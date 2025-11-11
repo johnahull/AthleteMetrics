@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -30,9 +30,10 @@ import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
+import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 
 const reportConfigSchema = z.object({
-  reportType: z.enum(["coach", "individual"]),
+  reportType: z.enum(["team", "individual"]),
   name: z.string().min(1, "Report name is required"),
   description: z.string().optional(),
   athleteIds: z.array(z.string()).optional(),
@@ -80,7 +81,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   } = useForm<ReportFormData>({
     resolver: zodResolver(reportConfigSchema),
     defaultValues: {
-      reportType: "coach",
+      reportType: "team",
       athleteIds: [],
       timeframeType: "preset",
       timeframePreset: "all_time",
@@ -126,32 +127,34 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     enabled: !!organizationContext,
   });
 
-  // Fetch site benchmarks
-  const { data: siteBenchmarks, isLoading: siteBenchmarksLoading, error: siteBenchmarksError } = useQuery({
-    queryKey: ["/api/benchmarks"],
+  // Fetch enabled benchmarks for the organization (includes both site and custom benchmarks)
+  const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useQuery<OrganizationBenchmarkWithDetails[]>({
+    queryKey: ["/api/benchmarks", organizationContext],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/benchmarks");
-      return res.json();
-    },
-  });
-
-  // Fetch custom benchmarks
-  const { data: customBenchmarks, isLoading: customBenchmarksLoading, error: customBenchmarksError } = useQuery({
-    queryKey: ["/api/benchmarks/custom", organizationContext],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/benchmarks/custom`);
+      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/benchmarks`);
       return res.json();
     },
     enabled: !!organizationContext,
   });
+
+  // Separate site and custom benchmarks from the enabled benchmarks (memoized for performance)
+  const siteBenchmarks = useMemo(
+    () => enabledBenchmarks?.filter((b) => b.benchmarkType === 'site') || [],
+    [enabledBenchmarks]
+  );
+
+  const customBenchmarks = useMemo(
+    () => enabledBenchmarks?.filter((b) => b.benchmarkType === 'custom') || [],
+    [enabledBenchmarks]
+  );
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
     console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
 
     if (step < totalSteps) {
-      // Skip athlete selection step for coach reports
-      if (step === 1 && reportType === "coach") {
+      // Skip athlete selection step for team reports
+      if (step === 1 && reportType === "team") {
         setStep(3); // Skip step 2 (athlete selection)
       } else {
         setStep(step + 1);
@@ -162,8 +165,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   const handleBack = () => {
     if (step > 1) {
-      // Skip athlete selection step for coach reports when going back
-      if (step === 3 && reportType === "coach") {
+      // Skip athlete selection step for team reports when going back
+      if (step === 3 && reportType === "team") {
         setStep(1); // Skip step 2 (athlete selection)
       } else {
         setStep(step - 1);
@@ -210,8 +213,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       athleteIds: data.athleteIds,
     };
 
-    console.log('[ReportWizard] Config being sent:', JSON.stringify(config, null, 2));
-
     if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
       config.benchmarks = {
         site: data.siteBenchmarks,
@@ -219,7 +220,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       };
     }
 
-    if (data.enableCompositeIndex && data.reportType === "coach") {
+    if (data.enableCompositeIndex && data.reportType === "team") {
       config.compositeIndex = {
         enabled: true,
         weights: data.compositeWeights,
@@ -295,9 +296,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 onValueChange={(value) => setValue("reportType", value as any)}
               >
                 <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
-                  <RadioGroupItem value="coach" id="coach" />
-                  <Label htmlFor="coach" className="cursor-pointer flex-1">
-                    <div className="font-semibold">Coach Report</div>
+                  <RadioGroupItem value="team" id="team" />
+                  <Label htmlFor="team" className="cursor-pointer flex-1">
+                    <div className="font-semibold">Team Report</div>
                     <div className="text-sm text-muted-foreground">
                       Team-wide performance analysis with rankings and composite index
                     </div>
@@ -344,8 +345,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 2 for Coach Reports - Skip to Step 3 */}
-          {step === 2 && reportType === "coach" && (
+          {/* Step 2 for Team Reports - Skip to Step 3 */}
+          {step === 2 && reportType === "team" && (
             <div className="space-y-4">
               <p className="text-muted-foreground">Athlete selection is only for individual reports. Proceeding to report details...</p>
             </div>
@@ -486,15 +487,15 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 Select benchmarks to compare against in the report
               </p>
 
-              {siteBenchmarksLoading || customBenchmarksLoading ? (
+              {benchmarksLoading ? (
                 <div className="flex justify-center py-8">
                   <LoadingSpinner />
                 </div>
               ) : (
                 <>
-                  {siteBenchmarksError && (
+                  {benchmarksError && (
                     <div className="border border-destructive rounded-lg p-4 text-center">
-                      <p className="text-sm text-destructive">Failed to load site benchmarks</p>
+                      <p className="text-sm text-destructive">Failed to load benchmarks</p>
                     </div>
                   )}
 
@@ -506,14 +507,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                           <div key={benchmark.id} className="flex items-center space-x-2">
                             <Checkbox
                               id={`site-${benchmark.id}`}
-                              checked={watch("siteBenchmarks")?.includes(benchmark.id)}
+                              checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
                               onCheckedChange={(checked) => {
                                 const current = watch("siteBenchmarks") || [];
                                 setValue(
                                   "siteBenchmarks",
                                   checked
-                                    ? [...current, benchmark.id]
-                                    : current.filter((id) => id !== benchmark.id)
+                                    ? [...current, benchmark.benchmarkId]
+                                    : current.filter((id) => id !== benchmark.benchmarkId)
                                 );
                               }}
                             />
@@ -529,12 +530,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   )}
 
-                  {customBenchmarksError && (
-                    <div className="border border-destructive rounded-lg p-4 text-center">
-                      <p className="text-sm text-destructive">Failed to load custom benchmarks</p>
-                    </div>
-                  )}
-
                   {customBenchmarks && customBenchmarks.length > 0 && (
                     <div>
                       <h4 className="font-medium mb-2">Custom Benchmarks</h4>
@@ -543,14 +538,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                           <div key={benchmark.id} className="flex items-center space-x-2">
                             <Checkbox
                               id={`custom-${benchmark.id}`}
-                              checked={watch("customBenchmarks")?.includes(benchmark.id)}
+                              checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
                               onCheckedChange={(checked) => {
                                 const current = watch("customBenchmarks") || [];
                                 setValue(
                                   "customBenchmarks",
                                   checked
-                                    ? [...current, benchmark.id]
-                                    : current.filter((id) => id !== benchmark.id)
+                                    ? [...current, benchmark.benchmarkId]
+                                    : current.filter((id) => id !== benchmark.benchmarkId)
                                 );
                               }}
                             />
@@ -566,12 +561,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   )}
 
-                  {!siteBenchmarksError && !customBenchmarksError &&
+                  {!benchmarksError &&
                    (!siteBenchmarks || siteBenchmarks.length === 0) &&
                    (!customBenchmarks || customBenchmarks.length === 0) && (
                     <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                      <p>No benchmarks available</p>
-                      <p className="text-sm mt-1">You can skip this step or create benchmarks in Settings</p>
+                      <p>No enabled benchmarks available</p>
+                      <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
                     </div>
                   )}
                 </>
@@ -646,8 +641,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 8: Composite Index (Coach Reports Only) */}
-          {step === 8 && reportType === "coach" && (
+          {/* Step 8: Composite Index (Team Reports Only) */}
+          {step === 8 && reportType === "team" && (
             <div className="space-y-4">
               <Label>Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
