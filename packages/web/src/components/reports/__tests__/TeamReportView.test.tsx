@@ -331,3 +331,296 @@ describe('TeamReportView - PDF Export', () => {
     createElementSpy.mockRestore();
   });
 });
+
+describe('TeamReportView - Benchmark Achievement Summary', () => {
+  let queryClient: QueryClient;
+
+  const mockReport: Report = {
+    id: 'report-123',
+    organizationId: 'org-456',
+    createdBy: 'user-789',
+    name: 'Benchmark Test Report',
+    description: 'Testing benchmark calculations',
+    reportType: 'team',
+    config: {
+      timeframe: {
+        type: 'preset',
+        preset: 'all_time',
+      },
+      metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+    },
+    isTemplate: false,
+    createdAt: '2025-01-01T00:00:00Z',
+  };
+
+  const renderComponent = () => {
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <TeamReportView report={mockReport} />
+      </QueryClientProvider>
+    );
+  };
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+
+    vi.mocked(useTeams).mockReturnValue({
+      data: [
+        { id: 'team-1', name: 'Team A' },
+        { id: 'team-2', name: 'Team B' },
+      ],
+      isLoading: false,
+      error: null,
+    } as any);
+
+    // Default mock - will be overridden in individual tests
+    mockGenerateReportMutate.mockResolvedValue({});
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isSuccess: false,
+      data: undefined,
+      isPending: true,
+      isError: false,
+      error: null,
+    } as any);
+
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    queryClient.clear();
+  });
+
+  it('should calculate benchmark achievements correctly', async () => {
+    const reportDataWithBenchmarks = {
+      reportType: 'team' as const,
+      reportConfig: mockReport.config,
+      teamStatistics: [],
+      athleteRankings: [
+        {
+          userId: 'athlete-1',
+          userName: 'John Doe',
+          measurements: { FLY10_TIME: 1.5, VERTICAL_JUMP: 24 },
+          percentiles: { FLY10_TIME: 75, VERTICAL_JUMP: 80 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Club Average', benchmarkValue: 1.8, meetsOrExceeds: true },
+              { benchmarkName: 'Elite Level', benchmarkValue: 1.4, meetsOrExceeds: false },
+            ],
+            VERTICAL_JUMP: [
+              { benchmarkName: 'Club Average', benchmarkValue: 20, meetsOrExceeds: true },
+            ],
+          },
+        },
+        {
+          userId: 'athlete-2',
+          userName: 'Jane Smith',
+          measurements: { FLY10_TIME: 1.7, VERTICAL_JUMP: 22 },
+          percentiles: { FLY10_TIME: 60, VERTICAL_JUMP: 70 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Club Average', benchmarkValue: 1.8, meetsOrExceeds: true },
+            ],
+            VERTICAL_JUMP: [
+              { benchmarkName: 'Club Average', benchmarkValue: 20, meetsOrExceeds: true },
+            ],
+          },
+        },
+        {
+          userId: 'athlete-3',
+          userName: 'Bob Johnson',
+          measurements: { FLY10_TIME: 2.0, VERTICAL_JUMP: 18 },
+          percentiles: { FLY10_TIME: 40, VERTICAL_JUMP: 50 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Club Average', benchmarkValue: 1.8, meetsOrExceeds: false },
+            ],
+            VERTICAL_JUMP: [
+              { benchmarkName: 'Club Average', benchmarkValue: 20, meetsOrExceeds: false },
+            ],
+          },
+        },
+      ],
+      athleteCount: 3,
+      teamIds: ['team-1'],
+      generatedAt: '2025-01-01T12:00:00Z',
+    };
+
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: false,
+      isError: false,
+      data: reportDataWithBenchmarks,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Benchmark Achievement Summary')).toBeInTheDocument();
+    });
+
+    // Should show "Club Average" benchmark with 2 athletes (67%)
+    await waitFor(() => {
+      expect(screen.getByText(/Club Average/i)).toBeInTheDocument();
+      expect(screen.getByText('67%')).toBeInTheDocument(); // 2 out of 3 athletes
+    });
+
+    // Should show "Elite Level" benchmark with 0 athletes (0%)
+    // Note: The component filters out benchmarks with 0 count
+    expect(screen.queryByText(/Elite Level/i)).not.toBeInTheDocument();
+  });
+
+  it('should count athletes meeting multiple benchmarks separately', async () => {
+    const reportDataWithMultipleBenchmarks = {
+      reportType: 'team' as const,
+      reportConfig: mockReport.config,
+      teamStatistics: [],
+      athleteRankings: [
+        {
+          userId: 'athlete-1',
+          userName: 'John Doe',
+          measurements: { FLY10_TIME: 1.3 },
+          percentiles: { FLY10_TIME: 90 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Good', benchmarkValue: 1.8, meetsOrExceeds: true },
+              { benchmarkName: 'Great', benchmarkValue: 1.5, meetsOrExceeds: true },
+              { benchmarkName: 'Elite', benchmarkValue: 1.4, meetsOrExceeds: true },
+            ],
+          },
+        },
+        {
+          userId: 'athlete-2',
+          userName: 'Jane Smith',
+          measurements: { FLY10_TIME: 1.6 },
+          percentiles: { FLY10_TIME: 70 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Good', benchmarkValue: 1.8, meetsOrExceeds: true },
+              { benchmarkName: 'Great', benchmarkValue: 1.5, meetsOrExceeds: false },
+            ],
+          },
+        },
+      ],
+      athleteCount: 2,
+      teamIds: ['team-1'],
+      generatedAt: '2025-01-01T12:00:00Z',
+    };
+
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: false,
+      isError: false,
+      data: reportDataWithMultipleBenchmarks,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('Benchmark Achievement Summary')).toBeInTheDocument();
+    });
+
+    // Both athletes meet "Good"
+    await waitFor(() => {
+      const goodBenchmark = screen.getByText(/Good/i).closest('div');
+      expect(goodBenchmark).toBeInTheDocument();
+      expect(goodBenchmark?.textContent).toContain('100%'); // 2 out of 2
+    });
+
+    // Only athlete-1 meets "Great"
+    const greatBenchmark = screen.getByText(/Great/i).closest('div');
+    expect(greatBenchmark?.textContent).toContain('50%'); // 1 out of 2
+
+    // Only athlete-1 meets "Elite"
+    const eliteBenchmark = screen.getByText(/Elite/i).closest('div');
+    expect(eliteBenchmark?.textContent).toContain('50%'); // 1 out of 2
+  });
+
+  it('should show "No benchmark met" when athletes do not meet any benchmarks', async () => {
+    const reportDataNoBenchmarksMet = {
+      reportType: 'team' as const,
+      reportConfig: mockReport.config,
+      teamStatistics: [],
+      athleteRankings: [
+        {
+          userId: 'athlete-1',
+          userName: 'John Doe',
+          measurements: { FLY10_TIME: 2.5 },
+          percentiles: { FLY10_TIME: 20 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Club Average', benchmarkValue: 1.8, meetsOrExceeds: false },
+            ],
+          },
+        },
+        {
+          userId: 'athlete-2',
+          userName: 'Jane Smith',
+          measurements: { FLY10_TIME: 2.8 },
+          percentiles: { FLY10_TIME: 10 },
+          benchmarkComparisons: {
+            FLY10_TIME: [
+              { benchmarkName: 'Club Average', benchmarkValue: 1.8, meetsOrExceeds: false },
+            ],
+          },
+        },
+      ],
+      athleteCount: 2,
+      teamIds: ['team-1'],
+      generatedAt: '2025-01-01T12:00:00Z',
+    };
+
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: false,
+      isError: false,
+      data: reportDataNoBenchmarksMet,
+    } as any);
+
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('No benchmark met')).toBeInTheDocument();
+      expect(screen.getByText('100%')).toBeInTheDocument(); // All athletes met no benchmarks
+    });
+  });
+
+  it('should not display benchmark summary when no benchmarks are configured', async () => {
+    const reportDataNoBenchmarks = {
+      reportType: 'team' as const,
+      reportConfig: mockReport.config,
+      teamStatistics: [],
+      athleteRankings: [
+        {
+          userId: 'athlete-1',
+          userName: 'John Doe',
+          measurements: { FLY10_TIME: 1.5 },
+          percentiles: { FLY10_TIME: 75 },
+          benchmarkComparisons: {},
+        },
+      ],
+      athleteCount: 1,
+      teamIds: ['team-1'],
+      generatedAt: '2025-01-01T12:00:00Z',
+    };
+
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: false,
+      isError: false,
+      data: reportDataNoBenchmarks,
+    } as any);
+
+    renderComponent();
+
+    // Should not show benchmark summary section at all
+    await waitFor(() => {
+      expect(screen.queryByText('Benchmark Achievement Summary')).not.toBeInTheDocument();
+    });
+  });
+});

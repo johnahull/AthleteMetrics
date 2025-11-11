@@ -250,7 +250,7 @@ describe('ReportWizard Component', () => {
       expect(payload).toMatchObject({
         name: 'Full Config Report',
         description: 'Test description',
-        reportType: 'coach',
+        reportType: 'team',
         organizationId: mockOrganizationContext,
         config: expect.objectContaining({
           timeframe: expect.any(Object),
@@ -442,6 +442,264 @@ describe('ReportWizard Component', () => {
         expect(
           screen.getByText(/No metrics enabled for this organization/i)
         ).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Custom Benchmarks', () => {
+    const mockCustomBenchmarks = [
+      {
+        id: 'org-bench-1',
+        benchmarkId: 'custom-bench-1',
+        benchmarkType: 'custom',
+        name: 'Club Average - Boys',
+        metricCode: 'FLY10_TIME',
+        benchmarkValue: 1.8,
+        isEnabled: true,
+      },
+      {
+        id: 'org-bench-2',
+        benchmarkId: 'custom-bench-2',
+        benchmarkType: 'custom',
+        name: 'Elite Level - Girls',
+        metricCode: 'VERTICAL_JUMP',
+        benchmarkValue: 22.5,
+        isEnabled: true,
+      },
+    ];
+
+    const mockSiteBenchmarks = [
+      {
+        id: 'org-bench-3',
+        benchmarkId: 'site-bench-1',
+        benchmarkType: 'site',
+        name: 'D1 College Standard',
+        metricCode: 'FLY10_TIME',
+        benchmarkValue: 1.6,
+        isEnabled: true,
+      },
+    ];
+
+    beforeEach(() => {
+      mockApiRequest.mockImplementation((method: string, url: string) => {
+        if (url.includes('/metrics')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [
+              {
+                metricCode: 'FLY10_TIME',
+                siteMetric: { name: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
+              },
+              {
+                metricCode: 'VERTICAL_JUMP',
+                siteMetric: { name: 'Vertical Jump', unit: 'inches', category: 'Power' },
+              },
+            ],
+          });
+        }
+        if (url.includes('/teams')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [{ id: 'team-1', name: 'Team A' }],
+          });
+        }
+        if (url.includes('/benchmarks')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [...mockSiteBenchmarks, ...mockCustomBenchmarks],
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => [] });
+      });
+    });
+
+    it('should load and display custom benchmarks', async () => {
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
+      });
+
+      // Navigate to benchmarks step
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText(/Report Name/i);
+        fireEvent.change(nameInput, { target: { value: 'Test Report' } });
+      });
+
+      // Navigate through timeframe and metrics
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[0]);
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      // Should show custom benchmarks
+      await waitFor(() => {
+        expect(screen.getByText('Custom Benchmarks')).toBeInTheDocument();
+        expect(screen.getByText('Club Average - Boys')).toBeInTheDocument();
+        expect(screen.getByText('Elite Level - Girls')).toBeInTheDocument();
+      });
+    });
+
+    it('should allow selecting custom benchmarks', async () => {
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
+      });
+
+      // Navigate to benchmarks step
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText(/Report Name/i);
+        fireEvent.change(nameInput, { target: { value: 'Test Report' } });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[0]);
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      // Select custom benchmarks
+      await waitFor(() => {
+        const customBenchCheckbox = screen.getByLabelText(/Club Average - Boys/i);
+        fireEvent.click(customBenchCheckbox);
+      });
+
+      // Continue to submission
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      const createButton = screen.getByRole('button', { name: /Create Report/i });
+      fireEvent.click(createButton);
+
+      await waitFor(() => {
+        expect(mockCreateReportMutate).toHaveBeenCalled();
+      });
+
+      const callArgs = mockCreateReportMutate.mock.calls[0][0];
+      expect(callArgs.config.benchmarks).toBeDefined();
+      expect(callArgs.config.benchmarks.custom).toContain('custom-bench-1');
+    });
+
+    it('should store correct benchmark IDs (not organization_benchmarks IDs)', async () => {
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
+      });
+
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText(/Report Name/i);
+        fireEvent.change(nameInput, { target: { value: 'Test Report' } });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const checkboxes = screen.getAllByRole('checkbox');
+        fireEvent.click(checkboxes[0]);
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      // Select both custom and site benchmarks
+      await waitFor(() => {
+        const custom1 = screen.getByLabelText(/Club Average - Boys/i);
+        const custom2 = screen.getByLabelText(/Elite Level - Girls/i);
+        const site1 = screen.getByLabelText(/D1 College Standard/i);
+
+        fireEvent.click(custom1);
+        fireEvent.click(custom2);
+        fireEvent.click(site1);
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      const createButton = screen.getByRole('button', { name: /Create Report/i });
+      fireEvent.click(createButton);
+
+      await waitFor(() => {
+        expect(mockCreateReportMutate).toHaveBeenCalled();
+      });
+
+      const callArgs = mockCreateReportMutate.mock.calls[0][0];
+
+      // Should use benchmarkId, not the organization_benchmarks id
+      expect(callArgs.config.benchmarks.custom).toEqual([
+        'custom-bench-1',
+        'custom-bench-2',
+      ]);
+      expect(callArgs.config.benchmarks.site).toEqual(['site-bench-1']);
+
+      // Should NOT contain organization_benchmarks IDs
+      expect(callArgs.config.benchmarks.custom).not.toContain('org-bench-1');
+      expect(callArgs.config.benchmarks.custom).not.toContain('org-bench-2');
+    });
+
+    it('should handle empty custom benchmarks', async () => {
+      mockApiRequest.mockImplementation((method: string, url: string) => {
+        if (url.includes('/benchmarks')) {
+          return Promise.resolve({
+            ok: true,
+            json: async () => [],
+          });
+        }
+        return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      renderWithQueryClient(
+        <ReportWizard open={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Team Report')).toBeInTheDocument();
+      });
+
+      const teamRadio = screen.getByLabelText(/Team Report/i, { exact: false });
+      fireEvent.click(teamRadio);
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      await waitFor(() => {
+        const nameInput = screen.getByLabelText(/Report Name/i);
+        fireEvent.change(nameInput, { target: { value: 'Test Report' } });
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Next/i }));
+
+      // Should show "no benchmarks" message
+      await waitFor(() => {
+        expect(screen.getByText(/No enabled benchmarks available/i)).toBeInTheDocument();
       });
     });
   });
