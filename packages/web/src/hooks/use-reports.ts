@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import type { ReportFilters } from "./use-report-filters";
 
 interface CreateReportData {
   name: string;
@@ -44,8 +45,19 @@ interface Report {
   reportType: "coach" | "individual";
   config: CreateReportData["config"];
   isTemplate: boolean;
+  isPinned: boolean;
   createdAt: string;
   updatedAt?: string;
+}
+
+interface ReportsResponse {
+  reports: Report[];
+  pagination: {
+    total: number;
+    limit: number;
+    offset: number;
+    hasMore: boolean;
+  };
 }
 
 interface GeneratedReport {
@@ -241,6 +253,131 @@ export function useDeleteReport() {
       toast({
         title: "Success",
         description: "Report deleted successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for fetching reports with filters and pagination
+ * @param organizationId - Organization ID
+ * @param filters - Report filters (search, type, date range, etc.)
+ * @param pagination - Pagination options
+ */
+export function useReportsWithFilters(
+  organizationId: string,
+  filters: ReportFilters,
+  pagination?: { limit?: number; offset?: number }
+) {
+  return useQuery<ReportsResponse>({
+    queryKey: ["/api/reports", organizationId, filters, pagination],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+
+      // Add organization ID
+      params.set('organizationId', organizationId);
+
+      // Add filters
+      if (filters.search) {
+        params.set('search', filters.search);
+      }
+
+      if (filters.reportType) {
+        params.set('reportType', filters.reportType);
+      }
+
+      if (filters.dateFrom) {
+        params.set('dateFrom', filters.dateFrom);
+      }
+
+      if (filters.dateTo) {
+        params.set('dateTo', filters.dateTo);
+      }
+
+      filters.metrics.forEach(metric => {
+        params.append('metrics', metric);
+      });
+
+      filters.teamIds.forEach(teamId => {
+        params.append('teamIds', teamId);
+      });
+
+      if (filters.pinned !== undefined) {
+        params.set('pinned', String(filters.pinned));
+      }
+
+      // Add sorting
+      params.set('sortBy', filters.sortBy);
+      params.set('sortOrder', filters.sortOrder);
+
+      // Add pagination
+      if (pagination?.limit) {
+        params.set('limit', String(pagination.limit));
+      }
+
+      if (pagination?.offset) {
+        params.set('offset', String(pagination.offset));
+      }
+
+      const res = await apiRequest("GET", `/api/reports?${params.toString()}`);
+      return res.json();
+    },
+  });
+}
+
+/**
+ * Hook for pinning a report
+ */
+export function usePinReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      const res = await apiRequest("PATCH", `/api/reports/${reportId}/pin`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Success",
+        description: "Report pinned successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for unpinning a report
+ */
+export function useUnpinReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      const res = await apiRequest("PATCH", `/api/reports/${reportId}/unpin`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Success",
+        description: "Report unpinned successfully",
       });
     },
     onError: (error: Error) => {
