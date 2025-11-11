@@ -5,11 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReportsFilterBar } from '../ReportsFilterBar';
 import { useReportFilters } from '@/hooks/use-report-filters';
 
-// Mock the hooks
-vi.mock('@/hooks/use-report-filters');
-vi.mock('@/hooks/use-teams');
-vi.mock('@/hooks/use-metrics');
-
 // Mock useTeams hook
 const mockTeams = [
   { id: 'team-1', name: 'Varsity Football', organizationId: 'org-1' },
@@ -23,18 +18,16 @@ const mockMetrics = [
   { code: 'AGILITY_505', name: '5-0-5 Agility' },
 ];
 
-vi.mock('@/hooks/use-teams', () => ({
-  useTeams: () => ({
-    data: mockTeams,
-    isLoading: false,
-  }),
-}));
+const mockUseTeams = vi.fn();
+const mockUseMetrics = vi.fn();
 
+// Mock the hooks
+vi.mock('@/hooks/use-report-filters');
+vi.mock('@/hooks/use-teams', () => ({
+  useTeams: (...args: any[]) => mockUseTeams(...args),
+}));
 vi.mock('@/hooks/use-metrics', () => ({
-  useMetrics: () => ({
-    data: mockMetrics,
-    isLoading: false,
-  }),
+  useMetrics: (...args: any[]) => mockUseMetrics(...args),
 }));
 
 const createWrapper = () => {
@@ -75,12 +68,22 @@ describe('ReportsFilterBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    // Default mock implementation
+    // Default mock implementation for hooks
     (useReportFilters as any).mockReturnValue({
       filters: defaultFilters,
       updateFilters: mockUpdateFilters,
       resetFilters: mockResetFilters,
       activeFilterCount: 0,
+    });
+
+    mockUseTeams.mockReturnValue({
+      data: mockTeams,
+      isLoading: false,
+    });
+
+    mockUseMetrics.mockReturnValue({
+      data: mockMetrics,
+      isLoading: false,
     });
   });
 
@@ -173,14 +176,24 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        teamIds: ['team-1'],
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     // Check that teams button shows badge with count
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
 
-    // Multiple "1" badges may exist (one in teams button, one for activeFilterCount)
-    const badges = screen.getAllByText('1');
-    expect(badges.length).toBeGreaterThan(0);
+    //Wait for any async rendering
+    await waitFor(() => {
+      expect(screen.queryByText('1')).toBeInTheDocument();
+    });
   });
 
   it('displays metrics filter button', async () => {
