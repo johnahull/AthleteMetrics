@@ -52,20 +52,32 @@ describe('ReportsFilterBar', () => {
   const mockUpdateFilters = vi.fn();
   const mockResetFilters = vi.fn();
 
+  const defaultFilters = {
+    search: '',
+    reportType: 'all' as const,
+    dateFrom: undefined,
+    dateTo: undefined,
+    metrics: [],
+    teamIds: [],
+    pinned: undefined,
+    sortBy: 'createdAt',
+    sortOrder: 'desc' as const,
+  };
+
+  const defaultProps = {
+    organizationId: 'org-1',
+    filters: defaultFilters,
+    updateFilters: mockUpdateFilters,
+    resetFilters: mockResetFilters,
+    activeFilterCount: 0,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
 
     // Default mock implementation
     (useReportFilters as any).mockReturnValue({
-      filters: {
-        search: '',
-        reportType: 'all',
-        dateFrom: undefined,
-        dateTo: undefined,
-        metrics: [],
-        teamIds: [],
-        pinned: undefined,
-      },
+      filters: defaultFilters,
       updateFilters: mockUpdateFilters,
       resetFilters: mockResetFilters,
       activeFilterCount: 0,
@@ -73,7 +85,7 @@ describe('ReportsFilterBar', () => {
   });
 
   it('renders all filter controls', () => {
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Search input
     expect(screen.getByPlaceholderText(/search reports/i)).toBeInTheDocument();
@@ -96,7 +108,7 @@ describe('ReportsFilterBar', () => {
 
   it('triggers search filter update on input', async () => {
     const user = userEvent.setup();
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     const searchInput = screen.getByPlaceholderText(/search reports/i);
     await user.type(searchInput, 'test');
@@ -108,7 +120,7 @@ describe('ReportsFilterBar', () => {
   });
 
   it('displays report type selector', async () => {
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Check that report type selector exists
     const reportTypeSelect = screen.getByRole('combobox', { name: /report type/i });
@@ -120,7 +132,7 @@ describe('ReportsFilterBar', () => {
 
   it('displays date range picker and updates date filters', async () => {
     const user = userEvent.setup();
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Click date range button to open popover
     const dateRangeButton = screen.getByRole('button', { name: /date range/i });
@@ -136,7 +148,7 @@ describe('ReportsFilterBar', () => {
   });
 
   it('displays teams filter button', async () => {
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     const teamsButton = screen.getByRole('button', { name: /teams/i });
     expect(teamsButton).toBeInTheDocument();
@@ -161,7 +173,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Check that teams button shows badge with count
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
@@ -172,7 +184,7 @@ describe('ReportsFilterBar', () => {
   });
 
   it('displays metrics filter button', async () => {
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     const metricsButton = screen.getByRole('button', { name: /metrics/i });
     expect(metricsButton).toBeInTheDocument();
@@ -197,7 +209,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Check that metrics button shows badge with count
     expect(screen.getByRole('button', { name: /metrics/i })).toBeInTheDocument();
@@ -223,7 +235,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 4, // search + reportType + 2 metrics counted as 1 + 1 team
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Badge should show count
     expect(screen.getByText('4')).toBeInTheDocument();
@@ -245,7 +257,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
   });
@@ -268,7 +280,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     const clearButton = screen.getByRole('button', { name: /clear filters/i });
     await user.click(clearButton);
@@ -292,7 +304,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Check Teams button exists
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
@@ -318,7 +330,7 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Check Metrics button exists
     expect(screen.getByRole('button', { name: /metrics/i })).toBeInTheDocument();
@@ -335,7 +347,7 @@ describe('ReportsFilterBar', () => {
       }),
     }));
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Component should still render without crashing
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
@@ -349,7 +361,7 @@ describe('ReportsFilterBar', () => {
       }),
     }));
 
-    render(<ReportsFilterBar organizationId="org-1" />, { wrapper: createWrapper() });
+    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
 
     // Component should still render without crashing
     expect(screen.getByRole('button', { name: /metrics/i })).toBeInTheDocument();
