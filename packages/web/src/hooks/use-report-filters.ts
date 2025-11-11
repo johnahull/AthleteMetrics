@@ -3,7 +3,7 @@ import { useDebounce } from '@/hooks/useDebounce';
 
 export interface ReportFilters {
   search: string;
-  reportType?: 'coach' | 'individual';
+  reportType?: 'all' | 'individual' | 'team';
   dateFrom?: string;
   dateTo?: string;
   metrics: string[];
@@ -36,7 +36,7 @@ const DEFAULT_FILTERS: ReportFilters = {
  */
 export function useReportFilters() {
   const [internalSearch, setInternalSearch] = useState('');
-  const [reportType, setReportType] = useState<'coach' | 'individual' | undefined>(undefined);
+  const [reportType, setReportType] = useState<'all' | 'individual' | 'team' | undefined>(undefined);
   const [dateFrom, setDateFrom] = useState<string | undefined>(undefined);
   const [dateTo, setDateTo] = useState<string | undefined>(undefined);
   const [metrics, setMetrics] = useState<string[]>([]);
@@ -58,7 +58,7 @@ export function useReportFilters() {
     }
 
     const reportTypeParam = params.get('reportType');
-    if (reportTypeParam === 'coach' || reportTypeParam === 'individual') {
+    if (reportTypeParam === 'all' || reportTypeParam === 'individual' || reportTypeParam === 'team') {
       setReportType(reportTypeParam);
     }
 
@@ -186,6 +186,22 @@ export function useReportFilters() {
     setSortOrder(DEFAULT_FILTERS.sortOrder);
   }, []);
 
+  // Helper method to update multiple filters at once
+  const updateFilters = useCallback((updates: Partial<ReportFilters>) => {
+    if (updates.search !== undefined) setInternalSearch(updates.search);
+    if (updates.reportType !== undefined) setReportType(updates.reportType);
+    if (updates.dateFrom !== undefined) setDateFrom(updates.dateFrom);
+    if (updates.dateTo !== undefined) setDateTo(updates.dateTo);
+    if (updates.metrics !== undefined) setMetrics(updates.metrics);
+    if (updates.teamIds !== undefined) setTeamIds(updates.teamIds);
+    if (updates.pinned !== undefined) setPinned(updates.pinned);
+    if (updates.sortBy !== undefined) setSortBy(updates.sortBy);
+    if (updates.sortOrder !== undefined) setSortOrder(updates.sortOrder);
+  }, []);
+
+  // Alias reset as resetFilters for consistency
+  const resetFilters = reset;
+
   return {
     filters,
     setSearch: setInternalSearch,
@@ -198,6 +214,8 @@ export function useReportFilters() {
     setSortBy,
     setSortOrder,
     reset,
+    updateFilters,
+    resetFilters,
     activeFilterCount,
   };
 }

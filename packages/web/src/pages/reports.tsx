@@ -1,21 +1,15 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useReports, useDeleteReport } from "@/hooks/use-reports";
+import { useDeleteReport } from "@/hooks/use-reports";
+import { useReportFilters } from "@/hooks/use-report-filters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { Plus, FileText, Eye, Trash2 } from "lucide-react";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { Plus } from "lucide-react";
 import { ReportWizard } from "@/components/reports/ReportWizard";
+import { ReportsFilterBar } from "@/components/reports/ReportsFilterBar";
+import { PinnedReportsSection } from "@/components/reports/PinnedReportsSection";
+import { RecentReportsSection } from "@/components/reports/RecentReportsSection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { format } from "date-fns";
+import type { Report } from "@shared/schema";
 
 export default function Reports() {
   const { user, organizationContext } = useAuth();
@@ -34,7 +28,7 @@ export default function Reports() {
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
 
-  const { data: reports, isLoading, error } = useReports(organizationContext || undefined);
+  const { filters } = useReportFilters();
   const deleteReport = useDeleteReport();
 
   // Check access
@@ -56,8 +50,8 @@ export default function Reports() {
   // Only coaches and admins can create reports
   const canCreateReports = user.isSiteAdmin || user.role === "coach" || user.role === "org_admin";
 
-  const handleViewReport = (reportId: string) => {
-    setLocation(`/reports/${reportId}`);
+  const handleViewReport = (report: Report) => {
+    setLocation(`/reports/${report.id}`);
   };
 
   const handleDeleteReport = async () => {
@@ -68,8 +62,9 @@ export default function Reports() {
   };
 
   return (
-    <div className="container mx-auto py-8">
-      <div className="flex justify-between items-center mb-6">
+    <div className="container mx-auto py-8 space-y-8">
+      {/* Header */}
+      <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Reports</h1>
           <p className="text-muted-foreground mt-1">
@@ -84,92 +79,21 @@ export default function Reports() {
         )}
       </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-8">
-          <LoadingSpinner />
-        </div>
-      ) : error ? (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-destructive text-center">
-              Failed to load reports. Please try again.
-            </p>
-          </CardContent>
-        </Card>
-      ) : !reports || reports.length === 0 ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No reports yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first report to get started
-            </p>
-            {canCreateReports && (
-              <Button onClick={() => setShowWizard(true)}>
-                <Plus className="h-4 w-4 mr-2" />
-                Create Report
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>All Reports</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {reports.map((report) => (
-                  <TableRow key={report.id}>
-                    <TableCell className="font-medium">{report.name}</TableCell>
-                    <TableCell>
-                      <Badge variant={report.reportType === "coach" ? "default" : "secondary"}>
-                        {report.reportType === "coach" ? "Coach" : "Individual"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="max-w-xs truncate">
-                      {report.description || "-"}
-                    </TableCell>
-                    <TableCell>
-                      {format(new Date(report.createdAt), "MMM d, yyyy")}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleViewReport(report.id)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        {canCreateReports && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setDeleteReportId(report.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+      {/* Filter Bar */}
+      <ReportsFilterBar organizationId={organizationContext || undefined} />
+
+      {/* Pinned Reports Section */}
+      <PinnedReportsSection
+        organizationId={organizationContext || undefined}
+        onReportClick={handleViewReport}
+      />
+
+      {/* Recent Reports Section */}
+      <RecentReportsSection
+        organizationId={organizationContext || undefined}
+        filters={filters}
+        onReportClick={handleViewReport}
+      />
 
       {showWizard && (
         <ReportWizard

@@ -273,7 +273,7 @@ export function useDeleteReport() {
  */
 export function useReportsWithFilters(
   organizationId: string,
-  filters: ReportFilters,
+  filters?: Partial<ReportFilters>,
   pagination?: { limit?: number; offset?: number }
 ) {
   return useQuery<ReportsResponse>({
@@ -285,37 +285,41 @@ export function useReportsWithFilters(
       params.set('organizationId', organizationId);
 
       // Add filters
-      if (filters.search) {
+      if (filters?.search) {
         params.set('search', filters.search);
       }
 
-      if (filters.reportType) {
+      if (filters?.reportType) {
         params.set('reportType', filters.reportType);
       }
 
-      if (filters.dateFrom) {
+      if (filters?.dateFrom) {
         params.set('dateFrom', filters.dateFrom);
       }
 
-      if (filters.dateTo) {
+      if (filters?.dateTo) {
         params.set('dateTo', filters.dateTo);
       }
 
-      filters.metrics.forEach(metric => {
+      filters?.metrics?.forEach(metric => {
         params.append('metrics', metric);
       });
 
-      filters.teamIds.forEach(teamId => {
+      filters?.teamIds?.forEach(teamId => {
         params.append('teamIds', teamId);
       });
 
-      if (filters.pinned !== undefined) {
+      if (filters?.pinned !== undefined) {
         params.set('pinned', String(filters.pinned));
       }
 
       // Add sorting
-      params.set('sortBy', filters.sortBy);
-      params.set('sortOrder', filters.sortOrder);
+      if (filters?.sortBy) {
+        params.set('sortBy', filters.sortBy);
+      }
+      if (filters?.sortOrder) {
+        params.set('sortOrder', filters.sortOrder);
+      }
 
       // Add pagination
       if (pagination?.limit) {

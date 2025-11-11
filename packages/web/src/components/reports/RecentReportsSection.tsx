@@ -32,7 +32,7 @@ export function RecentReportsSection({
 
   // Fetch reports excluding pinned ones
   const { data, isLoading, error } = useReportsWithFilters(
-    organizationId,
+    organizationId || '',
     { ...filters, pinned: false },
     { limit: currentLimit, offset: 0 }
   );
@@ -51,7 +51,7 @@ export function RecentReportsSection({
   // Handle report card click
   const handleReportClick = (report: Report) => {
     if (onReportClick) {
-      onReportClick(report);
+      onReportClick(report as any); // Type assertion to handle minor schema differences
     }
   };
 
@@ -109,7 +109,7 @@ export function RecentReportsSection({
             className="hover:shadow-md transition-shadow cursor-pointer relative"
           >
             <button
-              onClick={() => handleReportClick(report)}
+              onClick={() => handleReportClick(report as any)}
               className="text-left w-full"
             >
               <CardHeader className="pb-3">

@@ -28,7 +28,7 @@ export function PinnedReportsSection({
 
   // Fetch only pinned reports
   const { data, isLoading, error } = useReportsWithFilters(
-    organizationId,
+    organizationId || '',
     { pinned: true },
     { limit: 10, offset: 0 }
   );
@@ -47,7 +47,7 @@ export function PinnedReportsSection({
   // Handle report card click
   const handleReportClick = (report: Report) => {
     if (onReportClick) {
-      onReportClick(report);
+      onReportClick(report as any); // Type assertion to handle minor schema differences
     }
   };
 
@@ -115,7 +115,7 @@ export function PinnedReportsSection({
               className="hover:shadow-md transition-shadow cursor-pointer relative"
             >
               <button
-                onClick={() => handleReportClick(report)}
+                onClick={() => handleReportClick(report as any)}
                 className="text-left w-full"
               >
                 <CardHeader className="pb-3">
