@@ -6,7 +6,7 @@ import type { ReportFilters } from "./use-report-filters";
 interface CreateReportData {
   name: string;
   description?: string;
-  reportType: "coach" | "individual";
+  reportType: "team" | "individual";
   config: {
     timeframe: {
       type: "preset" | "custom";
@@ -42,7 +42,7 @@ interface Report {
   createdBy: string;
   name: string;
   description?: string;
-  reportType: "coach" | "individual";
+  reportType: "team" | "individual";
   config: CreateReportData["config"];
   isTemplate: boolean;
   isPinned: boolean;
@@ -63,7 +63,7 @@ interface ReportsResponse {
 interface GeneratedReport {
   reportId: string;
   organizationId: string;
-  reportType: "coach" | "individual";
+  reportType: "team" | "individual";
   config: CreateReportData["config"];
   generatedAt: string;
   data: any;

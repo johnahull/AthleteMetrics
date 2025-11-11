@@ -2,7 +2,7 @@ import { useRoute } from "wouter";
 import { useReport, useGenerateReport } from "@/hooks/use-reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { CoachReportView } from "@/components/reports/CoachReportView";
+import { TeamReportView } from "@/components/reports/TeamReportView";
 import { IndividualReportView } from "@/components/reports/IndividualReportView";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -60,8 +60,8 @@ export default function ReportView() {
         Back to Reports
       </Button>
 
-      {report.reportType === "coach" ? (
-        <CoachReportView report={report} />
+      {report.reportType === "team" ? (
+        <TeamReportView report={report} />
       ) : (
         <IndividualReportView report={report} />
       )}

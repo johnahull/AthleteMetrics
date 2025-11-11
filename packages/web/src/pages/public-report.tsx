@@ -66,7 +66,7 @@ export default function PublicReport() {
         </div>
 
         {/* Coach Report View */}
-        {reportConfig.reportType === "coach" && (
+        {reportConfig.reportType === 'team' && (
           <>
             {/* Performance Snapshot */}
             {dataSnapshot.performanceSnapshot && (
