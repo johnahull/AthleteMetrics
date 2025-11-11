@@ -185,7 +185,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
   // Helper function: Get team names from team IDs
   const getTeamNames = (): string => {
-    const teamIds = report.config.filters?.teamIds;
+    const config = report.config as { filters?: { teamIds?: string[] } };
+    const teamIds = config.filters?.teamIds;
 
     if (!teamIds || teamIds.length === 0) {
       return 'All Teams';
@@ -215,7 +216,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
   // Helper function: Get composite index description with weights
   const getCompositeIndexDescription = (): string => {
-    const weights = report.config.compositeIndex?.weights;
+    const config = report.config as { compositeIndex?: { weights?: Record<string, number> } };
+    const weights = config.compositeIndex?.weights;
 
     if (!weights || Object.keys(weights).length === 0) {
       return 'Weighted average of percentiles';

@@ -68,6 +68,22 @@ export interface TeamReportConfig {
   };
 }
 
+export interface IndividualReportConfig {
+  athleteId?: string;
+  athleteIds?: string[];
+  timeframe: TimeframeConfig;
+  metrics: string[];
+  benchmarks?: {
+    site?: string[]; // Site benchmark IDs
+    custom?: string[]; // Custom benchmark IDs
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
+}
+
 export interface TeamReportData {
   reportType: 'team';
   reportConfig: TeamReportConfig;
@@ -87,7 +103,7 @@ export interface Report {
   name: string;
   description?: string;
   reportType: "team" | "individual";
-  config: TeamReportConfig;
+  config: TeamReportConfig | IndividualReportConfig;
   isTemplate: boolean;
   isPinned: boolean;
   createdAt: string;

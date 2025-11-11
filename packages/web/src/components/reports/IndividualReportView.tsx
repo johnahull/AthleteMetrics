@@ -15,23 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { FileDown, Share2 } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { format } from "date-fns";
+import type { Report } from "@/types/report-types";
 
 // Version check - this log should appear immediately when the module loads
 console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v6-DEPS-FIX');
 console.log('🔍 If you see this, the new code is loaded! Check for more logs below.');
-
-interface Report {
-  id: string;
-  organizationId: string;
-  createdBy: string;
-  name: string;
-  description?: string;
-  reportType: "coach" | "individual";
-  config: any;
-  isTemplate: boolean;
-  createdAt: string;
-  updatedAt?: string;
-}
 
 interface IndividualReportViewProps {
   report: Report;
@@ -45,7 +33,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [reportData, setReportData] = useState<any>(null);
 
   // Extract athleteId outside useEffect to avoid dependency issues
-  const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
+  // Type guard to ensure we're accessing IndividualReportConfig properties
+  const config = report.config as { athleteId?: string; athleteIds?: string[] };
+  const athleteId = config?.athleteId || config?.athleteIds?.[0];
 
   console.log('[IndividualReportView] athleteId extracted:', athleteId);
 
@@ -76,7 +66,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const handleDownloadPDF = async () => {
     try {
       // Extract athleteId (try singular first, then array)
-      const athleteId = report.config?.athleteId || report.config?.athleteIds?.[0];
+      const config = report.config as { athleteId?: string; athleteIds?: string[] };
+      const athleteId = config?.athleteId || config?.athleteIds?.[0];
 
       if (!athleteId) {
         console.error('[IndividualReportView] No athleteId found for PDF download');
@@ -170,6 +161,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   )}
                   {athlete.gender && (
                     <p className="text-muted-foreground">Gender: {athlete.gender}</p>
+                  )}
+                  {athlete.teams && athlete.teams.length > 0 && (
+                    <p className="text-muted-foreground">
+                      Team{athlete.teams.length > 1 ? 's' : ''}: {athlete.teams.join(', ')}
+                    </p>
                   )}
                 </div>
               )}

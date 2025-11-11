@@ -6,22 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import type { Report } from "@/types/report-types";
 
 interface MultiIndividualReportViewProps {
   reportIds: string[];
-}
-
-interface Report {
-  id: string;
-  organizationId: string;
-  createdBy: string;
-  name: string;
-  description?: string;
-  reportType: "coach" | "individual";
-  config: any;
-  isTemplate: boolean;
-  createdAt: string;
-  updatedAt?: string;
 }
 
 export function MultiIndividualReportView({ reportIds }: MultiIndividualReportViewProps) {
