@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pin, ChevronDown, ChevronRight, Loader2 } from 'lucide-react';
+import { Pin, ChevronDown, ChevronRight, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, useUnpinReport } from '@/hooks/use-reports';
 import type { Report } from '@shared/schema';
@@ -16,12 +16,14 @@ import {
 interface PinnedReportsSectionProps {
   organizationId?: string;
   onReportClick?: (report: Report) => void;
+  onDelete?: (reportId: string, e: React.MouseEvent) => void;
   defaultCollapsed?: boolean;
 }
 
 export function PinnedReportsSection({
   organizationId,
   onReportClick,
+  onDelete,
   defaultCollapsed = false,
 }: PinnedReportsSectionProps) {
   const [isOpen, setIsOpen] = useState(!defaultCollapsed);
@@ -129,18 +131,34 @@ export function PinnedReportsSection({
                       )}
                     </div>
 
-                    {/* Unpin button */}
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-8 w-8 p-0 flex-shrink-0"
-                      onClick={(e) => handleUnpin(report.id, e)}
-                      disabled={unpinReport.isPending}
-                      title="Unpin report"
-                      aria-label="Unpin report"
-                    >
-                      <Pin className="h-4 w-4 fill-primary text-primary" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {/* Unpin button */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 flex-shrink-0"
+                        onClick={(e) => handleUnpin(report.id, e)}
+                        disabled={unpinReport.isPending}
+                        title="Unpin report"
+                        aria-label="Unpin report"
+                      >
+                        <Pin className="h-4 w-4 fill-primary text-primary" />
+                      </Button>
+
+                      {/* Delete button */}
+                      {onDelete && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 flex-shrink-0"
+                          onClick={(e) => onDelete(report.id, e)}
+                          title="Delete report"
+                          aria-label="Delete report"
+                        >
+                          <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
 

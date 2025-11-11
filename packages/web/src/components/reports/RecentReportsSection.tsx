@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Clock, Pin, FileText, Loader2 } from 'lucide-react';
+import { Clock, Pin, FileText, Loader2, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, usePinReport } from '@/hooks/use-reports';
 import type { Report } from '@shared/schema';
@@ -19,6 +19,7 @@ interface RecentReportsSectionProps {
     teamIds?: string[];
   };
   onReportClick?: (report: Report) => void;
+  onDelete?: (reportId: string, e: React.MouseEvent) => void;
   limit?: number;
 }
 
@@ -26,6 +27,7 @@ export function RecentReportsSection({
   organizationId,
   filters,
   onReportClick,
+  onDelete,
   limit = 25,
 }: RecentReportsSectionProps) {
   const [currentLimit, setCurrentLimit] = useState(limit);
@@ -140,18 +142,34 @@ export function RecentReportsSection({
                     )}
                   </div>
 
-                  {/* Pin button */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0 flex-shrink-0"
-                    onClick={(e) => handlePin(report.id, e)}
-                    disabled={pinReport.isPending}
-                    title="Pin report"
-                    aria-label="Pin report"
-                  >
-                    <Pin className="h-4 w-4 text-muted-foreground hover:text-primary" />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    {/* Pin button */}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 w-8 p-0 flex-shrink-0"
+                      onClick={(e) => handlePin(report.id, e)}
+                      disabled={pinReport.isPending}
+                      title="Pin report"
+                      aria-label="Pin report"
+                    >
+                      <Pin className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                    </Button>
+
+                    {/* Delete button */}
+                    {onDelete && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 flex-shrink-0"
+                        onClick={(e) => onDelete(report.id, e)}
+                        title="Delete report"
+                        aria-label="Delete report"
+                      >
+                        <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 

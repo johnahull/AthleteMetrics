@@ -54,6 +54,11 @@ export default function Reports() {
     setLocation(`/reports/${report.id}`);
   };
 
+  const handleRequestDelete = (reportId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    setDeleteReportId(reportId);
+  };
+
   const handleDeleteReport = async () => {
     if (deleteReportId) {
       await deleteReport.mutateAsync(deleteReportId);
@@ -92,6 +97,7 @@ export default function Reports() {
       <PinnedReportsSection
         organizationId={organizationContext || undefined}
         onReportClick={handleViewReport}
+        onDelete={handleRequestDelete}
       />
 
       {/* Recent Reports Section */}
@@ -99,6 +105,7 @@ export default function Reports() {
         organizationId={organizationContext || undefined}
         filters={filters}
         onReportClick={handleViewReport}
+        onDelete={handleRequestDelete}
       />
 
       {showWizard && (
