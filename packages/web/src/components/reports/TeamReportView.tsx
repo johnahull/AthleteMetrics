@@ -273,54 +273,50 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     }
 
     // Get all unique benchmark names across all metrics
-    const allBenchmarkTiers = new Set<string>();
+    const allBenchmarkNames = new Set<string>();
     athleteRankings.forEach((athlete: AthleteRanking) => {
       if (athlete.benchmarkComparisons) {
         Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
-          comparisons.forEach((comp) => allBenchmarkTiers.add(comp.benchmarkName));
+          comparisons.forEach((comp) => allBenchmarkNames.add(comp.benchmarkName));
         });
       }
     });
 
-    // For each athlete, find their highest tier met (across all metrics)
-    const athleteTiers = athleteRankings.map((athlete: AthleteRanking) => {
-      let highestTier: string | null = null;
+    // Count how many athletes meet each benchmark
+    const benchmarkCounts: Record<string, number> = {};
+    Array.from(allBenchmarkNames).forEach((benchmarkName) => {
+      benchmarkCounts[benchmarkName] = 0;
+    });
 
+    // Track which athletes meet at least one benchmark
+    const athletesWithBenchmarks = new Set<string>();
+
+    athleteRankings.forEach((athlete: AthleteRanking) => {
       if (athlete.benchmarkComparisons) {
-        // Collect all benchmark tiers this athlete met
-        const metTiers = new Set<string>();
+        // Check all metrics and all benchmarks
         Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
           comparisons.forEach((comp) => {
             if (comp.meetsOrExceeds) {
-              metTiers.add(comp.benchmarkName);
+              benchmarkCounts[comp.benchmarkName]++;
+              athletesWithBenchmarks.add(athlete.userId);
             }
           });
         });
-
-        // Use the first tier met as highest (assumes tiers are ordered by prestige)
-        if (metTiers.size > 0) {
-          highestTier = Array.from(metTiers)[0];
-        }
       }
-
-      return { athleteId: athlete.userId, tier: highestTier };
     });
 
-    // Count athletes per tier
-    const tierCounts: Record<string, number> = {};
-    allBenchmarkTiers.forEach((tier) => {
-      tierCounts[tier] = athleteTiers.filter((at) => at.tier === tier).length;
-    });
+    // Convert to array format for rendering, sorted by count descending
+    const achievements = Array.from(allBenchmarkNames)
+      .map((benchmarkName) => ({
+        tier: benchmarkName,
+        count: benchmarkCounts[benchmarkName],
+        percentage: (benchmarkCounts[benchmarkName] / athleteRankings.length) * 100,
+      }))
+      .filter((achievement) => achievement.count > 0) // Only show benchmarks that are met
+      .sort((a, b) => b.count - a.count); // Sort by count descending
 
     // Count athletes who didn't meet any benchmark
-    const noTierCount = athleteTiers.filter((at) => at.tier === null).length;
-
-    // Convert to array format for rendering
-    const achievements = Array.from(allBenchmarkTiers).map((tier) => ({
-      tier,
-      count: tierCounts[tier],
-      percentage: (tierCounts[tier] / athleteRankings.length) * 100,
-    }));
+    const noTierCount = athleteRankings.length - athletesWithBenchmarks.size;
 
     // Add "no benchmark met" if applicable
     if (noTierCount > 0) {
@@ -499,7 +495,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             <CardHeader>
               <CardTitle>Benchmark Achievement Summary</CardTitle>
               <CardDescription>
-                Distribution of athletes by highest benchmark tier achieved
+                Number of athletes meeting each benchmark (athletes may meet multiple benchmarks)
               </CardDescription>
             </CardHeader>
             <CardContent>
