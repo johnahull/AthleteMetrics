@@ -1261,10 +1261,9 @@ export class ReportService extends BaseService {
       .limit(1)
       .then((rows) => rows[0]);
 
-    const result = metric || {
-      code: metricCode,
-      lowerIsBetter: true,
-    };
+    const result = metric
+      ? { lowerIsBetter: metric.lowerIsBetter, name: metric.label }
+      : { lowerIsBetter: true, name: metricCode };
 
     // Cache the result
     this.metricInfoCache.set(metricCode, result);
