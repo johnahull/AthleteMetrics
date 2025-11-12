@@ -12,6 +12,7 @@ import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
+import { registerBenchmarkGroupRoutes } from "./benchmark-group-routes";
 import { registerReportRoutes } from "./report-routes";
 // import { registerImportRoutes } from "./import-routes";
 
@@ -45,6 +46,9 @@ export function registerAllRoutes(app: Express) {
 
   // Benchmark management routes
   registerBenchmarkRoutes(app);
+
+  // Benchmark group management routes
+  registerBenchmarkGroupRoutes(app);
 
   // Report management routes
   registerReportRoutes(app);
