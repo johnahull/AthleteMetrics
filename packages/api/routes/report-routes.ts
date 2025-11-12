@@ -25,6 +25,75 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
 
+// Type guards for report configs
+interface IndividualReportConfig {
+  athleteId?: string;
+  athleteIds?: string[];
+  timeframe: {
+    type: 'preset' | 'custom';
+    preset?: 'season' | 'year' | 'all_time';
+    customStart?: string;
+    customEnd?: string;
+  };
+  metrics: string[];
+  benchmarks?: {
+    site?: string[];
+    custom?: string[];
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
+}
+
+interface TeamReportConfig {
+  timeframe: {
+    type: 'preset' | 'custom';
+    preset?: 'season' | 'year' | 'all_time';
+    customStart?: string;
+    customEnd?: string;
+  };
+  metrics: string[];
+  filters?: {
+    teamIds?: string[];
+    gender?: string;
+    positions?: string[];
+  };
+  includeCompositeIndex?: boolean;
+  benchmarks?: {
+    site?: string[];
+    custom?: string[];
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
+  compositeIndex?: {
+    enabled: boolean;
+    weights?: Record<string, number>;
+  };
+}
+
+function isIndividualReportConfig(config: unknown): config is IndividualReportConfig {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    ('athleteId' in config || 'athleteIds' in config)
+  );
+}
+
+function isTeamReportConfig(config: unknown): config is TeamReportConfig {
+  return (
+    typeof config === 'object' &&
+    config !== null &&
+    'timeframe' in config &&
+    !('athleteId' in config) &&
+    !('athleteIds' in config)
+  );
+}
+
 // PDF Generation Constants
 const PDF_LIMITS = {
   MAX_ATHLETES_PER_METRIC: 50,
@@ -102,11 +171,12 @@ export function registerReportRoutes(app: Express) {
       if (
         validatedData.reportType === "individual" &&
         validatedData.config &&
-        (validatedData.config as any).athleteIds &&
-        Array.isArray((validatedData.config as any).athleteIds) &&
-        (validatedData.config as any).athleteIds.length > 0
+        isIndividualReportConfig(validatedData.config) &&
+        validatedData.config.athleteIds &&
+        Array.isArray(validatedData.config.athleteIds) &&
+        validatedData.config.athleteIds.length > 0
       ) {
-        const athleteIds = (validatedData.config as any).athleteIds as string[];
+        const athleteIds = validatedData.config.athleteIds;
 
         // Fetch athlete names for better report titles
         const athletes = await db
@@ -137,8 +207,8 @@ export function registerReportRoutes(app: Express) {
             const athleteName = athleteMap.get(athleteId) || "Unknown Athlete";
 
             // Create individual report config with single athleteId
-            const reportConfig = {
-              ...(validatedData.config as any),
+            const reportConfig: IndividualReportConfig = {
+              ...validatedData.config,
               athleteId, // Set single athleteId for this report
             };
 
@@ -180,8 +250,8 @@ export function registerReportRoutes(app: Express) {
       // For individual reports, normalize athleteIds array to single athleteId
       let finalConfig = validatedData.config;
 
-      if (validatedData.reportType === "individual") {
-        const athleteIds = (validatedData.config as any)?.athleteIds;
+      if (validatedData.reportType === "individual" && isIndividualReportConfig(validatedData.config)) {
+        const athleteIds = validatedData.config.athleteIds;
 
         // Validate that individual reports have an athlete
         if (!athleteIds || !Array.isArray(athleteIds) || athleteIds.length === 0) {
@@ -192,11 +262,11 @@ export function registerReportRoutes(app: Express) {
 
         // If single athlete in array, normalize to athleteId (singular)
         if (athleteIds.length === 1) {
+          const { athleteIds: _, ...configWithoutAthleteIds } = validatedData.config;
           finalConfig = {
-            ...(validatedData.config as any),
+            ...configWithoutAthleteIds,
             athleteId: athleteIds[0],
           };
-          delete (finalConfig as any).athleteIds;
         } else {
           // Multiple athletes should have been handled by batch creation above
           return res.status(400).json({
