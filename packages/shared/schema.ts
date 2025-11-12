@@ -1208,6 +1208,8 @@ export const insertReportSchema = createInsertSchema(reports).omit({
     benchmarks: z.object({
       site: z.array(z.string()).optional(), // Site benchmark IDs
       custom: z.array(z.string()).optional(), // Custom benchmark IDs
+      siteGroups: z.array(z.string()).optional(), // Site benchmark group IDs
+      customGroups: z.array(z.string()).optional(), // Custom benchmark group IDs
       userDefined: z.array(z.object({
         metricCode: z.string(),
         value: z.number().positive(),
@@ -1244,6 +1246,8 @@ export const updateReportSchema = z.object({
     benchmarks: z.object({
       site: z.array(z.string()).optional(),
       custom: z.array(z.string()).optional(),
+      siteGroups: z.array(z.string()).optional(),
+      customGroups: z.array(z.string()).optional(),
       userDefined: z.array(z.object({
         metricCode: z.string(),
         value: z.number().positive(),
