@@ -89,12 +89,13 @@ export async function loginAsDefaultUser(page: Page): Promise<void> {
     return;
   }
 
-  const username = process.env.STAGING_USERNAME;
-  const password = process.env.STAGING_PASSWORD;
+  // Try testing credentials first, fall back to staging
+  const username = process.env.TESTING_USERNAME || process.env.STAGING_USERNAME;
+  const password = process.env.TESTING_PASSWORD || process.env.STAGING_PASSWORD;
 
   if (!username || !password) {
     throw new Error(
-      'STAGING_USERNAME and STAGING_PASSWORD environment variables must be set. ' +
+      'TESTING_USERNAME/TESTING_PASSWORD or STAGING_USERNAME/STAGING_PASSWORD environment variables must be set. ' +
       'These credentials are used for E2E test authentication.'
     );
   }

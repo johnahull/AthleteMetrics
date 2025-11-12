@@ -12,6 +12,7 @@ import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
+import { registerReportRoutes } from "./report-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -20,13 +21,13 @@ import { registerBenchmarkRoutes } from "./benchmark-routes";
 export function registerAllRoutes(app: Express) {
   // Authentication routes
   registerAuthRoutes(app);
-  
+
   // User management routes
   registerUserRoutes(app);
-  
+
   // Organization management routes
   registerOrganizationRoutes(app);
-  
+
   // Athlete management routes
   registerAthleteRoutes(app);
 
@@ -44,6 +45,9 @@ export function registerAllRoutes(app: Express) {
 
   // Benchmark management routes
   registerBenchmarkRoutes(app);
+
+  // Report management routes
+  registerReportRoutes(app);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
@@ -66,8 +70,9 @@ export function getRouteStats() {
       analytics: "✅ Registered (new service)",
       metrics: "✅ Registered (new service)",
       benchmarks: "✅ Registered (new service)",
+      reports: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 9/10 modules refactored"
+    status: "Migration nearly complete - 10/11 modules refactored"
   };
 }

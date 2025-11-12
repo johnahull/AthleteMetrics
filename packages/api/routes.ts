@@ -5141,14 +5141,16 @@ export async function registerRoutes(app: Express) {
               continue;
             }
 
-            // Get organization context for filtering
+            // Get organization context and teamId for measurement
             let organizationId: string | undefined;
+            let teamId: string | undefined;
             const currentUser = req.session.user!;
             if (teamName) {
-              // Try to find the team to get organization context
+              // Try to find the team to get organization context and teamId
               const teams = await storage.getTeams();
               const team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
               organizationId = team?.organization?.id;
+              teamId = team?.id; // Store teamId for measurement
             }
             if (!organizationId) {
               // Fallback to current user's primary organization
@@ -5328,6 +5330,7 @@ export async function registerRoutes(app: Express) {
               units: units || getDefaultUnit(metric),
               flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
               notes: notes || undefined,
+              teamId: teamId || undefined, // Pass teamId from CSV teamName lookup
               isVerified: "false"
             };
 

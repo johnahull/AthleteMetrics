@@ -32,12 +32,20 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Install runtime dependencies for sharp and tesseract
+# Install runtime dependencies for sharp, tesseract, and canvas
+# Note: python3, make, g++ needed for canvas (chartjs-node-canvas)
 RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
     cairo \
+    cairo-dev \
     jpeg \
+    jpeg-dev \
     pango \
+    pango-dev \
     giflib \
+    giflib-dev \
     tesseract-ocr \
     tesseract-ocr-data-eng
 
@@ -47,9 +55,10 @@ COPY packages/api/package.json ./packages/api/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install only production dependencies for API and shared workspaces
-# Note: Web dependencies are not needed at runtime since frontend is pre-built
-RUN npm ci --only=production --workspace=@athletemetrics/api --workspace=@athletemetrics/shared
+# Install all production dependencies
+# Note: Migration scripts at root level need drizzle-orm and other deps
+# Web workspace dependencies will be installed but frontend is pre-built
+RUN npm ci --omit=dev
 
 # Copy built application from builder stage
 # Note: @shared code is now bundled into dist/index.js via esbuild alias

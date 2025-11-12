@@ -13,7 +13,8 @@ import {
   FileText,
   TrendingUp,
   Settings,
-  Target
+  Target,
+  ClipboardList
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -37,6 +38,7 @@ const NAVIGATION_CONFIGS = {
       { name: "Athletes", href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
+      { name: "Reports", href: "/reports", icon: ClipboardList },
       { name: "Measurements", href: "/publish", icon: FileCheck },
       { name: "Import/Export", href: "/import-export", icon: FileText },
       { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
@@ -48,6 +50,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
+    { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
@@ -59,6 +62,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
+    { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }

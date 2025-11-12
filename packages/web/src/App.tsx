@@ -48,6 +48,15 @@ const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-ben
 const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
 
+// Lazy load report pages
+const Reports = React.lazy(() => import("./pages/reports"));
+const ReportView = React.lazy(() => import("./pages/report-view"));
+const MultiReportView = React.lazy(() => import("./pages/multi-report-view"));
+const PublicReport = React.lazy(() => import("./pages/public-report"));
+
+// Lazy load component test pages (development only)
+const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-team-selector"));
+
 function Router() {
   return (
     <Switch>
@@ -58,6 +67,7 @@ function Router() {
       <Route path="/forgot-password" component={ForgotPassword} />
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
+      <Route path="/public/reports/:token" component={PublicReport} />
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
@@ -161,6 +171,27 @@ function Router() {
       <Route path="/profile">
         <RouteWrapper loadingText="Loading Profile...">
           <Profile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/multi">
+        <RouteWrapper loadingText="Loading Reports...">
+          <MultiReportView />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports/:id">
+        <RouteWrapper loadingText="Loading Report...">
+          <ReportView />
+        </RouteWrapper>
+      </Route>
+      <Route path="/reports">
+        <RouteWrapper loadingText="Loading Reports...">
+          <Reports />
+        </RouteWrapper>
+      </Route>
+      {/* Component test pages (development) */}
+      <Route path="/component-test/team-selector">
+        <RouteWrapper loadingText="Loading Component Test...">
+          <TeamAthleteSelectorTest />
         </RouteWrapper>
       </Route>
       {/* Welcome page (/) must come after /dashboard to avoid route conflicts

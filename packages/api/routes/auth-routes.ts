@@ -95,6 +95,7 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const organizations = await authService.getUserOrganizations(req.session.user.id);
+      console.log('[auth-routes] /api/auth/me/organizations response for user', req.session.user.id, ':', organizations);
       res.json(organizations);
     } catch (error) {
       console.error("Get organizations error:", error);

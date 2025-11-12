@@ -1,0 +1,111 @@
+export interface Benchmark {
+  name: string;
+  value: number;
+}
+
+export interface TopPerformer {
+  userName: string;
+  value: number;
+}
+
+export interface TeamStatistic {
+  metric: string;
+  units?: string;
+  average: number | null;
+  median: number | null;
+  min: number | null;
+  max: number | null;
+  standardDeviation: number | null;
+  topPerformer: TopPerformer | null;
+  benchmarks?: Benchmark[];
+}
+
+export interface BenchmarkComparison {
+  benchmarkName: string;
+  benchmarkValue: number;
+  meetsOrExceeds: boolean;
+}
+
+export interface AthleteRanking {
+  userId: string;
+  userName: string;
+  compositeIndex?: number;
+  measurements: Record<string, number>;
+  percentiles?: Record<string, number>;
+  benchmarkComparisons?: Record<string, BenchmarkComparison[]>;
+}
+
+export interface TimeframeConfig {
+  type: 'preset' | 'custom';
+  preset?: 'season' | 'year' | 'all_time';
+  customStart?: string;
+  customEnd?: string;
+}
+
+export interface ReportFilters {
+  teamIds?: string[];
+  gender?: string;
+  positions?: string[];
+}
+
+export interface TeamReportConfig {
+  timeframe: TimeframeConfig;
+  metrics: string[];
+  filters?: ReportFilters;
+  includeCompositeIndex?: boolean;
+  benchmarks?: {
+    site?: string[]; // Site benchmark IDs
+    custom?: string[]; // Custom benchmark IDs
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
+  compositeIndex?: {
+    enabled: boolean;
+    weights?: Record<string, number>;
+  };
+}
+
+export interface IndividualReportConfig {
+  athleteId?: string;
+  athleteIds?: string[];
+  timeframe: TimeframeConfig;
+  metrics: string[];
+  benchmarks?: {
+    site?: string[]; // Site benchmark IDs
+    custom?: string[]; // Custom benchmark IDs
+    userDefined?: Array<{
+      metricCode: string;
+      value: number;
+      label: string;
+    }>;
+  };
+}
+
+export interface TeamReportData {
+  reportType: 'team';
+  reportConfig: TeamReportConfig;
+  teamStatistics: TeamStatistic[];
+  athleteRankings: AthleteRanking[];
+  athleteCount: number;
+  teamIds: string[];
+  generatedAt: string;
+}
+
+export type PdfFormat = 'visual' | 'simplified';
+
+export interface Report {
+  id: string;
+  organizationId: string;
+  createdBy: string;
+  name: string;
+  description?: string;
+  reportType: "team" | "individual";
+  config: TeamReportConfig | IndividualReportConfig;
+  isTemplate: boolean;
+  isPinned: boolean;
+  createdAt: string;
+  updatedAt?: string;
+}

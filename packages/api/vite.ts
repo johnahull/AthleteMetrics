@@ -8,7 +8,7 @@ export async function setupVite(app: Express, server: Server) {
   // Dynamic imports for dev-only dependencies (with @vite-ignore to prevent bundling)
   const { createServer: createViteServer, createLogger } = await import(/* @vite-ignore */ "vite");
   // Use dynamic string import to prevent esbuild from bundling vite.config.ts
-  const configPath = "../vite.config.js";
+  const configPath = "../web/vite.config.ts";
   const viteConfig = await import(/* @vite-ignore */ configPath);
   const { nanoid } = await import(/* @vite-ignore */ "nanoid");
 
@@ -20,8 +20,16 @@ export async function setupVite(app: Express, server: Server) {
     allowedHosts: true as const,
   };
 
+  // Set the root directory to the web package
+  const webRoot = path.resolve(
+    path.dirname(new URL(import.meta.url).pathname),
+    "..",
+    "web"
+  );
+
   const vite = await createViteServer({
     ...viteConfig.default,
+    root: webRoot,
     configFile: false,
     customLogger: {
       ...viteLogger,
@@ -42,7 +50,7 @@ export async function setupVite(app: Express, server: Server) {
       const clientTemplate = path.resolve(
         path.dirname(new URL(import.meta.url).pathname),
         "..",
-        "client",
+        "web",
         "index.html",
       );
 
