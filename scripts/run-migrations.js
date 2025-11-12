@@ -200,17 +200,34 @@ async function runMigrations() {
       console.log(`   Migrations tracked: ${migrationCount}`);
     }
 
+    // Check if migration 0000 (base schema) is already tracked
+    let migration0000Tracked = false;
+    if (trackingExists && !trackingIsEmpty) {
+      const migration0000Check = await migrationClient.unsafe(`
+        SELECT EXISTS (
+          SELECT 1 FROM drizzle.__drizzle_migrations
+          WHERE hash = '0000_overjoyed_calypso'
+        ) as migration_0000_exists
+      `);
+      migration0000Tracked = migration0000Check[0]?.migration_0000_exists;
+      console.log(`   Migration 0000 tracked: ${migration0000Tracked ? 'YES' : 'NO'}`);
+    }
+
     // If schema exists but tracking is missing or empty, initialize tracking table
     // This handles databases created via drizzle-kit push
-    // IMPORTANT: Only initialize if tracking is completely empty - if it has migrations,
-    // continue to normal migration flow to apply any new migrations
-    if (schemaExists && trackingExists && !trackingIsEmpty) {
+    // IMPORTANT: Also initialize if migration 0000 is missing from tracking (schema exists via db:push)
+    if (schemaExists && trackingExists && !trackingIsEmpty && migration0000Tracked) {
       console.log('📋 Database has existing migration tracking - checking for new migrations...');
       // Continue to normal migration flow below - drizzle will handle incremental migrations
-    } else if (schemaExists && (!trackingExists || trackingIsEmpty)) {
-      console.log('⚠️  Database schema exists but migration tracking is missing');
-      console.log('   This indicates the database was created via drizzle-kit push');
-      console.log('   Initializing migration tracking table...');
+    } else if (schemaExists && (!trackingExists || trackingIsEmpty || !migration0000Tracked)) {
+      if (!migration0000Tracked && trackingExists && !trackingIsEmpty) {
+        console.log('⚠️  Database schema exists but migration 0000 is not tracked');
+        console.log('   This indicates the database was created via drizzle-kit push before migrations existed');
+      } else {
+        console.log('⚠️  Database schema exists but migration tracking is missing');
+        console.log('   This indicates the database was created via drizzle-kit push');
+      }
+      console.log('   Initializing/updating migration tracking table...');
 
       // Create drizzle schema and tracking table
       await migrationClient.unsafe(`CREATE SCHEMA IF NOT EXISTS drizzle`);
