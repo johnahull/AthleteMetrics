@@ -52,6 +52,17 @@ const reportGenerationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Very strict rate limiting for public endpoints (prevents token enumeration)
+const publicSnapshotLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 10, // Very low limit for unauthenticated public access
+  message: {
+    message: "Too many public snapshot requests, please try again later.",
+  },
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
 export function registerReportRoutes(app: Express) {
   const reportService = new ReportService();
 
@@ -853,7 +864,7 @@ export function registerReportRoutes(app: Express) {
    * Get public snapshot (NO AUTH REQUIRED)
    * GET /api/public/reports/:token
    */
-  app.get("/api/public/reports/:token", async (req, res) => {
+  app.get("/api/public/reports/:token", publicSnapshotLimiter, async (req, res) => {
     try {
       const token = req.params.token;
 
@@ -954,7 +965,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.get(
     "/api/public/reports/:token/pdf",
-    reportGenerationLimiter,
+    publicSnapshotLimiter,
     async (req, res) => {
       try {
         const token = req.params.token;
@@ -1006,8 +1017,12 @@ export function registerReportRoutes(app: Express) {
 function sanitizeFilename(filename: string): string {
   return filename
     .normalize('NFKD') // Unicode normalization to prevent homograph attacks
+    .replace(/[\u0300-\u036f]/g, '') // Remove combining diacritical marks
+    .replace(/[\u200B-\u200D\uFEFF]/g, '') // Remove zero-width characters
+    .replace(/[\u202A-\u202E]/g, '') // Remove bidirectional text overrides (RTL attacks)
     .replace(/[/\\?%*:|"<>\x00-\x1f]/g, '_') // Remove dangerous characters
     .replace(/^\.+/, '_') // Prevent hidden files
+    .replace(/\.+$/, '') // Remove trailing dots (Windows security issue)
     .substring(0, 200) // Limit length to prevent issues
     .trim() || 'report'; // Fallback for empty names
 }
