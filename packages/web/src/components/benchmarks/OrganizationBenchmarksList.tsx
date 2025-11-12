@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Plus, Search, Filter, Sparkles } from "lucide-react";
+import { Plus, Search, Filter, Sparkles, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { BenchmarkCatalog } from "./BenchmarkCatalog";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
@@ -101,6 +101,12 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
           </p>
         </div>
         <div className="flex gap-2">
+          <Link href={`/organizations/${organizationId}/benchmark-groups`}>
+            <Button variant="outline">
+              <Layers className="mr-2 h-4 w-4" />
+              Benchmark Groups
+            </Button>
+          </Link>
           <Link href={`/organizations/${organizationId}/custom-benchmarks`}>
             <Button variant="outline">
               <Sparkles className="mr-2 h-4 w-4" />

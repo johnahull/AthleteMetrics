@@ -25,3 +25,5 @@ export { BenchmarkComparison } from "./BenchmarkComparison";
 // Benchmark Group Components
 export { BenchmarkGroupsList } from "./BenchmarkGroupsList";
 export { BenchmarkGroupEditor } from "./BenchmarkGroupEditor";
+export { CustomBenchmarkGroupsList } from "./CustomBenchmarkGroupsList";
+export { CustomBenchmarkGroupEditor } from "./CustomBenchmarkGroupEditor";
