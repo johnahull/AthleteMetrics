@@ -155,11 +155,15 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // Fetch benchmark groups (site-wide and organization-specific)
   const { data: siteBenchmarkGroups, isLoading: siteGroupsLoading } = useSiteBenchmarkGroups(false, true);
-  const { data: customBenchmarkGroups, isLoading: customGroupsLoading } = useCustomBenchmarkGroups(
+  const { data: customBenchmarkGroups, isLoading: customGroupsLoadingRaw } = useCustomBenchmarkGroups(
     organizationContext || "",
     false,
     true
   );
+
+  // When organizationContext is not set, the custom groups query is disabled
+  // React Query sets isLoading=true for disabled queries, so we need to handle this
+  const customGroupsLoading = organizationContext ? customGroupsLoadingRaw : false;
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
