@@ -361,10 +361,10 @@ describe('ShareReportDialog Component', () => {
         <ShareReportDialog reportId={testReportId} open={true} onClose={mockOnClose} />
       );
 
-      // Wait for the snapshots table to render
+      // Wait for the snapshots table to render (portal rendering delay in happy-dom)
       await waitFor(() => {
         expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Find copy buttons in the table (there should be 2 active snapshots)
       let snapshotCopyButtons: HTMLElement[] = [];
@@ -396,10 +396,10 @@ describe('ShareReportDialog Component', () => {
         <ShareReportDialog reportId={testReportId} open={true} onClose={mockOnClose} />
       );
 
-      // Wait for the snapshots table to render
+      // Wait for the snapshots table to render (portal rendering delay in happy-dom)
       await waitFor(() => {
         expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Find trash buttons in the table
       let snapshotTrashButtons: HTMLElement[] = [];
@@ -460,11 +460,11 @@ describe('ShareReportDialog Component', () => {
       expect(screen.getByText('Views')).toBeInTheDocument();
       expect(screen.getByText('Actions')).toBeInTheDocument();
 
-      // Wait for snapshots to load and check first snapshot data
+      // Wait for snapshots to load and check first snapshot data (portal rendering delay in happy-dom)
       await waitFor(() => {
         expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
         expect(screen.getByText('5')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Check second snapshot data
       await waitFor(() => {
@@ -478,11 +478,11 @@ describe('ShareReportDialog Component', () => {
         <ShareReportDialog reportId={testReportId} open={true} onClose={mockOnClose} />
       );
 
-      // Wait for snapshots to load - only 2 active snapshots should be displayed
+      // Wait for snapshots to load - only 2 active snapshots should be displayed (portal rendering delay in happy-dom)
       await waitFor(() => {
         expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
         expect(screen.getByText('Jan 5, 2025')).toBeInTheDocument();
-      });
+      }, { timeout: 5000 });
 
       // Revoked snapshot should not be displayed
       expect(screen.queryByText('Dec 1, 2024')).not.toBeInTheDocument();

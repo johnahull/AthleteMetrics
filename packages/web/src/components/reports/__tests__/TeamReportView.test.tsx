@@ -181,8 +181,8 @@ describe('TeamReportView - PDF Export', () => {
     expect(exportButton).toBeInTheDocument();
     await user.click(exportButton);
 
-    // Wait for dropdown menu to appear and click Visual format option
-    const visualOption = await screen.findByText('Visual (Match UI)');
+    // Wait for dropdown menu to appear and click Visual format option (portal rendering delay in happy-dom)
+    const visualOption = await screen.findByText('Visual (Match UI)', {}, { timeout: 5000 });
     await user.click(visualOption);
 
     // Wait for fetch to be called
@@ -211,6 +211,8 @@ describe('TeamReportView - PDF Export', () => {
   });
 
   it('should handle PDF download errors gracefully', async () => {
+    const user = userEvent.setup();
+
     // Mock failed PDF response
     mockFetch.mockResolvedValueOnce({
       ok: false,
@@ -239,13 +241,11 @@ describe('TeamReportView - PDF Export', () => {
 
     // Click Export PDF dropdown trigger
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Click Visual format option from dropdown
-    await waitFor(() => {
-      const visualOption = screen.getByText('Visual (Match UI)');
-      fireEvent.click(visualOption);
-    });
+    // Wait for dropdown menu and click Visual format option (portal rendering delay in happy-dom)
+    const visualOption = await screen.findByText('Visual (Match UI)', {}, { timeout: 5000 });
+    await user.click(visualOption);
 
     // Wait for error to be logged
     await waitFor(() => {
@@ -262,6 +262,8 @@ describe('TeamReportView - PDF Export', () => {
   });
 
   it('should include credentials in PDF request', async () => {
+    const user = userEvent.setup();
+
     // Mock successful PDF response
     const mockPdfBlob = new Blob(['mock pdf content'], { type: 'application/pdf' });
     mockFetch.mockResolvedValueOnce({
@@ -288,13 +290,11 @@ describe('TeamReportView - PDF Export', () => {
 
     // Click Export PDF dropdown trigger
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Click Visual format option from dropdown
-    await waitFor(() => {
-      const visualOption = screen.getByText('Visual (Match UI)');
-      fireEvent.click(visualOption);
-    });
+    // Wait for dropdown menu and click Visual format option (portal rendering delay in happy-dom)
+    const visualOption = await screen.findByText('Visual (Match UI)', {}, { timeout: 5000 });
+    await user.click(visualOption);
 
     // Verify credentials are included
     await waitFor(() => {
@@ -308,6 +308,8 @@ describe('TeamReportView - PDF Export', () => {
   });
 
   it('should properly sanitize report name in PDF filename', async () => {
+    const user = userEvent.setup();
+
     // Mock report with special characters in name
     const reportWithSpecialChars: Report = {
       ...mockReport,
@@ -351,14 +353,11 @@ describe('TeamReportView - PDF Export', () => {
 
     // Click Export PDF dropdown
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Click the simplified format option
-    await waitFor(() => {
-      const simplifiedOption = screen.getByText('Simplified (Print-Friendly)');
-      expect(simplifiedOption).toBeInTheDocument();
-      fireEvent.click(simplifiedOption);
-    });
+    // Wait for dropdown menu and click simplified format option (portal rendering delay in happy-dom)
+    const simplifiedOption = await screen.findByText('Simplified (Print-Friendly)', {}, { timeout: 5000 });
+    await user.click(simplifiedOption);
 
     await waitFor(() => {
       expect(mockClick).toHaveBeenCalled();
@@ -372,6 +371,8 @@ describe('TeamReportView - PDF Export', () => {
   });
 
   it('should render PDF format dropdown menu', async () => {
+    const user = userEvent.setup();
+
     renderComponent();
 
     // Wait for report data to load
@@ -394,14 +395,14 @@ describe('TeamReportView - PDF Export', () => {
     expect(exportButton).toBeInTheDocument();
 
     // Click to open dropdown
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Verify both format options are available
+    // Verify both format options are available (portal rendering delay in happy-dom)
     await waitFor(() => {
       expect(screen.getByText('PDF Format')).toBeInTheDocument();
       expect(screen.getByText('Visual (Match UI)')).toBeInTheDocument();
       expect(screen.getByText('Simplified (Print-Friendly)')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 
   it('should download PDF with visual format when selected', async () => {
@@ -430,15 +431,13 @@ describe('TeamReportView - PDF Export', () => {
     });
 
     // Click Export PDF dropdown
+    const user = userEvent.setup();
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Click Visual format option
-    await waitFor(() => {
-      const visualOption = screen.getByText('Visual (Match UI)');
-      expect(visualOption).toBeInTheDocument();
-      fireEvent.click(visualOption);
-    });
+    // Wait for dropdown menu and click Visual format option (portal rendering delay in happy-dom)
+    const visualOption = await screen.findByText('Visual (Match UI)', {}, { timeout: 5000 });
+    await user.click(visualOption);
 
     // Verify fetch was called with format=visual parameter
     await waitFor(() => {
@@ -478,15 +477,13 @@ describe('TeamReportView - PDF Export', () => {
     });
 
     // Click Export PDF dropdown
+    const user = userEvent.setup();
     const exportButton = screen.getByRole('button', { name: /export pdf/i });
-    fireEvent.click(exportButton);
+    await user.click(exportButton);
 
-    // Click Simplified format option
-    await waitFor(() => {
-      const simplifiedOption = screen.getByText('Simplified (Print-Friendly)');
-      expect(simplifiedOption).toBeInTheDocument();
-      fireEvent.click(simplifiedOption);
-    });
+    // Wait for dropdown menu and click Simplified format option (portal rendering delay in happy-dom)
+    const simplifiedOption = await screen.findByText('Simplified (Print-Friendly)', {}, { timeout: 5000 });
+    await user.click(simplifiedOption);
 
     // Verify fetch was called with format=simplified parameter
     await waitFor(() => {
@@ -632,13 +629,13 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Benchmark Achievement Summary')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     // Should show "Club Average" benchmark with 2 athletes (67%)
     await waitFor(() => {
       expect(screen.getByText(/Club Average/i)).toBeInTheDocument();
       expect(screen.getByText('67%')).toBeInTheDocument(); // 2 out of 3 athletes
-    });
+    }, { timeout: 5000 });
 
     // Should show "Elite Level" benchmark with 0 athletes (0%)
     // Note: The component filters out benchmarks with 0 count
@@ -693,14 +690,14 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Benchmark Achievement Summary')).toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
 
     // Both athletes meet "Good"
     await waitFor(() => {
       const goodBenchmark = screen.getByText(/Good/i).closest('div');
       expect(goodBenchmark).toBeInTheDocument();
       expect(goodBenchmark?.textContent).toContain('100%'); // 2 out of 2
-    });
+    }, { timeout: 5000 });
 
     // Only athlete-1 meets "Great"
     const greatBenchmark = screen.getByText(/Great/i).closest('div');
@@ -791,6 +788,6 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
     // Should not show benchmark summary section at all
     await waitFor(() => {
       expect(screen.queryByText('Benchmark Achievement Summary')).not.toBeInTheDocument();
-    });
+    }, { timeout: 5000 });
   });
 });
