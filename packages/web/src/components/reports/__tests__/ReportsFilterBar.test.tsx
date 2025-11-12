@@ -190,9 +190,10 @@ describe('ReportsFilterBar', () => {
     // Check that teams button shows badge with count
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
 
-    //Wait for any async rendering
+    //Wait for any async rendering - multiple badges may exist
     await waitFor(() => {
-      expect(screen.queryByText('1')).toBeInTheDocument();
+      const badges = screen.getAllByText('1');
+      expect(badges.length).toBeGreaterThan(0);
     });
   });
 
@@ -222,14 +223,25 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        metrics: ['FLY10_TIME'],
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     // Check that metrics button shows badge with count
     expect(screen.getByRole('button', { name: /metrics/i })).toBeInTheDocument();
 
     // Multiple "1" badges may exist (one in metrics button, one for activeFilterCount)
-    const badges = screen.getAllByText('1');
-    expect(badges.length).toBeGreaterThan(0);
+    await waitFor(() => {
+      const badges = screen.getAllByText('1');
+      expect(badges.length).toBeGreaterThan(0);
+    });
   });
 
   it('displays active filter count badge when filters are applied', () => {
@@ -248,7 +260,19 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 4, // search + reportType + 2 metrics counted as 1 + 1 team
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        search: 'test',
+        reportType: 'individual' as const,
+        metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+        teamIds: ['team-1'],
+      },
+      activeFilterCount: 4,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     // Badge should show count
     expect(screen.getByText('4')).toBeInTheDocument();
@@ -270,7 +294,16 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        search: 'test',
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     expect(screen.getByRole('button', { name: /clear filters/i })).toBeInTheDocument();
   });
@@ -293,7 +326,16 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        search: 'test',
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     const clearButton = screen.getByRole('button', { name: /clear filters/i });
     await user.click(clearButton);
@@ -317,7 +359,16 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        teamIds: ['team-1', 'team-2'],
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     // Check Teams button exists
     expect(screen.getByRole('button', { name: /teams/i })).toBeInTheDocument();
@@ -343,7 +394,16 @@ describe('ReportsFilterBar', () => {
       activeFilterCount: 1,
     });
 
-    render(<ReportsFilterBar {...defaultProps} />, { wrapper: createWrapper() });
+    const props = {
+      ...defaultProps,
+      filters: {
+        ...defaultFilters,
+        metrics: ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505'],
+      },
+      activeFilterCount: 1,
+    };
+
+    render(<ReportsFilterBar {...props} />, { wrapper: createWrapper() });
 
     // Check Metrics button exists
     expect(screen.getByRole('button', { name: /metrics/i })).toBeInTheDocument();
