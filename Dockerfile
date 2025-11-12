@@ -66,6 +66,7 @@ COPY --from=builder /app/dist ./dist
 
 # Copy migrations and scripts (needed for db:migrate at startup)
 COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/drizzle/migrations ./drizzle/migrations
 COPY --from=builder /app/scripts ./scripts
 
 # Create non-root user for security

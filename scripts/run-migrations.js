@@ -241,6 +241,18 @@ async function runMigrations() {
 
       // Read migration journal to get all migration hashes
       const journalPath = path.join(migrationsFolder, 'meta', '_journal.json');
+
+      // Check if journal file exists before trying to read it
+      if (!fs.existsSync(journalPath)) {
+        console.error(`❌ Migration journal file not found: ${journalPath}`);
+        console.error('   This file is required for initializing migration tracking');
+        console.error('   Possible causes:');
+        console.error('   1. Migrations folder not properly copied to deployment');
+        console.error('   2. Running from wrong directory');
+        console.error('   3. Migration files corrupted or missing');
+        throw new Error(`Migration journal file not found: ${journalPath}`);
+      }
+
       const journal = JSON.parse(fs.readFileSync(journalPath, 'utf8'));
 
       // Mark all migrations as applied
