@@ -2,14 +2,19 @@ import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
+  siteBenchmarkGroups, customBenchmarkGroups, siteBenchmarkGroupMembers, customBenchmarkGroupMembers,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
+  type SiteBenchmarkGroup, type CustomBenchmarkGroup, type SiteBenchmarkGroupMember, type CustomBenchmarkGroupMember,
+  type SiteBenchmarkGroupWithMembers, type CustomBenchmarkGroupWithMembers,
   type InsertOrganization, type InsertTeam, type InsertMeasurement, type InsertUser, type InsertUserOrganization, type InsertUserTeam, type InsertInvitation, type InsertAuditLog,
   type InsertSiteMetric, type InsertOrganizationMetric,
   type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
+  type InsertSiteBenchmarkGroup, type InsertCustomBenchmarkGroup, type InsertSiteBenchmarkGroupMember, type InsertCustomBenchmarkGroupMember,
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
+  type UpdateSiteBenchmarkGroup, type UpdateCustomBenchmarkGroup,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -253,6 +258,28 @@ export interface IStorage {
   getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]>;
   enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
   disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
+
+  // Site Benchmark Groups (Master Group Catalog)
+  getSiteBenchmarkGroups(filters?: { includeInactive?: boolean }): Promise<SiteBenchmarkGroup[]>;
+  getSiteBenchmarkGroup(id: string): Promise<SiteBenchmarkGroup | undefined>;
+  getSiteBenchmarkGroupWithMembers(id: string): Promise<SiteBenchmarkGroupWithMembers | undefined>;
+  getSiteBenchmarkGroupsWithMembers(filters?: { includeInactive?: boolean }): Promise<SiteBenchmarkGroupWithMembers[]>;
+  createSiteBenchmarkGroup(group: InsertSiteBenchmarkGroup, createdBy: string): Promise<SiteBenchmarkGroup>;
+  updateSiteBenchmarkGroup(id: string, group: Partial<UpdateSiteBenchmarkGroup>): Promise<SiteBenchmarkGroup>;
+  deleteSiteBenchmarkGroup(id: string): Promise<void>;
+  addBenchmarkToSiteGroup(groupId: string, benchmarkId: string, displayOrder?: number): Promise<SiteBenchmarkGroupMember>;
+  removeBenchmarkFromSiteGroup(groupId: string, benchmarkId: string): Promise<void>;
+
+  // Custom Benchmark Groups (Org-specific groups)
+  getCustomBenchmarkGroupsForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmarkGroup[]>;
+  getCustomBenchmarkGroup(id: string): Promise<CustomBenchmarkGroup | undefined>;
+  getCustomBenchmarkGroupWithMembers(id: string): Promise<CustomBenchmarkGroupWithMembers | undefined>;
+  getCustomBenchmarkGroupsWithMembersForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmarkGroupWithMembers[]>;
+  createCustomBenchmarkGroup(group: InsertCustomBenchmarkGroup, createdBy: string): Promise<CustomBenchmarkGroup>;
+  updateCustomBenchmarkGroup(organizationId: string, groupId: string, group: Partial<UpdateCustomBenchmarkGroup>): Promise<CustomBenchmarkGroup>;
+  deleteCustomBenchmarkGroup(organizationId: string, groupId: string): Promise<void>;
+  addBenchmarkToCustomGroup(groupId: string, benchmarkId: string, displayOrder?: number): Promise<CustomBenchmarkGroupMember>;
+  removeBenchmarkFromCustomGroup(groupId: string, benchmarkId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3862,6 +3889,276 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated;
+  }
+
+  // ========================================================================
+  // SITE BENCHMARK GROUPS (Master Group Catalog)
+  // ========================================================================
+
+  async getSiteBenchmarkGroups(filters?: { includeInactive?: boolean }): Promise<SiteBenchmarkGroup[]> {
+    const conditions = [];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(siteBenchmarkGroups.isActive, true));
+    }
+
+    const groups = await db
+      .select()
+      .from(siteBenchmarkGroups)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(siteBenchmarkGroups.displayOrder), asc(siteBenchmarkGroups.name));
+
+    return groups;
+  }
+
+  async getSiteBenchmarkGroup(id: string): Promise<SiteBenchmarkGroup | undefined> {
+    const [group] = await db
+      .select()
+      .from(siteBenchmarkGroups)
+      .where(eq(siteBenchmarkGroups.id, id))
+      .limit(1);
+
+    return group;
+  }
+
+  async getSiteBenchmarkGroupWithMembers(id: string): Promise<SiteBenchmarkGroupWithMembers | undefined> {
+    const group = await this.getSiteBenchmarkGroup(id);
+    if (!group) return undefined;
+
+    // Get member benchmarks
+    const memberBenchmarks = await db
+      .select({
+        benchmark: siteBenchmarks,
+        member: siteBenchmarkGroupMembers,
+      })
+      .from(siteBenchmarkGroupMembers)
+      .innerJoin(siteBenchmarks, eq(siteBenchmarkGroupMembers.benchmarkId, siteBenchmarks.id))
+      .where(eq(siteBenchmarkGroupMembers.groupId, id))
+      .orderBy(asc(siteBenchmarkGroupMembers.displayOrder));
+
+    return {
+      ...group,
+      benchmarks: memberBenchmarks.map(m => m.benchmark),
+    };
+  }
+
+  async getSiteBenchmarkGroupsWithMembers(filters?: { includeInactive?: boolean }): Promise<SiteBenchmarkGroupWithMembers[]> {
+    const groups = await this.getSiteBenchmarkGroups(filters);
+
+    const groupsWithMembers = await Promise.all(
+      groups.map(async (group) => {
+        const withMembers = await this.getSiteBenchmarkGroupWithMembers(group.id);
+        return withMembers!;
+      })
+    );
+
+    return groupsWithMembers;
+  }
+
+  async createSiteBenchmarkGroup(group: InsertSiteBenchmarkGroup, createdBy: string): Promise<SiteBenchmarkGroup> {
+    const [created] = await db
+      .insert(siteBenchmarkGroups)
+      .values({
+        ...group,
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateSiteBenchmarkGroup(id: string, group: Partial<UpdateSiteBenchmarkGroup>): Promise<SiteBenchmarkGroup> {
+    const [updated] = await db
+      .update(siteBenchmarkGroups)
+      .set({
+        ...group,
+        updatedAt: new Date(),
+      })
+      .where(eq(siteBenchmarkGroups.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Site benchmark group with id ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSiteBenchmarkGroup(id: string): Promise<void> {
+    const deleted = await db
+      .delete(siteBenchmarkGroups)
+      .where(eq(siteBenchmarkGroups.id, id))
+      .returning();
+
+    if (!deleted || deleted.length === 0) {
+      throw new Error(`Site benchmark group with id ${id} not found`);
+    }
+  }
+
+  async addBenchmarkToSiteGroup(groupId: string, benchmarkId: string, displayOrder?: number): Promise<SiteBenchmarkGroupMember> {
+    const [member] = await db
+      .insert(siteBenchmarkGroupMembers)
+      .values({
+        groupId,
+        benchmarkId,
+        displayOrder: displayOrder ?? 999,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return member;
+  }
+
+  async removeBenchmarkFromSiteGroup(groupId: string, benchmarkId: string): Promise<void> {
+    await db
+      .delete(siteBenchmarkGroupMembers)
+      .where(
+        and(
+          eq(siteBenchmarkGroupMembers.groupId, groupId),
+          eq(siteBenchmarkGroupMembers.benchmarkId, benchmarkId)
+        )
+      );
+  }
+
+  // ========================================================================
+  // CUSTOM BENCHMARK GROUPS (Org-specific groups)
+  // ========================================================================
+
+  async getCustomBenchmarkGroupsForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmarkGroup[]> {
+    const conditions = [eq(customBenchmarkGroups.organizationId, organizationId)];
+
+    if (!filters?.includeInactive) {
+      conditions.push(eq(customBenchmarkGroups.isActive, true));
+    }
+
+    const groups = await db
+      .select()
+      .from(customBenchmarkGroups)
+      .where(and(...conditions))
+      .orderBy(asc(customBenchmarkGroups.displayOrder), asc(customBenchmarkGroups.name));
+
+    return groups;
+  }
+
+  async getCustomBenchmarkGroup(id: string): Promise<CustomBenchmarkGroup | undefined> {
+    const [group] = await db
+      .select()
+      .from(customBenchmarkGroups)
+      .where(eq(customBenchmarkGroups.id, id))
+      .limit(1);
+
+    return group;
+  }
+
+  async getCustomBenchmarkGroupWithMembers(id: string): Promise<CustomBenchmarkGroupWithMembers | undefined> {
+    const group = await this.getCustomBenchmarkGroup(id);
+    if (!group) return undefined;
+
+    // Get member benchmarks
+    const memberBenchmarks = await db
+      .select({
+        benchmark: customBenchmarks,
+        member: customBenchmarkGroupMembers,
+      })
+      .from(customBenchmarkGroupMembers)
+      .innerJoin(customBenchmarks, eq(customBenchmarkGroupMembers.benchmarkId, customBenchmarks.id))
+      .where(eq(customBenchmarkGroupMembers.groupId, id))
+      .orderBy(asc(customBenchmarkGroupMembers.displayOrder));
+
+    return {
+      ...group,
+      benchmarks: memberBenchmarks.map(m => m.benchmark),
+    };
+  }
+
+  async getCustomBenchmarkGroupsWithMembersForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmarkGroupWithMembers[]> {
+    const groups = await this.getCustomBenchmarkGroupsForOrg(organizationId, filters);
+
+    const groupsWithMembers = await Promise.all(
+      groups.map(async (group) => {
+        const withMembers = await this.getCustomBenchmarkGroupWithMembers(group.id);
+        return withMembers!;
+      })
+    );
+
+    return groupsWithMembers;
+  }
+
+  async createCustomBenchmarkGroup(group: InsertCustomBenchmarkGroup, createdBy: string): Promise<CustomBenchmarkGroup> {
+    const [created] = await db
+      .insert(customBenchmarkGroups)
+      .values({
+        ...group,
+        createdBy,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return created;
+  }
+
+  async updateCustomBenchmarkGroup(organizationId: string, groupId: string, group: Partial<UpdateCustomBenchmarkGroup>): Promise<CustomBenchmarkGroup> {
+    const [updated] = await db
+      .update(customBenchmarkGroups)
+      .set({
+        ...group,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(customBenchmarkGroups.id, groupId),
+          eq(customBenchmarkGroups.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Custom benchmark group with id ${groupId} not found for organization ${organizationId}`);
+    }
+
+    return updated;
+  }
+
+  async deleteCustomBenchmarkGroup(organizationId: string, groupId: string): Promise<void> {
+    const deleted = await db
+      .delete(customBenchmarkGroups)
+      .where(
+        and(
+          eq(customBenchmarkGroups.id, groupId),
+          eq(customBenchmarkGroups.organizationId, organizationId)
+        )
+      )
+      .returning();
+
+    if (!deleted || deleted.length === 0) {
+      throw new Error(`Custom benchmark group with id ${groupId} not found for organization ${organizationId}`);
+    }
+  }
+
+  async addBenchmarkToCustomGroup(groupId: string, benchmarkId: string, displayOrder?: number): Promise<CustomBenchmarkGroupMember> {
+    const [member] = await db
+      .insert(customBenchmarkGroupMembers)
+      .values({
+        groupId,
+        benchmarkId,
+        displayOrder: displayOrder ?? 999,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return member;
+  }
+
+  async removeBenchmarkFromCustomGroup(groupId: string, benchmarkId: string): Promise<void> {
+    await db
+      .delete(customBenchmarkGroupMembers)
+      .where(
+        and(
+          eq(customBenchmarkGroupMembers.groupId, groupId),
+          eq(customBenchmarkGroupMembers.benchmarkId, benchmarkId)
+        )
+      );
   }
 
   // Evaluation Queries

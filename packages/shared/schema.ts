@@ -228,6 +228,64 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   enabledIdx: index("org_benchmarks_enabled_idx").on(table.isEnabled),
 }));
 
+// Site-level benchmark groups (master catalog)
+export const siteBenchmarkGroups = pgTable("site_benchmark_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order").default(999).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  activeIdx: index("site_benchmark_groups_active_idx").on(table.isActive),
+  displayOrderIdx: index("site_benchmark_groups_display_order_idx").on(table.displayOrder),
+}));
+
+// Organization-specific custom benchmark groups
+export const customBenchmarkGroups = pgTable("custom_benchmark_groups", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  isActive: boolean("is_active").default(true).notNull(),
+  displayOrder: integer("display_order").default(999).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("custom_benchmark_groups_org_idx").on(table.organizationId),
+  orgActiveIdx: index("custom_benchmark_groups_org_active_idx").on(table.organizationId, table.isActive),
+  uniqueOrgName: unique("custom_benchmark_groups_org_name_unique").on(table.organizationId, table.name),
+}));
+
+// Many-to-many: Site benchmarks to site benchmark groups
+export const siteBenchmarkGroupMembers = pgTable("site_benchmark_group_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => siteBenchmarkGroups.id, { onDelete: 'cascade' }),
+  benchmarkId: varchar("benchmark_id").notNull().references(() => siteBenchmarks.id, { onDelete: 'cascade' }),
+  displayOrder: integer("display_order").default(999).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueMembership: unique("site_benchmark_group_members_unique").on(table.groupId, table.benchmarkId),
+  groupIdx: index("site_benchmark_group_members_group_idx").on(table.groupId),
+  benchmarkIdx: index("site_benchmark_group_members_benchmark_idx").on(table.benchmarkId),
+}));
+
+// Many-to-many: Custom benchmarks to custom benchmark groups
+export const customBenchmarkGroupMembers = pgTable("custom_benchmark_group_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  groupId: varchar("group_id").notNull().references(() => customBenchmarkGroups.id, { onDelete: 'cascade' }),
+  benchmarkId: varchar("benchmark_id").notNull().references(() => customBenchmarks.id, { onDelete: 'cascade' }),
+  displayOrder: integer("display_order").default(999).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueMembership: unique("custom_benchmark_group_members_unique").on(table.groupId, table.benchmarkId),
+  groupIdx: index("custom_benchmark_group_members_group_idx").on(table.groupId),
+  benchmarkIdx: index("custom_benchmark_group_members_benchmark_idx").on(table.benchmarkId),
+}));
+
 export const measurements = pgTable("measurements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   // Historical reference fields - NO foreign key constraints
@@ -1070,6 +1128,64 @@ export const updateOrganizationBenchmarkSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
+// Benchmark Group Schemas
+export const insertSiteBenchmarkGroupSchema = createInsertSchema(siteBenchmarkGroups).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true,
+  updatedAt: true,
+}).extend({
+  name: z.string().min(1, "Group name is required").max(100),
+  description: z.string().optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+});
+
+export const updateSiteBenchmarkGroupSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+export const insertCustomBenchmarkGroupSchema = createInsertSchema(customBenchmarkGroups).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true,
+  updatedAt: true,
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  name: z.string().min(1, "Group name is required").max(100),
+  description: z.string().optional(),
+  isActive: z.boolean().default(true),
+  displayOrder: z.number().int().optional(),
+});
+
+export const updateCustomBenchmarkGroupSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  isActive: z.boolean().optional(),
+  displayOrder: z.number().int().optional(),
+});
+
+export const insertSiteBenchmarkGroupMemberSchema = createInsertSchema(siteBenchmarkGroupMembers).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  groupId: z.string().min(1, "Group ID is required"),
+  benchmarkId: z.string().min(1, "Benchmark ID is required"),
+  displayOrder: z.number().int().optional(),
+});
+
+export const insertCustomBenchmarkGroupMemberSchema = createInsertSchema(customBenchmarkGroupMembers).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  groupId: z.string().min(1, "Group ID is required"),
+  benchmarkId: z.string().min(1, "Benchmark ID is required"),
+  displayOrder: z.number().int().optional(),
+});
+
 // Report Schemas
 export const insertReportSchema = createInsertSchema(reports).omit({
   id: true,
@@ -1273,6 +1389,20 @@ export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBench
 export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
 export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
 
+export type InsertSiteBenchmarkGroup = z.infer<typeof insertSiteBenchmarkGroupSchema>;
+export type SiteBenchmarkGroup = typeof siteBenchmarkGroups.$inferSelect;
+export type UpdateSiteBenchmarkGroup = z.infer<typeof updateSiteBenchmarkGroupSchema>;
+
+export type InsertCustomBenchmarkGroup = z.infer<typeof insertCustomBenchmarkGroupSchema>;
+export type CustomBenchmarkGroup = typeof customBenchmarkGroups.$inferSelect;
+export type UpdateCustomBenchmarkGroup = z.infer<typeof updateCustomBenchmarkGroupSchema>;
+
+export type InsertSiteBenchmarkGroupMember = z.infer<typeof insertSiteBenchmarkGroupMemberSchema>;
+export type SiteBenchmarkGroupMember = typeof siteBenchmarkGroupMembers.$inferSelect;
+
+export type InsertCustomBenchmarkGroupMember = z.infer<typeof insertCustomBenchmarkGroupMemberSchema>;
+export type CustomBenchmarkGroupMember = typeof customBenchmarkGroupMembers.$inferSelect;
+
 export type InsertReport = z.infer<typeof insertReportSchema>;
 export type Report = typeof reports.$inferSelect;
 export type UpdateReport = z.infer<typeof updateReportSchema>;
@@ -1299,6 +1429,15 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   level: 'college' | 'high_school' | 'club' | null;
   // Status (from site benchmarks only, custom benchmarks don't have isActive)
   isActive?: boolean;
+};
+
+// Enriched types for benchmark groups with their member benchmarks
+export type SiteBenchmarkGroupWithMembers = SiteBenchmarkGroup & {
+  benchmarks: SiteBenchmark[];
+};
+
+export type CustomBenchmarkGroupWithMembers = CustomBenchmarkGroup & {
+  benchmarks: CustomBenchmark[];
 };
 
 // Enums
