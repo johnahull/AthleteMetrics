@@ -113,7 +113,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const enableCompositeIndex = watch("enableCompositeIndex");
 
   // Fetch organization's enabled metrics
-  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
+  const { data: metrics, fetchStatus: metricsFetchStatus, error: metricsError } = useQuery({
     queryKey: ["/api/metrics", organizationContext],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/organizations/${organizationContext}/metrics?enabledOnly=true`);
@@ -121,9 +121,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     },
     enabled: !!organizationContext,
   });
+  const metricsLoading = metricsFetchStatus === 'fetching';
 
   // Fetch teams
-  const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
+  const { data: teams, fetchStatus: teamsFetchStatus, error: teamsError } = useQuery({
     queryKey: ["/api/teams", organizationContext],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/teams?organizationId=${organizationContext}`);
@@ -131,9 +132,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     },
     enabled: !!organizationContext,
   });
+  const teamsLoading = teamsFetchStatus === 'fetching';
 
   // Fetch enabled benchmarks for the organization (includes both site and custom benchmarks)
-  const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useQuery<OrganizationBenchmarkWithDetails[]>({
+  const { data: enabledBenchmarks, fetchStatus: benchmarksFetchStatus, error: benchmarksError } = useQuery<OrganizationBenchmarkWithDetails[]>({
     queryKey: ["/api/benchmarks", organizationContext],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/organizations/${organizationContext}/benchmarks`);
@@ -141,6 +143,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     },
     enabled: !!organizationContext,
   });
+  const benchmarksLoading = benchmarksFetchStatus === 'fetching';
 
   // Separate site and custom benchmarks from the enabled benchmarks (memoized for performance)
   const siteBenchmarks = useMemo(
@@ -154,20 +157,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   );
 
   // Fetch benchmark groups (site-wide and organization-specific)
-  const { data: siteBenchmarkGroups, isLoading: siteGroupsLoading } = useSiteBenchmarkGroups(false, true);
+  const { data: siteBenchmarkGroups, fetchStatus: siteGroupsFetchStatus } = useSiteBenchmarkGroups(false, true);
+  const siteGroupsLoading = siteGroupsFetchStatus === 'fetching';
+
   const {
     data: customBenchmarkGroups,
-    isLoading: customGroupsLoadingRaw,
     fetchStatus: customGroupsFetchStatus
   } = useCustomBenchmarkGroups(
     organizationContext || "",
     false,
     true
   );
-
-  // When organizationContext is not set, the custom groups query is disabled
-  // Use fetchStatus to distinguish between "not fetching" vs "actively fetching"
-  // fetchStatus: 'idle' means query is disabled or completed, 'fetching' means actively loading
   const customGroupsLoading = customGroupsFetchStatus === 'fetching';
 
   const handleNext = (e?: React.MouseEvent) => {
