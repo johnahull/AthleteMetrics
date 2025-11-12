@@ -362,13 +362,19 @@ describe('ShareReportDialog Component', () => {
       );
 
       // Wait for the snapshots table to render
-      await screen.findByText('Jan 1, 2025');
+      await waitFor(() => {
+        expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
+      });
 
       // Find copy buttons in the table (there should be 2 active snapshots)
-      const copyButtons = screen.getAllByRole('button', { name: '' });
-      const snapshotCopyButtons = copyButtons.filter(btn =>
-        btn.querySelector('svg')?.classList.contains('lucide-copy')
-      );
+      let snapshotCopyButtons: HTMLElement[] = [];
+      await waitFor(() => {
+        const copyButtons = screen.getAllByRole('button', { name: '' });
+        snapshotCopyButtons = copyButtons.filter(btn =>
+          btn.querySelector('svg')?.classList.contains('lucide-copy')
+        );
+        expect(snapshotCopyButtons.length).toBeGreaterThan(0);
+      });
 
       // Click the first snapshot's copy button
       fireEvent.click(snapshotCopyButtons[0]);
@@ -391,13 +397,19 @@ describe('ShareReportDialog Component', () => {
       );
 
       // Wait for the snapshots table to render
-      await screen.findByText('Jan 1, 2025');
+      await waitFor(() => {
+        expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
+      });
 
       // Find trash buttons in the table
-      const trashButtons = screen.getAllByRole('button', { name: '' });
-      const snapshotTrashButtons = trashButtons.filter(btn =>
-        btn.querySelector('svg')?.classList.contains('lucide-trash-2')
-      );
+      let snapshotTrashButtons: HTMLElement[] = [];
+      await waitFor(() => {
+        const trashButtons = screen.getAllByRole('button', { name: '' });
+        snapshotTrashButtons = trashButtons.filter(btn =>
+          btn.querySelector('svg')?.classList.contains('lucide-trash-2')
+        );
+        expect(snapshotTrashButtons.length).toBeGreaterThan(0);
+      });
 
       // Click the first snapshot's trash button
       fireEvent.click(snapshotTrashButtons[0]);
@@ -449,12 +461,16 @@ describe('ShareReportDialog Component', () => {
       expect(screen.getByText('Actions')).toBeInTheDocument();
 
       // Wait for snapshots to load and check first snapshot data
-      await screen.findByText('Jan 1, 2025');
-      expect(screen.getByText('5')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
+        expect(screen.getByText('5')).toBeInTheDocument();
+      });
 
       // Check second snapshot data
-      expect(screen.getByText('Jan 5, 2025')).toBeInTheDocument();
-      expect(screen.getByText('12')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Jan 5, 2025')).toBeInTheDocument();
+        expect(screen.getByText('12')).toBeInTheDocument();
+      });
     });
 
     it('should filter out revoked snapshots', async () => {
@@ -463,14 +479,16 @@ describe('ShareReportDialog Component', () => {
       );
 
       // Wait for snapshots to load - only 2 active snapshots should be displayed
-      await screen.findByText('Jan 1, 2025');
-      expect(screen.getByText('Jan 5, 2025')).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('Jan 1, 2025')).toBeInTheDocument();
+        expect(screen.getByText('Jan 5, 2025')).toBeInTheDocument();
+      });
 
       // Revoked snapshot should not be displayed
       expect(screen.queryByText('Dec 1, 2024')).not.toBeInTheDocument();
     });
 
-    it('should display snapshot expiration dates', () => {
+    it('should display snapshot expiration dates', async () => {
       renderWithQueryClient(
         <ShareReportDialog reportId={testReportId} open={true} onClose={mockOnClose} />
       );
@@ -479,8 +497,10 @@ describe('ShareReportDialog Component', () => {
       const expirationDate1 = format(addDays(new Date('2025-01-01'), 7), 'MMM d, yyyy');
       const expirationDate2 = format(addDays(new Date('2025-01-05'), 30), 'MMM d, yyyy');
 
-      expect(screen.getByText(expirationDate1)).toBeInTheDocument();
-      expect(screen.getByText(expirationDate2)).toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText(expirationDate1)).toBeInTheDocument();
+        expect(screen.getByText(expirationDate2)).toBeInTheDocument();
+      });
     });
   });
 });
