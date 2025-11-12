@@ -699,7 +699,7 @@ describe('ReportWizard Component', () => {
 
       // Should show "no benchmarks" message
       await waitFor(() => {
-        expect(screen.getByText(/No enabled benchmarks available/i)).toBeInTheDocument();
+        expect(screen.getByText(/No enabled benchmarks or groups available/i)).toBeInTheDocument();
       });
     });
   });
