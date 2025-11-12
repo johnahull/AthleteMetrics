@@ -1,8 +1,7 @@
 -- Migration: Add is_pinned column to reports table
 -- Description: Allows users to pin up to 10 reports for quick access on reports page
 -- Date: 2025-11-10
-
-BEGIN;
+-- NOTE: BEGIN/COMMIT removed - transaction is handled by apply-manual-migrations.js
 
 -- Add is_pinned column (default false)
 ALTER TABLE reports
@@ -18,5 +17,3 @@ WHERE is_pinned = true;
 
 -- Add comment for documentation
 COMMENT ON COLUMN reports.is_pinned IS 'Indicates if this report is pinned for quick access. Limit 10 per user enforced at application level.';
-
-COMMIT;
