@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Settings,
   Target,
-  ClipboardList
+  ClipboardList,
+  Layers
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -30,7 +31,8 @@ const NAVIGATION_CONFIGS = {
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
-      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" }
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
+      { name: "Benchmark Groups", href: "/benchmark-groups", icon: Layers, testId: "benchmark-groups-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },

@@ -44,6 +44,7 @@ const Welcome = React.lazy(() => import("./pages/welcome"));
 
 // Lazy load benchmark pages
 const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
+const BenchmarkGroups = React.lazy(() => import("./pages/benchmark-groups"));
 const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-benchmarks"));
 const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
@@ -146,6 +147,11 @@ function Router() {
       <Route path="/benchmarks">
         <RouteWrapper loadingText="Loading Benchmarks...">
           <Benchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/benchmark-groups">
+        <RouteWrapper loadingText="Loading Benchmark Groups...">
+          <BenchmarkGroups />
         </RouteWrapper>
       </Route>
       <Route path="/organizations/:id/custom-benchmarks">
