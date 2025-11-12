@@ -16,6 +16,10 @@ import {
   customBenchmarks,
   organizationBenchmarks,
   siteMetrics,
+  siteBenchmarkGroups,
+  siteBenchmarkGroupMembers,
+  customBenchmarkGroups,
+  customBenchmarkGroupMembers,
   type Report,
   type ReportSnapshot,
   type ReportBenchmark,
@@ -49,6 +53,8 @@ interface ReportConfig {
   benchmarks?: {
     site?: string[];
     custom?: string[];
+    siteGroups?: string[];
+    customGroups?: string[];
     userDefined?: Array<{
       metricCode: string;
       value: number;
@@ -1080,6 +1086,57 @@ export class ReportService extends BaseService {
       return benchmarksByMetric;
     }
 
+    // Expand benchmark groups into individual benchmark IDs
+    const expandedSiteBenchmarkIds = new Set<string>(benchmarkConfig.site || []);
+    const expandedCustomBenchmarkIds = new Set<string>(benchmarkConfig.custom || []);
+
+    // Expand site benchmark groups
+    if (benchmarkConfig.siteGroups && benchmarkConfig.siteGroups.length > 0) {
+      const siteGroupMembers = await db
+        .select({
+          benchmarkId: siteBenchmarkGroupMembers.benchmarkId,
+        })
+        .from(siteBenchmarkGroupMembers)
+        .innerJoin(
+          siteBenchmarkGroups,
+          eq(siteBenchmarkGroupMembers.groupId, siteBenchmarkGroups.id)
+        )
+        .where(
+          and(
+            inArray(siteBenchmarkGroups.id, benchmarkConfig.siteGroups),
+            eq(siteBenchmarkGroups.isActive, true)
+          )
+        );
+
+      for (const member of siteGroupMembers) {
+        expandedSiteBenchmarkIds.add(member.benchmarkId);
+      }
+    }
+
+    // Expand custom benchmark groups
+    if (benchmarkConfig.customGroups && benchmarkConfig.customGroups.length > 0) {
+      const customGroupMembers = await db
+        .select({
+          benchmarkId: customBenchmarkGroupMembers.benchmarkId,
+        })
+        .from(customBenchmarkGroupMembers)
+        .innerJoin(
+          customBenchmarkGroups,
+          eq(customBenchmarkGroupMembers.groupId, customBenchmarkGroups.id)
+        )
+        .where(
+          and(
+            inArray(customBenchmarkGroups.id, benchmarkConfig.customGroups),
+            eq(customBenchmarkGroups.organizationId, organizationId),
+            eq(customBenchmarkGroups.isActive, true)
+          )
+        );
+
+      for (const member of customGroupMembers) {
+        expandedCustomBenchmarkIds.add(member.benchmarkId);
+      }
+    }
+
     // Get user-defined benchmarks from the report
     if (benchmarkConfig.userDefined && benchmarkConfig.userDefined.length > 0) {
       for (const benchmark of benchmarkConfig.userDefined) {
@@ -1093,8 +1150,8 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Get site benchmarks
-    if (benchmarkConfig.site && benchmarkConfig.site.length > 0) {
+    // Get site benchmarks (including those from expanded groups)
+    if (expandedSiteBenchmarkIds.size > 0) {
       const siteBenchmarksList = await db
         .select({
           benchmark: siteBenchmarks,
@@ -1112,7 +1169,7 @@ export class ReportService extends BaseService {
         .where(
           and(
             eq(siteBenchmarks.isActive, true),
-            inArray(siteBenchmarks.id, benchmarkConfig.site)
+            inArray(siteBenchmarks.id, Array.from(expandedSiteBenchmarkIds))
           )
         );
 
@@ -1127,8 +1184,8 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Get custom benchmarks
-    if (benchmarkConfig.custom && benchmarkConfig.custom.length > 0) {
+    // Get custom benchmarks (including those from expanded groups)
+    if (expandedCustomBenchmarkIds.size > 0) {
       const customBenchmarksList = await db
         .select({
           benchmark: customBenchmarks,
@@ -1147,7 +1204,7 @@ export class ReportService extends BaseService {
           and(
             eq(customBenchmarks.organizationId, organizationId),
             eq(customBenchmarks.isActive, true),
-            inArray(customBenchmarks.id, benchmarkConfig.custom)
+            inArray(customBenchmarks.id, Array.from(expandedCustomBenchmarkIds))
           )
         );
 

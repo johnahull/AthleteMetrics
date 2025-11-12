@@ -31,6 +31,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
+import { useSiteBenchmarkGroups, useCustomBenchmarkGroups } from "@/lib/benchmark-groups-api";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -44,6 +45,8 @@ const reportConfigSchema = z.object({
   metrics: z.array(z.string()).min(1, "At least one metric is required"),
   siteBenchmarks: z.array(z.string()).optional(),
   customBenchmarks: z.array(z.string()).optional(),
+  siteGroups: z.array(z.string()).optional(),
+  customGroups: z.array(z.string()).optional(),
   teamIds: z.array(z.string()).optional(),
   gender: z.string().optional(),
   positions: z.array(z.string()).optional(),
@@ -88,6 +91,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       metrics: [],
       siteBenchmarks: [],
       customBenchmarks: [],
+      siteGroups: [],
+      customGroups: [],
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
@@ -146,6 +151,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const customBenchmarks = useMemo(
     () => enabledBenchmarks?.filter((b) => b.benchmarkType === 'custom') || [],
     [enabledBenchmarks]
+  );
+
+  // Fetch benchmark groups (site-wide and organization-specific)
+  const { data: siteBenchmarkGroups, isLoading: siteGroupsLoading } = useSiteBenchmarkGroups(false, true);
+  const { data: customBenchmarkGroups, isLoading: customGroupsLoading } = useCustomBenchmarkGroups(
+    organizationContext || "",
+    false,
+    true
   );
 
   const handleNext = (e?: React.MouseEvent) => {
@@ -213,10 +226,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       athleteIds: data.athleteIds,
     };
 
-    if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
+    if (data.siteBenchmarks?.length || data.customBenchmarks?.length || data.siteGroups?.length || data.customGroups?.length) {
       config.benchmarks = {
         site: data.siteBenchmarks,
         custom: data.customBenchmarks,
+        siteGroups: data.siteGroups,
+        customGroups: data.customGroups,
       };
     }
 
@@ -481,13 +496,15 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
           {/* Step 6: Benchmarks (Optional) */}
           {step === 6 && (
-            <div className="space-y-4">
-              <Label>Benchmarks (Optional)</Label>
-              <p className="text-sm text-muted-foreground">
-                Select benchmarks to compare against in the report
-              </p>
+            <div className="space-y-6">
+              <div>
+                <Label>Benchmarks (Optional)</Label>
+                <p className="text-sm text-muted-foreground">
+                  Select benchmark groups or individual benchmarks to compare against in the report
+                </p>
+              </div>
 
-              {benchmarksLoading ? (
+              {(benchmarksLoading || siteGroupsLoading || customGroupsLoading) ? (
                 <div className="flex justify-center py-8">
                   <LoadingSpinner />
                 </div>
@@ -499,10 +516,116 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   )}
 
+                  {/* Benchmark Groups Section */}
+                  {(siteBenchmarkGroups && siteBenchmarkGroups.length > 0) ||
+                   (customBenchmarkGroups && customBenchmarkGroups.length > 0) ? (
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="font-medium mb-1">Benchmark Groups</h4>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Select entire groups of benchmarks at once
+                        </p>
+                      </div>
+
+                      {siteBenchmarkGroups && siteBenchmarkGroups.length > 0 && (
+                        <div>
+                          <h5 className="text-sm font-medium mb-2 text-muted-foreground">Site Groups</h5>
+                          <div className="space-y-2 border rounded-lg p-3 max-h-40 overflow-y-auto bg-accent/20">
+                            {siteBenchmarkGroups.map((group: any) => (
+                              <div key={group.id} className="flex items-start space-x-2">
+                                <Checkbox
+                                  id={`site-group-${group.id}`}
+                                  checked={watch("siteGroups")?.includes(group.id)}
+                                  onCheckedChange={(checked) => {
+                                    const current = watch("siteGroups") || [];
+                                    setValue(
+                                      "siteGroups",
+                                      checked
+                                        ? [...current, group.id]
+                                        : current.filter((id) => id !== group.id)
+                                    );
+                                  }}
+                                />
+                                <div className="flex-1">
+                                  <Label
+                                    htmlFor={`site-group-${group.id}`}
+                                    className="cursor-pointer font-medium"
+                                  >
+                                    {group.name}
+                                  </Label>
+                                  {group.description && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {group.description}
+                                    </p>
+                                  )}
+                                  {'benchmarks' in group && Array.isArray(group.benchmarks) && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {group.benchmarks.length} benchmark{group.benchmarks.length !== 1 ? 's' : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {customBenchmarkGroups && customBenchmarkGroups.length > 0 && (
+                        <div>
+                          <h5 className="text-sm font-medium mb-2 text-muted-foreground">Custom Groups</h5>
+                          <div className="space-y-2 border rounded-lg p-3 max-h-40 overflow-y-auto bg-accent/20">
+                            {customBenchmarkGroups.map((group: any) => (
+                              <div key={group.id} className="flex items-start space-x-2">
+                                <Checkbox
+                                  id={`custom-group-${group.id}`}
+                                  checked={watch("customGroups")?.includes(group.id)}
+                                  onCheckedChange={(checked) => {
+                                    const current = watch("customGroups") || [];
+                                    setValue(
+                                      "customGroups",
+                                      checked
+                                        ? [...current, group.id]
+                                        : current.filter((id) => id !== group.id)
+                                    );
+                                  }}
+                                />
+                                <div className="flex-1">
+                                  <Label
+                                    htmlFor={`custom-group-${group.id}`}
+                                    className="cursor-pointer font-medium"
+                                  >
+                                    {group.name}
+                                  </Label>
+                                  {group.description && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {group.description}
+                                    </p>
+                                  )}
+                                  {'benchmarks' in group && Array.isArray(group.benchmarks) && (
+                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                      {group.benchmarks.length} benchmark{group.benchmarks.length !== 1 ? 's' : ''}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* Individual Benchmarks Section */}
                   {siteBenchmarks && siteBenchmarks.length > 0 && (
                     <div>
-                      <h4 className="font-medium mb-2">Site Benchmarks</h4>
-                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                      <div>
+                        <h4 className="font-medium mb-1">Individual Benchmarks</h4>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Or select specific benchmarks
+                        </p>
+                      </div>
+                      <h5 className="text-sm font-medium mb-2 text-muted-foreground">Site Benchmarks</h5>
+                      <div className="space-y-2 border rounded-lg p-3 max-h-48 overflow-y-auto">
                         {siteBenchmarks.map((benchmark: any) => (
                           <div key={benchmark.id} className="flex items-center space-x-2">
                             <Checkbox
@@ -520,7 +643,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                             />
                             <Label
                               htmlFor={`site-${benchmark.id}`}
-                              className="cursor-pointer"
+                              className="cursor-pointer text-sm"
                             >
                               {benchmark.name}
                             </Label>
@@ -532,8 +655,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
                   {customBenchmarks && customBenchmarks.length > 0 && (
                     <div>
-                      <h4 className="font-medium mb-2">Custom Benchmarks</h4>
-                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                      <h5 className="text-sm font-medium mb-2 text-muted-foreground">Custom Benchmarks</h5>
+                      <div className="space-y-2 border rounded-lg p-3 max-h-48 overflow-y-auto">
                         {customBenchmarks.map((benchmark: any) => (
                           <div key={benchmark.id} className="flex items-center space-x-2">
                             <Checkbox
@@ -551,7 +674,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                             />
                             <Label
                               htmlFor={`custom-${benchmark.id}`}
-                              className="cursor-pointer"
+                              className="cursor-pointer text-sm"
                             >
                               {benchmark.name}
                             </Label>
@@ -562,10 +685,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   )}
 
                   {!benchmarksError &&
+                   (!siteBenchmarkGroups || siteBenchmarkGroups.length === 0) &&
+                   (!customBenchmarkGroups || customBenchmarkGroups.length === 0) &&
                    (!siteBenchmarks || siteBenchmarks.length === 0) &&
                    (!customBenchmarks || customBenchmarks.length === 0) && (
                     <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                      <p>No enabled benchmarks available</p>
+                      <p>No enabled benchmarks or groups available</p>
                       <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
                     </div>
                   )}

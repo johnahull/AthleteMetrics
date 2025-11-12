@@ -39,6 +39,8 @@ interface IndividualReportConfig {
   benchmarks?: {
     site?: string[];
     custom?: string[];
+    siteGroups?: string[];
+    customGroups?: string[];
     userDefined?: Array<{
       metricCode: string;
       value: number;
@@ -64,6 +66,8 @@ interface TeamReportConfig {
   benchmarks?: {
     site?: string[];
     custom?: string[];
+    siteGroups?: string[];
+    customGroups?: string[];
     userDefined?: Array<{
       metricCode: string;
       value: number;
