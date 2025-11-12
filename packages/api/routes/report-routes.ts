@@ -25,6 +25,13 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
 
+// PDF Generation Constants
+const PDF_LIMITS = {
+  MAX_ATHLETES_PER_METRIC: 50,
+  MAX_COMPOSITE_RANKINGS: 20,
+  PAGE_BREAK_THRESHOLD: 200, // y-position threshold for adding new page
+} as const;
+
 // Rate limiting for report endpoints
 const reportLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -1187,7 +1194,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
         // Sort athletes by this metric
         const sortedAthletes = sortAthletesByMetric(reportData.athleteRankings, stat.metric);
         const totalAthletes = sortedAthletes.length;
-        const displayedAthletes = sortedAthletes.slice(0, 50); // Limit to top 50
+        const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
           const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
@@ -1216,11 +1223,11 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
 
           yPos = (doc as any).lastAutoTable.finalY + 5;
 
-          // Add truncation notice if more than 50 athletes
-          if (totalAthletes > 50) {
+          // Add truncation notice if more athletes than limit
+          if (totalAthletes > PDF_LIMITS.MAX_ATHLETES_PER_METRIC) {
             doc.setFontSize(8);
             doc.setTextColor(100, 100, 100);
-            doc.text(`Showing top 50 of ${totalAthletes} athletes`, 14, yPos);
+            doc.text(`Showing top ${PDF_LIMITS.MAX_ATHLETES_PER_METRIC} of ${totalAthletes} athletes`, 14, yPos);
             doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
             yPos += 5;
           }
@@ -1237,7 +1244,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
 
     if (hasCompositeIndex) {
       // Check if we need a new page
-      if (yPos > 200) {
+      if (yPos > PDF_LIMITS.PAGE_BREAK_THRESHOLD) {
         doc.addPage();
         yPos = 20;
       }
@@ -1251,7 +1258,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
       const rankingRows = (reportData.athleteRankings || [])
         .filter((athlete: any) => athlete.compositeIndex !== undefined && athlete.compositeIndex !== null)
         .sort((a: any, b: any) => (b.compositeIndex || 0) - (a.compositeIndex || 0))
-        .slice(0, 20) // Top 20
+        .slice(0, PDF_LIMITS.MAX_COMPOSITE_RANKINGS)
         .map((athlete: any, index: number) => [
           (index + 1).toString(),
           athlete.userName,
