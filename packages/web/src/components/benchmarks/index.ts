@@ -21,3 +21,7 @@ export { AthleteBenchmarkStatus } from "./AthleteBenchmarkStatus";
 export { BenchmarkProgressBar } from "./BenchmarkProgressBar";
 export { BenchmarkBadge } from "./BenchmarkBadge";
 export { BenchmarkComparison } from "./BenchmarkComparison";
+
+// Benchmark Group Components
+export { BenchmarkGroupsList } from "./BenchmarkGroupsList";
+export { BenchmarkGroupEditor } from "./BenchmarkGroupEditor";
