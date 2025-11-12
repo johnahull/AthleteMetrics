@@ -41,7 +41,10 @@ export function CustomBenchmarkGroupsList({ organizationId, onEdit, onCreate }: 
   const { toast } = useToast();
 
   // Fetch groups with members
-  const { data: groups, isLoading, error } = useCustomBenchmarkGroups(organizationId, includeInactive, includeMembers);
+  const { data: groups, fetchStatus, error } = useCustomBenchmarkGroups(organizationId, includeInactive, includeMembers);
+
+  // Use fetchStatus to determine loading state (handles disabled queries properly)
+  const isLoading = fetchStatus === 'fetching';
 
   // Delete mutation
   const deleteMutation = useDeleteCustomBenchmarkGroup();
