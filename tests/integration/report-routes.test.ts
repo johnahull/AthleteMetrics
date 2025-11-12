@@ -237,10 +237,12 @@ describe('GET /api/reports', () => {
       .set('Cookie', coachAuthCookie);
 
     expect(response.status).toBe(200);
-    expect(Array.isArray(response.body)).toBe(true);
-    expect(response.body.length).toBeGreaterThanOrEqual(1);
+    expect(response.body.reports).toBeDefined();
+    expect(Array.isArray(response.body.reports)).toBe(true);
+    expect(response.body.reports.length).toBeGreaterThanOrEqual(1);
+    expect(response.body.pagination).toBeDefined();
 
-    const foundReport = response.body.find((r: any) => r.id === testReport.id);
+    const foundReport = response.body.reports.find((r: any) => r.id === testReport.id);
     expect(foundReport).toBeDefined();
     expect(foundReport.name).toBe('Existing Report');
   });
@@ -272,9 +274,10 @@ describe('GET /api/reports', () => {
       .set('Cookie', coachAuthCookie);
 
     expect(response.status).toBe(200);
+    expect(response.body.reports).toBeDefined();
 
     // Should NOT include report from other organization
-    const foundReport = response.body.find((r: any) => r.id === otherReport.id);
+    const foundReport = response.body.reports.find((r: any) => r.id === otherReport.id);
     expect(foundReport).toBeUndefined();
 
     // Cleanup
