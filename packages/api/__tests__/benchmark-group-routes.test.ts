@@ -107,16 +107,20 @@ beforeAll(async () => {
 
   testCustomBenchmarkId = customBenchmark.id;
 
-  // Get session cookies
-  const siteAdminRes = await request(app)
-    .post('/api/test-login')
-    .send({ userId: siteAdmin.id, isSiteAdmin: true });
-  siteAdminCookie = siteAdminRes.headers['set-cookie'];
+  // Create authenticated agents by logging in
+  const siteAdminAgent = request.agent(app);
+  await siteAdminAgent
+    .post('/api/login')
+    .send({ username: 'siteadmin-benchmarkgroup-test', password: 'password123' });
 
-  const orgAdminRes = await request(app)
-    .post('/api/test-login')
-    .send({ userId: orgAdmin.id, organizationId: testOrgId });
-  orgAdminCookie = orgAdminRes.headers['set-cookie'];
+  const orgAdminAgent = request.agent(app);
+  await orgAdminAgent
+    .post('/api/login')
+    .send({ username: 'orgadmin-benchmarkgroup-test', password: 'password123' });
+
+  // Store cookies for later use
+  siteAdminCookie = siteAdminAgent.jar.getCookies({ domain: 'localhost', path: '/' }) as any;
+  orgAdminCookie = orgAdminAgent.jar.getCookies({ domain: 'localhost', path: '/' }) as any;
 });
 
 afterAll(async () => {
