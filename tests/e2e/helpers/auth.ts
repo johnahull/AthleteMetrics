@@ -104,6 +104,28 @@ export async function loginAsDefaultUser(page: Page): Promise<void> {
 }
 
 /**
+ * Login as site admin
+ * Uses environment variables for site admin credentials
+ *
+ * @param page - Playwright Page object
+ * @returns Promise<void>
+ * @throws Error if E2E_SITE_ADMIN_USERNAME or E2E_SITE_ADMIN_PASSWORD not set
+ */
+export async function loginAsSiteAdmin(page: Page): Promise<void> {
+  const username = process.env.E2E_SITE_ADMIN_USERNAME;
+  const password = process.env.E2E_SITE_ADMIN_PASSWORD;
+
+  if (!username || !password) {
+    throw new Error(
+      'E2E_SITE_ADMIN_USERNAME and E2E_SITE_ADMIN_PASSWORD environment variables must be set. ' +
+      'These credentials are used for site admin E2E tests.'
+    );
+  }
+
+  await loginWithCredentials(page, username, password, true);
+}
+
+/**
  * Logout current user
  *
  * @param page - Playwright Page object
