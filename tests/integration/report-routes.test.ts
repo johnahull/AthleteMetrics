@@ -225,7 +225,7 @@ describe('GET /api/reports', () => {
     [testReport] = await db.insert(reports).values({
       name: 'Existing Report',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['FLY10_TIME'] },
       createdBy: testCoach.id,
     }).returning();
@@ -262,7 +262,7 @@ describe('GET /api/reports', () => {
     const [otherReport] = await db.insert(reports).values({
       name: 'Other Org Report',
       organizationId: otherOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: [] },
       createdBy: testSiteAdmin.id,
     }).returning();
@@ -288,7 +288,7 @@ describe('GET /api/reports/:id', () => {
     [testReport] = await db.insert(reports).values({
       name: 'Test Report for Details',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: {
         timeframe: { type: 'preset', preset: 'all_time' },
         metrics: ['FLY10_TIME'],
@@ -332,7 +332,7 @@ describe('PUT /api/reports/:id', () => {
       name: 'Original Report Name',
       description: 'Original description',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['FLY10_TIME'] },
       createdBy: testCoach.id,
     }).returning();
@@ -381,7 +381,7 @@ describe('DELETE /api/reports/:id', () => {
     [testReport] = await db.insert(reports).values({
       name: 'Report to Delete',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: { timeframe: { type: 'preset', preset: 'all_time' }, metrics: ['FLY10_TIME'] },
       createdBy: testCoach.id,
     }).returning();
@@ -423,11 +423,11 @@ describe('POST /api/reports/:id/generate', () => {
   let testAthlete: any;
 
   beforeEach(async () => {
-    // Create coach report
+    // Create team report
     [testReport] = await db.insert(reports).values({
-      name: 'Coach Report for Generation',
+      name: 'Team Report for Generation',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: {
         timeframe: { type: 'preset', preset: 'all_time' },
         metrics: ['FLY10_TIME'],
@@ -539,7 +539,7 @@ describe('Report Snapshots', () => {
     [testReport] = await db.insert(reports).values({
       name: 'Report for Snapshots',
       organizationId: testOrg.id,
-      reportType: 'coach',
+      reportType: 'team',
       config: {
         timeframe: { type: 'preset', preset: 'all_time' },
         metrics: ['FLY10_TIME'],
