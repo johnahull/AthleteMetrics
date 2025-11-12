@@ -13,7 +13,7 @@ import type { CustomBenchmarkGroup, CustomBenchmarkGroupWithMembers } from "@sha
 
 export default function CustomBenchmarkGroupsPage() {
   const { id } = useParams();
-  const { user, userOrganizations } = useAuth();
+  const { user, userOrganizations, isLoading } = useAuth();
   const [showEditor, setShowEditor] = useState(false);
   const [editingGroup, setEditingGroup] = useState<CustomBenchmarkGroup | CustomBenchmarkGroupWithMembers | null>(null);
 
@@ -21,8 +21,15 @@ export default function CustomBenchmarkGroupsPage() {
     return <LoadingSpinner text="Loading organization..." />;
   }
 
+  // Wait for auth to load
+  if (isLoading) {
+    return <LoadingSpinner text="Loading..." />;
+  }
+
   // Check if user has access to this organization
   const isSiteAdmin = user?.isSiteAdmin || user?.role === "site_admin";
+
+  // Site admins have access to all orgs, non-site-admins need to be in userOrganizations
   const hasAccess = isSiteAdmin || userOrganizations?.some(org => org.organizationId === id);
 
   if (!hasAccess) {
