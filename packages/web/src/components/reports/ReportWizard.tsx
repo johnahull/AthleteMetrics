@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/lib/auth";
 import { useCreateReport } from "@/hooks/use-reports";
+import { useOrganizationMetrics } from "@/lib/metrics-api";
+import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import {
   Dialog,
   DialogContent,
@@ -107,15 +109,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
 
-  // Fetch organization's enabled metrics
-  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useQuery({
-    queryKey: ["/api/metrics", organizationContext],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/metrics?enabledOnly=true`);
-      return res.json();
-    },
-    enabled: !!organizationContext,
-  });
+  // Fetch organization's enabled metrics using standardized hook
+  const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
+    organizationContext || "",
+    true // enabledOnly
+  );
 
   // Fetch teams
   const { data: teams, isLoading: teamsLoading, error: teamsError } = useQuery({
@@ -127,15 +125,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     enabled: !!organizationContext,
   });
 
-  // Fetch enabled benchmarks for the organization (includes both site and custom benchmarks)
-  const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useQuery<OrganizationBenchmarkWithDetails[]>({
-    queryKey: ["/api/benchmarks", organizationContext],
-    queryFn: async () => {
-      const res = await apiRequest("GET", `/api/organizations/${organizationContext}/benchmarks`);
-      return res.json();
-    },
-    enabled: !!organizationContext,
-  });
+  // Fetch enabled benchmarks for the organization using standardized hook
+  const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useOrganizationBenchmarks(
+    organizationContext || "",
+    false // includeInactive - only get active benchmarks
+  );
 
   // Separate site and custom benchmarks from the enabled benchmarks (memoized for performance)
   const siteBenchmarks = useMemo(
@@ -453,8 +447,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 </div>
               ) : (
                 <div className="space-y-2 border rounded-lg p-4 max-h-96 overflow-y-auto">
-                  {metrics.map((metric: any) => {
-                    const metricCode = metric.metricCode || metric.code;
+                  {metrics.map((metric) => {
+                    const metricCode = metric.metricCode;
+                    const displayName = metric.customLabel || metric.siteMetric.label;
                     return (
                       <div key={metricCode} className="flex items-center space-x-2">
                         <Checkbox
@@ -463,9 +458,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                           onCheckedChange={() => toggleMetric(metricCode)}
                         />
                         <Label htmlFor={metricCode} className="cursor-pointer flex-1">
-                          <div className="font-medium">{metric.siteMetric?.name || metricCode}</div>
+                          <div className="font-medium">{displayName}</div>
                           <div className="text-sm text-muted-foreground">
-                            {metric.siteMetric?.unit} • {metric.siteMetric?.category}
+                            {metric.siteMetric.unit} • {metric.siteMetric.category}
                           </div>
                         </Label>
                       </div>
