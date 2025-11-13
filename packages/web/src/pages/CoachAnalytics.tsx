@@ -7,7 +7,8 @@ import React from 'react';
 import { BaseAnalyticsView } from '@/components/analytics/BaseAnalyticsView';
 import { Button } from '@/components/ui/button';
 import { Users, BarChart3, Trophy } from 'lucide-react';
-import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { ChartSkeleton, KPICardSkeleton } from '@/components/ui/loading-states';
 
 import { useAuth } from '@/lib/auth';
 import { devLog } from '@/utils/dev-logger';
@@ -69,9 +70,47 @@ export function CoachAnalytics() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="flex flex-col items-center justify-center min-h-[400px]">
-          <div className="text-lg font-medium mb-2">Loading organization...</div>
-          <div className="text-sm text-muted-foreground">Setting up your team analytics dashboard</div>
+        <div className="space-y-6">
+          {/* Header Skeleton */}
+          <div>
+            <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-96 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+
+          {/* Filters Skeleton */}
+          <Card className="bg-white">
+            <CardContent className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="space-y-2">
+                    <div className="h-4 w-20 bg-gray-200 rounded animate-pulse"></div>
+                    <div className="h-10 w-full bg-gray-200 rounded animate-pulse"></div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* KPI Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <KPICardSkeleton />
+            <KPICardSkeleton />
+            <KPICardSkeleton />
+          </div>
+
+          {/* Charts Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="bg-white">
+              <CardContent className="p-0">
+                <ChartSkeleton />
+              </CardContent>
+            </Card>
+            <Card className="bg-white">
+              <CardContent className="p-0">
+                <ChartSkeleton />
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     );

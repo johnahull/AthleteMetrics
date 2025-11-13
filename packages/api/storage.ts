@@ -120,6 +120,18 @@ export interface IStorage {
     page?: number;
     limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
+  getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
   updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
@@ -1746,6 +1758,53 @@ export class DatabaseStorage implements IStorage {
         athlete.teams.some((team: Team) => team.id === filters.teamId)
       );
     }
+
+    return result;
+  }
+
+  async getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>> {
+    const limit = filters.limit || 5;
+
+    // Query to get athletes with their most recent measurement
+    // Uses PostgreSQL DISTINCT ON to efficiently get the latest measurement per athlete
+    const result = await db.execute<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      avatar: string | null;
+      lastMeasurementDate: string;
+      lastMeasurementType: string;
+      teamName: string | null;
+    }>(sql`
+      SELECT DISTINCT ON (u.id)
+        u.id,
+        u.first_name as "firstName",
+        u.last_name as "lastName",
+        NULL as avatar,
+        m.date as "lastMeasurementDate",
+        m.metric as "lastMeasurementType",
+        t.name as "teamName"
+      FROM ${users} u
+      INNER JOIN ${userOrganizations} uo ON u.id = uo.user_id
+      INNER JOIN ${measurements} m ON m.user_id = u.id
+      LEFT JOIN ${teams} t ON m.team_id = t.id
+      WHERE uo.organization_id = ${filters.organizationId}
+        AND uo.role = 'athlete'
+        AND u.deleted_at IS NULL
+      ORDER BY u.id, m.date DESC, m.created_at DESC
+      LIMIT ${limit}
+    `);
 
     return result;
   }

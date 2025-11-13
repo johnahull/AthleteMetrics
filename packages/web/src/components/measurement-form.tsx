@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, FormProvider, type UseFormReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,8 @@ import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-m
 import { AthleteSelector } from "@/components/ui/athlete-selector";
 import { useAuth } from "@/lib/auth";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { FormErrorSummary } from "@/components/ui/form-error-summary";
+import { useFormErrors } from "@/hooks/useFormErrors";
 import { z } from "zod";
 
 // Create dynamic measurement schema that accepts any metric string
@@ -82,7 +84,9 @@ export default function MeasurementForm() {
   });
 
   // Use consolidated state management hook
-  // Type assertion since DynamicInsertMeasurement is compatible with InsertMeasurement
+  // Note: Type assertion is required because DynamicInsertMeasurement extends InsertMeasurement
+  // with additional optional fields. The hook only uses teamId and season fields which exist
+  // in both types, making this assertion safe.
   const {
     selectedAthlete,
     activeTeams,
@@ -93,7 +97,7 @@ export default function MeasurementForm() {
     fetchActiveTeams,
     resetTeamState,
     cleanup
-  } = useMeasurementForm(form as any);
+  } = useMeasurementForm(form as UseFormReturn<InsertMeasurement>);
 
   const createMeasurementMutation = useMutation({
     mutationFn: async (data: DynamicInsertMeasurement) => {

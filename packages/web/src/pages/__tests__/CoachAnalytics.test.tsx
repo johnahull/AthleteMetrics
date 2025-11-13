@@ -37,10 +37,11 @@ describe('CoachAnalytics', () => {
         userOrganizations: null
       });
 
-      render(<CoachAnalytics />);
+      const { container } = render(<CoachAnalytics />);
 
-      expect(screen.getByText('Loading organization...')).toBeInTheDocument();
-      expect(screen.getByText('Setting up your team analytics dashboard')).toBeInTheDocument();
+      // Check for skeleton loading elements with aria-busy (KPICardSkeleton and ChartSkeleton)
+      const skeletonElements = container.querySelectorAll('[aria-busy="true"]');
+      expect(skeletonElements.length).toBeGreaterThan(0);
     });
 
     it('should show loading state even with user when isLoading is true', () => {
@@ -51,9 +52,11 @@ describe('CoachAnalytics', () => {
         userOrganizations: [{ organizationId: 'org-123' }]
       });
 
-      render(<CoachAnalytics />);
+      const { container } = render(<CoachAnalytics />);
 
-      expect(screen.getByText('Loading organization...')).toBeInTheDocument();
+      // Check for skeleton loading elements with aria-busy (KPICardSkeleton and ChartSkeleton)
+      const skeletonElements = container.querySelectorAll('[aria-busy="true"]');
+      expect(skeletonElements.length).toBeGreaterThan(0);
     });
   });
 
