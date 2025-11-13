@@ -7,6 +7,8 @@ import { IndividualReportView } from "@/components/reports/IndividualReportView"
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
+import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
+import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
 
 export default function ReportView() {
   const [, params] = useRoute("/reports/:id");
@@ -15,6 +17,11 @@ export default function ReportView() {
 
   const { data: report, isLoading, error } = useReport(reportId);
   const generateReport = useGenerateReport(reportId);
+
+  // Generate breadcrumbs - use report name if available
+  const breadcrumbs = useBreadcrumbs('report', {
+    name: report?.name || report?.reportType
+  });
 
   if (isLoading) {
     return (
@@ -51,6 +58,9 @@ export default function ReportView() {
 
   return (
     <div className="container mx-auto py-8">
+      {/* Breadcrumb Navigation */}
+      <BreadcrumbNavigation items={breadcrumbs} />
+
       <Button
         variant="ghost"
         className="mb-4"

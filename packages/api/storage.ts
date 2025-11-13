@@ -120,6 +120,18 @@ export interface IStorage {
     page?: number;
     limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
+  getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
   updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
@@ -1748,6 +1760,72 @@ export class DatabaseStorage implements IStorage {
     }
 
     return result;
+  }
+
+  async getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>> {
+    const limit = filters.limit || 5;
+
+    // Query to get athletes with their most recent measurement
+    // Uses DISTINCT ON to get the latest measurement per athlete
+    const result = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        avatar: sql<string | null>`NULL`, // Avatar field placeholder (not implemented yet)
+        lastMeasurementDate: measurements.date,
+        lastMeasurementType: measurements.metric,
+        teamName: teams.name,
+      })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .innerJoin(measurements, eq(measurements.userId, users.id))
+      .leftJoin(teams, eq(measurements.teamId, teams.id))
+      .where(
+        and(
+          eq(userOrganizations.organizationId, filters.organizationId),
+          eq(userOrganizations.role, 'athlete'),
+          isNull(users.deletedAt)
+        )
+      )
+      .orderBy(desc(measurements.date), desc(measurements.createdAt))
+      .limit(limit * 10); // Get more than needed to deduplicate
+
+    // Deduplicate by athlete ID (keep only the most recent measurement per athlete)
+    const seenAthletes = new Set<string>();
+    const recentAthletes = [];
+
+    for (const row of result) {
+      if (!seenAthletes.has(row.id)) {
+        seenAthletes.add(row.id);
+        recentAthletes.push({
+          id: row.id,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          avatar: row.avatar,
+          lastMeasurementDate: row.lastMeasurementDate,
+          lastMeasurementType: row.lastMeasurementType,
+          teamName: row.teamName,
+        });
+
+        if (recentAthletes.length >= limit) {
+          break;
+        }
+      }
+    }
+
+    return recentAthletes;
   }
 
   // Legacy methods for backward compatibility - delegate to athlete methods

@@ -13,6 +13,7 @@ import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerReportRoutes } from "./report-routes";
+import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -39,6 +40,9 @@ export function registerAllRoutes(app: Express) {
 
   // Analytics routes
   registerAnalyticsRoutes(app);
+
+  // Dashboard trends routes
+  registerDashboardTrendsRoutes(app);
 
   // Metric management routes
   registerMetricRoutes(app);

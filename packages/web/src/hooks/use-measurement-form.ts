@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { UseFormReturn } from 'react-hook-form';
 import { InsertMeasurement } from '@shared/schema';
+import type { FieldValues } from 'react-hook-form';
 
 // TypeScript interfaces
 interface ActiveTeam {
@@ -32,6 +33,14 @@ interface MeasurementFormActions {
   resetTeamState: () => void;
 }
 
+/**
+ * Hook for managing measurement form state
+ *
+ * Note: Accepts UseFormReturn<InsertMeasurement> but compatible with forms using
+ * compatible types like DynamicInsertMeasurement. Due to React Hook Form's type
+ * constraints, callers may need to use type assertions when passing forms with
+ * extended/variant types.
+ */
 export function useMeasurementForm(form: UseFormReturn<InsertMeasurement>) {
   // Consolidated state
   const [state, setState] = useState<MeasurementFormState>({
