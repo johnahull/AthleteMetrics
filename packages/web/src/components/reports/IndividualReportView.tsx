@@ -162,6 +162,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   {athlete.gender && (
                     <p className="text-muted-foreground">Gender: {athlete.gender}</p>
                   )}
+                  {athlete.sports && athlete.sports.length > 0 && (
+                    <p className="text-muted-foreground">
+                      Sport{athlete.sports.length > 1 ? 's' : ''}: {athlete.sports.join(', ')}
+                    </p>
+                  )}
                   {athlete.teams && athlete.teams.length > 0 && (
                     <p className="text-muted-foreground">
                       Team{athlete.teams.length > 1 ? 's' : ''}: {athlete.teams.join(', ')}

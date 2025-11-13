@@ -65,6 +65,7 @@ interface AthletePerformance {
   gender?: 'Male' | 'Female' | 'Not Specified';
   positions?: string[];
   age?: number;
+  sports?: string[];
   teams?: string[];
   measurements: Record<string, number>;
   percentiles: Record<string, number>;
@@ -320,6 +321,7 @@ export class ReportService extends BaseService {
       age: athlete.birthYear
         ? new Date().getFullYear() - athlete.birthYear
         : undefined,
+      sports: athlete.sports || undefined,
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
       percentiles,
