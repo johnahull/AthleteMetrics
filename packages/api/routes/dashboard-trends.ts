@@ -49,12 +49,18 @@ interface DashboardTrendsResponse {
 }
 
 /**
+ * Threshold percentage for classifying trends as up/down vs flat
+ * Changes within ±1% are considered flat
+ */
+const TREND_THRESHOLD_PERCENT = 1;
+
+/**
  * Calculate trend direction based on percentage change
- * Uses 1% threshold for up/down classification
+ * Uses TREND_THRESHOLD_PERCENT for up/down classification
  */
 function calculateTrend(changePercent: number): 'up' | 'down' | 'flat' {
-  if (changePercent > 1) return 'up';
-  if (changePercent < -1) return 'down';
+  if (changePercent > TREND_THRESHOLD_PERCENT) return 'up';
+  if (changePercent < -TREND_THRESHOLD_PERCENT) return 'down';
   return 'flat';
 }
 
