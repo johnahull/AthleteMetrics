@@ -13,15 +13,15 @@
 -- Composite index for user-based verified measurements with date ordering
 -- This complements the existing idx_measurements_org_date_verified (organization-scoped)
 -- by providing an optimized path for user-scoped trend queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_userid_verified_date
+
+-- Note: DROP INDEX IF EXISTS is safe with CONCURRENTLY, then CREATE without IF NOT EXISTS
+-- This pattern works around PostgreSQL limitations with CONCURRENTLY + IF NOT EXISTS in some versions
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_userid_verified_date;
+
+CREATE INDEX CONCURRENTLY idx_measurements_userid_verified_date
   ON measurements(user_id, is_verified, date DESC)
   WHERE is_verified = true;
 
--- Index comment for documentation
-DO $$
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_measurements_userid_verified_date') THEN
-    COMMENT ON INDEX idx_measurements_userid_verified_date IS
-      'Composite index for user-based trends - optimizes dashboard trends queries filtering by user_id array, verification, and date range';
-  END IF;
-END $$;
+-- Index comment for documentation (separate statement)
+COMMENT ON INDEX idx_measurements_userid_verified_date IS
+  'Composite index for user-based trends - optimizes dashboard trends queries filtering by user_id array, verification, and date range';
