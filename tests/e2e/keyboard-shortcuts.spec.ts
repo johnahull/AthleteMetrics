@@ -121,12 +121,9 @@ test.describe('Keyboard Shortcuts - Global', () => {
       // Press Ctrl+M while focused on input
       await page.keyboard.press('Control+m');
 
-      // Wait a bit to ensure no modal appears
-      await page.waitForTimeout(500);
-
-      // Verify modal did NOT appear
+      // Verify modal did NOT appear using state assertion with timeout
       const modal = page.getByRole('dialog', { name: /Quick Add Measurement/i });
-      await expect(modal).not.toBeVisible();
+      await expect(modal).not.toBeVisible({ timeout: 2000 });
     } else {
       // If no search input, test with any input on the page
       const anyInput = page.locator('input, textarea').first();
@@ -135,9 +132,8 @@ test.describe('Keyboard Shortcuts - Global', () => {
       if (anyInputCount > 0) {
         await anyInput.focus();
         await page.keyboard.press('Control+m');
-        await page.waitForTimeout(500);
         const modal = page.getByRole('dialog', { name: /Quick Add Measurement/i });
-        await expect(modal).not.toBeVisible();
+        await expect(modal).not.toBeVisible({ timeout: 2000 });
       }
     }
   });
@@ -157,12 +153,9 @@ test.describe('Keyboard Shortcuts - Global', () => {
       // Press Shift+? while focused on input
       await page.keyboard.press('Shift+?');
 
-      // Wait a bit to ensure no help dialog appears
-      await page.waitForTimeout(500);
-
-      // Verify help dialog did NOT appear
+      // Verify help dialog did NOT appear using state assertion with timeout
       const helpDialog = page.getByRole('dialog', { name: /Keyboard Shortcuts/i });
-      await expect(helpDialog).not.toBeVisible();
+      await expect(helpDialog).not.toBeVisible({ timeout: 2000 });
     }
   });
 

@@ -1777,55 +1777,36 @@ export class DatabaseStorage implements IStorage {
     const limit = filters.limit || 5;
 
     // Query to get athletes with their most recent measurement
-    // Uses DISTINCT ON to get the latest measurement per athlete
-    const result = await db
-      .select({
-        id: users.id,
-        firstName: users.firstName,
-        lastName: users.lastName,
-        avatar: sql<string | null>`NULL`, // Avatar field placeholder (not implemented yet)
-        lastMeasurementDate: measurements.date,
-        lastMeasurementType: measurements.metric,
-        teamName: teams.name,
-      })
-      .from(users)
-      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
-      .innerJoin(measurements, eq(measurements.userId, users.id))
-      .leftJoin(teams, eq(measurements.teamId, teams.id))
-      .where(
-        and(
-          eq(userOrganizations.organizationId, filters.organizationId),
-          eq(userOrganizations.role, 'athlete'),
-          isNull(users.deletedAt)
-        )
-      )
-      .orderBy(desc(measurements.date), desc(measurements.createdAt))
-      .limit(limit * 10); // Get more than needed to deduplicate
+    // Uses PostgreSQL DISTINCT ON to efficiently get the latest measurement per athlete
+    const result = await db.execute<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      avatar: string | null;
+      lastMeasurementDate: string;
+      lastMeasurementType: string;
+      teamName: string | null;
+    }>(sql`
+      SELECT DISTINCT ON (u.id)
+        u.id,
+        u.first_name as "firstName",
+        u.last_name as "lastName",
+        NULL as avatar,
+        m.date as "lastMeasurementDate",
+        m.metric as "lastMeasurementType",
+        t.name as "teamName"
+      FROM ${users} u
+      INNER JOIN ${userOrganizations} uo ON u.id = uo.user_id
+      INNER JOIN ${measurements} m ON m.user_id = u.id
+      LEFT JOIN ${teams} t ON m.team_id = t.id
+      WHERE uo.organization_id = ${filters.organizationId}
+        AND uo.role = 'athlete'
+        AND u.deleted_at IS NULL
+      ORDER BY u.id, m.date DESC, m.created_at DESC
+      LIMIT ${limit}
+    `);
 
-    // Deduplicate by athlete ID (keep only the most recent measurement per athlete)
-    const seenAthletes = new Set<string>();
-    const recentAthletes = [];
-
-    for (const row of result) {
-      if (!seenAthletes.has(row.id)) {
-        seenAthletes.add(row.id);
-        recentAthletes.push({
-          id: row.id,
-          firstName: row.firstName,
-          lastName: row.lastName,
-          avatar: row.avatar,
-          lastMeasurementDate: row.lastMeasurementDate,
-          lastMeasurementType: row.lastMeasurementType,
-          teamName: row.teamName,
-        });
-
-        if (recentAthletes.length >= limit) {
-          break;
-        }
-      }
-    }
-
-    return recentAthletes;
+    return result.rows;
   }
 
   // Legacy methods for backward compatibility - delegate to athlete methods

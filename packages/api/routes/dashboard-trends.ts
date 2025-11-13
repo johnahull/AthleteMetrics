@@ -149,31 +149,37 @@ export function registerDashboardTrendsRoutes(app: Express) {
       let previousAthletes = 0;
 
       if (athleteIds.length > 0) {
-        // Current month athletes
-        const currentAthletesResult = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(users)
-          .where(
-            and(
-              inArray(users.id, athleteIds),
-              gte(users.createdAt, currentMonthStart),
-              lt(users.createdAt, currentMonthEnd)
-            )
-          );
-        currentAthletes = currentAthletesResult[0]?.count || 0;
-
-        // Previous month athletes
-        const previousAthletesResult = await db
-          .select({ count: sql<number>`count(*)::int` })
+        // Single query with GROUP BY to get both current and previous month counts
+        const athleteCountsResult = await db
+          .select({
+            period: sql<string>`
+              CASE
+                WHEN ${users.createdAt} >= ${currentMonthStart}
+                  AND ${users.createdAt} < ${currentMonthEnd} THEN 'current'
+                WHEN ${users.createdAt} >= ${previousMonthStart}
+                  AND ${users.createdAt} < ${previousMonthEnd} THEN 'previous'
+              END
+            `,
+            count: sql<number>`count(*)::int`
+          })
           .from(users)
           .where(
             and(
               inArray(users.id, athleteIds),
               gte(users.createdAt, previousMonthStart),
-              lt(users.createdAt, previousMonthEnd)
+              lt(users.createdAt, currentMonthEnd)
             )
-          );
-        previousAthletes = previousAthletesResult[0]?.count || 0;
+          )
+          .groupBy(sql`1`);
+
+        // Extract counts from result
+        for (const row of athleteCountsResult) {
+          if (row.period === 'current') {
+            currentAthletes = row.count;
+          } else if (row.period === 'previous') {
+            previousAthletes = row.count;
+          }
+        }
       }
 
       // Measurements Trend (count measurements in current vs previous month)
@@ -181,59 +187,79 @@ export function registerDashboardTrendsRoutes(app: Express) {
       let previousMeasurements = 0;
 
       if (athleteIds.length > 0) {
-        // Current month measurements
-        const currentMeasurementsResult = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(measurements)
-          .where(
-            and(
-              inArray(measurements.userId, athleteIds),
-              gte(measurements.date, currentMonthStart.toISOString().split('T')[0]),
-              lt(measurements.date, currentMonthEnd.toISOString().split('T')[0]),
-              eq(measurements.isVerified, true)
-            )
-          );
-        currentMeasurements = currentMeasurementsResult[0]?.count || 0;
+        // Single query with GROUP BY to get both current and previous month counts
+        const currentMonthStartStr = currentMonthStart.toISOString().split('T')[0];
+        const currentMonthEndStr = currentMonthEnd.toISOString().split('T')[0];
+        const previousMonthStartStr = previousMonthStart.toISOString().split('T')[0];
+        const previousMonthEndStr = previousMonthEnd.toISOString().split('T')[0];
 
-        // Previous month measurements
-        const previousMeasurementsResult = await db
-          .select({ count: sql<number>`count(*)::int` })
+        const measurementCountsResult = await db
+          .select({
+            period: sql<string>`
+              CASE
+                WHEN ${measurements.date} >= ${currentMonthStartStr}
+                  AND ${measurements.date} < ${currentMonthEndStr} THEN 'current'
+                WHEN ${measurements.date} >= ${previousMonthStartStr}
+                  AND ${measurements.date} < ${previousMonthEndStr} THEN 'previous'
+              END
+            `,
+            count: sql<number>`count(*)::int`
+          })
           .from(measurements)
           .where(
             and(
               inArray(measurements.userId, athleteIds),
-              gte(measurements.date, previousMonthStart.toISOString().split('T')[0]),
-              lt(measurements.date, previousMonthEnd.toISOString().split('T')[0]),
+              gte(measurements.date, previousMonthStartStr),
+              lt(measurements.date, currentMonthEndStr),
               eq(measurements.isVerified, true)
             )
-          );
-        previousMeasurements = previousMeasurementsResult[0]?.count || 0;
+          )
+          .groupBy(sql`1`);
+
+        // Extract counts from result
+        for (const row of measurementCountsResult) {
+          if (row.period === 'current') {
+            currentMeasurements = row.count;
+          } else if (row.period === 'previous') {
+            previousMeasurements = row.count;
+          }
+        }
       }
 
       // Teams Trend (count teams created in current vs previous month)
-      const currentTeamsResult = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(teams)
-        .where(
-          and(
-            eq(teams.organizationId, organizationId),
-            gte(teams.createdAt, currentMonthStart),
-            lt(teams.createdAt, currentMonthEnd)
-          )
-        );
-      const currentTeams = currentTeamsResult[0]?.count || 0;
-
-      const previousTeamsResult = await db
-        .select({ count: sql<number>`count(*)::int` })
+      // Single query with GROUP BY to get both current and previous month counts
+      const teamCountsResult = await db
+        .select({
+          period: sql<string>`
+            CASE
+              WHEN ${teams.createdAt} >= ${currentMonthStart}
+                AND ${teams.createdAt} < ${currentMonthEnd} THEN 'current'
+              WHEN ${teams.createdAt} >= ${previousMonthStart}
+                AND ${teams.createdAt} < ${previousMonthEnd} THEN 'previous'
+            END
+          `,
+          count: sql<number>`count(*)::int`
+        })
         .from(teams)
         .where(
           and(
             eq(teams.organizationId, organizationId),
             gte(teams.createdAt, previousMonthStart),
-            lt(teams.createdAt, previousMonthEnd)
+            lt(teams.createdAt, currentMonthEnd)
           )
-        );
-      const previousTeams = previousTeamsResult[0]?.count || 0;
+        )
+        .groupBy(sql`1`);
+
+      // Extract counts from result
+      let currentTeams = 0;
+      let previousTeams = 0;
+      for (const row of teamCountsResult) {
+        if (row.period === 'current') {
+          currentTeams = row.count;
+        } else if (row.period === 'previous') {
+          previousTeams = row.count;
+        }
+      }
 
       // Build response
       const response: DashboardTrendsResponse = {
