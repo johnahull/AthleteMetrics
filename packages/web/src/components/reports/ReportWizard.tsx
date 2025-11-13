@@ -100,6 +100,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   // Watch form values
   const reportType = watch("reportType");
+  const reportName = watch("name");
 
   // Debug logging
   useEffect(() => {
@@ -145,6 +146,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
     console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
+
+    // Validate report name on step 3 before progressing
+    if (step === 3 && (!reportName || reportName.trim() === "")) {
+      console.log('[ReportWizard] Cannot proceed from step 3 - report name is required');
+      return;
+    }
 
     if (step < totalSteps) {
       // Skip athlete selection step for team reports
@@ -258,6 +265,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const progress = (step / totalSteps) * 100;
+
+  // Determine if Next button should be disabled
+  const isNextDisabled = step === 3 && (!reportName || reportName.trim() === "");
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -723,7 +733,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </Button>
 
             {step < totalSteps ? (
-              <Button type="button" onClick={handleNext}>
+              <Button type="button" onClick={handleNext} disabled={isNextDisabled}>
                 Next
                 <ChevronRight className="h-4 w-4 ml-1" />
               </Button>
