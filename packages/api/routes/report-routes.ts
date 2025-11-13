@@ -1298,7 +1298,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
 
           autoTable(doc, {
             startY: yPos,
-            head: [["Rank", "Athlete", "Value", "Percentile", "Benchmark"]],
+            head: [["Rank", "Athlete", "Value", "Percentile", "Benchmarks Met"]],
             body: metricRows,
             theme: isVisual ? "striped" : "grid",
             headStyles: { fillColor: colors.accent, fontSize: 9 },
