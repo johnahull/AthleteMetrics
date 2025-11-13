@@ -1806,7 +1806,7 @@ export class DatabaseStorage implements IStorage {
       LIMIT ${limit}
     `);
 
-    return result.rows;
+    return result;
   }
 
   // Legacy methods for backward compatibility - delegate to athlete methods
