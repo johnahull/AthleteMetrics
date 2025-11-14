@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileUp, Plus, Save, Copy, Trash2 } from "lucide-react";
+import { FileUp, Plus, Save, Copy, Trash2, Wand2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,6 +18,7 @@ import {
 import MeasurementForm from "@/components/measurement-form";
 import { BatchEntryGrid } from '@/components/batch-measurement-entry/batch-entry-grid';
 import { BatchEntryCard } from '@/components/batch-measurement-entry/batch-entry-card';
+import { BatchWizard, BatchWizardConfig } from '@/components/batch-measurement-entry/batch-wizard';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/use-batch-measurement-form';
 import { useToast } from '@/hooks/use-toast';
@@ -26,6 +27,7 @@ export default function DataEntry() {
   const { toast } = useToast();
   const isMobile = useMediaQuery('(max-width: 768px)');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('single');
 
   const { data: recentMeasurements = [] } = useQuery({
@@ -60,6 +62,29 @@ export default function DataEntry() {
         variant: 'destructive',
       });
     }
+  };
+
+  const handleWizardComplete = (config: BatchWizardConfig) => {
+    // Generate rows: athleteIds × metrics × measurementsPerAthlete
+    config.athleteIds.forEach(athleteId => {
+      config.metrics.forEach(metric => {
+        for (let i = 0; i < config.measurementsPerAthlete; i++) {
+          addRow();
+          const currentIndex = form.getValues('measurements').length - 1;
+
+          // Pre-populate athlete, metric, and date
+          form.setValue(`measurements.${currentIndex}.athleteId`, athleteId);
+          form.setValue(`measurements.${currentIndex}.metric`, metric);
+          form.setValue(`measurements.${currentIndex}.date`, config.date);
+        }
+      });
+    });
+
+    const totalRows = config.athleteIds.length * config.metrics.length * config.measurementsPerAthlete;
+    toast({
+      title: 'Grid Generated',
+      description: `${totalRows} rows created and ready for data entry`,
+    });
   };
 
   return (
@@ -104,6 +129,18 @@ export default function DataEntry() {
                 <CardContent>
                   {/* Toolbar */}
                   <div className="flex flex-wrap gap-2 mb-4">
+                    <Button
+                      type="button"
+                      onClick={() => setWizardOpen(true)}
+                      data-testid="batch-quick-setup"
+                      variant="default"
+                      size="sm"
+                      className="bg-primary"
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Quick Setup
+                    </Button>
+
                     <Button
                       type="button"
                       onClick={addRow}
@@ -204,6 +241,13 @@ export default function DataEntry() {
                   </AlertDialogFooter>
                 </AlertDialogContent>
               </AlertDialog>
+
+              {/* Quick Setup Wizard */}
+              <BatchWizard
+                open={wizardOpen}
+                onClose={() => setWizardOpen(false)}
+                onComplete={handleWizardComplete}
+              />
             </FormProvider>
           </TabsContent>
         </Tabs>

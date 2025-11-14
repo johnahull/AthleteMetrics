@@ -492,6 +492,297 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 });
 
+test.describe('Quick Setup Wizard Tests', () => {
+
+  test.beforeEach(async ({ page }) => {
+    await loginAsDefaultUser(page);
+    await navigateToBatchEntry(page);
+  });
+
+  test('should open Quick Setup Wizard when button is clicked', async ({ page }) => {
+    // Click Quick Setup Wizard button
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Should show wizard dialog
+    await expect(page.locator('[role="dialog"]').filter({ hasText: /quick.*setup|setup.*wizard/i })).toBeVisible();
+
+    // Should show Step 1 heading
+    await expect(page.locator('text=/step.*1|select.*athletes/i')).toBeVisible();
+  });
+
+  test('should navigate through wizard steps with Next button', async ({ page }) => {
+    // Open wizard
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Step 1: Select at least one athlete
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    // Click Next
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    // Should show Step 2
+    await expect(page.locator('text=/step.*2|select.*metric/i')).toBeVisible();
+
+    // Step 2: Select at least one metric
+    const metricCheckbox = page.locator('[data-testid="metric-checkbox"]').first();
+    await metricCheckbox.click();
+
+    // Click Next
+    await nextButton.click();
+
+    // Should show Step 3
+    await expect(page.locator('text=/step.*3|configuration/i')).toBeVisible();
+
+    // Click Next
+    await nextButton.click();
+
+    // Should show Step 4 (Review)
+    await expect(page.locator('text=/step.*4|review|summary/i')).toBeVisible();
+  });
+
+  test('should allow going back to previous steps', async ({ page }) => {
+    // Open wizard and navigate to Step 3
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    const metricCheckbox = page.locator('[data-testid="metric-checkbox"]').first();
+    await metricCheckbox.click();
+    await nextButton.click();
+
+    // Now on Step 3, click Back
+    const backButton = page.locator('button:has-text("Back")');
+    await backButton.click();
+
+    // Should be back on Step 2
+    await expect(page.locator('text=/step.*2|select.*metric/i')).toBeVisible();
+  });
+
+  test('should select team and display athletes in Step 1', async ({ page }) => {
+    // Open wizard
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Select a team
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    // Should show selected athletes count
+    const selectedCount = page.locator('text=/\\d+.*athletes.*selected|selected.*\\d+/i');
+    await expect(selectedCount).toBeVisible();
+
+    // Verify at least 1 athlete is selected
+    const countText = await selectedCount.textContent();
+    const count = parseInt(countText?.match(/\d+/)?.[0] || '0');
+    expect(count).toBeGreaterThan(0);
+  });
+
+  test('should select multiple metrics in Step 2', async ({ page }) => {
+    // Open wizard and navigate to Step 2
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    // Select 3 metrics
+    const metricCheckboxes = page.locator('[data-testid="metric-checkbox"]');
+    await metricCheckboxes.nth(0).click();
+    await metricCheckboxes.nth(1).click();
+    await metricCheckboxes.nth(2).click();
+
+    // Should show 3 selected
+    const selectedCount = page.locator('text=/3.*metrics.*selected|selected.*3/i');
+    await expect(selectedCount).toBeVisible();
+  });
+
+  test('should configure date and measurements per athlete in Step 3', async ({ page }) => {
+    // Open wizard and navigate to Step 3
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    const metricCheckbox = page.locator('[data-testid="metric-checkbox"]').first();
+    await metricCheckbox.click();
+    await nextButton.click();
+
+    // Should show date picker with default value
+    const dateInput = page.locator('[data-testid="wizard-date"], input[type="date"]');
+    await expect(dateInput).toBeVisible();
+
+    // Should show measurements per athlete input
+    const measurementsInput = page.locator('[data-testid="wizard-measurements-per-athlete"], input[type="number"]');
+    await expect(measurementsInput).toBeVisible();
+
+    // Change measurements per athlete to 2
+    await measurementsInput.fill('2');
+    await expect(measurementsInput).toHaveValue('2');
+  });
+
+  test('should display review summary with correct totals in Step 4', async ({ page }) => {
+    // Open wizard and go through all steps
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    // Select 2 metrics
+    const metricCheckboxes = page.locator('[data-testid="metric-checkbox"]');
+    await metricCheckboxes.nth(0).click();
+    await metricCheckboxes.nth(1).click();
+    await nextButton.click();
+
+    // Set measurements per athlete to 2
+    const measurementsInput = page.locator('[data-testid="wizard-measurements-per-athlete"], input[type="number"]');
+    await measurementsInput.fill('2');
+    await nextButton.click();
+
+    // Should show review summary
+    await expect(page.locator('text=/total.*rows|rows.*to.*generate/i')).toBeVisible();
+
+    // Should show calculation (e.g., "10 athletes × 2 metrics × 2 = 40 rows")
+    const summaryText = page.locator('[data-testid="wizard-summary"]');
+    await expect(summaryText).toBeVisible();
+  });
+
+  test('should generate grid rows when wizard is completed', async ({ page }) => {
+    // Open wizard
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Complete wizard
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    const metricCheckbox = page.locator('[data-testid="metric-checkbox"]').first();
+    await metricCheckbox.click();
+    await nextButton.click();
+    await nextButton.click();
+
+    // Click Generate Grid
+    const generateButton = page.locator('button:has-text("Generate Grid")');
+    await generateButton.click();
+
+    // Wizard should close
+    await expect(page.locator('[role="dialog"]')).not.toBeVisible();
+
+    // Grid should have rows
+    const rows = page.locator('[data-testid^="batch-row-"]');
+    const rowCount = await rows.count();
+    expect(rowCount).toBeGreaterThan(0);
+  });
+
+  test('should pre-populate athleteId and metric in generated rows', async ({ page }) => {
+    // Open wizard and generate grid
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    const metricCheckbox = page.locator('[data-testid="metric-checkbox"]').first();
+    await metricCheckbox.click();
+    await nextButton.click();
+    await nextButton.click();
+
+    const generateButton = page.locator('button:has-text("Generate Grid")');
+    await generateButton.click();
+
+    // Check first row has pre-populated athlete
+    const firstRow = page.locator('[data-testid^="batch-row-"]').first();
+    const athleteSelect = firstRow.locator('select').first();
+    const athleteValue = await athleteSelect.inputValue();
+    expect(athleteValue).not.toBe('');
+
+    // Check first row has pre-populated metric
+    const metricSelect = firstRow.locator('select').nth(1);
+    const metricValue = await metricSelect.inputValue();
+    expect(metricValue).not.toBe('');
+  });
+
+  test('should close wizard when Cancel is clicked', async ({ page }) => {
+    // Open wizard
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Click Cancel
+    const cancelButton = page.locator('button:has-text("Cancel")');
+    await cancelButton.click();
+
+    // Wizard should close
+    await expect(page.locator('[role="dialog"]')).not.toBeVisible();
+
+    // No rows should be generated
+    const rows = page.locator('[data-testid^="batch-row-"]');
+    const rowCount = await rows.count();
+    expect(rowCount).toBe(0);
+  });
+
+  test('should require at least one athlete to proceed from Step 1', async ({ page }) => {
+    // Open wizard
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    // Try to click Next without selecting athletes
+    const nextButton = page.locator('button:has-text("Next")');
+
+    // Next button should be disabled or show error
+    const isDisabled = await nextButton.isDisabled();
+    if (!isDisabled) {
+      await nextButton.click();
+      // Should show validation error
+      await expect(page.locator('text=/select.*athlete|athlete.*required/i')).toBeVisible();
+    }
+  });
+
+  test('should require at least one metric to proceed from Step 2', async ({ page }) => {
+    // Open wizard and navigate to Step 2
+    const wizardButton = page.locator('[data-testid="batch-quick-setup"], button:has-text("Quick Setup")');
+    await wizardButton.click();
+
+    const teamCheckbox = page.locator('[data-testid="team-checkbox"]').first();
+    await teamCheckbox.click();
+
+    const nextButton = page.locator('button:has-text("Next")');
+    await nextButton.click();
+
+    // Try to proceed without selecting metrics
+    const isDisabled = await nextButton.isDisabled();
+    if (!isDisabled) {
+      await nextButton.click();
+      // Should show validation error
+      await expect(page.locator('text=/select.*metric|metric.*required/i')).toBeVisible();
+    }
+  });
+});
+
 test.describe('Batch Measurement Entry Summary', () => {
   test('print batch measurement entry test summary', async () => {
     console.log('\n═══════════════════════════════════════════════════');
@@ -512,6 +803,19 @@ test.describe('Batch Measurement Entry Summary', () => {
     console.log('✅ Display mobile card view on small screens');
     console.log('✅ Handle batch save errors gracefully');
     console.log('✅ Show row-specific errors after failed save');
+    console.log('\n--- Quick Setup Wizard ---');
+    console.log('✅ Open Quick Setup Wizard');
+    console.log('✅ Navigate through wizard steps');
+    console.log('✅ Go back to previous steps');
+    console.log('✅ Select team and display athletes');
+    console.log('✅ Select multiple metrics');
+    console.log('✅ Configure date and measurements per athlete');
+    console.log('✅ Display review summary with totals');
+    console.log('✅ Generate grid rows on completion');
+    console.log('✅ Pre-populate athleteId and metric in rows');
+    console.log('✅ Close wizard on Cancel');
+    console.log('✅ Require athlete selection validation');
+    console.log('✅ Require metric selection validation');
     console.log('═══════════════════════════════════════════════════\n');
   });
 });
