@@ -375,8 +375,10 @@ export function registerReportRoutes(app: Express) {
 
       // Search filter (name or description)
       if (search && typeof search === 'string' && search.trim()) {
+        // Escape LIKE special characters (%, _) to prevent SQL injection
+        const escapedSearch = search.trim().replace(/[%_]/g, '\\$&');
         conditions.push(
-          sql`(${reports.name} ILIKE ${`%${search.trim()}%`} OR ${reports.description} ILIKE ${`%${search.trim()}%`})`
+          sql`(${reports.name} ILIKE ${`%${escapedSearch}%`} OR ${reports.description} ILIKE ${`%${escapedSearch}%`})`
         );
       }
 

@@ -354,7 +354,7 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'set null' }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
 
   // Report identification
   name: varchar("name", { length: 200 }).notNull(),
@@ -428,7 +428,7 @@ export const reportSnapshots = pgTable("report_snapshots", {
   */
 
   // Access control
-  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: 'set null' }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
   expiresAt: timestamp("expires_at").notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   revokedAt: timestamp("revoked_at"),
