@@ -1,34 +1,267 @@
 import { useState } from "react";
+import { FormProvider } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileUp } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Plus, Save, Copy, Trash2, Wand2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import MeasurementForm from "@/components/measurement-form";
+import { BatchEntryGrid } from '@/components/batch-measurement-entry/batch-entry-grid';
+import { BatchEntryCard } from '@/components/batch-measurement-entry/batch-entry-card';
+import { BatchWizard, BatchWizardConfig } from '@/components/batch-measurement-entry/batch-wizard';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/use-batch-measurement-form';
+import { useToast } from '@/hooks/use-toast';
 
 export default function DataEntry() {
+  const { toast } = useToast();
+  const isMobile = useMediaQuery('(max-width: 768px)');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('single');
+
   const { data: recentMeasurements = [] } = useQuery({
     queryKey: ["/api/measurements"],
   }) as { data: any[] };
 
+  const {
+    form,
+    fields,
+    addRow,
+    append,
+    deleteRow,
+    copyPreviousRow,
+    clearAll,
+    save,
+    saving,
+    errors,
+  } = useBatchMeasurementForm();
+
+  const handleSaveAll = async () => {
+    const result = await save();
+
+    if (result.success) {
+      toast({
+        title: 'Success',
+        description: `${result.count} measurements saved successfully`,
+        variant: 'default',
+      });
+    } else {
+      toast({
+        title: 'Error',
+        description: result.errors?.join(', ') || 'Failed to save measurements',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleWizardComplete = (config: BatchWizardConfig) => {
+    const totalRows = config.athleteIds.length * config.metrics.length * config.measurementsPerAthlete;
+
+    // Safety limit to prevent browser crashes
+    const MAX_ROWS = 500;
+    if (totalRows > MAX_ROWS) {
+      toast({
+        title: 'Too Many Rows',
+        description: `Cannot generate ${totalRows} rows (max: ${MAX_ROWS}). Please reduce athletes, metrics, or measurements per athlete.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Generate all rows at once for better performance (batch operation)
+    // athleteIds × metrics × measurementsPerAthlete
+    const newRows = config.athleteIds.flatMap(athleteId =>
+      config.metrics.flatMap(metric =>
+        Array.from({ length: config.measurementsPerAthlete }, () => ({
+          athleteId: athleteId,
+          metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI" | "TOP_SPEED",
+          date: config.date,
+          value: 0,
+          notes: '',
+        }))
+      )
+    );
+
+    // Use setValue for atomic update (better performance than multiple append calls)
+    form.setValue('measurements', [...fields, ...newRows], { shouldDirty: true });
+
+    toast({
+      title: 'Grid Generated',
+      description: `${totalRows} rows created and ready for data entry`,
+    });
+  };
+
   return (
     <div className="p-6">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900">Data Entry</h1>
-          <Button variant="outline" className="bg-gray-600 text-white hover:bg-gray-700">
-            <FileUp className="h-4 w-4 mr-2" />
-            Bulk Import
-          </Button>
         </div>
 
-        {/* Measurement Form */}
-        <Card className="bg-white mb-6">
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-6">Add New Measurement</h3>
-            <MeasurementForm />
-          </CardContent>
-        </Card>
+        {/* Tabs for Single vs Batch Entry */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="single">Single Entry</TabsTrigger>
+            <TabsTrigger value="batch">Batch Entry</TabsTrigger>
+          </TabsList>
+
+          {/* Single Entry Tab */}
+          <TabsContent value="single">
+            <Card className="bg-white mb-6">
+              <CardContent className="p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-6">Add New Measurement</h3>
+                <MeasurementForm />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Batch Entry Tab */}
+          <TabsContent value="batch">
+            <FormProvider {...form}>
+              <Card>
+                <CardHeader>
+                  <CardTitle>Batch Measurement Entry</CardTitle>
+                  <CardDescription>
+                    Enter measurements for multiple athletes at once
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {/* Toolbar */}
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    <Button
+                      type="button"
+                      onClick={() => setWizardOpen(true)}
+                      data-testid="batch-quick-setup"
+                      variant="default"
+                      size="sm"
+                      className="bg-primary"
+                    >
+                      <Wand2 className="h-4 w-4 mr-2" />
+                      Quick Setup
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={addRow}
+                      data-testid="batch-add-row"
+                      variant="outline"
+                      size="sm"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Row
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={copyPreviousRow}
+                      data-testid="batch-copy-row"
+                      variant="outline"
+                      size="sm"
+                      disabled={fields.length === 0}
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Previous Row
+                    </Button>
+
+                    <Button
+                      type="button"
+                      onClick={() => setShowClearConfirm(true)}
+                      data-testid="batch-clear-all"
+                      variant="outline"
+                      size="sm"
+                      disabled={fields.length === 0}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Clear All
+                    </Button>
+
+                    <div className="ml-auto">
+                      <Button
+                        type="button"
+                        onClick={handleSaveAll}
+                        data-testid="batch-save-all"
+                        disabled={saving || fields.length === 0}
+                        size="sm"
+                      >
+                        <Save className="h-4 w-4 mr-2" />
+                        {saving ? 'Saving...' : 'Save All'}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Grid or Card View based on screen size */}
+                  {isMobile ? (
+                    <BatchEntryCard fields={fields} deleteRow={deleteRow} />
+                  ) : (
+                    <BatchEntryGrid fields={fields} deleteRow={deleteRow} />
+                  )}
+
+                  {/* Empty State */}
+                  {fields.length === 0 && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <p>No measurements yet. Click "Add Row" to start adding measurements.</p>
+                    </div>
+                  )}
+
+                  {/* Row Count */}
+                  {fields.length > 0 && (
+                    <div className="mt-4 text-sm text-muted-foreground">
+                      {fields.length} {fields.length === 1 ? 'row' : 'rows'}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Clear All Confirmation Dialog */}
+              <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Clear all rows?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will remove all {fields.length} {fields.length === 1 ? 'row' : 'rows'} from the grid.
+                      Any unsaved data will be lost. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => {
+                        clearAll();
+                        setShowClearConfirm(false);
+                        toast({
+                          title: 'Cleared',
+                          description: 'All rows have been removed',
+                        });
+                      }}
+                      className="bg-red-600 hover:bg-red-700"
+                    >
+                      Clear All
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+
+              {/* Quick Setup Wizard */}
+              <BatchWizard
+                open={wizardOpen}
+                onClose={() => setWizardOpen(false)}
+                onComplete={handleWizardComplete}
+              />
+            </FormProvider>
+          </TabsContent>
+        </Tabs>
 
         {/* Recent Entries */}
         <Card className="bg-white">

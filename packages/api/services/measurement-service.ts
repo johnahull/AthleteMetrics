@@ -112,12 +112,14 @@ export class MeasurementService {
    * IMPORTANT: Wrapped in transaction to prevent race conditions
    * @param measurement Measurement data
    * @param submittedBy User ID of submitter
+   * @param submitterRole Role of submitter (coach, org_admin, athlete, site_admin)
    * @returns Created measurement
    * @throws Error if user not found, team not found, or transaction fails
    */
   async createMeasurement(
     measurement: InsertMeasurement,
-    submittedBy: string
+    submittedBy: string,
+    submitterRole: string = 'athlete'
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -230,6 +232,12 @@ export class MeasurementService {
         }
       }
 
+      // Auto-verify measurements from coaches, org admins, and site admins
+      // Athletes' self-submitted measurements remain unverified
+      const isVerified = submitterRole === 'coach' ||
+                        submitterRole === 'org_admin' ||
+                        submitterRole === 'site_admin';
+
       // Create measurement
       const [newMeasurement] = await tx
         .insert(measurements)
@@ -248,7 +256,7 @@ export class MeasurementService {
           teamContextAuto,
           teamNameSnapshot,
           organizationId: organizationId || null,
-          isVerified: false,
+          isVerified,
         })
         .returning();
 
@@ -281,6 +289,147 @@ export class MeasurementService {
       // Unknown error type - wrap with context
       throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
     }
+  }
+
+  /**
+   * Batch create measurements (coaches and org admins only)
+   * Processes each measurement independently to allow partial success
+   * IMPORTANT: Each measurement is in its own transaction for atomicity per-measurement
+   * This allows the batch to continue processing if individual measurements fail
+   *
+   * SECURITY: Validates organization access for each athlete in batch to prevent cross-org data creation
+   * @param measurements Array of measurements to create
+   * @param user Session user for authorization
+   * @param isSiteAdmin Whether user is a site admin (bypasses org checks)
+   * @returns Result with created count and errors
+   */
+  async createMeasurementsBatch(
+    measurements: InsertMeasurement[],
+    user: { id: string; role: string; primaryOrganizationId?: string },
+    isSiteAdmin: boolean = false
+  ): Promise<{ created: number; failed: number; errors: Array<{ index: number; message: string }> }> {
+    const errors: Array<{ index: number; message: string }> = [];
+    let created = 0;
+
+    // SECURITY: Pre-validate all athletes belong to user's organization (non-site-admins only)
+    // This prevents coaches from creating measurements for athletes in other organizations
+    if (!isSiteAdmin && user.primaryOrganizationId) {
+      const uniqueUserIds = [...new Set(measurements.map(m => m.userId))];
+
+      // Query all athletes' team memberships to verify organization access
+      const athleteTeams = await db
+        .select({
+          userId: userTeams.userId,
+          organizationId: teams.organizationId
+        })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(and(
+          inArray(userTeams.userId, uniqueUserIds),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+
+      // Build map of userId -> organizations
+      const userOrgsMap = new Map<string, Set<string>>();
+      athleteTeams.forEach(at => {
+        if (!userOrgsMap.has(at.userId)) {
+          userOrgsMap.set(at.userId, new Set());
+        }
+        userOrgsMap.get(at.userId)!.add(at.organizationId);
+      });
+
+      // Check each athlete has access to user's organization
+      for (let i = 0; i < measurements.length; i++) {
+        const userOrgs = userOrgsMap.get(measurements[i].userId);
+        if (!userOrgs || !userOrgs.has(user.primaryOrganizationId)) {
+          errors.push({
+            index: i,
+            message: `Unauthorized: athlete not in your organization`
+          });
+        }
+      }
+
+      // If pre-validation found unauthorized athletes, return early
+      if (errors.length > 0) {
+        return {
+          created: 0,
+          failed: errors.length,
+          errors,
+        };
+      }
+    }
+
+    // SECURITY: Validate teamIds if provided (all users including site admins)
+    // Pre-validate all team IDs exist and are accessible
+    const teamIds = measurements
+      .map(m => m.teamId)
+      .filter((id): id is string => !!id && id.trim() !== '');
+
+    if (teamIds.length > 0) {
+      const uniqueTeamIds = [...new Set(teamIds)];
+      const teamsData = await db
+        .select({
+          id: teams.id,
+          organizationId: teams.organizationId
+        })
+        .from(teams)
+        .where(inArray(teams.id, uniqueTeamIds));
+
+      const teamMap = new Map(teamsData.map(t => [t.id, t.organizationId]));
+
+      // Validate each teamId exists and is accessible
+      for (let i = 0; i < measurements.length; i++) {
+        if (measurements[i].teamId && measurements[i].teamId!.trim() !== '') {
+          const teamOrgId = teamMap.get(measurements[i].teamId!);
+
+          if (!teamOrgId) {
+            errors.push({ index: i, message: 'Team not found' });
+            continue;
+          }
+
+          // Non-site-admins can only assign to teams in their organization
+          if (!isSiteAdmin && teamOrgId !== user.primaryOrganizationId) {
+            errors.push({
+              index: i,
+              message: 'Cannot assign measurements to teams in different organizations'
+            });
+          }
+        }
+      }
+
+      // If team validation found errors, return early
+      if (errors.length > 0) {
+        return {
+          created: 0,
+          failed: errors.length,
+          errors,
+        };
+      }
+    }
+
+    // Process each measurement in its own transaction for atomicity per-measurement
+    // This prevents a single failure from rolling back all measurements
+    for (let i = 0; i < measurements.length; i++) {
+      // Skip measurements that failed pre-validation
+      if (errors.some(e => e.index === i)) {
+        continue;
+      }
+
+      try {
+        await this.createMeasurement(measurements[i], user.id, user.role);
+        created++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({ index: i, message });
+      }
+    }
+
+    return {
+      created,
+      failed: errors.length,
+      errors,
+    };
   }
 
   /**

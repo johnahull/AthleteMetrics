@@ -20,6 +20,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { mutations } from "@/lib/api";
 import type { Athlete, Team, Measurement } from "@shared/schema";
+import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
+import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -42,7 +44,7 @@ export default function AthleteProfile() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
   
@@ -88,6 +90,13 @@ export default function AthleteProfile() {
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: any[] };
+
+  // Generate breadcrumbs
+  const breadcrumbs = useBreadcrumbs('athlete', {
+    firstName: athlete?.firstName,
+    lastName: athlete?.lastName,
+    fullName: athlete?.fullName
+  });
 
   // Mutations for edit/delete functionality  
   const updateMeasurementMutation = useMutation({
@@ -238,10 +247,13 @@ export default function AthleteProfile() {
 
   return (
     <div className="p-6">
+      {/* Breadcrumb Navigation */}
+      <BreadcrumbNavigation items={breadcrumbs} />
+
       {/* Header */}
       <div className="flex items-center mb-6">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           onClick={() => setLocation('/athletes')}
           className="mr-4"
           data-testid="button-back-to-athletes"

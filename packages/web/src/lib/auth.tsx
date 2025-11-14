@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { EnhancedUser, ImpersonationStatus, UserOrganization } from './types/user';
 import { apiClient } from './api';
+import { clearFormStorageForUser } from './form-storage';
 
 interface AuthContextType {
   user: EnhancedUser | null;
@@ -74,8 +75,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             });
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
+              console.log('[AuthProvider] Fetched user organizations:', organizations);
               // Only auto-select if user has exactly one organization to avoid confusion
               if (organizations && organizations.length === 1) {
+                console.log('[AuthProvider] Auto-setting organizationContext to:', organizations[0].organizationId);
                 setOrganizationContext(organizations[0].organizationId);
               }
             }
@@ -166,6 +169,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
+      // Clear form storage before logout (for security on shared devices)
+      if (user?.id) {
+        clearFormStorageForUser(user.id);
+      }
+
       await fetch('/api/auth/logout', {
         method: 'POST',
         credentials: 'include'
@@ -179,6 +187,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLocation('/login');
     } catch (error) {
       console.error('Logout failed:', error);
+      // Clear form storage even on error
+      if (user?.id) {
+        clearFormStorageForUser(user.id);
+      }
       setUser(null);
       setUserOrganizations(null);
       setOrganizationContext(null);

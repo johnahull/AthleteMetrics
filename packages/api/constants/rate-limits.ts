@@ -68,6 +68,13 @@ export const RATE_LIMITS = {
     }
     return parsed > 0 ? parsed : 50;
   })(),
+
+  /**
+   * Batch operations (measurements batch create)
+   * Stricter limit since each batch can contain up to 100 measurements
+   * @default 10 requests per 15-minute window (up to 1000 measurements)
+   */
+  BATCH: 10,
 } as const;
 
 /**

@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TeamAthleteSelector Component - Visual Test</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-gray-50 p-8">
+  <div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2">TeamAthleteSelector Component - Visual Preview</h1>
+    <p class="text-gray-600 mb-8">This is a static mockup showing the component layout and styling</p>
+
+    <!-- Two-panel layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <!-- Left Panel: Teams and Athletes -->
+      <div class="bg-white rounded-lg border shadow-sm">
+        <div class="border-b p-6">
+          <h2 class="text-lg font-semibold flex items-center gap-2">
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+            </svg>
+            Select by Team or Individual
+          </h2>
+        </div>
+        <div class="p-6 space-y-4">
+          <!-- Search -->
+          <div class="relative">
+            <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            <input
+              type="text"
+              placeholder="Search athletes or teams..."
+              class="w-full pl-9 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <!-- Filters -->
+          <div class="flex gap-2">
+            <select class="flex-1 px-3 py-2 border rounded-md">
+              <option>All Positions</option>
+              <option>Forward</option>
+              <option>Midfielder</option>
+              <option>Defender</option>
+            </select>
+            <select class="flex-1 px-3 py-2 border rounded-md">
+              <option>All Genders</option>
+              <option>Male</option>
+              <option>Female</option>
+            </select>
+          </div>
+
+          <!-- Quick Actions -->
+          <div class="flex gap-2">
+            <button class="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50">Select All</button>
+            <button class="flex-1 px-4 py-2 border rounded-md hover:bg-gray-50">Clear All</button>
+          </div>
+
+          <!-- Teams and Athletes List -->
+          <div class="border rounded-md h-[400px] overflow-y-auto p-3 space-y-3">
+            <!-- Teams Section -->
+            <div class="space-y-2">
+              <h4 class="text-sm font-medium text-gray-500">Teams</h4>
+
+              <!-- Team 1 -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">Varsity Soccer</div>
+                  <div class="text-xs text-gray-500">12 athletes • College</div>
+                </div>
+              </div>
+
+              <!-- Team 2 -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300" checked>
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">JV Soccer</div>
+                  <div class="text-xs text-gray-500">8 athletes • HS</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Individual Athletes Section -->
+            <div class="space-y-2">
+              <h4 class="text-sm font-medium text-gray-500">Individual Athletes (24)</h4>
+
+              <!-- Athlete 1 -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">John Smith</div>
+                  <div class="text-xs text-gray-500">Varsity Soccer • Forward</div>
+                </div>
+              </div>
+
+              <!-- Athlete 2 (selected) -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300" checked>
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">Sarah Johnson</div>
+                  <div class="text-xs text-gray-500">JV Soccer • Midfielder</div>
+                </div>
+              </div>
+
+              <!-- Athlete 3 (selected) -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300" checked>
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">Mike Williams</div>
+                  <div class="text-xs text-gray-500">Varsity Soccer • Defender</div>
+                </div>
+              </div>
+
+              <!-- More athletes... -->
+              <div class="flex items-center space-x-2 p-2 rounded-md hover:bg-gray-50">
+                <input type="checkbox" class="h-4 w-4 rounded border-gray-300">
+                <svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                </svg>
+                <div class="flex-1">
+                  <div class="text-sm font-medium">Emily Davis</div>
+                  <div class="text-xs text-gray-500">No team</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel: Selected Athletes -->
+      <div class="bg-white rounded-lg border shadow-sm">
+        <div class="border-b p-6">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-semibold flex items-center gap-2">
+              <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+              Selected Athletes
+            </h2>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+              10
+            </span>
+          </div>
+        </div>
+        <div class="p-6">
+          <div class="border rounded-md h-[500px] overflow-y-auto p-3 space-y-2">
+            <!-- Selected Athlete 1 -->
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md group hover:bg-gray-100">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">Sarah Johnson</div>
+                <div class="text-xs text-gray-500 truncate">JV Soccer • Midfielder</div>
+              </div>
+              <button class="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 rounded">
+                <svg class="h-4 w-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Selected Athlete 2 -->
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md group hover:bg-gray-100">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">Mike Williams</div>
+                <div class="text-xs text-gray-500 truncate">Varsity Soccer • Defender</div>
+              </div>
+              <button class="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 rounded">
+                <svg class="h-4 w-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- More selected athletes... -->
+            <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md group hover:bg-gray-100">
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium truncate">Alex Martinez</div>
+                <div class="text-xs text-gray-500 truncate">Varsity Soccer • Forward</div>
+              </div>
+              <button class="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-50 hover:text-red-600 rounded">
+                <svg class="h-4 w-4 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <!-- Empty state example (hidden when items exist) -->
+            <!-- <div class="flex flex-col items-center justify-center h-32 text-gray-400">
+              <svg class="h-8 w-8 mb-2 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+              <p class="text-sm">No athletes selected</p>
+            </div> -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Features Info -->
+    <div class="mt-8 bg-white rounded-lg border shadow-sm p-6">
+      <h3 class="text-lg font-semibold mb-4">Component Features</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Two-panel layout (selectors + selected)</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Select entire teams at once</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Select individual athletes</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Search by name or team</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Filter by position/gender</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Quick select/clear all actions</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Remove from selection panel</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>Responsive layout</span>
+        </div>
+        <div class="flex items-start gap-2">
+          <svg class="h-5 w-5 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+          </svg>
+          <span>shadcn/ui + Tailwind CSS</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -22,12 +22,8 @@ import {
 } from "../middleware/athlete-permissions";
 import { athleteQuerySchema } from "../validation/athlete-validation";
 import { ZodError } from "zod";
+import { isSiteAdmin } from "../utils/auth-helpers";
 // Session types are loaded globally
-
-// Helper function to check if user is site admin
-function isSiteAdmin(user: any): boolean {
-  return user?.isSiteAdmin === true;
-}
 
 // Rate limiting for athlete endpoints
 const athleteLimiter = rateLimit({
@@ -48,6 +44,61 @@ const athleteDeleteLimiter = rateLimit({
 });
 
 export function registerAthleteRoutes(app: Express) {
+  /**
+   * Get recent athletes with measurements
+   */
+  app.get("/api/athletes/recent", athleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { organizationId, limit } = req.query;
+
+      // Validate organizationId is provided
+      if (!organizationId || typeof organizationId !== 'string') {
+        return res.status(400).json({ message: "Organization ID is required" });
+      }
+
+      // Validate limit parameter
+      let parsedLimit = 5; // Default
+      if (limit) {
+        parsedLimit = parseInt(limit as string, 10);
+        if (isNaN(parsedLimit) || parsedLimit < 1) {
+          return res.status(400).json({ message: "Limit must be a positive integer" });
+        }
+        if (parsedLimit > 100) {
+          return res.status(400).json({ message: "Limit cannot exceed 100" });
+        }
+      }
+
+      // Check organization access permission
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+      if (!userIsSiteAdmin) {
+        // Non-site-admin users can only access their own organization
+        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
+
+        if (!hasOrgAccess) {
+          return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        }
+      }
+
+      // Fetch recent athletes
+      const athletes = await storage.getRecentAthletes({
+        organizationId,
+        limit: parsedLimit,
+      });
+
+      res.json({ athletes });
+    } catch (error) {
+      console.error("Get recent athletes error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch recent athletes";
+      res.status(500).json({ message });
+    }
+  });
+
   /**
    * Get all athletes with optional filtering
    */
