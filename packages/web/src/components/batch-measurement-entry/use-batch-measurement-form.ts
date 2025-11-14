@@ -5,13 +5,17 @@ import { z } from 'zod';
 import { useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/auth';
 
-// Batch measurement row schema
+// Batch measurement row schema (aligned with server insertMeasurementSchema)
 const batchMeasurementRowSchema = z.object({
-  athleteId: z.string().min(1, 'Athlete is required'),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be YYYY-MM-DD'),
-  metric: z.string().min(1, 'Metric is required'),
-  value: z.number().positive('Value must be positive'),
-  flyInDistance: z.number().optional(),
+  athleteId: z.string().min(1, 'Athlete is required'), // Frontend uses athleteId, mapped to userId on submit
+  date: z.string().date('Date must be in YYYY-MM-DD format'), // Use strict .date() validation like server
+  metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'], {
+    errorMap: () => ({ message: 'Invalid metric type' })
+  }), // Match server enum validation
+  value: z.number().positive('Value must be positive').refine((val) => val < 10000, {
+    message: 'Value exceeds realistic range'
+  }), // Add upper bound validation
+  flyInDistance: z.number().positive().optional(),
   notes: z.string().max(1000, 'Notes must be 1000 characters or less').optional(),
   teamId: z.string().optional(),
 });
@@ -44,8 +48,11 @@ export function useBatchMeasurementForm() {
   // Load draft from localStorage on mount
   useEffect(() => {
     const loadDraft = () => {
+      // Guard: Only load draft if user ID is available
+      if (!user?.id) return;
+
       try {
-        const draft = localStorage.getItem(`${STORAGE_KEY}-${user?.id}`);
+        const draft = localStorage.getItem(`${STORAGE_KEY}-${user.id}`);
         if (draft) {
           const parsed = JSON.parse(draft);
           if (parsed.measurements && Array.isArray(parsed.measurements)) {
@@ -58,21 +65,24 @@ export function useBatchMeasurementForm() {
     };
 
     loadDraft();
-  }, [user?.id]);
+  }, [user?.id, form]);
 
   // Auto-save to localStorage
   useEffect(() => {
+    // Guard: Only set up auto-save if user ID is available
+    if (!user?.id) return;
+
     let isMounted = true;
 
     const saveDraft = () => {
-      if (!isMounted) return; // Prevent saving if unmounted
+      if (!isMounted || !user?.id) return; // Prevent saving if unmounted or no user
 
       try {
         const values = form.getValues();
         // Only save if form is dirty and has data
         if (form.formState.isDirty && values.measurements.length > 0) {
           localStorage.setItem(
-            `${STORAGE_KEY}-${user?.id}`,
+            `${STORAGE_KEY}-${user.id}`,
             JSON.stringify(values)
           );
         }
@@ -128,7 +138,10 @@ export function useBatchMeasurementForm() {
   // Clear all rows
   const clearAll = useCallback(() => {
     form.setValue('measurements', []);
-    localStorage.removeItem(`${STORAGE_KEY}-${user?.id}`);
+    // Only remove from localStorage if user ID exists
+    if (user?.id) {
+      localStorage.removeItem(`${STORAGE_KEY}-${user.id}`);
+    }
   }, [form, user?.id]);
 
   // Batch save mutation
@@ -163,7 +176,9 @@ export function useBatchMeasurementForm() {
     },
     onSuccess: () => {
       // Clear draft after successful save
-      localStorage.removeItem(`${STORAGE_KEY}-${user?.id}`);
+      if (user?.id) {
+        localStorage.removeItem(`${STORAGE_KEY}-${user.id}`);
+      }
       form.reset();
     },
   });
@@ -173,14 +188,47 @@ export function useBatchMeasurementForm() {
     const isValid = await form.trigger();
 
     if (!isValid) {
+      // Get field-specific errors for better error messages
+      const errors = form.formState.errors;
+      const errorMessages = [];
+
+      if (errors.measurements) {
+        const measurementErrors = errors.measurements as any;
+        if (Array.isArray(measurementErrors)) {
+          measurementErrors.forEach((rowError, index) => {
+            if (rowError) {
+              const fields = Object.keys(rowError);
+              if (fields.length > 0) {
+                errorMessages.push(`Row ${index + 1}: ${fields.join(', ')} validation failed`);
+              }
+            }
+          });
+        }
+      }
+
       return {
         success: false,
-        errors: ['Please fix validation errors before saving'],
+        errors: errorMessages.length > 0
+          ? errorMessages
+          : ['Please fix validation errors before saving'],
       };
     }
 
     try {
       const data = form.getValues();
+
+      // Additional validation: ensure all athleteIds are non-empty
+      const emptyAthleteRows = data.measurements
+        .map((m, i) => ({ athlete: m.athleteId, index: i }))
+        .filter(r => !r.athlete || r.athlete.trim() === '');
+
+      if (emptyAthleteRows.length > 0) {
+        return {
+          success: false,
+          errors: emptyAthleteRows.map(r => `Row ${r.index + 1}: Athlete is required`),
+        };
+      }
+
       const result = await saveMutation.mutateAsync(data);
 
       return {

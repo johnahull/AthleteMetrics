@@ -35,6 +35,15 @@ const measurementDeleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Batch operation rate limiting (stricter due to high measurement count per request)
+const measurementBatchLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.BATCH,
+  message: { message: "Too many batch operations, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -283,7 +292,7 @@ export function registerMeasurementRoutes(app: Express) {
    * Batch create measurements (org admins and coaches)
    * Creates multiple measurements in a single transaction
    */
-  app.post("/api/measurements/batch", measurementLimiter, requireAuth, async (req, res) => {
+  app.post("/api/measurements/batch", measurementBatchLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -303,15 +312,31 @@ export function registerMeasurementRoutes(app: Express) {
       const validatedBatch = batchSchema.parse(req.body);
       const measurements = validatedBatch.measurements;
 
-      // Call batch service method
-      const result = await measurementService.createMeasurementsBatch(measurements, user);
+      // Call batch service method with site admin check
+      const result = await measurementService.createMeasurementsBatch(
+        measurements,
+        user,
+        isSiteAdmin(user)
+      );
 
-      // Return result with success count and errors
-      res.status(200).json({
+      // Return appropriate HTTP status code
+      // 201: All measurements created successfully
+      // 207: Partial success (some measurements failed)
+      // 400: All measurements failed (validation errors)
+      const statusCode =
+        result.failed === 0 ? 201 :
+        result.created === 0 ? 400 :
+        207; // RFC 4918 Multi-Status for partial success
+
+      res.status(statusCode).json({
         created: result.created,
         failed: result.failed,
         errors: result.errors,
-        message: `${result.created} measurements created successfully${result.failed > 0 ? `, ${result.failed} failed` : ''}`
+        message: result.failed === 0
+          ? `All ${result.created} measurements created successfully`
+          : result.created === 0
+          ? `All measurements failed validation`
+          : `${result.created} measurements created successfully, ${result.failed} failed`
       });
     } catch (error) {
       console.error("Batch create measurements error:", error);
