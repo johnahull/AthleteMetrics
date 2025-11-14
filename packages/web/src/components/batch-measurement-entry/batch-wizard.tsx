@@ -82,6 +82,8 @@ export function BatchWizard({ open, onClose, onComplete }: BatchWizardProps) {
     if (step === 2) return selectedMetrics.length > 0;
     if (step === 4) {
       // Check 500-row limit on final step
+      // Note: This is a UX limit to prevent browser performance issues from rendering too many form fields
+      // The backend API limit is 100 measurements per request (handled during batch save)
       const totalRows = selectedAthleteIds.length * selectedMetrics.length * measurementsPerAthlete;
       return totalRows <= 500;
     }
@@ -397,6 +399,8 @@ interface StepReviewProps {
 function StepReview({ athleteIds, metrics, date, measurementsPerAthlete }: StepReviewProps) {
   const { metrics: availableMetrics } = useAvailableMetrics();
   const totalRows = athleteIds.length * metrics.length * measurementsPerAthlete;
+  // MAX_ROWS is a UX limit for wizard-generated grid rows to prevent browser performance issues
+  // This is separate from the backend API's 100 measurements per batch request limit
   const MAX_ROWS = 500;
   const exceedsLimit = totalRows > MAX_ROWS;
 

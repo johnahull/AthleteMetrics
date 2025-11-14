@@ -1,5 +1,5 @@
 import React, { useRef, useCallback } from 'react';
-import { useFormContext } from 'react-hook-form';
+import { useFormContext, FieldArrayWithId } from 'react-hook-form';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,8 +7,19 @@ import { Trash2 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 
+// Type for batch measurement row (matches schema in use-batch-measurement-form.ts)
+type BatchMeasurementRow = {
+  athleteId: string;
+  date: string;
+  metric: string;
+  value: number;
+  flyInDistance?: number;
+  notes?: string;
+  teamId?: string;
+};
+
 interface BatchEntryGridProps {
-  fields: any[];
+  fields: FieldArrayWithId<{ measurements: BatchMeasurementRow[] }, 'measurements', 'id'>[];
   deleteRow: (index: number) => void;
 }
 

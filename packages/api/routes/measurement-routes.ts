@@ -305,6 +305,9 @@ export function registerMeasurementRoutes(app: Express) {
       }
 
       // Validate batch request structure
+      // Backend limit: 100 measurements per API request (DoS protection)
+      // Frontend wizard limit: 500 total grid rows (UX/browser performance limit)
+      // These limits serve different purposes and are enforced at different layers
       const batchSchema = z.object({
         measurements: z.array(insertMeasurementSchema).min(1).max(100)
       });
