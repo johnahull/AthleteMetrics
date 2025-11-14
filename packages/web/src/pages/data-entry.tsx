@@ -38,6 +38,7 @@ export default function DataEntry() {
     form,
     fields,
     addRow,
+    append,
     deleteRow,
     copyPreviousRow,
     clearAll,
@@ -78,17 +79,18 @@ export default function DataEntry() {
       return;
     }
 
-    // Generate rows: athleteIds × metrics × measurementsPerAthlete
+    // Generate rows using append directly (no race condition)
+    // athleteIds × metrics × measurementsPerAthlete
     config.athleteIds.forEach(athleteId => {
       config.metrics.forEach(metric => {
         for (let i = 0; i < config.measurementsPerAthlete; i++) {
-          addRow();
-          const currentIndex = form.getValues('measurements').length - 1;
-
-          // Pre-populate athlete, metric, and date
-          form.setValue(`measurements.${currentIndex}.athleteId`, athleteId);
-          form.setValue(`measurements.${currentIndex}.metric`, metric);
-          form.setValue(`measurements.${currentIndex}.date`, config.date);
+          append({
+            athleteId: athleteId,
+            metric: metric,
+            date: config.date,
+            value: 0,
+            notes: '',
+          });
         }
       });
     });

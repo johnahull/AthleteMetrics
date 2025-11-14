@@ -6,9 +6,8 @@ export function useMediaQuery(query: string): boolean {
   useEffect(() => {
     const media = window.matchMedia(query);
 
-    if (media.matches !== matches) {
-      setMatches(media.matches);
-    }
+    // Always sync on mount or query change
+    setMatches(media.matches);
 
     const listener = (e: MediaQueryListEvent) => setMatches(e.matches);
 
@@ -22,7 +21,7 @@ export function useMediaQuery(query: string): boolean {
       media.addListener(listener);
       return () => media.removeListener(listener);
     }
-  }, [matches, query]);
+  }, [query]); // Remove matches from dependencies to prevent infinite loop
 
   return matches;
 }

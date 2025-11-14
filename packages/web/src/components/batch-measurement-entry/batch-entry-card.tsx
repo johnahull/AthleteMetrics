@@ -135,6 +135,7 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
                 type="text"
                 {...register(`measurements.${currentIndex}.notes`)}
                 placeholder="Add notes..."
+                maxLength={1000}
               />
             </div>
           </div>
@@ -146,6 +147,7 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
               variant="outline"
               onClick={handlePrevious}
               disabled={!canGoPrevious}
+              aria-label="Go to previous measurement entry"
             >
               <ChevronLeft className="h-4 w-4 mr-1" />
               Previous
@@ -156,6 +158,7 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
               variant="outline"
               onClick={handleNext}
               disabled={!canGoNext}
+              aria-label="Go to next measurement entry"
             >
               Next
               <ChevronRight className="h-4 w-4 ml-1" />

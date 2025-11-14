@@ -93,7 +93,8 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
 
       case 'Escape':
         e.preventDefault();
-        // Blur current input
+        // Blur current input (UX design choice: exit edit mode without canceling edits)
+        // Note: This allows users to quickly exit a field with Esc without losing changes
         (e.target as HTMLElement)?.blur();
         break;
     }
@@ -220,6 +221,7 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
                     {...register(`measurements.${index}.notes`)}
                     data-testid={`batch-notes-${index}`}
                     placeholder="Optional notes..."
+                    maxLength={1000}
                     onKeyDown={(e) => handleKeyDown(e, index, 4)}
                   />
                 </td>

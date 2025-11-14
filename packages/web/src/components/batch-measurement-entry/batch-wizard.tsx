@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Wand2, Calendar, Hash, Users, Target, CheckCircle } from 'lucide-react';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Wand2, Calendar, Hash, Users, Target, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { TeamAthleteSelector } from '@/components/ui/team-athlete-selector';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
@@ -79,6 +80,11 @@ export function BatchWizard({ open, onClose, onComplete }: BatchWizardProps) {
   const canProceed = () => {
     if (step === 1) return selectedAthleteIds.length > 0;
     if (step === 2) return selectedMetrics.length > 0;
+    if (step === 4) {
+      // Check 500-row limit on final step
+      const totalRows = selectedAthleteIds.length * selectedMetrics.length * measurementsPerAthlete;
+      return totalRows <= 500;
+    }
     return true;
   };
 
@@ -391,6 +397,8 @@ interface StepReviewProps {
 function StepReview({ athleteIds, metrics, date, measurementsPerAthlete }: StepReviewProps) {
   const { metrics: availableMetrics } = useAvailableMetrics();
   const totalRows = athleteIds.length * metrics.length * measurementsPerAthlete;
+  const MAX_ROWS = 500;
+  const exceedsLimit = totalRows > MAX_ROWS;
 
   // Get metric labels
   const selectedMetricLabels = metrics.map(code => {
@@ -404,6 +412,17 @@ function StepReview({ athleteIds, metrics, date, measurementsPerAthlete }: StepR
       <p className="text-sm text-muted-foreground mb-6">
         Review your configuration before generating the grid
       </p>
+
+      {/* Warning for exceeding limit */}
+      {exceedsLimit && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Too Many Rows</AlertTitle>
+          <AlertDescription>
+            Cannot generate {totalRows} rows (maximum: {MAX_ROWS}). Please go back and reduce your selection of athletes, metrics, or measurements per athlete.
+          </AlertDescription>
+        </Alert>
+      )}
 
       <Card className="mb-6">
         <CardContent className="pt-6">

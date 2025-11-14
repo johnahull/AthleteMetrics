@@ -199,6 +199,7 @@ export function useBatchMeasurementForm() {
     form,
     fields,
     addRow,
+    append, // Export append for direct use in wizard
     deleteRow,
     copyPreviousRow,
     clearAll,

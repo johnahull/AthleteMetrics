@@ -285,7 +285,9 @@ export class MeasurementService {
 
   /**
    * Batch create measurements (coaches and org admins only)
-   * Creates multiple measurements in a single transaction
+   * Processes each measurement independently to allow partial success
+   * IMPORTANT: Each measurement is in its own transaction for atomicity per-measurement
+   * This allows the batch to continue processing if individual measurements fail
    * @param measurements Array of measurements to create
    * @param user Session user for authorization
    * @returns Result with created count and errors
@@ -297,22 +299,16 @@ export class MeasurementService {
     const errors: Array<{ index: number; message: string }> = [];
     let created = 0;
 
-    // Process all measurements in a single transaction
-    try {
-      await db.transaction(async (tx) => {
-        for (let i = 0; i < measurements.length; i++) {
-          try {
-            await this.createMeasurement(measurements[i], user.id);
-            created++;
-          } catch (error) {
-            const message = error instanceof Error ? error.message : 'Unknown error';
-            errors.push({ index: i, message });
-          }
-        }
-      });
-    } catch (error) {
-      // Transaction-level error
-      throw new Error(error instanceof Error ? error.message : 'Batch transaction failed');
+    // Process each measurement in its own transaction for atomicity per-measurement
+    // This prevents a single failure from rolling back all measurements
+    for (let i = 0; i < measurements.length; i++) {
+      try {
+        await this.createMeasurement(measurements[i], user.id);
+        created++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({ index: i, message });
+      }
     }
 
     return {
