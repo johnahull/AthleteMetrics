@@ -326,6 +326,14 @@ export class BenchmarkService extends BaseService {
       // Create benchmark
       const benchmark = await this.storage.createCustomBenchmark(validatedData, requestingUserId);
 
+      // Auto-enable the custom benchmark for the organization
+      // This ensures the benchmark is immediately usable in reports
+      await this.storage.enableBenchmarkForOrg(
+        validatedData.organizationId,
+        benchmark.id,
+        'custom'
+      );
+
       // Cycle 9: Create audit log
       // Create audit log with retry logic
       await retryAuditLog(

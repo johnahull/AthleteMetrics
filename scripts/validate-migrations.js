@@ -55,7 +55,7 @@ const DANGEROUS_PATTERNS = [
     severity: 'WARNING'
   },
   {
-    pattern: /ALTER\s+TABLE.*ADD\s+COLUMN.*NOT\s+NULL(?!.*DEFAULT)/i,
+    pattern: /ALTER\s+TABLE[^;]*ADD\s+COLUMN(?![^;]*DEFAULT)[^;]*NOT\s+NULL/i,
     message: 'Adding NOT NULL column without DEFAULT will fail on existing data',
     severity: 'ERROR'
   },

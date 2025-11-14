@@ -5,11 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Menu, X, LogOut } from "lucide-react";
 import Sidebar from "./sidebar";
 import ImpersonationBanner from "./impersonation-banner";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import MeasurementForm from "./measurement-form";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showMeasurementModal, setShowMeasurementModal] = useState(false);
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
 
   // Public routes that don't require authentication
   const PUBLIC_ROUTES = [
@@ -26,6 +32,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isPublicRoute = PUBLIC_ROUTES.some(route =>
     route === location || location.startsWith(route + '/')
   );
+
+  // Initialize keyboard shortcuts
+  useKeyboardShortcuts({
+    user,
+    onMeasurement: () => setShowMeasurementModal(true),
+    onHelp: () => setShowHelpDialog(true),
+    onEscape: () => {
+      setShowMeasurementModal(false);
+      setShowHelpDialog(false);
+    },
+  });
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicRoute) {
@@ -96,6 +113,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {children}
         </div>
       </main>
+
+      {/* Measurement Modal - Triggered by Ctrl+M / Cmd+M */}
+      <Dialog open={showMeasurementModal} onOpenChange={setShowMeasurementModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Quick Add Measurement</DialogTitle>
+          </DialogHeader>
+          <MeasurementForm />
+        </DialogContent>
+      </Dialog>
+
+      {/* Keyboard Shortcuts Help Dialog - Triggered by ? */}
+      <KeyboardShortcutsDialog
+        open={showHelpDialog}
+        onOpenChange={setShowHelpDialog}
+      />
     </div>
   );
 }

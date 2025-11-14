@@ -12,6 +12,8 @@ jobs:
   test-and-deploy:
     name: Test and Deploy to Production
     runs-on: ubuntu-latest
+    environment:
+      name: release-deployment
     permissions:
       contents: write
       issues: write

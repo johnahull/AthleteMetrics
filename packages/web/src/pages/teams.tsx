@@ -16,6 +16,8 @@ import TeamAthletesModal from "@/components/TeamAthletesModal";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { useAuth } from "@/lib/auth";
 import type { Team, ArchiveTeam } from "@shared/schema";
+import { Skeleton } from "@/components/ui/skeleton";
+import { KPICardSkeleton } from "@/components/ui/loading-states";
 
 export default function Teams() {
   const [showAddModal, setShowAddModal] = useState(false);
@@ -161,11 +163,14 @@ export default function Teams() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
+        <div className="space-y-6">
+          {/* Header Skeleton */}
+          <Skeleton className="h-8 w-64" />
+
+          {/* Teams Grid Skeleton */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[...Array(6)].map((_, i) => (
-              <div key={i} className="h-64 bg-gray-200 rounded-xl"></div>
+              <KPICardSkeleton key={i} />
             ))}
           </div>
         </div>

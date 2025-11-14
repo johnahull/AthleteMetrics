@@ -35,6 +35,15 @@ const measurementDeleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Batch operation rate limiting (stricter due to high measurement count per request)
+const measurementBatchLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.BATCH,
+  message: { message: "Too many batch operations, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -267,7 +276,7 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      const measurement = await measurementService.createMeasurement(validatedData, user.id);
+      const measurement = await measurementService.createMeasurement(validatedData, user.id, user.role);
       res.status(201).json(measurement);
     } catch (error) {
       console.error("Create measurement error:", error);
@@ -275,6 +284,69 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to create measurement";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Batch create measurements (org admins and coaches)
+   * Creates multiple measurements in a single transaction
+   */
+  app.post("/api/measurements/batch", measurementBatchLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot use batch endpoint
+      if (user.role === 'athlete') {
+        return res.status(403).json({ message: "Athletes cannot use batch measurement entry" });
+      }
+
+      // Validate batch request structure
+      // Backend limit: 100 measurements per API request (DoS protection)
+      // Frontend wizard limit: 500 total grid rows (UX/browser performance limit)
+      // These limits serve different purposes and are enforced at different layers
+      const batchSchema = z.object({
+        measurements: z.array(insertMeasurementSchema).min(1).max(100)
+      });
+
+      const validatedBatch = batchSchema.parse(req.body);
+      const measurements = validatedBatch.measurements;
+
+      // Call batch service method with site admin check
+      const result = await measurementService.createMeasurementsBatch(
+        measurements,
+        user,
+        isSiteAdmin(user)
+      );
+
+      // Return appropriate HTTP status code
+      // 201: All measurements created successfully
+      // 207: Partial success (some measurements failed)
+      // 400: All measurements failed (validation errors)
+      const statusCode =
+        result.failed === 0 ? 201 :
+        result.created === 0 ? 400 :
+        207; // RFC 4918 Multi-Status for partial success
+
+      res.status(statusCode).json({
+        created: result.created,
+        failed: result.failed,
+        errors: result.errors,
+        message: result.failed === 0
+          ? `All ${result.created} measurements created successfully`
+          : result.created === 0
+          ? `All measurements failed validation`
+          : `${result.created} measurements created successfully, ${result.failed} failed`
+      });
+    } catch (error) {
+      console.error("Batch create measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid batch data", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to create measurements batch";
       res.status(400).json({ message });
     }
   });

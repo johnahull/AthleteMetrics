@@ -136,17 +136,48 @@ async function applyManualMigrations() {
         if (hasConcurrently) {
           console.log('   ⚠️  Migration contains CONCURRENTLY - running outside transaction');
 
-          // Split into individual statements and execute separately
-          // This avoids implicit transaction wrapping by postgres library
-          const statements = migrationSQL
-            .split(';')
-            .map(s => s.trim())
-            .filter(s => s.length > 0 && !s.startsWith('--'));
+          // Split into individual statements, handling DO $$ blocks correctly
+          // DO $$ blocks can contain semicolons, so we need to be more sophisticated
+          const statements = [];
+          let current = '';
+          let inDollarBlock = false;
 
-          for (const statement of statements) {
-            if (statement.trim()) {
-              await sql.unsafe(statement);
+          for (const line of migrationSQL.split('\n')) {
+            const trimmed = line.trim();
+
+            // Skip comment-only lines
+            if (trimmed.startsWith('--')) {
+              continue;
             }
+
+            current += line + '\n';
+
+            // Track DO $$ ... END $$ blocks
+            if (trimmed.match(/^DO\s+\$\$/i)) {
+              inDollarBlock = true;
+            }
+            if (inDollarBlock && trimmed.match(/^END\s+\$\$;/i)) {
+              inDollarBlock = false;
+              statements.push(current.trim());
+              current = '';
+              continue;
+            }
+
+            // Normal statement ending (not in DO block)
+            if (!inDollarBlock && trimmed.endsWith(';')) {
+              statements.push(current.trim());
+              current = '';
+            }
+          }
+
+          // Add any remaining content
+          if (current.trim()) {
+            statements.push(current.trim());
+          }
+
+          // Filter out empty statements and execute
+          for (const statement of statements.filter(s => s.length > 0)) {
+            await sql.unsafe(statement);
           }
 
           // Track migration separately (also outside any transaction)

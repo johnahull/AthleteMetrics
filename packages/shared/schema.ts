@@ -350,6 +350,128 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
 }));
 
+// Reports - Performance reporting system
+export const reports = pgTable("reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+
+  // Report identification
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  reportType: varchar("report_type", { length: 50 }).notNull(), // 'team' or 'individual'
+
+  // Report configuration (JSONB for flexibility)
+  config: jsonb("config").notNull(),
+  /* config structure:
+  {
+    "timeframe": {
+      "type": "preset" | "custom",
+      "preset": "season" | "year" | "all_time",
+      "customStart": "2025-01-01",
+      "customEnd": "2025-12-31"
+    },
+    "metrics": ["FLY10_TIME", "VERTICAL_JUMP"],
+    "benchmarks": {
+      "site": ["benchmark-id-1"],
+      "custom": ["custom-benchmark-id-1"],
+      "userDefined": [
+        {"metricCode": "FLY10_TIME", "value": 1.30, "label": "Coach Target"}
+      ]
+    },
+    "compositeIndex": {
+      "enabled": true,
+      "weights": {"FLY10_TIME": 0.4, "VERTICAL_JUMP": 0.6}
+    },
+    "filters": {
+      "teamIds": ["team-id-1"],
+      "gender": "Male",
+      "positions": ["F", "M"]
+    }
+  }
+  */
+
+  // Metadata
+  isTemplate: boolean("is_template").default(false).notNull(),
+  isPinned: boolean("is_pinned").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("reports_org_idx").on(table.organizationId),
+  createdByIdx: index("reports_created_by_idx").on(table.createdBy),
+  typeIdx: index("reports_type_idx").on(table.reportType),
+  orgTypeIdx: index("reports_org_type_idx").on(table.organizationId, table.reportType),
+  pinnedIdx: index("reports_pinned_idx").on(table.isPinned),
+  orgPinnedIdx: index("reports_org_pinned_idx").on(table.organizationId, table.isPinned),
+}));
+
+// Public report snapshots (shareable URLs)
+export const reportSnapshots = pgTable("report_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportId: varchar("report_id").notNull().references(() => reports.id, { onDelete: 'cascade' }),
+  publicToken: varchar("public_token", { length: 64 }).notNull().unique(), // URL-safe token for public access
+
+  // Snapshot data (immutable at creation time)
+  snapshotData: jsonb("snapshot_data").notNull(),
+  /* snapshotData structure:
+  {
+    "reportConfig": {...},
+    "generatedAt": "2025-01-15T10:00:00Z",
+    "generatedBy": "user-id",
+    "dataSnapshot": {
+      // All computed report data frozen at generation time
+      "athletes": [...],
+      "rankings": [...],
+      "benchmarkComparisons": {...}
+    }
+  }
+  */
+
+  // Access control
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp("expires_at").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  revokedAt: timestamp("revoked_at"),
+  revokedBy: varchar("revoked_by").references(() => users.id, { onDelete: 'set null' }),
+
+  // Analytics
+  viewCount: integer("view_count").default(0).notNull(),
+  lastViewedAt: timestamp("last_viewed_at"),
+
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  tokenIdx: index("report_snapshots_token_idx").on(table.publicToken),
+  reportIdx: index("report_snapshots_report_idx").on(table.reportId),
+  expiresIdx: index("report_snapshots_expires_idx").on(table.expiresAt),
+  activeIdx: index("report_snapshots_active_idx").on(table.isActive),
+  activeExpiresIdx: index("report_snapshots_active_expires_idx").on(table.isActive, table.expiresAt),
+}));
+
+// User-defined benchmarks for reports (in addition to site/custom benchmarks)
+export const reportBenchmarks = pgTable("report_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportId: varchar("report_id").notNull().references(() => reports.id, { onDelete: 'cascade' }),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code),
+
+  // Benchmark definition
+  name: varchar("name", { length: 100 }).notNull(),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+
+  // Optional filters (NULL = applies to all)
+  gender: varchar("gender", { length: 20 }),
+  ageMin: integer("age_min"),
+  ageMax: integer("age_max"),
+  position: varchar("position", { length: 50 }),
+
+  // Metadata
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  reportIdx: index("report_benchmarks_report_idx").on(table.reportId),
+  metricIdx: index("report_benchmarks_metric_idx").on(table.metricCode),
+}));
+
 // Relations
 export const sessionsRelations = relations(sessions, ({ one }) => ({
   user: one(users, {
@@ -364,6 +486,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   organizationMetrics: many(organizationMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
+  reports: many(reports),
 }));
 
 export const siteMetricsRelations = relations(siteMetrics, ({ one, many }) => ({
@@ -402,6 +525,8 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   invitationsSent: many(invitations),
   emailVerificationTokens: many(emailVerificationTokens),
   sessions: many(sessions),
+  reportsCreated: many(reports, { relationName: "reportsCreated" }),
+  reportSnapshotsCreated: many(reportSnapshots, { relationName: "reportSnapshotsCreated" }),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -509,6 +634,47 @@ export const organizationBenchmarksRelations = relations(organizationBenchmarks,
   organization: one(organizations, {
     fields: [organizationBenchmarks.organizationId],
     references: [organizations.id],
+  }),
+}));
+
+export const reportsRelations = relations(reports, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [reports.organizationId],
+    references: [organizations.id],
+  }),
+  createdBy: one(users, {
+    fields: [reports.createdBy],
+    references: [users.id],
+    relationName: "reportsCreated",
+  }),
+  snapshots: many(reportSnapshots),
+  benchmarks: many(reportBenchmarks),
+}));
+
+export const reportSnapshotsRelations = relations(reportSnapshots, ({ one }) => ({
+  report: one(reports, {
+    fields: [reportSnapshots.reportId],
+    references: [reports.id],
+  }),
+  createdBy: one(users, {
+    fields: [reportSnapshots.createdBy],
+    references: [users.id],
+    relationName: "reportSnapshotsCreated",
+  }),
+  revokedBy: one(users, {
+    fields: [reportSnapshots.revokedBy],
+    references: [users.id],
+  }),
+}));
+
+export const reportBenchmarksRelations = relations(reportBenchmarks, ({ one }) => ({
+  report: one(reports, {
+    fields: [reportBenchmarks.reportId],
+    references: [reports.id],
+  }),
+  metric: one(siteMetrics, {
+    fields: [reportBenchmarks.metricCode],
+    references: [siteMetrics.code],
   }),
 }));
 
@@ -708,6 +874,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),
   season: z.string().optional(),
@@ -904,6 +1071,130 @@ export const updateOrganizationBenchmarkSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
+// Report Schemas
+export const insertReportSchema = createInsertSchema(reports).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  createdBy: true, // Set from session
+}).extend({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  name: z.string().min(1, "Report name is required").max(200),
+  description: z.string().optional(),
+  reportType: z.enum(['team', 'individual']),
+  config: z.object({
+    timeframe: z.object({
+      type: z.enum(['preset', 'custom']),
+      preset: z.enum(['season', 'year', 'all_time']).optional(),
+      customStart: z.string().optional(), // ISO date string
+      customEnd: z.string().optional(), // ISO date string
+    }),
+    metrics: z.array(z.string()).min(1, "At least one metric is required"),
+    benchmarks: z.object({
+      site: z.array(z.string()).optional(), // Site benchmark IDs
+      custom: z.array(z.string()).optional(), // Custom benchmark IDs
+      userDefined: z.array(z.object({
+        metricCode: z.string(),
+        value: z.number().positive(),
+        label: z.string().max(100),
+      })).optional(),
+    }).optional(),
+    compositeIndex: z.object({
+      enabled: z.boolean(),
+      weights: z.record(z.string(), z.number().min(0).max(1)), // metricCode -> weight (0-1)
+    }).optional(),
+    filters: z.object({
+      teamIds: z.array(z.string()).optional(),
+      gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+      positions: z.array(z.string()).optional(),
+    }).optional(),
+    // Individual report athlete identifiers
+    athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
+    athleteId: z.string().optional(), // Single athlete ID (stored in database)
+  }),
+  isTemplate: z.boolean().default(false),
+});
+
+export const updateReportSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  description: z.string().optional(),
+  config: z.object({
+    timeframe: z.object({
+      type: z.enum(['preset', 'custom']),
+      preset: z.enum(['season', 'year', 'all_time']).optional(),
+      customStart: z.string().optional(),
+      customEnd: z.string().optional(),
+    }).optional(),
+    metrics: z.array(z.string()).min(1).optional(),
+    benchmarks: z.object({
+      site: z.array(z.string()).optional(),
+      custom: z.array(z.string()).optional(),
+      userDefined: z.array(z.object({
+        metricCode: z.string(),
+        value: z.number().positive(),
+        label: z.string().max(100),
+      })).optional(),
+    }).optional(),
+    compositeIndex: z.object({
+      enabled: z.boolean(),
+      weights: z.record(z.string(), z.number().min(0).max(1)),
+    }).optional(),
+    filters: z.object({
+      teamIds: z.array(z.string()).optional(),
+      gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+      positions: z.array(z.string()).optional(),
+    }).optional(),
+    // Individual report athlete identifiers
+    athleteIds: z.array(z.string()).optional(), // Array of athlete IDs (used in creation)
+    athleteId: z.string().optional(), // Single athlete ID (stored in database)
+  }).optional(),
+  isTemplate: z.boolean().optional(),
+});
+
+export const insertReportSnapshotSchema = createInsertSchema(reportSnapshots).omit({
+  id: true,
+  publicToken: true, // Generated by backend
+  createdAt: true,
+  createdBy: true, // Set from session
+  viewCount: true, // Managed by system
+  lastViewedAt: true, // Managed by system
+  revokedAt: true, // Managed by system
+  revokedBy: true, // Managed by system
+}).extend({
+  reportId: z.string().min(1, "Report ID is required"),
+  snapshotData: z.object({
+    reportConfig: z.any(), // Full report configuration
+    generatedAt: z.string(), // ISO timestamp
+    generatedBy: z.string(), // User ID
+    dataSnapshot: z.any(), // Complete computed report data
+  }),
+  expiresAt: z.date().or(z.string()), // Allow Date object or ISO string
+  isActive: z.boolean().default(true),
+});
+
+export const insertReportBenchmarkSchema = createInsertSchema(reportBenchmarks).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  reportId: z.string().min(1, "Report ID is required"),
+  metricCode: z.string().min(1, "Metric code is required").max(50),
+  name: z.string().min(1, "Benchmark name is required").max(100),
+  benchmarkValue: z.number().positive("Benchmark value must be positive"),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(5).max(100).optional(),
+  ageMax: z.number().int().min(5).max(100).optional(),
+  position: z.string().max(50).optional(),
+}).refine(
+  (data) => {
+    if (data.ageMin !== undefined && data.ageMax !== undefined) {
+      return data.ageMin <= data.ageMax;
+    }
+    return true;
+  },
+  { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+);
+
 // Types
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
@@ -982,6 +1273,16 @@ export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;
 export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBenchmarkSchema>;
 export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
 export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
+
+export type InsertReport = z.infer<typeof insertReportSchema>;
+export type Report = typeof reports.$inferSelect;
+export type UpdateReport = z.infer<typeof updateReportSchema>;
+
+export type InsertReportSnapshot = z.infer<typeof insertReportSnapshotSchema>;
+export type ReportSnapshot = typeof reportSnapshots.$inferSelect;
+
+export type InsertReportBenchmark = z.infer<typeof insertReportBenchmarkSchema>;
+export type ReportBenchmark = typeof reportBenchmarks.$inferSelect;
 
 // Enriched type for organization benchmarks with full benchmark details
 export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {

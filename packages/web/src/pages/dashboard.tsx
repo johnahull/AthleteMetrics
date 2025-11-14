@@ -1,16 +1,31 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
-import { Users, UsersRound, Clock, ArrowUp } from "lucide-react";
+import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
 import PerformanceChart from "@/components/charts/performance-chart";
+import RecentAthletesWidget from "@/components/recent-athletes-widget";
+import AthleteMeasurementForm from "@/components/athlete-measurement-form";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
+import { KPICardWithTrend } from "@/components/kpi-card-with-trend";
+import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
 
 export default function Dashboard() {
   const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
+  const [measurementModalOpen, setMeasurementModalOpen] = useState(false);
+  const [selectedAthlete, setSelectedAthlete] = useState<{
+    athleteId: string;
+    athleteName: string;
+  } | null>(null);
+
+  // Get available metrics for the organization
+  const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
@@ -27,6 +42,9 @@ export default function Dashboard() {
   };
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
+
+  // Fetch dashboard trends
+  const { data: trendsData, isLoading: trendsLoading } = useDashboardTrends(effectiveOrganizationId);
 
   const { data: dashboardStats, isLoading, error } = useQuery({
     queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, user?.isSiteAdmin],
@@ -123,12 +141,40 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <div className="animate-pulse space-y-6">
-          <div className="h-8 bg-gray-200 rounded w-64"></div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-32 bg-gray-200 rounded-xl"></div>
-            ))}
+        <div className="space-y-6">
+          {/* Header Skeleton */}
+          <div>
+            <div className="h-8 w-64 bg-gray-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-96 bg-gray-200 rounded animate-pulse"></div>
+          </div>
+
+          {/* KPI Cards Skeleton */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <KPICardSkeleton />
+            <KPICardSkeleton />
+            <KPICardSkeleton />
+          </div>
+
+          {/* Charts Skeleton */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="bg-white">
+              <CardContent className="p-0">
+                <ChartSkeleton />
+              </CardContent>
+            </Card>
+            <Card className="bg-white">
+              <CardContent className="p-6">
+                <div className="h-4 w-32 bg-gray-200 rounded mb-6 animate-pulse"></div>
+                <div className="space-y-4">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex justify-between">
+                      <div className="h-3 w-24 bg-gray-200 rounded animate-pulse"></div>
+                      <div className="h-3 w-16 bg-gray-200 rounded animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
@@ -214,66 +260,64 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards - Static Cards for Athletes and Teams */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Active Athletes</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-active-athletes">
-                  {stats.totalAthletes || 0}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">
-                  {stats.activeAthletes || 0} with active accounts
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <UsersRound className="h-6 w-6 text-primary" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* KPI Cards with Trends */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <KPICardWithTrend
+          title="Total Athletes"
+          value={stats.totalAthletes || 0}
+          icon={UsersRound}
+          trend={trendsData?.athletes ? {
+            value: trendsData.athletes.change,
+            percent: trendsData.athletes.changePercent,
+            direction: trendsData.athletes.trend
+          } : undefined}
+        />
 
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Active Teams</p>
-                <p className="text-3xl font-bold text-gray-900" data-testid="stat-total-teams">
-                  {stats.totalTeams}
-                </p>
-                <p className="text-sm text-gray-500 mt-1">Across all levels</p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <Users className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        <KPICardWithTrend
+          title="Total Measurements"
+          value={trendsData?.measurements.current || 0}
+          icon={Activity}
+          trend={trendsData?.measurements ? {
+            value: trendsData.measurements.change,
+            percent: trendsData.measurements.changePercent,
+            direction: trendsData.measurements.trend
+          } : undefined}
+        />
+
+        <KPICardWithTrend
+          title="Active Teams"
+          value={stats.totalTeams || 0}
+          icon={Users}
+          trend={trendsData?.teams ? {
+            value: trendsData.teams.change,
+            percent: trendsData.teams.changePercent,
+            direction: trendsData.teams.trend
+          } : undefined}
+        />
       </div>
 
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
       {effectiveOrganizationId && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-        {/* Dynamic metric cards for all 7 test types */}
-        {['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'].map((metric) => {
-          const bestResult = stats[`best${metric}Last30Days`];
-          const MetricIcon = getMetricIcon(metric);
-          const metricColor = getMetricColor(metric);
+        {/* Dynamic metric cards for organization-enabled metrics only */}
+        {!metricsLoading && availableMetrics.map((metric) => {
+          const metricCode = metric.code;
+          const bestResult = stats[`best${metricCode}Last30Days`];
+          const MetricIcon = getMetricIcon(metricCode);
+          const metricColor = getMetricColor(metricCode);
           
           return (
-            <Card key={metric} className="bg-white">
+            <Card key={metricCode} className="bg-white">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">
-                      Best {getMetricDisplayName(metric)} (30d)
+                      Best {metric.label} (30d)
                     </p>
-                    <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metric.toLowerCase()}`}>
-                      {bestResult ? formatMetricValue(metric, parseFloat(bestResult.value)) : "N/A"}
+                    <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
+                      {bestResult ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
                     </p>
-                    <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metric.toLowerCase()}-athlete`}>
+                    <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metricCode.toLowerCase()}-athlete`}>
                       {bestResult?.userName || "No data"}
                     </p>
                   </div>
@@ -285,6 +329,23 @@ export default function Dashboard() {
             </Card>
           );
         })}
+        
+        {/* Loading state for metrics */}
+        {metricsLoading && (
+          <>
+            {[...Array(4)].map((_, i) => (
+              <Card key={`loading-${i}`} className="bg-white">
+                <CardContent className="p-6">
+                  <div className="animate-pulse space-y-3">
+                    <div className="h-4 bg-gray-200 rounded w-3/4"></div>
+                    <div className="h-8 bg-gray-200 rounded w-1/2"></div>
+                    <div className="h-4 bg-gray-200 rounded w-2/3"></div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </>
+        )}
       </div>
       )}
 
@@ -321,6 +382,19 @@ export default function Dashboard() {
             </div>
           </CardContent>
         </Card>
+      </div>
+      )}
+
+      {/* Recent Athletes Widget - Only show when org is selected */}
+      {effectiveOrganizationId && (
+      <div className="mb-8">
+        <RecentAthletesWidget
+          organizationId={effectiveOrganizationId}
+          onAddMeasurement={(data) => {
+            setSelectedAthlete(data);
+            setMeasurementModalOpen(true);
+          }}
+        />
       </div>
       )}
 
@@ -395,6 +469,25 @@ export default function Dashboard() {
         </CardContent>
       </Card>
       )}
+
+      {/* Add Measurement Modal */}
+      <Dialog open={measurementModalOpen} onOpenChange={setMeasurementModalOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Measurement</DialogTitle>
+          </DialogHeader>
+          {selectedAthlete && (
+            <AthleteMeasurementForm
+              athleteId={selectedAthlete.athleteId}
+              athleteName={selectedAthlete.athleteName}
+              onSuccess={() => {
+                setMeasurementModalOpen(false);
+                setSelectedAthlete(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

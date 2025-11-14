@@ -120,6 +120,18 @@ export interface IStorage {
     page?: number;
     limit?: number;
   }): Promise<(User & { teams: (Team & { organization: Organization })[] })[]>;
+  getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>>;
   getAthlete(id: string): Promise<User | undefined>;
   createAthlete(athlete: Partial<InsertUser>): Promise<User>;
   updateAthlete(id: string, athlete: Partial<InsertUser>): Promise<User>;
@@ -1746,6 +1758,64 @@ export class DatabaseStorage implements IStorage {
         athlete.teams.some((team: Team) => team.id === filters.teamId)
       );
     }
+
+    return result;
+  }
+
+  async getRecentAthletes(filters: {
+    organizationId: string;
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    firstName: string;
+    lastName: string;
+    avatar: string | null;
+    lastMeasurementDate: string;
+    lastMeasurementType: string;
+    teamName: string | null;
+  }>> {
+    // Validate required organizationId parameter
+    if (!filters.organizationId) {
+      throw new Error('organizationId is required for getRecentAthletes');
+    }
+
+    const limit = filters.limit || 5;
+
+    // Query to get athletes with their most recent measurement
+    // Uses ROW_NUMBER() window function to get the latest measurement per athlete
+    const result = await db.execute<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      avatar: string | null;
+      lastMeasurementDate: string;
+      lastMeasurementType: string;
+      teamName: string | null;
+    }>(sql`
+      WITH ranked_measurements AS (
+        SELECT
+          u.id,
+          u.first_name as "firstName",
+          u.last_name as "lastName",
+          NULL as avatar,
+          m.date as "lastMeasurementDate",
+          m.metric as "lastMeasurementType",
+          t.name as "teamName",
+          ROW_NUMBER() OVER (PARTITION BY u.id ORDER BY m.date DESC, m.created_at DESC) as rn
+        FROM ${users} u
+        INNER JOIN ${userOrganizations} uo ON u.id = uo.user_id
+        INNER JOIN ${measurements} m ON m.user_id = u.id
+        LEFT JOIN ${teams} t ON m.team_id = t.id
+        WHERE uo.organization_id = ${filters.organizationId}
+          AND uo.role = 'athlete'
+          AND u.deleted_at IS NULL
+      )
+      SELECT id, "firstName", "lastName", avatar, "lastMeasurementDate", "lastMeasurementType", "teamName"
+      FROM ranked_measurements
+      WHERE rn = 1
+      ORDER BY "lastMeasurementDate" DESC, id
+      LIMIT ${limit}
+    `);
 
     return result;
   }
