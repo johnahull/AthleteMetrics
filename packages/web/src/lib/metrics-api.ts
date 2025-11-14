@@ -20,7 +20,7 @@ export async function fetchSiteMetrics(includeInactive = false): Promise<SiteMet
     params.append('includeInactive', 'true');
   }
 
-  const response = await fetch(`/api/metrics?${params.toString()}`);
+  const response = await fetch(`/api/site-metrics?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site metrics');
   }

@@ -59,15 +59,19 @@ export function CustomBenchmarkForm({
   const { toast } = useToast();
   const isEditing = !!benchmark;
 
-  // Fetch available metrics
+  // Fetch available metrics filtered by organization type
   const { data: metrics = [] } = useQuery({
-    queryKey: ["/api/metrics"],
+    queryKey: ["/api/metrics", organizationId],
     queryFn: async () => {
-      const response = await fetch("/api/metrics?includeInactive=false");
+      const response = await fetch("/api/metrics?includeInactive=false", {
+        headers: {
+          'x-organization-id': organizationId,
+        },
+      });
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
     },
-    enabled: open,
+    enabled: open && !!organizationId,
   });
 
   const createMutation = useCreateCustomBenchmark();

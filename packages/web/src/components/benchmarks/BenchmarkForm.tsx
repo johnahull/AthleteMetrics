@@ -54,11 +54,11 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   const queryClient = useQueryClient();
   const isEditing = !!benchmark;
 
-  // Fetch available metrics
+  // Fetch available metrics (site admin context)
   const { data: metrics = [] } = useQuery({
-    queryKey: ["/api/metrics"],
+    queryKey: ["/api/site-metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/metrics?includeInactive=false");
+      const response = await fetch("/api/site-metrics?includeInactive=false");
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
     },

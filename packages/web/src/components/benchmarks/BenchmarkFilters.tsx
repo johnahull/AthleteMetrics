@@ -12,6 +12,7 @@ import { X } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 
 interface BenchmarkFiltersProps {
+  organizationId?: string;
   filters: {
     metricCode?: string;
     gender?: string;
@@ -22,12 +23,13 @@ interface BenchmarkFiltersProps {
   onFiltersChange: (filters: any) => void;
 }
 
-export function BenchmarkFilters({ filters, onFiltersChange }: BenchmarkFiltersProps) {
-  // Fetch available metrics for filter
+export function BenchmarkFilters({ organizationId, filters, onFiltersChange }: BenchmarkFiltersProps) {
+  // Fetch available metrics for filter (filtered by organization type if organizationId provided)
   const { data: metrics = [] } = useQuery({
-    queryKey: ["/api/metrics"],
+    queryKey: ["/api/metrics", organizationId],
     queryFn: async () => {
-      const response = await fetch("/api/metrics?includeInactive=false");
+      const headers = organizationId ? { 'x-organization-id': organizationId } : {};
+      const response = await fetch("/api/metrics?includeInactive=false", { headers });
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
     },
