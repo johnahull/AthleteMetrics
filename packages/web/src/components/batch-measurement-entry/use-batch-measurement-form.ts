@@ -190,7 +190,7 @@ export function useBatchMeasurementForm() {
     if (!isValid) {
       // Get field-specific errors for better error messages
       const errors = form.formState.errors;
-      const errorMessages = [];
+      const errorMessages: string[] = [];
 
       if (errors.measurements) {
         const measurementErrors = errors.measurements as any;

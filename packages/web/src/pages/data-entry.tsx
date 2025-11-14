@@ -86,7 +86,7 @@ export default function DataEntry() {
         for (let i = 0; i < config.measurementsPerAthlete; i++) {
           append({
             athleteId: athleteId,
-            metric: metric,
+            metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI" | "TOP_SPEED",
             date: config.date,
             value: 0,
             notes: '',
