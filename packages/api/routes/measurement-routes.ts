@@ -280,6 +280,50 @@ export function registerMeasurementRoutes(app: Express) {
   });
 
   /**
+   * Batch create measurements (org admins and coaches)
+   * Creates multiple measurements in a single transaction
+   */
+  app.post("/api/measurements/batch", measurementLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot use batch endpoint
+      if (user.role === 'athlete') {
+        return res.status(403).json({ message: "Athletes cannot use batch measurement entry" });
+      }
+
+      // Validate batch request structure
+      const batchSchema = z.object({
+        measurements: z.array(insertMeasurementSchema).min(1).max(100)
+      });
+
+      const validatedBatch = batchSchema.parse(req.body);
+      const measurements = validatedBatch.measurements;
+
+      // Call batch service method
+      const result = await measurementService.createMeasurementsBatch(measurements, user);
+
+      // Return result with success count and errors
+      res.status(200).json({
+        created: result.created,
+        failed: result.failed,
+        errors: result.errors,
+        message: `${result.created} measurements created successfully${result.failed > 0 ? `, ${result.failed} failed` : ''}`
+      });
+    } catch (error) {
+      console.error("Batch create measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid batch data", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to create measurements batch";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
    * Update measurement (submitter, org admins, and coaches)
    */
   app.put("/api/measurements/:id", measurementLimiter, requireAuth, async (req, res) => {

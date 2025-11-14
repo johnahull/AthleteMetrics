@@ -284,6 +284,45 @@ export class MeasurementService {
   }
 
   /**
+   * Batch create measurements (coaches and org admins only)
+   * Creates multiple measurements in a single transaction
+   * @param measurements Array of measurements to create
+   * @param user Session user for authorization
+   * @returns Result with created count and errors
+   */
+  async createMeasurementsBatch(
+    measurements: InsertMeasurement[],
+    user: { id: string; role: string; primaryOrganizationId?: string }
+  ): Promise<{ created: number; failed: number; errors: Array<{ index: number; message: string }> }> {
+    const errors: Array<{ index: number; message: string }> = [];
+    let created = 0;
+
+    // Process all measurements in a single transaction
+    try {
+      await db.transaction(async (tx) => {
+        for (let i = 0; i < measurements.length; i++) {
+          try {
+            await this.createMeasurement(measurements[i], user.id);
+            created++;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            errors.push({ index: i, message });
+          }
+        }
+      });
+    } catch (error) {
+      // Transaction-level error
+      throw new Error(error instanceof Error ? error.message : 'Batch transaction failed');
+    }
+
+    return {
+      created,
+      failed: errors.length,
+      errors,
+    };
+  }
+
+  /**
    * Update measurement fields
    * Note: submittedBy cannot be updated after creation
    * IMPORTANT: Wrapped in transaction with FOR UPDATE lock to prevent race conditions
