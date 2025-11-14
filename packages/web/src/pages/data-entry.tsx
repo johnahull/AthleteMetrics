@@ -65,6 +65,19 @@ export default function DataEntry() {
   };
 
   const handleWizardComplete = (config: BatchWizardConfig) => {
+    const totalRows = config.athleteIds.length * config.metrics.length * config.measurementsPerAthlete;
+
+    // Safety limit to prevent browser crashes
+    const MAX_ROWS = 500;
+    if (totalRows > MAX_ROWS) {
+      toast({
+        title: 'Too Many Rows',
+        description: `Cannot generate ${totalRows} rows (max: ${MAX_ROWS}). Please reduce athletes, metrics, or measurements per athlete.`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Generate rows: athleteIds × metrics × measurementsPerAthlete
     config.athleteIds.forEach(athleteId => {
       config.metrics.forEach(metric => {
@@ -80,7 +93,6 @@ export default function DataEntry() {
       });
     });
 
-    const totalRows = config.athleteIds.length * config.metrics.length * config.measurementsPerAthlete;
     toast({
       title: 'Grid Generated',
       description: `${totalRows} rows created and ready for data entry`,

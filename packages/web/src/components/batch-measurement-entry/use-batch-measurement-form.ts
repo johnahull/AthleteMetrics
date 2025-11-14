@@ -12,7 +12,7 @@ const batchMeasurementRowSchema = z.object({
   metric: z.string().min(1, 'Metric is required'),
   value: z.number().positive('Value must be positive'),
   flyInDistance: z.number().optional(),
-  notes: z.string().optional(),
+  notes: z.string().max(1000, 'Notes must be 1000 characters or less').optional(),
   teamId: z.string().optional(),
 });
 
@@ -62,10 +62,15 @@ export function useBatchMeasurementForm() {
 
   // Auto-save to localStorage
   useEffect(() => {
+    let isMounted = true;
+
     const saveDraft = () => {
+      if (!isMounted) return; // Prevent saving if unmounted
+
       try {
         const values = form.getValues();
-        if (values.measurements.length > 0) {
+        // Only save if form is dirty and has data
+        if (form.formState.isDirty && values.measurements.length > 0) {
           localStorage.setItem(
             `${STORAGE_KEY}-${user?.id}`,
             JSON.stringify(values)
@@ -77,7 +82,11 @@ export function useBatchMeasurementForm() {
     };
 
     const interval = setInterval(saveDraft, AUTO_SAVE_INTERVAL);
-    return () => clearInterval(interval);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, [user?.id, form]);
 
   // Add a new row
@@ -125,10 +134,23 @@ export function useBatchMeasurementForm() {
   // Batch save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: BatchMeasurementForm) => {
+      // Transform athleteId -> userId for backend
+      const transformedData = {
+        measurements: data.measurements.map(m => ({
+          userId: m.athleteId, // Map athleteId to userId for backend schema
+          date: m.date,
+          metric: m.metric,
+          value: m.value,
+          flyInDistance: m.flyInDistance,
+          notes: m.notes,
+          teamId: m.teamId,
+        })),
+      };
+
       const response = await fetch('/api/measurements/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(transformedData),
         credentials: 'include',
       });
 
