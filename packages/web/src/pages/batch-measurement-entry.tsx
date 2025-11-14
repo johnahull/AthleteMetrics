@@ -3,6 +3,16 @@ import { FormProvider } from 'react-hook-form';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Plus, Save, Copy, Trash2 } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { BatchEntryGrid } from '@/components/batch-measurement-entry/batch-entry-grid';
 import { BatchEntryCard } from '@/components/batch-measurement-entry/batch-entry-card';
 import { useMediaQuery } from '@/hooks/use-media-query';
@@ -12,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function BatchMeasurementEntry() {
   const { toast } = useToast();
   const isMobile = useMediaQuery('(max-width: 768px)');
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const {
     form,
@@ -88,7 +99,7 @@ export default function BatchMeasurementEntry() {
 
               <Button
                 type="button"
-                onClick={clearAll}
+                onClick={() => setShowClearConfirm(true)}
                 data-testid="batch-clear-all"
                 variant="outline"
                 size="sm"
@@ -134,6 +145,35 @@ export default function BatchMeasurementEntry() {
             )}
           </CardContent>
         </Card>
+
+        {/* Clear All Confirmation Dialog */}
+        <AlertDialog open={showClearConfirm} onOpenChange={setShowClearConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Clear all rows?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will remove all {fields.length} {fields.length === 1 ? 'row' : 'rows'} from the grid.
+                Any unsaved data will be lost. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  clearAll();
+                  setShowClearConfirm(false);
+                  toast({
+                    title: 'Cleared',
+                    description: 'All rows have been removed',
+                  });
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Clear All
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </FormProvider>
   );
