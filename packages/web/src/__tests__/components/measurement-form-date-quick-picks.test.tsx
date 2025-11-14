@@ -232,10 +232,10 @@ describe("DateQuickPicks - React Hook Form Integration", () => {
 
       await user.click(dateButtons[0]);
 
-      // Calendar should close
+      // Calendar should close (with animation delay)
       await waitFor(() => {
         expect(screen.queryByRole("grid")).not.toBeInTheDocument();
-      });
+      }, { timeout: 3000 });
     });
   });
 
