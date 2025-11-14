@@ -72,10 +72,9 @@ export function useBatchMeasurementForm() {
     // Guard: Only set up auto-save if user ID is available
     if (!user?.id) return;
 
-    let isMounted = true;
-
     const saveDraft = () => {
-      if (!isMounted || !user?.id) return; // Prevent saving if unmounted or no user
+      // Double-check user ID is still available
+      if (!user?.id) return;
 
       try {
         const values = form.getValues();
@@ -93,8 +92,8 @@ export function useBatchMeasurementForm() {
 
     const interval = setInterval(saveDraft, AUTO_SAVE_INTERVAL);
 
+    // Cleanup: clear interval immediately on unmount
     return () => {
-      isMounted = false;
       clearInterval(interval);
     };
   }, [user?.id, form]);
