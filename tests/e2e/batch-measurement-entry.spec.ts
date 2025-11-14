@@ -22,6 +22,18 @@ const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 // Generate unique test data
 const timestamp = Date.now();
 
+// Helper function to navigate to batch entry tab
+async function navigateToBatchEntry(page: any) {
+  await page.goto(`${STAGING_URL}/data-entry`);
+
+  // Click the Batch Entry tab
+  const batchEntryTab = page.locator('button[role="tab"]').filter({ hasText: /batch.*entry/i });
+  await batchEntryTab.click();
+
+  // Wait for the batch entry content to be visible
+  await page.waitForSelector('[data-testid="batch-add-row"], button:has-text("Add Row")', { timeout: 5000 });
+}
+
 test.describe('Batch Measurement Entry Tests', () => {
 
   // Setup: Login before each test
@@ -29,25 +41,25 @@ test.describe('Batch Measurement Entry Tests', () => {
     await loginAsDefaultUser(page);
   });
 
-  test('should navigate to batch entry page from sidebar', async ({ page }) => {
-    // Navigate to dashboard
-    await page.goto(`${STAGING_URL}/`);
+  test('should navigate to batch entry tab from data entry page', async ({ page }) => {
+    // Navigate to data entry page
+    await page.goto(`${STAGING_URL}/data-entry`);
 
-    // Look for batch entry link in sidebar
-    const batchEntryLink = page.locator('a[href="/data-entry/batch"], text=/batch.*entry|batch.*data/i');
+    // Should show Data Entry page
+    await expect(page).toHaveURL(/\/data-entry/);
 
-    // Click the link
-    await batchEntryLink.click();
+    // Look for Batch Entry tab
+    const batchEntryTab = page.locator('button[role="tab"]').filter({ hasText: /batch.*entry/i });
 
-    // Should navigate to batch entry page
-    await expect(page).toHaveURL(/\/data-entry\/batch/);
+    // Click the tab
+    await batchEntryTab.click();
 
-    // Should show page title
-    await expect(page.locator('h1, h2').filter({ hasText: /batch.*entry|batch.*measurement/i })).toBeVisible();
+    // Should show batch entry interface
+    await expect(page.locator('h1, h2, h3').filter({ hasText: /batch.*entry|batch.*measurement/i })).toBeVisible();
   });
 
   test('should display empty grid with add row button', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Should show add row button
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -61,7 +73,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should add multiple rows to grid', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Click add row button 3 times
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -76,7 +88,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should fill out a complete batch entry row', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add a row if needed
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -125,7 +137,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should copy previous row data except athlete', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add first row
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -172,7 +184,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should delete a row from the grid', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add 2 rows
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -191,7 +203,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should save batch of measurements successfully', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add 3 rows
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -235,7 +247,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should auto-save draft to localStorage', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add row and fill data
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -275,7 +287,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should restore draft from localStorage after reload', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add 2 rows and fill data
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -324,7 +336,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should support keyboard navigation with Tab', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add a row
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -347,7 +359,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should show validation errors for incomplete rows', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add a row
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -366,7 +378,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should clear all rows when requested', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add 3 rows
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -401,7 +413,7 @@ test.describe('Batch Measurement Entry Tests', () => {
     // Set mobile viewport
     await page.setViewportSize({ width: 375, height: 667 });
 
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add a row
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -420,7 +432,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should handle batch save errors gracefully', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add a row with invalid data (e.g., negative value)
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -448,7 +460,7 @@ test.describe('Batch Measurement Entry Tests', () => {
   });
 
   test('should show row-specific errors after failed save', async ({ page }) => {
-    await page.goto(`${STAGING_URL}/data-entry/batch`);
+    await navigateToBatchEntry(page);
 
     // Add 2 rows - one valid, one invalid
     const addRowButton = page.locator('[data-testid="batch-add-row"], button:has-text("Add Row")');
@@ -485,7 +497,7 @@ test.describe('Batch Measurement Entry Summary', () => {
     console.log('\n═══════════════════════════════════════════════════');
     console.log('Batch Measurement Entry Tests Summary');
     console.log('═══════════════════════════════════════════════════');
-    console.log('✅ Navigate to batch entry page from sidebar');
+    console.log('✅ Navigate to batch entry tab from data entry page');
     console.log('✅ Display empty grid with add row button');
     console.log('✅ Add multiple rows to grid');
     console.log('✅ Fill out complete batch entry row');
