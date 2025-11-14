@@ -18,6 +18,7 @@ const Teams = React.lazy(() => import("./pages/teams"));
 const Athletes = React.lazy(() => import("./pages/athletes"));
 const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
 const DataEntry = React.lazy(() => import("./pages/data-entry"));
+const BatchMeasurementEntry = React.lazy(() => import("./pages/batch-measurement-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
@@ -101,6 +102,11 @@ function Router() {
       <Route path="/user-management">
         <RouteWrapper loadingText="Loading User Management...">
           <UserManagement />
+        </RouteWrapper>
+      </Route>
+      <Route path="/data-entry/batch">
+        <RouteWrapper loadingText="Loading Batch Entry...">
+          <BatchMeasurementEntry />
         </RouteWrapper>
       </Route>
       <Route path="/data-entry">

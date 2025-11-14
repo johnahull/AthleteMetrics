@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Settings,
   Target,
-  ClipboardList
+  ClipboardList,
+  ListPlus
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -37,6 +38,7 @@ const NAVIGATION_CONFIGS = {
       { name: "Teams", href: "/teams", icon: Users },
       { name: "Athletes", href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+      { name: "Batch Entry", href: "/data-entry/batch", icon: ListPlus },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Reports", href: "/reports", icon: ClipboardList },
       { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -49,6 +51,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Batch Entry", href: "/data-entry/batch", icon: ListPlus },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -61,6 +64,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Teams", href: "/teams", icon: Users },
     { name: "Athletes", href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Batch Entry", href: "/data-entry/batch", icon: ListPlus },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
