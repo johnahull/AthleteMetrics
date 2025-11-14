@@ -178,9 +178,12 @@ packages/web/src/components/batch-measurement-entry/
 ✅ **Phase 2: Smart Features (Complete)**
 - [x] Copy previous row (duplicates all fields except athlete)
 - [x] Auto-save drafts to localStorage (every 30s)
-- [x] Clear all rows with confirmation
+- [x] Clear all rows with confirmation dialog
 - [x] Team context auto-assignment logic
 - [x] Form validation with Zod schemas
+- [x] Full keyboard navigation (arrows, tab, enter, escape)
+- [x] Visual cell-level validation errors (red borders + inline messages)
+- [x] Confirmation dialog for destructive actions
 
 ✅ **Phase 3: Backend & Integration (Complete)**
 - [x] Backend API endpoint (`POST /api/measurements/batch`)
@@ -194,11 +197,10 @@ packages/web/src/components/batch-measurement-entry/
 - [ ] Fix any test failures
 - [ ] Mobile device testing (iOS/Android)
 - [ ] Performance optimization
-- [ ] Accessibility audit
-- [ ] Keyboard navigation enhancements (arrows, tab, enter)
+- [ ] Accessibility audit (ARIA labels, screen readers)
 
-**Implementation Time**: ~4 hours (TDD approach)
-**Commits**: 3 (frontend, backend, typescript fixes)
+**Implementation Time**: ~6 hours (TDD approach + UX enhancements)
+**Commits**: 5 (frontend, backend, typescript fixes, UX enhancements, progress update)
 
 ### Testing Strategy
 
