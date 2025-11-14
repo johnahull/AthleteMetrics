@@ -156,14 +156,19 @@ export function registerDashboardTrendsRoutes(app: Express) {
 
       if (athleteIds.length > 0) {
         // Single query with GROUP BY to get both current and previous month counts
+        const currentMonthStartStr = currentMonthStart.toISOString();
+        const currentMonthEndStr = currentMonthEnd.toISOString();
+        const previousMonthStartStr = previousMonthStart.toISOString();
+        const previousMonthEndStr = previousMonthEnd.toISOString();
+
         const athleteCountsResult = await db
           .select({
             period: sql<string>`
               CASE
-                WHEN ${users.createdAt} >= ${currentMonthStart}
-                  AND ${users.createdAt} < ${currentMonthEnd} THEN 'current'
-                WHEN ${users.createdAt} >= ${previousMonthStart}
-                  AND ${users.createdAt} < ${previousMonthEnd} THEN 'previous'
+                WHEN ${users.createdAt} >= ${sql.raw(`'${currentMonthStartStr}'`)}
+                  AND ${users.createdAt} < ${sql.raw(`'${currentMonthEndStr}'`)} THEN 'current'
+                WHEN ${users.createdAt} >= ${sql.raw(`'${previousMonthStartStr}'`)}
+                  AND ${users.createdAt} < ${sql.raw(`'${previousMonthEndStr}'`)} THEN 'previous'
               END
             `,
             count: sql<number>`count(*)::int`
@@ -234,14 +239,19 @@ export function registerDashboardTrendsRoutes(app: Express) {
 
       // Teams Trend (count teams created in current vs previous month)
       // Single query with GROUP BY to get both current and previous month counts
+      const currentMonthStartStrTeam = currentMonthStart.toISOString();
+      const currentMonthEndStrTeam = currentMonthEnd.toISOString();
+      const previousMonthStartStrTeam = previousMonthStart.toISOString();
+      const previousMonthEndStrTeam = previousMonthEnd.toISOString();
+
       const teamCountsResult = await db
         .select({
           period: sql<string>`
             CASE
-              WHEN ${teams.createdAt} >= ${currentMonthStart}
-                AND ${teams.createdAt} < ${currentMonthEnd} THEN 'current'
-              WHEN ${teams.createdAt} >= ${previousMonthStart}
-                AND ${teams.createdAt} < ${previousMonthEnd} THEN 'previous'
+              WHEN ${teams.createdAt} >= ${sql.raw(`'${currentMonthStartStrTeam}'`)}
+                AND ${teams.createdAt} < ${sql.raw(`'${currentMonthEndStrTeam}'`)} THEN 'current'
+              WHEN ${teams.createdAt} >= ${sql.raw(`'${previousMonthStartStrTeam}'`)}
+                AND ${teams.createdAt} < ${sql.raw(`'${previousMonthEndStrTeam}'`)} THEN 'previous'
             END
           `,
           count: sql<number>`count(*)::int`

@@ -26,6 +26,11 @@ export default function Athletes() {
   const { data: userOrganizationsData } = useQuery({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!user?.id && !user?.isSiteAdmin,
+    queryFn: async () => {
+      const response = await fetch("/api/auth/me/organizations");
+      if (!response.ok) throw new Error('Failed to fetch organizations');
+      return response.json();
+    }
   });
 
   // Get effective organization ID - same pattern as dashboard and other pages

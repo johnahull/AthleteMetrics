@@ -24,6 +24,18 @@ vi.mock('@/lib/queryClient', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
 }));
 
+// Mock useOrganizationMetrics
+const mockUseOrganizationMetrics = vi.fn();
+vi.mock('@/lib/metrics-api', () => ({
+  useOrganizationMetrics: (...args: any[]) => mockUseOrganizationMetrics(...args),
+}));
+
+// Mock useOrganizationBenchmarks
+const mockUseOrganizationBenchmarks = vi.fn();
+vi.mock('@/lib/benchmarks-api', () => ({
+  useOrganizationBenchmarks: (...args: any[]) => mockUseOrganizationBenchmarks(...args),
+}));
+
 describe('ReportWizard Component', () => {
   let queryClient: QueryClient;
   const mockOnClose = vi.fn();
@@ -95,6 +107,29 @@ describe('ReportWizard Component', () => {
       id: 'report-new',
       name: 'Test Report',
       organizationId: mockOrganizationContext,
+    });
+
+    // Mock useOrganizationMetrics hook
+    mockUseOrganizationMetrics.mockReturnValue({
+      data: [
+        {
+          metricCode: 'FLY10_TIME',
+          siteMetric: { name: '10-Yard Fly', unit: 'seconds', category: 'Speed' },
+        },
+        {
+          metricCode: 'VERTICAL_JUMP',
+          siteMetric: { name: 'Vertical Jump', unit: 'inches', category: 'Power' },
+        },
+      ],
+      isLoading: false,
+      error: null,
+    });
+
+    // Mock useOrganizationBenchmarks hook
+    mockUseOrganizationBenchmarks.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
     });
 
     vi.clearAllMocks();
@@ -315,10 +350,7 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiRequest).toHaveBeenCalledWith(
-          'GET',
-          `/api/organizations/${mockOrganizationContext}/metrics?enabledOnly=true`
-        );
+        expect(mockUseOrganizationMetrics).toHaveBeenCalledWith(mockOrganizationContext, true);
       });
     });
 
@@ -341,10 +373,7 @@ describe('ReportWizard Component', () => {
       );
 
       await waitFor(() => {
-        expect(mockApiRequest).toHaveBeenCalledWith(
-          'GET',
-          `/api/organizations/${mockOrganizationContext}/benchmarks`
-        );
+        expect(mockUseOrganizationBenchmarks).toHaveBeenCalledWith(mockOrganizationContext, false);
       });
     });
 
@@ -378,6 +407,13 @@ describe('ReportWizard Component', () => {
           return Promise.reject(new Error('Failed to load metrics'));
         }
         return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      // Mock the hook to return an error
+      mockUseOrganizationMetrics.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        error: new Error('Failed to load metrics'),
       });
 
       renderWithQueryClient(
@@ -414,6 +450,13 @@ describe('ReportWizard Component', () => {
           return Promise.resolve({ ok: true, json: async () => [] });
         }
         return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      // Mock the hook to return empty metrics
+      mockUseOrganizationMetrics.mockReturnValue({
+        data: [],
+        isLoading: false,
+        error: null,
       });
 
       renderWithQueryClient(
@@ -510,6 +553,13 @@ describe('ReportWizard Component', () => {
           });
         }
         return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      // Update the useOrganizationBenchmarks mock for these tests
+      mockUseOrganizationBenchmarks.mockReturnValue({
+        data: [...mockSiteBenchmarks, ...mockCustomBenchmarks],
+        isLoading: false,
+        error: null,
       });
     });
 
@@ -674,6 +724,13 @@ describe('ReportWizard Component', () => {
           });
         }
         return Promise.resolve({ ok: true, json: async () => [] });
+      });
+
+      // Override the mock to return empty benchmarks
+      mockUseOrganizationBenchmarks.mockReturnValue({
+        data: [],
+        isLoading: false,
+        error: null,
       });
 
       renderWithQueryClient(

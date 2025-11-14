@@ -112,12 +112,14 @@ export class MeasurementService {
    * IMPORTANT: Wrapped in transaction to prevent race conditions
    * @param measurement Measurement data
    * @param submittedBy User ID of submitter
+   * @param submitterRole Role of submitter (coach, org_admin, athlete, site_admin)
    * @returns Created measurement
    * @throws Error if user not found, team not found, or transaction fails
    */
   async createMeasurement(
     measurement: InsertMeasurement,
-    submittedBy: string
+    submittedBy: string,
+    submitterRole: string = 'athlete'
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
@@ -230,6 +232,12 @@ export class MeasurementService {
         }
       }
 
+      // Auto-verify measurements from coaches, org admins, and site admins
+      // Athletes' self-submitted measurements remain unverified
+      const isVerified = submitterRole === 'coach' ||
+                        submitterRole === 'org_admin' ||
+                        submitterRole === 'site_admin';
+
       // Create measurement
       const [newMeasurement] = await tx
         .insert(measurements)
@@ -248,7 +256,7 @@ export class MeasurementService {
           teamContextAuto,
           teamNameSnapshot,
           organizationId: organizationId || null,
-          isVerified: false,
+          isVerified,
         })
         .returning();
 
@@ -409,7 +417,7 @@ export class MeasurementService {
       }
 
       try {
-        await this.createMeasurement(measurements[i], user.id);
+        await this.createMeasurement(measurements[i], user.id, user.role);
         created++;
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Unknown error';

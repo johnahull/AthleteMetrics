@@ -276,7 +276,7 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      const measurement = await measurementService.createMeasurement(validatedData, user.id);
+      const measurement = await measurementService.createMeasurement(validatedData, user.id, user.role);
       res.status(201).json(measurement);
     } catch (error) {
       console.error("Create measurement error:", error);
