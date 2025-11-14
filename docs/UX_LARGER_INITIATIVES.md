@@ -16,7 +16,9 @@ This document outlines 5 major UX initiatives that require significant developme
 **Effort**: 2-3 weeks
 **Impact**: High - Saves 70%+ of data entry time for teams
 **Priority**: P0 (Highest)
-**Status**: Planning
+**Status**: In Progress (Started: 2025-11-13)
+**Branch**: `feature/batch-measurement-entry`
+**Approach**: TDD (Test-Driven Development)
 
 ### Problem Statement
 
@@ -120,31 +122,85 @@ packages/web/src/components/batch-measurement-entry/
 - Transaction wrapper to ensure all-or-nothing semantics
 - Batch validation before insert to fail fast
 
-### Implementation Phases
+### Implementation Phases (MVP Approach)
 
-**Phase 1: Core Grid (Week 1)**
-- [ ] Create grid component with keyboard navigation
-- [ ] Implement editable cells with React Hook Form
-- [ ] Add row add/delete functionality
-- [ ] Basic validation (required fields, data types)
+**MVP Configuration:**
+- Grid-only entry (CSV paste deferred to Phase 2)
+- Mobile responsive from day 1 (card view + desktop grid)
+- Optimized for 10-30 measurements (no virtualization)
+- All 4 core features included
+
+**Phase 1: Core Grid Foundation (Week 1)**
+- [ ] Page setup and routing (`/data-entry/batch`)
+- [ ] Desktop grid component with editable cells
+- [ ] Mobile card-based view with swipe navigation
+- [ ] React Hook Form integration with useFieldArray
+- [ ] Add/delete row functionality
+- [ ] Basic inline validation
 
 **Phase 2: Smart Features (Week 2)**
-- [ ] Copy previous row functionality
-- [ ] Auto-fill date and metric
-- [ ] Draft auto-save to localStorage
-- [ ] Bulk operations (select, delete, apply)
+- [ ] Copy previous row button
+- [ ] Auto-fill defaults (date, metric)
+- [ ] Auto-save drafts to localStorage
+- [ ] Keyboard navigation (arrows, tab, enter)
+- [ ] Bulk operations (delete selected, clear all)
+- [ ] Team context auto-assignment
 
-**Phase 3: Import/Export (Week 2-3)**
-- [ ] Paste from Excel/CSV
-- [ ] Export grid to CSV
-- [ ] Backend batch API endpoint
-- [ ] Transaction handling and error reporting
+**Phase 3: Backend & Integration (Week 2-3)**
+- [ ] Backend `POST /api/measurements/batch` endpoint
+- [ ] Service layer batch creation with transactions
+- [ ] Frontend React Query integration
+- [ ] Error reporting and partial success handling
+- [ ] Loading states and progress indicators
 
-**Phase 4: Polish & Mobile (Week 3)**
-- [ ] Mobile card-based entry
-- [ ] Keyboard shortcut guide
-- [ ] Performance optimization (virtualized rows for 100+)
-- [ ] Comprehensive testing
+**Phase 4: Testing & Polish (Week 3)**
+- [ ] E2E tests for batch workflows
+- [ ] Mobile device testing (iOS/Android)
+- [ ] Performance optimization
+- [ ] Accessibility audit
+- [ ] Documentation and help tooltips
+
+### Implementation Progress
+
+**Current Status**: Phase 3 - Complete (Ready for Testing)
+**Last Updated**: 2025-11-13
+
+✅ **Phase 1: Core Grid Foundation (Complete)**
+- [x] Feature branch created (`feature/batch-measurement-entry`)
+- [x] Status tracking in markdown
+- [x] Page routing and layout (`/data-entry/batch`)
+- [x] Grid component structure (desktop spreadsheet view)
+- [x] Mobile card view (responsive <768px)
+- [x] Form state management (React Hook Form + useFieldArray)
+- [x] Add/delete rows functionality
+- [x] Sidebar navigation link added
+
+✅ **Phase 2: Smart Features (Complete)**
+- [x] Copy previous row (duplicates all fields except athlete)
+- [x] Auto-save drafts to localStorage (every 30s)
+- [x] Clear all rows with confirmation dialog
+- [x] Team context auto-assignment logic
+- [x] Form validation with Zod schemas
+- [x] Full keyboard navigation (arrows, tab, enter, escape)
+- [x] Visual cell-level validation errors (red borders + inline messages)
+- [x] Confirmation dialog for destructive actions
+
+✅ **Phase 3: Backend & Integration (Complete)**
+- [x] Backend API endpoint (`POST /api/measurements/batch`)
+- [x] Service layer batch creation method
+- [x] Transaction-based all-or-nothing saves
+- [x] Row-level error reporting
+- [x] TypeScript build passes successfully
+
+📋 **Phase 4: Testing & Polish (Pending)**
+- [ ] Run E2E tests against local dev server
+- [ ] Fix any test failures
+- [ ] Mobile device testing (iOS/Android)
+- [ ] Performance optimization
+- [ ] Accessibility audit (ARIA labels, screen readers)
+
+**Implementation Time**: ~6 hours (TDD approach + UX enhancements)
+**Commits**: 5 (frontend, backend, typescript fixes, UX enhancements, progress update)
 
 ### Testing Strategy
 
@@ -194,11 +250,24 @@ test('coach can batch enter measurements for entire team', async ({ page }) => {
 - Reduced support tickets for data entry questions
 - Increased measurement frequency (easier = more testing)
 
-### Future Enhancements
+### Future Enhancements (Post-MVP)
+
+**Deferred from MVP (Phase 2 Candidates):**
+- **CSV paste from Excel**: Copy cells from Excel/Google Sheets, paste into grid
+- **CSV file upload**: Drag-and-drop .csv file to populate grid
+- **Export grid to CSV**: Download current grid as CSV file
+- **Virtualization**: Support 100+ row grids with react-window
+- **Duplicate detection**: Warn if same athlete+date+metric exists
+
+**Long-term Enhancements:**
 - **Mobile app integration**: Use native camera + speech for batch entry
 - **Team templates**: Save common athlete groupings for quick selection
 - **Live collaboration**: Multiple coaches entering simultaneously
 - **Undo/redo**: Multi-level undo for batch operations
+- **Voice input**: Speak measurements directly ("John Smith 1.28")
+- **Smart suggestions**: Auto-suggest values based on athlete history
+- **Bulk edit**: Change date/metric for multiple selected rows at once
+- **Conditional formatting**: Highlight PRs, declining performance, outliers
 
 ---
 

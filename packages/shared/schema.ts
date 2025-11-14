@@ -874,6 +874,7 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),
   season: z.string().optional(),
