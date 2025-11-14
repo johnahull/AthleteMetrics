@@ -1774,6 +1774,11 @@ export class DatabaseStorage implements IStorage {
     lastMeasurementType: string;
     teamName: string | null;
   }>> {
+    // Validate required organizationId parameter
+    if (!filters.organizationId) {
+      throw new Error('organizationId is required for getRecentAthletes');
+    }
+
     const limit = filters.limit || 5;
 
     // Query to get athletes with their most recent measurement

@@ -72,27 +72,36 @@ export function useBatchMeasurementForm() {
     // Guard: Only set up auto-save if user ID is available
     if (!user?.id) return;
 
+    // Capture user ID at effect creation time to prevent stale closure
+    const currentUserId = user.id;
+
     const saveDraft = () => {
-      // Double-check user ID is still available
-      if (!user?.id) return;
+      // Verify this is still the same user
+      if (!user?.id || user.id !== currentUserId) return;
 
       try {
         const values = form.getValues();
         // Only save if form is dirty and has data
         if (form.formState.isDirty && values.measurements.length > 0) {
           localStorage.setItem(
-            `${STORAGE_KEY}-${user.id}`,
+            `${STORAGE_KEY}-${currentUserId}`,
             JSON.stringify(values)
           );
         }
       } catch (error) {
-        console.error('Failed to save draft:', error);
+        // Handle localStorage quota exceeded error specifically
+        if (error instanceof DOMException && error.name === 'QuotaExceededError') {
+          console.warn('localStorage quota exceeded, skipping auto-save');
+          // Could optionally notify user with toast here
+        } else {
+          console.error('Failed to save draft:', error);
+        }
       }
     };
 
     const interval = setInterval(saveDraft, AUTO_SAVE_INTERVAL);
 
-    // Cleanup: clear interval immediately on unmount
+    // Cleanup: clear interval immediately on unmount or user change
     return () => {
       clearInterval(interval);
     };

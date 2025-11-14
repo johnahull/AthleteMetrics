@@ -79,21 +79,22 @@ export default function DataEntry() {
       return;
     }
 
-    // Generate rows using append directly (no race condition)
+    // Generate all rows at once for better performance (batch operation)
     // athleteIds × metrics × measurementsPerAthlete
-    config.athleteIds.forEach(athleteId => {
-      config.metrics.forEach(metric => {
-        for (let i = 0; i < config.measurementsPerAthlete; i++) {
-          append({
-            athleteId: athleteId,
-            metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI" | "TOP_SPEED",
-            date: config.date,
-            value: 0,
-            notes: '',
-          });
-        }
-      });
-    });
+    const newRows = config.athleteIds.flatMap(athleteId =>
+      config.metrics.flatMap(metric =>
+        Array.from({ length: config.measurementsPerAthlete }, () => ({
+          athleteId: athleteId,
+          metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI" | "TOP_SPEED",
+          date: config.date,
+          value: 0,
+          notes: '',
+        }))
+      )
+    );
+
+    // Use setValue for atomic update (better performance than multiple append calls)
+    form.setValue('measurements', [...fields, ...newRows], { shouldDirty: true });
 
     toast({
       title: 'Grid Generated',

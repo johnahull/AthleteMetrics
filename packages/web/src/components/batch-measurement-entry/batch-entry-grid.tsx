@@ -70,7 +70,8 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
       case 'ArrowRight':
         // Move to next cell in same row (only if at end of input)
         const input = e.target as HTMLInputElement;
-        if (input.selectionStart === input.value.length) {
+        // Check if selectionStart is available (null for select/date inputs)
+        if (input.selectionStart !== null && input.selectionStart === input.value.length) {
           e.preventDefault();
           if (cellIndex < totalCells - 1) {
             const nextInput = inputs[cellIndex + 1] as HTMLElement;
@@ -82,7 +83,8 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
       case 'ArrowLeft':
         // Move to previous cell in same row (only if at start of input)
         const inputLeft = e.target as HTMLInputElement;
-        if (inputLeft.selectionStart === 0) {
+        // Check if selectionStart is available (null for select/date inputs)
+        if (inputLeft.selectionStart !== null && inputLeft.selectionStart === 0) {
           e.preventDefault();
           if (cellIndex > 0) {
             const prevInput = inputs[cellIndex - 1] as HTMLElement;
