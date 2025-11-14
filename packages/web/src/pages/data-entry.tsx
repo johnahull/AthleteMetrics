@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileUp, Plus, Save, Copy, Trash2, Wand2 } from "lucide-react";
+import { Plus, Save, Copy, Trash2, Wand2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -91,12 +91,8 @@ export default function DataEntry() {
     <div className="p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-6">
           <h1 className="text-2xl font-semibold text-gray-900">Data Entry</h1>
-          <Button variant="outline" className="bg-gray-600 text-white hover:bg-gray-700">
-            <FileUp className="h-4 w-4 mr-2" />
-            Bulk Import
-          </Button>
         </div>
 
         {/* Tabs for Single vs Batch Entry */}
