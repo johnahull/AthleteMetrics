@@ -15,7 +15,7 @@ interface BatchEntryGridProps {
 export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
   const { register, setValue, watch } = useFormContext();
 
-  const { data: athletes } = useQuery({
+  const { data: athletes = [] } = useQuery<any[]>({
     queryKey: ['/api/athletes'],
   });
 
@@ -79,7 +79,7 @@ export function BatchEntryGrid({ fields, deleteRow }: BatchEntryGridProps) {
                 >
                   {availableMetrics.map((metric) => (
                     <option key={metric.code} value={metric.code}>
-                      {metric.name}
+                      {metric.label}
                     </option>
                   ))}
                 </select>

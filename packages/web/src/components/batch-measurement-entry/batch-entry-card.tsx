@@ -16,7 +16,7 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const { register } = useFormContext();
 
-  const { data: athletes } = useQuery({
+  const { data: athletes = [] } = useQuery<any[]>({
     queryKey: ['/api/athletes'],
   });
 
@@ -108,7 +108,7 @@ export function BatchEntryCard({ fields, deleteRow }: BatchEntryCardProps) {
               >
                 {availableMetrics.map((metric) => (
                   <option key={metric.code} value={metric.code}>
-                    {metric.name}
+                    {metric.label}
                   </option>
                 ))}
               </select>

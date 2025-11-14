@@ -1,9 +1,8 @@
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { useEffect, useCallback } from 'react';
-import { apiRequest } from '@/lib/queryClient';
 import { useAuth } from '@/lib/auth';
 
 // Batch measurement row schema
@@ -126,10 +125,11 @@ export function useBatchMeasurementForm() {
   // Batch save mutation
   const saveMutation = useMutation({
     mutationFn: async (data: BatchMeasurementForm) => {
-      const response = await apiRequest('/api/measurements/batch', {
+      const response = await fetch('/api/measurements/batch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        credentials: 'include',
       });
 
       if (!response.ok) {
