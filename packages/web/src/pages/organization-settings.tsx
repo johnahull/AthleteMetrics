@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
 import { updateOrganizationSchema } from "@shared/schema";
 import type { UpdateOrganization } from "@shared/schema";
+import { OrganizationTypeSelector } from "@/components/organization-type-selector";
 
 // Loading spinner component
 const LoadingSpinner = ({ text }: { text: string }) => (
@@ -54,6 +55,7 @@ export default function OrganizationSettings() {
       name: organization.name,
       description: organization.description || '',
       location: organization.location || '',
+      orgType: organization.orgType || 'club',
       isActive: organization.isActive,
       benchmarksEnabled: organization.benchmarksEnabled || false,
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
@@ -75,6 +77,9 @@ export default function OrganizationSettings() {
       }
       if (data.location !== organization?.location) {
         changedFields.location = data.location;
+      }
+      if (data.orgType !== organization?.orgType) {
+        changedFields.orgType = data.orgType;
       }
       if (data.isActive !== organization?.isActive) {
         changedFields.isActive = data.isActive;
@@ -254,6 +259,27 @@ export default function OrganizationSettings() {
                   </FormItem>
                 )}
               />
+            </CardContent>
+          </Card>
+
+          {/* Organization Type */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Type</CardTitle>
+              <CardDescription>
+                Affects which metrics and benchmarks are available to your organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div role="group" aria-label="Organization Type">
+                <FormField
+                  control={form.control}
+                  name="orgType"
+                  render={({ field }) => (
+                    <OrganizationTypeSelector field={field} />
+                  )}
+                />
+              </div>
             </CardContent>
           </Card>
 

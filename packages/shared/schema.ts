@@ -9,11 +9,19 @@ import { validateUsername } from "./username-validation";
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
 
+/**
+ * Organization type enum for multi-tenant filtering
+ * @see organization-type-utils.ts for utilities and constants related to organization types
+ */
+export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 'private_facility', 'elite_academy'] as const;
+
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
   description: text("description"),
   location: text("location"),
+  // Organization type for metric and benchmark filtering
+  orgType: text("org_type", { enum: organizationTypeEnum }).default('club').notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   // Benchmark feature flags (added in migration 0024)
   benchmarksEnabled: boolean("benchmarks_enabled").default(false).notNull(),
@@ -114,6 +122,8 @@ export const siteMetrics = pgTable("site_metrics", {
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
   description: text("description"),
+  // Organization type availability (NULL = available to all org types)
+  availableOrgTypes: text("available_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Advanced properties for sport-specific configuration
   sportAssociations: text("sport_associations").array(), // ["Soccer", "Basketball"]
   validationMin: decimal("validation_min", { precision: 10, scale: 3 }), // Minimum valid value
@@ -129,6 +139,8 @@ export const siteMetrics = pgTable("site_metrics", {
   activeIdx: index("site_metrics_active_idx").on(table.isActive),
   codeIdx: index("site_metrics_code_idx").on(table.code),
   categoryIdx: index("site_metrics_category_idx").on(table.category),
+  // Index for organization type filtering
+  availableOrgTypesIdx: index("site_metrics_available_org_types_idx").on(table.availableOrgTypes),
 }));
 
 // Organization-level metric enablement (org opt-in to site metrics)
@@ -155,6 +167,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   description: text("description"),
   benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
   comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+  // Organization type filtering (NULL = applies to all org types)
+  applicableOrgTypes: text("applicable_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Athlete attribute filters (NULL = applies to all)
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
@@ -179,6 +193,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   filtersIdx: index("site_benchmarks_filters_idx").on(table.metricCode, table.gender, table.level),
   // Unique constraint for semantic conflict resolution (migration 0030)
   uniqueMetricName: unique("site_benchmarks_metric_name_unique").on(table.metricCode, table.name),
+  // Index for organization type filtering
+  orgTypesIdx: index("site_benchmarks_org_types_idx").on(table.applicableOrgTypes),
 }));
 
 // Organization-specific custom benchmarks
@@ -704,6 +720,8 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
   createdAt: true,
   isActive: true, // Managed by system
   deletedAt: true, // Managed by system
+}).extend({
+  orgType: z.enum(organizationTypeEnum).default('club'),
 });
 
 // Organization status update schema
@@ -716,6 +734,7 @@ export const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(200, "Organization name must be 200 characters or less").optional(),
   description: z.string().max(1000, "Description must be 1000 characters or less").optional().nullable(),
   location: z.string().max(200, "Location must be 200 characters or less").optional().nullable(),
+  orgType: z.enum(organizationTypeEnum).optional(),
   isActive: z.boolean().optional(),
   benchmarksEnabled: z.boolean().optional(),
   allowCustomBenchmarks: z.boolean().optional(),
@@ -922,6 +941,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string()).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
@@ -938,6 +958,7 @@ export const updateSiteMetricSchema = z.object({
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string()).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
@@ -977,6 +998,7 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   description: z.string().optional(),
   benchmarkValue: z.number().positive("Benchmark value must be positive"),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1001,6 +1023,7 @@ export const updateSiteBenchmarkSchema = z.object({
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
   comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1399,6 +1422,16 @@ export const OrganizationRole = {
   ATHLETE: "athlete",
 } as const;
 
+// Organization Type enum for exports
+export const OrganizationType = {
+  YOUTH: "youth",
+  HIGH_SCHOOL: "high_school", 
+  COLLEGE: "college",
+  CLUB: "club",
+  PRIVATE_FACILITY: "private_facility",
+  ELITE_ACADEMY: "elite_academy",
+} as const;
+
 // Unified athlete schema
 export type Athlete = User;
 export type InsertAthlete = z.infer<typeof insertAthleteSchema>;
@@ -1420,6 +1453,9 @@ export const insertAthleteSchema = z.object({
   teamIds: z.array(z.string()).optional(),
   organizationId: z.string().optional()
 });
+
+// Organization Type
+export type OrganizationType = (typeof organizationTypeEnum)[number];
 
 // Legacy compatibility exports removed - use Athlete types instead
 

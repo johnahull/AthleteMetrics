@@ -1,4 +1,5 @@
 import "express-session";
+import type { OrganizationType } from "@shared/organization-type-utils";
 
 declare module "express-session" {
   interface SessionData {
@@ -41,5 +42,23 @@ declare module "express-session" {
      * session table when the userId is already set.
      */
     userIdSynced?: boolean;
+  }
+}
+
+declare global {
+  namespace Express {
+    interface Request {
+      /**
+       * Organization type validated and set by organization-type middleware
+       */
+      organizationType?: OrganizationType | null;
+      /**
+       * Organization type context metadata
+       */
+      organizationTypeContext?: {
+        source: 'param' | 'query' | 'body';
+        validated: boolean;
+      };
+    }
   }
 }

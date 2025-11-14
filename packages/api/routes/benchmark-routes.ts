@@ -8,6 +8,7 @@ import type { Express, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
+import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
@@ -137,14 +138,45 @@ export function registerBenchmarkRoutes(app: Express) {
   // SITE BENCHMARKS (Site Admin Only)
   // ========================================================================
 
-  // Get all site benchmarks
+  // Get site benchmarks with organization type filtering (site admin)
+  app.get("/api/site-benchmarks",
+    benchmarkReadLimiter,
+    requireSiteAdmin,
+    validateOrgTypeQuery('orgType', false), // Validate orgType query param if provided
+    async (req, res) => {
+      try {
+        const userId = req.session.user!.id;
+        const includeInactive = req.query.includeInactive === 'true';
+        const orgType = (req as any).organizationType as string | undefined; // Get validated org type from middleware
+
+        const benchmarks = await benchmarkService.getSiteBenchmarks(userId, { includeInactive, orgType });
+        res.json(benchmarks);
+      } catch (error) {
+        console.error("GET /api/site-benchmarks error:", error);
+        handleBenchmarkError(res, error, "fetch site benchmarks");
+      }
+    }
+  );
+
+  // Get all site benchmarks (with organization context)
   app.get("/api/benchmarks", benchmarkReadLimiter, requireAuth, async (req, res) => {
     try {
       const userId = req.session.user!.id;
       const includeInactive = req.query.includeInactive === 'true';
+      const organizationId = req.headers['x-organization-id'] as string;
 
-      const benchmarks = await benchmarkService.getSiteBenchmarks(userId, { includeInactive });
-      res.json(benchmarks);
+      // If organization ID is provided, filter by that organization's type
+      if (organizationId) {
+        const benchmarks = await benchmarkService.getSiteBenchmarksForOrganization(
+          organizationId, 
+          userId, 
+          { includeInactive }
+        );
+        return res.json(benchmarks);
+      }
+
+      // If no organization context, require organization context
+      return res.status(400).json({ message: "Organization context required" });
     } catch (error) {
       console.error("GET /api/benchmarks error:", error);
       handleBenchmarkError(res, error, "fetch benchmarks");

@@ -25,6 +25,7 @@ import type {
 
 export interface BenchmarkFilters {
   includeInactive?: boolean;
+  orgType?: string; // Filter by organization type
 }
 
 export interface RequestContext {
@@ -249,6 +250,7 @@ export class BenchmarkService extends BaseService {
 
   /**
    * Get all site benchmarks
+   * Supports organization type filtering when orgType is specified
    */
   async getSiteBenchmarks(
     requestingUserId: string,
@@ -257,9 +259,23 @@ export class BenchmarkService extends BaseService {
     try {
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
 
-      return await this.storage.getSiteBenchmarks({
+      const allBenchmarks = await this.storage.getSiteBenchmarks({
         includeInactive: isSiteAdmin && filters?.includeInactive,
       });
+
+      // If organization type filtering is requested, filter benchmarks
+      if (filters?.orgType) {
+        return allBenchmarks.filter(benchmark => {
+          // If benchmark has no applicableOrgTypes restriction, it applies to all org types
+          if (!benchmark.applicableOrgTypes || benchmark.applicableOrgTypes.length === 0) {
+            return true;
+          }
+          // Otherwise, check if the requested org type is in the allowed list
+          return benchmark.applicableOrgTypes.includes(filters.orgType as any);
+        });
+      }
+
+      return allBenchmarks;
     } catch (error) {
       return this.handleError(error, "BenchmarkService.getSiteBenchmarks");
     }
@@ -273,6 +289,31 @@ export class BenchmarkService extends BaseService {
       return await this.storage.getSiteBenchmark(benchmarkId);
     } catch (error) {
       return this.handleError(error, "BenchmarkService.getSiteBenchmark");
+    }
+  }
+
+  /**
+   * Get site benchmarks filtered by the requesting organization's type
+   */
+  async getSiteBenchmarksForOrganization(
+    organizationId: string,
+    requestingUserId: string,
+    filters?: Omit<BenchmarkFilters, 'orgType'>
+  ): Promise<SiteBenchmark[]> {
+    try {
+      // Get the organization to determine its type
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error("Organization not found");
+      }
+
+      // Get benchmarks filtered by organization type
+      return await this.getSiteBenchmarks(requestingUserId, {
+        ...filters,
+        orgType: organization.orgType,
+      });
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.getSiteBenchmarksForOrganization");
     }
   }
 
