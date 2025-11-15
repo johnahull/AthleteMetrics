@@ -843,8 +843,11 @@ export class ReportService extends BaseService {
       reportId
     );
 
+    // Pre-fetch all metric configs to warm the cache and avoid N+1 queries
+    await Promise.all(metrics.map(m => this.getMetricInfo(m)));
+
     for (const metric of metrics) {
-      // Get metric configuration to determine lowerIsBetter
+      // Get metric configuration to determine lowerIsBetter (from cache)
       const metricInfo = await this.getMetricInfo(metric);
 
       // Group measurements by athlete to get best performance per athlete
@@ -865,16 +868,14 @@ export class ReportService extends BaseService {
           // First measurement for this athlete
           athleteBestPerformances.set(userId, { value, userName, units });
         } else {
-          // Update with best performance
+          // Update with best performance (userName updated to match best measurement)
           const current = athleteBestPerformances.get(userId)!;
-          if (metricInfo.lowerIsBetter) {
-            if (value < current.value) {
-              athleteBestPerformances.set(userId, { value, userName, units });
-            }
-          } else {
-            if (value > current.value) {
-              athleteBestPerformances.set(userId, { value, userName, units });
-            }
+          const shouldUpdate = metricInfo.lowerIsBetter
+            ? value < current.value
+            : value > current.value;
+
+          if (shouldUpdate) {
+            athleteBestPerformances.set(userId, { value, userName, units });
           }
         }
       }
@@ -894,11 +895,19 @@ export class ReportService extends BaseService {
       );
 
       const values = aggregatedPerformances.map((p) => p.value);
-      const units = aggregatedPerformances[0]?.units || '';
+
+      // Explicit check for empty values array for safety
+      if (values.length === 0) {
+        console.warn(`No valid values for metric ${metric} after aggregation`);
+        continue;
+      }
 
       // Find best overall performer from aggregated data
       const bestValue = metricInfo.lowerIsBetter ? Math.min(...values) : Math.max(...values);
       const topPerformer = aggregatedPerformances.find((p) => p.value === bestValue);
+
+      // Use units from top performer for consistency, fallback to first athlete's units
+      const units = topPerformer?.units || aggregatedPerformances[0]?.units || '';
 
       // Get benchmarks for this metric
       const metricBenchmarks = benchmarksByMetric[metric] || [];
