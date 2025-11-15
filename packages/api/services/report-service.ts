@@ -844,28 +844,61 @@ export class ReportService extends BaseService {
     );
 
     for (const metric of metrics) {
-      const metricMeasurements = measurementData
-        .filter((m) => m.measurement.metric === metric)
-        .map((m) => ({
-          value: parseFloat(m.measurement.value),
-          userId: m.measurement.userId,
-          userName: m.user?.fullName || 'Unknown',
-          units: m.measurement.units,
-        }))
-        .filter((m) => !isNaN(m.value));
+      // Get metric configuration to determine lowerIsBetter
+      const metricInfo = await this.getMetricInfo(metric);
 
-      if (metricMeasurements.length === 0) {
+      // Group measurements by athlete to get best performance per athlete
+      // This ensures each athlete contributes equally to statistics regardless of test frequency
+      const athleteBestPerformances = new Map<string, { value: number; userName: string; units: string }>();
+
+      for (const item of measurementData) {
+        if (item.measurement.metric !== metric) continue;
+
+        const value = parseFloat(item.measurement.value);
+        if (isNaN(value)) continue;
+
+        const userId = item.measurement.userId;
+        const userName = item.user?.fullName || 'Unknown';
+        const units = item.measurement.units;
+
+        if (!athleteBestPerformances.has(userId)) {
+          // First measurement for this athlete
+          athleteBestPerformances.set(userId, { value, userName, units });
+        } else {
+          // Update with best performance
+          const current = athleteBestPerformances.get(userId)!;
+          if (metricInfo.lowerIsBetter) {
+            if (value < current.value) {
+              athleteBestPerformances.set(userId, { value, userName, units });
+            }
+          } else {
+            if (value > current.value) {
+              athleteBestPerformances.set(userId, { value, userName, units });
+            }
+          }
+        }
+      }
+
+      if (athleteBestPerformances.size === 0) {
         continue;
       }
 
-      const values = metricMeasurements.map((m) => m.value);
-      const units = metricMeasurements[0]?.units || '';
+      // Extract aggregated values (one per athlete)
+      const aggregatedPerformances = Array.from(athleteBestPerformances.entries()).map(
+        ([userId, perf]) => ({
+          userId,
+          userName: perf.userName,
+          value: perf.value,
+          units: perf.units,
+        })
+      );
 
-      // Find best performer (depends on metric type)
-      // For now, assume lower is better for time-based, higher for jumps
-      const isLowerBetter = metric.includes('TIME') || metric.includes('TEST');
-      const bestValue = isLowerBetter ? Math.min(...values) : Math.max(...values);
-      const topPerformer = metricMeasurements.find((m) => m.value === bestValue);
+      const values = aggregatedPerformances.map((p) => p.value);
+      const units = aggregatedPerformances[0]?.units || '';
+
+      // Find best overall performer from aggregated data
+      const bestValue = metricInfo.lowerIsBetter ? Math.min(...values) : Math.max(...values);
+      const topPerformer = aggregatedPerformances.find((p) => p.value === bestValue);
 
       // Get benchmarks for this metric
       const metricBenchmarks = benchmarksByMetric[metric] || [];

@@ -3,12 +3,21 @@
  * Extracted from TeamReportView to follow DRY principles
  */
 
+import { METRIC_CONFIG } from '@shared/analytics-types';
+
 /**
  * Determine if lower values are better for a metric
+ * Uses METRIC_CONFIG as source of truth instead of hardcoded list
  */
 export function isLowerBetter(metricCode: string): boolean {
-  const lowerBetterMetrics = ['FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
-  return lowerBetterMetrics.some(metric => metricCode.includes(metric));
+  // Check if metric exists in config
+  if (metricCode in METRIC_CONFIG) {
+    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].lowerIsBetter;
+  }
+
+  // Fallback: Assume time-based metrics have lower-is-better
+  // This handles any custom metrics not yet in METRIC_CONFIG
+  return metricCode.includes('TIME') || metricCode.includes('TEST');
 }
 
 /**
