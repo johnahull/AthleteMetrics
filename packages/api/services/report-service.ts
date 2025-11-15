@@ -846,17 +846,29 @@ export class ReportService extends BaseService {
     // Pre-fetch all metric configs to warm the cache and avoid N+1 queries
     await Promise.all(metrics.map(m => this.getMetricInfo(m)));
 
+    // Performance optimization: Pre-group measurements by metric to avoid O(n×m) complexity
+    // This reduces from O(n×m) to O(n+m) where n=measurements, m=metrics
+    const measurementsByMetric = new Map<string, typeof measurementData>();
+    for (const item of measurementData) {
+      const metricCode = item.measurement.metric;
+      if (!measurementsByMetric.has(metricCode)) {
+        measurementsByMetric.set(metricCode, []);
+      }
+      measurementsByMetric.get(metricCode)!.push(item);
+    }
+
     for (const metric of metrics) {
       // Get metric configuration to determine lowerIsBetter (from cache)
       const metricInfo = await this.getMetricInfo(metric);
+
+      // Get only measurements for this specific metric (already filtered)
+      const metricMeasurements = measurementsByMetric.get(metric) || [];
 
       // Group measurements by athlete to get best performance per athlete
       // This ensures each athlete contributes equally to statistics regardless of test frequency
       const athleteBestPerformances = new Map<string, { value: number; userName: string; units: string }>();
 
-      for (const item of measurementData) {
-        if (item.measurement.metric !== metric) continue;
-
+      for (const item of metricMeasurements) {
         const value = parseFloat(item.measurement.value);
         if (isNaN(value)) continue;
 
