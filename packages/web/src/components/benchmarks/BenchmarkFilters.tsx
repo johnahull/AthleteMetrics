@@ -28,7 +28,7 @@ export function BenchmarkFilters({ organizationId, filters, onFiltersChange }: B
   const { data: metrics = [] } = useQuery({
     queryKey: ["/api/metrics", organizationId],
     queryFn: async () => {
-      const headers = organizationId ? { 'x-organization-id': organizationId } : {};
+      const headers: HeadersInit = organizationId ? { 'x-organization-id': organizationId } : {};
       const response = await fetch("/api/metrics?includeInactive=false", { headers });
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
