@@ -30,7 +30,7 @@ export const ORGANIZATION_TYPE_LABELS: Record<OrganizationType, string> = {
   high_school: 'High School',
   college: 'College/University',
   club: 'Club/Travel Team',
-  private_facility: 'Private Training Facility',
+  private_facility: 'Private Coach/Training Facility',
   elite_academy: 'Elite Academy',
 } as const;
 
@@ -43,7 +43,7 @@ export const ORGANIZATION_TYPE_DESCRIPTIONS: Record<OrganizationType, string> = 
   high_school: 'High school teams, including varsity, JV, and freshman levels',
   college: 'College and university teams, including NCAA divisions and club sports',
   club: 'Club teams, travel teams, and competitive recreational organizations',
-  private_facility: 'Private training facilities and performance centers',
+  private_facility: 'Private training facilities and coaches (All ages)',
   elite_academy: 'Elite sports academies and professional development programs',
 } as const;
 
