@@ -14,6 +14,7 @@ import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
+import { registerSearchRoutes } from "./search-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -52,6 +53,9 @@ export function registerAllRoutes(app: Express) {
 
   // Report management routes
   registerReportRoutes(app);
+
+  // Global search routes (command palette)
+  registerSearchRoutes(app);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);

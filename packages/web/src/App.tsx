@@ -11,6 +11,8 @@ import Layout from "./components/layout";
 import Login from "./pages/login";
 import NotFound from "@/pages/not-found";
 import { performanceMonitor } from "./utils/performance-monitoring";
+import { CommandPaletteProvider } from "./components/command-palette/command-palette-provider";
+import { CommandPalette } from "./components/command-palette/command-palette";
 
 // Lazy load heavy pages to reduce initial bundle size
 const Dashboard = React.lazy(() => import("./pages/dashboard"));
@@ -224,10 +226,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Layout>
-            <Toaster />
-            <Router />
-          </Layout>
+          <CommandPaletteProvider>
+            <Layout>
+              <Toaster />
+              <CommandPalette />
+              <Router />
+            </Layout>
+          </CommandPaletteProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
