@@ -557,5 +557,58 @@ test.describe('Command Palette', () => {
       const heading = page.getByRole('heading', { name: /keyboard shortcuts/i });
       await expect(heading).toBeVisible();
     });
+
+    test('displays all shortcuts from hotkeys.ts config dynamically', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Should display Ctrl+K (command palette) - from hotkeys.ts
+      await expect(page.getByText(/Ctrl.*K|Cmd.*K/i)).toBeVisible();
+      await expect(page.getByText(/open command palette/i)).toBeVisible();
+
+      // Should display Ctrl+M (quick add measurement) - from hotkeys.ts
+      await expect(page.getByText(/Ctrl.*M|Cmd.*M/i)).toBeVisible();
+      await expect(page.getByText(/quick add measurement/i)).toBeVisible();
+
+      // Should display Ctrl+B (sidebar toggle) - from hotkeys.ts
+      await expect(page.getByText(/Ctrl.*B|Cmd.*B/i)).toBeVisible();
+      await expect(page.getByText(/toggle sidebar/i)).toBeVisible();
+
+      // Should display ? (help) - from hotkeys.ts
+      await expect(page.getByText('?')).toBeVisible();
+      await expect(page.getByText(/show.*shortcuts|keyboard.*help/i)).toBeVisible();
+
+      // Should display Escape (close) - from hotkeys.ts
+      await expect(page.getByText(/Esc/i)).toBeVisible();
+      await expect(page.getByText(/close.*modal|close.*dialog/i)).toBeVisible();
+    });
+
+    test('displays platform-specific key labels (Cmd on Mac, Ctrl on Windows)', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Get user agent to determine platform
+      const userAgent = await page.evaluate(() => navigator.userAgent);
+      const isMac = /Mac|iPhone|iPad|iPod/.test(userAgent);
+
+      if (isMac) {
+        // On Mac, should show Cmd instead of Ctrl
+        await expect(page.getByText(/Cmd\+K/i)).toBeVisible();
+        await expect(page.getByText(/Cmd\+M/i)).toBeVisible();
+      } else {
+        // On Windows/Linux, should show Ctrl
+        await expect(page.getByText(/Ctrl\+K/i)).toBeVisible();
+        await expect(page.getByText(/Ctrl\+M/i)).toBeVisible();
+      }
+    });
+
+    test('groups shortcuts by category from config', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Should have category headings
+      await expect(page.getByText(/command palette/i)).toBeVisible();
+      await expect(page.getByText(/navigation/i)).toBeVisible();
+    });
   });
 });

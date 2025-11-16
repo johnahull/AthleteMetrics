@@ -1,9 +1,10 @@
 /**
  * Keyboard Shortcuts Help Modal
  * Displays all available keyboard shortcuts for the application
+ * Dynamically reads shortcuts from hotkeys.ts configuration
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,63 +13,60 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Keyboard } from 'lucide-react';
-
-interface KeyboardShortcut {
-  keys: string[];
-  description: string;
-  category: string;
-}
-
-const shortcuts: KeyboardShortcut[] = [
-  // Command Palette
-  {
-    keys: ['Ctrl', 'K'],
-    description: 'Open command palette',
-    category: 'Command Palette',
-  },
-  {
-    keys: ['?'],
-    description: 'Show keyboard shortcuts',
-    category: 'Command Palette',
-  },
-  {
-    keys: ['Esc'],
-    description: 'Close command palette or modal',
-    category: 'Command Palette',
-  },
-
-  // Navigation
-  {
-    keys: ['↑', '↓'],
-    description: 'Navigate through results',
-    category: 'Navigation',
-  },
-  {
-    keys: ['Enter'],
-    description: 'Select highlighted item',
-    category: 'Navigation',
-  },
-  {
-    keys: ['Tab'],
-    description: 'Cycle through items',
-    category: 'Navigation',
-  },
-];
+import { KEYBOARD_SHORTCUTS, getShortcutDisplay } from '@/lib/hotkeys';
+import type { KeyboardShortcut } from '@/lib/hotkeys';
 
 interface KeyboardShortcutsHelpProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+/**
+ * Convert hotkeys.ts shortcut format to display format
+ */
+interface DisplayShortcut {
+  keys: string[];
+  description: string;
+  category: string;
+}
+
 export function KeyboardShortcutsHelp({ isOpen, onClose }: KeyboardShortcutsHelpProps) {
+  // Detect platform
+  const isMac = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return /Mac|iPhone|iPad|iPod/.test(navigator.userAgent);
+  }, []);
+
+  // Convert hotkeys.ts shortcuts to display format
+  const displayShortcuts = useMemo(() => {
+    return KEYBOARD_SHORTCUTS.map((shortcut): DisplayShortcut => {
+      // Get platform-specific display string
+      const displayString = getShortcutDisplay(shortcut, isMac);
+
+      // Split the display string into individual keys
+      // e.g., "Cmd+K" -> ["Cmd", "K"], "?" -> ["?"], "Esc" -> ["Esc"]
+      const keys = displayString.includes('+')
+        ? displayString.split('+')
+        : [displayString];
+
+      return {
+        keys,
+        description: shortcut.description,
+        category: shortcut.category
+      };
+    });
+  }, [isMac]);
+
   // Group shortcuts by category
-  const groupedShortcuts = shortcuts.reduce((acc, shortcut) => {
-    if (!acc[shortcut.category]) {
-      acc[shortcut.category] = [];
-    }
-    acc[shortcut.category].push(shortcut);
-    return acc;
-  }, {} as Record<string, KeyboardShortcut[]>);
+  const groupedShortcuts = useMemo(() => {
+    return displayShortcuts.reduce((acc, shortcut) => {
+      if (!acc[shortcut.category]) {
+        acc[shortcut.category] = [];
+      }
+      acc[shortcut.category].push(shortcut);
+      return acc;
+    }, {} as Record<string, DisplayShortcut[]>);
+  }, [displayShortcuts]);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

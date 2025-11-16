@@ -353,17 +353,43 @@ Use ↑↓ to navigate, Enter to select, Esc to close
 **Frontend Components**:
 ```
 packages/web/src/components/command-palette/
-├── command-palette-provider.tsx     # Global state & keyboard shortcuts
+├── command-palette-provider.tsx     # Global state & Ctrl+K shortcut
 ├── command-palette.tsx              # Main modal component (cmdk)
-├── keyboard-shortcuts-help.tsx      # Help modal (? key)
+├── keyboard-shortcuts-help.tsx      # Dynamic help modal (reads hotkeys.ts)
 └── (integrated with shadcn/ui Command component)
 
+packages/web/src/components/
+└── keyboard-shortcuts-dialog.tsx    # Global help dialog (? key trigger)
+
 packages/web/src/lib/
+├── hotkeys.ts                       # ✨ SINGLE SOURCE OF TRUTH for all shortcuts
 ├── command-palette-actions.ts       # Action registry (7 quick actions)
 └── recent-items.ts                  # localStorage tracking (last 5)
 
 packages/web/src/hooks/
-└── use-global-search.ts             # React Query hook with debouncing
+├── use-global-search.ts             # React Query hook with debouncing
+└── useKeyboardShortcuts.ts          # Global shortcut listener (Ctrl+M, ?, Esc)
+```
+
+**Keyboard Shortcuts System**:
+```typescript
+// packages/web/src/lib/hotkeys.ts - Central registry
+export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
+  { id: 'command-palette', key: 'k', modifiers: ['ctrl', 'meta'],
+    description: 'Open command palette', category: 'Command Palette' },
+  { id: 'measurement', key: 'm', modifiers: ['ctrl', 'meta'],
+    description: 'Quick add measurement', category: 'Actions',
+    requiredPermission: 'CREATE_MEASUREMENTS' },
+  { id: 'sidebar', key: 'b', modifiers: ['ctrl', 'meta'],
+    description: 'Toggle sidebar', category: 'Navigation' },
+  // ... more shortcuts
+];
+
+// Platform-aware display: Cmd on Mac, Ctrl on Windows
+getShortcutDisplay(shortcut, isMac);
+
+// Permission-based filtering: Only show shortcuts user can use
+KEYBOARD_SHORTCUTS.filter(s => hasPermission(user.role, s.requiredPermission));
 ```
 
 **Search Algorithm**:
@@ -494,8 +520,10 @@ export const commandActions: CommandAction[] = [
 - [x] React Query caching (5-minute stale time)
 - [x] Mobile responsive design
 - [x] ARIA labels and accessibility
-- [x] Keyboard shortcuts help modal (? key)
-- [x] 35 comprehensive E2E tests (27 palette + 8 help modal)
+- [x] Keyboard shortcuts help modal (? key) - Dynamic, reads from hotkeys.ts
+- [x] Platform-aware keyboard shortcuts (Cmd on Mac, Ctrl on Windows)
+- [x] Permission-based shortcut filtering
+- [x] 38 comprehensive E2E tests (27 palette + 8 help modal + 3 dynamic tests)
 
 📋 **Remaining Work**:
 - [ ] Run E2E tests against staging environment

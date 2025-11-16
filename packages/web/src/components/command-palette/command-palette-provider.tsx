@@ -38,27 +38,11 @@ export function CommandPaletteProvider({ children }: { children: React.ReactNode
         event.preventDefault();
         toggle();
       }
-
-      // ? key for keyboard shortcuts help (only if no input is focused)
-      if (event.key === '?' && !isInputFocused()) {
-        event.preventDefault();
-        toggleHelp();
-      }
-    };
-
-    // Helper to check if an input element is focused
-    const isInputFocused = () => {
-      const activeElement = document.activeElement;
-      return (
-        activeElement instanceof HTMLInputElement ||
-        activeElement instanceof HTMLTextAreaElement ||
-        activeElement?.getAttribute('contenteditable') === 'true'
-      );
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggle, toggleHelp]);
+  }, [toggle]);
 
   return (
     <CommandPaletteContext.Provider value={{ isOpen, open, close, toggle, isHelpOpen, openHelp, closeHelp, toggleHelp }}>
