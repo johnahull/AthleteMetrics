@@ -843,29 +843,83 @@ export class ReportService extends BaseService {
       reportId
     );
 
-    for (const metric of metrics) {
-      const metricMeasurements = measurementData
-        .filter((m) => m.measurement.metric === metric)
-        .map((m) => ({
-          value: parseFloat(m.measurement.value),
-          userId: m.measurement.userId,
-          userName: m.user?.fullName || 'Unknown',
-          units: m.measurement.units,
-        }))
-        .filter((m) => !isNaN(m.value));
+    // Pre-fetch all metric configs to warm the cache and avoid N+1 queries
+    await Promise.all(metrics.map(m => this.getMetricInfo(m)));
 
-      if (metricMeasurements.length === 0) {
+    // Performance optimization: Pre-group measurements by metric to avoid O(n×m) complexity
+    // This reduces from O(n×m) to O(n+m) where n=measurements, m=metrics
+    const measurementsByMetric = new Map<string, typeof measurementData>();
+    for (const item of measurementData) {
+      const metricCode = item.measurement.metric;
+      if (!measurementsByMetric.has(metricCode)) {
+        measurementsByMetric.set(metricCode, []);
+      }
+      measurementsByMetric.get(metricCode)!.push(item);
+    }
+
+    for (const metric of metrics) {
+      // Get metric configuration to determine lowerIsBetter (from cache)
+      const metricInfo = await this.getMetricInfo(metric);
+
+      // Get only measurements for this specific metric (already filtered)
+      const metricMeasurements = measurementsByMetric.get(metric) || [];
+
+      // Group measurements by athlete to get best performance per athlete
+      // This ensures each athlete contributes equally to statistics regardless of test frequency
+      const athleteBestPerformances = new Map<string, { value: number; userName: string; units: string }>();
+
+      for (const item of metricMeasurements) {
+        const value = parseFloat(item.measurement.value);
+        if (isNaN(value)) continue;
+
+        const userId = item.measurement.userId;
+        const userName = item.user?.fullName || 'Unknown';
+        const units = item.measurement.units;
+
+        if (!athleteBestPerformances.has(userId)) {
+          // First measurement for this athlete
+          athleteBestPerformances.set(userId, { value, userName, units });
+        } else {
+          // Update with best performance (userName updated to match best measurement)
+          const current = athleteBestPerformances.get(userId)!;
+          const shouldUpdate = metricInfo.lowerIsBetter
+            ? value < current.value
+            : value > current.value;
+
+          if (shouldUpdate) {
+            athleteBestPerformances.set(userId, { value, userName, units });
+          }
+        }
+      }
+
+      if (athleteBestPerformances.size === 0) {
         continue;
       }
 
-      const values = metricMeasurements.map((m) => m.value);
-      const units = metricMeasurements[0]?.units || '';
+      // Extract aggregated values (one per athlete)
+      const aggregatedPerformances = Array.from(athleteBestPerformances.entries()).map(
+        ([userId, perf]) => ({
+          userId,
+          userName: perf.userName,
+          value: perf.value,
+          units: perf.units,
+        })
+      );
 
-      // Find best performer (depends on metric type)
-      // For now, assume lower is better for time-based, higher for jumps
-      const isLowerBetter = metric.includes('TIME') || metric.includes('TEST');
-      const bestValue = isLowerBetter ? Math.min(...values) : Math.max(...values);
-      const topPerformer = metricMeasurements.find((m) => m.value === bestValue);
+      const values = aggregatedPerformances.map((p) => p.value);
+
+      // Explicit check for empty values array for safety
+      if (values.length === 0) {
+        console.warn(`No valid values for metric ${metric} after aggregation`);
+        continue;
+      }
+
+      // Find best overall performer from aggregated data
+      const bestValue = metricInfo.lowerIsBetter ? Math.min(...values) : Math.max(...values);
+      const topPerformer = aggregatedPerformances.find((p) => p.value === bestValue);
+
+      // Use units from top performer for consistency, fallback to first athlete's units
+      const units = topPerformer?.units || aggregatedPerformances[0]?.units || '';
 
       // Get benchmarks for this metric
       const metricBenchmarks = benchmarksByMetric[metric] || [];

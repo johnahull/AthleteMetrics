@@ -359,4 +359,299 @@ describe('ReportService', () => {
       expect(reportService).toBeDefined();
     });
   });
+
+  describe('calculateTeamStatistics - Per-Athlete Aggregation', () => {
+    let athlete1Id: string;
+    let athlete2Id: string;
+    let athlete3Id: string;
+    let fly10MetricId: string;
+    let verticalMetricId: string;
+
+    beforeEach(async () => {
+      const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+      // Create test athletes
+      const [a1] = await db.insert(users).values({
+        username: `athlete1-${uniqueSuffix}`,
+        emails: [`athlete1-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Athlete',
+        lastName: 'One',
+        fullName: 'Athlete One',
+        birthYear: 2005,
+      }).returning();
+      athlete1Id = a1.id;
+
+      const [a2] = await db.insert(users).values({
+        username: `athlete2-${uniqueSuffix}`,
+        emails: [`athlete2-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Athlete',
+        lastName: 'Two',
+        fullName: 'Athlete Two',
+        birthYear: 2006,
+      }).returning();
+      athlete2Id = a2.id;
+
+      const [a3] = await db.insert(users).values({
+        username: `athlete3-${uniqueSuffix}`,
+        emails: [`athlete3-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Athlete',
+        lastName: 'Three',
+        fullName: 'Athlete Three',
+        birthYear: 2007,
+      }).returning();
+      athlete3Id = a3.id;
+
+      // Ensure FLY10_TIME and VERTICAL_JUMP metrics exist in siteMetrics
+      const [fly10] = await db.insert(siteMetrics).values({
+        code: 'FLY10_TIME',
+        label: '10-Yard Fly Time',
+        unit: 's',
+        lowerIsBetter: true,
+        sportType: 'soccer',
+      }).onConflictDoUpdate({
+        target: siteMetrics.code,
+        set: { lowerIsBetter: true },
+      }).returning();
+      fly10MetricId = fly10.id;
+
+      const [vertical] = await db.insert(siteMetrics).values({
+        code: 'VERTICAL_JUMP',
+        label: 'Vertical Jump',
+        unit: 'in',
+        lowerIsBetter: false,
+        sportType: 'soccer',
+      }).onConflictDoUpdate({
+        target: siteMetrics.code,
+        set: { lowerIsBetter: false },
+      }).returning();
+      verticalMetricId = vertical.id;
+
+      // Enable metrics for organization
+      await db.insert(organizationMetrics).values([
+        { organizationId: testOrgId, metricCode: 'FLY10_TIME', isEnabled: true },
+        { organizationId: testOrgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
+      ]).onConflictDoNothing();
+    });
+
+    afterEach(async () => {
+      // Clean up measurements first
+      if (athlete1Id || athlete2Id || athlete3Id) {
+        await db.delete(measurements).where(
+          eq(measurements.userId, athlete1Id)
+        );
+        await db.delete(measurements).where(
+          eq(measurements.userId, athlete2Id)
+        );
+        await db.delete(measurements).where(
+          eq(measurements.userId, athlete3Id)
+        );
+      }
+
+      // Clean up athletes
+      if (athlete1Id) await db.delete(users).where(eq(users.id, athlete1Id));
+      if (athlete2Id) await db.delete(users).where(eq(users.id, athlete2Id));
+      if (athlete3Id) await db.delete(users).where(eq(users.id, athlete3Id));
+    });
+
+    it('should aggregate per-athlete best performances before calculating statistics', async () => {
+      // Athlete 1: 3 measurements (1.5, 1.6, 1.7) - best is 1.5
+      // Athlete 2: 1 measurement (1.4) - best is 1.4
+      // Athlete 3: 5 measurements (1.8, 1.9, 2.0, 2.1, 1.3) - best is 1.3
+      // Expected mean: (1.5 + 1.4 + 1.3) / 3 = 1.4
+      // If not aggregated, mean would be: (1.5+1.6+1.7+1.4+1.8+1.9+2.0+2.1+1.3) / 9 = 1.7
+
+      const testDate = new Date().toISOString().split('T')[0];
+
+      await db.insert(measurements).values([
+        // Athlete 1 measurements
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.5', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.6', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.7', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+        // Athlete 2 measurement
+        { userId: athlete2Id, metric: 'FLY10_TIME', value: '1.4', units: 's', date: testDate, age: 17, submittedBy: testUserId, organizationId: testOrgId },
+        // Athlete 3 measurements
+        { userId: athlete3Id, metric: 'FLY10_TIME', value: '1.8', units: 's', date: testDate, age: 16, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete3Id, metric: 'FLY10_TIME', value: '1.9', units: 's', date: testDate, age: 16, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete3Id, metric: 'FLY10_TIME', value: '2.0', units: 's', date: testDate, age: 16, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete3Id, metric: 'FLY10_TIME', value: '2.1', units: 's', date: testDate, age: 16, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete3Id, metric: 'FLY10_TIME', value: '1.3', units: 's', date: testDate, age: 16, submittedBy: testUserId, organizationId: testOrgId },
+      ]);
+
+      // Get measurements with user data (mimicking the actual service behavior)
+      const measurementData = await db
+        .select({
+          measurement: measurements,
+          user: users,
+        })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .where(eq(measurements.organizationId, testOrgId));
+
+      const stats = await (reportService as any).calculateTeamStatistics(
+        measurementData,
+        ['FLY10_TIME'],
+        undefined,
+        testOrgId,
+        testReportId
+      );
+
+      expect(stats).toHaveLength(1);
+      const fly10Stats = stats[0];
+
+      // Verify mean is based on per-athlete best, not all measurements
+      expect(fly10Stats.average).toBeCloseTo(1.4, 2);  // (1.5 + 1.4 + 1.3) / 3 = 1.4
+
+      // Verify median
+      expect(fly10Stats.median).toBe(1.4);  // Middle value of [1.3, 1.4, 1.5]
+
+      // Verify min/max are from best per athlete
+      expect(fly10Stats.min).toBe(1.3);
+      expect(fly10Stats.max).toBe(1.5);
+
+      // Verify topPerformer is the athlete with best performance
+      expect(fly10Stats.topPerformer).toBeDefined();
+      expect(fly10Stats.topPerformer.userId).toBe(athlete3Id);
+      expect(fly10Stats.topPerformer.value).toBe(1.3);
+    });
+
+    it('should select best performance based on lowerIsBetter flag', async () => {
+      const testDate = new Date().toISOString().split('T')[0];
+
+      // Test lowerIsBetter=true (FLY10_TIME: lower is better)
+      await db.insert(measurements).values([
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.5', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.3', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },  // Best
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.7', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+      ]);
+
+      // Test lowerIsBetter=false (VERTICAL_JUMP: higher is better)
+      await db.insert(measurements).values([
+        { userId: athlete2Id, metric: 'VERTICAL_JUMP', value: '25', units: 'in', date: testDate, age: 17, submittedBy: testUserId, organizationId: testOrgId },
+        { userId: athlete2Id, metric: 'VERTICAL_JUMP', value: '30', units: 'in', date: testDate, age: 17, submittedBy: testUserId, organizationId: testOrgId },  // Best
+        { userId: athlete2Id, metric: 'VERTICAL_JUMP', value: '27', units: 'in', date: testDate, age: 17, submittedBy: testUserId, organizationId: testOrgId },
+      ]);
+
+      const measurementData = await db
+        .select({
+          measurement: measurements,
+          user: users,
+        })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .where(eq(measurements.organizationId, testOrgId));
+
+      const stats = await (reportService as any).calculateTeamStatistics(
+        measurementData,
+        ['FLY10_TIME', 'VERTICAL_JUMP'],
+        undefined,
+        testOrgId,
+        testReportId
+      );
+
+      const fly10Stats = stats.find((s: any) => s.metric === 'FLY10_TIME');
+      const verticalStats = stats.find((s: any) => s.metric === 'VERTICAL_JUMP');
+
+      // For lowerIsBetter=true, should select minimum value (1.3)
+      expect(fly10Stats.topPerformer.value).toBe(1.3);
+      expect(fly10Stats.average).toBeCloseTo(1.3, 2);
+
+      // For lowerIsBetter=false, should select maximum value (30)
+      expect(verticalStats.topPerformer.value).toBe(30);
+      expect(verticalStats.average).toBeCloseTo(30, 2);
+    });
+
+    it('should update userName to match best performance measurement', async () => {
+      const testDate = new Date().toISOString().split('T')[0];
+
+      // Athlete 1 with name change: first measurement has old name, best measurement has new name
+      // Insert measurement with old name first
+      await db.insert(measurements).values([
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.7', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },
+      ]);
+
+      // Update athlete name
+      await db.update(users)
+        .set({ fullName: 'Athlete One Updated' })
+        .where(eq(users.id, athlete1Id));
+
+      // Insert best measurement with updated name
+      await db.insert(measurements).values([
+        { userId: athlete1Id, metric: 'FLY10_TIME', value: '1.5', units: 's', date: testDate, age: 18, submittedBy: testUserId, organizationId: testOrgId },  // Best
+      ]);
+
+      const measurementData = await db
+        .select({
+          measurement: measurements,
+          user: users,
+        })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .where(eq(measurements.organizationId, testOrgId));
+
+      const stats = await (reportService as any).calculateTeamStatistics(
+        measurementData,
+        ['FLY10_TIME'],
+        undefined,
+        testOrgId,
+        testReportId
+      );
+
+      const fly10Stats = stats[0];
+
+      // topPerformer should have the updated name from the best measurement
+      expect(fly10Stats.topPerformer.userName).toBe('Athlete One Updated');
+      expect(fly10Stats.topPerformer.value).toBe(1.5);
+    });
+
+    it('should handle athletes with different measurement counts fairly', async () => {
+      const testDate = new Date().toISOString().split('T')[0];
+
+      // Athlete 1: 10 measurements
+      const athlete1Measurements = Array.from({ length: 10 }, (_, i) => ({
+        userId: athlete1Id,
+        metric: 'FLY10_TIME',
+        value: (1.5 + i * 0.1).toFixed(1),  // 1.5, 1.6, 1.7, ..., 2.4
+        units: 's',
+        date: testDate,
+        age: 18,
+        submittedBy: testUserId,
+        organizationId: testOrgId,
+      }));
+
+      // Athlete 2: 1 measurement
+      const athlete2Measurements = [
+        { userId: athlete2Id, metric: 'FLY10_TIME', value: '1.4', units: 's', date: testDate, age: 17, submittedBy: testUserId, organizationId: testOrgId },
+      ];
+
+      await db.insert(measurements).values([...athlete1Measurements, ...athlete2Measurements]);
+
+      const measurementData = await db
+        .select({
+          measurement: measurements,
+          user: users,
+        })
+        .from(measurements)
+        .leftJoin(users, eq(measurements.userId, users.id))
+        .where(eq(measurements.organizationId, testOrgId));
+
+      const stats = await (reportService as any).calculateTeamStatistics(
+        measurementData,
+        ['FLY10_TIME'],
+        undefined,
+        testOrgId,
+        testReportId
+      );
+
+      const fly10Stats = stats[0];
+
+      // Both athletes should contribute equally: (1.5 + 1.4) / 2 = 1.45
+      expect(fly10Stats.average).toBeCloseTo(1.45, 2);
+
+      // Median should also reflect 2 values, not 11
+      expect(fly10Stats.median).toBeCloseTo(1.45, 2);
+    });
+  });
 });
