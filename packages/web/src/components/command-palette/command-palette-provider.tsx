@@ -10,33 +10,58 @@ interface CommandPaletteContextValue {
   open: () => void;
   close: () => void;
   toggle: () => void;
+  isHelpOpen: boolean;
+  openHelp: () => void;
+  closeHelp: () => void;
+  toggleHelp: () => void;
 }
 
 const CommandPaletteContext = createContext<CommandPaletteContextValue | undefined>(undefined);
 
 export function CommandPaletteProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
   const toggle = useCallback(() => setIsOpen((prev) => !prev), []);
 
-  // Register global keyboard shortcut (Ctrl+K / Cmd+K)
+  const openHelp = useCallback(() => setIsHelpOpen(true), []);
+  const closeHelp = useCallback(() => setIsHelpOpen(false), []);
+  const toggleHelp = useCallback(() => setIsHelpOpen((prev) => !prev), []);
+
+  // Register global keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      // Check for Ctrl+K or Cmd+K
+      // Ctrl+K / Cmd+K for command palette
       if ((event.ctrlKey || event.metaKey) && event.key === 'k') {
         event.preventDefault();
         toggle();
       }
+
+      // ? key for keyboard shortcuts help (only if no input is focused)
+      if (event.key === '?' && !isInputFocused()) {
+        event.preventDefault();
+        toggleHelp();
+      }
+    };
+
+    // Helper to check if an input element is focused
+    const isInputFocused = () => {
+      const activeElement = document.activeElement;
+      return (
+        activeElement instanceof HTMLInputElement ||
+        activeElement instanceof HTMLTextAreaElement ||
+        activeElement?.getAttribute('contenteditable') === 'true'
+      );
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [toggle]);
+  }, [toggle, toggleHelp]);
 
   return (
-    <CommandPaletteContext.Provider value={{ isOpen, open, close, toggle }}>
+    <CommandPaletteContext.Provider value={{ isOpen, open, close, toggle, isHelpOpen, openHelp, closeHelp, toggleHelp }}>
       {children}
     </CommandPaletteContext.Provider>
   );

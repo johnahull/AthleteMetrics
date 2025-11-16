@@ -337,11 +337,11 @@ Use ↑↓ to navigate, Enter to select, Esc to close
 - **Weighted results**: Prioritize recent items
 
 #### 3. Keyboard-First
-- **Open**: `Ctrl+K` or `/` (GitHub-style)
-- **Navigate**: Arrow keys
+- **Open**: `Ctrl+K` or `Cmd+K` (Mac)
+- **Navigate**: Arrow keys (↑↓)
 - **Select**: Enter
 - **Close**: Escape
-- **Quick actions**: `>add measurement` for action mode
+- **Help**: `?` to view all keyboard shortcuts
 
 #### 4. Context-Aware
 - **Recent items**: Show last 5 accessed items
@@ -353,11 +353,17 @@ Use ↑↓ to navigate, Enter to select, Esc to close
 **Frontend Components**:
 ```
 packages/web/src/components/command-palette/
-├── command-palette.tsx           # Main modal component
-├── command-palette-input.tsx     # Search input with fuzzy matching
-├── command-palette-results.tsx   # Results display (grouped)
-├── command-palette-item.tsx      # Single result item
-└── command-palette-actions.tsx   # Action registry
+├── command-palette-provider.tsx     # Global state & keyboard shortcuts
+├── command-palette.tsx              # Main modal component (cmdk)
+├── keyboard-shortcuts-help.tsx      # Help modal (? key)
+└── (integrated with shadcn/ui Command component)
+
+packages/web/src/lib/
+├── command-palette-actions.ts       # Action registry (7 quick actions)
+└── recent-items.ts                  # localStorage tracking (last 5)
+
+packages/web/src/hooks/
+└── use-global-search.ts             # React Query hook with debouncing
 ```
 
 **Search Algorithm**:
@@ -451,8 +457,8 @@ export const commandActions: CommandAction[] = [
 - [x] Add result icons and styling
 - [x] Implement result caching (React Query 5min)
 - [x] Optimize search API (PostgreSQL full-text search GIN indexes)
-- [ ] Keyboard shortcut help modal (deferred)
-- [x] Comprehensive E2E testing (27 tests)
+- [x] Keyboard shortcut help modal (? key)
+- [x] Comprehensive E2E testing (35 tests - 27 command palette + 8 help modal)
 
 ### Implementation Progress
 
@@ -488,7 +494,8 @@ export const commandActions: CommandAction[] = [
 - [x] React Query caching (5-minute stale time)
 - [x] Mobile responsive design
 - [x] ARIA labels and accessibility
-- [x] 27 comprehensive E2E tests
+- [x] Keyboard shortcuts help modal (? key)
+- [x] 35 comprehensive E2E tests (27 palette + 8 help modal)
 
 📋 **Remaining Work**:
 - [ ] Run E2E tests against staging environment

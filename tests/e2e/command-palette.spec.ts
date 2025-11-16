@@ -449,4 +449,113 @@ test.describe('Command Palette', () => {
       expect(responseTime).toBeLessThan(100);
     });
   });
+
+  test.describe('Keyboard Shortcuts Help Modal', () => {
+    test('opens help modal with ? key', async ({ page }) => {
+      // Press ? key to open help modal
+      await page.keyboard.press('?');
+
+      // Should show help modal with title
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByText(/keyboard shortcuts/i)).toBeVisible();
+    });
+
+    test('opens help modal with Shift+/ keys', async ({ page }) => {
+      // Press Shift+/ (which produces ?) to open help modal
+      await page.keyboard.press('Shift+/');
+
+      // Should show help modal
+      await expect(page.getByRole('dialog')).toBeVisible();
+      await expect(page.getByText(/keyboard shortcuts/i)).toBeVisible();
+    });
+
+    test('displays all keyboard shortcuts in help modal', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Should display command palette shortcut
+      await expect(page.getByText(/Ctrl.*K|Cmd.*K/i)).toBeVisible();
+      await expect(page.getByText(/open command palette/i)).toBeVisible();
+
+      // Should display help shortcut
+      await expect(page.getByText(/\?/)).toBeVisible();
+      await expect(page.getByText(/show.*shortcuts|keyboard help/i)).toBeVisible();
+
+      // Should display navigation shortcuts
+      await expect(page.getByText(/arrow.*keys|↑.*↓/i)).toBeVisible();
+      await expect(page.getByText(/enter/i)).toBeVisible();
+      await expect(page.getByText(/escape|esc/i)).toBeVisible();
+    });
+
+    test('closes help modal with Escape key', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      // Close with Escape
+      await page.keyboard.press('Escape');
+
+      // Help modal should be closed
+      await expect(page.getByRole('dialog')).not.toBeVisible();
+    });
+
+    test('closes help modal by clicking outside', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+      await expect(page.getByRole('dialog')).toBeVisible();
+
+      // Click outside the modal (on backdrop)
+      await page.click('body', { position: { x: 10, y: 10 } });
+
+      // Help modal should be closed
+      await expect(page.getByRole('dialog')).not.toBeVisible();
+    });
+
+    test('help modal does not interfere with command palette', async ({ page }) => {
+      // Open command palette
+      await page.keyboard.press('Control+k');
+      await expect(page.getByPlaceholder(/search/i)).toBeVisible();
+
+      // Close command palette
+      await page.keyboard.press('Escape');
+
+      // Open help modal
+      await page.keyboard.press('?');
+      await expect(page.getByText(/keyboard shortcuts/i)).toBeVisible();
+
+      // Close help modal
+      await page.keyboard.press('Escape');
+
+      // Both should be closed
+      await expect(page.getByPlaceholder(/search/i)).not.toBeVisible();
+      await expect(page.getByText(/keyboard shortcuts/i)).not.toBeVisible();
+    });
+
+    test('displays keyboard shortcuts with proper formatting', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Should have keyboard shortcut badges/chips with proper styling
+      const shortcuts = page.locator('[data-shortcut-key]');
+      await expect(shortcuts.first()).toBeVisible();
+
+      // Should have descriptions
+      const descriptions = page.locator('[data-shortcut-description]');
+      await expect(descriptions.first()).toBeVisible();
+    });
+
+    test('help modal is accessible with screen readers', async ({ page }) => {
+      // Open help modal
+      await page.keyboard.press('?');
+
+      // Should have proper ARIA attributes
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toHaveAttribute('aria-labelledby');
+      await expect(dialog).toHaveAttribute('aria-describedby');
+
+      // Should have heading for screen readers
+      const heading = page.getByRole('heading', { name: /keyboard shortcuts/i });
+      await expect(heading).toBeVisible();
+    });
+  });
 });
