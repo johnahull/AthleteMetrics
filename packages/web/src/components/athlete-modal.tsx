@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertAthleteSchema, Gender, SoccerPosition, AVAILABLE_SPORTS, type InsertAthlete, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Trophy, Users, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface AthleteModalProps {
   isOpen: boolean;
@@ -22,6 +23,7 @@ interface AthleteModalProps {
 }
 
 export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalProps) {
+  const labels = useContextualLabels();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, organizationContext } = useAuth();
@@ -198,14 +200,14 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       // IMPROVED ERROR HANDLING: Show team assignment warnings if present
       if (data.teamErrors && data.teamErrors.length > 0) {
         toast({
-          title: "Athlete created with warnings",
-          description: `Athlete created successfully, but some team assignments failed: ${data.teamErrors.join(', ')}`,
+          title: `${labels.athlete} created with warnings`,
+          description: `${labels.athlete} created successfully, but some ${labels.team.toLowerCase()} assignments failed: ${data.teamErrors.join(', ')}`,
           variant: "default",
         });
       } else {
         toast({
           title: "Success",
-          description: "Athlete created successfully",
+          description: `${labels.athlete} created successfully`,
         });
       }
 
@@ -227,7 +229,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
     onError: (error: Error) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to create athlete",
+        description: error.message || `Failed to create ${labels.athlete.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -319,7 +321,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
         } catch (error) {
           toast({
             title: "Error",
-            description: "Failed to create new team",
+            description: `Failed to create new ${labels.team.toLowerCase()}`,
             variant: "destructive",
           });
           return;
@@ -340,9 +342,9 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       <DialogContent className="max-w-4xl w-full p-0 h-[90vh] max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 pt-6 pb-4 border-b flex-shrink-0">
           <DialogHeader>
-            <DialogTitle>{isEditing ? "Edit Athlete" : "Add New Athlete"}</DialogTitle>
+            <DialogTitle>{isEditing ? `Edit ${labels.athlete}` : `Add New ${labels.athlete}`}</DialogTitle>
             <DialogDescription>
-              {isEditing ? "Update athlete information below." : "Add a new athlete to your team by filling out the form below."}
+              {isEditing ? `Update ${labels.athlete.toLowerCase()} information below.` : `Add a new ${labels.athlete.toLowerCase()} to your ${labels.team.toLowerCase()} by filling out the form below.`}
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -713,7 +715,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               <FormItem>
                 <FormLabel className="flex items-center">
                   <Users className="h-4 w-4 mr-2" />
-                  Team Assignment
+                  {labels.team} Assignment
                 </FormLabel>
                 <div className="space-y-3">
                   {/* Existing Teams */}
@@ -738,7 +740,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                       </div>
                     ))}
                     {teams.filter((t: Team) => !t.isArchived).length === 0 && !showCreateTeam && (
-                      <p className="text-sm text-gray-500">No teams available</p>
+                      <p className="text-sm text-gray-500">No {labels.teams.toLowerCase()} available</p>
                     )}
                   </div>
 
@@ -753,12 +755,12 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                       data-testid="button-show-create-team"
                     >
                       <Plus className="h-4 w-4 mr-2" />
-                      Create New Team
+                      Create New {labels.team}
                     </Button>
                   ) : (
                     <div className="space-y-2 p-3 border rounded-lg bg-gray-50">
                       <div className="flex items-center justify-between">
-                        <label className="text-sm font-medium">New Team</label>
+                        <label className="text-sm font-medium">New {labels.team}</label>
                         <Button
                           type="button"
                           variant="ghost"
@@ -773,7 +775,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                         </Button>
                       </div>
                       <Input
-                        placeholder="Team name"
+                        placeholder={`${labels.team} name`}
                         value={newTeamName}
                         onChange={(e) => setNewTeamName(e.target.value)}
                         disabled={isPending || createTeamMutation.isPending}
@@ -794,7 +796,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                         </SelectContent>
                       </Select>
                       {createTeamMutation.isPending && (
-                        <p className="text-sm text-gray-500">Creating team...</p>
+                        <p className="text-sm text-gray-500">Creating {labels.team.toLowerCase()}...</p>
                       )}
                     </div>
                   )}

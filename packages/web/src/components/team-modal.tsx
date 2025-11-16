@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertTeamSchema, AVAILABLE_SPORTS, type InsertTeam, type Team } from "@shared/schema";
 import { normalizeString } from "@/lib/form-utils";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface TeamModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ interface TeamModalProps {
 }
 
 export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
+  const labels = useContextualLabels();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!team;
@@ -75,7 +77,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
-        description: "Team created successfully",
+        description: `${labels.team} created successfully`,
       });
       onClose();
       form.reset();
@@ -83,7 +85,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to create team",
+        description: `Failed to create ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -139,7 +141,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
-        description: "Team updated successfully",
+        description: `${labels.team} updated successfully`,
       });
       onClose();
     },
@@ -150,14 +152,14 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       if ((error as any).errorCode === 'DUPLICATE_TEAM_NAME') {
         form.setError('name', {
           type: 'manual',
-          message: error instanceof Error ? error.message : "A team with this name already exists",
+          message: error instanceof Error ? error.message : `A ${labels.team.toLowerCase()} with this name already exists`,
         });
         return; // Don't show toast for form field errors
       }
 
       const errorMessage = error instanceof Error
         ? error.message
-        : error?.message || "Failed to update team";
+        : error?.message || `Failed to update ${labels.team.toLowerCase()}`;
       toast({
         title: "Error",
         description: errorMessage,
@@ -180,9 +182,9 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>{isEditing ? "Edit Team" : "Add New Team"}</DialogTitle>
+          <DialogTitle>{isEditing ? `Edit ${labels.team}` : `Add New ${labels.team}`}</DialogTitle>
           <DialogDescription>
-            {isEditing ? "Update team information below." : "Create a new team by filling out the form below."}
+            {isEditing ? `Update ${labels.team.toLowerCase()} information below.` : `Create a new ${labels.team.toLowerCase()} by filling out the form below.`}
           </DialogDescription>
         </DialogHeader>
         
@@ -195,12 +197,12 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Team Name <span className="text-red-500">*</span>
+                      {labels.team} Name <span className="text-red-500">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input 
-                        {...field} 
-                        placeholder="Enter team name"
+                      <Input
+                        {...field}
+                        placeholder={`Enter ${labels.team.toLowerCase()} name`}
                         disabled={isPending}
                         data-testid="input-team-name"
                       />
@@ -294,10 +296,10 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                 <FormItem>
                   <FormLabel>Notes</FormLabel>
                   <FormControl>
-                    <Textarea 
-                      {...field} 
+                    <Textarea
+                      {...field}
                       value={field.value || ""}
-                      placeholder="Optional notes about this team..."
+                      placeholder={`Optional notes about this ${labels.team.toLowerCase()}...`}
                       disabled={isPending}
                       rows={3}
                       data-testid="textarea-team-notes"
@@ -309,21 +311,21 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
             />
 
             <div className="flex justify-end space-x-3 pt-4">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 onClick={onClose}
                 disabled={isPending}
                 data-testid="button-cancel-team"
               >
                 Cancel
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 disabled={isPending}
                 data-testid="button-save-team"
               >
-                {isPending ? "Saving..." : isEditing ? "Update Team" : "Add Team"}
+                {isPending ? "Saving..." : isEditing ? `Update ${labels.team}` : `Add ${labels.team}`}
               </Button>
             </div>
           </form>
