@@ -3,6 +3,10 @@ import { getUnsyncedMeasurements, markMeasurementSynced, cleanupOldMeasurements,
 // Maximum number of retry attempts before giving up
 const MAX_RETRIES = 5;
 
+// Sync interval: 5 minutes (reduced from 30s to prevent battery drain)
+// This balances timely sync with battery/CPU efficiency
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
 /**
  * Background sync service for offline measurements
  */
@@ -10,9 +14,10 @@ export class BackgroundSyncService {
   private syncInterval: number | null = null;
   private syncPromise: Promise<{ success: number; failed: number }> | null = null;
   private onlineHandler: (() => void) | null = null;
+  private visibilityHandler: (() => void) | null = null;
 
   /**
-   * Start background sync (checks every 5 minutes when page is visible)
+   * Start background sync (checks every 5 minutes when visible)
    */
   start() {
     if (this.syncInterval) {
@@ -22,11 +27,8 @@ export class BackgroundSyncService {
     // Initial sync
     this.syncNow();
 
-    // Periodic sync every 5 minutes (reduced from 30s to save battery)
-    // Only sync if page is visible and online
-    const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+    // Periodic sync every 5 minutes - but only if page is visible and online
     this.syncInterval = window.setInterval(() => {
-      // Only sync if page is visible (not hidden/minimized)
       if (!document.hidden && navigator.onLine) {
         this.syncNow();
       }
@@ -38,6 +40,15 @@ export class BackgroundSyncService {
       this.syncNow();
     };
     window.addEventListener('online', this.onlineHandler);
+
+    // Listen for visibility change - sync when tab becomes visible (if online)
+    this.visibilityHandler = () => {
+      if (!document.hidden && navigator.onLine) {
+        console.log('[BackgroundSync] Tab became visible, syncing...');
+        this.syncNow();
+      }
+    };
+    document.addEventListener('visibilitychange', this.visibilityHandler);
   }
 
   /**
@@ -49,10 +60,15 @@ export class BackgroundSyncService {
       this.syncInterval = null;
     }
 
-    // Remove event listener to prevent memory leak
+    // Remove event listeners to prevent memory leaks
     if (this.onlineHandler) {
       window.removeEventListener('online', this.onlineHandler);
       this.onlineHandler = null;
+    }
+
+    if (this.visibilityHandler) {
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
+      this.visibilityHandler = null;
     }
   }
 
