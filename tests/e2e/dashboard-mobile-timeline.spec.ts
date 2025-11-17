@@ -1,11 +1,14 @@
 import { test, expect } from '@playwright/test';
+import { getEnvironmentConfig } from './config';
+
+const { TARGET_USERNAME, TARGET_PASSWORD } = getEnvironmentConfig();
 
 test.describe('Dashboard Timeline View (Mobile)', () => {
   test.beforeEach(async ({ page }) => {
     // Login
     await page.goto('/login');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'password');
+    await page.fill('input[name="username"]', TARGET_USERNAME || 'admin');
+    await page.fill('input[name="password"]', TARGET_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/dashboard');
   });

@@ -67,8 +67,6 @@ export function useResponsiveMode(): ResponsiveMode {
     mqlMobile.addEventListener("change", onChange)
     mqlTablet.addEventListener("change", onChange)
 
-    setMode(getMode())
-
     return () => {
       mqlMobile.removeEventListener("change", onChange)
       mqlTablet.removeEventListener("change", onChange)
