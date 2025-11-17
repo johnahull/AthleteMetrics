@@ -7,7 +7,6 @@ on:
 jobs:
   claude-review:
     runs-on: ubuntu-latest
-    timeout-minutes: 15  # Add explicit timeout to prevent infinite hanging
     permissions:
       contents: read
       pull-requests: write
@@ -25,8 +24,6 @@ jobs:
 
       - name: Run Automated PR Review
         id: claude-review
-        timeout-minutes: 12  # Step-level timeout (shorter than job timeout)
-        continue-on-error: true  # Don't fail the entire workflow if Claude times out
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -56,23 +53,9 @@ jobs:
             - Use TodoWrite to track review tasks
             - Be constructive and specific in feedback
 
-          # Use 'sonnet' alias to automatically get latest Sonnet version
-          # Alternative aliases: 'opus' (latest Opus), 'haiku' (latest Haiku)
-          claude_args: --max-turns 20 --model sonnet --allowed-tools "Bash(gh:*),Read,Grep,Glob,TodoWrite"
+          claude_args: --max-turns 30 --allowed-tools "Bash(gh:*),Read,Grep,Glob,Task,TodoWrite"
 
           additional_permissions: |
             actions: read
             pull-requests: write
-
-      - name: Notify if review timed out
-        if: steps.claude-review.outcome == 'failure' && steps.claude-review.conclusion == 'cancelled'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '⚠️ **Automated code review timed out**\n\nThe Claude Code review took longer than expected and was cancelled. This usually happens with large PRs or when the service is slow.\n\n**What to do:**\n- You can manually trigger a review by commenting `@claude review this PR`\n- Or proceed with manual code review\n- Check the [workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for more details'
-            })
 
