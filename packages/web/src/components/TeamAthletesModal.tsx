@@ -1003,7 +1003,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     Select All Available
                   </Button>
                   <div id="select-all-description" className="sr-only">
-                    Select all {availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to team
+                    Select all {availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to {labels.team.toLowerCase()}
                   </div>
                   <Button
                     variant="outline"
@@ -1082,7 +1082,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                               {isOnTeam && (
                                 <Badge variant="secondary" className="text-xs flex items-center gap-1">
                                   <UserCheck className="h-3 w-3" />
-                                  On Team
+                                  On {labels.team}
                                 </Badge>
                               )}
                             </div>

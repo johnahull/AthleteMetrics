@@ -156,7 +156,7 @@ export function FilterBar({
             </Button>
           )}
           <div id="select-all-description" className="sr-only">
-            Select all available athletes for adding to team
+            Select all available athletes for adding to {labels.team.toLowerCase()}
           </div>
 
           {onClearSelection && (
