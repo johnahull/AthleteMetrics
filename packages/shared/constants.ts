@@ -42,3 +42,27 @@ export const DATE_CONSTANTS = {
   START_OF_DAY: 'T00:00:00.000Z',
   END_OF_DAY: 'T23:59:59.999Z',
 } as const;
+
+/**
+ * Responsive design breakpoints
+ *
+ * These breakpoints define the three responsive modes:
+ * - Mobile: < 768px (bottom nav + drawer sidebar, single-column grids)
+ * - Tablet: 768-1023px (full sidebar, no bottom nav, two-column grids)
+ * - Desktop: >= 1024px (full sidebar, no bottom nav, three-column grids)
+ *
+ * Note: These values align with Tailwind CSS's default breakpoints:
+ * - md: 768px
+ * - lg: 1024px
+ */
+export const RESPONSIVE_BREAKPOINTS = {
+  /**
+   * Breakpoint between mobile and tablet modes (768px)
+   */
+  MOBILE_BREAKPOINT: 768,
+
+  /**
+   * Breakpoint between tablet and desktop modes (1024px)
+   */
+  TABLET_BREAKPOINT: 1024,
+} as const;

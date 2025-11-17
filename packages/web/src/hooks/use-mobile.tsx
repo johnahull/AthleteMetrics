@@ -1,14 +1,54 @@
 import * as React from "react"
+import { RESPONSIVE_BREAKPOINTS } from "@shared/constants"
 
-export const MOBILE_BREAKPOINT = 768
-export const TABLET_BREAKPOINT = 1024
+const { MOBILE_BREAKPOINT, TABLET_BREAKPOINT } = RESPONSIVE_BREAKPOINTS
 
 export type ResponsiveMode = 'mobile' | 'tablet' | 'desktop'
 
+/**
+ * Hook to detect the current responsive mode based on viewport width.
+ *
+ * Breakpoints:
+ * - Mobile: < 768px
+ * - Tablet: 768px - 1023px
+ * - Desktop: >= 1024px
+ *
+ * Uses window.matchMedia for optimal performance - only fires when
+ * breakpoint boundaries are crossed, not on every resize event.
+ * This approach is more efficient than listening to resize events.
+ *
+ * @returns {ResponsiveMode} Current responsive mode ('mobile' | 'tablet' | 'desktop')
+ *
+ * @example
+ * ```tsx
+ * function MyComponent() {
+ *   const mode = useResponsiveMode();
+ *
+ *   return (
+ *     <div>
+ *       {mode === 'mobile' && <MobileView />}
+ *       {mode === 'tablet' && <TabletView />}
+ *       {mode === 'desktop' && <DesktopView />}
+ *     </div>
+ *   );
+ * }
+ * ```
+ */
 export function useResponsiveMode(): ResponsiveMode {
-  const [mode, setMode] = React.useState<ResponsiveMode | undefined>(undefined)
+  const [mode, setMode] = React.useState<ResponsiveMode>(() => {
+    // SSR-safe initial value
+    if (typeof window === 'undefined') return 'desktop'
+
+    const width = window.innerWidth
+    if (width < MOBILE_BREAKPOINT) return 'mobile'
+    if (width < TABLET_BREAKPOINT) return 'tablet'
+    return 'desktop'
+  })
 
   React.useEffect(() => {
+    // Skip effect in SSR environment
+    if (typeof window === 'undefined') return
+
     const getMode = (): ResponsiveMode => {
       const width = window.innerWidth
       if (width < MOBILE_BREAKPOINT) return 'mobile'
@@ -35,7 +75,7 @@ export function useResponsiveMode(): ResponsiveMode {
     }
   }, [])
 
-  return mode || 'desktop'
+  return mode
 }
 
 export function useIsTablet(): boolean {

@@ -18,10 +18,11 @@ import { BatchEntryCard } from '@/components/batch-measurement-entry/batch-entry
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/use-batch-measurement-form';
 import { useToast } from '@/hooks/use-toast';
+import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 
 export default function BatchMeasurementEntry() {
   const { toast } = useToast();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const {
