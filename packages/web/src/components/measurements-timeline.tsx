@@ -41,6 +41,10 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
 
   const formatValue = (value: number, metricType: string) => {
     // Format based on metric type
+    // Add null check to prevent crashes when metricType is undefined
+    if (!metricType) {
+      return value.toFixed(2);
+    }
     if (metricType.includes('TIME') || metricType.includes('DASH')) {
       return `${value.toFixed(2)}s`;
     }
@@ -51,12 +55,17 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
   };
 
   const getMetricIcon = (metricType: string) => {
+    // Add null check to prevent crashes when metricType is undefined
+    if (!metricType) return Award;
     if (metricType.includes('JUMP')) return TrendingUp;
     if (metricType.includes('DASH') || metricType.includes('TIME')) return Award;
     return Award;
   };
 
   const getMetricColor = (metricType: string) => {
+    // Add null check to prevent crashes when metricType is undefined
+    if (!metricType) return 'bg-gray-100 text-gray-800';
+
     const colors: Record<string, string> = {
       'FLY10_TIME': 'bg-blue-100 text-blue-800',
       'VERTICAL_JUMP': 'bg-green-100 text-green-800',
