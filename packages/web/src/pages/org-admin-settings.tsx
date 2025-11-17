@@ -16,7 +16,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
-import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
+import { useOrganization, useUpdateOrgAdminSettings } from "@/lib/organization-api";
 import { z } from "zod";
 
 // Schema for org admin settable fields
@@ -47,7 +47,7 @@ export default function OrgAdminSettings() {
   const { data: organization, isLoading, error } = useOrganization(organizationId);
 
   // Update mutation
-  const updateMutation = useUpdateOrganization(organizationId!);
+  const updateMutation = useUpdateOrgAdminSettings(organizationId!);
 
   // Form setup with React Hook Form + Zod validation
   const form = useForm<OrgAdminSettings>({
