@@ -17,6 +17,8 @@ export interface OfflineMeasurement {
   serverId?: string; // Server-assigned ID after sync
   retryCount?: number; // Number of sync attempts
   lastRetryAt?: number; // Timestamp of last retry attempt
+  failed?: boolean; // Whether sync permanently failed
+  failureReason?: string; // Reason for permanent failure
 }
 
 /**
@@ -50,6 +52,12 @@ export class OfflineDatabase extends Dexie {
     // Version 2: Add retry tracking fields
     this.version(2).stores({
       measurements: '++id, athleteId, synced, createdAt, serverId, retryCount',
+      athletes: 'id, cachedAt'
+    });
+
+    // Version 3: Add failed field for permanently failed measurements
+    this.version(3).stores({
+      measurements: '++id, athleteId, synced, createdAt, serverId, retryCount, failed',
       athletes: 'id, cachedAt'
     });
   }
@@ -119,12 +127,13 @@ export async function addOfflineMeasurement(measurement: Omit<OfflineMeasurement
 }
 
 /**
- * Get all unsynced measurements
+ * Get all unsynced measurements (excluding permanently failed ones)
  */
 export async function getUnsyncedMeasurements(): Promise<OfflineMeasurement[]> {
   return await db.measurements
     .where('synced')
     .equals(0) // false = 0 in IndexedDB
+    .filter(m => !m.failed) // Exclude permanently failed measurements
     .toArray();
 }
 

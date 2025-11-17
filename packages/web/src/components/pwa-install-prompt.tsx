@@ -13,16 +13,28 @@ export function PWAInstallPrompt() {
   const [pageViews, setPageViews] = useState(0);
 
   useEffect(() => {
-    // Track page views
-    const currentViews = parseInt(localStorage.getItem('pwa-page-views') || '0');
-    const newViews = currentViews + 1;
-    localStorage.setItem('pwa-page-views', String(newViews));
-    setPageViews(newViews);
+    // Track page views (with error handling for localStorage)
+    try {
+      const currentViews = parseInt(localStorage.getItem('pwa-page-views') || '0');
+      const newViews = currentViews + 1;
+      localStorage.setItem('pwa-page-views', String(newViews));
+      setPageViews(newViews);
+    } catch (error) {
+      console.warn('Failed to track PWA page views (localStorage unavailable):', error);
+      // Default to showing prompt after 2 visits even if localStorage fails
+      setPageViews(2);
+    }
   }, []);
 
   useEffect(() => {
-    // Check if user has dismissed the prompt before
-    const isDismissed = localStorage.getItem('pwa-install-dismissed') === 'true';
+    // Check if user has dismissed the prompt before (with error handling)
+    let isDismissed = false;
+    try {
+      isDismissed = localStorage.getItem('pwa-install-dismissed') === 'true';
+    } catch (error) {
+      console.warn('Failed to check PWA dismissal status (localStorage unavailable):', error);
+    }
+
     if (isDismissed || pageViews < 2) {
       return;
     }
@@ -67,7 +79,11 @@ export function PWAInstallPrompt() {
   };
 
   const handleDismiss = () => {
-    localStorage.setItem('pwa-install-dismissed', 'true');
+    try {
+      localStorage.setItem('pwa-install-dismissed', 'true');
+    } catch (error) {
+      console.warn('Failed to save PWA dismissal preference (localStorage unavailable):', error);
+    }
     setShowPrompt(false);
   };
 

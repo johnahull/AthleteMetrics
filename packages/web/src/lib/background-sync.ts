@@ -116,14 +116,14 @@ export class BackgroundSyncService {
       // Check if retry limit reached
       if (measurement.retryCount && measurement.retryCount >= MAX_RETRIES) {
         console.error(
-          `[BackgroundSync] Max retries (${MAX_RETRIES}) reached for measurement ${measurement.id}. Marking as failed.`
+          `[BackgroundSync] Max retries (${MAX_RETRIES}) reached for measurement ${measurement.id}. Marking as permanently failed.`
         );
-        // Mark as synced with a special flag to prevent further retries
-        // In a production system, you might want to move this to a "failed" table
+        // Mark as permanently failed (but NOT synced) to prevent data loss confusion
         if (measurement.id) {
           await db.measurements.update(measurement.id, {
-            synced: true,
-            serverId: 'FAILED_MAX_RETRIES'
+            failed: true,
+            failureReason: `Maximum retry attempts (${MAX_RETRIES}) exceeded`,
+            synced: false  // Keep as unsynced so user knows data is not on server
           });
         }
         failedCount++;
