@@ -417,7 +417,7 @@ export default function Dashboard() {
                 athleteName: `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim() || 'Unknown',
                 metricType: m.metricType || '',
                 metricName: m.metricType ? getMetricDisplayName(m.metricType) : 'Unknown',
-                value: m.value,
+                value: m.value ?? 0,
                 date: m.date,
                 notes: m.notes,
                 teamName: m.team?.name,

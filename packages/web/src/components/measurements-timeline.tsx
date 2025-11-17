@@ -41,7 +41,10 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
 
   const formatValue = (value: number, metricType: string) => {
     // Format based on metric type
-    // Add null check to prevent crashes when metricType is undefined
+    // Add null check to prevent crashes when value or metricType is undefined
+    if (value === undefined || value === null || typeof value !== 'number') {
+      return 'N/A';
+    }
     if (!metricType) {
       return value.toFixed(2);
     }
