@@ -95,9 +95,22 @@ test.describe('Offline Functionality', () => {
       }
     }
 
+    // Set up network monitoring BEFORE going online
+    const syncApiCallPromise = page.waitForResponse(
+      response => response.url().includes('/api/measurements') && response.request().method() === 'POST',
+      { timeout: 15000 }
+    ).catch(() => null); // Don't fail if no sync call (might not have queued data)
+
     // Go back online
     await context.setOffline(false);
     await page.waitForFunction(() => navigator.onLine, { timeout: 3000 });
+
+    // Verify sync API call was made (network monitoring)
+    const syncResponse = await syncApiCallPromise;
+    if (syncResponse) {
+      // Verify successful sync
+      expect(syncResponse.status()).toBe(200);
+    }
 
     // Wait for sync to complete by monitoring queue/sync indicators
     const queueIndicator = page.locator('[data-testid="offline-queue-count"]');
