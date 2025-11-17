@@ -6,6 +6,7 @@ import type { Express } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { storage } from "../storage";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
@@ -245,6 +246,93 @@ export function registerOrganizationRoutes(app: Express) {
       const statusCode = message.includes("Unauthorized") ? 403
         : message.includes("not found") ? 404
         : message.includes("already exists") ? 400
+        : message.includes("Invalid") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Update organization settings (Org Admin only - limited fields)
+   * PATCH /api/organizations/:id/org-settings
+   *
+   * Allows org admins to update only aiEnabled flag (if aiEnabledBySiteAdmin is true)
+   */
+  app.patch("/api/organizations/:id/org-settings", updateLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
+      // Get organization
+      const org = await storage.getOrganization(organizationId);
+      if (!org) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      // Verify user is org admin for this organization
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      const userOrg = userOrgs.find((uo: any) => uo.organizationId === organizationId);
+
+      if (!userOrg || userOrg.role !== 'org_admin') {
+        return res.status(403).json({ message: "Access denied. Org admin role required." });
+      }
+
+      // Only allow updating aiEnabled field
+      const { aiEnabled } = req.body;
+
+      // Validate that aiEnabled is provided
+      if (typeof aiEnabled !== 'boolean') {
+        return res.status(400).json({ message: "aiEnabled field is required and must be boolean" });
+      }
+
+      // If trying to enable AI, check that site admin has permitted it
+      if (aiEnabled === true && !org.aiEnabledBySiteAdmin) {
+        return res.status(403).json({
+          message: "AI features must be enabled by site administrator first"
+        });
+      }
+
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      // Update only the aiEnabled field
+      const updated = await storage.updateOrganization(organizationId, { aiEnabled });
+
+      // Create audit log for AI flag change by org admin
+      if (aiEnabled !== org.aiEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: aiEnabled ? 'org_ai_enabled_by_org_admin' : 'org_ai_disabled_by_org_admin',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.aiEnabled,
+            newValue: aiEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update organization settings error:", error);
+      const message = sanitizeError(error, "Failed to update organization settings");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
         : message.includes("Invalid") ? 400
         : 500;
       res.status(statusCode).json({ message });

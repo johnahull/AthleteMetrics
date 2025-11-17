@@ -171,6 +171,18 @@ export class OrganizationService extends BaseService {
           to: validatedUpdates.allowCustomBenchmarks
         };
       }
+      if (validatedUpdates.aiEnabledBySiteAdmin !== undefined && validatedUpdates.aiEnabledBySiteAdmin !== org.aiEnabledBySiteAdmin) {
+        changesSummary.aiEnabledBySiteAdminChanged = {
+          from: org.aiEnabledBySiteAdmin,
+          to: validatedUpdates.aiEnabledBySiteAdmin
+        };
+      }
+      if (validatedUpdates.aiEnabled !== undefined && validatedUpdates.aiEnabled !== org.aiEnabled) {
+        changesSummary.aiEnabledChanged = {
+          from: org.aiEnabled,
+          to: validatedUpdates.aiEnabled
+        };
+      }
 
       // Create audit log with request context
       await this.storage.createAuditLog({
@@ -185,6 +197,23 @@ export class OrganizationService extends BaseService {
         ipAddress: context.ipAddress || null,
         userAgent: context.userAgent || null,
       });
+
+      // Create specific audit logs for AI flag changes
+      if (validatedUpdates.aiEnabledBySiteAdmin !== undefined && validatedUpdates.aiEnabledBySiteAdmin !== org.aiEnabledBySiteAdmin) {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: validatedUpdates.aiEnabledBySiteAdmin ? 'org_ai_enabled_by_site_admin' : 'org_ai_disabled_by_site_admin',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: sanitizedOrgName,
+            previousValue: org.aiEnabledBySiteAdmin,
+            newValue: validatedUpdates.aiEnabledBySiteAdmin
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
 
       return updatedOrg;
     } catch (error) {
