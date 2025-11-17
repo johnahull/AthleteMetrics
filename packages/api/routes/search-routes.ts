@@ -4,9 +4,11 @@
  */
 
 import type { Express } from "express";
+import rateLimit from "express-rate-limit";
 import { GlobalSearchService } from "../services/global-search-service";
 import { requireAuth } from "../middleware";
 import { z } from "zod";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Validation schema for search query parameters
 const searchQuerySchema = z.object({
@@ -19,6 +21,23 @@ const searchQuerySchema = z.object({
   includeMeasurements: z.string().optional().transform((val) => val !== 'false'),
 });
 
+// Validation schema for action search query parameters
+const actionQuerySchema = z.object({
+  q: z.string().min(1).max(100),
+});
+
+// Rate limiting for search endpoints
+// Search queries can be resource-intensive, so we use moderate limits
+const searchRateLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.STANDARD, // 100 requests per 15-minute window
+  message: {
+    message: "Too many search requests, please try again later."
+  },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerSearchRoutes(app: Express) {
   const globalSearchService = new GlobalSearchService();
 
@@ -26,7 +45,7 @@ export function registerSearchRoutes(app: Express) {
    * Global search endpoint for command palette
    * GET /api/search/global?q=<query>&limit=20
    */
-  app.get("/api/search/global", requireAuth, async (req, res) => {
+  app.get("/api/search/global", searchRateLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -100,15 +119,19 @@ export function registerSearchRoutes(app: Express) {
    * Get suggested actions based on query
    * GET /api/search/actions?q=<query>
    */
-  app.get("/api/search/actions", requireAuth, async (req, res) => {
+  app.get("/api/search/actions", searchRateLimiter, requireAuth, async (req, res) => {
     try {
-      const query = req.query.q as string;
-
-      if (!query || typeof query !== 'string') {
-        return res.status(400).json({ message: "Query parameter 'q' is required" });
+      // Validate query parameters using Zod schema
+      const validation = actionQuerySchema.safeParse(req.query);
+      if (!validation.success) {
+        return res.status(400).json({
+          message: "Invalid query parameter",
+          errors: validation.error.errors,
+        });
       }
 
-      const actions = await globalSearchService.getSuggestedActions(query);
+      const { q } = validation.data;
+      const actions = await globalSearchService.getSuggestedActions(q);
 
       return res.json({ actions });
     } catch (error) {

@@ -69,6 +69,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
         description: "Team created successfully",
@@ -131,6 +132,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
         description: "Team updated successfully",

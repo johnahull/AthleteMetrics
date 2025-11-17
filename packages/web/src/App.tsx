@@ -14,6 +14,7 @@ import { performanceMonitor } from "./utils/performance-monitoring";
 import { CommandPaletteProvider, useCommandPalette } from "./components/command-palette/command-palette-provider";
 import { CommandPalette } from "./components/command-palette/command-palette";
 import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-shortcuts-help";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Lazy load heavy pages to reduce initial bundle size
 const Dashboard = React.lazy(() => import("./pages/dashboard"));
@@ -221,7 +222,9 @@ function AppContent() {
   return (
     <Layout>
       <Toaster />
-      <CommandPalette />
+      <ErrorBoundary fallback={<div className="p-4 text-sm text-muted-foreground">Command palette unavailable</div>}>
+        <CommandPalette />
+      </ErrorBoundary>
       <KeyboardShortcutsHelp isOpen={isHelpOpen} onClose={closeHelp} />
       <Router />
     </Layout>

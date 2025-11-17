@@ -205,6 +205,7 @@ export class GlobalSearchService extends BaseService {
   /**
    * Search measurements within an organization
    * Searches by athlete name or metric type
+   * Uses Drizzle schema for type-safe joins (consistent with athlete/team searches)
    */
   private async searchMeasurements(
     query: string,
@@ -215,6 +216,7 @@ export class GlobalSearchService extends BaseService {
       const searchPattern = `%${query}%`;
 
       // Search measurements by athlete name or metric type
+      // Uses proper Drizzle schema joins for type safety and consistency
       const results = await db
         .select({
           id: measurements.id,
@@ -224,11 +226,12 @@ export class GlobalSearchService extends BaseService {
           value: measurements.value,
         })
         .from(measurements)
-        .innerJoin(users, sql`${measurements.userId} = ${users.id}`)
-        .innerJoin(sql`user_organizations`, sql`user_organizations.user_id = ${users.id}`)
+        .innerJoin(users, eq(measurements.userId, users.id))
+        .innerJoin(userOrganizations, eq(userOrganizations.userId, users.id))
         .where(
           and(
-            sql`user_organizations.organization_id = ${organizationId}`,
+            eq(userOrganizations.organizationId, organizationId),
+            isNull(users.deletedAt), // Exclude soft-deleted users
             or(
               ilike(users.fullName, searchPattern),
               ilike(measurements.metric, searchPattern)
