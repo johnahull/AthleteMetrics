@@ -16,6 +16,7 @@ import {
   insertReportBenchmarkSchema,
   insertReportSnapshotSchema,
   users,
+  organizations,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -1088,7 +1089,7 @@ export function registerReportRoutes(app: Express) {
    *
    * Requires: AI enabled for organization (both flags)
    */
-  app.post("/api/reports/:id/generate-insights", reportLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
+  app.post("/api/reports/:id/generate-insights", reportGenerationLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
@@ -1110,7 +1111,7 @@ export function registerReportRoutes(app: Express) {
       const modelKey = siteSettings?.aiModel || "gpt-5-nano";
 
       // Build report data for AI
-      const reportData = await buildReportDataForAI(report);
+      const reportData = await buildReportDataForAI(report, user.id, reportService);
 
       // Generate insights using AI service
       const { generateCoachingInsights } = await import("../services/ai-insights-service");
@@ -1131,8 +1132,7 @@ export function registerReportRoutes(app: Express) {
     } catch (error) {
       console.error("Error generating coaching insights:", error);
       res.status(500).json({
-        message: "Failed to generate coaching insights",
-        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to generate coaching insights. Please try again or contact support."
       });
     }
   });
@@ -1143,6 +1143,11 @@ export function registerReportRoutes(app: Express) {
    */
   app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, async (req, res) => {
     try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
       const reportId = req.params.id;
       const { coachingInsights } = req.body;
 
@@ -1154,6 +1159,17 @@ export function registerReportRoutes(app: Express) {
       const report = await storage.getReport(reportId);
       if (!report) {
         return res.status(404).json({ message: "Report not found" });
+      }
+
+      // SECURITY: Verify user has access to this organization
+      const hasAccess = await reportService["validateOrganizationAccess"](
+        user.id,
+        report.organizationId
+      );
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: "Access denied to this report"
+        });
       }
 
       // Update report insights
@@ -1179,8 +1195,7 @@ export function registerReportRoutes(app: Express) {
       }
 
       res.status(500).json({
-        message: "Failed to update coaching insights",
-        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to update coaching insights"
       });
     }
   });
@@ -1698,17 +1713,230 @@ function calculateBenchmarkAchievements(athleteRankings: any[]) {
 /**
  * Build report data structure for AI insights generation
  */
-async function buildReportDataForAI(report: any): Promise<any> {
-  // This is a simplified version - you'll need to expand this based on actual report structure
-  // For now, return a basic structure
-  return {
-    reportType: report.reportType,
-    reportName: report.name,
-    organizationName: "Organization", // TODO: fetch actual org name
-    timeframe: "Current Season", // TODO: extract from report config
-    metrics: [], // TODO: fetch actual measurement data
-    improvements: [],
-    concerns: [],
-    benchmarkComparisons: [],
-  };
+async function buildReportDataForAI(report: any, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+  try {
+    // Fetch organization details
+    const org = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, report.organizationId))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    // Generate full report data using report service
+    let reportData: any;
+    if (report.reportType === 'team') {
+      reportData = await reportService.generateTeamReport(report.id, userId);
+    } else {
+      // For individual reports, we need the athlete ID from the report config
+      const config = report.config as any;
+      const athleteId = config.athleteId;
+
+      if (!athleteId) {
+        throw new Error("Individual report missing athlete ID in config");
+      }
+
+      reportData = await reportService.generateIndividualReport(
+        report.id,
+        userId,
+        athleteId
+      );
+    }
+
+    // Extract timeframe from report config
+    const config = report.config as any;
+    let timeframe = "Current Season";
+    if (config.timeframe) {
+      const { startDate, endDate } = config.timeframe;
+      if (startDate && endDate) {
+        const start = new Date(startDate).toLocaleDateString();
+        const end = new Date(endDate).toLocaleDateString();
+        timeframe = `${start} to ${end}`;
+      }
+    }
+
+    // Build metrics array from report data
+    const metrics: Array<{
+      code: string;
+      label: string;
+      values: number[];
+      unit: string;
+      lowerIsBetter: boolean;
+    }> = [];
+
+    if (report.reportType === 'team' && reportData.teamStatistics) {
+      // Team report metrics
+      for (const stat of reportData.teamStatistics) {
+        const metricCode = stat.metric;
+        const values: number[] = [];
+
+        // Extract individual values from athlete rankings
+        if (reportData.athleteRankings) {
+          for (const athlete of reportData.athleteRankings) {
+            if (athlete.measurements && athlete.measurements[metricCode] !== undefined) {
+              values.push(athlete.measurements[metricCode]);
+            }
+          }
+        }
+
+        metrics.push({
+          code: metricCode,
+          label: stat.metric, // Human-readable label
+          values,
+          unit: stat.units || "",
+          lowerIsBetter: isMetricLowerBetter(metricCode),
+        });
+      }
+    } else if (report.reportType === 'individual' && reportData.athlete) {
+      // Individual report metrics
+      const athlete = reportData.athlete;
+      if (athlete.measurements) {
+        for (const [metricCode, value] of Object.entries(athlete.measurements)) {
+          if (typeof value === 'number') {
+            metrics.push({
+              code: metricCode,
+              label: metricCode, // Human-readable label
+              values: [value],
+              unit: getMetricUnit(metricCode),
+              lowerIsBetter: isMetricLowerBetter(metricCode),
+            });
+          }
+        }
+      }
+    }
+
+    // Build improvements array (metrics that improved from previous)
+    const improvements: Array<{ metric: string; improvement: string }> = [];
+    // Note: Would need historical data to calculate improvements
+    // For now, this is a placeholder for future enhancement
+
+    // Build concerns array (metrics below expected performance)
+    const concerns: Array<{ metric: string; concern: string }> = [];
+    if (reportData.benchmarkComparisons) {
+      // Identify metrics below benchmarks
+      for (const comparison of reportData.benchmarkComparisons) {
+        if (!comparison.meetsOrExceeds) {
+          concerns.push({
+            metric: comparison.metric,
+            concern: `Below ${comparison.benchmarkName} benchmark (${comparison.benchmarkValue})`,
+          });
+        }
+      }
+    }
+
+    // Build benchmark comparisons array
+    const benchmarkComparisons: Array<{ metric: string; performance: string }> = [];
+    if (report.reportType === 'team' && reportData.athleteRankings) {
+      // Calculate team benchmark achievement rate
+      const benchmarkStats = new Map<string, { total: number; met: number }>();
+
+      for (const athlete of reportData.athleteRankings) {
+        if (athlete.benchmarkComparisons) {
+          for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons as any)) {
+            if (!benchmarkStats.has(metric)) {
+              benchmarkStats.set(metric, { total: 0, met: 0 });
+            }
+            const stats = benchmarkStats.get(metric)!;
+            for (const comp of comparisons as any[]) {
+              stats.total++;
+              if (comp.meetsOrExceeds) stats.met++;
+            }
+          }
+        }
+      }
+
+      for (const [metric, stats] of benchmarkStats) {
+        const percentage = Math.round((stats.met / stats.total) * 100);
+        benchmarkComparisons.push({
+          metric,
+          performance: `${percentage}% of athletes meet benchmarks (${stats.met}/${stats.total})`,
+        });
+      }
+    } else if (report.reportType === 'individual' && reportData.athlete?.benchmarkComparisons) {
+      // Individual benchmark comparisons
+      for (const [metric, comparisons] of Object.entries(reportData.athlete.benchmarkComparisons as any)) {
+        const metComparisons = (comparisons as any[]).filter(c => c.meetsOrExceeds);
+        const totalComparisons = (comparisons as any[]).length;
+        benchmarkComparisons.push({
+          metric,
+          performance: `Meets ${metComparisons.length}/${totalComparisons} benchmarks`,
+        });
+      }
+    }
+
+    // Build final ReportData object
+    const aiReportData: import("../services/ai-insights-service").ReportData = {
+      reportType: report.reportType,
+      reportName: report.name,
+      organizationName: org?.name || "Unknown Organization",
+      timeframe,
+      metrics,
+      improvements,
+      concerns,
+      benchmarkComparisons,
+    };
+
+    // Add team-specific data
+    if (report.reportType === 'team') {
+      aiReportData.teamName = reportData.team?.name;
+      aiReportData.athleteCount = reportData.athleteCount || 0;
+    }
+
+    // Add individual-specific data
+    if (report.reportType === 'individual' && reportData.athlete) {
+      aiReportData.athleteName = reportData.athlete.userName || reportData.athlete.fullName;
+      aiReportData.athletePosition = reportData.athlete.position;
+      aiReportData.athleteAge = reportData.athlete.age;
+      aiReportData.athleteGender = reportData.athlete.gender;
+    }
+
+    return aiReportData;
+  } catch (error) {
+    console.error("Error building report data for AI:", error);
+    throw new Error(
+      `Failed to prepare report data for AI analysis: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+/**
+ * Helper: Determine if metric is lower-is-better
+ */
+function isMetricLowerBetter(metricCode: string): boolean {
+  // Metrics where lower values indicate better performance
+  const lowerIsBetterMetrics = [
+    'FLY10_TIME',
+    'AGILITY_505',
+    'AGILITY_5105',
+    'T_TEST',
+    'DASH_40YD',
+    '40_YARD_DASH',
+    'SPRINT_TIME',
+  ];
+
+  return lowerIsBetterMetrics.some(m =>
+    metricCode.toUpperCase().includes(m.toUpperCase())
+  );
+}
+
+/**
+ * Helper: Get unit for metric
+ */
+function getMetricUnit(metricCode: string): string {
+  const upperCode = metricCode.toUpperCase();
+
+  if (upperCode.includes('TIME') || upperCode.includes('DASH') || upperCode.includes('SPRINT')) {
+    return 'seconds';
+  }
+  if (upperCode.includes('JUMP') || upperCode.includes('HEIGHT')) {
+    return 'inches';
+  }
+  if (upperCode.includes('WEIGHT') || upperCode.includes('MASS')) {
+    return 'lbs';
+  }
+  if (upperCode.includes('DISTANCE')) {
+    return 'yards';
+  }
+
+  return ''; // Unknown unit
 }

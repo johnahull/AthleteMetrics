@@ -79,7 +79,8 @@ class GoogleProvider implements AIProvider {
   constructor(modelName: string) {
     const apiKey = process.env.GOOGLE_AI_API_KEY;
     if (!apiKey) {
-      throw new Error("GOOGLE_AI_API_KEY environment variable is required for Google AI models");
+      console.error(`AI Service Error: Missing API key for provider: google, model: ${modelName}`);
+      throw new Error("AI service configuration error. Please contact your administrator.");
     }
     this.client = new GoogleGenerativeAI(apiKey);
     this.modelName = modelName;
@@ -117,7 +118,8 @@ class OpenAIProvider implements AIProvider {
   constructor(modelName: string) {
     const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY environment variable is required for OpenAI models");
+      console.error(`AI Service Error: Missing API key for provider: openai, model: ${modelName}`);
+      throw new Error("AI service configuration error. Please contact your administrator.");
     }
     this.client = new OpenAI({ apiKey });
     this.modelName = modelName;
@@ -158,7 +160,8 @@ class AnthropicProvider implements AIProvider {
   constructor(modelName: string) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) {
-      throw new Error("ANTHROPIC_API_KEY environment variable is required for Anthropic models");
+      console.error(`AI Service Error: Missing API key for provider: anthropic, model: ${modelName}`);
+      throw new Error("AI service configuration error. Please contact your administrator.");
     }
     this.client = new Anthropic({ apiKey });
     this.modelName = modelName;
