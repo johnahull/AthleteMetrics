@@ -12,7 +12,7 @@ export class BackgroundSyncService {
   private onlineHandler: (() => void) | null = null;
 
   /**
-   * Start background sync (checks every 30 seconds)
+   * Start background sync (checks every 5 minutes when page is visible)
    */
   start() {
     if (this.syncInterval) {
@@ -22,10 +22,15 @@ export class BackgroundSyncService {
     // Initial sync
     this.syncNow();
 
-    // Periodic sync every 30 seconds
+    // Periodic sync every 5 minutes (reduced from 30s to save battery)
+    // Only sync if page is visible and online
+    const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
     this.syncInterval = window.setInterval(() => {
-      this.syncNow();
-    }, 30000);
+      // Only sync if page is visible (not hidden/minimized)
+      if (!document.hidden && navigator.onLine) {
+        this.syncNow();
+      }
+    }, SYNC_INTERVAL_MS);
 
     // Listen for online event
     this.onlineHandler = () => {

@@ -15,11 +15,10 @@ test.describe('Offline Functionality', () => {
 
     // Simulate offline
     await context.setOffline(true);
-    await page.waitForTimeout(1000);
 
-    // Should show offline indicator
+    // Wait for offline indicator to appear (replaced hard-coded timeout)
     const offlineIndicator = page.locator('[data-testid="offline-indicator"]');
-    await expect(offlineIndicator).toBeVisible();
+    await expect(offlineIndicator).toBeVisible({ timeout: 3000 });
     await expect(offlineIndicator).toContainText(/offline/i);
   });
 
@@ -28,30 +27,31 @@ test.describe('Offline Functionality', () => {
 
     // Go offline first
     await context.setOffline(true);
-    await page.waitForTimeout(500);
+    const offlineIndicator = page.locator('[data-testid="offline-indicator"]');
+    await expect(offlineIndicator).toBeVisible({ timeout: 3000 });
 
     // Go back online
     await context.setOffline(false);
-    await page.waitForTimeout(1000);
+
+    // Wait for connection state to update
+    await page.waitForFunction(() => navigator.onLine, { timeout: 3000 });
 
     // Should show online indicator or hide offline indicator
-    const offlineIndicator = page.locator('[data-testid="offline-indicator"]');
     const isVisible = await offlineIndicator.isVisible().catch(() => false);
 
     if (isVisible) {
       // If visible, should show "online" or "connected"
-      const text = await offlineIndicator.textContent();
-      expect(text?.toLowerCase()).toMatch(/online|connected|synced/);
+      await expect(offlineIndicator).toContainText(/online|connected|synced/i, { timeout: 3000 });
     }
   });
 
   test('should queue measurements when offline', async ({ page, context }) => {
     await page.goto('/data-entry');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Go offline
     await context.setOffline(true);
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => !navigator.onLine, { timeout: 3000 });
 
     // Try to add a measurement
     const valueInput = page.locator('input[type="number"]').first();
@@ -62,15 +62,13 @@ test.describe('Offline Functionality', () => {
       const submitButton = page.locator('button[type="submit"], button:has-text("Save"), button:has-text("Add")').first();
       if (await submitButton.isVisible()) {
         await submitButton.click();
-        await page.waitForTimeout(500);
 
-        // Should show offline queue indicator
+        // Wait for queue indicator to update (replaced hard-coded timeout)
         const queueIndicator = page.locator('[data-testid="offline-queue-count"]');
         const isQueueVisible = await queueIndicator.isVisible().catch(() => false);
 
         if (isQueueVisible) {
-          const queueText = await queueIndicator.textContent();
-          expect(queueText).toMatch(/1|pending|queued/i);
+          await expect(queueIndicator).toContainText(/1|pending|queued/i, { timeout: 3000 });
         }
       }
     }
@@ -78,11 +76,11 @@ test.describe('Offline Functionality', () => {
 
   test('should sync queued measurements when back online', async ({ page, context }) => {
     await page.goto('/data-entry');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Go offline and add measurement
     await context.setOffline(true);
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => !navigator.onLine, { timeout: 3000 });
 
     const valueInput = page.locator('input[type="number"]').first();
     if (await valueInput.isVisible()) {
@@ -91,15 +89,17 @@ test.describe('Offline Functionality', () => {
       const submitButton = page.locator('button[type="submit"], button:has-text("Save"), button:has-text("Add")').first();
       if (await submitButton.isVisible()) {
         await submitButton.click();
-        await page.waitForTimeout(500);
+
+        // Wait for form submission to process
+        await page.waitForLoadState('networkidle');
       }
     }
 
     // Go back online
     await context.setOffline(false);
-    await page.waitForTimeout(2000); // Wait for sync
+    await page.waitForFunction(() => navigator.onLine, { timeout: 3000 });
 
-    // Queue should be empty or show sync complete
+    // Wait for sync to complete by monitoring queue/sync indicators
     const queueIndicator = page.locator('[data-testid="offline-queue-count"]');
     const syncIndicator = page.locator('[data-testid="sync-status"]');
 
@@ -107,13 +107,11 @@ test.describe('Offline Functionality', () => {
     const syncVisible = await syncIndicator.isVisible().catch(() => false);
 
     if (queueVisible) {
-      const queueText = await queueIndicator.textContent();
-      expect(queueText).toMatch(/0|empty|synced/i);
+      await expect(queueIndicator).toContainText(/0|empty|synced/i, { timeout: 10000 });
     }
 
     if (syncVisible) {
-      const syncText = await syncIndicator.textContent();
-      expect(syncText).toMatch(/synced|complete|success/i);
+      await expect(syncIndicator).toContainText(/synced|complete|success/i, { timeout: 10000 });
     }
   });
 
@@ -122,7 +120,7 @@ test.describe('Offline Functionality', () => {
 
     // Go offline
     await context.setOffline(true);
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => !navigator.onLine, { timeout: 3000 });
 
     // Check if sync button appears when there's queued data
     const syncButton = page.locator('button[data-testid="sync-now-button"], button:has-text("Sync")');
@@ -138,7 +136,7 @@ test.describe('Offline Functionality', () => {
 
   test('should allow manual sync trigger when online', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Look for sync button
     const syncButton = page.locator('button[data-testid="sync-now-button"], button:has-text("Sync")');
@@ -150,9 +148,8 @@ test.describe('Offline Functionality', () => {
       if (!isDisabled) {
         // Click sync button
         await syncButton.click();
-        await page.waitForTimeout(500);
 
-        // Should show syncing indicator
+        // Wait for syncing indicator or completion (replaced hard-coded timeout)
         const syncingIndicator = page.locator('[data-testid="syncing-indicator"]');
         const isSyncingVisible = await syncingIndicator.isVisible().catch(() => false);
 
@@ -164,11 +161,11 @@ test.describe('Offline Functionality', () => {
 
   test('should persist offline queue across page reloads', async ({ page, context }) => {
     await page.goto('/data-entry');
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Go offline and add measurement
     await context.setOffline(true);
-    await page.waitForTimeout(500);
+    await page.waitForFunction(() => !navigator.onLine, { timeout: 3000 });
 
     const valueInput = page.locator('input[type="number"]').first();
     if (await valueInput.isVisible()) {
@@ -177,21 +174,20 @@ test.describe('Offline Functionality', () => {
       const submitButton = page.locator('button[type="submit"], button:has-text("Save"), button:has-text("Add")').first();
       if (await submitButton.isVisible()) {
         await submitButton.click();
-        await page.waitForTimeout(500);
+        await page.waitForLoadState('networkidle');
       }
     }
 
     // Reload page while still offline
     await page.reload();
-    await page.waitForTimeout(1000);
+    await page.waitForLoadState('networkidle');
 
     // Queue should still show pending item
     const queueIndicator = page.locator('[data-testid="offline-queue-count"]');
     const isVisible = await queueIndicator.isVisible().catch(() => false);
 
     if (isVisible) {
-      const queueText = await queueIndicator.textContent();
-      expect(queueText).toMatch(/1|pending|queued/i);
+      await expect(queueIndicator).toContainText(/1|pending|queued/i, { timeout: 3000 });
     }
   });
 });
@@ -211,7 +207,7 @@ test.describe('Responsive Charts', () => {
 
     test('should render charts with appropriate mobile sizing', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Look for chart canvases
       const chartCanvas = page.locator('canvas').first();
@@ -232,7 +228,7 @@ test.describe('Responsive Charts', () => {
 
     test('should show simplified chart legends on mobile', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Chart legends should be simplified or collapsible on mobile
       const legend = page.locator('[class*="legend"], [data-testid="chart-legend"]').first();
@@ -248,7 +244,7 @@ test.describe('Responsive Charts', () => {
 
     test('should allow horizontal scrolling for wide charts if needed', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // If charts are in a container, it should allow horizontal scroll
       const chartContainer = page.locator('[class*="chart-container"], [data-testid="chart-wrapper"]').first();
@@ -265,14 +261,16 @@ test.describe('Responsive Charts', () => {
 
     test('should use touch-friendly chart interactions', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       const chartCanvas = page.locator('canvas').first();
 
       if (await chartCanvas.isVisible()) {
         // Try tapping on chart
         await chartCanvas.tap();
-        await page.waitForTimeout(300);
+
+        // Wait for potential tooltip (replaced hard-coded timeout)
+        await page.waitForTimeout(300); // Short timeout acceptable for UI feedback
 
         // Tooltip should appear on tap
         const tooltip = page.locator('[class*="tooltip"], [role="tooltip"]').first();
@@ -284,7 +282,7 @@ test.describe('Responsive Charts', () => {
 
     test('should show responsive font sizes in charts', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       // Chart text should be readable on mobile (>=12px)
       const chartLabels = page.locator('canvas ~ div, [class*="chart"] text').first();
@@ -307,7 +305,7 @@ test.describe('Responsive Charts', () => {
 
     test('should render full-sized charts on desktop', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       const chartCanvas = page.locator('canvas').first();
 
@@ -323,7 +321,7 @@ test.describe('Responsive Charts', () => {
 
     test('should show full chart legends on desktop', async ({ page }) => {
       await page.goto('/analytics');
-      await page.waitForTimeout(2000);
+      await page.waitForLoadState('networkidle');
 
       const legend = page.locator('[class*="legend"], [data-testid="chart-legend"]').first();
 

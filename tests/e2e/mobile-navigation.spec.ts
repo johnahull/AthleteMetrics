@@ -106,12 +106,9 @@ test.describe('Mobile Navigation', () => {
       if (await hamburger.isVisible()) {
         await hamburger.click();
 
-        // Wait for drawer to open
-        await page.waitForTimeout(500);
-
-        // Sidebar content should now be visible in drawer
+        // Wait for drawer to be visible (replaced hard-coded timeout)
         const drawerContent = page.locator('[role="dialog"], [data-testid="mobile-drawer"]');
-        await expect(drawerContent).toBeVisible();
+        await expect(drawerContent).toBeVisible({ timeout: 2000 });
 
         // Should contain navigation links
         const navLinks = await drawerContent.locator('a').count();
@@ -169,12 +166,9 @@ test.describe('Mobile Navigation', () => {
       if (await quickAddButton.isVisible()) {
         await quickAddButton.click();
 
-        // Wait for modal/dialog to open
-        await page.waitForTimeout(500);
-
-        // Measurement modal should be visible
+        // Wait for modal to be visible (replaced hard-coded timeout)
         const modal = page.locator('[role="dialog"], [data-testid="measurement-modal"]');
-        await expect(modal).toBeVisible();
+        await expect(modal).toBeVisible({ timeout: 2000 });
       }
     });
   });
@@ -196,7 +190,7 @@ test.describe('Mobile Navigation', () => {
 
       for (const pageUrl of pagesToTest) {
         await page.goto(pageUrl);
-        await page.waitForTimeout(1000);
+        await page.waitForLoadState('networkidle');
 
         const scrollWidth = await page.evaluate(() => document.body.scrollWidth);
         const width = await page.evaluate(() => window.innerWidth);

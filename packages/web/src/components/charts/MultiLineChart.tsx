@@ -299,8 +299,8 @@ export function MultiLineChart({
   // Determine if this is individual analysis (single athlete) - needed for legend
   const isSingleAthlete = multiLineData?.athletesToShow?.length === 1;
 
-  // Chart options with responsive settings
-  const baseOptions: ChartOptions<'line'> = {
+  // Chart options with responsive settings (memoized to prevent recreation)
+  const baseOptions: ChartOptions<'line'> = useMemo(() => ({
     plugins: {
       ...config.plugins,
       title: {
@@ -413,10 +413,13 @@ export function MultiLineChart({
       intersect: false,
       mode: 'index'
     }
-  };
+  }), [config, multiLineData?.sortedDates, multiLineData?.athletesToShow, multiLineData?.metrics, getMetricConfig]);
 
-  // Merge with responsive options
-  const options = mergeChartOptions(baseOptions, isMobile);
+  // Merge with responsive options (memoized to prevent recreation)
+  const options = useMemo(
+    () => mergeChartOptions(baseOptions, isMobile),
+    [baseOptions, isMobile]
+  );
 
   // Show loading skeleton when data is processing
   if (isDataProcessing) {

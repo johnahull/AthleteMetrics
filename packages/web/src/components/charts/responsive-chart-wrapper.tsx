@@ -20,8 +20,9 @@ interface ResponsiveChartWrapperProps {
  * - Adjusts height based on viewport
  * - Allows horizontal scrolling on mobile if needed
  * - Maintains proper aspect ratios
+ * - Memoized to prevent unnecessary re-renders
  */
-export function ResponsiveChartWrapper({
+export const ResponsiveChartWrapper = React.memo(function ResponsiveChartWrapper({
   children,
   className,
   mobileHeight = 300,
@@ -44,4 +45,4 @@ export function ResponsiveChartWrapper({
       </div>
     </div>
   );
-}
+});
