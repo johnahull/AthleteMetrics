@@ -787,7 +787,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             <div
               className="space-y-2 max-h-96 overflow-y-auto"
               role="list"
-              aria-label="Current team athletes"
+              aria-label={`Current ${labels.team.toLowerCase()} athletes`}
             >
               {isLoadingCurrent ? (
                 <div className="flex items-center justify-center py-8">
@@ -1175,7 +1175,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             variant="outline"
             onClick={onClose}
             disabled={isPending}
-            aria-label="Close team athletes modal"
+            aria-label={`Close ${labels.team.toLowerCase()} athletes modal`}
           >
             Done
           </Button>

@@ -366,7 +366,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <Input
                   id="name"
                   {...register("name")}
-                  placeholder="e.g., Spring 2025 Team Performance"
+                  placeholder={`e.g., Spring 2025 ${labels.team} Performance`}
                 />
                 {errors.name && (
                   <p className="text-sm text-destructive mt-1">{errors.name.message}</p>

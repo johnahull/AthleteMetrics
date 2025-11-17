@@ -283,9 +283,9 @@ export function GroupSelector({
         <CardContent className={isLoading ? 'opacity-50 pointer-events-none' : ''}>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'teams' | 'age' | 'custom')}>
             <TabsList className="grid w-full grid-cols-3" role="tablist" aria-label="Group selection methods">
-              <TabsTrigger value="teams" aria-label="Create groups by teams">
+              <TabsTrigger value="teams" aria-label={`Create groups by ${labels.teams.toLowerCase()}`}>
                 <Users className="h-4 w-4 mr-2" aria-hidden="true" />
-                Teams
+                {labels.teams}
               </TabsTrigger>
               <TabsTrigger value="age" aria-label="Create groups by age ranges">
                 <Calendar className="h-4 w-4 mr-2" aria-hidden="true" />
