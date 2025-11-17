@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useTeams } from "@/hooks/use-teams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,9 +24,11 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
+import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import { useAuth } from "@/lib/auth";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
 
 interface TeamReportViewProps {
@@ -37,9 +40,18 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const [pdfFormat, setPdfFormat] = useState<PdfFormat>('simplified');
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
+  const { user } = useAuth();
 
   // Fetch teams for team name display
   const { data: teams } = useTeams({ organizationId: report.organizationId });
+
+  // Determine if AI is enabled for this organization
+  const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
+    queryKey: [`/api/organizations/${report.organizationId}`],
+    enabled: !!report.organizationId,
+  });
+
+  const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
   useEffect(() => {
     // Generate report data on mount
@@ -397,6 +409,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Coaching Insights */}
+      <CoachingInsightsCard
+        reportId={report.id}
+        initialInsights={report.coachingInsights}
+        generatedAt={report.coachingInsightsGeneratedAt}
+        model={report.coachingInsightsModel}
+        aiEnabled={aiEnabled || false}
+      />
 
       {/* Team Statistics */}
       {Array.isArray(teamStatistics) && teamStatistics.length > 0 && (

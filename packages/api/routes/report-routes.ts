@@ -1546,10 +1546,90 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
     }
   }
 
+  // Add Coaching Insights section (if available)
+  if (report.coachingInsights) {
+    // Check if we need a new page
+    if (yPos > 220) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    doc.setFontSize(16);
+    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text("Coaching Insights", 14, yPos);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    yPos += 10;
+
+    // Strip markdown formatting for PDF
+    const plainTextInsights = stripMarkdown(report.coachingInsights);
+
+    // Split insights into lines and add with text wrapping
+    const maxWidth = 180; // Maximum text width in PDF units
+    const lineHeight = 5;
+    const lines = doc.splitTextToSize(plainTextInsights, maxWidth);
+
+    lines.forEach((line: string) => {
+      // Check if we need a new page
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.setFontSize(10);
+      doc.text(line, 14, yPos);
+      yPos += lineHeight;
+    });
+
+    yPos += 5;
+
+    // Add generation metadata
+    if (report.coachingInsightsGeneratedAt) {
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      const generatedDate = new Date(report.coachingInsightsGeneratedAt).toLocaleString();
+      const modelText = report.coachingInsightsModel ? ` (${report.coachingInsightsModel})` : '';
+      doc.text(`Generated: ${generatedDate}${modelText}`, 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 10;
+    }
+  }
+
   // Add footer to all pages
   addFooterToAllPages(doc);
 
   return doc;
+}
+
+/**
+ * Helper function: Strip markdown formatting for plain text rendering in PDF
+ */
+function stripMarkdown(markdown: string): string {
+  return markdown
+    // Remove headers (# ## ###)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold (**text** or __text__)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    // Remove italic (*text* or _text_)
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove code blocks (```code```)
+    .replace(/```[\s\S]*?```/g, '')
+    // Remove inline code (`code`)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links ([text](url))
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    // Remove images (![alt](url))
+    .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    // Remove blockquotes (> text)
+    .replace(/^>\s+/gm, '')
+    // Remove horizontal rules (--- or ***)
+    .replace(/^(-{3,}|\*{3,})$/gm, '')
+    // Remove list markers (- or * or 1.)
+    .replace(/^[\s]*[-*+]\s+/gm, '• ')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**

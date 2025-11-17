@@ -57,6 +57,7 @@ export default function OrganizationSettings() {
       isActive: organization.isActive,
       benchmarksEnabled: organization.benchmarksEnabled || false,
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
+      aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
     } : undefined,
   });
 
@@ -83,6 +84,9 @@ export default function OrganizationSettings() {
       }
       if (data.allowCustomBenchmarks !== organization?.allowCustomBenchmarks) {
         changedFields.allowCustomBenchmarks = data.allowCustomBenchmarks;
+      }
+      if (data.aiEnabledBySiteAdmin !== organization?.aiEnabledBySiteAdmin) {
+        changedFields.aiEnabledBySiteAdmin = data.aiEnabledBySiteAdmin;
       }
 
       // If no changes, don't make API call
@@ -299,6 +303,27 @@ export default function OrganizationSettings() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={!form.watch('benchmarksEnabled')}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiEnabledBySiteAdmin"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Coaching Insights</FormLabel>
+                      <FormDescription>
+                        Allow coaches to generate AI insights in reports (Site Admin Only)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
                       />
                     </FormControl>
                   </FormItem>

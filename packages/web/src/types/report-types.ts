@@ -108,4 +108,7 @@ export interface Report {
   isPinned: boolean;
   createdAt: string;
   updatedAt?: string;
+  coachingInsights?: string | null;
+  coachingInsightsGeneratedAt?: string | null;
+  coachingInsightsModel?: string | null;
 }
