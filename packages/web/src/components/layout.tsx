@@ -64,7 +64,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         backgroundSync.stop();
       };
     }
-  }, [user, isPublicRoute]);
+  }, []); // Empty dependency array ensures single initialization
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicRoute) {

@@ -51,14 +51,63 @@ export class OfflineDatabase extends Dexie {
 export const db = new OfflineDatabase();
 
 /**
+ * Check storage quota
+ */
+export async function checkStorageQuota(): Promise<{
+  usage: number;
+  quota: number;
+  percentUsed: number;
+  hasSpace: boolean;
+}> {
+  if ('storage' in navigator && 'estimate' in navigator.storage) {
+    const estimate = await navigator.storage.estimate();
+    const usage = estimate.usage || 0;
+    const quota = estimate.quota || 0;
+    const percentUsed = quota > 0 ? (usage / quota) * 100 : 0;
+
+    return {
+      usage,
+      quota,
+      percentUsed,
+      hasSpace: percentUsed < 90
+    };
+  }
+
+  return {
+    usage: 0,
+    quota: 0,
+    percentUsed: 0,
+    hasSpace: true
+  };
+}
+
+/**
  * Add measurement to offline queue
  */
 export async function addOfflineMeasurement(measurement: Omit<OfflineMeasurement, 'id' | 'synced' | 'createdAt'>) {
-  return await db.measurements.add({
-    ...measurement,
-    synced: false,
-    createdAt: Date.now()
-  });
+  const quota = await checkStorageQuota();
+
+  if (!quota.hasSpace) {
+    throw new Error('Storage quota exceeded. Please sync or clear old data.');
+  }
+
+  try {
+    return await db.measurements.add({
+      ...measurement,
+      synced: false,
+      createdAt: Date.now()
+    });
+  } catch (error: any) {
+    if (error.name === 'QuotaExceededError') {
+      await cleanupOldMeasurements();
+      return await db.measurements.add({
+        ...measurement,
+        synced: false,
+        createdAt: Date.now()
+      });
+    }
+    throw error;
+  }
 }
 
 /**

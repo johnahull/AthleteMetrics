@@ -6,6 +6,7 @@ import { getUnsyncedMeasurements, markMeasurementSynced, cleanupOldMeasurements 
 export class BackgroundSyncService {
   private syncInterval: number | null = null;
   private isSyncing = false;
+  private onlineHandler: (() => void) | null = null;
 
   /**
    * Start background sync (checks every 30 seconds)
@@ -24,10 +25,11 @@ export class BackgroundSyncService {
     }, 30000);
 
     // Listen for online event
-    window.addEventListener('online', () => {
+    this.onlineHandler = () => {
       console.log('[BackgroundSync] Connection restored, syncing...');
       this.syncNow();
-    });
+    };
+    window.addEventListener('online', this.onlineHandler);
   }
 
   /**
@@ -37,6 +39,12 @@ export class BackgroundSyncService {
     if (this.syncInterval) {
       clearInterval(this.syncInterval);
       this.syncInterval = null;
+    }
+
+    // Remove event listener to prevent memory leak
+    if (this.onlineHandler) {
+      window.removeEventListener('online', this.onlineHandler);
+      this.onlineHandler = null;
     }
   }
 
@@ -75,6 +83,7 @@ export class BackgroundSyncService {
             headers: {
               'Content-Type': 'application/json'
             },
+            credentials: 'include',
             body: JSON.stringify({
               userId: measurement.athleteId,
               metricType: measurement.metricType,

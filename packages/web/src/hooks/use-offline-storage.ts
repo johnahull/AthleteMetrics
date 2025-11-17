@@ -126,6 +126,7 @@ export function useAddMeasurementOffline() {
           headers: {
             'Content-Type': 'application/json'
           },
+          credentials: 'include',
           body: JSON.stringify({
             userId: measurement.athleteId,
             metricType: measurement.metricType,
