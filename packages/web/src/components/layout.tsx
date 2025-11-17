@@ -17,6 +17,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/components/ui/drawer";
+import { OfflineStatusIndicator } from "./offline-status-indicator";
+import { backgroundSync } from "@/lib/background-sync";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -53,6 +55,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setShowHelpDialog(false);
     },
   });
+
+  // Start background sync service when user is logged in
+  useEffect(() => {
+    if (user && !isPublicRoute) {
+      backgroundSync.start();
+      return () => {
+        backgroundSync.stop();
+      };
+    }
+  }, [user, isPublicRoute]);
 
   useEffect(() => {
     if (!isLoading && !user && !isPublicRoute) {
@@ -114,6 +126,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </Button>
 
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Offline Status Indicator */}
+            <OfflineStatusIndicator />
+
             <div className="text-sm text-gray-500 hidden sm:block">
               AthleteMetrics
             </div>

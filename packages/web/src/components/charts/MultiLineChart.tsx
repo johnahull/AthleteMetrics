@@ -38,6 +38,9 @@ import { CollapsibleLegend } from './components/CollapsibleLegend';
 import { ChartSkeleton } from './components/ChartSkeleton';
 import { useDebounce } from '@/hooks/useDebounce';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { ResponsiveChartWrapper } from './responsive-chart-wrapper';
+import { mergeChartOptions } from '@/utils/responsive-chart-options';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 // Register Chart.js components
 ChartJS.register(
@@ -101,6 +104,7 @@ export function MultiLineChart({
   dataDebounceDelay = 200
 }: MultiLineChartProps) {
   const { getMetricConfig } = useMetricConfig();
+  const isMobile = useIsMobile();
 
   // Validate chart data
   const dataValidation = validateChartData(data);
@@ -295,10 +299,8 @@ export function MultiLineChart({
   // Determine if this is individual analysis (single athlete) - needed for legend
   const isSingleAthlete = multiLineData?.athletesToShow?.length === 1;
 
-  // Chart options
-  const options: ChartOptions<'line'> = {
-    responsive: true,
-    maintainAspectRatio: false,
+  // Chart options with responsive settings
+  const baseOptions: ChartOptions<'line'> = {
     plugins: {
       ...config.plugins,
       title: {
@@ -413,6 +415,9 @@ export function MultiLineChart({
     }
   };
 
+  // Merge with responsive options
+  const options = mergeChartOptions(baseOptions, isMobile);
+
   // Show loading skeleton when data is processing
   if (isDataProcessing) {
     return (
@@ -449,12 +454,14 @@ export function MultiLineChart({
         />
       )}
 
-      <ChartErrorBoundary
-        fallbackTitle="Multi-Line Chart Error"
-        fallbackMessage="Failed to render the multi-line chart. This may be due to data formatting issues or chart configuration problems."
-      >
-        <Line data={multiLineData} options={options} />
-      </ChartErrorBoundary>
+      <ResponsiveChartWrapper mobileHeight={300} desktopHeight={400}>
+        <ChartErrorBoundary
+          fallbackTitle="Multi-Line Chart Error"
+          fallbackMessage="Failed to render the multi-line chart. This may be due to data formatting issues or chart configuration problems."
+        >
+          <Line data={multiLineData} options={options} />
+        </ChartErrorBoundary>
+      </ResponsiveChartWrapper>
 
       {/* Chart explanation */}
       <div className="mt-4 text-sm">
