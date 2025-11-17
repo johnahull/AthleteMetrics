@@ -56,6 +56,8 @@ jobs:
             - Use TodoWrite to track review tasks
             - Be constructive and specific in feedback
 
+          # Use 'sonnet' alias to automatically get latest Sonnet version
+          # Alternative aliases: 'opus' (latest Opus), 'haiku' (latest Haiku)
           claude_args: --max-turns 20 --model sonnet --allowed-tools "Bash(gh:*),Read,Grep,Glob,TodoWrite"
 
           additional_permissions: |
