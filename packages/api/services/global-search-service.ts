@@ -4,8 +4,8 @@
  */
 
 import { BaseService } from "./base-service";
-import { users, teams, measurements } from "@shared/schema";
-import { sql, or, and, ilike, desc, asc } from "drizzle-orm";
+import { users, teams, measurements, userOrganizations, userTeams } from "@shared/schema";
+import { sql, or, and, ilike, desc, asc, eq, isNull } from "drizzle-orm";
 import { db } from "../db";
 
 export interface GlobalSearchResult {
@@ -92,7 +92,8 @@ export class GlobalSearchService extends BaseService {
 
   /**
    * Search athletes (users) within an organization
-   * Uses PostgreSQL full-text search for fuzzy matching
+   * Uses PostgreSQL ILIKE with trigram indexes for fast fuzzy matching
+   * Optimized with single query using subquery for team names (no N+1)
    */
   private async searchAthletes(
     query: string,
@@ -100,23 +101,34 @@ export class GlobalSearchService extends BaseService {
     limit: number
   ): Promise<AthleteSearchResult[]> {
     try {
-      // Use ILIKE for simple pattern matching (PostgreSQL case-insensitive)
-      // For better fuzzy search, we'll use full-text search with indexes
+      // Use ILIKE for pattern matching with trigram GIN indexes
+      // Migration 0035 creates gin_trgm_ops indexes for fast ILIKE searches
       const searchPattern = `%${query}%`;
 
+      // Single query with subquery for team name - avoids N+1 problem
       const results = await db
         .select({
           id: users.id,
           name: users.fullName,
           birthYear: users.birthYear,
           gender: users.gender,
+          team: sql<string | null>`(
+            SELECT t.name
+            FROM user_teams ut
+            INNER JOIN teams t ON ut.team_id = t.id
+            WHERE ut.user_id = ${users.id}
+              AND ut.is_active = true
+              AND ut.left_at IS NULL
+            ORDER BY ut.joined_at DESC
+            LIMIT 1
+          )`,
         })
         .from(users)
-        .innerJoin(sql`user_organizations`, sql`user_organizations.user_id = ${users.id}`)
+        .innerJoin(userOrganizations, eq(userOrganizations.userId, users.id))
         .where(
           and(
-            sql`user_organizations.organization_id = ${organizationId}`,
-            sql`${users.deletedAt} IS NULL`, // Exclude soft-deleted users
+            eq(userOrganizations.organizationId, organizationId),
+            isNull(users.deletedAt), // Exclude soft-deleted users
             or(
               ilike(users.fullName, searchPattern),
               ilike(users.firstName, searchPattern),
@@ -128,36 +140,13 @@ export class GlobalSearchService extends BaseService {
         .orderBy(asc(users.fullName))
         .limit(limit);
 
-      // For each athlete, get their primary team (if any)
-      const athletesWithTeams = await Promise.all(
-        results.map(async (athlete) => {
-          // Get athlete's first active team
-          const userTeam = await db
-            .select({
-              teamName: teams.name,
-            })
-            .from(sql`user_teams`)
-            .innerJoin(teams, sql`user_teams.team_id = ${teams.id}`)
-            .where(
-              and(
-                sql`user_teams.user_id = ${athlete.id}`,
-                sql`user_teams.is_active = true`,
-                sql`user_teams.left_at IS NULL`
-              )
-            )
-            .limit(1);
-
-          return {
-            id: athlete.id,
-            name: athlete.name,
-            team: userTeam[0]?.teamName || null,
-            birthYear: athlete.birthYear,
-            gender: athlete.gender,
-          };
-        })
-      );
-
-      return athletesWithTeams;
+      return results.map(result => ({
+        id: result.id,
+        name: result.name,
+        team: result.team,
+        birthYear: result.birthYear,
+        gender: result.gender,
+      }));
     } catch (error) {
       console.error("Error searching athletes:", error);
       return [];
@@ -166,6 +155,7 @@ export class GlobalSearchService extends BaseService {
 
   /**
    * Search teams within an organization
+   * Optimized with single query using subquery for athlete counts (no N+1)
    */
   private async searchTeams(
     query: string,
@@ -175,49 +165,37 @@ export class GlobalSearchService extends BaseService {
     try {
       const searchPattern = `%${query}%`;
 
+      // Single query with subquery for athlete count - avoids N+1 problem
       const results = await db
         .select({
           id: teams.id,
           name: teams.name,
           level: teams.level,
+          athleteCount: sql<number>`(
+            SELECT COUNT(DISTINCT ut.user_id)
+            FROM user_teams ut
+            WHERE ut.team_id = ${teams.id}
+              AND ut.is_active = true
+              AND ut.left_at IS NULL
+          )`,
         })
         .from(teams)
         .where(
           and(
-            sql`${teams.organizationId} = ${organizationId}`,
-            sql`${teams.isArchived} = false`, // Only active teams
+            eq(teams.organizationId, organizationId),
+            eq(teams.isArchived, false), // Only active teams
             ilike(teams.name, searchPattern)
           )
         )
         .orderBy(asc(teams.name))
         .limit(limit);
 
-      // Get athlete count for each team
-      const teamsWithCounts = await Promise.all(
-        results.map(async (team) => {
-          const countResult = await db
-            .select({
-              count: sql<number>`COUNT(DISTINCT user_teams.user_id)`,
-            })
-            .from(sql`user_teams`)
-            .where(
-              and(
-                sql`user_teams.team_id = ${team.id}`,
-                sql`user_teams.is_active = true`,
-                sql`user_teams.left_at IS NULL`
-              )
-            );
-
-          return {
-            id: team.id,
-            name: team.name,
-            level: team.level,
-            athleteCount: Number(countResult[0]?.count || 0),
-          };
-        })
-      );
-
-      return teamsWithCounts;
+      return results.map(result => ({
+        id: result.id,
+        name: result.name,
+        level: result.level,
+        athleteCount: Number(result.athleteCount || 0),
+      }));
     } catch (error) {
       console.error("Error searching teams:", error);
       return [];

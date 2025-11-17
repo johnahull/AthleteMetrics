@@ -10,7 +10,9 @@ import { z } from "zod";
 
 // Validation schema for search query parameters
 const searchQuerySchema = z.object({
-  q: z.string().min(1).max(100),
+  q: z.string()
+    .min(2, "Search query must be at least 2 characters")
+    .max(100, "Search query must not exceed 100 characters"),
   limit: z.string().optional().transform((val) => val ? parseInt(val, 10) : 20),
   includeAthletes: z.string().optional().transform((val) => val !== 'false'),
   includeTeams: z.string().optional().transform((val) => val !== 'false'),
@@ -47,15 +49,30 @@ export function registerSearchRoutes(app: Express) {
       // TODO: Add organization context to request (e.g., from URL param or session)
       const userOrganizations = await globalSearchService.getUserOrganizations(user.id);
 
-      if (userOrganizations.length === 0 && !user.isSiteAdmin) {
-        return res.status(403).json({
-          message: "User does not belong to any organization",
-        });
+      // Validate user has access to an organization
+      if (userOrganizations.length === 0) {
+        if (user.isSiteAdmin) {
+          // Site admins without org context need to select an organization first
+          return res.status(400).json({
+            message: "Please select an organization to search within",
+            hint: "Site admins must be in an organization context to use search",
+          });
+        } else {
+          // Regular users must belong to at least one organization
+          return res.status(403).json({
+            message: "User does not belong to any organization",
+          });
+        }
       }
 
-      // Site admins can search across all orgs, but for now we'll use the first org
-      // In the future, we might add org switching or multi-org search
-      const organizationId = userOrganizations[0]?.organizationId || '';
+      const organizationId = userOrganizations[0].organizationId;
+
+      // Ensure organizationId is valid (extra safety check)
+      if (!organizationId) {
+        return res.status(500).json({
+          message: "Invalid organization context",
+        });
+      }
 
       // Perform global search
       const results = await globalSearchService.globalSearch(

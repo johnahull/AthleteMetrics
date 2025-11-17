@@ -82,8 +82,8 @@ export function useGlobalSearch(options: UseGlobalSearchOptions) {
 
       return response.json();
     },
-    // Only search if query has at least 1 character
-    enabled: debouncedQuery.length >= 1,
+    // Only search if query has at least 2 characters (matches backend validation)
+    enabled: debouncedQuery.length >= 2,
     // Cache results for 5 minutes
     staleTime: 5 * 60 * 1000,
     // Don't retry on failure (search should be fast)
