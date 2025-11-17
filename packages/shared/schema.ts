@@ -15,6 +15,9 @@ export const organizations = pgTable("organizations", {
   // Benchmark feature flags (added in migration 0024)
   benchmarksEnabled: boolean("benchmarks_enabled").default(false).notNull(),
   allowCustomBenchmarks: boolean("allow_custom_benchmarks").default(false).notNull(),
+  // AI Coaching Insights feature flags (added in migrations 0037)
+  aiEnabledBySiteAdmin: boolean("ai_enabled_by_site_admin").default(false).notNull(),
+  aiEnabled: boolean("ai_enabled").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -350,6 +353,14 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
 }));
 
+// Site Settings - Global site configuration (singleton table)
+export const siteSettings = pgTable("site_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
+});
+
 // Reports - Performance reporting system
 export const reports = pgTable("reports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -390,6 +401,11 @@ export const reports = pgTable("reports", {
     }
   }
   */
+
+  // AI Coaching Insights (added in migration 0038)
+  coachingInsights: text("coaching_insights"),
+  coachingInsightsGeneratedAt: timestamp("coaching_insights_generated_at"),
+  coachingInsightsModel: text("coaching_insights_model"),
 
   // Metadata
   isTemplate: boolean("is_template").default(false).notNull(),
@@ -699,6 +715,8 @@ export const updateOrganizationSchema = z.object({
   isActive: z.boolean().optional(),
   benchmarksEnabled: z.boolean().optional(),
   allowCustomBenchmarks: z.boolean().optional(),
+  aiEnabledBySiteAdmin: z.boolean().optional(), // Only site admin can set this
+  aiEnabled: z.boolean().optional(), // Org admin can set this
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
@@ -1388,3 +1406,35 @@ export const insertAthleteSchema = z.object({
 });
 
 // Legacy compatibility exports removed - use Athlete types instead
+
+// Site Settings validation schemas
+export const AI_MODELS = [
+  "gpt-5-nano",
+  "gemini-2.0-flash-lite",
+  "gemini-2.5-flash-lite",
+  "claude-haiku-3",
+  "claude-haiku-4.5",
+  "gemini-2.5-pro",
+  "claude-sonnet-4.5",
+] as const;
+
+export type AIModel = typeof AI_MODELS[number];
+
+export const updateSiteSettingsSchema = z.object({
+  aiModel: z.enum(AI_MODELS),
+});
+
+export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({
+  id: true,
+  updatedAt: true,
+  updatedBy: true,
+});
+
+// Report Insights validation schemas
+export const updateReportInsightsSchema = z.object({
+  coachingInsights: z.string().min(1, "Insights cannot be empty").max(10000, "Insights must be 10000 characters or less"),
+});
+
+export const generateReportInsightsSchema = z.object({
+  reportId: z.string().uuid(),
+});

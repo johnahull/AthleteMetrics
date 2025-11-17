@@ -15,6 +15,7 @@ import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 import { registerSearchRoutes } from "./search-routes";
+import siteSettingsRoutes from "./site-settings-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -56,6 +57,9 @@ export function registerAllRoutes(app: Express) {
 
   // Global search routes (command palette)
   registerSearchRoutes(app);
+
+  // Site settings routes (AI model configuration)
+  app.use("/api/site-settings", siteSettingsRoutes);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);

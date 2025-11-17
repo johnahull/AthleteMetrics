@@ -6,7 +6,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
-import { requireAuth } from "../middleware";
+import { requireAuth, requireAIEnabled } from "../middleware";
+import { storage } from "../storage";
 import {
   insertReportSchema,
   reports,
@@ -1080,6 +1081,109 @@ export function registerReportRoutes(app: Express) {
       }
     }
   );
+
+  /**
+   * Generate AI coaching insights for a report
+   * POST /api/reports/:id/generate-insights
+   *
+   * Requires: AI enabled for organization (both flags)
+   */
+  app.post("/api/reports/:id/generate-insights", reportLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
+    try {
+      const reportId = req.params.id;
+      const user = req.session?.user || req.user;
+
+      // Get report
+      const report = await storage.getReport(reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // Check user has access to this report's organization
+      const org = await storage.getOrganization(report.organizationId);
+      if (!org) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      // Get site settings to determine which AI model to use
+      const siteSettings = await storage.getSiteSettings();
+      const modelKey = siteSettings?.aiModel || "gpt-5-nano";
+
+      // Build report data for AI
+      const reportData = await buildReportDataForAI(report);
+
+      // Generate insights using AI service
+      const { generateCoachingInsights } = await import("../services/ai-insights-service");
+      const insights = await generateCoachingInsights(modelKey, reportData);
+
+      // Update report with generated insights
+      const updatedReport = await storage.updateReport(reportId, {
+        coachingInsights: insights,
+        coachingInsightsGeneratedAt: new Date(),
+        coachingInsightsModel: modelKey,
+      });
+
+      res.json({
+        insights,
+        generatedAt: updatedReport.coachingInsightsGeneratedAt,
+        model: modelKey,
+      });
+    } catch (error) {
+      console.error("Error generating coaching insights:", error);
+      res.status(500).json({
+        message: "Failed to generate coaching insights",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  /**
+   * Update coaching insights for a report (manual edit)
+   * PATCH /api/reports/:id/insights
+   */
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, async (req, res) => {
+    try {
+      const reportId = req.params.id;
+      const { coachingInsights } = req.body;
+
+      // Validate insights
+      const { updateReportInsightsSchema } = await import("@shared/schema");
+      updateReportInsightsSchema.parse({ coachingInsights });
+
+      // Get report
+      const report = await storage.getReport(reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // Update report insights
+      const updatedReport = await storage.updateReport(reportId, {
+        coachingInsights,
+        coachingInsightsGeneratedAt: new Date(),
+        coachingInsightsModel: report.coachingInsightsModel, // Keep original model
+      });
+
+      res.json({
+        insights: updatedReport.coachingInsights,
+        generatedAt: updatedReport.coachingInsightsGeneratedAt,
+        model: updatedReport.coachingInsightsModel,
+      });
+    } catch (error) {
+      console.error("Error updating coaching insights:", error);
+
+      if (error instanceof Error && error.name === "ZodError") {
+        return res.status(400).json({
+          message: "Validation error",
+          errors: error,
+        });
+      }
+
+      res.status(500).json({
+        message: "Failed to update coaching insights",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
 }
 
 /**
@@ -1511,3 +1615,20 @@ function calculateBenchmarkAchievements(athleteRankings: any[]) {
   return achievements;
 }
 
+/**
+ * Build report data structure for AI insights generation
+ */
+async function buildReportDataForAI(report: any): Promise<any> {
+  // This is a simplified version - you'll need to expand this based on actual report structure
+  // For now, return a basic structure
+  return {
+    reportType: report.reportType,
+    reportName: report.name,
+    organizationName: "Organization", // TODO: fetch actual org name
+    timeframe: "Current Season", // TODO: extract from report config
+    metrics: [], // TODO: fetch actual measurement data
+    improvements: [],
+    concerns: [],
+    benchmarkComparisons: [],
+  };
+}

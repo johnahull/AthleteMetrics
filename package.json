@@ -84,6 +84,8 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.0.31",
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@google/generative-ai": "^0.24.1",
     "@react-pdf/renderer": "^4.3.1",
     "chartjs-node-canvas": "^5.0.0",
     "date-fns": "^3.6.0",
@@ -92,7 +94,9 @@
     "drizzle-zod": "^0.7.0",
     "jspdf-autotable": "^5.0.2",
     "nanoid": "^5.1.6",
+    "openai": "^6.9.0",
     "postgres": "^3.4.5",
+    "react-markdown": "^10.1.0",
     "simple-statistics": "^7.8.8",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
