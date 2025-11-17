@@ -335,9 +335,80 @@ export function validateOrgTypeArray(
 }
 
 /**
+ * Middleware to verify user has access to a specific organization type
+ * Non-admin users can only access data for organization types they belong to
+ *
+ * @param storage - Storage instance for database queries
+ * @returns Express middleware function
+ *
+ * @example
+ * ```typescript
+ * app.get('/api/organization-types/:orgType/metrics',
+ *   requireAuth,
+ *   validateOrgTypeParam('orgType'),
+ *   verifyOrganizationTypeAccess(storage),
+ *   handler
+ * );
+ * ```
+ */
+export function verifyOrganizationTypeAccess(storage: any) {
+  return async (req: OrganizationTypeRequest, res: Response, next: NextFunction) => {
+    try {
+      const user = req.session?.user;
+      if (!user) {
+        throw new OrganizationTypeError(
+          OrganizationTypeErrorType.UNAUTHORIZED_TYPE_ACCESS,
+          'Authentication required',
+          401
+        );
+      }
+
+      // Site admins have access to all organization types
+      if (user.isSiteAdmin) {
+        return next();
+      }
+
+      // Get requested organization type from params
+      const requestedOrgType = req.params.orgType as OrganizationType | undefined;
+      if (!requestedOrgType) {
+        return next(); // No org type specified, proceed (will be handled by other validation)
+      }
+
+      // Get user's organizations to check their organization types
+      const userOrgs = await storage.getUserOrganizations(user.id);
+
+      // Extract unique organization types the user belongs to
+      const userOrgTypes = new Set(
+        userOrgs
+          .map((uo: any) => uo.organization?.orgType)
+          .filter((type: any) => type != null)
+      );
+
+      // Check if user has access to the requested organization type
+      if (!userOrgTypes.has(requestedOrgType)) {
+        throw new OrganizationTypeError(
+          OrganizationTypeErrorType.UNAUTHORIZED_TYPE_ACCESS,
+          `You don't have access to resources for organization type '${requestedOrgType}'. You can only access data for organization types you belong to.`,
+          403,
+          {
+            requestedOrgType,
+            userOrgTypes: Array.from(userOrgTypes),
+            userId: user.id
+          }
+        );
+      }
+
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/**
  * Authorization middleware to check if user can access specific organization type data
  * Enforces business rules for organization type access
- * 
+ *
  * @param allowedRoles - Roles allowed to access organization type data
  * @returns Express middleware function
  */
@@ -370,9 +441,6 @@ export function authorizeOrganizationTypeAccess(
           { userRole, allowedRoles }
         );
       }
-
-      // Additional business logic can be added here
-      // For example, checking if user's organization matches the requested organization type
 
       next();
     } catch (error) {

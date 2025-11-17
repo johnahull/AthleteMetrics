@@ -33,6 +33,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -70,6 +71,7 @@ interface ReportWizardProps {
 }
 
 export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
+  const labels = useContextualLabels();
   const { organizationContext } = useAuth();
   const [step, setStep] = useState(1);
   const totalSteps = 8;
@@ -302,9 +304,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <div className="flex items-center space-x-2 border rounded-lg p-4 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="team" id="team" />
                   <Label htmlFor="team" className="cursor-pointer flex-1">
-                    <div className="font-semibold">Team Report</div>
+                    <div className="font-semibold">{labels.team} Report</div>
                     <div className="text-sm text-muted-foreground">
-                      Team-wide performance analysis with rankings and composite index
+                      {labels.team}-wide performance analysis with rankings and composite index
                     </div>
                   </Label>
                 </div>
@@ -313,7 +315,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   <Label htmlFor="individual" className="cursor-pointer flex-1">
                     <div className="font-semibold">Individual Report</div>
                     <div className="text-sm text-muted-foreground">
-                      Individual athlete performance with team rank and percentiles
+                      Individual {labels.athlete.toLowerCase()} performance with {labels.team.toLowerCase()} rank and percentiles
                     </div>
                   </Label>
                 </div>
@@ -327,9 +329,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
           {/* Step 2: Athlete Selection (Individual Reports Only) */}
           {step === 2 && reportType === "individual" && (
             <div className="space-y-4">
-              <Label>Select Athletes</Label>
+              <Label>Select {labels.athletes}</Label>
               <p className="text-sm text-muted-foreground">
-                Choose individual athletes or select entire teams. One report will be created for each athlete.
+                Choose individual {labels.athletes.toLowerCase()} or select entire {labels.teams.toLowerCase()}. One report will be created for each {labels.athlete.toLowerCase()}.
               </p>
 
               <TeamAthleteSelector
@@ -588,18 +590,18 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               </p>
 
               <div>
-                <Label>Teams</Label>
+                <Label>{labels.teams}</Label>
                 {teamsLoading ? (
                   <div className="flex justify-center py-4">
                     <LoadingSpinner />
                   </div>
                 ) : teamsError ? (
                   <div className="border border-destructive rounded-lg p-4 text-center">
-                    <p className="text-sm text-destructive">Failed to load teams</p>
+                    <p className="text-sm text-destructive">Failed to load {labels.teams.toLowerCase()}</p>
                   </div>
                 ) : !teams || teams.length === 0 ? (
                   <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                    <p className="text-sm">No teams available</p>
+                    <p className="text-sm">No {labels.teams.toLowerCase()} available</p>
                   </div>
                 ) : (
                   <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">

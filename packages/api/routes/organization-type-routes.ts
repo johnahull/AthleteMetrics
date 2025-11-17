@@ -21,6 +21,7 @@ import {
   validateOrgTypeQuery,
   validateOrgTypeArray,
   authorizeOrganizationTypeAccess,
+  verifyOrganizationTypeAccess,
   handleOrganizationTypeError,
   logOrganizationTypeAccess,
   getOrganizationTypeFromRequest,
@@ -31,6 +32,7 @@ import {
   OrganizationTypeConstants,
   type OrganizationType,
 } from "@shared/organization-type-utils";
+import { storage } from "../storage";
 
 const organizationTypeService = new OrganizationTypeService();
 
@@ -144,6 +146,7 @@ export function registerOrganizationTypeRoutes(app: Express) {
     readLimiter,
     requireAuth,
     validateOrgTypeParam('orgType', true),
+    verifyOrganizationTypeAccess(storage),
     logOrganizationTypeAccess('organization_type_metrics_accessed'),
     async (req, res) => {
       try {
@@ -188,10 +191,11 @@ export function registerOrganizationTypeRoutes(app: Express) {
    * Get benchmarks available for specific organization type
    */
   app.get(
-    "/api/organization-types/:orgType/benchmarks", 
+    "/api/organization-types/:orgType/benchmarks",
     readLimiter,
     requireAuth,
     validateOrgTypeParam('orgType', true),
+    verifyOrganizationTypeAccess(storage),
     logOrganizationTypeAccess('organization_type_benchmarks_accessed'),
     async (req, res) => {
       try {
@@ -240,6 +244,7 @@ export function registerOrganizationTypeRoutes(app: Express) {
     readLimiter,
     requireAuth,
     validateOrgTypeParam('orgType', true),
+    verifyOrganizationTypeAccess(storage),
     authorizeOrganizationTypeAccess(['site_admin', 'org_admin']),
     logOrganizationTypeAccess('organization_type_organizations_accessed'),
     async (req, res) => {

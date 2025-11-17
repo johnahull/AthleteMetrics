@@ -32,7 +32,14 @@ const CACHE_DURATION_MS = 5 * 60 * 1000;
 
 /**
  * Simple in-memory cache for organization type queries with LRU eviction
- * TODO: Replace with Redis in production for horizontal scaling
+ *
+ * PRODUCTION NOTE: This implementation is suitable for single-instance deployments.
+ * For horizontal scaling (multiple server instances), replace with Redis or Memcached.
+ *
+ * CONCURRENCY SAFETY: While Node.js is single-threaded, async operations can interleave.
+ * This implementation uses snapshot-based iteration to minimize inconsistencies.
+ *
+ * @see https://redis.io/ for production-grade distributed caching
  */
 interface CacheEntry<T> {
   data: T;
@@ -46,6 +53,7 @@ class SimpleCache<T> {
   private maxSize: number;
   private hits = 0;
   private misses = 0;
+  private evicting = false; // Prevent concurrent eviction operations
 
   constructor(maxSize: number = 1000) {
     this.maxSize = maxSize;
@@ -55,6 +63,7 @@ class SimpleCache<T> {
     const now = Date.now();
 
     // Implement LRU eviction if cache is full
+    // Use evicting flag to prevent concurrent eviction operations
     if (this.cache.size >= this.maxSize && !this.cache.has(key)) {
       this.evictOldest();
     }
@@ -82,6 +91,7 @@ class SimpleCache<T> {
     }
 
     // Update last accessed time for LRU tracking
+    // This mutation is safe because Map preserves insertion order
     entry.lastAccessed = now;
     this.hits++;
     return entry.data;
@@ -89,10 +99,16 @@ class SimpleCache<T> {
 
   invalidate(pattern?: string): void {
     if (pattern) {
+      // Create snapshot of keys to avoid mutation during iteration
+      const keysToDelete: string[] = [];
       for (const key of this.cache.keys()) {
         if (key.includes(pattern)) {
-          this.cache.delete(key);
+          keysToDelete.push(key);
         }
+      }
+      // Delete after iteration completes
+      for (const key of keysToDelete) {
+        this.cache.delete(key);
       }
     } else {
       this.cache.clear();
@@ -110,20 +126,45 @@ class SimpleCache<T> {
   /**
    * Evict the least recently used entry from cache
    * Used when cache reaches maxSize limit
+   *
+   * CONCURRENCY NOTE: Uses evicting flag and snapshot-based iteration
+   * to prevent inconsistencies from interleaved async operations
    */
   private evictOldest(): void {
-    let oldestKey: string | null = null;
-    let oldestTime = Infinity;
-
-    for (const [key, entry] of this.cache) {
-      if (entry.lastAccessed < oldestTime) {
-        oldestTime = entry.lastAccessed;
-        oldestKey = key;
-      }
+    // Prevent concurrent eviction operations
+    if (this.evicting) {
+      return;
     }
 
-    if (oldestKey) {
-      this.cache.delete(oldestKey);
+    this.evicting = true;
+
+    try {
+      // Create snapshot of entries to avoid issues with concurrent modifications
+      // While Node.js is single-threaded, async operations can interleave between
+      // iterations, potentially causing inconsistent state
+      const entries = Array.from(this.cache.entries());
+
+      if (entries.length === 0) {
+        return;
+      }
+
+      // Find oldest entry from snapshot
+      let oldestKey: string | null = null;
+      let oldestTime = Infinity;
+
+      for (const [key, entry] of entries) {
+        if (entry.lastAccessed < oldestTime) {
+          oldestTime = entry.lastAccessed;
+          oldestKey = key;
+        }
+      }
+
+      // Delete oldest entry if found
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    } finally {
+      this.evicting = false;
     }
   }
 
@@ -309,11 +350,11 @@ export class OrganizationTypeService extends BaseService {
 
       this.performanceMetrics.cacheMisses++;
 
-      // Query database with optimized SQL
-      // Note: This would need to be implemented with proper storage interface
-      // For now, using placeholder implementation
-      // TODO: Implement proper filtering by organization type in storage layer
-      const benchmarks = await this.storage.getSiteBenchmarks() || [];
+      // Query database with organization type filtering
+      const benchmarks = await this.storage.getSiteBenchmarks({
+        includeInactive: false,
+        orgType: orgType
+      }) || [];
 
       // Cache results
       if (useCache && benchmarks) {
@@ -388,22 +429,11 @@ export class OrganizationTypeService extends BaseService {
 
       this.performanceMetrics.cacheMisses++;
 
-      // Build query conditions
-      const conditions: string[] = [];
-      if (!includeInactive) {
-        conditions.push("is_active = true");
-      }
-      if (orgType) {
-        conditions.push(`org_type = '${orgType}'`);
-      }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-      // Query database
-      // Note: This would need to be implemented with proper storage interface
-      // For now, using placeholder implementation
-      // TODO: Implement proper filtering by organization type in storage layer
-      const organizations = await this.storage.getOrganizations() || [];
+      // Query database with organization type filtering using new storage method
+      const organizations = await this.storage.getOrganizations({
+        includeInactive: includeInactive,
+        orgType: orgType
+      }) || [];
 
       // Cache results (shorter cache for admin queries with inactive orgs)
       const cacheTime = includeInactive ? CACHE_DURATION_MS / 2 : CACHE_DURATION_MS;

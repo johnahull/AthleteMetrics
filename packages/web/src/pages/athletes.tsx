@@ -19,9 +19,11 @@ import { PaginationControls } from "@/components/team-athletes/PaginationControl
 import { TableSkeleton } from "@/components/ui/loading-states";
 import { useResponsiveMode } from "@/hooks/use-mobile";
 import { AthletesCardView } from "@/components/athletes-card-view";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function Athletes() {
   const responsiveMode = useResponsiveMode();
+  const labels = useContextualLabels();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
 
@@ -282,7 +284,7 @@ export default function Athletes() {
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || "Failed to remove athlete from team",
+        description: error.message || `Failed to remove athlete from team`,
         variant: "destructive",
       });
     },
@@ -691,7 +693,7 @@ export default function Athletes() {
     <div className="p-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
-        <h1 className="text-2xl font-semibold text-gray-900">Athletes Management</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">{labels.athletes} Management</h1>
         <div className="flex space-x-3">
           <Button 
             variant="outline" 
@@ -735,14 +737,14 @@ export default function Athletes() {
         <CardContent className="p-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{labels.team}</label>
               <Select value={filters.teamId} onValueChange={(value) => setFilters(prev => ({ ...prev, teamId: value }))}>
                 <SelectTrigger data-testid="select-team-filter">
-                  <SelectValue placeholder="All Teams" />
+                  <SelectValue placeholder={`All ${labels.teams}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
-                  <SelectItem value="none">Independent Athletes (No Team)</SelectItem>
+                  <SelectItem value="all">All {labels.teams}</SelectItem>
+                  <SelectItem value="none">Independent {labels.athletes} (No {labels.team})</SelectItem>
                   {teams?.filter((team: Team) => team.isArchived !== true).map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -833,7 +835,7 @@ export default function Athletes() {
                 <div className="flex space-x-2">
                   {filters.teamId && filters.teamId !== 'all' && (
                     <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                      Team: {filters.teamId === 'none' ? 'Independent Athletes' : teams?.find((t: any) => t.id === filters.teamId)?.name}
+                      {labels.team}: {filters.teamId === 'none' ? `Independent ${labels.athletes}` : teams?.find((t: any) => t.id === filters.teamId)?.name}
                     </span>
                   )}
                   {filters.gender && filters.gender !== 'all' && (
@@ -1060,7 +1062,7 @@ export default function Athletes() {
                       aria-sort={sortColumn === 'team' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
-                        Team
+                        {labels.team}
                         {sortColumn === 'team' ? (
                           sortDirection === 'asc' ? (
                             <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
@@ -1201,11 +1203,11 @@ export default function Athletes() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-gray-600">
-                        {athlete.teams && athlete.teams.length > 0 
-                          ? athlete.teams.length > 1 
+                        {athlete.teams && athlete.teams.length > 0
+                          ? athlete.teams.length > 1
                             ? `${athlete.teams[0].name} (+${athlete.teams.length - 1} more)`
                             : athlete.teams[0].name
-                          : "Independent"
+                          : `Independent`
                         }
                       </td>
                       <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
@@ -1334,7 +1336,7 @@ export default function Athletes() {
                               onClick={() => handleRemoveAthleteFromTeam(athlete.id, athlete.fullName, filters.teamId)}
                               className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                               disabled={removeAthleteFromTeamMutation.isPending}
-                              title={`Remove from ${teams.find((t: any) => t.id === filters.teamId)?.name || 'team'}`}
+                              title={`Remove from ${teams.find((t: any) => t.id === filters.teamId)?.name || labels.team.toLowerCase()}`}
                               data-testid={`button-remove-from-team-${athlete.id}`}
                             >
                               <UserMinus className="h-4 w-4" />

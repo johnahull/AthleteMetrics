@@ -37,8 +37,10 @@ import {
   TEAM_HANDLING_DESCRIPTIONS
 } from "@shared/import-types";
 import { useAuth } from "@/lib/auth";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function ImportExport() {
+  const labels = useContextualLabels();
   const [importType, setImportType] = useState<"athletes" | "measurements">("athletes");
 
   // New import mode states
@@ -1193,7 +1195,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
 
                   {/* Team Handling */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Team Handling</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">{labels.team} Handling</label>
                     <Select
                       value={teamHandling}
                       onValueChange={(value) => setTeamHandling(value as TeamHandlingMode)}
@@ -1596,7 +1598,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   <Download className="h-6 w-6 text-blue-600" />
                 </div>
                 <h4 className="font-medium text-gray-900 mb-2">Export Athletes</h4>
-                <p className="text-sm text-gray-600 mb-4">Download all athlete information including team assignments</p>
+                <p className="text-sm text-gray-600 mb-4">Download all athlete information including {labels.team.toLowerCase()} assignments</p>
                 <Button 
                   onClick={() => handleExport("athletes")}
                   className="w-full bg-blue-600 hover:bg-blue-700"
@@ -1628,7 +1630,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   <Download className="h-6 w-6 text-purple-600" />
                 </div>
                 <h4 className="font-medium text-gray-900 mb-2">Full Export</h4>
-                <p className="text-sm text-gray-600 mb-4">Download complete database backup including all teams and data</p>
+                <p className="text-sm text-gray-600 mb-4">Download complete database backup including all {labels.teams.toLowerCase()} and data</p>
                 <Button 
                   onClick={() => {
                     handleExport("athletes");
@@ -1651,7 +1653,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   <ul className="space-y-1 text-xs">
                     <li>• Exported files will include all data visible in your current view/filters</li>
                     <li>• Use the analytics page filters to customize what gets exported</li>
-                    <li>• Full export includes all teams, athletes, and measurements</li>
+                    <li>• Full export includes all {labels.teams.toLowerCase()}, athletes, and measurements</li>
                   </ul>
                 </div>
               </div>
@@ -1663,9 +1665,9 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
         <Dialog open={showTeamConfirmDialog} onOpenChange={setShowTeamConfirmDialog}>
           <DialogContent className="sm:max-w-[600px]">
             <DialogHeader>
-              <DialogTitle>Create Missing Teams?</DialogTitle>
+              <DialogTitle>Create Missing {labels.teams}?</DialogTitle>
               <DialogDescription>
-                The following teams don't exist in your organization. Would you like to create them?
+                The following {labels.teams.toLowerCase()} don't exist in your organization. Would you like to create them?
               </DialogDescription>
             </DialogHeader>
 
@@ -1674,7 +1676,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
               {userOrganizations && userOrganizations.length > 1 && (
                 <div className="mb-4">
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Select Organization for New Teams
+                    Select Organization for New {labels.teams}
                   </label>
                   <Select value={selectedOrgForTeams} onValueChange={setSelectedOrgForTeams}>
                     <SelectTrigger>

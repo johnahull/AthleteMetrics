@@ -361,6 +361,22 @@ export function getOrganizationTypeFilterSQL(
     throw new Error(`Invalid column name: ${columnName}. Allowed columns: ${validColumns.join(', ')}`);
   }
 
+  // Additional runtime validation of orgType to prevent SQL injection
+  // Even though TypeScript enforces the type, validate at runtime for API boundaries
+  if (!isValidOrganizationType(orgType)) {
+    throw new Error(
+      `Invalid organization type: "${orgType}". Expected one of: ${organizationTypeEnum.join(', ')}`
+    );
+  }
+
+  // SECURITY NOTE: This function returns a raw SQL string. While both parameters are validated
+  // (columnName via whitelist, orgType via enum validation), the preferred approach is to use
+  // Drizzle ORM's parameterized queries. This function is kept for backward compatibility but
+  // should be migrated to use Drizzle SQL templates in future refactoring.
+  //
+  // Recommended migration:
+  // import { sql } from 'drizzle-orm';
+  // const filter = sql`(${column} IS NULL OR ${column} && ARRAY[${orgType}]::text[])`;
   return `(${columnName} IS NULL OR ${columnName} && ARRAY['${orgType}']::text[])`;
 }
 
