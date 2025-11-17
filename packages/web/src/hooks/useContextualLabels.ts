@@ -54,6 +54,12 @@ export interface ContextualLabels {
 
   /** Complete terminology set for advanced usage */
   readonly all: ContextualTerminology;
+
+  /** Whether the organization data is currently loading */
+  readonly isLoading: boolean;
+
+  /** Error object if organization fetch failed */
+  readonly error: Error | null;
 }
 
 /**
@@ -62,9 +68,15 @@ export interface ContextualLabels {
  * @param organizationId - The organization ID from auth context
  * @returns Organization data including orgType
  */
+/**
+ * Cache duration for organization data
+ * Organization type rarely changes, so we cache for 5 minutes
+ */
+const ORGANIZATION_CACHE_DURATION = 5 * 60 * 1000;
+
 function useOrganization(organizationId: string | null) {
   return useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
+    queryKey: ['organizations', organizationId, 'details'],
     queryFn: async () => {
       if (!organizationId) return null;
 
@@ -75,7 +87,7 @@ function useOrganization(organizationId: string | null) {
       return response.json() as Promise<{ id: string; orgType: OrganizationType }>;
     },
     enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000, // 5 minutes - org type rarely changes
+    staleTime: ORGANIZATION_CACHE_DURATION,
   });
 }
 
@@ -116,11 +128,16 @@ function useOrganization(organizationId: string | null) {
  */
 export function useContextualLabels(): ContextualLabels {
   const { organizationContext } = useAuth();
-  const { data: organization } = useOrganization(organizationContext);
+  const { data: organization, isLoading, error } = useOrganization(organizationContext);
 
   return useMemo(() => {
     const orgType = organization?.orgType ?? null;
     const allLabels = getContextualLabels(orgType);
+
+    // Log errors for debugging (non-blocking)
+    if (error) {
+      console.error('Failed to fetch organization for contextual labels:', error);
+    }
 
     return {
       orgType,
@@ -131,8 +148,10 @@ export function useContextualLabels(): ContextualLabels {
       athlete: getAthleteLabel(orgType, false),
       athletes: getAthleteLabel(orgType, true),
       all: allLabels,
+      isLoading,
+      error: error as Error | null,
     };
-  }, [organization?.orgType]);
+  }, [organization?.orgType, isLoading, error]);
 }
 
 /**
@@ -170,6 +189,8 @@ export function useContextualLabelsFor(orgType: OrganizationType | null | undefi
       athlete: getAthleteLabel(normalizedOrgType, false),
       athletes: getAthleteLabel(normalizedOrgType, true),
       all: allLabels,
+      isLoading: false, // Static labels, no loading state
+      error: null, // Static labels, no error state
     };
   }, [orgType]);
 }
