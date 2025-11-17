@@ -284,7 +284,7 @@ export default function Athletes() {
     onError: (error: any) => {
       toast({
         title: "Error",
-        description: error.message || `Failed to remove athlete from team`,
+        description: error.message || `Failed to remove athlete from ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },

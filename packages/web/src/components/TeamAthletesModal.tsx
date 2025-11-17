@@ -292,7 +292,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       toast({
         title: "Error",
-        description: error.message || "Failed to remove athlete from team",
+        description: error.message || `Failed to remove athlete from ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -532,7 +532,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       toast({
         title: "Error",
-        description: error.message || "Failed to remove athletes from team",
+        description: error.message || `Failed to remove athletes from ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -890,7 +890,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                             onClick={() => handleRemoveAthlete(athlete.id, athlete.fullName || `${athlete.firstName} ${athlete.lastName}`)}
                             className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                             disabled={isPending}
-                            aria-label={`Remove ${athlete.firstName} ${athlete.lastName} from team`}
+                            aria-label={`Remove ${athlete.firstName} ${athlete.lastName} from ${labels.team.toLowerCase()}`}
                           >
                             <UserMinus className="h-4 w-4" aria-hidden="true" />
                             <span className="sr-only">Remove</span>
@@ -1063,7 +1063,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                             checked={isSelected}
                             onCheckedChange={(checked) => handleAthleteSelection(athlete.id, checked === true)}
                             disabled={isPending || isOnTeam}
-                            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athlete.firstName} ${athlete.lastName}${isOnTeam ? ' (already on team)' : ''}`}
+                            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athlete.firstName} ${athlete.lastName}${isOnTeam ? ` (already on ${labels.team.toLowerCase()})` : ''}`}
                           />
                           <div
                             className="w-10 h-10 bg-primary rounded-full flex items-center justify-center"

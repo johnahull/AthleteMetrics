@@ -73,7 +73,7 @@ export function AthleteCard({
               checked={isSelected}
               onCheckedChange={(checked) => onSelection(athlete.id, checked === true)}
               disabled={isPending || isOnTeam}
-              aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athleteName}${isOnTeam ? ' (already on team)' : ''}`}
+              aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athleteName}${isOnTeam ? ` (already on ${labels.team.toLowerCase()})` : ''}`}
             />
           )}
 
