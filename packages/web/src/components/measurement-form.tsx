@@ -108,6 +108,7 @@ export default function MeasurementForm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
         description: "Measurement added successfully",

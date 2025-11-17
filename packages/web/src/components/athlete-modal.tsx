@@ -193,6 +193,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
 
       // IMPROVED ERROR HANDLING: Show team assignment warnings if present
       if (data.teamErrors && data.teamErrors.length > 0) {
@@ -245,6 +246,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       queryClient.invalidateQueries({ queryKey: ["/api/athletes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/athletes", athlete?.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
         description: "Athlete updated successfully",

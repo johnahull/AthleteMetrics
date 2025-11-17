@@ -11,6 +11,10 @@ import Layout from "./components/layout";
 import Login from "./pages/login";
 import NotFound from "@/pages/not-found";
 import { performanceMonitor } from "./utils/performance-monitoring";
+import { CommandPaletteProvider, useCommandPalette } from "./components/command-palette/command-palette-provider";
+import { CommandPalette } from "./components/command-palette/command-palette";
+import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-shortcuts-help";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 // Lazy load heavy pages to reduce initial bundle size
 const Dashboard = React.lazy(() => import("./pages/dashboard"));
@@ -212,6 +216,21 @@ function Router() {
   );
 }
 
+function AppContent() {
+  const { isHelpOpen, closeHelp } = useCommandPalette();
+
+  return (
+    <Layout>
+      <Toaster />
+      <ErrorBoundary fallback={<div className="p-4 text-sm text-muted-foreground">Command palette unavailable</div>}>
+        <CommandPalette />
+      </ErrorBoundary>
+      <KeyboardShortcutsHelp isOpen={isHelpOpen} onClose={closeHelp} />
+      <Router />
+    </Layout>
+  );
+}
+
 function App() {
   useEffect(() => {
     // Initialize chunk loading monitoring in development
@@ -224,10 +243,9 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <Layout>
-            <Toaster />
-            <Router />
-          </Layout>
+          <CommandPaletteProvider>
+            <AppContent />
+          </CommandPaletteProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

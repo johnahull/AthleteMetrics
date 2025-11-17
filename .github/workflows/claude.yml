@@ -43,8 +43,8 @@ jobs:
           # Optional: Give a custom prompt to Claude. If this is not specified, Claude will perform the instructions specified in the comment that tagged it.
           # prompt: 'Update the pull request description to include a summary of changes.'
 
-          # Optional: Add claude_args to customize behavior and configuration
-          # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-          # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options
-          # claude_args: '--model claude-opus-4-1-20250805 --allowed-tools Bash(gh pr:*)'
+          # Use latest Sonnet model (alias automatically uses newest version)
+          # Model aliases: 'sonnet' (latest Sonnet), 'opus' (latest Opus), 'haiku' (latest Haiku)
+          # This ensures CI always uses the latest model without manual version updates
+          claude_args: '--model sonnet'
 

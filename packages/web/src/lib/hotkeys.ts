@@ -13,6 +13,7 @@ export interface KeyboardShortcut {
   modifiers: Modifier[];
   displayLabel: string;
   description: string;
+  category: 'Command Palette' | 'Navigation' | 'Actions';
   requiredPermission?: Permission;
 }
 
@@ -21,11 +22,20 @@ export interface KeyboardShortcut {
  */
 export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   {
+    id: 'command-palette',
+    key: 'k',
+    modifiers: ['ctrl', 'meta'], // Both Ctrl (Windows/Linux) and Cmd (Mac)
+    displayLabel: 'Ctrl+K / Cmd+K',
+    description: 'Open command palette',
+    category: 'Command Palette'
+  },
+  {
     id: 'measurement',
     key: 'm',
     modifiers: ['ctrl', 'meta'], // Both Ctrl (Windows/Linux) and Cmd (Mac)
     displayLabel: 'Ctrl+M / Cmd+M',
     description: 'Quick add measurement',
+    category: 'Actions',
     requiredPermission: 'CREATE_MEASUREMENTS'
   },
   {
@@ -33,14 +43,16 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     key: '?',
     modifiers: ['shift'],
     displayLabel: '?',
-    description: 'Show keyboard shortcuts help'
+    description: 'Show keyboard shortcuts help',
+    category: 'Command Palette'
   },
   {
     id: 'escape',
     key: 'Escape',
     modifiers: [],
     displayLabel: 'Esc',
-    description: 'Close modals and dialogs'
+    description: 'Close modals and dialogs',
+    category: 'Navigation'
   }
 ];
 
