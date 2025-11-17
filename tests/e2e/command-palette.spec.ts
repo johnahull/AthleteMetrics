@@ -570,10 +570,6 @@ test.describe('Command Palette', () => {
       await expect(page.getByText(/Ctrl.*M|Cmd.*M/i)).toBeVisible();
       await expect(page.getByText(/quick add measurement/i)).toBeVisible();
 
-      // Should display Ctrl+B (sidebar toggle) - from hotkeys.ts
-      await expect(page.getByText(/Ctrl.*B|Cmd.*B/i)).toBeVisible();
-      await expect(page.getByText(/toggle sidebar/i)).toBeVisible();
-
       // Should display ? (help) - from hotkeys.ts
       await expect(page.getByText('?')).toBeVisible();
       await expect(page.getByText(/show.*shortcuts|keyboard.*help/i)).toBeVisible();

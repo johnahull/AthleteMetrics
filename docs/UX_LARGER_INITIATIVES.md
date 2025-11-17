@@ -380,9 +380,10 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
   { id: 'measurement', key: 'm', modifiers: ['ctrl', 'meta'],
     description: 'Quick add measurement', category: 'Actions',
     requiredPermission: 'CREATE_MEASUREMENTS' },
-  { id: 'sidebar', key: 'b', modifiers: ['ctrl', 'meta'],
-    description: 'Toggle sidebar', category: 'Navigation' },
-  // ... more shortcuts
+  { id: 'help', key: '?', modifiers: ['shift'],
+    description: 'Show keyboard shortcuts help', category: 'Command Palette' },
+  { id: 'escape', key: 'Escape', modifiers: [],
+    description: 'Close modals and dialogs', category: 'Navigation' },
 ];
 
 // Platform-aware display: Cmd on Mac, Ctrl on Windows

@@ -39,14 +39,6 @@ export const KEYBOARD_SHORTCUTS: KeyboardShortcut[] = [
     requiredPermission: 'CREATE_MEASUREMENTS'
   },
   {
-    id: 'sidebar',
-    key: 'b',
-    modifiers: ['ctrl', 'meta'], // Both Ctrl (Windows/Linux) and Cmd (Mac)
-    displayLabel: 'Ctrl+B / Cmd+B',
-    description: 'Toggle sidebar',
-    category: 'Navigation'
-  },
-  {
     id: 'help',
     key: '?',
     modifiers: ['shift'],
