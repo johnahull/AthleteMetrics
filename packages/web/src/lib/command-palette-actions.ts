@@ -3,7 +3,7 @@
  * Defines all quick actions available in the command palette
  */
 
-import { type LucideIcon, UserPlus, Activity, Grid, Users, Upload, BarChart, Settings } from 'lucide-react';
+import { type LucideIcon, UserPlus, Activity, Users, Upload, BarChart, Settings } from 'lucide-react';
 import { type Permission } from '@shared/role-types';
 
 export interface CommandAction {
@@ -35,14 +35,6 @@ export function getCommandActions(navigate: (path: string) => void): CommandActi
       keywords: ['add', 'record', 'test', 'measurement', 'performance', 'metric'],
       permission: 'CREATE_MEASUREMENTS',
       action: () => navigate('/data-entry'),
-    },
-    {
-      id: 'batch-entry',
-      title: 'Batch Measurement Entry',
-      icon: Grid,
-      keywords: ['batch', 'bulk', 'multiple', 'entry', 'grid', 'spreadsheet'],
-      permission: 'CREATE_MEASUREMENTS',
-      action: () => navigate('/data-entry/batch'),
     },
     {
       id: 'add-team',

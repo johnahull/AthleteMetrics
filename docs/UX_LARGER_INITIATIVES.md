@@ -363,7 +363,7 @@ packages/web/src/components/
 
 packages/web/src/lib/
 ├── hotkeys.ts                       # ✨ SINGLE SOURCE OF TRUTH for all shortcuts
-├── command-palette-actions.ts       # Action registry (7 quick actions)
+├── command-palette-actions.ts       # Action registry (6 quick actions)
 └── recent-items.ts                  # localStorage tracking (last 5)
 
 packages/web/src/hooks/
