@@ -15,6 +15,7 @@ import { CommandPaletteProvider, useCommandPalette } from "./components/command-
 import { CommandPalette } from "./components/command-palette/command-palette";
 import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-shortcuts-help";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { PWAInstallPrompt } from "./components/pwa-install-prompt";
 
 // Lazy load heavy pages to reduce initial bundle size
 const Dashboard = React.lazy(() => import("./pages/dashboard"));
@@ -226,6 +227,7 @@ function AppContent() {
         <CommandPalette />
       </ErrorBoundary>
       <KeyboardShortcutsHelp isOpen={isHelpOpen} onClose={closeHelp} />
+      <PWAInstallPrompt />
       <Router />
     </Layout>
   );

@@ -126,7 +126,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   return navigation;
 };
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [location] = useLocation();
   const { user: userData, logout } = useAuth();
 
@@ -185,7 +185,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <NavigationMenu navigation={navigation} currentLocation={location} />
+      <NavigationMenu navigation={navigation} currentLocation={location} onNavigate={onNavigate} />
 
       <UserProfileDisplay
         user={userData}

@@ -9,11 +9,21 @@ import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { KeyboardShortcutsDialog } from "./keyboard-shortcuts-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import MeasurementForm from "./measurement-form";
+import { MobileBottomNav } from "./mobile-bottom-nav";
+import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerHeader,
+  DrawerTitle,
+} from "@/components/ui/drawer";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const isMobile = useIsMobile();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showMeasurementModal, setShowMeasurementModal] = useState(false);
   const [showHelpDialog, setShowHelpDialog] = useState(false);
 
@@ -68,29 +78,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex bg-gray-50">
-      {isSidebarOpen && <Sidebar />}
+      {/* Desktop Sidebar - Hidden on mobile */}
+      {!isMobile && isSidebarOpen && <Sidebar />}
+
+      {/* Mobile Sidebar Drawer */}
+      {isMobile && (
+        <Drawer open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <DrawerContent data-testid="mobile-drawer">
+            <DrawerHeader>
+              <DrawerTitle>Menu</DrawerTitle>
+            </DrawerHeader>
+            <div className="px-4 pb-4 overflow-y-auto">
+              <Sidebar onNavigate={() => setIsMobileMenuOpen(false)} />
+            </div>
+          </DrawerContent>
+        </Drawer>
+      )}
+
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* Impersonation Banner */}
         <ImpersonationBanner />
+
         {/* Toggle Button Bar */}
         <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm sticky top-0 z-10">
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            onClick={() => isMobile ? setIsMobileMenuOpen(!isMobileMenuOpen) : setIsSidebarOpen(!isSidebarOpen)}
             className="flex items-center gap-2"
-            data-testid="toggle-sidebar"
+            data-testid="mobile-menu-button"
+            aria-label="Toggle menu"
           >
-            {isSidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-            <span>{isSidebarOpen ? 'Hide Menu' : 'Show Menu'}</span>
+            {(isMobile ? isMobileMenuOpen : isSidebarOpen) ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            <span className="hidden sm:inline">{(isMobile ? isMobileMenuOpen : isSidebarOpen) ? 'Hide Menu' : 'Show Menu'}</span>
           </Button>
-          <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500">
+
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="text-sm text-gray-500 hidden sm:block">
               AthleteMetrics
             </div>
             {user && (
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 sm:gap-3 text-sm">
+                <div className="hidden sm:flex items-center gap-2">
                   <span className="text-gray-500">Welcome,</span>
                   <span className="font-medium text-gray-900">{user.firstName || user.username}</span>
                 </div>
@@ -102,17 +131,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   data-testid="logout-button"
                 >
                   <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
+                  <span className="hidden sm:inline">Logout</span>
                 </Button>
               </div>
             )}
           </div>
         </div>
-        {/* Main Content */}
-        <div className="flex-1 overflow-auto">
+
+        {/* Main Content - Add padding bottom on mobile for bottom nav */}
+        <div className={`flex-1 overflow-auto ${isMobile ? 'pb-20' : ''}`}>
           {children}
         </div>
       </main>
+
+      {/* Mobile Bottom Navigation */}
+      <MobileBottomNav />
 
       {/* Measurement Modal - Triggered by Ctrl+M / Cmd+M */}
       <Dialog open={showMeasurementModal} onOpenChange={setShowMeasurementModal}>
