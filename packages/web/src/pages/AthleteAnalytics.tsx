@@ -113,7 +113,7 @@ export function AthleteAnalytics() {
     return (
       <div className="p-6">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2 text-destructive">Error Loading Teams</h2>
+          <h2 className="text-xl font-semibold mb-2 text-destructive">Error Loading {labels.teams}</h2>
           <p className="text-muted-foreground mb-4">{teamsError}</p>
           <Button onClick={() => window.location.reload()}>
             <RefreshCw className="h-4 w-4 mr-2" />

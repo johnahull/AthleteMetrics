@@ -49,10 +49,10 @@ export default function ArchiveTeamModal({
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Archive Team: {team.name}</DialogTitle>
+          <DialogTitle>Archive {labels.team}: {team.name}</DialogTitle>
           <DialogDescription>
-            Archiving will freeze this team's roster and analytics. 
-            Future measurements won't appear in this team's data.
+            Archiving will freeze this {labels.team.toLowerCase()}'s roster and analytics.
+            Future measurements won't appear in this {labels.team.toLowerCase()}'s data.
           </DialogDescription>
         </DialogHeader>
 
@@ -127,13 +127,13 @@ export default function ArchiveTeamModal({
               >
                 Cancel
               </Button>
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 variant="destructive"
                 disabled={isLoading}
                 data-testid="button-confirm-archive"
               >
-                {isLoading ? "Archiving..." : "Archive Team"}
+                {isLoading ? "Archiving..." : `Archive ${labels.team}`}
               </Button>
             </DialogFooter>
           </form>

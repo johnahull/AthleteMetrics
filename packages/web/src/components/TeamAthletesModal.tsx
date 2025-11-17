@@ -679,7 +679,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
         <Tabs
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'current' | 'add')}
-          aria-label="Team management tabs"
+          aria-label={`${labels.team} management tabs`}
         >
           <TabsList className="grid w-full grid-cols-2" role="tablist">
             <TabsTrigger
