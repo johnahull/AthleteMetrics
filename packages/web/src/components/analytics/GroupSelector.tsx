@@ -17,6 +17,7 @@ import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getGroupColor as getChartGroupColor, sanitizeColor, DEFAULT_GROUP_COLOR } from '@/utils/chart-colors';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 /**
  * Sanitize group name to prevent XSS and ensure valid input
@@ -68,6 +69,7 @@ export function GroupSelector({
   className,
   isLoading = false
 }: GroupSelectorProps) {
+  const labels = useContextualLabels();
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
 
   // Parse athlete teams once and memoize for performance
@@ -302,7 +304,7 @@ export function GroupSelector({
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {uniqueTeams.length === 0 ? (
                   <Alert>
-                    <AlertDescription>No teams found in the selected organization.</AlertDescription>
+                    <AlertDescription>No {labels.teams.toLowerCase()} found in the selected organization.</AlertDescription>
                   </Alert>
                 ) : (
                   uniqueTeams.map((team) => {

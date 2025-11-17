@@ -2,6 +2,7 @@ import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Search, UserPlus } from "lucide-react";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface EmptyStateProps {
   mode: 'current' | 'available';
@@ -16,6 +17,8 @@ export function EmptyState({
   showOnlyAvailable,
   onSwitchToAdd
 }: EmptyStateProps) {
+  const labels = useContextualLabels();
+
   if (mode === 'current') {
     return (
       <Card className="bg-gray-50">
@@ -23,9 +26,9 @@ export function EmptyState({
           {!searchTerm ? (
             <>
               <Users className="h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this team</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this {labels.team.toLowerCase()}</h3>
               <p className="text-gray-600 text-center mb-4">
-                This team doesn't have any athletes yet. Switch to "Add Athletes" to add some.
+                This {labels.team.toLowerCase()} doesn't have any athletes yet. Switch to "Add Athletes" to add some.
               </p>
               {onSwitchToAdd && (
                 <Button onClick={onSwitchToAdd} variant="outline">
@@ -60,7 +63,7 @@ export function EmptyState({
           {searchTerm
             ? `No athletes match "${searchTerm}"`
             : showOnlyAvailable
-              ? "All athletes are already on this team"
+              ? `All athletes are already on this ${labels.team.toLowerCase()}`
               : "No athletes in this organization"
           }
         </p>

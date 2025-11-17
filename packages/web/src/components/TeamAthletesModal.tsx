@@ -17,6 +17,7 @@ import { getAvailableSeasons, formatSeasonForDisplay } from "@/utils/seasons";
 import { sanitizeSearchTerm } from "@shared/input-sanitization";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Team, User } from "@shared/schema";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 // Extended User type for team management with memberships
 interface UserWithTeamMemberships extends User {
@@ -42,6 +43,7 @@ interface TeamAthletesModalProps {
 }
 
 export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 'current' }: TeamAthletesModalProps) {
+  const labels = useContextualLabels();
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
@@ -644,10 +646,10 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <Users className="h-5 w-5" />
-                Team Management Error
+                {labels.team} Management Error
               </DialogTitle>
               <DialogDescription>
-                Something went wrong while loading the team management interface. Please try again.
+                Something went wrong while loading the {labels.team.toLowerCase()} management interface. Please try again.
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end pt-4">
@@ -667,10 +669,10 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
         <DialogHeader>
           <DialogTitle id="team-athletes-title" className="flex items-center gap-2">
             <Users className="h-5 w-5" aria-hidden="true" />
-            Team Athletes - {team.name}
+            {labels.team} Athletes - {team.name}
           </DialogTitle>
           <DialogDescription id="team-athletes-description">
-            Manage current team members and add new athletes to the team.
+            Manage current {labels.team.toLowerCase()} members and add new athletes to the {labels.team.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
 
@@ -798,9 +800,9 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     {currentAthletes.length === 0 ? (
                       <>
                         <Users className="h-12 w-12 text-gray-400 mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this team</h3>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this {labels.team.toLowerCase()}</h3>
                         <p className="text-gray-600 text-center mb-4">
-                          This team doesn't have any athletes yet. Switch to "Add Athletes" to add some.
+                          This {labels.team.toLowerCase()} doesn't have any athletes yet. Switch to "Add Athletes" to add some.
                         </p>
                         <Button onClick={() => setActiveTab('add')} variant="outline">
                           <UserPlus className="h-4 w-4 mr-2" />

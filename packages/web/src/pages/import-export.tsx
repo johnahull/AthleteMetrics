@@ -1742,7 +1742,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                 }}
                 disabled={importMutation.isPending}
               >
-                {importMutation.isPending ? "Creating Teams & Importing..." : "Create Teams & Import"}
+                {importMutation.isPending ? `Creating ${labels.teams} & Importing...` : `Create ${labels.teams} & Import`}
               </Button>
             </DialogFooter>
           </DialogContent>

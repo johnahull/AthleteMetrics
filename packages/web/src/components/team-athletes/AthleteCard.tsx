@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserMinus, Eye, UserCheck } from "lucide-react";
 import type { User } from "@shared/schema";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface UserWithTeamMemberships extends User {
   teamMemberships?: Array<{
@@ -38,6 +39,7 @@ export function AthleteCard({
   onViewProfile,
   otherTeams = []
 }: AthleteCardProps) {
+  const labels = useContextualLabels();
   const athleteName = athlete.fullName || `${athlete.firstName} ${athlete.lastName}`;
 
   return (
@@ -93,7 +95,7 @@ export function AthleteCard({
               {mode === 'available' && isOnTeam && (
                 <Badge variant="secondary" className="text-xs flex items-center gap-1">
                   <UserCheck className="h-3 w-3" />
-                  On Team
+                  On {labels.team}
                 </Badge>
               )}
             </div>
@@ -138,7 +140,7 @@ export function AthleteCard({
                 onClick={() => onRemove(athlete.id, athleteName)}
                 className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                 disabled={isPending}
-                aria-label={`Remove ${athleteName} from team`}
+                aria-label={`Remove ${athleteName} from ${labels.team.toLowerCase()}`}
               >
                 <UserMinus className="h-4 w-4" aria-hidden="true" />
                 <span className="sr-only">Remove</span>

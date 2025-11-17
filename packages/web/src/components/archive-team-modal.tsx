@@ -8,6 +8,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { archiveTeamSchema, type ArchiveTeam, type Team } from "@shared/schema";
 import { getCurrentSeason } from "@shared/season-utils";
 import { AlertTriangle } from "lucide-react";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface ArchiveTeamModalProps {
   team: Team;
@@ -18,13 +19,14 @@ interface ArchiveTeamModalProps {
 }
 
 
-export default function ArchiveTeamModal({ 
-  team, 
-  isOpen, 
-  onClose, 
-  onConfirm, 
-  isLoading = false 
+export default function ArchiveTeamModal({
+  team,
+  isOpen,
+  onClose,
+  onConfirm,
+  isLoading = false
 }: ArchiveTeamModalProps) {
+  const labels = useContextualLabels();
   const form = useForm<ArchiveTeam>({
     resolver: zodResolver(archiveTeamSchema),
     defaultValues: {
@@ -107,10 +109,10 @@ export default function ArchiveTeamModal({
               <AlertTitle>Archive Effects</AlertTitle>
               <AlertDescription>
                 <ul className="list-disc list-inside space-y-1 mt-2">
-                  <li>Team roster will be frozen as of the archive date</li>
+                  <li>{labels.team} roster will be frozen as of the archive date</li>
                   <li>Analytics will exclude measurements taken after archive date</li>
-                  <li>Team can be unarchived later if needed</li>
-                  <li>Current team members will be marked as inactive</li>
+                  <li>{labels.team} can be unarchived later if needed</li>
+                  <li>Current {labels.team.toLowerCase()} members will be marked as inactive</li>
                 </ul>
               </AlertDescription>
             </Alert>

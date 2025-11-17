@@ -4,8 +4,10 @@ import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { BarChart3, Users, TrendingUp } from 'lucide-react';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 export default function Welcome() {
+  const labels = useContextualLabels();
   const { user } = useAuth();
   const [, setLocation] = useLocation();
 
@@ -85,7 +87,7 @@ export default function Welcome() {
           <div className="pt-4 space-y-3" role="list" aria-label="Key features">
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <Users className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span>Team Management</span>
+              <span>{labels.team} Management</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
