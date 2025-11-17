@@ -10,37 +10,39 @@ interface BeforeInstallPromptEvent extends Event {
 export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [pageViews, setPageViews] = useState(0);
 
   useEffect(() => {
     // Track page views
-    const pageViews = parseInt(localStorage.getItem('pwa-page-views') || '0');
-    localStorage.setItem('pwa-page-views', String(pageViews + 1));
+    const currentViews = parseInt(localStorage.getItem('pwa-page-views') || '0');
+    const newViews = currentViews + 1;
+    localStorage.setItem('pwa-page-views', String(newViews));
+    setPageViews(newViews);
+  }, []);
 
+  useEffect(() => {
     // Check if user has dismissed the prompt before
     const isDismissed = localStorage.getItem('pwa-install-dismissed') === 'true';
-    if (isDismissed) {
+    if (isDismissed || pageViews < 2) {
       return;
     }
 
-    // Show prompt after 2-3 page views
-    if (pageViews >= 2) {
-      // Listen for beforeinstallprompt event
-      const handler = (e: Event) => {
-        // Prevent the mini-infobar from appearing on mobile
-        e.preventDefault();
+    // Listen for beforeinstallprompt event
+    const handler = (e: Event) => {
+      // Prevent the mini-infobar from appearing on mobile
+      e.preventDefault();
 
-        // Stash the event so it can be triggered later
-        setDeferredPrompt(e as BeforeInstallPromptEvent);
-        setShowPrompt(true);
-      };
+      // Stash the event so it can be triggered later
+      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      setShowPrompt(true);
+    };
 
-      window.addEventListener('beforeinstallprompt', handler);
+    window.addEventListener('beforeinstallprompt', handler);
 
-      return () => {
-        window.removeEventListener('beforeinstallprompt', handler);
-      };
-    }
-  }, []);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+    };
+  }, [pageViews]);
 
   const handleInstallClick = async () => {
     if (!deferredPrompt) {

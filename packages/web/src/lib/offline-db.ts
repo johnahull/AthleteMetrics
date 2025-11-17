@@ -15,6 +15,8 @@ export interface OfflineMeasurement {
   synced: boolean; // Whether synced to server
   createdAt: number; // Timestamp
   serverId?: string; // Server-assigned ID after sync
+  retryCount?: number; // Number of sync attempts
+  lastRetryAt?: number; // Timestamp of last retry attempt
 }
 
 /**
@@ -42,6 +44,12 @@ export class OfflineDatabase extends Dexie {
 
     this.version(1).stores({
       measurements: '++id, athleteId, synced, createdAt, serverId',
+      athletes: 'id, cachedAt'
+    });
+
+    // Version 2: Add retry tracking fields
+    this.version(2).stores({
+      measurements: '++id, athleteId, synced, createdAt, serverId, retryCount',
       athletes: 'id, cachedAt'
     });
   }
