@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Users, Building2, Activity } from "lucide-react";
 import { queries } from "@/lib/api";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface Organization {
   id: string;
@@ -29,6 +30,7 @@ export default function DeleteOrganizationModal({
   onConfirm,
   isLoading = false
 }: DeleteOrganizationModalProps) {
+  const labels = useContextualLabels();
   const [confirmationName, setConfirmationName] = useState("");
 
   // Reset confirmation input when modal closes or organization changes
@@ -94,7 +96,7 @@ export default function DeleteOrganizationModal({
                   <Building2 className="h-4 w-4 text-gray-600" />
                   <div>
                     <div className="text-lg font-semibold">{dependencies.teams}</div>
-                    <div className="text-xs text-gray-600">Teams</div>
+                    <div className="text-xs text-gray-600">{labels.teams}</div>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 p-2 bg-gray-50 rounded border">

@@ -17,6 +17,7 @@ import {
 
 import { MetricsSelector } from './MetricsSelector';
 import { TimeframeSelector } from './TimeframeSelector';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 import type {
   AnalyticsFilters,
@@ -74,6 +75,7 @@ export function FilterPanel({
   metricsAvailability = {},
   maxMetricCount
 }: FilterPanelProps) {
+  const labels = useContextualLabels();
 
 
   // Handle filter changes
@@ -184,7 +186,7 @@ export function FilterPanel({
                 {/* Teams Filter */}
                 {availableTeams.length > 0 && (
                   <div>
-                    <label className="text-sm font-medium mb-2 block">Teams</label>
+                    <label className="text-sm font-medium mb-2 block">{labels.teams}</label>
                     <div className="grid grid-cols-2 gap-2 max-h-32 overflow-y-auto">
                       {availableTeams.map((team) => (
                         <label key={team.id} className="flex items-center space-x-2 cursor-pointer">

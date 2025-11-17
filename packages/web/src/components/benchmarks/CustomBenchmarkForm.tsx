@@ -28,6 +28,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -56,6 +57,7 @@ export function CustomBenchmarkForm({
   organizationId,
   benchmark,
 }: CustomBenchmarkFormProps) {
+  const labels = useContextualLabels();
   const { toast } = useToast();
   const isEditing = !!benchmark;
 
@@ -252,7 +254,7 @@ export function CustomBenchmarkForm({
                     <FormItem>
                       <FormLabel>Benchmark Name *</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Custom Team Benchmark" />
+                        <Input {...field} placeholder={`Custom ${labels.team} Benchmark`} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

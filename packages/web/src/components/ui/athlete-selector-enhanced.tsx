@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import type { TrendData } from '@shared/analytics-types';
 import { usePerformanceAthleteSelector } from '@/hooks/usePerformanceAthleteSelector';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 interface AthleteSelectionProps {
   data: TrendData[];
@@ -24,6 +25,7 @@ export function AthleteSelector({
   metric,
   className = ''
 }: AthleteSelectionProps) {
+  const labels = useContextualLabels();
   const {
     searchTerm,
     setSearchTerm,
@@ -98,7 +100,7 @@ export function AthleteSelector({
       <div className="relative mb-3">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
         <Input
-          placeholder="Search athletes or teams..."
+          placeholder={`Search ${labels.athletes.toLowerCase()} or ${labels.teams.toLowerCase()}...`}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
