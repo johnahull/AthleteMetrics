@@ -90,10 +90,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen flex bg-gray-50">
-      {/* Desktop Sidebar - Hidden on mobile */}
+      {/* Desktop/Tablet Sidebar - Hidden only on mobile */}
       {!isMobile && isSidebarOpen && <Sidebar />}
 
-      {/* Mobile Sidebar Drawer */}
+      {/* Mobile Sidebar Drawer - Only on mobile */}
       {isMobile && (
         <Drawer open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <DrawerContent data-testid="mobile-drawer">

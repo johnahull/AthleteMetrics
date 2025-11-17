@@ -17,11 +17,11 @@ import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
 import { PaginationControls } from "@/components/team-athletes/PaginationControls";
 import { TableSkeleton } from "@/components/ui/loading-states";
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useResponsiveMode } from "@/hooks/use-mobile";
 import { AthletesCardView } from "@/components/athletes-card-view";
 
 export default function Athletes() {
-  const isMobile = useIsMobile();
+  const responsiveMode = useResponsiveMode();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
 
@@ -1007,8 +1007,8 @@ export default function Athletes() {
                 Add Athlete
               </Button>
             </div>
-          ) : isMobile ? (
-            /* Mobile Card View */
+          ) : responsiveMode === 'mobile' || responsiveMode === 'tablet' ? (
+            /* Mobile/Tablet Card View */
             <AthletesCardView
               athletes={athletes.map((athlete: any) => ({
                 ...athlete,

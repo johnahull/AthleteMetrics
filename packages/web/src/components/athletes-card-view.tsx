@@ -68,7 +68,7 @@ export function AthletesCardView({ athletes, onAthleteClick }: AthletesCardViewP
   return (
     <div
       data-testid="athletes-card-view"
-      className="grid grid-cols-1 gap-4 p-4"
+      className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4"
     >
       {athletes.map((athlete) => {
         const age = calculateAge(athlete.birthYear);

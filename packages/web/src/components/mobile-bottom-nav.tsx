@@ -67,7 +67,7 @@ export function MobileBottomNav() {
     <>
       <nav
         data-testid="mobile-bottom-nav"
-        className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border md:hidden"
+        className="fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border lg:hidden"
         aria-label="Mobile navigation"
       >
         <div className="flex items-center justify-around h-16 px-2">
