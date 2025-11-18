@@ -8,10 +8,29 @@
 import express from "express";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
-import { updateSiteSettingsSchema, AI_MODELS } from "@shared/schema";
+import { updateSiteSettingsSchema } from "@shared/schema";
 import { AI_MODELS as AI_MODELS_CONFIG } from "../services/ai-insights-service";
 
 const router = express.Router();
+
+/**
+ * Sanitize error messages to prevent leaking internal details to clients.
+ * Returns a safe error message for the API response.
+ */
+function sanitizeError(error: unknown, fallback: string): string {
+  if (error instanceof Error) {
+    // Only allow specific safe error messages through
+    const safeMessages = [
+      "Validation error",
+      "Settings not found",
+      "Model not found",
+    ];
+    if (safeMessages.some(msg => error.message.includes(msg))) {
+      return error.message;
+    }
+  }
+  return fallback;
+}
 
 /**
  * GET /api/site-settings
@@ -25,7 +44,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-5-nano",
+        aiModel: "gpt-4o-mini",
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -35,8 +54,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error fetching site settings:", error);
     res.status(500).json({
-      message: "Failed to fetch site settings",
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: sanitizeError(error, "Failed to fetch site settings"),
     });
   }
 });
@@ -71,8 +89,7 @@ router.patch("/", requireSiteAdmin, async (req: any, res) => {
     }
 
     res.status(500).json({
-      message: "Failed to update site settings",
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: sanitizeError(error, "Failed to update site settings"),
     });
   }
 });
@@ -110,8 +127,7 @@ router.get("/ai-models", requireSiteAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error fetching AI models:", error);
     res.status(500).json({
-      message: "Failed to fetch AI models",
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: sanitizeError(error, "Failed to fetch AI models"),
     });
   }
 });

@@ -14,6 +14,9 @@ import { test, expect } from '@playwright/test';
  */
 
 test.describe('Coaching Insights - Site Admin Configuration', () => {
+  // Store original settings for cleanup
+  let originalAIModel: string | null = null;
+
   test.beforeEach(async ({ page }) => {
     // Login as site admin
     await page.goto('/login');
@@ -21,6 +24,18 @@ test.describe('Coaching Insights - Site Admin Configuration', () => {
     await page.fill('input[name="password"]', process.env.E2E_SITE_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Restore original AI model if it was changed
+    if (originalAIModel) {
+      await page.goto('/admin');
+      const modelSelect = page.locator('[data-testid="ai-model-select"]').first();
+      await modelSelect.click();
+      await page.click(`text=${originalAIModel}`);
+      await page.waitForTimeout(1000); // Wait for save
+      originalAIModel = null;
+    }
   });
 
   test('should allow site admin to select AI model', async ({ page }) => {

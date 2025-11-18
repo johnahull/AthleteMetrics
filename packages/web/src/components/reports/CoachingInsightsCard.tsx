@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,6 +16,11 @@ interface CoachingInsightsCardProps {
   aiEnabled: boolean;
 }
 
+/**
+ * Maximum character limit for coaching insights content.
+ * This limit ensures reasonable storage size and prevents excessive AI generation costs.
+ * Matches the database column constraint for coachingInsights (10,000 chars).
+ */
 const MAX_CHARS = 10000;
 
 export function CoachingInsightsCard({
@@ -40,7 +45,7 @@ export function CoachingInsightsCard({
   const hasInsights = !!initialInsights;
   const isGenerating = generateMutation.isPending;
 
-  const handleGenerate = () => {
+  const handleGenerate = useCallback(() => {
     generateMutation.mutate(undefined, {
       onSuccess: () => {
         toast({
@@ -56,19 +61,19 @@ export function CoachingInsightsCard({
         });
       },
     });
-  };
+  }, [generateMutation, toast]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setEditedContent(initialInsights || "");
     setIsEditing(true);
-  };
+  }, [initialInsights]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     setEditedContent(initialInsights || "");
     setIsEditing(false);
-  };
+  }, [initialInsights]);
 
-  const handleSave = () => {
+  const handleSave = useCallback(() => {
     if (editedContent.length > MAX_CHARS) {
       toast({
         title: "Content too long",
@@ -94,11 +99,11 @@ export function CoachingInsightsCard({
         });
       },
     });
-  };
+  }, [editedContent, updateMutation, toast]);
 
-  const handleRegenerate = () => {
+  const handleRegenerate = useCallback(() => {
     handleGenerate();
-  };
+  }, [handleGenerate]);
 
   // State 1: Not Generated
   if (!hasInsights && !isGenerating) {

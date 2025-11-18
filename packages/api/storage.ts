@@ -11,6 +11,7 @@ import {
   type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
+  type SiteSettings, type Report,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -268,12 +269,12 @@ export interface IStorage {
   disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
 
   // Site Settings (Global Settings)
-  getSiteSettings(): Promise<any | undefined>;
-  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<any>;
+  getSiteSettings(): Promise<SiteSettings | undefined>;
+  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings>;
 
   // Reports
-  getReport(id: string): Promise<any | undefined>;
-  updateReport(id: string, data: any): Promise<any>;
+  getReport(id: string): Promise<Report | undefined>;
+  updateReport(id: string, data: Partial<Report>): Promise<Report>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4070,12 +4071,12 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== Site Settings ====================
 
-  async getSiteSettings(): Promise<any | undefined> {
+  async getSiteSettings(): Promise<SiteSettings | undefined> {
     const [settings] = await db.select().from(siteSettings).limit(1);
     return settings || undefined;
   }
 
-  async updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<any> {
+  async updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
     const existing = await this.getSiteSettings();
 
@@ -4106,12 +4107,12 @@ export class DatabaseStorage implements IStorage {
 
   // ==================== Reports ====================
 
-  async getReport(id: string): Promise<any | undefined> {
+  async getReport(id: string): Promise<Report | undefined> {
     const [report] = await db.select().from(reports).where(eq(reports.id, id));
     return report || undefined;
   }
 
-  async updateReport(id: string, data: any): Promise<any> {
+  async updateReport(id: string, data: Partial<Report>): Promise<Report> {
     const [updated] = await db
       .update(reports)
       .set({

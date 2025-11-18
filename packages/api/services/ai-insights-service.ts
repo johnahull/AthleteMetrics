@@ -12,12 +12,12 @@ import Anthropic from "@anthropic-ai/sdk";
 // AI Model Configurations
 export const AI_MODELS = {
   // Budget Tier (5 models)
-  "gpt-5-nano": {
+  "gpt-4o-mini": {
     provider: "openai" as const,
-    model: "gpt-5-nano",
+    model: "gpt-4o-mini",
     tier: "budget" as const,
-    costPer1M: { input: 0.05, output: 0.40 },
-    description: "OpenAI GPT-5 Nano - Cheapest & Fast",
+    costPer1M: { input: 0.15, output: 0.60 },
+    description: "OpenAI GPT-4o Mini - Fast & Cost-Effective",
   },
   "gemini-2.0-flash-lite": {
     provider: "google" as const,
@@ -87,26 +87,40 @@ class GoogleProvider implements AIProvider {
   }
 
   async generateInsights(prompt: string): Promise<string> {
-    const model = this.client.getGenerativeModel({ model: this.modelName });
+    try {
+      const model = this.client.getGenerativeModel({ model: this.modelName });
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        maxOutputTokens: 2048,
-      },
-    });
+      const result = await model.generateContent({
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.7,
+          topP: 0.95,
+          topK: 40,
+          maxOutputTokens: 2048,
+        },
+      });
 
-    const response = result.response;
-    const text = response.text();
+      const response = result.response;
+      const text = response.text();
 
-    if (!text) {
-      throw new Error("Google AI returned empty response");
+      if (!text) {
+        throw new Error("Google AI returned empty response");
+      }
+
+      return text;
+    } catch (error: any) {
+      // Handle specific Google AI errors
+      if (error?.status === 429 || error?.message?.includes("429")) {
+        throw new Error("AI service rate limited. Please try again in a few minutes.");
+      }
+      if (error?.status === 401 || error?.status === 403 || error?.message?.includes("API key")) {
+        throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.message?.includes("empty response")) {
+        throw error;
+      }
+      throw new Error("AI service temporarily unavailable. Please try again later.");
     }
-
-    return text;
   }
 }
 
@@ -126,29 +140,43 @@ class OpenAIProvider implements AIProvider {
   }
 
   async generateInsights(prompt: string): Promise<string> {
-    const completion = await this.client.chat.completions.create({
-      model: this.modelName,
-      messages: [
-        {
-          role: "system",
-          content: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 2048,
-    });
+    try {
+      const completion = await this.client.chat.completions.create({
+        model: this.modelName,
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
+          },
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 2048,
+      });
 
-    const text = completion.choices[0]?.message?.content;
+      const text = completion.choices[0]?.message?.content;
 
-    if (!text) {
-      throw new Error("OpenAI returned empty response");
+      if (!text) {
+        throw new Error("OpenAI returned empty response");
+      }
+
+      return text;
+    } catch (error: any) {
+      // Handle specific OpenAI errors
+      if (error?.status === 429 || error?.code === "rate_limit_exceeded") {
+        throw new Error("AI service rate limited. Please try again in a few minutes.");
+      }
+      if (error?.status === 401 || error?.code === "invalid_api_key") {
+        throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.message?.includes("empty response")) {
+        throw error;
+      }
+      throw new Error("AI service temporarily unavailable. Please try again later.");
     }
-
-    return text;
   }
 }
 
@@ -168,26 +196,40 @@ class AnthropicProvider implements AIProvider {
   }
 
   async generateInsights(prompt: string): Promise<string> {
-    const message = await this.client.messages.create({
-      model: this.modelName,
-      max_tokens: 2048,
-      temperature: 0.7,
-      system: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
-      messages: [
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
-    });
+    try {
+      const message = await this.client.messages.create({
+        model: this.modelName,
+        max_tokens: 2048,
+        temperature: 0.7,
+        system: "You are an expert athletic performance coach analyzing athlete data to provide actionable coaching insights.",
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      });
 
-    const textContent = message.content.find((block) => block.type === "text");
+      const textContent = message.content.find((block) => block.type === "text");
 
-    if (!textContent || textContent.type !== "text") {
-      throw new Error("Anthropic returned no text content");
+      if (!textContent || textContent.type !== "text") {
+        throw new Error("Anthropic returned no text content");
+      }
+
+      return textContent.text;
+    } catch (error: any) {
+      // Handle specific Anthropic errors
+      if (error?.status === 429 || error?.error?.type === "rate_limit_error") {
+        throw new Error("AI service rate limited. Please try again in a few minutes.");
+      }
+      if (error?.status === 401 || error?.error?.type === "authentication_error") {
+        throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.message?.includes("no text content")) {
+        throw error;
+      }
+      throw new Error("AI service temporarily unavailable. Please try again later.");
     }
-
-    return textContent.text;
   }
 }
 

@@ -199,6 +199,11 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
 export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
   const user = req.session?.user || req.user;
 
+  // Ensure user is authenticated before proceeding
+  if (!user?.id) {
+    return res.status(401).json({ message: "User not authenticated" });
+  }
+
   // Get organizationId from report or direct parameter
   let organizationId = req.params.organizationId;
 
