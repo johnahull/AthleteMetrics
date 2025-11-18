@@ -80,7 +80,7 @@ export function useGenerateInsights(reportId: string) {
     mutationFn: () => generateInsights(reportId),
     onSuccess: (data) => {
       // Update the report cache with new insights
-      queryClient.setQueryData(["report", reportId], (old: any) => {
+      queryClient.setQueryData(["/api/reports", reportId], (old: any) => {
         if (!old) return old;
         return {
           ...old,
@@ -91,7 +91,7 @@ export function useGenerateInsights(reportId: string) {
       });
 
       // Invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["report", reportId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId] });
     },
   });
 }
@@ -107,7 +107,7 @@ export function useUpdateInsights(reportId: string) {
     mutationFn: (insights: string) => updateInsights(reportId, insights),
     onSuccess: (data) => {
       // Update the report cache with edited insights
-      queryClient.setQueryData(["report", reportId], (old: any) => {
+      queryClient.setQueryData(["/api/reports", reportId], (old: any) => {
         if (!old) return old;
         return {
           ...old,
@@ -118,7 +118,7 @@ export function useUpdateInsights(reportId: string) {
       });
 
       // Invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["report", reportId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId] });
     },
   });
 }
