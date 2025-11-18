@@ -1731,8 +1731,18 @@ function calculateBenchmarkAchievements(athleteRankings: any[]) {
 
 /**
  * Build report data structure for AI insights generation
+ *
+ * Includes data size limits to prevent extremely large payloads:
+ * - MAX_METRICS: 20 metrics maximum
+ * - MAX_ATHLETES: 100 athletes maximum for team reports
+ * - MAX_VALUES_PER_METRIC: 100 values per metric
  */
 async function buildReportDataForAI(report: any, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+  // Data size limits to prevent large AI payloads
+  const MAX_METRICS = 20;
+  const MAX_ATHLETES = 100;
+  const MAX_VALUES_PER_METRIC = 100;
+
   try {
     // Fetch organization details
     const org = await db
@@ -1784,33 +1794,41 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
     }> = [];
 
     if (report.reportType === 'team' && reportData.teamStatistics) {
-      // Team report metrics
-      for (const stat of reportData.teamStatistics) {
+      // Limit athlete rankings to prevent large payloads
+      const limitedAthleteRankings = reportData.athleteRankings
+        ? reportData.athleteRankings.slice(0, MAX_ATHLETES)
+        : [];
+
+      // Team report metrics (limited to MAX_METRICS)
+      const statsToProcess = reportData.teamStatistics.slice(0, MAX_METRICS);
+      for (const stat of statsToProcess) {
         const metricCode = stat.metric;
         const values: number[] = [];
 
-        // Extract individual values from athlete rankings
-        if (reportData.athleteRankings) {
-          for (const athlete of reportData.athleteRankings) {
-            if (athlete.measurements && athlete.measurements[metricCode] !== undefined) {
-              values.push(athlete.measurements[metricCode]);
-            }
+        // Extract individual values from athlete rankings (limited)
+        for (const athlete of limitedAthleteRankings) {
+          if (athlete.measurements && athlete.measurements[metricCode] !== undefined) {
+            values.push(athlete.measurements[metricCode]);
           }
         }
+
+        // Limit values per metric
+        const limitedValues = values.slice(0, MAX_VALUES_PER_METRIC);
 
         metrics.push({
           code: metricCode,
           label: stat.metric, // Human-readable label
-          values,
+          values: limitedValues,
           unit: stat.units || "",
           lowerIsBetter: isMetricLowerBetter(metricCode),
         });
       }
     } else if (report.reportType === 'individual' && reportData.athlete) {
-      // Individual report metrics
+      // Individual report metrics (limited to MAX_METRICS)
       const athlete = reportData.athlete;
       if (athlete.measurements) {
-        for (const [metricCode, value] of Object.entries(athlete.measurements)) {
+        const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
+        for (const [metricCode, value] of entries) {
           if (typeof value === 'number') {
             metrics.push({
               code: metricCode,

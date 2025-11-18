@@ -90,24 +90,37 @@ class GoogleProvider implements AIProvider {
     try {
       const model = this.client.getGenerativeModel({ model: this.modelName });
 
-      const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 2048,
-        },
-      });
+      // Create timeout with AbortController (30 seconds)
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
-      const response = result.response;
-      const text = response.text();
+      try {
+        const result = await model.generateContent(
+          {
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              topP: 0.95,
+              topK: 40,
+              maxOutputTokens: 2048,
+            },
+          },
+          { signal: controller.signal }
+        );
 
-      if (!text) {
-        throw new Error("Google AI returned empty response");
+        clearTimeout(timeoutId);
+
+        const response = result.response;
+        const text = response.text();
+
+        if (!text) {
+          throw new Error("Google AI returned empty response");
+        }
+
+        return text;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      return text;
     } catch (error: any) {
       // Handle specific Google AI errors
       if (error?.status === 429 || error?.message?.includes("429")) {
@@ -115,6 +128,9 @@ class GoogleProvider implements AIProvider {
       }
       if (error?.status === 401 || error?.status === 403 || error?.message?.includes("API key")) {
         throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.name === "AbortError" || error?.message?.includes("aborted") || error?.message?.includes("timeout")) {
+        throw new Error("AI service request timed out. Please try again.");
       }
       if (error?.message?.includes("empty response")) {
         throw error;
@@ -135,7 +151,11 @@ class OpenAIProvider implements AIProvider {
       console.error(`AI Service Error: Missing API key for provider: openai, model: ${modelName}`);
       throw new Error("AI service configuration error. Please contact your administrator.");
     }
-    this.client = new OpenAI({ apiKey });
+    // Configure with 30 second timeout
+    this.client = new OpenAI({
+      apiKey,
+      timeout: 30000,
+    });
     this.modelName = modelName;
   }
 
@@ -172,6 +192,9 @@ class OpenAIProvider implements AIProvider {
       if (error?.status === 401 || error?.code === "invalid_api_key") {
         throw new Error("AI service authentication failed. Contact administrator.");
       }
+      if (error?.code === "ETIMEDOUT" || error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
+        throw new Error("AI service request timed out. Please try again.");
+      }
       if (error?.message?.includes("empty response")) {
         throw error;
       }
@@ -191,7 +214,11 @@ class AnthropicProvider implements AIProvider {
       console.error(`AI Service Error: Missing API key for provider: anthropic, model: ${modelName}`);
       throw new Error("AI service configuration error. Please contact your administrator.");
     }
-    this.client = new Anthropic({ apiKey });
+    // Configure with 30 second timeout
+    this.client = new Anthropic({
+      apiKey,
+      timeout: 30000,
+    });
     this.modelName = modelName;
   }
 
@@ -224,6 +251,9 @@ class AnthropicProvider implements AIProvider {
       }
       if (error?.status === 401 || error?.error?.type === "authentication_error") {
         throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.code === "ETIMEDOUT" || error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
+        throw new Error("AI service request timed out. Please try again.");
       }
       if (error?.message?.includes("no text content")) {
         throw error;

@@ -220,6 +220,13 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
     return res.status(400).json({ message: "Organization ID required" });
   }
 
+  // Check organization access before revealing AI status
+  // This prevents information disclosure about AI being enabled for orgs user can't access
+  const hasAccess = await canAccessOrganization(user, organizationId);
+  if (!hasAccess) {
+    return res.status(403).json({ message: "Access denied to this organization" });
+  }
+
   // Get organization and check AI flags
   const organization = await storage.getOrganization(organizationId);
   if (!organization) {

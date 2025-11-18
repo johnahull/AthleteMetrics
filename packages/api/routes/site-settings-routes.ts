@@ -71,6 +71,25 @@ router.patch("/", requireSiteAdmin, async (req: any, res) => {
     // Validate request body
     const validated = updateSiteSettingsSchema.parse(req.body);
 
+    // Validate that the selected model has its API key configured
+    const modelConfig = AI_MODELS_CONFIG[validated.aiModel as keyof typeof AI_MODELS_CONFIG];
+    if (!modelConfig) {
+      return res.status(400).json({ message: "Invalid AI model" });
+    }
+
+    // Check if provider API key exists
+    const apiKeyEnvVars: Record<string, string> = {
+      'openai': 'OPENAI_API_KEY',
+      'google': 'GOOGLE_AI_API_KEY',
+      'anthropic': 'ANTHROPIC_API_KEY'
+    };
+    const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
+    if (!process.env[apiKeyEnvVar]) {
+      return res.status(400).json({
+        message: `API key for ${modelConfig.provider} provider is not configured. Please set the ${apiKeyEnvVar} environment variable.`
+      });
+    }
+
     // Update or create settings
     const updatedSettings = await storage.updateSiteSettings({
       aiModel: validated.aiModel,
