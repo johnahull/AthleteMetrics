@@ -28,6 +28,7 @@ import multer from "multer";
 import csv from "csv-parser";
 import { ocrService } from "./ocr/ocr-service";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "./athlete-matching";
+import { validateAIProviderConfiguration } from "./services/ai-insights-service";
 import { reviewQueue } from "./review-queue";
 import type { ImportResult } from "@shared/import-types";
 import {
@@ -966,6 +967,9 @@ export async function registerRoutes(app: Express) {
 
   // Initialize default user
   await initializeDefaultUser();
+
+  // Validate AI provider configuration
+  validateAIProviderConfiguration();
 
   // ⚠️ LEGACY ROUTES - These have been refactored to new service layer
   // Authentication routes are now handled by ./routes/auth-routes.ts

@@ -66,6 +66,50 @@ export const AI_MODELS = {
 
 export type AIModelKey = keyof typeof AI_MODELS;
 
+/**
+ * Validate AI provider configuration at startup.
+ * Checks which providers have API keys configured and logs status.
+ *
+ * Security: Only checks key presence, never logs actual key values.
+ * Non-blocking: Logs warnings but doesn't stop app startup (AI is optional).
+ */
+export function validateAIProviderConfiguration(): {
+  available: string[];
+  unavailable: string[];
+} {
+  const providers = {
+    openai: !!process.env.OPENAI_API_KEY,
+    google: !!process.env.GOOGLE_AI_API_KEY,
+    anthropic: !!process.env.ANTHROPIC_API_KEY,
+  };
+
+  const available: string[] = [];
+  const unavailable: string[] = [];
+
+  for (const [provider, hasKey] of Object.entries(providers)) {
+    if (hasKey) {
+      available.push(provider);
+    } else {
+      unavailable.push(provider);
+    }
+  }
+
+  // Log status for administrator awareness
+  if (available.length > 0) {
+    console.log(`AI providers configured: ${available.join(', ')}`);
+  }
+
+  if (unavailable.length > 0) {
+    console.warn(`AI providers not configured (missing API keys): ${unavailable.join(', ')}`);
+  }
+
+  if (available.length === 0) {
+    console.warn('No AI providers configured. AI coaching insights feature will be disabled.');
+  }
+
+  return { available, unavailable };
+}
+
 // Provider interfaces
 interface AIProvider {
   generateInsights(prompt: string): Promise<string>;
