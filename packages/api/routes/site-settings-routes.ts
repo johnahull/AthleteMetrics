@@ -6,6 +6,7 @@
  */
 
 import express, { Request, Response } from "express";
+import { ZodError } from "zod";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
@@ -135,10 +136,10 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
   } catch (error) {
     console.error("Error updating site settings:", error);
 
-    if (error instanceof Error && error.name === "ZodError") {
+    if (error instanceof ZodError) {
       return res.status(400).json({
         message: "Validation error",
-        errors: error,
+        errors: error.errors,
       });
     }
 

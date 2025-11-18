@@ -1176,6 +1176,28 @@ export function registerReportRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error generating coaching insights:", error);
+
+      // Audit log for failed AI generation
+      const user = req.session?.user || req.user;
+      if (user?.id) {
+        try {
+          await storage.createAuditLog({
+            userId: user.id,
+            action: 'report_ai_insights_generated',
+            resourceType: 'report',
+            resourceId: req.params.id,
+            details: JSON.stringify({
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }),
+            ipAddress: req.ip || null,
+            userAgent: req.get('user-agent') || null,
+          });
+        } catch (auditError) {
+          console.error("Failed to create audit log for failed AI generation:", auditError);
+        }
+      }
+
       res.status(500).json({
         message: "Failed to generate coaching insights. Please try again or contact support."
       });
@@ -1249,10 +1271,10 @@ export function registerReportRoutes(app: Express) {
     } catch (error) {
       console.error("Error updating coaching insights:", error);
 
-      if (error instanceof Error && error.name === "ZodError") {
+      if (error instanceof ZodError) {
         return res.status(400).json({
           message: "Validation error",
-          errors: error,
+          errors: (error as ZodError).errors,
         });
       }
 
