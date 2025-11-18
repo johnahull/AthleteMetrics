@@ -1,5 +1,5 @@
 import { Home, Users, UsersRound, Plus, User } from 'lucide-react';
-import { Link, useLocation } from 'wouter';
+import { Link, useLocation, useRoute } from 'wouter';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -45,7 +45,7 @@ const navItems: NavItem[] = [
 ];
 
 export function MobileBottomNav() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const isMobile = useIsMobile();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
 
@@ -142,7 +142,7 @@ export function MobileBottomNav() {
               <Button
                 onClick={() => {
                   setShowQuickAdd(false);
-                  window.location.href = '/data-entry';
+                  setLocation('/data-entry');
                 }}
                 className="flex-1"
               >

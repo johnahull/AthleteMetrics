@@ -139,11 +139,18 @@ export class BackgroundSyncService {
           value: measurement.value,
           date: measurement.date,
           notes: measurement.notes
-        }) as { id: string };
+        });
+
+        // Validate API response format
+        if (!result || typeof result !== 'object' || !('id' in result) || typeof (result as { id: string }).id !== 'string') {
+          throw new Error('Invalid API response format: expected { id: string }');
+        }
+
+        const typedResult = result as { id: string };
 
         // Mark as synced
         if (measurement.id) {
-          await markMeasurementSynced(measurement.id, result.id);
+          await markMeasurementSynced(measurement.id, typedResult.id);
           successCount++;
         }
       } catch (error) {
