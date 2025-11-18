@@ -1119,7 +1119,7 @@ export function registerReportRoutes(app: Express) {
 
       // Get site settings to determine which AI model to use
       const siteSettings = await storage.getSiteSettings();
-      const modelKey = siteSettings?.aiModel || "gpt-4o-mini";
+      const modelKey = (siteSettings?.aiModel || "gpt-5-nano") as import("../services/ai-insights-service").AIModelKey;
 
       // Build report data for AI
       const reportData = await buildReportDataForAI(report, user.id, reportService);
