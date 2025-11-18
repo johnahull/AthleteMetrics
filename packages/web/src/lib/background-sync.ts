@@ -139,7 +139,7 @@ export class BackgroundSyncService {
           value: measurement.value,
           date: measurement.date,
           notes: measurement.notes
-        });
+        }) as { id: string };
 
         // Mark as synced
         if (measurement.id) {
