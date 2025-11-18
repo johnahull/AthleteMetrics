@@ -218,7 +218,7 @@ class OpenAIProvider implements AIProvider {
           },
         ],
         temperature: 0.7,
-        max_tokens: 2048,
+        max_completion_tokens: 2048,
       });
 
       const text = completion.choices[0]?.message?.content;
@@ -229,12 +229,24 @@ class OpenAIProvider implements AIProvider {
 
       return text;
     } catch (error: any) {
+      // Log the actual error for debugging
+      console.error(`OpenAI API Error for model ${this.modelName}:`, {
+        message: error?.message,
+        status: error?.status,
+        code: error?.code,
+        type: error?.type,
+        error: error?.error,
+      });
+
       // Handle specific OpenAI errors
       if (error?.status === 429 || error?.code === "rate_limit_exceeded") {
         throw new Error("AI service rate limited. Please try again in a few minutes.");
       }
       if (error?.status === 401 || error?.code === "invalid_api_key") {
         throw new Error("AI service authentication failed. Contact administrator.");
+      }
+      if (error?.status === 404 || error?.code === "model_not_found") {
+        throw new Error(`AI model '${this.modelName}' not found. Contact administrator.`);
       }
       if (error?.code === "ETIMEDOUT" || error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
         throw new Error("AI service request timed out. Please try again.");
