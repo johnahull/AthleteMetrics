@@ -259,7 +259,7 @@ class OpenAIProvider implements AIProvider {
         throw new Error("AI service authentication failed. Contact administrator.");
       }
       if (error?.status === 404 || error?.code === "model_not_found") {
-        throw new Error(`AI model '${this.modelName}' not found. Contact administrator.`);
+        throw new Error("AI model configuration error. Contact administrator.");
       }
       if (error?.code === "ETIMEDOUT" || error?.code === "ECONNABORTED" || error?.message?.includes("timeout")) {
         throw new Error("AI service request timed out. Please try again.");

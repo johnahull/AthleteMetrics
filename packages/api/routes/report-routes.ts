@@ -6,7 +6,7 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
-import { requireAuth, requireAIEnabled } from "../middleware";
+import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
   insertReportSchema,
@@ -19,6 +19,7 @@ import {
   organizations,
   teams,
   MAX_INSIGHTS_LENGTH,
+  type Report,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -975,7 +976,7 @@ export function registerReportRoutes(app: Express) {
       const reportId = req.params.id;
       const athleteId = req.query.athleteId as string | undefined;
       const format = (req.query.format as string) || 'simplified';
-      let report: any;
+      let report: Report | undefined;
 
       try {
         const user = req.session.user;
@@ -995,7 +996,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate report data
-        let reportData: any;
+        let reportData: Record<string, unknown>;
         if (report.reportType === 'team') {
           reportData = await reportService.generateTeamReport(reportId, user.id);
         } else {
@@ -1094,7 +1095,7 @@ export function registerReportRoutes(app: Express) {
    *
    * Requires: AI enabled for organization (both flags)
    */
-  app.post("/api/reports/:id/generate-insights", reportGenerationLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
+  app.post("/api/reports/:id/generate-insights", reportGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
@@ -1211,7 +1212,7 @@ export function registerReportRoutes(app: Express) {
    *
    * Requires: AI enabled for organization (both flags)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {

@@ -3,7 +3,7 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
 // Extended request type with user info
-interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;

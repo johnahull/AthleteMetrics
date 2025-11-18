@@ -134,6 +134,12 @@ export class OrganizationService extends BaseService {
         }
       }
 
+      // SECURITY: Auto-disable aiEnabled when aiEnabledBySiteAdmin is set to false
+      // This maintains the hierarchy: aiEnabled can only be true if aiEnabledBySiteAdmin is true
+      if (validatedUpdates.aiEnabledBySiteAdmin === false && org.aiEnabled === true) {
+        validatedUpdates.aiEnabled = false;
+      }
+
       // Update organization in database
       const updatedOrg = await this.storage.updateOrganization(organizationId, validatedUpdates);
 
