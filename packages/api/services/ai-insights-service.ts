@@ -66,6 +66,10 @@ export const AI_MODELS = {
 
 export type AIModelKey = keyof typeof AI_MODELS;
 
+// Configuration constants
+/** Default timeout for AI API calls in milliseconds (30 seconds) */
+export const AI_REQUEST_TIMEOUT_MS = 30000;
+
 /**
  * Validate AI provider configuration at startup.
  * Checks which providers have API keys configured and logs status.
@@ -134,9 +138,9 @@ class GoogleProvider implements AIProvider {
     try {
       const model = this.client.getGenerativeModel({ model: this.modelName });
 
-      // Create timeout with AbortController (30 seconds)
+      // Create timeout with AbortController
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000);
+      const timeoutId = setTimeout(() => controller.abort(), AI_REQUEST_TIMEOUT_MS);
 
       try {
         const result = await model.generateContent(
@@ -195,10 +199,10 @@ class OpenAIProvider implements AIProvider {
       console.error(`AI Service Error: Missing API key for provider: openai, model: ${modelName}`);
       throw new Error("AI service configuration error. Please contact your administrator.");
     }
-    // Configure with 30 second timeout
+    // Configure with timeout
     this.client = new OpenAI({
       apiKey,
-      timeout: 30000,
+      timeout: AI_REQUEST_TIMEOUT_MS,
     });
     this.modelName = modelName;
   }
@@ -283,10 +287,10 @@ class AnthropicProvider implements AIProvider {
       console.error(`AI Service Error: Missing API key for provider: anthropic, model: ${modelName}`);
       throw new Error("AI service configuration error. Please contact your administrator.");
     }
-    // Configure with 30 second timeout
+    // Configure with timeout
     this.client = new Anthropic({
       apiKey,
-      timeout: 30000,
+      timeout: AI_REQUEST_TIMEOUT_MS,
     });
     this.modelName = modelName;
   }
@@ -401,6 +405,11 @@ export async function generateCoachingInsights(
   reportData: ReportData
 ): Promise<string> {
   try {
+    // Defensive validation: ensure model key exists in AI_MODELS
+    if (!(modelKey in AI_MODELS)) {
+      throw new Error(`Invalid AI model: ${modelKey}`);
+    }
+
     const provider = createProvider(modelKey);
     const prompt = buildPrompt(reportData);
     const insights = await provider.generateInsights(prompt);
