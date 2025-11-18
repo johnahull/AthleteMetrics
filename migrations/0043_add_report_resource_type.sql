@@ -18,14 +18,19 @@ BEGIN
     RAISE EXCEPTION 'Cannot apply migration: invalid resource_type values exist in audit_logs table';
   END IF;
 
-  -- If validation passes, drop and recreate constraint
+  -- If validation passes, drop and recreate constraint (idempotent)
   ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_resource_type_valid;
 
-  ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
-    'organization', 'user', 'team', 'measurement', 'invitation', 'session',
-    'site_metric', 'site_benchmark', 'custom_benchmark', 'organization_benchmark',
-    'report'
-  ));
+  -- Only add constraint if it doesn't exist (handles case where drop failed)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_resource_type_valid'
+  ) THEN
+    ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
+      'organization', 'user', 'team', 'measurement', 'invitation', 'session',
+      'site_metric', 'site_benchmark', 'custom_benchmark', 'organization_benchmark',
+      'report'
+    ));
+  END IF;
 END $$;
 
 -- Add comment for documentation

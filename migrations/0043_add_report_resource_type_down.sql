@@ -7,13 +7,18 @@ BEGIN
     RAISE EXCEPTION 'Cannot rollback: audit_logs with resource_type "report" exist. Delete them first.';
   END IF;
 
-  -- Drop and recreate constraint without 'report'
+  -- Drop and recreate constraint without 'report' (idempotent)
   ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_resource_type_valid;
 
-  ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
-    'organization', 'user', 'team', 'measurement', 'invitation', 'session',
-    'site_metric', 'site_benchmark', 'custom_benchmark', 'organization_benchmark'
-  ));
+  -- Only add constraint if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_resource_type_valid'
+  ) THEN
+    ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (resource_type IN (
+      'organization', 'user', 'team', 'measurement', 'invitation', 'session',
+      'site_metric', 'site_benchmark', 'custom_benchmark', 'organization_benchmark'
+    ));
+  END IF;
 END $$;
 
 -- Update comment
