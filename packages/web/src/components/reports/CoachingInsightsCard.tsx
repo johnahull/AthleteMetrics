@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -36,6 +36,13 @@ export function CoachingInsightsCard({
 
   const generateMutation = useGenerateInsights(reportId);
   const updateMutation = useUpdateInsights(reportId);
+
+  // Sync editedContent when initialInsights prop changes (e.g., after regeneration)
+  useEffect(() => {
+    if (!isEditing) {
+      setEditedContent(initialInsights || "");
+    }
+  }, [initialInsights, isEditing]);
 
   // Don't render if AI is not enabled
   if (!aiEnabled) {

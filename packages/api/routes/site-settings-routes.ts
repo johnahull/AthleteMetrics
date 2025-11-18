@@ -5,11 +5,23 @@
  * Only accessible by site admins.
  */
 
-import express from "express";
+import express, { Request, Response } from "express";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
 import { AI_MODELS as AI_MODELS_CONFIG } from "../services/ai-insights-service";
+
+// Type for authenticated request with session
+interface AuthenticatedRequest extends Request {
+  session: Request['session'] & {
+    user?: {
+      id: string;
+      email: string;
+      isSiteAdmin: boolean;
+      [key: string]: unknown;
+    };
+  };
+}
 
 const router = express.Router();
 
@@ -44,7 +56,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-5-nano",
+        aiModel: "gpt-4o-mini",
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -64,9 +76,9 @@ router.get("/", requireSiteAdmin, async (req, res) => {
  * Update site settings
  * Access: Site admin only
  */
-router.patch("/", requireSiteAdmin, async (req: any, res) => {
+router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Response) => {
   try {
-    const user = req.session?.user || req.user;
+    const user = req.session?.user;
 
     // Validate request body
     const validated = updateSiteSettingsSchema.parse(req.body);
@@ -86,15 +98,36 @@ router.patch("/", requireSiteAdmin, async (req: any, res) => {
     const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
     if (!process.env[apiKeyEnvVar]) {
       return res.status(400).json({
-        message: `API key for ${modelConfig.provider} provider is not configured. Please set the ${apiKeyEnvVar} environment variable.`
+        message: `API key for ${modelConfig.provider} provider is not configured`
       });
     }
+
+    // Get previous settings for audit log
+    const previousSettings = await storage.getSiteSettings();
+    const previousModel = previousSettings?.aiModel || 'gpt-4o-mini';
 
     // Update or create settings
     const updatedSettings = await storage.updateSiteSettings({
       aiModel: validated.aiModel,
       updatedBy: user?.id || null,
     });
+
+    // Audit log for AI model change
+    if (user?.id && previousModel !== validated.aiModel) {
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'site_ai_model_changed',
+        resourceType: 'site_settings',
+        resourceId: 'global',
+        details: JSON.stringify({
+          previousModel,
+          newModel: validated.aiModel,
+          provider: modelConfig.provider
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+    }
 
     res.json(updatedSettings);
   } catch (error) {

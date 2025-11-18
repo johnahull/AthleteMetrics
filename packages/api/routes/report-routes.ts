@@ -1119,7 +1119,7 @@ export function registerReportRoutes(app: Express) {
 
       // Get site settings to determine which AI model to use
       const siteSettings = await storage.getSiteSettings();
-      const modelKey = (siteSettings?.aiModel || "gpt-5-nano") as import("../services/ai-insights-service").AIModelKey;
+      const modelKey = (siteSettings?.aiModel || "gpt-4o-mini") as import("../services/ai-insights-service").AIModelKey;
 
       // Build report data for AI
       const reportData = await buildReportDataForAI(report, user.id, reportService);
@@ -1141,6 +1141,22 @@ export function registerReportRoutes(app: Express) {
         coachingInsights: insights,
         coachingInsightsGeneratedAt: new Date(),
         coachingInsightsModel: modelKey,
+      });
+
+      // Audit log for AI insight generation
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'report_ai_insights_generated',
+        resourceType: 'report',
+        resourceId: reportId,
+        details: JSON.stringify({
+          reportName: report.name,
+          organizationId: report.organizationId,
+          model: modelKey,
+          insightsLength: insights.length
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
       });
 
       res.json({
@@ -1196,6 +1212,21 @@ export function registerReportRoutes(app: Express) {
         coachingInsights,
         coachingInsightsGeneratedAt: new Date(),
         coachingInsightsModel: report.coachingInsightsModel, // Keep original model
+      });
+
+      // Audit log for manual insight update
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'report_ai_insights_updated',
+        resourceType: 'report',
+        resourceId: reportId,
+        details: JSON.stringify({
+          reportName: report.name,
+          organizationId: report.organizationId,
+          insightsLength: coachingInsights.length
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
       });
 
       res.json({

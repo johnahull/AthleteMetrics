@@ -315,7 +315,7 @@ export default function AdminPage() {
     queryKey: ["/api/site-settings"],
   });
 
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-4o-mini");
 
   useEffect(() => {
     if (siteSettings?.aiModel) {
@@ -341,14 +341,9 @@ export default function AdminPage() {
     },
   });
 
-  const handleModelChange = (model: string) => {
-    setSelectedModel(model);
-    updateAiModelMutation.mutate(model);
-  };
-
   // AI Model pricing data
   const aiModels = [
-    { value: "gpt-5-nano", label: "GPT-5 Nano", tier: "Budget", inputPrice: 0.05, outputPrice: 0.40 },
+    { value: "gpt-4o-mini", label: "GPT-4o Mini", tier: "Budget", inputPrice: 0.15, outputPrice: 0.60 },
     { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", tier: "Budget", inputPrice: 0.075, outputPrice: 0.30 },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tier: "Budget", inputPrice: 0.10, outputPrice: 0.40 },
     { value: "claude-haiku-3", label: "Claude Haiku 3", tier: "Budget", inputPrice: 0.25, outputPrice: 1.25 },
@@ -356,6 +351,21 @@ export default function AdminPage() {
     { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tier: "Premium", inputPrice: 1.25, outputPrice: 10.00 },
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5", tier: "Premium", inputPrice: 3.00, outputPrice: 15.00 },
   ];
+
+  const handleModelChange = (model: string) => {
+    // Client-side validation: ensure model exists in available models
+    const modelExists = aiModels.some(m => m.value === model);
+    if (!modelExists) {
+      toast({
+        title: "Invalid model selection",
+        description: "Please select a valid AI model",
+        variant: "destructive"
+      });
+      return;
+    }
+    setSelectedModel(model);
+    updateAiModelMutation.mutate(model);
+  };
 
   const selectedModelData = aiModels.find(m => m.value === selectedModel);
   const estimatedCostPer100 = selectedModelData
