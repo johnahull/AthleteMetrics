@@ -205,7 +205,10 @@ class OpenAIProvider implements AIProvider {
 
   async generateInsights(prompt: string): Promise<string> {
     try {
-      const completion = await this.client.chat.completions.create({
+      // GPT-5 models use different parameters than older models
+      const isGpt5Model = this.modelName.startsWith('gpt-5');
+
+      const requestParams: any = {
         model: this.modelName,
         messages: [
           {
@@ -217,8 +220,19 @@ class OpenAIProvider implements AIProvider {
             content: prompt,
           },
         ],
-        max_completion_tokens: 2048,
-      });
+      };
+
+      if (isGpt5Model) {
+        // GPT-5 models use reasoning_effort and verbosity instead of temperature
+        requestParams.reasoning_effort = "low";
+        requestParams.max_completion_tokens = 2048;
+      } else {
+        // Older models use traditional parameters
+        requestParams.temperature = 0.7;
+        requestParams.max_tokens = 2048;
+      }
+
+      const completion = await this.client.chat.completions.create(requestParams);
 
       const text = completion.choices[0]?.message?.content;
 
