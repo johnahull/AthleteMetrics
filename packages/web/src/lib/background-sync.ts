@@ -1,4 +1,5 @@
 import { getUnsyncedMeasurements, markMeasurementSynced, cleanupOldMeasurements, db } from './offline-db';
+import { apiClient } from './api';
 
 // Maximum number of retry attempts before giving up
 const MAX_RETRIES = 5;
@@ -131,27 +132,14 @@ export class BackgroundSyncService {
       }
 
       try {
-        // Send to server
-        const response = await fetch('/api/measurements', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            userId: measurement.athleteId,
-            metricType: measurement.metricType,
-            value: measurement.value,
-            date: measurement.date,
-            notes: measurement.notes
-          })
+        // Send to server using apiClient for CSRF protection
+        const result = await apiClient.post('/measurements', {
+          userId: measurement.athleteId,
+          metricType: measurement.metricType,
+          value: measurement.value,
+          date: measurement.date,
+          notes: measurement.notes
         });
-
-        if (!response.ok) {
-          throw new Error(`Server responded with ${response.status}`);
-        }
-
-        const result = await response.json();
 
         // Mark as synced
         if (measurement.id) {
