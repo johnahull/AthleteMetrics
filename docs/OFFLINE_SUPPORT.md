@@ -74,18 +74,20 @@ await markMeasurementSynced(localId, serverId);
 **Location**: `packages/web/src/lib/background-sync.ts`
 
 **Features**:
-- Automatic sync every 30 seconds when online
-- Connection restoration detection
+- Automatic sync every 5 minutes when online and page is visible (battery-efficient)
+- Connection restoration detection with immediate sync
+- Tab visibility awareness - syncs when tab becomes visible
 - Batch processing of queued measurements
-- Automatic retry for failed sync attempts
+- Automatic retry for failed sync attempts (max 5 retries)
 - Cleanup of synced measurements older than 7 days
 
 **How It Works**:
 1. Service starts when user logs in (in `layout.tsx`)
-2. Checks for unsynced measurements every 30 seconds
-3. Sends queued measurements to server when online
-4. Marks successfully synced measurements
-5. Stops when user logs out
+2. Checks for unsynced measurements every 5 minutes (only when page is visible)
+3. Immediately syncs when connection is restored or tab becomes visible
+4. Sends queued measurements to server when online
+5. Marks successfully synced measurements
+6. Stops when user logs out
 
 **Manual Sync**:
 ```typescript

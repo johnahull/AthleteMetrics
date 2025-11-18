@@ -137,11 +137,14 @@ export async function addOfflineMeasurement(measurement: Omit<OfflineMeasurement
 /**
  * Get all unsynced measurements (excluding permanently failed ones)
  * Uses compound index for O(1) query performance
+ *
+ * Note: Dexie/IndexedDB stores booleans as 0/1 internally, so we query
+ * with numeric values [0, 0] to match synced=false AND failed=false
  */
 export async function getUnsyncedMeasurements(): Promise<OfflineMeasurement[]> {
   return await db.measurements
     .where('[synced+failed]')
-    .equals([0, 0]) // synced=false AND failed=false (use compound index)
+    .equals([0, 0]) // Dexie stores booleans as 0/1 in IndexedDB
     .toArray();
 }
 
