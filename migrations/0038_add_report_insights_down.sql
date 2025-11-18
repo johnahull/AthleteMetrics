@@ -6,6 +6,9 @@
 -- Drop index first
 DROP INDEX IF EXISTS reports_has_insights_idx;
 
+-- Drop constraint before removing columns
+ALTER TABLE reports DROP CONSTRAINT IF EXISTS reports_coaching_insights_model_check;
+
 -- Remove columns
 ALTER TABLE reports DROP COLUMN IF EXISTS coaching_insights_model;
 ALTER TABLE reports DROP COLUMN IF EXISTS coaching_insights_generated_at;

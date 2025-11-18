@@ -246,13 +246,12 @@ class OpenAIProvider implements AIProvider {
 
       return text;
     } catch (error: any) {
-      // Log the actual error for debugging
+      // Log the actual error for debugging (limited to safe fields)
       console.error(`OpenAI API Error for model ${this.modelName}:`, {
         message: error?.message,
         status: error?.status,
         code: error?.code,
         type: error?.type,
-        error: error?.error,
       });
 
       // Handle specific OpenAI errors

@@ -10,7 +10,8 @@ BEGIN
     SELECT 1 FROM audit_logs
     WHERE action IN (
       'org_ai_enabled_by_site_admin', 'org_ai_disabled_by_site_admin',
-      'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin'
+      'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin',
+      'site_ai_model_changed', 'report_ai_insights_generated', 'report_ai_insights_updated'
     )
   ) THEN
     RAISE EXCEPTION 'Cannot rollback migration: AI audit actions exist in audit_logs table';
