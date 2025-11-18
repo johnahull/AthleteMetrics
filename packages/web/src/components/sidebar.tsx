@@ -30,7 +30,8 @@ const NAVIGATION_CONFIGS = {
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
-      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" }
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
+      { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
