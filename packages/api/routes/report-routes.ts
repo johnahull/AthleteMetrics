@@ -996,7 +996,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate report data
-        let reportData: Record<string, unknown>;
+        let reportData: unknown;
         if (report.reportType === 'team') {
           reportData = await reportService.generateTeamReport(reportId, user.id);
         } else {
@@ -1099,6 +1099,10 @@ export function registerReportRoutes(app: Express) {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
+
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
 
       // Get report
       const report = await storage.getReport(reportId);
