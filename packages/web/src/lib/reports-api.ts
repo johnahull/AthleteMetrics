@@ -32,6 +32,7 @@ interface UpdateInsightsResponse {
 async function generateInsights(reportId: string): Promise<GenerateInsightsResponse> {
   const response = await fetch(`/api/reports/${reportId}/generate-insights`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
     credentials: "include",
   });
 
@@ -89,6 +90,9 @@ export function useGenerateInsights(reportId: string) {
           coachingInsightsModel: data.model,
         };
       });
+
+      // Invalidate reports list to update coachingInsightsGeneratedAt timestamp
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
     },
   });
 }
@@ -113,6 +117,9 @@ export function useUpdateInsights(reportId: string) {
           coachingInsightsModel: data.coachingInsightsModel,
         };
       });
+
+      // Invalidate reports list to update coachingInsightsGeneratedAt timestamp
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
     },
   });
 }

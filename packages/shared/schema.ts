@@ -6,6 +6,9 @@ import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
 
+// AI Coaching Insights constants
+export const MAX_INSIGHTS_LENGTH = 10000;
+
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),

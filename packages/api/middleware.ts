@@ -237,8 +237,6 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
   if (!organization.aiEnabledBySiteAdmin || !organization.aiEnabled) {
     return res.status(403).json({
       message: "AI coaching insights feature is not enabled for this organization",
-      aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin,
-      aiEnabled: organization.aiEnabled,
     });
   }
 

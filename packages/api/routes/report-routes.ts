@@ -18,6 +18,7 @@ import {
   users,
   organizations,
   teams,
+  MAX_INSIGHTS_LENGTH,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -1139,8 +1140,7 @@ export function registerReportRoutes(app: Express) {
       // Generate insights using AI service
       const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
 
-      // Validate insights length (10,000 char limit from schema)
-      const MAX_INSIGHTS_LENGTH = 10000;
+      // Validate insights length
       if (insights.length > MAX_INSIGHTS_LENGTH) {
         return res.status(400).json({
           message: `Generated insights exceed maximum length of ${MAX_INSIGHTS_LENGTH} characters. Please try regenerating.`
