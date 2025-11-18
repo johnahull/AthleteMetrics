@@ -79,7 +79,7 @@ export function useGenerateInsights(reportId: string) {
   return useMutation({
     mutationFn: () => generateInsights(reportId),
     onSuccess: (data) => {
-      // Update the report cache with new insights
+      // Update the report cache with new insights (optimistic update)
       queryClient.setQueryData(["/api/reports", reportId], (old: any) => {
         if (!old) return old;
         return {
@@ -89,9 +89,6 @@ export function useGenerateInsights(reportId: string) {
           coachingInsightsModel: data.model,
         };
       });
-
-      // Invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId] });
     },
   });
 }
@@ -106,7 +103,7 @@ export function useUpdateInsights(reportId: string) {
   return useMutation({
     mutationFn: (insights: string) => updateInsights(reportId, insights),
     onSuccess: (data) => {
-      // Update the report cache with edited insights
+      // Update the report cache with edited insights (optimistic update)
       queryClient.setQueryData(["/api/reports", reportId], (old: any) => {
         if (!old) return old;
         return {
@@ -116,9 +113,6 @@ export function useUpdateInsights(reportId: string) {
           coachingInsightsModel: data.coachingInsightsModel,
         };
       });
-
-      // Invalidate to ensure consistency
-      queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId] });
     },
   });
 }
