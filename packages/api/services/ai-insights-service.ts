@@ -358,6 +358,7 @@ export interface ReportData {
 
   // Team report specific
   teamName?: string;
+  teamSport?: string; // Sport from team.sport
   athleteCount?: number;
 
   // Individual report specific
@@ -365,6 +366,7 @@ export interface ReportData {
   athletePosition?: string;
   athleteAge?: number;
   athleteGender?: string;
+  athleteSport?: string; // Sport from athlete.sports[0]
 
   // Common report data
   timeframe: string;
@@ -448,12 +450,14 @@ function buildPrompt(reportData: ReportData): string {
   // Team-specific context
   if (reportType === "team" && reportData.teamName) {
     prompt += `- Team: ${sanitizeForPrompt(reportData.teamName)}\n`;
+    if (reportData.teamSport) prompt += `- Sport: ${sanitizeForPrompt(reportData.teamSport)}\n`;
     prompt += `- Athletes: ${reportData.athleteCount || "N/A"}\n`;
   }
 
   // Individual-specific context
   if (reportType === "individual" && reportData.athleteName) {
     prompt += `- Athlete: ${sanitizeForPrompt(reportData.athleteName)}\n`;
+    if (reportData.athleteSport) prompt += `- Sport: ${sanitizeForPrompt(reportData.athleteSport)}\n`;
     if (reportData.athletePosition) prompt += `- Position: ${sanitizeForPrompt(reportData.athletePosition)}\n`;
     if (reportData.athleteAge) prompt += `- Age: ${reportData.athleteAge}\n`;
     if (reportData.athleteGender) prompt += `- Gender: ${sanitizeForPrompt(reportData.athleteGender)}\n`;

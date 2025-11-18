@@ -27,6 +27,7 @@ export const teams = pgTable("teams", {
   organizationId: varchar("organization_id").notNull().references(() => organizations.id),
   name: text("name").notNull(),
   level: text("level"), // "Club", "HS", "College"
+  sport: text("sport"), // "Soccer", "Basketball", etc.
   notes: text("notes"),
   // Temporal archiving fields
   archivedAt: timestamp("archived_at"),
@@ -747,6 +748,7 @@ export const insertTeamSchema = createInsertSchema(teams).omit({
   season: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   level: z.enum(['Club', 'HS', 'College']).optional(),
+  sport: z.string().trim().optional(), // "Soccer", "Basketball", etc.
 });
 
 export const insertUserSchema = createInsertSchema(users).omit({

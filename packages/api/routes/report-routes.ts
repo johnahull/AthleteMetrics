@@ -17,6 +17,7 @@ import {
   insertReportSnapshotSchema,
   users,
   organizations,
+  teams,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -1980,8 +1981,25 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
 
     // Add team-specific data
     if (report.reportType === 'team') {
-      aiReportData.teamName = reportData.team?.name;
       aiReportData.athleteCount = reportData.athleteCount || 0;
+
+      // Fetch team info (name and sport) from the first team in teamIds
+      if (reportData.teamIds && reportData.teamIds.length > 0) {
+        const teamData = await db
+          .select({
+            name: teams.name,
+            sport: teams.sport,
+          })
+          .from(teams)
+          .where(eq(teams.id, reportData.teamIds[0]))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (teamData) {
+          aiReportData.teamName = teamData.name;
+          aiReportData.teamSport = teamData.sport || undefined;
+        }
+      }
     }
 
     // Add individual-specific data
@@ -1990,6 +2008,8 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
       aiReportData.athletePosition = reportData.athlete.position;
       aiReportData.athleteAge = reportData.athlete.age;
       aiReportData.athleteGender = reportData.athlete.gender;
+      // Extract sport from athlete.sports array (use first sport)
+      aiReportData.athleteSport = reportData.athlete.sports?.[0] || undefined;
     }
 
     return aiReportData;
