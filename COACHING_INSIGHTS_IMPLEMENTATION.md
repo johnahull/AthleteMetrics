@@ -7,9 +7,9 @@ This document summarizes the implementation of the AI-powered Coaching Insights 
 
 ### 🤖 Multi-Provider AI Integration
 - **7 AI Models** across 3 providers (OpenAI, Google, Anthropic)
-- **Budget Tier** (5 models): GPT-5 Nano, Gemini 2.0/2.5 Flash-Lite, Claude Haiku 3/4.5
+- **Budget Tier** (5 models): GPT-4o Mini, Gemini 2.0/2.5 Flash-Lite, Claude Haiku 3/4.5
 - **Premium Tier** (2 models): Gemini 2.5 Pro, Claude Sonnet 4.5
-- **Default Model**: GPT-5 Nano ($0.05/$0.40 per 1M tokens - cheapest)
+- **Default Model**: GPT-4o Mini ($0.15/$0.60 per 1M tokens)
 - **Model-Agnostic Architecture**: Strategy pattern with provider-specific implementations
 
 ### 🔐 Hierarchical Permission System
@@ -43,7 +43,7 @@ This document summarizes the implementation of the AI-powered Coaching Insights 
 ```sql
 CREATE TABLE site_settings (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  ai_model TEXT NOT NULL DEFAULT 'gpt-5-nano',
+  ai_model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_by VARCHAR REFERENCES users(id)
 );
@@ -51,7 +51,7 @@ CREATE TABLE site_settings (
 -- Constraint for valid AI models
 ALTER TABLE site_settings ADD CONSTRAINT site_settings_ai_model_check
   CHECK (ai_model IN (
-    'gpt-5-nano', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite',
+    'gpt-4o-mini', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite',
     'claude-haiku-3', 'claude-haiku-4.5', 'gemini-2.5-pro', 'claude-sonnet-4.5'
   ));
 ```
@@ -226,10 +226,10 @@ ADMIN_PASSWORD=your_password_here
 
 ### Provider Setup
 
-**OpenAI** (gpt-5-nano):
+**OpenAI** (gpt-4o-mini):
 - Account: https://platform.openai.com/
 - API Key: From API Keys section
-- Models: GPT-5 Nano
+- Models: GPT-4o Mini
 
 **Google** (gemini-2.0-flash-lite, gemini-2.5-flash-lite, gemini-2.5-pro):
 - Account: https://aistudio.google.com/

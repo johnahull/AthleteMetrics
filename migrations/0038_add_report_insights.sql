@@ -11,7 +11,7 @@ ALTER TABLE reports ADD COLUMN IF NOT EXISTS coaching_insights_model TEXT;
 -- Add comments
 COMMENT ON COLUMN reports.coaching_insights IS 'AI-generated or manually edited coaching insights for this report (markdown format)';
 COMMENT ON COLUMN reports.coaching_insights_generated_at IS 'Timestamp when coaching insights were last generated or updated';
-COMMENT ON COLUMN reports.coaching_insights_model IS 'AI model used to generate the insights (e.g., gpt-5-nano, claude-sonnet-4.5)';
+COMMENT ON COLUMN reports.coaching_insights_model IS 'AI model used to generate the insights (e.g., gpt-4o-mini, claude-sonnet-4.5)';
 
 -- Create index for reports with insights (for analytics/reporting)
 CREATE INDEX IF NOT EXISTS reports_has_insights_idx ON reports(coaching_insights_generated_at) WHERE coaching_insights IS NOT NULL;
@@ -21,7 +21,7 @@ ALTER TABLE reports ADD CONSTRAINT reports_coaching_insights_model_check
   CHECK (
     coaching_insights_model IS NULL OR
     coaching_insights_model IN (
-      'gpt-5-nano',
+      'gpt-4o-mini',
       'gemini-2.0-flash-lite',
       'gemini-2.5-flash-lite',
       'claude-haiku-3',

@@ -200,6 +200,7 @@ export function CoachingInsightsCard({
             rows={12}
             className="font-mono text-sm"
             placeholder="Enter coaching insights..."
+            data-testid="insights-editor"
           />
           <div className="flex justify-between items-center text-sm text-muted-foreground">
             <span>
@@ -243,7 +244,7 @@ export function CoachingInsightsCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="prose prose-sm max-w-none dark:prose-invert">
+        <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
           <ReactMarkdown>{initialInsights || ""}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">

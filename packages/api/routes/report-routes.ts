@@ -557,11 +557,14 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
+      // Validate request body with Zod schema (partial for updates)
+      const validatedData = insertReportSchema.partial().parse(req.body);
+
       // Update report
       const [updated] = await db
         .update(reports)
         .set({
-          ...req.body,
+          ...validatedData,
           updatedAt: new Date(),
         })
         .where(eq(reports.id, reportId))
@@ -1119,14 +1122,21 @@ export function registerReportRoutes(app: Express) {
 
       // Get site settings to determine which AI model to use
       const siteSettings = await storage.getSiteSettings();
-      const modelKey = (siteSettings?.aiModel || "gpt-4o-mini") as import("../services/ai-insights-service").AIModelKey;
+      const { AI_MODELS, generateCoachingInsights } = await import("../services/ai-insights-service");
+      type AIModelKey = keyof typeof AI_MODELS;
+
+      const modelKey = (siteSettings?.aiModel || "gpt-4o-mini") as string;
+
+      // Validate model key exists in AI_MODELS
+      if (!(modelKey in AI_MODELS)) {
+        return res.status(500).json({ message: "Invalid AI model configuration. Please contact your administrator." });
+      }
 
       // Build report data for AI
       const reportData = await buildReportDataForAI(report, user.id, reportService);
 
       // Generate insights using AI service
-      const { generateCoachingInsights } = await import("../services/ai-insights-service");
-      const insights = await generateCoachingInsights(modelKey, reportData);
+      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
 
       // Validate insights length (10,000 char limit from schema)
       const MAX_INSIGHTS_LENGTH = 10000;

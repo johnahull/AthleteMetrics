@@ -26,7 +26,8 @@ BEGIN
       'custom_benchmark_created', 'custom_benchmark_updated', 'custom_benchmark_deleted',
       'org_benchmark_enabled', 'org_benchmark_disabled', 'org_benchmark_updated',
       'org_ai_enabled_by_site_admin', 'org_ai_disabled_by_site_admin',
-      'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin'
+      'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin',
+      'site_ai_model_changed', 'report_ai_insights_generated', 'report_ai_insights_updated'
     )
   ) THEN
     RAISE EXCEPTION 'Cannot apply migration: invalid action values exist in audit_logs table';
@@ -61,7 +62,8 @@ BEGIN
     'org_benchmark_enabled', 'org_benchmark_disabled', 'org_benchmark_updated',
     -- AI feature management actions
     'org_ai_enabled_by_site_admin', 'org_ai_disabled_by_site_admin',
-    'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin'
+    'org_ai_enabled_by_org_admin', 'org_ai_disabled_by_org_admin',
+    'site_ai_model_changed', 'report_ai_insights_generated', 'report_ai_insights_updated'
   ));
 END $$;
 

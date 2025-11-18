@@ -356,7 +356,7 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 // Site Settings - Global site configuration (singleton table)
 export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  aiModel: text("ai_model").notNull().default("gpt-4o-mini"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
 });
@@ -1411,7 +1411,7 @@ export const insertAthleteSchema = z.object({
 
 // Site Settings validation schemas
 export const AI_MODELS = [
-  "gpt-5-nano",
+  "gpt-4o-mini",
   "gemini-2.0-flash-lite",
   "gemini-2.5-flash-lite",
   "claude-haiku-3",
