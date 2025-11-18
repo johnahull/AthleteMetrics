@@ -14,8 +14,11 @@ import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
 import { KPICardWithTrend } from "@/components/kpi-card-with-trend";
 import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { MeasurementsTimeline } from "@/components/measurements-timeline";
 
 export default function Dashboard() {
+  const isMobile = useIsMobile();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
   const [measurementModalOpen, setMeasurementModalOpen] = useState(false);
@@ -405,8 +408,25 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-6">
             <h3 className="text-lg font-semibold text-gray-900">Recent Measurements</h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          {isMobile ? (
+            /* Mobile Timeline View */
+            <MeasurementsTimeline
+              measurements={(recentMeasurements || []).slice(0, 10).map((m: any) => ({
+                id: m.id,
+                athleteId: m.user?.id || '',
+                athleteName: `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim() || 'Unknown',
+                metricType: m.metricType || '',
+                metricName: m.metricType ? getMetricDisplayName(m.metricType) : 'Unknown',
+                value: m.value ?? 0,
+                date: m.date,
+                notes: m.notes,
+                teamName: m.team?.name,
+              }))}
+            />
+          ) : (
+            /* Desktop Table View */
+            <div className="overflow-x-auto md:block hidden">
+              <table className="w-full">
               <thead>
                 <tr className="text-left text-sm font-medium text-gray-500 border-b border-gray-200">
                   <th className="pb-3">Athlete</th>
@@ -465,7 +485,8 @@ export default function Dashboard() {
                 )}
               </tbody>
             </table>
-          </div>
+            </div>
+          )}
         </CardContent>
       </Card>
       )}

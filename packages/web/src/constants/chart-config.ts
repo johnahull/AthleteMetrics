@@ -182,9 +182,10 @@ export const DISTRIBUTION_CONFIG = {
 // RESPONSIVE BREAKPOINTS
 // =============================================================================
 
+import { RESPONSIVE_BREAKPOINTS } from "@shared/constants"
+
 export const RESPONSIVE_CONFIG = {
-  MOBILE_BREAKPOINT: 768,
-  TABLET_BREAKPOINT: 1024,
+  ...RESPONSIVE_BREAKPOINTS,
 
   // Reduced sizing for mobile
   MOBILE_POINT_RADIUS: 3,

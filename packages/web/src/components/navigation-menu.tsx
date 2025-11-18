@@ -13,9 +13,10 @@ interface NavigationItem {
 interface NavigationMenuProps {
   navigation: NavigationItem[];
   currentLocation: string;
+  onNavigate?: () => void;
 }
 
-export function NavigationMenu({ navigation, currentLocation }: NavigationMenuProps) {
+export function NavigationMenu({ navigation, currentLocation, onNavigate }: NavigationMenuProps) {
   return (
     <nav className="p-4 space-y-2 flex-1">
       {navigation.map((item) => {
@@ -25,11 +26,12 @@ export function NavigationMenu({ navigation, currentLocation }: NavigationMenuPr
             <div
               className={cn(
                 "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer",
-                isActive 
-                  ? "bg-primary text-white" 
+                isActive
+                  ? "bg-primary text-white"
                   : "text-gray-700 hover:bg-gray-100"
               )}
               data-testid={item.testId || `nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+              onClick={onNavigate}
             >
               <item.icon className="h-5 w-5" />
               <span>{item.name}</span>

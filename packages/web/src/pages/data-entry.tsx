@@ -22,10 +22,11 @@ import { BatchWizard, BatchWizardConfig } from '@/components/batch-measurement-e
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/use-batch-measurement-form';
 import { useToast } from '@/hooks/use-toast';
+import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 
 export default function DataEntry() {
   const { toast } = useToast();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('single');

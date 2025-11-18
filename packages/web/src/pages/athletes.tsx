@@ -17,8 +17,11 @@ import { useAuth } from "@/lib/auth";
 import type { Team } from "@shared/schema";
 import { PaginationControls } from "@/components/team-athletes/PaginationControls";
 import { TableSkeleton } from "@/components/ui/loading-states";
+import { useResponsiveMode } from "@/hooks/use-mobile";
+import { AthletesCardView } from "@/components/athletes-card-view";
 
 export default function Athletes() {
+  const responsiveMode = useResponsiveMode();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [location, setLocation] = useLocation();
 
@@ -1004,8 +1007,22 @@ export default function Athletes() {
                 Add Athlete
               </Button>
             </div>
+          ) : responsiveMode === 'mobile' || responsiveMode === 'tablet' ? (
+            /* Mobile/Tablet Card View */
+            <AthletesCardView
+              athletes={athletes.map((athlete: any) => ({
+                ...athlete,
+                teamName: athlete.team?.name,
+                measurementCount: athlete.measurementCount || 0,
+              }))}
+              onAthleteClick={(athleteId) => {
+                // Could open a measurement modal or navigate
+                setLocation(`/athletes/${athleteId}`);
+              }}
+            />
           ) : (
-            <div className="overflow-x-auto">
+            /* Desktop Table View */
+            <div className="overflow-x-auto md:block hidden">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr className="text-left text-sm font-medium text-gray-500">
