@@ -11,7 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertAthleteSchema, Gender, SoccerPosition, type InsertAthlete, type User, type Team } from "@shared/schema";
+import { insertAthleteSchema, Gender, SoccerPosition, AVAILABLE_SPORTS, type InsertAthlete, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Trophy, Users, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 
@@ -519,7 +519,9 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                                 <SelectValue placeholder="Select sport" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="Soccer">Soccer</SelectItem>
+                                {AVAILABLE_SPORTS.map((sport) => (
+                                  <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </FormControl>

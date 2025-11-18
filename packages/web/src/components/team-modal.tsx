@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertTeamSchema, type InsertTeam, type Team } from "@shared/schema";
+import { insertTeamSchema, AVAILABLE_SPORTS, type InsertTeam, type Team } from "@shared/schema";
 import { normalizeString } from "@/lib/form-utils";
 
 interface TeamModalProps {
@@ -265,15 +265,22 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Sport</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        value={field.value || ""}
-                        placeholder="e.g., Soccer"
-                        disabled={isPending}
-                        data-testid="input-team-sport"
-                      />
-                    </FormControl>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-team-sport">
+                          <SelectValue placeholder="Select sport" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {AVAILABLE_SPORTS.map((sport) => (
+                          <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

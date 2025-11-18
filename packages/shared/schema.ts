@@ -1367,6 +1367,14 @@ export const SoccerPosition = {
   GOALKEEPER: "GK",
 } as const;
 
+// Available sports - add new sports here
+export const Sport = {
+  SOCCER: "Soccer",
+} as const;
+
+// Array of sport values for use in dropdowns
+export const AVAILABLE_SPORTS = Object.values(Sport);
+
 // Organization-specific roles only
 export const UserRole = {
   ORG_ADMIN: "org_admin",
