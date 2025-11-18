@@ -1125,7 +1125,7 @@ export function registerReportRoutes(app: Express) {
       const { AI_MODELS, generateCoachingInsights } = await import("../services/ai-insights-service");
       type AIModelKey = keyof typeof AI_MODELS;
 
-      const modelKey = (siteSettings?.aiModel || "gpt-4o-mini") as string;
+      const modelKey = (siteSettings?.aiModel || "gpt-5-nano") as string;
 
       // Validate model key exists in AI_MODELS
       if (!(modelKey in AI_MODELS)) {

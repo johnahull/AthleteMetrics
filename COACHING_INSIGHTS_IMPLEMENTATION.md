@@ -43,7 +43,7 @@ This document summarizes the implementation of the AI-powered Coaching Insights 
 ```sql
 CREATE TABLE site_settings (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
-  ai_model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+  ai_model TEXT NOT NULL DEFAULT 'gpt-5-nano',
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_by VARCHAR REFERENCES users(id)
 );
@@ -51,7 +51,7 @@ CREATE TABLE site_settings (
 -- Constraint for valid AI models
 ALTER TABLE site_settings ADD CONSTRAINT site_settings_ai_model_check
   CHECK (ai_model IN (
-    'gpt-4o-mini', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite',
+    'gpt-5-nano', 'gemini-2.0-flash-lite', 'gemini-2.5-flash-lite',
     'claude-haiku-3', 'claude-haiku-4.5', 'gemini-2.5-pro', 'claude-sonnet-4.5'
   ));
 ```
@@ -226,7 +226,7 @@ ADMIN_PASSWORD=your_password_here
 
 ### Provider Setup
 
-**OpenAI** (gpt-4o-mini):
+**OpenAI** (gpt-5-nano):
 - Account: https://platform.openai.com/
 - API Key: From API Keys section
 - Models: GPT-4o Mini

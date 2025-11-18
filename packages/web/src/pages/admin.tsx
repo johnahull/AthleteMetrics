@@ -315,7 +315,7 @@ export default function AdminPage() {
     queryKey: ["/api/site-settings"],
   });
 
-  const [selectedModel, setSelectedModel] = useState<string>("gpt-4o-mini");
+  const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
 
   useEffect(() => {
     if (siteSettings?.aiModel) {
@@ -343,7 +343,7 @@ export default function AdminPage() {
 
   // AI Model pricing data
   const aiModels = [
-    { value: "gpt-4o-mini", label: "GPT-4o Mini", tier: "Budget", inputPrice: 0.15, outputPrice: 0.60 },
+    { value: "gpt-5-nano", label: "GPT-5 Nano", tier: "Budget", inputPrice: 0.05, outputPrice: 0.40 },
     { value: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite", tier: "Budget", inputPrice: 0.075, outputPrice: 0.30 },
     { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite", tier: "Budget", inputPrice: 0.10, outputPrice: 0.40 },
     { value: "claude-haiku-3", label: "Claude Haiku 3", tier: "Budget", inputPrice: 0.25, outputPrice: 1.25 },

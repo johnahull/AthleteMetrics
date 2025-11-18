@@ -56,7 +56,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-4o-mini",
+        aiModel: "gpt-5-nano",
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -104,7 +104,7 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
 
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
-    const previousModel = previousSettings?.aiModel || 'gpt-4o-mini';
+    const previousModel = previousSettings?.aiModel || 'gpt-5-nano';
 
     // Update or create settings
     const updatedSettings = await storage.updateSiteSettings({
