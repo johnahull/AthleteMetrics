@@ -217,7 +217,6 @@ class OpenAIProvider implements AIProvider {
             content: prompt,
           },
         ],
-        temperature: 0.7,
         max_completion_tokens: 2048,
       });
 
