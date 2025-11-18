@@ -1100,7 +1100,18 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Report not found" });
       }
 
-      // Check user has access to this report's organization
+      // SECURITY: Verify user has access to this report's organization
+      const hasAccess = await reportService["validateOrganizationAccess"](
+        user.id,
+        report.organizationId
+      );
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: "Access denied to this report"
+        });
+      }
+
+      // Get organization to check AI flags
       const org = await storage.getOrganization(report.organizationId);
       if (!org) {
         return res.status(404).json({ message: "Organization not found" });
@@ -1116,6 +1127,14 @@ export function registerReportRoutes(app: Express) {
       // Generate insights using AI service
       const { generateCoachingInsights } = await import("../services/ai-insights-service");
       const insights = await generateCoachingInsights(modelKey, reportData);
+
+      // Validate insights length (10,000 char limit from schema)
+      const MAX_INSIGHTS_LENGTH = 10000;
+      if (insights.length > MAX_INSIGHTS_LENGTH) {
+        return res.status(400).json({
+          message: `Generated insights exceed maximum length of ${MAX_INSIGHTS_LENGTH} characters. Please try regenerating.`
+        });
+      }
 
       // Update report with generated insights
       const updatedReport = await storage.updateReport(reportId, {

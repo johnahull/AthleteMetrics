@@ -314,10 +314,28 @@ export async function generateCoachingInsights(
 }
 
 /**
+ * Sanitize user-generated content before including in AI prompts
+ * Prevents potential prompt injection attacks by escaping markdown and special characters
+ */
+function sanitizeForPrompt(input: string): string {
+  if (!input) return '';
+  return input
+    .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
+    .replace(/\n+/g, ' ') // Convert newlines to spaces
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim()
+    .substring(0, 500); // Limit length of individual fields
+}
+
+/**
  * Build the prompt for the AI model based on report data
  */
 function buildPrompt(reportData: ReportData): string {
-  const { reportType, reportName, organizationName } = reportData;
+  const { reportType } = reportData;
+
+  // Sanitize user-provided content to prevent prompt injection
+  const reportName = sanitizeForPrompt(reportData.reportName);
+  const organizationName = sanitizeForPrompt(reportData.organizationName);
 
   let prompt = `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
 
@@ -330,16 +348,16 @@ function buildPrompt(reportData: ReportData): string {
 
   // Team-specific context
   if (reportType === "team" && reportData.teamName) {
-    prompt += `- Team: ${reportData.teamName}\n`;
+    prompt += `- Team: ${sanitizeForPrompt(reportData.teamName)}\n`;
     prompt += `- Athletes: ${reportData.athleteCount || "N/A"}\n`;
   }
 
   // Individual-specific context
   if (reportType === "individual" && reportData.athleteName) {
-    prompt += `- Athlete: ${reportData.athleteName}\n`;
-    if (reportData.athletePosition) prompt += `- Position: ${reportData.athletePosition}\n`;
+    prompt += `- Athlete: ${sanitizeForPrompt(reportData.athleteName)}\n`;
+    if (reportData.athletePosition) prompt += `- Position: ${sanitizeForPrompt(reportData.athletePosition)}\n`;
     if (reportData.athleteAge) prompt += `- Age: ${reportData.athleteAge}\n`;
-    if (reportData.athleteGender) prompt += `- Gender: ${reportData.athleteGender}\n`;
+    if (reportData.athleteGender) prompt += `- Gender: ${sanitizeForPrompt(reportData.athleteGender)}\n`;
   }
 
   prompt += `\n`;

@@ -51,9 +51,9 @@ test.describe('Coaching Insights - Site Admin Configuration', () => {
     await modelSelect.click();
 
     // Verify all 7 models are available
-    await expect(page.locator('text=GPT-5 Nano')).toBeVisible();
-    await expect(page.locator('text=Gemini 2.0 Flash-Lite')).toBeVisible();
-    await expect(page.locator('text=Gemini 2.5 Flash-Lite')).toBeVisible();
+    await expect(page.locator('text=GPT-4o Mini')).toBeVisible();
+    await expect(page.locator('text=Gemini 2.0 Flash Lite')).toBeVisible();
+    await expect(page.locator('text=Gemini 2.5 Flash Lite')).toBeVisible();
     await expect(page.locator('text=Claude Haiku 3')).toBeVisible();
     await expect(page.locator('text=Claude Haiku 4.5')).toBeVisible();
     await expect(page.locator('text=Gemini 2.5 Pro')).toBeVisible();

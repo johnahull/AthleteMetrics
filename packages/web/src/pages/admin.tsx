@@ -382,8 +382,12 @@ export default function AdminPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <label className="text-sm font-medium">AI Model</label>
-            <Select value={selectedModel} onValueChange={handleModelChange}>
-              <SelectTrigger>
+            <Select
+              value={selectedModel}
+              onValueChange={handleModelChange}
+              disabled={updateAiModelMutation.isPending}
+            >
+              <SelectTrigger data-testid="ai-model-select">
                 <SelectValue placeholder="Select AI model" />
               </SelectTrigger>
               <SelectContent>

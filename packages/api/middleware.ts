@@ -210,9 +210,10 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
   // If not in params, try to get from report ID
   if (!organizationId && req.params.id) {
     const report = await storage.getReport(req.params.id);
-    if (report) {
-      organizationId = report.organizationId;
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
     }
+    organizationId = report.organizationId;
   }
 
   if (!organizationId) {
