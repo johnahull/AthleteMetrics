@@ -18,6 +18,7 @@ import {
   users,
   organizations,
   teams,
+  auditLogs,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
@@ -1139,6 +1140,21 @@ export function registerReportRoutes(app: Express) {
         return res.status(500).json({ message: "Invalid AI model configuration. Please contact your administrator." });
       }
 
+      // Validate API key is available for the selected model's provider
+      const modelConfig = AI_MODELS[modelKey as AIModelKey];
+      const apiKeyEnvVars: Record<string, string> = {
+        'openai': 'OPENAI_API_KEY',
+        'google': 'GOOGLE_AI_API_KEY',
+        'anthropic': 'ANTHROPIC_API_KEY'
+      };
+      const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
+      if (!process.env[apiKeyEnvVar]) {
+        console.error(`AI generation failed: Missing API key for provider ${modelConfig.provider}`);
+        return res.status(503).json({
+          message: "AI service is not available. Please contact your administrator to configure the AI provider."
+        });
+      }
+
       // Build report data for AI
       const reportData = await buildReportDataForAI(report, user.id, reportService);
 
@@ -1152,32 +1168,42 @@ export function registerReportRoutes(app: Express) {
         });
       }
 
-      // Update report with generated insights
-      const updatedReport = await storage.updateReport(reportId, {
-        coachingInsights: insights,
-        coachingInsightsGeneratedAt: new Date(),
-        coachingInsightsModel: modelKey,
-      });
+      // Use transaction to ensure atomic update of report and audit log
+      const result = await db.transaction(async (tx) => {
+        // Update report with generated insights
+        const [updatedReport] = await tx
+          .update(reports)
+          .set({
+            coachingInsights: insights,
+            coachingInsightsGeneratedAt: new Date(),
+            coachingInsightsModel: modelKey,
+            updatedAt: new Date(),
+          })
+          .where(eq(reports.id, reportId))
+          .returning();
 
-      // Audit log for AI insight generation
-      await storage.createAuditLog({
-        userId: user.id,
-        action: 'report_ai_insights_generated',
-        resourceType: 'report',
-        resourceId: reportId,
-        details: JSON.stringify({
-          reportName: report.name,
-          organizationId: report.organizationId,
-          model: modelKey,
-          insightsLength: insights.length
-        }),
-        ipAddress: req.ip || null,
-        userAgent: req.get('user-agent') || null,
+        // Audit log for AI insight generation
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: 'report_ai_insights_generated',
+          resourceType: 'report',
+          resourceId: reportId,
+          details: JSON.stringify({
+            reportName: report.name,
+            organizationId: report.organizationId,
+            model: modelKey,
+            insightsLength: insights.length
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+
+        return updatedReport;
       });
 
       res.json({
         insights,
-        generatedAt: updatedReport.coachingInsightsGeneratedAt,
+        generatedAt: result.coachingInsightsGeneratedAt,
         model: modelKey,
       });
     } catch (error) {

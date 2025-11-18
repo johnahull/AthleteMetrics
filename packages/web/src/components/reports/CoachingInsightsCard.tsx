@@ -8,6 +8,7 @@ import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
+import { MAX_INSIGHTS_LENGTH } from "@shared/schema";
 
 interface CoachingInsightsCardProps {
   reportId: string;
@@ -17,12 +18,7 @@ interface CoachingInsightsCardProps {
   aiEnabled: boolean;
 }
 
-/**
- * Maximum character limit for coaching insights content.
- * This limit ensures reasonable storage size and prevents excessive AI generation costs.
- * Matches the database column constraint for coachingInsights (10,000 chars).
- */
-const MAX_CHARS = 10000;
+// Use MAX_INSIGHTS_LENGTH from shared schema for consistency with database constraint
 
 export function CoachingInsightsCard({
   reportId,
@@ -82,10 +78,10 @@ export function CoachingInsightsCard({
   }, [initialInsights]);
 
   const handleSave = useCallback(() => {
-    if (editedContent.length > MAX_CHARS) {
+    if (editedContent.length > MAX_INSIGHTS_LENGTH) {
       toast({
         title: "Content too long",
-        description: `Please keep insights under ${MAX_CHARS} characters`,
+        description: `Please keep insights under ${MAX_INSIGHTS_LENGTH} characters`,
         variant: "destructive",
       });
       return;
@@ -205,9 +201,9 @@ export function CoachingInsightsCard({
           />
           <div className="flex justify-between items-center text-sm text-muted-foreground">
             <span>
-              Characters: {editedContent.length} / {MAX_CHARS}
+              Characters: {editedContent.length} / {MAX_INSIGHTS_LENGTH}
             </span>
-            {editedContent.length > MAX_CHARS && (
+            {editedContent.length > MAX_INSIGHTS_LENGTH && (
               <span className="text-destructive font-medium">
                 Exceeds maximum length
               </span>
