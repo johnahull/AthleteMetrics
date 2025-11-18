@@ -97,8 +97,10 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
     };
     const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
     if (!process.env[apiKeyEnvVar]) {
+      // Log internally but don't expose provider details to client
+      console.error(`AI Service Error: Missing API key ${apiKeyEnvVar} for provider ${modelConfig.provider}`);
       return res.status(400).json({
-        message: `API key for ${modelConfig.provider} provider is not configured`
+        message: "Selected model is not available. Please contact administrator."
       });
     }
 

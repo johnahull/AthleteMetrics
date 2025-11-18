@@ -1185,8 +1185,10 @@ export function registerReportRoutes(app: Express) {
   /**
    * Update coaching insights for a report (manual edit)
    * PATCH /api/reports/:id/insights
+   *
+   * Requires: AI enabled for organization (both flags)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, async (req, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: any, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {

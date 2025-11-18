@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Sparkles, Edit, Save, X, RefreshCw, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import rehypeSanitize from "rehype-sanitize";
 import { useToast } from "@/hooks/use-toast";
 import { useGenerateInsights, useUpdateInsights } from "@/lib/reports-api";
 
@@ -245,7 +246,7 @@ export function CoachingInsightsCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="prose prose-sm max-w-none dark:prose-invert" data-testid="insights-display">
-          <ReactMarkdown>{initialInsights || ""}</ReactMarkdown>
+          <ReactMarkdown rehypePlugins={[rehypeSanitize]}>{initialInsights || ""}</ReactMarkdown>
         </div>
         <div className="flex items-center gap-2 pt-4 border-t text-sm text-muted-foreground">
           <span>
