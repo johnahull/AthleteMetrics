@@ -13,32 +13,39 @@ export function useOfflineStats() {
   // during bulk sync operations (was causing 300+ queries for 100 measurements)
   const stats = useLiveQuery(
     async () => {
-      const [total, unsynced, athletes] = await Promise.all([
+      const [total, unsynced, failed, athletes] = await Promise.all([
         db.measurements.count(),
         db.measurements.where('[synced+failed]').equals([0, 0]).count(), // Use compound index
+        db.measurements.where('failed').equals(1).count(), // Permanently failed measurements
         db.athletes.count()
       ]);
       return {
         totalMeasurements: total,
         unsyncedCount: unsynced,
+        failedCount: failed,
         cachedAthletes: athletes,
-        hasPendingSync: unsynced > 0
+        hasPendingSync: unsynced > 0,
+        hasFailedSync: failed > 0
       };
     },
     [],
     {
       totalMeasurements: 0,
       unsyncedCount: 0,
+      failedCount: 0,
       cachedAthletes: 0,
-      hasPendingSync: false
+      hasPendingSync: false,
+      hasFailedSync: false
     }
   );
 
   return stats || {
     totalMeasurements: 0,
     unsyncedCount: 0,
+    failedCount: 0,
     cachedAthletes: 0,
-    hasPendingSync: false
+    hasPendingSync: false,
+    hasFailedSync: false
   };
 }
 

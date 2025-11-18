@@ -200,17 +200,52 @@ export async function clearOfflineData() {
 }
 
 /**
+ * Get count of permanently failed measurements
+ */
+export async function getFailedMeasurementsCount(): Promise<number> {
+  return await db.measurements.where('failed').equals(1).count();
+}
+
+/**
+ * Get all permanently failed measurements
+ */
+export async function getFailedMeasurements(): Promise<OfflineMeasurement[]> {
+  return await db.measurements.where('failed').equals(1).toArray();
+}
+
+/**
+ * Retry a failed measurement by resetting its retry count and failed status
+ */
+export async function retryFailedMeasurement(localId: number): Promise<void> {
+  await db.measurements.update(localId, {
+    failed: false,
+    retryCount: 0,
+    failureReason: undefined
+  });
+}
+
+/**
+ * Delete a permanently failed measurement
+ */
+export async function deleteFailedMeasurement(localId: number): Promise<void> {
+  await db.measurements.delete(localId);
+}
+
+/**
  * Get offline storage stats
  */
 export async function getOfflineStats() {
   const totalMeasurements = await db.measurements.count();
   const unsyncedCount = await db.measurements.where('synced').equals(0).count();
+  const failedCount = await db.measurements.where('failed').equals(1).count();
   const cachedAthletes = await db.athletes.count();
 
   return {
     totalMeasurements,
     unsyncedCount,
+    failedCount,
     cachedAthletes,
-    hasPendingSync: unsyncedCount > 0
+    hasPendingSync: unsyncedCount > 0,
+    hasFailedSync: failedCount > 0
   };
 }

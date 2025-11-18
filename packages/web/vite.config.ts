@@ -15,7 +15,7 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['icon-192.svg', 'icon-512.svg'],
+      includeAssets: ['icon-192.svg', 'icon-512.svg', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'AthleteMetrics',
         short_name: 'AthleteMetrics',
@@ -25,6 +25,33 @@ export default defineConfig({
         display: 'standalone',
         start_url: '/',
         icons: [
+          // PNG fallbacks for Safari and older browsers
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          // Maskable PNG icons for Android
+          {
+            src: 'icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          {
+            src: 'icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable'
+          },
+          // SVG icons for modern browsers
           {
             src: 'icon-192.svg',
             sizes: '192x192',

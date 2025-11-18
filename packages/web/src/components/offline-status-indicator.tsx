@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Wifi, WifiOff, Cloud, CloudOff, Loader2 } from 'lucide-react';
+import { Wifi, WifiOff, Cloud, CloudOff, Loader2, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useOnlineStatus, useOfflineStats } from '@/hooks/use-offline-storage';
 import { Button } from '@/components/ui/button';
@@ -75,6 +75,25 @@ export function OfflineStatusIndicator() {
             </TooltipTrigger>
             <TooltipContent>
               <p>{stats.unsyncedCount} measurement{stats.unsyncedCount !== 1 ? 's' : ''} pending sync</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+
+        {/* Failed Measurements Indicator */}
+        {stats.failedCount > 0 && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                data-testid="failed-measurements-count"
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                <span>{stats.failedCount} failed</span>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>{stats.failedCount} measurement{stats.failedCount !== 1 ? 's' : ''} failed to sync</p>
+              <p className="text-xs mt-1">These measurements could not be synced after multiple attempts</p>
             </TooltipContent>
           </Tooltip>
         )}
