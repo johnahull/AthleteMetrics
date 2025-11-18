@@ -2,22 +2,44 @@
  * Organization Admin Settings Page
  * Allows org admins to manage their organization settings including:
  * - AI Coaching Insights (if enabled by site admin)
+ * - Coaches & Administrators management
+ * - Metrics Configuration
  */
 
 import { useParams, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Save, Settings, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrgAdminSettings } from "@/lib/organization-api";
+import OrganizationMetricsCard from "@/components/organization-metrics-card";
 import { z } from "zod";
+
+type OrganizationProfile = {
+  id: string;
+  name: string;
+  description?: string;
+  aiEnabled?: boolean;
+  aiEnabledBySiteAdmin?: boolean;
+  coaches: Array<{
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string;
+      email: string;
+    };
+    role: string;
+  }>;
+};
 
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
@@ -46,14 +68,21 @@ export default function OrgAdminSettings() {
   // Fetch organization data
   const { data: organization, isLoading, error } = useOrganization(organizationId);
 
+  // Fetch organization profile for coaches/admins list
+  const { data: organizationProfile } = useQuery<OrganizationProfile>({
+    queryKey: [`/api/organizations/${organizationId}/profile`],
+    enabled: !!organizationId,
+  });
+
   // Update mutation
   const updateMutation = useUpdateOrgAdminSettings(organizationId!);
 
   // Form setup with React Hook Form + Zod validation
+  // If site admin has disabled AI, force the value to false
   const form = useForm<OrgAdminSettings>({
     resolver: zodResolver(orgAdminSettingsSchema),
     values: organization ? {
-      aiEnabled: organization.aiEnabled || false,
+      aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
     } : undefined,
   });
 
@@ -231,6 +260,54 @@ export default function OrgAdminSettings() {
           </div>
         </form>
       </Form>
+
+      {/* Coaches & Administrators Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCog className="h-5 w-5" />
+            Coaches & Administrators ({organizationProfile?.coaches?.length ?? 0})
+          </CardTitle>
+          <CardDescription>
+            View coaches and administrators in your organization
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {organizationProfile?.coaches && organizationProfile.coaches.length > 0 ? (
+              organizationProfile.coaches.map((coach) => (
+                <div
+                  key={coach.user.id}
+                  className="flex items-center justify-between p-3 bg-muted rounded-lg"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium">
+                      {coach.user.firstName} {coach.user.lastName}
+                    </p>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                      <Mail className="h-3 w-3" />
+                      <span>{coach.user.email}</span>
+                    </div>
+                  </div>
+                  <Badge variant={coach.role === 'org_admin' ? 'default' : 'secondary'}>
+                    {coach.role === 'org_admin' ? 'Admin' : 'Coach'}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground text-center py-4">
+                No coaches or administrators found
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Metrics Configuration Section */}
+      <OrganizationMetricsCard
+        organizationId={organizationId!}
+        canEdit={true}
+      />
     </div>
   );
 }
