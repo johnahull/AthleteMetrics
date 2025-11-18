@@ -17,7 +17,7 @@ interface AuthenticatedRequest extends Request {
     user?: {
       id: string;
       email: string;
-      isSiteAdmin: boolean;
+      isSiteAdmin?: boolean;
       [key: string]: unknown;
     };
   };
