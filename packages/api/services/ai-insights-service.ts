@@ -507,12 +507,13 @@ function buildPrompt(reportData: ReportData): string {
 
   // Instructions
   prompt += `## Instructions\n`;
-  prompt += `Provide coaching insights in markdown format covering:\n\n`;
-  prompt += `1. **Key Strengths**: What is performing well?\n`;
-  prompt += `2. **Areas for Improvement**: What needs work?\n`;
-  prompt += `3. **Actionable Recommendations**: Specific training suggestions\n`;
-  prompt += `4. **Focus Areas**: Priority metrics to track in next training cycle\n\n`;
-  prompt += `Keep insights concise (300-500 words), actionable, and focused on coaching value. Use markdown formatting with headers, bullet points, and **bold** for emphasis.\n`;
+  prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
+  prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
+  prompt += `1. **Summary**: 2-3 sentences giving the big picture of this report\n`;
+  prompt += `2. **What's Going Well**: Top strengths to celebrate\n`;
+  prompt += `3. **What to Work On**: Key areas needing attention\n`;
+  prompt += `4. **Next Steps**: 2-3 simple, actionable things to do in training\n\n`;
+  prompt += `Keep it short (150-250 words total). Be encouraging but honest. Use bullet points and **bold** for emphasis. Avoid technical jargon.\n`;
 
   return prompt;
 }
