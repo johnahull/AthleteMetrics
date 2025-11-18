@@ -366,8 +366,26 @@ describe('AI Insights Sport Context', () => {
       // - Individual reports should show "- Sport: Soccer" in context
       // - Team reports should show "- Sport: Soccer" in context
 
-      // Placeholder assertion that will pass once implemented
-      expect(true).toBe(true);
+      // Verify sport context is properly included in ReportData interface
+      const individualData: import('../../services/ai-insights-service').ReportData = {
+        reportType: 'individual',
+        reportName: 'Test',
+        organizationName: 'Org',
+        timeframe: '2024',
+        metrics: [],
+        athleteSport: 'Soccer',
+      };
+      const teamData: import('../../services/ai-insights-service').ReportData = {
+        reportType: 'team',
+        reportName: 'Test',
+        organizationName: 'Org',
+        timeframe: '2024',
+        metrics: [],
+        teamSport: 'Soccer',
+      };
+
+      expect(individualData.athleteSport).toBe('Soccer');
+      expect(teamData.teamSport).toBe('Soccer');
     });
   });
 

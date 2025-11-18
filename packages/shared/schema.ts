@@ -1368,6 +1368,7 @@ export const SoccerPosition = {
 } as const;
 
 // Available sports - add new sports here
+// NOTE: MVP currently supports only Soccer. Add more sports here as needed.
 export const Sport = {
   SOCCER: "Soccer",
 } as const;
