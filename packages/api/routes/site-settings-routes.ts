@@ -44,7 +44,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     if (!settings) {
       // Return default settings if none exist
       return res.json({
-        aiModel: "gpt-4o-mini",
+        aiModel: "gpt-5-nano",
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });

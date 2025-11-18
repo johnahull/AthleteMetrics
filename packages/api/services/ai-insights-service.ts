@@ -12,12 +12,12 @@ import Anthropic from "@anthropic-ai/sdk";
 // AI Model Configurations
 export const AI_MODELS = {
   // Budget Tier (5 models)
-  "gpt-4o-mini": {
+  "gpt-5-nano": {
     provider: "openai" as const,
-    model: "gpt-4o-mini",
+    model: "gpt-5-nano",
     tier: "budget" as const,
-    costPer1M: { input: 0.15, output: 0.60 },
-    description: "OpenAI GPT-4o Mini - Fast & Cost-Effective",
+    costPer1M: { input: 0.05, output: 0.40 },
+    description: "OpenAI GPT-5 Nano - Cheapest & Fast",
   },
   "gemini-2.0-flash-lite": {
     provider: "google" as const,
