@@ -12,6 +12,7 @@ import {
   exportAnalyticsDataAsCSV,
   exportChartAsPNG,
   copyChartToClipboard,
+  shareChart,
   generateExportFilename,
   type ExportFormat
 } from '../chartExport';
@@ -33,6 +34,26 @@ vi.mock('../csv', () => ({
     ).join('\n');
   })
 }));
+
+// Mock html2canvas at module level to avoid test pollution
+// Each test can customize the mock behavior using mockImplementation
+const mockHtml2Canvas = vi.fn();
+vi.mock('html2canvas', () => ({
+  default: mockHtml2Canvas
+}));
+
+// Mock devLog at module level for consistent error logging tests
+// Note: vi.mock is hoisted, so we must use inline vi.fn() instead of referencing external variables
+vi.mock('@/utils/dev-logger', () => ({
+  devLog: {
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
+  }
+}));
+
+// Import the mocked module to access mock functions in tests
+import { devLog } from '@/utils/dev-logger';
 
 import { downloadCSV, arrayToCSV } from '../csv';
 
@@ -412,10 +433,8 @@ describe('Chart Export Utilities - TDD', () => {
         })
       };
 
-      // Mock html2canvas module
-      vi.doMock('html2canvas', () => ({
-        default: vi.fn(() => Promise.resolve(mockCanvas))
-      }));
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
 
       // The actual test verification happens in the implementation
       // The finally block should always execute and clean up the canvas
@@ -478,6 +497,222 @@ describe('Chart Export Utilities - TDD', () => {
       });
 
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('shareChart', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('should throw error when container is null', async () => {
+      await expect(shareChart(null, 'Test Chart', 'test.png'))
+        .rejects.toThrow('No container element available for share');
+    });
+
+    it('should share via Web Share API when supported', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock Web Share API with file support
+      const mockShare = vi.fn(() => Promise.resolve());
+      const mockCanShare = vi.fn(() => true);
+
+      vi.stubGlobal('navigator', {
+        share: mockShare,
+        canShare: mockCanShare,
+        clipboard: { write: vi.fn() }
+      });
+
+      const result = await shareChart(mockContainer, 'Test Chart', 'test.png');
+
+      expect(result).toEqual({ action: 'shared' });
+      expect(mockShare).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Test Chart',
+        text: 'Performance chart: Test Chart'
+      }));
+    });
+
+    it('should handle user cancellation gracefully (AbortError)', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock Web Share API that throws AbortError
+      const abortError = new Error('User cancelled');
+      abortError.name = 'AbortError';
+      const mockShare = vi.fn(() => Promise.reject(abortError));
+      const mockCanShare = vi.fn(() => true);
+
+      vi.stubGlobal('navigator', {
+        share: mockShare,
+        canShare: mockCanShare,
+        clipboard: { write: vi.fn() }
+      });
+
+      const result = await shareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // AbortError should return cancelled action, not throw
+      expect(result).toEqual({ action: 'cancelled' });
+      expect(mockShare).toHaveBeenCalled();
+    });
+
+    it('should fall back to clipboard when Web Share API is unavailable', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock clipboard write but no Web Share API
+      const mockClipboardWrite = vi.fn(() => Promise.resolve());
+      vi.stubGlobal('navigator', {
+        share: undefined,
+        canShare: undefined,
+        clipboard: {
+          write: mockClipboardWrite
+        }
+      });
+
+      const result = await shareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // Should fall back to clipboard
+      expect(result).toEqual({ action: 'clipboard' });
+      expect(mockClipboardWrite).toHaveBeenCalled();
+    });
+
+    it('should throw error when neither Web Share API nor Clipboard API available', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Remove both APIs
+      vi.stubGlobal('navigator', {
+        share: undefined,
+        canShare: undefined,
+        clipboard: undefined
+      });
+
+      // Function should throw when neither API is available
+      await expect(shareChart(mockContainer, 'Test Chart', 'test.png'))
+        .rejects.toThrow('Neither Web Share API nor Clipboard API available');
+    });
+
+    it('should clean up canvas memory in finally block', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Mock canvas with cleanup tracking
+      const mockClearRect = vi.fn();
+      const mockGetContext = vi.fn(() => ({
+        clearRect: mockClearRect
+      }));
+
+      const mockCanvas = {
+        width: 1000,
+        height: 1000,
+        getContext: mockGetContext,
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock clipboard for successful completion
+      const mockClipboardWrite = vi.fn(() => Promise.resolve());
+      vi.stubGlobal('navigator', {
+        share: undefined,
+        canShare: undefined,
+        clipboard: {
+          write: mockClipboardWrite
+        }
+      });
+
+      await shareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // Canvas cleanup should have been called
+      expect(mockGetContext).toHaveBeenCalledWith('2d');
+      expect(mockClearRect).toHaveBeenCalledWith(0, 0, 1000, 1000);
+    });
+
+    it('should re-throw non-AbortError exceptions', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock Web Share API that throws NotAllowedError (not AbortError)
+      const notAllowedError = new Error('Permission denied');
+      notAllowedError.name = 'NotAllowedError';
+      const mockShare = vi.fn(() => Promise.reject(notAllowedError));
+      const mockCanShare = vi.fn(() => true);
+
+      vi.stubGlobal('navigator', {
+        share: mockShare,
+        canShare: mockCanShare,
+        clipboard: { write: vi.fn() }
+      });
+
+      // Should re-throw non-AbortError exceptions
+      await expect(shareChart(mockContainer, 'Test Chart', 'test.png'))
+        .rejects.toThrow('Permission denied');
+
+      // Should have logged the error before re-throwing
+      expect(devLog.error).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
     });
   });
 });
