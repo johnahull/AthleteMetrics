@@ -54,6 +54,26 @@ const ROUTE_CONSTANTS = {
 } as const;
 
 /**
+ * Startup validation for rate limit bypass environment variable
+ * Validates at module load time to catch misconfigurations early
+ */
+const RATE_LIMIT_BYPASS_ENABLED = (() => {
+  const bypassValue = process.env.BYPASS_GENERAL_RATE_LIMIT;
+  const isProduction = process.env.NODE_ENV === 'production';
+
+  // In production, bypass is always disabled regardless of env var
+  if (isProduction && bypassValue === 'true') {
+    console.warn(
+      '⚠️  BYPASS_GENERAL_RATE_LIMIT is set to "true" but will be ignored in production'
+    );
+    return false;
+  }
+
+  // Only allow bypass in non-production with explicit 'true' value
+  return !isProduction && bypassValue === 'true';
+})();
+
+/**
  * Rate limiting configuration for organization type endpoints
  * More generous limits for read operations, stricter for write operations
  */
@@ -63,24 +83,16 @@ const readLimiter = rateLimit({
   message: { message: "Too many requests for organization type data, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: (req) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) return false; // Always enforce in production
-    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
-  },
+  skip: () => RATE_LIMIT_BYPASS_ENABLED,
 });
 
 const writeLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes  
+  windowMs: 15 * 60 * 1000, // 15 minutes
   limit: 20, // 20 requests per window (stricter for write operations)
   message: { message: "Too many organization type modification requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
-  skip: (req) => {
-    const isProduction = process.env.NODE_ENV === 'production';
-    if (isProduction) return false; // Always enforce in production
-    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
-  },
+  skip: () => RATE_LIMIT_BYPASS_ENABLED,
 });
 
 /**

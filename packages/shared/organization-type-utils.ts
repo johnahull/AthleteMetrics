@@ -433,21 +433,17 @@ export function validateOrganizationTypesBulk<T extends Record<string, any>>(
   data: T[],
   typeField: keyof T = 'orgType' as keyof T
 ): T[] {
+  // First pass: validate all items and collect errors
   const invalidTypes: Array<{ index: number; value: unknown }> = [];
-  
-  const validatedData = data.map((item, index) => {
+
+  data.forEach((item, index) => {
     const orgType = item[typeField];
     if (orgType != null && !isValidOrganizationType(orgType)) {
       invalidTypes.push({ index, value: orgType });
-      return item;
     }
-    
-    return {
-      ...item,
-      [typeField]: parseOrganizationType(orgType),
-    };
   });
-  
+
+  // Throw error before processing if any invalid types found
   if (invalidTypes.length > 0) {
     throw new Error(
       `Invalid organization types found at indices: ${
@@ -455,8 +451,15 @@ export function validateOrganizationTypesBulk<T extends Record<string, any>>(
       }`
     );
   }
-  
-  return validatedData;
+
+  // Second pass: normalize valid data only after validation passes
+  return data.map((item) => {
+    const orgType = item[typeField];
+    return {
+      ...item,
+      [typeField]: parseOrganizationType(orgType),
+    };
+  });
 }
 
 /**
