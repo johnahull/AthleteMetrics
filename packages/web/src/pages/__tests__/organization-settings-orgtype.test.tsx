@@ -46,7 +46,7 @@ vi.mock('@/components/organization-type-selector', () => ({
         <option value="high_school">High School</option>
         <option value="college">College/University</option>
         <option value="club">Club/Travel Team</option>
-        <option value="private_facility">Private Training Facility</option>
+        <option value="private_facility">Private Coach/Training Facility</option>
         <option value="elite_academy">Elite Academy</option>
       </select>
     </div>
@@ -155,7 +155,7 @@ describe('Organization Settings - Organization Type Integration', () => {
       expect(screen.getByText('High School')).toBeInTheDocument();
       expect(screen.getByText('College/University')).toBeInTheDocument();
       expect(screen.getByText('Club/Travel Team')).toBeInTheDocument();
-      expect(screen.getByText('Private Training Facility')).toBeInTheDocument();
+      expect(screen.getByText('Private Coach/Training Facility')).toBeInTheDocument();
       expect(screen.getByText('Elite Academy')).toBeInTheDocument();
     });
 

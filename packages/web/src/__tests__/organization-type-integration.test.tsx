@@ -46,7 +46,7 @@ describe('Organization Type Integration', () => {
       expect(getOrganizationTypeLabel('high_school')).toBe('High School');
       expect(getOrganizationTypeLabel('college')).toBe('College/University');
       expect(getOrganizationTypeLabel('club')).toBe('Club/Travel Team');
-      expect(getOrganizationTypeLabel('private_facility')).toBe('Private Training Facility');
+      expect(getOrganizationTypeLabel('private_facility')).toBe('Private Coach/Training Facility');
       expect(getOrganizationTypeLabel('elite_academy')).toBe('Elite Academy');
     });
 
