@@ -170,7 +170,7 @@ export async function cleanupOldMeasurements() {
   await db.measurements
     .where('createdAt')
     .below(weekAgo) // Old measurements
-    .and(m => m.synced === true) // Only delete synced ones
+    .and((m: OfflineMeasurement) => m.synced === true) // Only delete synced ones
     .delete();
 }
 

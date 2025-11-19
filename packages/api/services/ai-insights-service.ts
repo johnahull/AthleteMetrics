@@ -340,7 +340,7 @@ class AnthropicProvider implements AIProvider {
         ],
       });
 
-      const textContent = message.content.find((block) => block.type === "text");
+      const textContent = message.content.find((block: { type: string }) => block.type === "text");
 
       if (!textContent || textContent.type !== "text") {
         throw new Error("Anthropic returned no text content");
