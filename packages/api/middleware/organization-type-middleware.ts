@@ -48,7 +48,7 @@ export class OrganizationTypeError extends Error {
  * Extended Request interface with organization type context
  */
 export interface OrganizationTypeRequest extends Request {
-  organizationType?: OrganizationType;
+  organizationType?: OrganizationType | null;
   organizationTypeValidated?: boolean;
   organizationTypeContext?: {
     source: 'param' | 'query' | 'body';

@@ -158,7 +158,7 @@ class SecurityRateLimitStore {
   ): void {
     const now = Date.now();
     const recentRequests = entry.requests.filter(
-      req => now - req.timestamp < 60 * 1000 // Last minute
+      (req: { timestamp: number; endpoint: string; success: boolean }) => now - req.timestamp < 60 * 1000 // Last minute
     );
 
     // Pattern 1: Rapid requests (> 10 requests per minute)
@@ -170,14 +170,14 @@ class SecurityRateLimitStore {
                   recentRequests.length > 30 ? 'HIGH' : 'MEDIUM',
         metadata: {
           requestCount: recentRequests.length,
-          endpoints: [...new Set(recentRequests.map(r => r.endpoint))],
+          endpoints: [...new Set(recentRequests.map((r: { endpoint: string }) => r.endpoint))],
           timestamp: now,
         },
       });
     }
 
     // Pattern 2: High failure rate
-    const failedRequests = recentRequests.filter(req => !req.success);
+    const failedRequests = recentRequests.filter((req: { success: boolean }) => !req.success);
     const failureRate = failedRequests.length / recentRequests.length;
     
     if (recentRequests.length > 5 && failureRate > 0.7) {
@@ -196,7 +196,7 @@ class SecurityRateLimitStore {
 
     // Clean up old suspicious activity indicators (older than 1 hour)
     entry.suspiciousActivity = entry.suspiciousActivity.filter(
-      indicator => now - (indicator.metadata.timestamp || 0) < 60 * 60 * 1000
+      (indicator: { metadata: { timestamp?: number } }) => now - (indicator.metadata.timestamp || 0) < 60 * 60 * 1000
     );
   }
 

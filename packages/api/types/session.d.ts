@@ -53,11 +53,16 @@ declare global {
        */
       organizationType?: OrganizationType | null;
       /**
+       * Whether organization type has been validated by middleware
+       */
+      organizationTypeValidated?: boolean;
+      /**
        * Organization type context metadata
        */
       organizationTypeContext?: {
         source: 'param' | 'query' | 'body';
-        validated: boolean;
+        original: unknown;
+        normalized: OrganizationType;
       };
     }
   }
