@@ -311,7 +311,7 @@ describe('ReportService', () => {
       await db.insert(measurements).values(measurements_data);
 
       // Test athlete with value 35 should be at 75th percentile (better than 3 out of 5)
-      const result = await reportService.calculatePercentiles(
+      const { percentiles, teamAverages } = await reportService.calculatePercentilesAndAverages(
         athletes[3].id,
         testOrgId,
         [metricCode],
@@ -320,9 +320,10 @@ describe('ReportService', () => {
         '2099-12-31'
       );
 
-      expect(result[metricCode]).toBeDefined();
-      expect(result[metricCode]).toBeGreaterThan(50); // Better than average
-      expect(result[metricCode]).toBeLessThan(100); // Not the best
+      expect(percentiles[metricCode]).toBeDefined();
+      expect(percentiles[metricCode]).toBeGreaterThan(50); // Better than average
+      expect(percentiles[metricCode]).toBeLessThan(100); // Not the best
+      expect(teamAverages[metricCode]).toBeDefined(); // Team average should be returned
 
       // Cleanup
       for (const athlete of athletes) {
@@ -331,8 +332,8 @@ describe('ReportService', () => {
       }
     });
 
-    it('should return empty object when no measurements exist', async () => {
-      const result = await reportService.calculatePercentiles(
+    it('should return empty objects when no measurements exist', async () => {
+      const { percentiles, teamAverages } = await reportService.calculatePercentilesAndAverages(
         testUserId,
         testOrgId,
         ['FLY10_TIME'],
@@ -341,7 +342,8 @@ describe('ReportService', () => {
         '2024-12-31'
       );
 
-      expect(result).toEqual({});
+      expect(percentiles).toEqual({});
+      expect(teamAverages).toEqual({});
     });
   });
 

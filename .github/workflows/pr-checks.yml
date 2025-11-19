@@ -214,15 +214,16 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           # Get list of added or modified migration files in this PR
+          # shellcheck disable=SC2086
           CHANGED_MIGRATIONS=$(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'migrations/*.sql' | grep -v '_down\.sql$' || true)
 
           if [ -z "$CHANGED_MIGRATIONS" ]; then
             echo "No new or modified migrations found"
-            echo "has_migrations=false" >> $GITHUB_OUTPUT
+            echo "has_migrations=false" >> "$GITHUB_OUTPUT"
           else
             echo "Found migrations to lint:"
             echo "$CHANGED_MIGRATIONS"
-            echo "has_migrations=true" >> $GITHUB_OUTPUT
+            echo "has_migrations=true" >> "$GITHUB_OUTPUT"
             # Save to file for next step
             echo "$CHANGED_MIGRATIONS" > /tmp/migrations_to_lint.txt
           fi

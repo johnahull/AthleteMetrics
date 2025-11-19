@@ -18,19 +18,14 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
+import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import type { Report } from "@/types/report-types";
-
-// Version check - this log should appear immediately when the module loads
-console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v6-DEPS-FIX');
-console.log('🔍 If you see this, the new code is loaded! Check for more logs below.');
 
 interface IndividualReportViewProps {
   report: Report;
 }
 
 export function IndividualReportView({ report }: IndividualReportViewProps) {
-  console.log('[IndividualReportView] COMPONENT RENDER - report:', report);
-
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
@@ -49,27 +44,14 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const config = report.config as { athleteId?: string; athleteIds?: string[] };
   const athleteId = config?.athleteId || config?.athleteIds?.[0];
 
-  console.log('[IndividualReportView] athleteId extracted:', athleteId);
-
   useEffect(() => {
-    console.log('[IndividualReportView] useEffect RUNNING');
-    console.log('[IndividualReportView] Report config:', report.config);
-    console.log('[IndividualReportView] Extracted athleteId:', athleteId);
-    console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
-
     if (!athleteId) {
-      console.error('[IndividualReportView] No athleteId found in report config!');
       return;
     }
 
     generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
-        console.log('[IndividualReportView] Report generated successfully:', data);
         setReportData(data);
-      },
-      onError: (error) => {
-        console.error('[IndividualReportView] Report generation failed:', error);
-        // Error toast is handled by the hook, but we log here for debugging
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,15 +89,6 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     }
   };
 
-  // Debug logging for mutation state
-  console.log('[IndividualReportView] Render state:', {
-    isPending: generateReport.isPending,
-    isError: generateReport.isError,
-    isSuccess: generateReport.isSuccess,
-    hasReportData: !!reportData,
-    error: generateReport.error
-  });
-
   if (generateReport.isPending || !reportData) {
     return (
       <Card>
@@ -150,7 +123,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete } = reportData;
+  const { athlete, metricLabels, metricUnits } = reportData;
 
   return (
     <div className="space-y-6">
@@ -235,15 +208,25 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   const percentile = athlete.percentiles[metricCode];
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
+                  const metricLabel = metricLabels?.[metricCode] || metricCode;
+                  const unit = metricUnits?.[metricCode] || '';
 
                   return (
                     <TableRow key={metricCode}>
-                      <TableCell className="font-medium">{metricCode}</TableCell>
+                      <TableCell className="font-medium">{metricLabel}</TableCell>
                       <TableCell>
-                        {typeof value === 'number' ? value.toFixed(2) : "N/A"}
+                        {typeof value === 'number'
+                          ? (isFly10Metric(metricCode)
+                              ? formatFly10Dual(value)
+                              : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
-                        {teamAverage !== undefined ? teamAverage.toFixed(2) : "N/A"}
+                        {teamAverage !== undefined
+                          ? (isFly10Metric(metricCode)
+                              ? formatFly10Dual(teamAverage)
+                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
                         {percentile !== undefined ? (
@@ -258,12 +241,14 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                             {benchmarks.map((b: any, idx: number) => (
                               <div key={idx} className="text-sm">
                                 <span className="font-medium">{b.benchmarkName}:</span>{" "}
-                                {b.benchmarkValue.toFixed(2)}
+                                {isFly10Metric(metricCode)
+                                  ? formatFly10Dual(b.benchmarkValue)
+                                  : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
                                 <Badge
-                                  variant={b.meetsTarget ? "default" : "secondary"}
+                                  variant={b.meetsOrExceeds ? "default" : "secondary"}
                                   className="ml-2"
                                 >
-                                  {b.meetsTarget ? "✓ Meets" : "✗ Below"}
+                                  {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
                                 </Badge>
                               </div>
                             ))}
