@@ -383,6 +383,12 @@ export function useAnalyticsExport() {
         } else {
           throw new Error('Container not available for share');
         }
+
+      default: {
+        // Exhaustive check - this should never happen if all ExportFormat cases are handled
+        const _exhaustiveCheck: never = format;
+        throw new Error(`Unhandled export format: ${_exhaustiveCheck}`);
+      }
     }
   }, [state.analyticsData, state.selectedChartType, state.metrics]);
 
