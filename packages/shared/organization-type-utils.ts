@@ -339,6 +339,15 @@ export const organizationTypeLookup = new OrganizationTypeLookup();
  * SQL fragment for organization type array filtering
  * Provides optimized SQL for database queries with organization type filtering
  *
+ * @deprecated This function uses raw SQL string interpolation. While inputs are validated,
+ * prefer using Drizzle ORM's parameterized queries for better type safety and security.
+ *
+ * Recommended migration:
+ * ```typescript
+ * import { sql } from 'drizzle-orm';
+ * const filter = sql`(${column} IS NULL OR ${column} && ARRAY[${orgType}]::text[])`;
+ * ```
+ *
  * @param orgType - The organization type to filter by
  * @param columnName - The column name containing the array (defaults to 'available_org_types')
  * @returns SQL fragment for WHERE clause

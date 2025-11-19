@@ -489,9 +489,14 @@ export class OrganizationTypeService extends BaseService {
         throw new Error("Only site administrators can view organization type statistics");
       }
 
-      // Note: This would need to be implemented with proper storage interface
-      // For now, using placeholder implementation
       // TODO: Implement getOrganizationTypeStatistics in storage interface
+      // This requires:
+      // 1. Add getOrganizationTypeStatistics() method to IStorage interface
+      // 2. Implement in DatabaseStorage with query:
+      //    SELECT org_type, COUNT(*) as count FROM organizations
+      //    WHERE org_type IS NOT NULL GROUP BY org_type
+      // 3. Handle null org_type organizations separately
+      // For now, returns zeros as placeholder
       const stats: any[] = [];
 
       const result: Record<OrganizationType, number> & { total: number } = {
