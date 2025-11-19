@@ -25,6 +25,7 @@ import type {
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getChartDataForType } from './chartDataUtils';
+import type { ExportFormat } from '@/lib/chartExport';
 
 // Chart height constants for consistent sizing across chart types
 // Heights are optimized for each chart type's specific display needs
@@ -71,7 +72,8 @@ const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmCha
 const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
-export type ExportFormat = 'csv' | 'png' | 'clipboard' | 'share';
+// Re-export ExportFormat from chartExport for backwards compatibility
+export type { ExportFormat };
 
 interface ChartContainerProps {
   title: string;
@@ -174,9 +176,27 @@ export function ChartContainer({
 
     setIsExporting(true);
     try {
-      await onExport(format, undefined, containerRef.current);
+      const result = await onExport(format, undefined, containerRef.current);
 
-      // Show success toast
+      // Handle share result specially
+      if (format === 'share' && result && typeof result === 'object' && 'action' in result) {
+        const shareResult = result as { action: 'shared' | 'clipboard' | 'cancelled' };
+
+        if (shareResult.action === 'cancelled') {
+          // User cancelled - no toast needed
+          return;
+        }
+
+        toast({
+          title: shareResult.action === 'shared' ? 'Shared successfully' : 'Copied to clipboard',
+          description: shareResult.action === 'shared'
+            ? 'Chart shared via your device'
+            : 'Chart copied to clipboard (share not available)'
+        });
+        return;
+      }
+
+      // Show success toast for other formats
       const formatNames: Record<ExportFormat, string> = {
         csv: 'CSV data',
         png: 'PNG image',
@@ -185,10 +205,8 @@ export function ChartContainer({
       };
 
       toast({
-        title: format === 'share' ? 'Share initiated' : 'Export successful',
-        description: format === 'share'
-          ? 'Chart ready to share'
-          : `${formatNames[format]} export completed successfully`
+        title: 'Export successful',
+        description: `${formatNames[format]} export completed successfully`
       });
     } catch (error) {
       // Show error toast

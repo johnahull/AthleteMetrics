@@ -311,14 +311,22 @@ export function generateExportFilename(
 }
 
 /**
+ * Result of share operation indicating which action was taken
+ */
+export interface ShareResult {
+  action: 'shared' | 'clipboard' | 'cancelled';
+}
+
+/**
  * Share chart using Web Share API (mobile-first)
  * Falls back to clipboard copy on unsupported browsers
+ * Returns the action taken so caller can display appropriate message
  */
 export async function shareChart(
   containerElement: HTMLElement | null,
   title: string,
   filename: string
-): Promise<void> {
+): Promise<ShareResult> {
   if (!containerElement) {
     throw new Error('No container element available for share');
   }
@@ -352,12 +360,20 @@ export async function shareChart(
 
       // Check if sharing files is supported
       if (navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          title: title,
-          text: `Performance chart: ${title}`,
-          files: [file]
-        });
-        return;
+        try {
+          await navigator.share({
+            title: title,
+            text: `Performance chart: ${title}`,
+            files: [file]
+          });
+          return { action: 'shared' };
+        } catch (shareError) {
+          // User cancelled sharing - this is expected behavior, not an error
+          if (shareError instanceof Error && shareError.name === 'AbortError') {
+            return { action: 'cancelled' };
+          }
+          throw shareError; // Re-throw actual errors
+        }
       }
     }
 
@@ -368,8 +384,7 @@ export async function shareChart(
       })
     ]);
 
-    // Indicate fallback was used
-    console.log('Web Share API not available, copied to clipboard instead');
+    return { action: 'clipboard' };
   } finally {
     // Clean up canvas to free memory
     if (canvas) {

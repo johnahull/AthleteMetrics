@@ -376,12 +376,13 @@ export function useAnalyticsExport() {
 
       case 'share':
         if (containerRef) {
-          await shareChart(containerRef, chartTitle, filename);
-          devLog.log('Chart share completed:', { filename });
+          const result = await shareChart(containerRef, chartTitle, filename);
+          devLog.log('Chart share completed:', { filename, action: result.action });
+          // Return the result so caller can show appropriate message
+          return result;
         } else {
           throw new Error('Container not available for share');
         }
-        break;
     }
   }, [state.analyticsData, state.selectedChartType, state.metrics]);
 
