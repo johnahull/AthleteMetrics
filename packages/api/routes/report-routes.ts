@@ -1912,6 +1912,8 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       values: number[];
       unit: string;
       lowerIsBetter: boolean;
+      percentile?: number;
+      teamAverage?: number;
     }> = [];
 
     // Cast reportData to typed object for accessing properties
@@ -1935,6 +1937,8 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
         gender?: string;
         sports?: string[];
         measurements?: Record<string, number>;
+        percentiles?: Record<string, number>;
+        teamAverages?: Record<string, number>;
         benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
       };
       benchmarkComparisons?: Array<{
@@ -1988,6 +1992,8 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
               values: [value],
               unit: getMetricUnit(metricCode),
               lowerIsBetter: isMetricLowerBetter(metricCode),
+              percentile: athlete.percentiles?.[metricCode],
+              teamAverage: athlete.teamAverages?.[metricCode],
             });
           }
         }

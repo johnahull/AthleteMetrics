@@ -410,6 +410,8 @@ export interface ReportData {
     values: number[];
     unit: string;
     lowerIsBetter: boolean;
+    percentile?: number;
+    teamAverage?: number;
   }>;
 
   // Statistical summaries
@@ -526,7 +528,22 @@ function buildPrompt(reportData: ReportData): string {
         : 0;
       const trendDirection = trend > 0 ? "↑" : trend < 0 ? "↓" : "→";
 
-      prompt += `- ${metric.label}: Average ${avgValue} ${metric.unit} ${trendDirection} (${metric.lowerIsBetter ? "lower is better" : "higher is better"})\n`;
+      let metricLine = `- ${metric.label}: ${avgValue} ${metric.unit} ${trendDirection} (${metric.lowerIsBetter ? "lower is better" : "higher is better"})`;
+
+      // Add team average comparison for individual reports
+      if (metric.teamAverage !== undefined && metric.percentile !== undefined) {
+        const teamAvg = metric.teamAverage.toFixed(2);
+        const athleteValue = parseFloat(avgValue);
+        const diff = athleteValue - metric.teamAverage;
+        const diffStr = diff > 0 ? `+${diff.toFixed(2)}` : diff.toFixed(2);
+        const comparison = metric.lowerIsBetter
+          ? (diff < 0 ? "better than" : diff > 0 ? "worse than" : "equal to")
+          : (diff > 0 ? "better than" : diff < 0 ? "worse than" : "equal to");
+        metricLine += `\n  - Team Average: ${teamAvg} ${metric.unit} (athlete is ${diffStr}, ${comparison} team avg)`;
+        metricLine += `\n  - Percentile: ${metric.percentile.toFixed(1)}th (compared to all athletes in organization)`;
+      }
+
+      prompt += metricLine + `\n`;
     });
     prompt += `\n`;
   }
