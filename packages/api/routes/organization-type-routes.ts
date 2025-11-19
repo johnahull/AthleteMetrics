@@ -51,6 +51,11 @@ const ROUTE_CONSTANTS = {
    * Note: Statistics route (GET /statistics) is disabled pending implementation
    */
   ACTIVE_ROUTE_COUNT: 8,
+  /**
+   * Maximum number of values that can be validated in a single bulk validation request
+   * Prevents excessive memory usage and processing time
+   */
+  MAX_BULK_VALIDATION_VALUES: 50,
 } as const;
 
 /**
@@ -339,25 +344,40 @@ export function registerOrganizationTypeRoutes(app: Express) {
         }
 
         // Fetch metrics for each organization type in parallel
+        // Use Promise.allSettled to handle partial failures gracefully
         const metricsPromises = organizationTypes.map((orgType: OrganizationType) =>
           organizationTypeService.getMetricsForOrganizationType(orgType, userId, true)
         );
-        
-        const metricsResults = await Promise.all(metricsPromises);
 
-        // Combine and deduplicate metrics
+        const metricsResults = await Promise.allSettled(metricsPromises);
+
+        // Combine and deduplicate metrics, tracking any failures
         const allMetrics = new Map<string, SiteMetric>();
         const resultsByOrgType: Record<string, SiteMetric[]> = {};
+        const errors: Array<{ orgType: string; error: string }> = [];
 
         organizationTypes.forEach((orgType: string, index: number) => {
-          const metrics = metricsResults[index];
-          resultsByOrgType[orgType] = metrics;
+          const result = metricsResults[index];
 
-          metrics.forEach((metric: SiteMetric) => {
-            if (!allMetrics.has(metric.code)) {
-              allMetrics.set(metric.code, metric);
-            }
-          });
+          if (result.status === 'fulfilled') {
+            const metrics = result.value;
+            resultsByOrgType[orgType] = metrics;
+
+            metrics.forEach((metric: SiteMetric) => {
+              if (!allMetrics.has(metric.code)) {
+                allMetrics.set(metric.code, metric);
+              }
+            });
+          } else {
+            // Track the failure but continue processing other org types
+            resultsByOrgType[orgType] = [];
+            errors.push({
+              orgType,
+              error: result.reason instanceof Error
+                ? result.reason.message
+                : 'Unknown error fetching metrics'
+            });
+          }
         });
 
         res.json({
@@ -365,6 +385,10 @@ export function registerOrganizationTypeRoutes(app: Express) {
           resultsByOrgType,
           combinedMetrics: Array.from(allMetrics.values()),
           totalUniqueMetrics: allMetrics.size,
+          ...(errors.length > 0 && {
+            errors,
+            partialSuccess: true
+          }),
         });
       } catch (error) {
         console.error("Filter metrics by organization types error:", error);
@@ -445,8 +469,10 @@ export function registerOrganizationTypeRoutes(app: Express) {
           return res.status(400).json({ message: "Values must be an array" });
         }
 
-        if (values.length > 50) {
-          return res.status(400).json({ message: "Cannot validate more than 50 values at once" });
+        if (values.length > ROUTE_CONSTANTS.MAX_BULK_VALIDATION_VALUES) {
+          return res.status(400).json({
+            message: `Cannot validate more than ${ROUTE_CONSTANTS.MAX_BULK_VALIDATION_VALUES} values at once`
+          });
         }
 
         const results = values.map((value, index) => {
