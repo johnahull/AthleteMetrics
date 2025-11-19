@@ -5,11 +5,13 @@
 import type { Express } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
+import { OrganizationTypeService } from "../services/organization-type-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
+const organizationTypeService = new OrganizationTypeService();
 
 /**
  * Sanitize error messages for production
@@ -206,6 +208,10 @@ export function registerOrganizationRoutes(app: Express) {
         req.body,
         req.session.user!.id
       );
+
+      // Invalidate organization type caches when new organization is created
+      organizationTypeService.invalidateCache(`orgs:`);
+
       res.status(201).json(organization);
     } catch (error) {
       console.error("Create organization error:", error);
@@ -238,6 +244,10 @@ export function registerOrganizationRoutes(app: Express) {
         req.session.user!.id,
         context
       );
+
+      // Invalidate organization type caches when organization is updated
+      // This ensures cached metrics/benchmarks reflect any org type changes
+      organizationTypeService.invalidateCache(`orgs:`);
 
       res.json(updatedOrganization);
     } catch (error) {
@@ -309,6 +319,9 @@ export function registerOrganizationRoutes(app: Express) {
 
       // Update only the aiEnabled field
       const updated = await storage.updateOrganization(organizationId, { aiEnabled });
+
+      // Invalidate organization type caches when organization is updated
+      organizationTypeService.invalidateCache(`orgs:`);
 
       // Create audit log for AI flag change by org admin
       if (aiEnabled !== org.aiEnabled) {

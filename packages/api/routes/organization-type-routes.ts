@@ -350,48 +350,56 @@ export function registerOrganizationTypeRoutes(app: Express) {
   /**
    * GET /api/organization-types/statistics
    * Get organization type statistics (site admin only)
+   *
+   * @todo This route is disabled until the storage query is implemented.
+   * See OrganizationTypeService.getOrganizationTypeStatistics for implementation details.
+   *
+   * To enable this route:
+   * 1. Implement getOrganizationTypeStatistics() in storage interface
+   * 2. Uncomment the route registration below
    */
-  app.get(
-    "/api/organization-types/statistics",
-    readLimiter,
-    requireSiteAdmin,
-    logOrganizationTypeAccess('organization_type_statistics_accessed'),
-    async (req, res) => {
-      try {
-        const userId = req.session.user?.id;
-        if (!userId) {
-          return res.status(401).json({ message: "Authentication required" });
-        }
-
-        const statistics = await organizationTypeService.getOrganizationTypeStatistics(
-          userId
-        );
-
-        // Calculate percentages
-        const total = statistics.total;
-        const statisticsWithPercentages = Object.entries(statistics)
-          .filter(([key]) => key !== 'total')
-          .map(([orgType, count]) => ({
-            organizationType: orgType,
-            organizationTypeLabel: ORGANIZATION_TYPE_LABELS[orgType as keyof typeof ORGANIZATION_TYPE_LABELS],
-            count: count as number,
-            percentage: total > 0 ? Math.round(((count as number) / total) * 100) : 0,
-          }))
-          .sort((a, b) => b.count - a.count);
-
-        res.json({
-          total,
-          breakdown: statisticsWithPercentages,
-          timestamp: new Date().toISOString(),
-        });
-      } catch (error) {
-        console.error("Get organization type statistics error:", error);
-        const message = sanitizeError(error, "Failed to fetch organization type statistics");
-        const statusCode = message.includes("Only site administrators") ? 403 : 500;
-        res.status(statusCode).json({ message });
-      }
-    }
-  );
+  // Route disabled - implementation pending
+  // app.get(
+  //   "/api/organization-types/statistics",
+  //   readLimiter,
+  //   requireSiteAdmin,
+  //   logOrganizationTypeAccess('organization_type_statistics_accessed'),
+  //   async (req, res) => {
+  //     try {
+  //       const userId = req.session.user?.id;
+  //       if (!userId) {
+  //         return res.status(401).json({ message: "Authentication required" });
+  //       }
+  //
+  //       const statistics = await organizationTypeService.getOrganizationTypeStatistics(
+  //         userId
+  //       );
+  //
+  //       // Calculate percentages
+  //       const total = statistics.total;
+  //       const statisticsWithPercentages = Object.entries(statistics)
+  //         .filter(([key]) => key !== 'total')
+  //         .map(([orgType, count]) => ({
+  //           organizationType: orgType,
+  //           organizationTypeLabel: ORGANIZATION_TYPE_LABELS[orgType as keyof typeof ORGANIZATION_TYPE_LABELS],
+  //           count: count as number,
+  //           percentage: total > 0 ? Math.round(((count as number) / total) * 100) : 0,
+  //         }))
+  //         .sort((a, b) => b.count - a.count);
+  //
+  //       res.json({
+  //         total,
+  //         breakdown: statisticsWithPercentages,
+  //         timestamp: new Date().toISOString(),
+  //       });
+  //     } catch (error) {
+  //       console.error("Get organization type statistics error:", error);
+  //       const message = sanitizeError(error, "Failed to fetch organization type statistics");
+  //       const statusCode = message.includes("Only site administrators") ? 403 : 500;
+  //       res.status(statusCode).json({ message });
+  //     }
+  //   }
+  // );
 
   /**
    * POST /api/organization-types/validate
@@ -551,16 +559,16 @@ export async function healthCheckOrganizationTypeRoutes(): Promise<{
 }> {
   try {
     const serviceHealth = await organizationTypeService.healthCheck();
-    
+
     return {
       status: serviceHealth.status,
-      routes: 9, // Number of routes registered
+      routes: 8, // Number of routes registered (statistics route is disabled)
       lastCheck: new Date().toISOString(),
     };
   } catch (error) {
     return {
       status: 'unhealthy',
-      routes: 9,
+      routes: 8,
       lastCheck: new Date().toISOString(),
     };
   }

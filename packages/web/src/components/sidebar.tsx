@@ -159,18 +159,6 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId, labels.teams, labels.athletes);
 
-  // Get current organization data if in context
-  const { data: currentOrganization } = useQuery({
-    queryKey: ['organizations', organizationId, 'details'],
-    enabled: !!organizationId,
-    queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationId}`);
-      if (!response.ok) return null;
-      return response.json();
-    }
-  });
-
-
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
       {/* Logo */}
