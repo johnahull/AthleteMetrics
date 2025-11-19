@@ -43,14 +43,17 @@ vi.mock('html2canvas', () => ({
 }));
 
 // Mock devLog at module level for consistent error logging tests
-const mockDevLogError = vi.fn();
+// Note: vi.mock is hoisted, so we must use inline vi.fn() instead of referencing external variables
 vi.mock('@/utils/dev-logger', () => ({
   devLog: {
     log: vi.fn(),
     warn: vi.fn(),
-    error: mockDevLogError
+    error: vi.fn()
   }
 }));
+
+// Import the mocked module to access mock functions in tests
+import { devLog } from '@/utils/dev-logger';
 
 import { downloadCSV, arrayToCSV } from '../csv';
 
@@ -708,8 +711,8 @@ describe('Chart Export Utilities - TDD', () => {
       await expect(shareChart(mockContainer, 'Test Chart', 'test.png'))
         .rejects.toThrow('Permission denied');
 
-      // Should have logged the error before re-throwing (using module-level mock)
-      expect(mockDevLogError).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
+      // Should have logged the error before re-throwing
+      expect(devLog.error).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
     });
   });
 });
