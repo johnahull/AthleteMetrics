@@ -688,8 +688,9 @@ describe('Chart Export Utilities - TDD', () => {
       const mockShare = vi.fn(() => Promise.reject(notAllowedError));
       const mockCanShare = vi.fn(() => true);
 
-      // Spy on console.error to verify error logging (devLog.error calls console.error internally)
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      // Mock devLog to verify error logging
+      const { devLog } = await import('../../utils/dev-logger');
+      const devLogErrorSpy = vi.spyOn(devLog, 'error').mockImplementation(() => {});
 
       vi.stubGlobal('navigator', {
         share: mockShare,
@@ -702,9 +703,9 @@ describe('Chart Export Utilities - TDD', () => {
         .rejects.toThrow('Permission denied');
 
       // Should have logged the error before re-throwing
-      expect(consoleErrorSpy).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
+      expect(devLogErrorSpy).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
 
-      consoleErrorSpy.mockRestore();
+      devLogErrorSpy.mockRestore();
     });
   });
 });
