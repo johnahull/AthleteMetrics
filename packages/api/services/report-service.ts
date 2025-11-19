@@ -69,6 +69,7 @@ interface AthletePerformance {
   teams?: string[];
   measurements: Record<string, number>;
   percentiles: Record<string, number>;
+  teamAverages: Record<string, number>;
   compositeIndex?: number;
   benchmarkComparisons: Record<string, BenchmarkComparison[]>;
 }
@@ -294,8 +295,8 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate percentiles against all athletes in organization
-    const percentiles = await this.calculatePercentiles(
+    // Calculate percentiles and team averages against all athletes in organization
+    const { percentiles, teamAverages } = await this.calculatePercentilesAndAverages(
       athleteId,
       report.organizationId,
       config.metrics,
@@ -325,6 +326,7 @@ export class ReportService extends BaseService {
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
       percentiles,
+      teamAverages,
       benchmarkComparisons,
     };
 
@@ -358,17 +360,18 @@ export class ReportService extends BaseService {
   }
 
   /**
-   * Calculate percentiles for an athlete's performances
+   * Calculate percentiles and team averages for an athlete's performances
    */
-  async calculatePercentiles(
+  async calculatePercentilesAndAverages(
     athleteId: string,
     organizationId: string,
     metrics: string[],
     athletePerformances: Record<string, number>,
     startDate: string,
     endDate: string
-  ): Promise<Record<string, number>> {
+  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number> }> {
     const percentiles: Record<string, number> = {};
+    const teamAverages: Record<string, number> = {};
 
     for (const metric of metrics) {
       if (athletePerformances[metric] === undefined) {
@@ -419,10 +422,13 @@ export class ReportService extends BaseService {
         // For "lower is better" metrics, invert the percentile
         const rank = quantileRank(allValues, athleteValue) * 100;
         percentiles[metric] = metricInfo.lowerIsBetter ? 100 - rank : rank;
+
+        // Calculate team average (using best performance per athlete, same as team reports)
+        teamAverages[metric] = mean(allValues);
       }
     }
 
-    return percentiles;
+    return { percentiles, teamAverages };
   }
 
   /**
@@ -969,6 +975,7 @@ export class ReportService extends BaseService {
             : undefined,
           measurements: {},
           percentiles: {},
+          teamAverages: {},
           benchmarkComparisons: {},
         });
       }
@@ -996,7 +1003,7 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate percentiles for each athlete
+    // Calculate percentiles and team averages for each athlete
     const athletes = Array.from(athleteMap.values());
 
     for (const metric of metrics) {
@@ -1007,6 +1014,7 @@ export class ReportService extends BaseService {
       if (values.length === 0) continue;
 
       const metricInfo = await this.getMetricInfo(metric);
+      const teamAverage = mean(values);
 
       for (const athlete of athletes) {
         if (athlete.measurements[metric] !== undefined) {
@@ -1014,6 +1022,7 @@ export class ReportService extends BaseService {
           athlete.percentiles[metric] = metricInfo.lowerIsBetter
             ? 100 - rank
             : rank;
+          athlete.teamAverages[metric] = teamAverage;
         }
       }
     }

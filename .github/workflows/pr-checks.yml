@@ -193,6 +193,53 @@ jobs:
       - name: Run security audit
         run: ./scripts/security-audit.sh
 
+  migration-lint:
+    name: Migration Idempotency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Need full history for diff
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for modified migrations
+        id: check-migrations
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Get list of added or modified migration files in this PR
+          CHANGED_MIGRATIONS=$(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'migrations/*.sql' | grep -v '_down\.sql$' || true)
+
+          if [ -z "$CHANGED_MIGRATIONS" ]; then
+            echo "No new or modified migrations found"
+            echo "has_migrations=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found migrations to lint:"
+            echo "$CHANGED_MIGRATIONS"
+            echo "has_migrations=true" >> $GITHUB_OUTPUT
+            # Save to file for next step
+            echo "$CHANGED_MIGRATIONS" > /tmp/migrations_to_lint.txt
+          fi
+
+      - name: Lint modified migrations
+        if: steps.check-migrations.outputs.has_migrations == 'true'
+        run: |
+          echo "Linting migrations for idempotency..."
+          EXIT_CODE=0
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "Checking: $file"
+              node scripts/lint-migrations.js "$file" || EXIT_CODE=1
+            fi
+          done < /tmp/migrations_to_lint.txt
+          exit $EXIT_CODE
+
   workflow-lint:
     name: Workflow Linting
     runs-on: ubuntu-latest

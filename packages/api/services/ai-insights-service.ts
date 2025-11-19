@@ -562,11 +562,17 @@ function buildPrompt(reportData: ReportData): string {
   prompt += `## Instructions\n`;
   prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
   prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
-  prompt += `1. **Summary**: 2-3 sentences giving the big picture of this report\n`;
-  prompt += `2. **What's Going Well**: Top strengths to celebrate\n`;
-  prompt += `3. **What to Work On**: Key areas needing attention\n`;
-  prompt += `4. **Next Steps**: 2-3 simple, actionable things to do in training\n\n`;
-  prompt += `Keep it short (150-250 words total). Be encouraging but honest. Use bullet points and **bold** for emphasis. Avoid technical jargon.\n`;
+  prompt += `1. **Summary**: 2-3 sentences giving the big picture of this report based on the numbers\n`;
+  prompt += `2. **What's Going Well**: Top strengths shown by the data (metrics meeting or exceeding benchmarks)\n`;
+  prompt += `3. **What to Work On**: Key areas needing attention based on metrics and benchmarks\n`;
+  prompt += `4. **Next Steps**: 2-3 specific, actionable training recommendations to improve the metrics\n\n`;
+  prompt += `IMPORTANT CONSTRAINTS:\n`;
+  prompt += `- Base ALL observations strictly on the provided metrics and benchmark data\n`;
+  prompt += `- Do NOT comment on effort, attitude, coachability, consistency, or other unmeasured qualities\n`;
+  prompt += `- Do NOT make assumptions about behaviors, habits, or character traits\n`;
+  prompt += `- Focus only on what the numbers show and specific training actions to improve them\n`;
+  prompt += `- When data is limited, acknowledge it rather than filling gaps with assumptions\n\n`;
+  prompt += `Keep it short (150-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.\n`;
 
   return prompt;
 }

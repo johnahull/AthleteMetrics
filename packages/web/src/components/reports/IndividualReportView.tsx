@@ -225,6 +225,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
+                  <TableHead>Team Average</TableHead>
                   <TableHead>Percentile</TableHead>
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
@@ -232,6 +233,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               <TableBody>
                 {Object.entries(athlete.measurements).map(([metricCode, value]) => {
                   const percentile = athlete.percentiles[metricCode];
+                  const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
 
                   return (
@@ -239,6 +241,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       <TableCell className="font-medium">{metricCode}</TableCell>
                       <TableCell>
                         {typeof value === 'number' ? value.toFixed(2) : "N/A"}
+                      </TableCell>
+                      <TableCell>
+                        {teamAverage !== undefined ? teamAverage.toFixed(2) : "N/A"}
                       </TableCell>
                       <TableCell>
                         {percentile !== undefined ? (

@@ -187,3 +187,89 @@ Before any schema change:
 - Ensure computed fields (age, fullName) have proper triggers/logic
 - Validate enum changes don't orphan existing data
 - Check cascade delete behavior for relationship changes
+
+## Migration Idempotency Requirements (MANDATORY)
+
+**ALL migrations MUST be idempotent** - safe to run multiple times without error or side effects.
+
+### Required Patterns
+
+| Operation | Idempotent Pattern |
+|-----------|-------------------|
+| CREATE TABLE | `CREATE TABLE IF NOT EXISTS` |
+| CREATE INDEX | `CREATE INDEX IF NOT EXISTS` or `CREATE INDEX CONCURRENTLY IF NOT EXISTS` |
+| ADD COLUMN | `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` |
+| ADD CONSTRAINT | Conditional DO $$ block (see below) |
+| INSERT seed data | `INSERT ... ON CONFLICT DO NOTHING` or `WHERE NOT EXISTS` |
+| ADD ENUM VALUE | Conditional DO $$ block (see below) |
+| ADD FOREIGN KEY | Conditional DO $$ block (see below) |
+
+### Constraint Idempotency Pattern
+```sql
+-- Add constraint if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'constraint_name'
+  ) THEN
+    ALTER TABLE table_name ADD CONSTRAINT constraint_name CHECK (...);
+  END IF;
+END $$;
+```
+
+### Foreign Key Idempotency Pattern
+```sql
+-- Add foreign key if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'fk_name' AND contype = 'f'
+  ) THEN
+    ALTER TABLE table_name
+    ADD CONSTRAINT fk_name
+    FOREIGN KEY (column) REFERENCES other_table(id);
+  END IF;
+END $$;
+```
+
+### Enum Value Idempotency Pattern
+```sql
+-- Add enum value if not exists
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum
+    WHERE enumlabel = 'new_value'
+    AND enumtypid = 'enum_type'::regtype
+  ) THEN
+    ALTER TYPE enum_type ADD VALUE 'new_value';
+  END IF;
+END $$;
+```
+
+### Seed Data Idempotency Pattern
+```sql
+-- Insert with conflict handling
+INSERT INTO table_name (id, name, value)
+VALUES ('uuid', 'name', 'value')
+ON CONFLICT (id) DO NOTHING;
+
+-- Or with WHERE NOT EXISTS
+INSERT INTO table_name (col1, col2)
+SELECT 'val1', 'val2'
+WHERE NOT EXISTS (
+  SELECT 1 FROM table_name WHERE col1 = 'val1'
+);
+```
+
+### Pre-Migration Checklist
+Before writing any migration:
+- [ ] All CREATE statements use IF NOT EXISTS
+- [ ] All constraints wrapped in conditional DO $$ blocks
+- [ ] All seed data uses ON CONFLICT or WHERE NOT EXISTS
+- [ ] Indexes use IF NOT EXISTS (prefer CONCURRENTLY for large tables)
+- [ ] Migration can be safely re-run without errors
+
+See `docs/MIGRATION_IDEMPOTENCY.md` for comprehensive examples.
