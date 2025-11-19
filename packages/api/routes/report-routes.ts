@@ -138,6 +138,17 @@ const publicSnapshotLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Dedicated rate limiting for AI endpoints (very expensive API calls)
+const aiGenerationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 10, // Very low limit for expensive AI API calls
+  message: {
+    message: "Too many AI insight generation requests, please try again later.",
+  },
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
 export function registerReportRoutes(app: Express) {
   const reportService = new ReportService();
 
@@ -1096,7 +1107,7 @@ export function registerReportRoutes(app: Express) {
    *
    * Requires: AI enabled for organization (both flags)
    */
-  app.post("/api/reports/:id/generate-insights", reportGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
@@ -1130,7 +1141,7 @@ export function registerReportRoutes(app: Express) {
 
       // Get site settings to determine which AI model to use
       const siteSettings = await storage.getSiteSettings();
-      const { AI_MODELS, generateCoachingInsights } = await import("../services/ai-insights-service");
+      const { AI_MODELS, generateCoachingInsights, isModelAvailable } = await import("../services/ai-insights-service");
       type AIModelKey = keyof typeof AI_MODELS;
 
       const modelKey = (siteSettings?.aiModel || "gpt-5-nano") as string;
@@ -1140,16 +1151,10 @@ export function registerReportRoutes(app: Express) {
         return res.status(500).json({ message: "Invalid AI model configuration. Please contact your administrator." });
       }
 
-      // Validate API key is available for the selected model's provider
-      const modelConfig = AI_MODELS[modelKey as AIModelKey];
-      const apiKeyEnvVars: Record<string, string> = {
-        'openai': 'OPENAI_API_KEY',
-        'google': 'GOOGLE_AI_API_KEY',
-        'anthropic': 'ANTHROPIC_API_KEY'
-      };
-      const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
-      if (!process.env[apiKeyEnvVar]) {
-        console.error(`AI generation failed: Missing API key for provider ${modelConfig.provider}`);
+      // Validate API key is available for the selected model's provider using shared utility
+      const modelAvailability = isModelAvailable(modelKey);
+      if (!modelAvailability.available) {
+        console.error(`AI generation failed: Missing API key for provider ${modelAvailability.provider}`);
         return res.status(503).json({
           message: "AI service is not available. Please contact your administrator to configure the AI provider."
         });

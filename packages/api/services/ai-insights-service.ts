@@ -67,8 +67,39 @@ export const AI_MODELS = {
 export type AIModelKey = keyof typeof AI_MODELS;
 
 // Configuration constants
-/** Default timeout for AI API calls in milliseconds (30 seconds) */
-export const AI_REQUEST_TIMEOUT_MS = 30000;
+/** Default timeout for AI API calls in milliseconds (30 seconds). Can be overridden via AI_REQUEST_TIMEOUT_MS env var */
+export const AI_REQUEST_TIMEOUT_MS = parseInt(process.env.AI_REQUEST_TIMEOUT_MS || '30000', 10);
+
+/**
+ * Get the environment variable name for a given AI provider's API key.
+ * Returns the env var name, not the actual key value.
+ */
+export function getProviderApiKeyEnvVar(provider: string): string {
+  const apiKeyEnvVars: Record<string, string> = {
+    'openai': 'OPENAI_API_KEY',
+    'google': 'GOOGLE_AI_API_KEY',
+    'anthropic': 'ANTHROPIC_API_KEY'
+  };
+  return apiKeyEnvVars[provider] || '';
+}
+
+/**
+ * Check if a specific AI model's provider has its API key configured.
+ * Returns an object indicating availability and relevant details.
+ *
+ * Security: Never returns actual API key values, only boolean availability.
+ */
+export function isModelAvailable(modelKey: string): { available: boolean; provider: string; envVar: string } {
+  const config = AI_MODELS[modelKey as AIModelKey];
+  if (!config) {
+    return { available: false, provider: '', envVar: '' };
+  }
+
+  const envVar = getProviderApiKeyEnvVar(config.provider);
+  const available = !!process.env[envVar];
+
+  return { available, provider: config.provider, envVar };
+}
 
 /**
  * Validate AI provider configuration at startup.

@@ -81,7 +81,7 @@ export function CoachingInsightsCard({
     if (editedContent.length > MAX_INSIGHTS_LENGTH) {
       toast({
         title: "Content too long",
-        description: `Please keep insights under ${MAX_INSIGHTS_LENGTH} characters`,
+        description: `Please keep insights under ${MAX_INSIGHTS_LENGTH.toLocaleString()} characters`,
         variant: "destructive",
       });
       return;

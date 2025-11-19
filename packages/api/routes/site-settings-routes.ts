@@ -10,7 +10,7 @@ import { ZodError } from "zod";
 import { requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import { updateSiteSettingsSchema } from "@shared/schema";
-import { AI_MODELS as AI_MODELS_CONFIG } from "../services/ai-insights-service";
+import { AI_MODELS as AI_MODELS_CONFIG, isModelAvailable } from "../services/ai-insights-service";
 
 // Type for authenticated request with session
 interface AuthenticatedRequest extends Request {
@@ -84,26 +84,22 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
     // Validate request body
     const validated = updateSiteSettingsSchema.parse(req.body);
 
-    // Validate that the selected model has its API key configured
-    const modelConfig = AI_MODELS_CONFIG[validated.aiModel as keyof typeof AI_MODELS_CONFIG];
-    if (!modelConfig) {
+    // Validate that the selected model has its API key configured using shared utility
+    const modelAvailability = isModelAvailable(validated.aiModel);
+    if (!modelAvailability.provider) {
       return res.status(400).json({ message: "Invalid AI model" });
     }
 
-    // Check if provider API key exists
-    const apiKeyEnvVars: Record<string, string> = {
-      'openai': 'OPENAI_API_KEY',
-      'google': 'GOOGLE_AI_API_KEY',
-      'anthropic': 'ANTHROPIC_API_KEY'
-    };
-    const apiKeyEnvVar = apiKeyEnvVars[modelConfig.provider];
-    if (!process.env[apiKeyEnvVar]) {
+    if (!modelAvailability.available) {
       // Log internally but don't expose provider details to client
-      console.error(`AI Service Error: Missing API key ${apiKeyEnvVar} for provider ${modelConfig.provider}`);
+      console.error(`AI Service Error: Missing API key ${modelAvailability.envVar} for provider ${modelAvailability.provider}`);
       return res.status(400).json({
         message: "Selected model is not available. Please contact administrator."
       });
     }
+
+    // Get the model config for audit logging
+    const modelConfig = AI_MODELS_CONFIG[validated.aiModel as keyof typeof AI_MODELS_CONFIG];
 
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
