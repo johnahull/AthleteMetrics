@@ -378,6 +378,9 @@ export async function shareChart(
     }
 
     // Fallback to clipboard copy if Web Share API doesn't support files
+    if (!navigator.clipboard || !navigator.clipboard.write) {
+      throw new Error('Neither Web Share API nor Clipboard API available');
+    }
     await navigator.clipboard.write([
       new ClipboardItem({
         'image/png': blob

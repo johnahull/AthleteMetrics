@@ -25,7 +25,7 @@ import type {
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getChartDataForType } from './chartDataUtils';
-import type { ExportFormat } from '@/lib/chartExport';
+import type { ExportFormat, ShareResult } from '@/lib/chartExport';
 
 // Chart height constants for consistent sizing across chart types
 // Heights are optimized for each chart type's specific display needs
@@ -93,7 +93,7 @@ interface ChartContainerProps {
   selectedDates?: string[];
   metric?: string;
   selectedGroups?: GroupDefinition[];
-  onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => void;
+  onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => Promise<ShareResult | void> | void;
   onFullscreen?: () => void;
   className?: string;
 }
