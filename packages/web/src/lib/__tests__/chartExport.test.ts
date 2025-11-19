@@ -665,5 +665,46 @@ describe('Chart Export Utilities - TDD', () => {
       expect(mockGetContext).toHaveBeenCalledWith('2d');
       expect(mockClearRect).toHaveBeenCalledWith(0, 0, 1000, 1000);
     });
+
+    it('should re-throw non-AbortError exceptions', async () => {
+      const mockContainer = document.createElement('div');
+
+      // Setup mock canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      // Configure the module-level mock for this test
+      mockHtml2Canvas.mockResolvedValue(mockCanvas);
+
+      // Mock Web Share API that throws NotAllowedError (not AbortError)
+      const notAllowedError = new Error('Permission denied');
+      notAllowedError.name = 'NotAllowedError';
+      const mockShare = vi.fn(() => Promise.reject(notAllowedError));
+      const mockCanShare = vi.fn(() => true);
+
+      // Spy on console.error to verify error logging (devLog.error calls console.error internally)
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      vi.stubGlobal('navigator', {
+        share: mockShare,
+        canShare: mockCanShare,
+        clipboard: { write: vi.fn() }
+      });
+
+      // Should re-throw non-AbortError exceptions
+      await expect(shareChart(mockContainer, 'Test Chart', 'test.png'))
+        .rejects.toThrow('Permission denied');
+
+      // Should have logged the error before re-throwing
+      expect(consoleErrorSpy).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
+
+      consoleErrorSpy.mockRestore();
+    });
   });
 });

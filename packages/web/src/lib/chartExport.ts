@@ -11,6 +11,7 @@ import type {
   AnalyticsResponse
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
+import { devLog } from '@/utils/dev-logger';
 
 export type ExportFormat = 'csv' | 'png' | 'clipboard' | 'share';
 
@@ -373,7 +374,7 @@ export async function shareChart(
             return { action: 'cancelled' };
           }
           // Log actual errors before re-throwing for better debugging
-          console.error('Error sharing chart:', shareError);
+          devLog.error('Error sharing chart:', shareError);
           throw shareError;
         }
       }

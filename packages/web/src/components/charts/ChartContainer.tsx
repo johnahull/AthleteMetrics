@@ -77,6 +77,7 @@ export type { ExportFormat };
 
 // Module-level cached check for Web Share API file support
 // This avoids creating File objects on every component render
+// Note: Safe for SSR - returns false when navigator is undefined (server-side)
 const checkShareAvailability = (): boolean => {
   if (typeof navigator === 'undefined' || !navigator.share) {
     return false;
@@ -198,7 +199,7 @@ export function ChartContainer({
           title: shareResult.action === 'shared' ? 'Shared successfully' : 'Copied to clipboard',
           description: shareResult.action === 'shared'
             ? 'Chart shared via your device'
-            : 'Chart image copied - paste into your app to share'
+            : 'Chart copied to clipboard (Web Share not available on this device)'
         });
         return;
       }
@@ -420,7 +421,7 @@ export function ChartContainer({
                   </DropdownMenuItem>
                 )}
                 {isShareAvailable && (
-                  <DropdownMenuItem onClick={() => handleExport('share')} disabled={isExporting}>
+                  <DropdownMenuItem onClick={() => handleExport('share')} disabled={isExporting} aria-label="Share chart">
                     <Share2 className="mr-2 h-4 w-4" />
                     <span>Share Chart</span>
                   </DropdownMenuItem>
