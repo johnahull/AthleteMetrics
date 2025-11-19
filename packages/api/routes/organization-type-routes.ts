@@ -38,6 +38,22 @@ import { storage } from "../storage";
 const organizationTypeService = new OrganizationTypeService();
 
 /**
+ * Route registration constants
+ * Used for health check and monitoring purposes
+ */
+const ROUTE_CONSTANTS = {
+  /**
+   * Number of active routes registered by this module
+   * Update this when adding or removing routes
+   * Current routes: GET /types, GET /:orgType/metrics, GET /:orgType/benchmarks,
+   * GET /:orgType/organizations, POST /filter-metrics, POST /validate,
+   * POST /cache/invalidate, GET /performance, POST /performance/reset
+   * Note: Statistics route (GET /statistics) is disabled pending implementation
+   */
+  ACTIVE_ROUTE_COUNT: 8,
+} as const;
+
+/**
  * Rate limiting configuration for organization type endpoints
  * More generous limits for read operations, stricter for write operations
  */
@@ -591,13 +607,13 @@ export async function healthCheckOrganizationTypeRoutes(): Promise<{
 
     return {
       status: serviceHealth.status,
-      routes: 8, // Number of routes registered (statistics route is disabled)
+      routes: ROUTE_CONSTANTS.ACTIVE_ROUTE_COUNT,
       lastCheck: new Date().toISOString(),
     };
   } catch (error) {
     return {
       status: 'unhealthy',
-      routes: 8,
+      routes: ROUTE_CONSTANTS.ACTIVE_ROUTE_COUNT,
       lastCheck: new Date().toISOString(),
     };
   }

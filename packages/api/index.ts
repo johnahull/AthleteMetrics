@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
+import { shutdownSecurityStore } from "./middleware/organization-type-security";
+import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
@@ -277,6 +279,11 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
       log('HTTP server closed');
 
       try {
+        // Shutdown organization type singletons to prevent memory leaks
+        shutdownSecurityStore();
+        shutdownAuditLogQueue();
+        log('Organization type services cleaned up');
+
         const { closeDatabase } = await import('./db.js');
         await closeDatabase();
         log('Database connections closed');
