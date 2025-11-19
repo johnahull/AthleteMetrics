@@ -335,6 +335,15 @@ export function validateOrgTypeArray(
 }
 
 /**
+ * Storage interface for organization type access verification
+ */
+interface OrganizationTypeStorage {
+  getUserOrganizations(userId: string): Promise<Array<{
+    organization?: { orgType?: string | null };
+  }>>;
+}
+
+/**
  * Middleware to verify user has access to a specific organization type
  * Non-admin users can only access data for organization types they belong to
  *
@@ -351,7 +360,7 @@ export function validateOrgTypeArray(
  * );
  * ```
  */
-export function verifyOrganizationTypeAccess(storage: any) {
+export function verifyOrganizationTypeAccess(storage: OrganizationTypeStorage) {
   return async (req: OrganizationTypeRequest, res: Response, next: NextFunction) => {
     try {
       const user = req.session?.user;
@@ -380,8 +389,8 @@ export function verifyOrganizationTypeAccess(storage: any) {
       // Extract unique organization types the user belongs to
       const userOrgTypes = new Set(
         userOrgs
-          .map((uo: any) => uo.organization?.orgType)
-          .filter((type: any) => type != null)
+          .map((uo) => uo.organization?.orgType)
+          .filter((type): type is string => type != null)
       );
 
       // Check if user has access to the requested organization type

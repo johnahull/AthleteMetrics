@@ -165,8 +165,12 @@ class SecurityRateLimitStore {
    * Analyze request patterns for suspicious activity
    */
   private analyzeSuspiciousActivity(
-    key: string, 
-    entry: any, 
+    key: string,
+    entry: {
+      requests: Array<{ timestamp: number; endpoint: string; success: boolean }>;
+      suspiciousActivity: SuspiciousActivityIndicator[];
+      lastReset: number;
+    },
     context: Partial<SecurityContext>
   ): void {
     const now = Date.now();
@@ -232,6 +236,22 @@ class SecurityRateLimitStore {
  * Global security rate limit store
  */
 const securityStore = new SecurityRateLimitStore();
+
+/**
+ * Cleanup function for graceful shutdown
+ * Call this when shutting down the application to prevent memory leaks
+ *
+ * @example
+ * ```typescript
+ * process.on('SIGTERM', () => {
+ *   shutdownSecurityStore();
+ *   process.exit(0);
+ * });
+ * ```
+ */
+export function shutdownSecurityStore(): void {
+  securityStore.destroy();
+}
 
 /**
  * Enhanced rate limiter with security pattern detection
@@ -395,6 +415,13 @@ export function sanitizeOrganizationTypeInput() {
 }
 
 /**
+ * Storage interface for authorization queries
+ */
+interface AuthorizationStorage {
+  getUserOrganizations(userId: string): Promise<Array<{ organizationId: string }>>;
+}
+
+/**
  * Advanced authorization middleware for organization type operations
  * Implements fine-grained access control with context awareness
  */
@@ -403,6 +430,8 @@ export function advancedOrganizationTypeAuthorization(options: {
   allowSiteAdmin?: boolean;
   requireOwnOrganization?: boolean;
   auditAction?: string;
+  /** Storage instance required if requireOwnOrganization is true */
+  storage?: AuthorizationStorage;
 }) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -452,9 +481,21 @@ export function advancedOrganizationTypeAuthorization(options: {
       // Check organization-specific access if required
       if (options.requireOwnOrganization) {
         const requestedOrgId = req.params.id || req.body?.organizationId;
-        if (requestedOrgId) {
-          // TODO: Check if user has access to the requested organization
-          // This would require a database query to verify user-organization relationship
+        if (requestedOrgId && options.storage) {
+          // Verify user has access to the requested organization
+          const userOrganizations = await options.storage.getUserOrganizations(context.userId);
+          const hasAccess = userOrganizations.some(
+            (uo: { organizationId: string }) => uo.organizationId === requestedOrgId
+          );
+
+          if (!hasAccess) {
+            throw new OrganizationTypeError(
+              OrganizationTypeErrorType.UNAUTHORIZED_TYPE_ACCESS,
+              `You don't have access to this organization`,
+              403,
+              { requestedOrgId, userId: context.userId }
+            );
+          }
         }
       }
 

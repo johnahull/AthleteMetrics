@@ -32,6 +32,7 @@ import {
   OrganizationTypeConstants,
   type OrganizationType,
 } from "@shared/organization-type-utils";
+import type { SiteMetric } from "@shared/schema";
 import { storage } from "../storage";
 
 const organizationTypeService = new OrganizationTypeService();
@@ -310,21 +311,21 @@ export function registerOrganizationTypeRoutes(app: Express) {
         }
 
         // Fetch metrics for each organization type in parallel
-        const metricsPromises = organizationTypes.map((orgType: any) =>
-          organizationTypeService.getMetricsForOrganizationType(orgType as OrganizationType, userId, true)
+        const metricsPromises = organizationTypes.map((orgType: OrganizationType) =>
+          organizationTypeService.getMetricsForOrganizationType(orgType, userId, true)
         );
         
         const metricsResults = await Promise.all(metricsPromises);
 
         // Combine and deduplicate metrics
-        const allMetrics = new Map();
-        const resultsByOrgType: Record<string, any[]> = {};
+        const allMetrics = new Map<string, SiteMetric>();
+        const resultsByOrgType: Record<string, SiteMetric[]> = {};
 
         organizationTypes.forEach((orgType: string, index: number) => {
           const metrics = metricsResults[index];
           resultsByOrgType[orgType] = metrics;
-          
-          metrics.forEach((metric: any) => {
+
+          metrics.forEach((metric: SiteMetric) => {
             if (!allMetrics.has(metric.code)) {
               allMetrics.set(metric.code, metric);
             }
