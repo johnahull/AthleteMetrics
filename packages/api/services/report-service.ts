@@ -111,6 +111,7 @@ interface TeamReportData {
   teamIds: string[];
   athleteCount: number;
   metricLabels: Record<string, string>;
+  metricUnits: Record<string, string>;
 }
 
 interface IndividualReportData {
@@ -119,6 +120,7 @@ interface IndividualReportData {
   athlete: AthletePerformance;
   generatedAt: string;
   metricLabels: Record<string, string>;
+  metricUnits: Record<string, string>;
 }
 
 export class ReportService extends BaseService {
@@ -126,22 +128,28 @@ export class ReportService extends BaseService {
   private metricInfoCache = new Map<string, { lowerIsBetter: boolean; name: string }>();
 
   /**
-   * Get display labels for a list of metric codes
+   * Get display labels and units for a list of metric codes
    */
-  async getMetricLabels(metricCodes: string[]): Promise<Record<string, string>> {
+  async getMetricLabelsAndUnits(metricCodes: string[]): Promise<{
+    labels: Record<string, string>;
+    units: Record<string, string>;
+  }> {
     const labels: Record<string, string> = {};
+    const units: Record<string, string> = {};
 
     // Fetch all metrics in one query
     const metrics = await db
       .select({
         code: siteMetrics.code,
         label: siteMetrics.label,
+        unit: siteMetrics.unit,
       })
       .from(siteMetrics)
       .where(inArray(siteMetrics.code, metricCodes));
 
     for (const metric of metrics) {
       labels[metric.code] = metric.label;
+      units[metric.code] = metric.unit || '';
     }
 
     // Fallback to code for any missing labels
@@ -149,9 +157,12 @@ export class ReportService extends BaseService {
       if (!labels[code]) {
         labels[code] = code;
       }
+      if (!units[code]) {
+        units[code] = '';
+      }
     }
 
-    return labels;
+    return { labels, units };
   }
 
   /**
@@ -221,8 +232,8 @@ export class ReportService extends BaseService {
       benchmarksByMetric
     );
 
-    // Get metric display labels
-    const metricLabels = await this.getMetricLabels(config.metrics);
+    // Get metric display labels and units
+    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
 
     const result = {
       reportType: 'team' as const,
@@ -233,6 +244,7 @@ export class ReportService extends BaseService {
       teamIds: config.filters?.teamIds || [],
       athleteCount: athleteRankings.length,
       metricLabels,
+      metricUnits,
     };
 
     return result;
@@ -365,8 +377,8 @@ export class ReportService extends BaseService {
       benchmarkComparisons,
     };
 
-    // Get metric display labels
-    const metricLabels = await this.getMetricLabels(config.metrics);
+    // Get metric display labels and units
+    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
 
     return {
       reportType: 'individual',
@@ -374,6 +386,7 @@ export class ReportService extends BaseService {
       athlete: athletePerformance,
       generatedAt: new Date().toISOString(),
       metricLabels,
+      metricUnits,
     };
   }
 

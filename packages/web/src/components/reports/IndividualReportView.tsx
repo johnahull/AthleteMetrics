@@ -151,7 +151,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels } = reportData;
+  const { athlete, metricLabels, metricUnits } = reportData;
 
   return (
     <div className="space-y-6">
@@ -237,6 +237,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
                   const metricLabel = metricLabels?.[metricCode] || metricCode;
+                  const unit = metricUnits?.[metricCode] || '';
 
                   return (
                     <TableRow key={metricCode}>
@@ -245,14 +246,14 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                         {typeof value === 'number'
                           ? (isFly10Metric(metricCode)
                               ? formatFly10Dual(value)
-                              : value.toFixed(2))
+                              : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
                       </TableCell>
                       <TableCell>
                         {teamAverage !== undefined
                           ? (isFly10Metric(metricCode)
                               ? formatFly10Dual(teamAverage)
-                              : teamAverage.toFixed(2))
+                              : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
                       </TableCell>
                       <TableCell>
@@ -268,7 +269,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                             {benchmarks.map((b: any, idx: number) => (
                               <div key={idx} className="text-sm">
                                 <span className="font-medium">{b.benchmarkName}:</span>{" "}
-                                {b.benchmarkValue.toFixed(2)}
+                                {isFly10Metric(metricCode)
+                                  ? formatFly10Dual(b.benchmarkValue)
+                                  : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
                                 <Badge
                                   variant={b.meetsTarget ? "default" : "secondary"}
                                   className="ml-2"
