@@ -4,14 +4,18 @@
 
 DO $$
 BEGIN
-  -- Only proceed if the constraint exists
+  -- Drop existing constraint if it exists
   IF EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_action_valid'
   ) THEN
-    -- Drop the existing constraint
-    ALTER TABLE audit_logs DROP CONSTRAINT audit_logs_action_valid;
+    ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
+  END IF;
 
-    -- Re-create with ALL existing actions from 0047 plus the new actions
+  -- Re-create with ALL existing actions from 0047 plus the new actions
+  -- Only add if it doesn't exist (handles partial migration runs)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_action_valid'
+  ) THEN
     ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
       -- Organization actions
       'organization_created', 'organization_updated', 'organization_deactivated', 'organization_reactivated',

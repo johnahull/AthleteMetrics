@@ -8,31 +8,19 @@
 -- ============================================================================
 
 -- Add the org_type column to organizations table with proper enum constraint
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS org_type TEXT NOT NULL DEFAULT 'club';
+
+-- Add CHECK constraint for valid organization types
 DO $$
 BEGIN
-  -- Check if org_type column already exists
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'organizations' AND column_name = 'org_type'
-  ) THEN
-    -- Add org_type column with default 'club' and NOT NULL constraint
-    ALTER TABLE organizations 
-    ADD COLUMN org_type TEXT NOT NULL DEFAULT 'club';
-    
-    RAISE NOTICE 'Added org_type column to organizations table';
-  ELSE
-    RAISE NOTICE 'org_type column already exists in organizations table';
-  END IF;
-
-  -- Add CHECK constraint for valid organization types
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint 
+    SELECT 1 FROM pg_constraint
     WHERE conname = 'organizations_org_type_check'
   ) THEN
-    ALTER TABLE organizations 
-    ADD CONSTRAINT organizations_org_type_check 
+    ALTER TABLE organizations
+    ADD CONSTRAINT organizations_org_type_check
     CHECK (org_type IN ('youth', 'high_school', 'college', 'club', 'private_facility', 'elite_academy'));
-    
+
     RAISE NOTICE 'Added organizations_org_type_check constraint';
   ELSE
     RAISE NOTICE 'organizations_org_type_check constraint already exists';
@@ -44,124 +32,39 @@ END $$;
 -- ============================================================================
 
 -- Add the available_org_types column to site_metrics table (nullable text array)
-DO $$
-BEGIN
-  -- Check if available_org_types column already exists
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'site_metrics' AND column_name = 'available_org_types'
-  ) THEN
-    -- Add available_org_types column as nullable text array
-    ALTER TABLE site_metrics 
-    ADD COLUMN available_org_types TEXT[];
-    
-    RAISE NOTICE 'Added available_org_types column to site_metrics table';
-  ELSE
-    RAISE NOTICE 'available_org_types column already exists in site_metrics table';
-  END IF;
-END $$;
+ALTER TABLE site_metrics ADD COLUMN IF NOT EXISTS available_org_types TEXT[];
 
 -- ============================================================================
 -- PART 3: ADD APPLICABLE_ORG_TYPES COLUMN TO SITE_BENCHMARKS TABLE
 -- ============================================================================
 
 -- Add the applicable_org_types column to site_benchmarks table (nullable text array)
-DO $$
-BEGIN
-  -- Check if applicable_org_types column already exists
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'site_benchmarks' AND column_name = 'applicable_org_types'
-  ) THEN
-    -- Add applicable_org_types column as nullable text array
-    ALTER TABLE site_benchmarks 
-    ADD COLUMN applicable_org_types TEXT[];
-    
-    RAISE NOTICE 'Added applicable_org_types column to site_benchmarks table';
-  ELSE
-    RAISE NOTICE 'applicable_org_types column already exists in site_benchmarks table';
-  END IF;
-END $$;
+ALTER TABLE site_benchmarks ADD COLUMN IF NOT EXISTS applicable_org_types TEXT[];
 
 -- ============================================================================
 -- PART 4: CREATE INDEXES FOR ORGANIZATION TYPE FILTERING
 -- ============================================================================
 
 -- Create index on organizations.org_type for efficient filtering
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes 
-    WHERE indexname = 'organizations_org_type_idx'
-  ) THEN
-    CREATE INDEX organizations_org_type_idx ON organizations(org_type);
-    RAISE NOTICE 'Created organizations_org_type_idx index';
-  ELSE
-    RAISE NOTICE 'Index organizations_org_type_idx already exists';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS organizations_org_type_idx ON organizations(org_type);
 
 -- Create index on site_metrics.available_org_types for efficient array filtering
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes 
-    WHERE indexname = 'site_metrics_available_org_types_idx'
-  ) THEN
-    -- GIN index for efficient array overlap queries (WHERE available_org_types && ARRAY['college'])
-    CREATE INDEX site_metrics_available_org_types_idx ON site_metrics USING GIN(available_org_types);
-    RAISE NOTICE 'Created site_metrics_available_org_types_idx GIN index';
-  ELSE
-    RAISE NOTICE 'Index site_metrics_available_org_types_idx already exists';
-  END IF;
-END $$;
+-- GIN index for efficient array overlap queries (WHERE available_org_types && ARRAY['college'])
+CREATE INDEX IF NOT EXISTS site_metrics_available_org_types_idx ON site_metrics USING GIN(available_org_types);
 
 -- Create index on site_benchmarks.applicable_org_types for efficient array filtering
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE indexname = 'site_benchmarks_org_types_idx'
-  ) THEN
-    -- GIN index for efficient array overlap queries (WHERE applicable_org_types && ARRAY['college'])
-    CREATE INDEX site_benchmarks_org_types_idx ON site_benchmarks USING GIN(applicable_org_types);
-    RAISE NOTICE 'Created site_benchmarks_org_types_idx GIN index';
-  ELSE
-    RAISE NOTICE 'Index site_benchmarks_org_types_idx already exists';
-  END IF;
-END $$;
+-- GIN index for efficient array overlap queries (WHERE applicable_org_types && ARRAY['college'])
+CREATE INDEX IF NOT EXISTS site_benchmarks_org_types_idx ON site_benchmarks USING GIN(applicable_org_types);
 
 -- Create composite index for site_metrics filtering by code and org type
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE indexname = 'site_metrics_code_org_types_idx'
-  ) THEN
-    -- Composite index for queries like: WHERE code = ? AND is_active = true AND available_org_types && ARRAY[?]
-    CREATE INDEX site_metrics_code_org_types_idx ON site_metrics(code, available_org_types)
-    WHERE is_active = true;
-    RAISE NOTICE 'Created site_metrics_code_org_types_idx composite index';
-  ELSE
-    RAISE NOTICE 'Index site_metrics_code_org_types_idx already exists';
-  END IF;
-END $$;
+-- Composite index for queries like: WHERE code = ? AND is_active = true AND available_org_types && ARRAY[?]
+CREATE INDEX IF NOT EXISTS site_metrics_code_org_types_idx ON site_metrics(code, available_org_types)
+WHERE is_active = true;
 
 -- Create composite index for site_benchmarks filtering by metric_code and org type
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE indexname = 'site_benchmarks_metric_org_types_idx'
-  ) THEN
-    -- Composite index for queries like: WHERE metric_code = ? AND is_active = true AND applicable_org_types && ARRAY[?]
-    CREATE INDEX site_benchmarks_metric_org_types_idx ON site_benchmarks(metric_code, applicable_org_types)
-    WHERE is_active = true;
-    RAISE NOTICE 'Created site_benchmarks_metric_org_types_idx composite index';
-  ELSE
-    RAISE NOTICE 'Index site_benchmarks_metric_org_types_idx already exists';
-  END IF;
-END $$;
+-- Composite index for queries like: WHERE metric_code = ? AND is_active = true AND applicable_org_types && ARRAY[?]
+CREATE INDEX IF NOT EXISTS site_benchmarks_metric_org_types_idx ON site_benchmarks(metric_code, applicable_org_types)
+WHERE is_active = true;
 
 -- ============================================================================
 -- PART 5: VERIFY MIGRATION SUCCESS
