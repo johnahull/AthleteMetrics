@@ -2045,7 +2045,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
 
     // Build final ReportData object
     const aiReportData: import("../services/ai-insights-service").ReportData = {
-      reportType: report.reportType,
+      reportType: report.reportType as "individual" | "team",
       reportName: report.name,
       organizationName: org?.name || "Unknown Organization",
       timeframe,
