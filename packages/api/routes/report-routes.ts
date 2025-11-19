@@ -1282,33 +1282,43 @@ export function registerReportRoutes(app: Express) {
         });
       }
 
-      // Update report insights
-      // Set model to null to indicate manual edit (not AI-generated)
-      const updatedReport = await storage.updateReport(reportId, {
-        coachingInsights,
-        coachingInsightsGeneratedAt: new Date(),
-        coachingInsightsModel: null, // Clear model to indicate manual edit
-      });
+      // Use transaction to ensure atomic update of report and audit log
+      const result = await db.transaction(async (tx) => {
+        // Update report insights
+        // Set model to null to indicate manual edit (not AI-generated)
+        const [updatedReport] = await tx
+          .update(reports)
+          .set({
+            coachingInsights,
+            coachingInsightsGeneratedAt: new Date(),
+            coachingInsightsModel: null, // Clear model to indicate manual edit
+            updatedAt: new Date(),
+          })
+          .where(eq(reports.id, reportId))
+          .returning();
 
-      // Audit log for manual insight update
-      await storage.createAuditLog({
-        userId: user.id,
-        action: 'report_ai_insights_updated',
-        resourceType: 'report',
-        resourceId: reportId,
-        details: JSON.stringify({
-          reportName: report.name,
-          organizationId: report.organizationId,
-          insightsLength: coachingInsights.length
-        }),
-        ipAddress: req.ip || null,
-        userAgent: req.get('user-agent') || null,
+        // Audit log for manual insight update
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: 'report_ai_insights_updated',
+          resourceType: 'report',
+          resourceId: reportId,
+          details: JSON.stringify({
+            reportName: report.name,
+            organizationId: report.organizationId,
+            insightsLength: coachingInsights.length
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+
+        return updatedReport;
       });
 
       res.json({
-        insights: updatedReport.coachingInsights,
-        generatedAt: updatedReport.coachingInsightsGeneratedAt,
-        model: updatedReport.coachingInsightsModel,
+        insights: result.coachingInsights,
+        generatedAt: result.coachingInsightsGeneratedAt,
+        model: result.coachingInsightsModel,
       });
     } catch (error) {
       console.error("Error updating coaching insights:", error);

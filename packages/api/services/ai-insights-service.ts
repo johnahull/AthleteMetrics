@@ -447,9 +447,19 @@ export async function generateCoachingInsights(
     return insights;
   } catch (error) {
     console.error("Error generating coaching insights:", error);
-    throw new Error(
-      `Failed to generate coaching insights: ${error instanceof Error ? error.message : "Unknown error"}`
-    );
+    // Return sanitized error message to prevent information leakage
+    // Provider-specific user-friendly messages are already thrown by provider classes
+    if (error instanceof Error && (
+      error.message.includes("rate limit") ||
+      error.message.includes("temporarily unavailable") ||
+      error.message.includes("Contact administrator") ||
+      error.message.includes("timed out")
+    )) {
+      // These are already user-friendly messages from providers
+      throw error;
+    }
+    // Generic fallback for unexpected errors
+    throw new Error("AI service encountered an error. Please try again or contact support.");
   }
 }
 
