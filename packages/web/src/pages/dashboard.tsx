@@ -92,7 +92,7 @@ export default function Dashboard() {
 
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${effectiveOrganizationId}`],
+    queryKey: ['organizations', effectiveOrganizationId, 'details'],
     enabled: !!effectiveOrganizationId && !!user,
     queryFn: async () => {
       const response = await fetch(`/api/organizations/${effectiveOrganizationId}`, {

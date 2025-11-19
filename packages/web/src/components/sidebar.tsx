@@ -161,7 +161,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   // Get current organization data if in context
   const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
+    queryKey: ['organizations', organizationId, 'details'],
     enabled: !!organizationId,
     queryFn: async () => {
       const response = await fetch(`/api/organizations/${organizationId}`);

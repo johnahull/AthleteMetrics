@@ -134,8 +134,8 @@ export function useContextualLabels(): ContextualLabels {
     const orgType = organization?.orgType ?? null;
     const allLabels = getContextualLabels(orgType);
 
-    // Log errors for debugging (non-blocking)
-    if (error) {
+    // Log errors for debugging in development (non-blocking)
+    if (error && import.meta.env.DEV) {
       console.error('Failed to fetch organization for contextual labels:', error);
     }
 

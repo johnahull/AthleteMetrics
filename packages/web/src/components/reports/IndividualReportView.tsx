@@ -33,7 +33,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   // Determine if AI is enabled for this organization
   const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
-    queryKey: [`/api/organizations/${report.organizationId}`],
+    queryKey: ['organizations', report.organizationId, 'details'],
     enabled: !!report.organizationId,
   });
 
