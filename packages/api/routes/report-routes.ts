@@ -1045,7 +1045,6 @@ export function registerReportRoutes(app: Express) {
         res.status(500).json({
           message:
             error instanceof Error ? error.message : "Failed to generate PDF",
-          reportId, // Include for troubleshooting
         });
       }
     }
@@ -1231,7 +1230,13 @@ export function registerReportRoutes(app: Express) {
             userAgent: req.get('user-agent') || null,
           });
         } catch (auditError) {
-          console.error("Failed to create audit log for failed AI generation:", auditError);
+          // Log with full context for debugging - audit trail is critical for compliance
+          console.error("CRITICAL: Failed to create audit log for failed AI generation:", {
+            userId: user.id,
+            reportId: req.params.id,
+            originalError: error instanceof Error ? error.message : 'Unknown error',
+            auditError: auditError instanceof Error ? auditError.message : auditError,
+          });
         }
       }
 
@@ -1279,10 +1284,11 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Update report insights
+      // Set model to null to indicate manual edit (not AI-generated)
       const updatedReport = await storage.updateReport(reportId, {
         coachingInsights,
         coachingInsightsGeneratedAt: new Date(),
-        coachingInsightsModel: report.coachingInsightsModel, // Keep original model
+        coachingInsightsModel: null, // Clear model to indicate manual edit
       });
 
       // Audit log for manual insight update
@@ -1839,7 +1845,7 @@ function calculateBenchmarkAchievements(athleteRankings: any[]) {
  * - MAX_ATHLETES: 100 athletes maximum for team reports
  * - MAX_VALUES_PER_METRIC: 100 values per metric
  */
-async function buildReportDataForAI(report: any, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
   // Data size limits to prevent large AI payloads
   const MAX_METRICS = 20;
   const MAX_ATHLETES = 100;
@@ -1855,13 +1861,14 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
       .then((rows) => rows[0]);
 
     // Generate full report data using report service
-    let reportData: any;
+    // Use unknown type then narrow based on report type
+    let reportData: unknown;
     if (report.reportType === 'team') {
       reportData = await reportService.generateTeamReport(report.id, userId);
     } else {
       // For individual reports, we need the athlete ID from the report config
-      const config = report.config as any;
-      const athleteId = config.athleteId;
+      const config = isIndividualReportConfig(report.config) ? report.config : null;
+      const athleteId = config?.athleteId;
 
       if (!athleteId) {
         throw new Error("Individual report missing athlete ID in config");
@@ -1875,10 +1882,13 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
     }
 
     // Extract timeframe from report config
-    const config = report.config as any;
+    // Use type guards to safely access config properties
+    const reportConfig = isIndividualReportConfig(report.config) || isTeamReportConfig(report.config)
+      ? report.config
+      : null;
     let timeframe = "Current Season";
-    if (config.timeframe) {
-      const { startDate, endDate } = config.timeframe;
+    if (reportConfig?.timeframe) {
+      const { customStart: startDate, customEnd: endDate } = reportConfig.timeframe;
       if (startDate && endDate) {
         const start = new Date(startDate).toLocaleDateString();
         const end = new Date(endDate).toLocaleDateString();
@@ -1895,14 +1905,45 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
       lowerIsBetter: boolean;
     }> = [];
 
-    if (report.reportType === 'team' && reportData.teamStatistics) {
+    // Cast reportData to typed object for accessing properties
+    // The report service returns different structures for team vs individual reports
+    const typedReportData = reportData as {
+      teamStatistics?: Array<{ metric: string; units?: string }>;
+      athleteRankings?: Array<{
+        userId: string;
+        userName: string;
+        measurements?: Record<string, number>;
+        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+      }>;
+      athleteCount?: number;
+      teamIds?: string[];
+      athlete?: {
+        userId: string;
+        userName?: string;
+        fullName?: string;
+        position?: string;
+        age?: number;
+        gender?: string;
+        sports?: string[];
+        measurements?: Record<string, number>;
+        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+      };
+      benchmarkComparisons?: Array<{
+        metric: string;
+        benchmarkName: string;
+        benchmarkValue: number;
+        meetsOrExceeds: boolean;
+      }>;
+    };
+
+    if (report.reportType === 'team' && typedReportData.teamStatistics) {
       // Limit athlete rankings to prevent large payloads
-      const limitedAthleteRankings = reportData.athleteRankings
-        ? reportData.athleteRankings.slice(0, MAX_ATHLETES)
+      const limitedAthleteRankings = typedReportData.athleteRankings
+        ? typedReportData.athleteRankings.slice(0, MAX_ATHLETES)
         : [];
 
       // Team report metrics (limited to MAX_METRICS)
-      const statsToProcess = reportData.teamStatistics.slice(0, MAX_METRICS);
+      const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
         const values: number[] = [];
@@ -1925,9 +1966,9 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
           lowerIsBetter: isMetricLowerBetter(metricCode),
         });
       }
-    } else if (report.reportType === 'individual' && reportData.athlete) {
+    } else if (report.reportType === 'individual' && typedReportData.athlete) {
       // Individual report metrics (limited to MAX_METRICS)
-      const athlete = reportData.athlete;
+      const athlete = typedReportData.athlete;
       if (athlete.measurements) {
         const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
         for (const [metricCode, value] of entries) {
@@ -1951,9 +1992,9 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
 
     // Build concerns array (metrics below expected performance)
     const concerns: Array<{ metric: string; concern: string }> = [];
-    if (reportData.benchmarkComparisons) {
+    if (typedReportData.benchmarkComparisons) {
       // Identify metrics below benchmarks
-      for (const comparison of reportData.benchmarkComparisons) {
+      for (const comparison of typedReportData.benchmarkComparisons) {
         if (!comparison.meetsOrExceeds) {
           concerns.push({
             metric: comparison.metric,
@@ -1965,18 +2006,18 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
 
     // Build benchmark comparisons array
     const benchmarkComparisons: Array<{ metric: string; performance: string }> = [];
-    if (report.reportType === 'team' && reportData.athleteRankings) {
+    if (report.reportType === 'team' && typedReportData.athleteRankings) {
       // Calculate team benchmark achievement rate
       const benchmarkStats = new Map<string, { total: number; met: number }>();
 
-      for (const athlete of reportData.athleteRankings) {
+      for (const athlete of typedReportData.athleteRankings) {
         if (athlete.benchmarkComparisons) {
-          for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons as any)) {
+          for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons)) {
             if (!benchmarkStats.has(metric)) {
               benchmarkStats.set(metric, { total: 0, met: 0 });
             }
             const stats = benchmarkStats.get(metric)!;
-            for (const comp of comparisons as any[]) {
+            for (const comp of comparisons) {
               stats.total++;
               if (comp.meetsOrExceeds) stats.met++;
             }
@@ -1991,11 +2032,11 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
           performance: `${percentage}% of athletes meet benchmarks (${stats.met}/${stats.total})`,
         });
       }
-    } else if (report.reportType === 'individual' && reportData.athlete?.benchmarkComparisons) {
+    } else if (report.reportType === 'individual' && typedReportData.athlete?.benchmarkComparisons) {
       // Individual benchmark comparisons
-      for (const [metric, comparisons] of Object.entries(reportData.athlete.benchmarkComparisons as any)) {
-        const metComparisons = (comparisons as any[]).filter(c => c.meetsOrExceeds);
-        const totalComparisons = (comparisons as any[]).length;
+      for (const [metric, comparisons] of Object.entries(typedReportData.athlete.benchmarkComparisons)) {
+        const metComparisons = comparisons.filter(c => c.meetsOrExceeds);
+        const totalComparisons = comparisons.length;
         benchmarkComparisons.push({
           metric,
           performance: `Meets ${metComparisons.length}/${totalComparisons} benchmarks`,
@@ -2017,17 +2058,17 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
 
     // Add team-specific data
     if (report.reportType === 'team') {
-      aiReportData.athleteCount = reportData.athleteCount || 0;
+      aiReportData.athleteCount = typedReportData.athleteCount || 0;
 
       // Fetch team info (name and sport) from the first team in teamIds
-      if (reportData.teamIds && reportData.teamIds.length > 0) {
+      if (typedReportData.teamIds && typedReportData.teamIds.length > 0) {
         const teamData = await db
           .select({
             name: teams.name,
             sport: teams.sport,
           })
           .from(teams)
-          .where(eq(teams.id, reportData.teamIds[0]))
+          .where(eq(teams.id, typedReportData.teamIds[0]))
           .limit(1)
           .then((rows) => rows[0]);
 
@@ -2039,13 +2080,13 @@ async function buildReportDataForAI(report: any, userId: string, reportService: 
     }
 
     // Add individual-specific data
-    if (report.reportType === 'individual' && reportData.athlete) {
-      aiReportData.athleteName = reportData.athlete.userName || reportData.athlete.fullName;
-      aiReportData.athletePosition = reportData.athlete.position;
-      aiReportData.athleteAge = reportData.athlete.age;
-      aiReportData.athleteGender = reportData.athlete.gender;
+    if (report.reportType === 'individual' && typedReportData.athlete) {
+      aiReportData.athleteName = typedReportData.athlete.userName || typedReportData.athlete.fullName;
+      aiReportData.athletePosition = typedReportData.athlete.position;
+      aiReportData.athleteAge = typedReportData.athlete.age;
+      aiReportData.athleteGender = typedReportData.athlete.gender;
       // Extract sport from athlete.sports array (use first sport)
-      aiReportData.athleteSport = reportData.athlete.sports?.[0] || undefined;
+      aiReportData.athleteSport = typedReportData.athlete.sports?.[0] || undefined;
     }
 
     return aiReportData;
