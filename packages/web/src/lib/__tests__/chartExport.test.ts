@@ -491,17 +491,18 @@ describe('Chart Export Utilities - TDD', () => {
     it('should share via Web Share API when supported', async () => {
       const mockContainer = document.createElement('div');
 
-      // Mock html2canvas
+      // Mock html2canvas at module level using dynamic import mock
       const mockCanvas = {
         width: 100,
         height: 100,
         getContext: vi.fn(() => ({ clearRect: vi.fn() })),
-        toBlob: vi.fn((callback) => {
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
           callback(new Blob(['test'], { type: 'image/png' }));
         })
       };
 
-      vi.doMock('html2canvas', () => ({
+      // Mock the dynamic import
+      vi.mock('html2canvas', () => ({
         default: vi.fn(() => Promise.resolve(mockCanvas))
       }));
 
@@ -515,12 +516,18 @@ describe('Chart Export Utilities - TDD', () => {
         clipboard: { write: vi.fn() }
       });
 
-      const result = await shareChart(mockContainer, 'Test Chart', 'test.png');
+      // Import fresh to get mocked version
+      const { shareChart: mockedShareChart } = await import('../chartExport');
+      const result = await mockedShareChart(mockContainer, 'Test Chart', 'test.png');
 
-      // Since html2canvas will fail in jsdom, we verify the setup is correct
-      expect(mockContainer).toBeDefined();
+      expect(result).toEqual({ action: 'shared' });
+      expect(mockShare).toHaveBeenCalledWith(expect.objectContaining({
+        title: 'Test Chart',
+        text: 'Performance chart: Test Chart'
+      }));
 
       vi.unstubAllGlobals();
+      vi.resetModules();
     });
 
     it('should handle user cancellation gracefully (AbortError)', async () => {
@@ -531,12 +538,12 @@ describe('Chart Export Utilities - TDD', () => {
         width: 100,
         height: 100,
         getContext: vi.fn(() => ({ clearRect: vi.fn() })),
-        toBlob: vi.fn((callback) => {
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
           callback(new Blob(['test'], { type: 'image/png' }));
         })
       };
 
-      vi.doMock('html2canvas', () => ({
+      vi.mock('html2canvas', () => ({
         default: vi.fn(() => Promise.resolve(mockCanvas))
       }));
 
@@ -552,17 +559,36 @@ describe('Chart Export Utilities - TDD', () => {
         clipboard: { write: vi.fn() }
       });
 
-      // AbortError should be handled gracefully
-      // In real scenario, function would return { action: 'cancelled' }
-      expect(mockContainer).toBeDefined();
+      // Import fresh to get mocked version
+      const { shareChart: mockedShareChart } = await import('../chartExport');
+      const result = await mockedShareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // AbortError should return cancelled action, not throw
+      expect(result).toEqual({ action: 'cancelled' });
+      expect(mockShare).toHaveBeenCalled();
 
       vi.unstubAllGlobals();
+      vi.resetModules();
     });
 
     it('should fall back to clipboard when Web Share API is unavailable', async () => {
       const mockContainer = document.createElement('div');
 
-      // Mock clipboard write
+      // Mock html2canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      vi.mock('html2canvas', () => ({
+        default: vi.fn(() => Promise.resolve(mockCanvas))
+      }));
+
+      // Mock clipboard write but no Web Share API
       const mockClipboardWrite = vi.fn(() => Promise.resolve());
       vi.stubGlobal('navigator', {
         share: undefined,
@@ -572,15 +598,34 @@ describe('Chart Export Utilities - TDD', () => {
         }
       });
 
-      // Note: Testing dynamic html2canvas import requires complex mocking
-      // The function structure is validated
-      expect(mockContainer).toBeDefined();
+      // Import fresh to get mocked version
+      const { shareChart: mockedShareChart } = await import('../chartExport');
+      const result = await mockedShareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // Should fall back to clipboard
+      expect(result).toEqual({ action: 'clipboard' });
+      expect(mockClipboardWrite).toHaveBeenCalled();
 
       vi.unstubAllGlobals();
+      vi.resetModules();
     });
 
     it('should throw error when neither Web Share API nor Clipboard API available', async () => {
       const mockContainer = document.createElement('div');
+
+      // Mock html2canvas
+      const mockCanvas = {
+        width: 100,
+        height: 100,
+        getContext: vi.fn(() => ({ clearRect: vi.fn() })),
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
+          callback(new Blob(['test'], { type: 'image/png' }));
+        })
+      };
+
+      vi.mock('html2canvas', () => ({
+        default: vi.fn(() => Promise.resolve(mockCanvas))
+      }));
 
       // Remove both APIs
       vi.stubGlobal('navigator', {
@@ -589,11 +634,15 @@ describe('Chart Export Utilities - TDD', () => {
         clipboard: undefined
       });
 
+      // Import fresh to get mocked version
+      const { shareChart: mockedShareChart } = await import('../chartExport');
+
       // Function should throw when neither API is available
-      // (after html2canvas completes but APIs are missing)
-      expect(mockContainer).toBeDefined();
+      await expect(mockedShareChart(mockContainer, 'Test Chart', 'test.png'))
+        .rejects.toThrow('Neither Web Share API nor Clipboard API available');
 
       vi.unstubAllGlobals();
+      vi.resetModules();
     });
 
     it('should clean up canvas memory in finally block', async () => {
@@ -609,17 +658,35 @@ describe('Chart Export Utilities - TDD', () => {
         width: 1000,
         height: 1000,
         getContext: mockGetContext,
-        toBlob: vi.fn((callback) => {
+        toBlob: vi.fn((callback: (blob: Blob | null) => void) => {
           callback(new Blob(['test'], { type: 'image/png' }));
         })
       };
 
-      vi.doMock('html2canvas', () => ({
+      vi.mock('html2canvas', () => ({
         default: vi.fn(() => Promise.resolve(mockCanvas))
       }));
 
-      // The finally block should always execute and clean up the canvas
-      expect(mockContainer).toBeDefined();
+      // Mock clipboard for successful completion
+      const mockClipboardWrite = vi.fn(() => Promise.resolve());
+      vi.stubGlobal('navigator', {
+        share: undefined,
+        canShare: undefined,
+        clipboard: {
+          write: mockClipboardWrite
+        }
+      });
+
+      // Import fresh to get mocked version
+      const { shareChart: mockedShareChart } = await import('../chartExport');
+      await mockedShareChart(mockContainer, 'Test Chart', 'test.png');
+
+      // Canvas cleanup should have been called
+      expect(mockGetContext).toHaveBeenCalledWith('2d');
+      expect(mockClearRect).toHaveBeenCalledWith(0, 0, 1000, 1000);
+
+      vi.unstubAllGlobals();
+      vi.resetModules();
     });
   });
 });

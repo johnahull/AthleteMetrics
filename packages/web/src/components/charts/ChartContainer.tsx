@@ -191,7 +191,7 @@ export function ChartContainer({
           title: shareResult.action === 'shared' ? 'Shared successfully' : 'Copied to clipboard',
           description: shareResult.action === 'shared'
             ? 'Chart shared via your device'
-            : 'Chart copied to clipboard (share not available)'
+            : 'Chart copied to clipboard for sharing'
         });
         return;
       }
