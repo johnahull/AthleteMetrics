@@ -38,7 +38,6 @@ interface TeamReportViewProps {
 
 export function TeamReportView({ report }: TeamReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [pdfFormat, setPdfFormat] = useState<PdfFormat>('simplified');
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
   const { user } = useAuth();
@@ -59,7 +58,6 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     // Team reports don't need athleteId - pass empty object
     generateReport.mutate({}, {
       onSuccess: (response) => {
-        console.log('[TeamReportView] Report generated successfully:', response);
         // Extract the actual report data from the response
         if (response && typeof response === 'object' && 'data' in response) {
           setReportData(response.data as TeamReportData);
@@ -130,18 +128,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels } = reportData;
-
-  console.log('[TeamReportView] Rendering with data:', {
-    teamStatistics,
-    athleteRankings,
-    teamStatsIsArray: Array.isArray(teamStatistics),
-    athleteRankingsIsArray: Array.isArray(athleteRankings),
-    teamStatsLength: teamStatistics?.length,
-    athleteRankingsLength: athleteRankings?.length,
-    generatedAt,
-    fullReportData: reportData
-  });
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits } = reportData;
 
   // Collect all unique benchmark names across all metrics
   const allBenchmarkNames = new Set<string>();

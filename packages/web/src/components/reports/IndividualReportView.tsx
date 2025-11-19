@@ -21,17 +21,11 @@ import { useAuth } from "@/lib/auth";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import type { Report } from "@/types/report-types";
 
-// Version check - this log should appear immediately when the module loads
-console.log('🔄 IndividualReportView MODULE LOADED - Version: 2024-11-10-FIX-v6-DEPS-FIX');
-console.log('🔍 If you see this, the new code is loaded! Check for more logs below.');
-
 interface IndividualReportViewProps {
   report: Report;
 }
 
 export function IndividualReportView({ report }: IndividualReportViewProps) {
-  console.log('[IndividualReportView] COMPONENT RENDER - report:', report);
-
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
@@ -50,27 +44,14 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const config = report.config as { athleteId?: string; athleteIds?: string[] };
   const athleteId = config?.athleteId || config?.athleteIds?.[0];
 
-  console.log('[IndividualReportView] athleteId extracted:', athleteId);
-
   useEffect(() => {
-    console.log('[IndividualReportView] useEffect RUNNING');
-    console.log('[IndividualReportView] Report config:', report.config);
-    console.log('[IndividualReportView] Extracted athleteId:', athleteId);
-    console.log('[IndividualReportView] Calling generateReport.mutate with:', { athleteId });
-
     if (!athleteId) {
-      console.error('[IndividualReportView] No athleteId found in report config!');
       return;
     }
 
     generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
-        console.log('[IndividualReportView] Report generated successfully:', data);
         setReportData(data);
-      },
-      onError: (error) => {
-        console.error('[IndividualReportView] Report generation failed:', error);
-        // Error toast is handled by the hook, but we log here for debugging
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -107,15 +88,6 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
       console.error("Error downloading PDF:", error);
     }
   };
-
-  // Debug logging for mutation state
-  console.log('[IndividualReportView] Render state:', {
-    isPending: generateReport.isPending,
-    isError: generateReport.isError,
-    isSuccess: generateReport.isSuccess,
-    hasReportData: !!reportData,
-    error: generateReport.error
-  });
 
   if (generateReport.isPending || !reportData) {
     return (
@@ -273,10 +245,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                                   ? formatFly10Dual(b.benchmarkValue)
                                   : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
                                 <Badge
-                                  variant={b.meetsTarget ? "default" : "secondary"}
+                                  variant={b.meetsOrExceeds ? "default" : "secondary"}
                                   className="ml-2"
                                 >
-                                  {b.meetsTarget ? "✓ Meets" : "✗ Below"}
+                                  {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
                                 </Badge>
                               </div>
                             ))}
