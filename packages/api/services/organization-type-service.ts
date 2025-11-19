@@ -31,6 +31,26 @@ import type { SiteMetric, SiteBenchmark, Organization } from "@shared/schema";
 const CACHE_DURATION_MS = 5 * 60 * 1000;
 
 /**
+ * Default cache size for organization type queries
+ * Can be overridden via CACHE_MAX_SIZE environment variable
+ */
+const DEFAULT_CACHE_MAX_SIZE = 1000;
+
+/**
+ * Get cache max size from environment or use default
+ */
+function getCacheMaxSize(): number {
+  const envSize = process.env.CACHE_MAX_SIZE;
+  if (envSize) {
+    const parsed = parseInt(envSize, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return DEFAULT_CACHE_MAX_SIZE;
+}
+
+/**
  * Simple in-memory cache for organization type queries with LRU eviction
  *
  * PRODUCTION NOTE: This implementation is suitable for single-instance deployments.
@@ -190,9 +210,9 @@ interface PerformanceMetrics {
 }
 
 export class OrganizationTypeService extends BaseService {
-  private metricsCache = new SimpleCache<SiteMetric[]>();
-  private benchmarksCache = new SimpleCache<SiteBenchmark[]>();
-  private organizationsCache = new SimpleCache<Organization[]>();
+  private metricsCache: SimpleCache<SiteMetric[]>;
+  private benchmarksCache: SimpleCache<SiteBenchmark[]>;
+  private organizationsCache: SimpleCache<Organization[]>;
   private metricService: MetricService;
   private benchmarkService: BenchmarkService;
   private performanceMetrics: PerformanceMetrics = {
@@ -205,6 +225,11 @@ export class OrganizationTypeService extends BaseService {
 
   constructor() {
     super();
+    // Initialize caches with environment-configurable max size
+    const cacheMaxSize = getCacheMaxSize();
+    this.metricsCache = new SimpleCache<SiteMetric[]>(cacheMaxSize);
+    this.benchmarksCache = new SimpleCache<SiteBenchmark[]>(cacheMaxSize);
+    this.organizationsCache = new SimpleCache<Organization[]>(cacheMaxSize);
     this.metricService = new MetricService();
     this.benchmarkService = new BenchmarkService();
   }
@@ -534,10 +559,23 @@ export class OrganizationTypeService extends BaseService {
       this.metricsCache.invalidate(pattern);
       this.benchmarksCache.invalidate(pattern);
       this.organizationsCache.invalidate(pattern);
-      
-      console.log(`Cache invalidated${pattern ? ` for pattern: ${pattern}` : ' (all)'}`);
+
+      // Use structured logging format for better log aggregation and filtering
+      console.info(JSON.stringify({
+        level: 'info',
+        service: 'OrganizationTypeService',
+        action: 'cache_invalidated',
+        pattern: pattern || 'all',
+        timestamp: new Date().toISOString(),
+      }));
     } catch (error) {
-      console.error('OrganizationTypeService.invalidateCache:', error);
+      console.error(JSON.stringify({
+        level: 'error',
+        service: 'OrganizationTypeService',
+        action: 'cache_invalidation_failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      }));
     }
   }
 

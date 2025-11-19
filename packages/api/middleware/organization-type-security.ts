@@ -41,14 +41,41 @@ interface SecurityConfig {
 }
 
 /**
+ * Security configuration constants
+ * Extracted from magic numbers for clarity and maintainability
+ */
+const SECURITY_CONSTANTS = {
+  /** Default maximum payload size in bytes (1MB) */
+  DEFAULT_MAX_PAYLOAD_SIZE: 1024 * 1024,
+  /** Default threshold for suspicious activity detection */
+  DEFAULT_SUSPICIOUS_ACTIVITY_THRESHOLD: 10,
+  /** Requests per minute threshold for rapid request detection */
+  RAPID_REQUEST_THRESHOLD: 10,
+  /** High severity threshold for rapid requests */
+  RAPID_REQUEST_HIGH_THRESHOLD: 30,
+  /** Critical severity threshold for rapid requests */
+  RAPID_REQUEST_CRITICAL_THRESHOLD: 50,
+  /** Minimum requests before analyzing failure rate */
+  MIN_REQUESTS_FOR_FAILURE_ANALYSIS: 5,
+  /** Failure rate threshold for suspicious activity */
+  HIGH_FAILURE_RATE_THRESHOLD: 0.7,
+  /** Critical failure rate threshold */
+  CRITICAL_FAILURE_RATE_THRESHOLD: 0.9,
+  /** Time window for analyzing recent requests (1 minute) */
+  RECENT_REQUEST_WINDOW_MS: 60 * 1000,
+  /** Time window for suspicious activity retention (1 hour) */
+  SUSPICIOUS_ACTIVITY_RETENTION_MS: 60 * 60 * 1000,
+} as const;
+
+/**
  * Default security configuration
  */
 const DEFAULT_SECURITY_CONFIG: SecurityConfig = {
   enableThreatDetection: process.env.NODE_ENV === 'production',
-  maxPayloadSize: 1024 * 1024, // 1MB
+  maxPayloadSize: SECURITY_CONSTANTS.DEFAULT_MAX_PAYLOAD_SIZE,
   enableCSRFProtection: true,
   enableDetailedAuditLog: true,
-  suspiciousActivityThreshold: 10,
+  suspiciousActivityThreshold: SECURITY_CONSTANTS.DEFAULT_SUSPICIOUS_ACTIVITY_THRESHOLD,
 };
 
 /**
@@ -175,16 +202,17 @@ class SecurityRateLimitStore {
   ): void {
     const now = Date.now();
     const recentRequests = entry.requests.filter(
-      (req: { timestamp: number; endpoint: string; success: boolean }) => now - req.timestamp < 60 * 1000 // Last minute
+      (req: { timestamp: number; endpoint: string; success: boolean }) =>
+        now - req.timestamp < SECURITY_CONSTANTS.RECENT_REQUEST_WINDOW_MS
     );
 
-    // Pattern 1: Rapid requests (> 10 requests per minute)
-    if (recentRequests.length > 10) {
+    // Pattern 1: Rapid requests (> threshold per minute)
+    if (recentRequests.length > SECURITY_CONSTANTS.RAPID_REQUEST_THRESHOLD) {
       entry.suspiciousActivity.push({
         type: 'RAPID_REQUESTS',
         description: `${recentRequests.length} requests in the last minute`,
-        severity: recentRequests.length > 50 ? 'CRITICAL' : 
-                  recentRequests.length > 30 ? 'HIGH' : 'MEDIUM',
+        severity: recentRequests.length > SECURITY_CONSTANTS.RAPID_REQUEST_CRITICAL_THRESHOLD ? 'CRITICAL' :
+                  recentRequests.length > SECURITY_CONSTANTS.RAPID_REQUEST_HIGH_THRESHOLD ? 'HIGH' : 'MEDIUM',
         metadata: {
           requestCount: recentRequests.length,
           endpoints: [...new Set(recentRequests.map((r: { endpoint: string }) => r.endpoint))],
@@ -196,12 +224,13 @@ class SecurityRateLimitStore {
     // Pattern 2: High failure rate
     const failedRequests = recentRequests.filter((req: { success: boolean }) => !req.success);
     const failureRate = failedRequests.length / recentRequests.length;
-    
-    if (recentRequests.length > 5 && failureRate > 0.7) {
+
+    if (recentRequests.length > SECURITY_CONSTANTS.MIN_REQUESTS_FOR_FAILURE_ANALYSIS &&
+        failureRate > SECURITY_CONSTANTS.HIGH_FAILURE_RATE_THRESHOLD) {
       entry.suspiciousActivity.push({
         type: 'INVALID_INPUT_PATTERN',
         description: `High failure rate: ${Math.round(failureRate * 100)}%`,
-        severity: failureRate > 0.9 ? 'HIGH' : 'MEDIUM',
+        severity: failureRate > SECURITY_CONSTANTS.CRITICAL_FAILURE_RATE_THRESHOLD ? 'HIGH' : 'MEDIUM',
         metadata: {
           failureRate,
           failedRequests: failedRequests.length,
@@ -211,9 +240,10 @@ class SecurityRateLimitStore {
       });
     }
 
-    // Clean up old suspicious activity indicators (older than 1 hour)
+    // Clean up old suspicious activity indicators
     entry.suspiciousActivity = entry.suspiciousActivity.filter(
-      (indicator: { metadata: { timestamp?: number } }) => now - (indicator.metadata.timestamp || 0) < 60 * 60 * 1000
+      (indicator: { metadata: { timestamp?: number } }) =>
+        now - (indicator.metadata.timestamp || 0) < SECURITY_CONSTANTS.SUSPICIOUS_ACTIVITY_RETENTION_MS
     );
   }
 
@@ -535,15 +565,23 @@ export function auditOrganizationTypeOperation(action: string) {
     let responseBody: any;
     let responseStatus = 200;
 
-    // Override response methods to capture response data
+    // Override response methods to capture response data with type guards
     res.send = function(body) {
-      responseBody = body;
+      // Only capture response body if it's a valid type for logging
+      if (body !== null && body !== undefined) {
+        if (typeof body === 'string' || typeof body === 'object') {
+          responseBody = body;
+        }
+      }
       responseStatus = res.statusCode;
       return originalSend.call(this, body);
     };
 
     res.json = function(body) {
-      responseBody = body;
+      // Only capture response body if it's a valid object for logging
+      if (body !== null && body !== undefined && typeof body === 'object') {
+        responseBody = body;
+      }
       responseStatus = res.statusCode;
       return originalJson.call(this, body);
     };
@@ -698,7 +736,24 @@ export function organizationTypeCSRFProtection() {
     const csrfToken = req.headers['x-csrf-token'] || req.body?._csrf;
     const sessionCSRF = (req.session as any)?.csrfToken;
 
-    if (!csrfToken || !sessionCSRF || csrfToken !== sessionCSRF) {
+    // Use timing-safe comparison to prevent timing attacks
+    // Both tokens must be strings and same length for timingSafeEqual
+    if (!csrfToken || !sessionCSRF) {
+      throw new OrganizationTypeError(
+        OrganizationTypeErrorType.UNAUTHORIZED_TYPE_ACCESS,
+        'Invalid CSRF token',
+        403
+      );
+    }
+
+    // Convert to buffers for timing-safe comparison
+    const tokenBuffer = Buffer.from(String(csrfToken));
+    const sessionBuffer = Buffer.from(String(sessionCSRF));
+
+    // Check length first (different lengths mean different tokens)
+    // Then use timing-safe comparison for same-length tokens
+    if (tokenBuffer.length !== sessionBuffer.length ||
+        !crypto.timingSafeEqual(tokenBuffer, sessionBuffer)) {
       throw new OrganizationTypeError(
         OrganizationTypeErrorType.UNAUTHORIZED_TYPE_ACCESS,
         'Invalid CSRF token',

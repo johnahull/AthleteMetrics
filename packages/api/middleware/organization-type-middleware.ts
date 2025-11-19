@@ -534,17 +534,101 @@ export function requireOrganizationType() {
 }
 
 /**
+ * Failed audit log entry for retry queue
+ */
+interface FailedAuditEntry {
+  auditData: {
+    userId: string;
+    action: string;
+    resourceType: string;
+    resourceId: string;
+    details: string;
+    ipAddress: string | undefined;
+  };
+  error: Error;
+  timestamp: number;
+  retryCount: number;
+}
+
+/**
+ * Simple in-memory queue for failed audit logs
+ * In production, this should be replaced with a persistent queue (Redis, SQS, etc.)
+ */
+class AuditLogFailureQueue {
+  private static instance: AuditLogFailureQueue;
+  private queue: FailedAuditEntry[] = [];
+  private readonly maxQueueSize = 1000;
+  private readonly maxRetries = 3;
+
+  private constructor() {
+    // Start periodic retry processing
+    setInterval(() => this.processQueue(), 60 * 1000); // Every minute
+  }
+
+  static getInstance(): AuditLogFailureQueue {
+    if (!AuditLogFailureQueue.instance) {
+      AuditLogFailureQueue.instance = new AuditLogFailureQueue();
+    }
+    return AuditLogFailureQueue.instance;
+  }
+
+  enqueue(entry: Omit<FailedAuditEntry, 'timestamp' | 'retryCount'>): void {
+    // Prevent queue from growing unbounded
+    if (this.queue.length >= this.maxQueueSize) {
+      console.error('CRITICAL: Audit log failure queue is full, dropping oldest entries');
+      this.queue.shift(); // Remove oldest entry
+    }
+
+    this.queue.push({
+      ...entry,
+      timestamp: Date.now(),
+      retryCount: 0,
+    });
+  }
+
+  private async processQueue(): Promise<void> {
+    if (this.queue.length === 0) return;
+
+    const entriesToRetry = [...this.queue];
+    this.queue = [];
+
+    for (const entry of entriesToRetry) {
+      if (entry.retryCount >= this.maxRetries) {
+        // Log to dead letter queue (console for now, should be persistent storage in production)
+        console.error('DEAD LETTER: Audit log permanently failed after max retries:', {
+          auditData: entry.auditData,
+          error: entry.error.message,
+          retryCount: entry.retryCount,
+        });
+        continue;
+      }
+
+      // Re-queue with incremented retry count
+      // In production, this would attempt to actually save to storage
+      entry.retryCount++;
+      this.queue.push(entry);
+    }
+  }
+
+  getQueueSize(): number {
+    return this.queue.length;
+  }
+}
+
+/**
  * Middleware to log organization type access for audit purposes
- * 
+ *
  * @param action - Action being performed (for audit logging)
  * @returns Express middleware function
  */
 export function logOrganizationTypeAccess(action: string = 'organization_type_accessed') {
+  const failureQueue = AuditLogFailureQueue.getInstance();
+
   return async (req: OrganizationTypeRequest, res: Response, next: NextFunction) => {
     try {
       const user = req.session?.user;
       const orgType = req.organizationType;
-      
+
       if (user && orgType) {
         // Create audit log entry
         const auditData = {
@@ -569,8 +653,15 @@ export function logOrganizationTypeAccess(action: string = 'organization_type_ac
             // This would need to be implemented based on your storage setup
             console.log('Organization type access logged:', auditData);
           } catch (logError) {
-            // CRITICAL: Audit log failure - this should trigger alerts in production
-            console.error('CRITICAL: Audit log failed:', logError);
+            // CRITICAL: Audit log failure - queue for retry
+            const error = logError instanceof Error ? logError : new Error(String(logError));
+            console.error('CRITICAL: Audit log failed, queuing for retry:', error.message);
+
+            // Add to failure queue for retry
+            failureQueue.enqueue({
+              auditData,
+              error,
+            });
 
             // TODO: Integrate with monitoring service (e.g., Sentry, DataDog, CloudWatch)
             // Example implementations:

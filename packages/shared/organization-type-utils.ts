@@ -30,7 +30,7 @@ export const ORGANIZATION_TYPE_LABELS: Record<OrganizationType, string> = {
   high_school: 'High School',
   college: 'College/University',
   club: 'Club/Travel Team',
-  private_facility: 'Private Coach/Training Facility',
+  private_facility: 'Private Training Facility',
   elite_academy: 'Elite Academy',
 } as const;
 
@@ -342,6 +342,9 @@ export const organizationTypeLookup = new OrganizationTypeLookup();
  * @deprecated **SECURITY WARNING**: This function uses raw SQL string interpolation.
  * While inputs are validated (column via whitelist, orgType via enum), this pattern
  * is fragile and should be migrated to Drizzle ORM's parameterized queries.
+ *
+ * @since 2025-11-09 - Initial implementation
+ * @deprecated-removal 2.0.0 - Will be removed in next major version
  *
  * **Migration Required Before Next Major Release**
  *

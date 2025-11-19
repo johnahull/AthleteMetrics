@@ -89,6 +89,11 @@ function useOrganization(organizationId: string | null) {
     },
     enabled: !!organizationId,
     staleTime: ORGANIZATION_CACHE_DURATION_MS,
+    // Limit retries to prevent infinite retry loops on persistent errors
+    // After 2 retries (3 total attempts), fall back to default labels
+    retry: 2,
+    // Exponential backoff: 1s, 2s for the 2 retries
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000),
   });
 }
 
