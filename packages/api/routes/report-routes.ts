@@ -1947,6 +1947,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
         benchmarkValue: number;
         meetsOrExceeds: boolean;
       }>;
+      metricLabels?: Record<string, string>;
     };
 
     if (report.reportType === 'team' && typedReportData.teamStatistics) {
@@ -1973,7 +1974,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
 
         metrics.push({
           code: metricCode,
-          label: stat.metric, // Human-readable label
+          label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
           values: limitedValues,
           unit: stat.units || "",
           lowerIsBetter: isMetricLowerBetter(metricCode),
@@ -1988,7 +1989,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
           if (typeof value === 'number') {
             metrics.push({
               code: metricCode,
-              label: metricCode, // Human-readable label
+              label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
               values: [value],
               unit: getMetricUnit(metricCode),
               lowerIsBetter: isMetricLowerBetter(metricCode),

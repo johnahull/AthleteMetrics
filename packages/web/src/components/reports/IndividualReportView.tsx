@@ -150,7 +150,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete } = reportData;
+  const { athlete, metricLabels } = reportData;
 
   return (
     <div className="space-y-6">
@@ -235,10 +235,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   const percentile = athlete.percentiles[metricCode];
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
+                  const metricLabel = metricLabels?.[metricCode] || metricCode;
 
                   return (
                     <TableRow key={metricCode}>
-                      <TableCell className="font-medium">{metricCode}</TableCell>
+                      <TableCell className="font-medium">{metricLabel}</TableCell>
                       <TableCell>
                         {typeof value === 'number' ? value.toFixed(2) : "N/A"}
                       </TableCell>

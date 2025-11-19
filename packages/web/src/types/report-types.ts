@@ -92,6 +92,7 @@ export interface TeamReportData {
   athleteCount: number;
   teamIds: string[];
   generatedAt: string;
+  metricLabels?: Record<string, string>;
 }
 
 export type PdfFormat = 'visual' | 'simplified';

@@ -129,7 +129,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels } = reportData;
 
   console.log('[TeamReportView] Rendering with data:', {
     teamStatistics,
@@ -222,7 +222,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     }
 
     return teamStatistics
-      .map(stat => getMetricDisplayName(stat.metric))
+      .map(stat => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
       .join(', ');
   };
 
@@ -237,7 +237,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
     const weightDescriptions = Object.entries(weights)
       .map(([metricCode, weight]) => {
-        const metricName = getMetricDisplayName(metricCode);
+        const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
         const percentage = ((weight as number) * 100).toFixed(0);
         return `${metricName} (${percentage}%)`;
       })
@@ -450,7 +450,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
                   return (
                     <TableRow key={stat.metric}>
-                      <TableCell className="font-medium">{stat.metric}</TableCell>
+                      <TableCell className="font-medium">{metricLabels?.[stat.metric] || stat.metric}</TableCell>
                       <TableCell>
                         {stat.average !== null && stat.average !== undefined
                           ? `${stat.average.toFixed(2)} ${stat.units || ''}`
@@ -577,7 +577,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{getMetricDisplayName(stat.metric)}</CardTitle>
+                  <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
                   <CardDescription>
                     Team Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}

@@ -110,6 +110,7 @@ interface TeamReportData {
   generatedAt: string;
   teamIds: string[];
   athleteCount: number;
+  metricLabels: Record<string, string>;
 }
 
 interface IndividualReportData {
@@ -117,11 +118,41 @@ interface IndividualReportData {
   reportConfig: ReportConfig;
   athlete: AthletePerformance;
   generatedAt: string;
+  metricLabels: Record<string, string>;
 }
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
   private metricInfoCache = new Map<string, { lowerIsBetter: boolean; name: string }>();
+
+  /**
+   * Get display labels for a list of metric codes
+   */
+  async getMetricLabels(metricCodes: string[]): Promise<Record<string, string>> {
+    const labels: Record<string, string> = {};
+
+    // Fetch all metrics in one query
+    const metrics = await db
+      .select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, metricCodes));
+
+    for (const metric of metrics) {
+      labels[metric.code] = metric.label;
+    }
+
+    // Fallback to code for any missing labels
+    for (const code of metricCodes) {
+      if (!labels[code]) {
+        labels[code] = code;
+      }
+    }
+
+    return labels;
+  }
 
   /**
    * Generate a team report with team-level aggregations and athlete rankings
@@ -190,6 +221,9 @@ export class ReportService extends BaseService {
       benchmarksByMetric
     );
 
+    // Get metric display labels
+    const metricLabels = await this.getMetricLabels(config.metrics);
+
     const result = {
       reportType: 'team' as const,
       reportConfig: config,
@@ -198,6 +232,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       teamIds: config.filters?.teamIds || [],
       athleteCount: athleteRankings.length,
+      metricLabels,
     };
 
     return result;
@@ -330,11 +365,15 @@ export class ReportService extends BaseService {
       benchmarkComparisons,
     };
 
+    // Get metric display labels
+    const metricLabels = await this.getMetricLabels(config.metrics);
+
     return {
       reportType: 'individual',
       reportConfig: config,
       athlete: athletePerformance,
       generatedAt: new Date().toISOString(),
+      metricLabels,
     };
   }
 
