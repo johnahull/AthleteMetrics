@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertTeamSchema, type InsertTeam, type Team } from "@shared/schema";
+import { insertTeamSchema, AVAILABLE_SPORTS, type InsertTeam, type Team } from "@shared/schema";
 import { normalizeString } from "@/lib/form-utils";
 
 interface TeamModalProps {
@@ -29,6 +29,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
     defaultValues: {
       name: "",
       level: undefined,
+      sport: "",
       notes: "",
       season: "",
       organizationId: undefined,
@@ -46,6 +47,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       form.reset({
         name: team.name,
         level,
+        sport: team.sport || "",
         notes: team.notes || "",
         season: team.season || "",
         organizationId: team.organizationId,
@@ -54,6 +56,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       form.reset({
         name: "",
         level: undefined,
+        sport: "",
         notes: "",
         season: "",
         organizationId: undefined,
@@ -103,6 +106,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         updateData.name = formData.name;
       }
       if (formData.level !== team!.level) updateData.level = formData.level;
+      if (normalizeString(formData.sport) !== normalizeString(team!.sport)) updateData.sport = formData.sport;
       if (normalizeString(formData.notes) !== normalizeString(team!.notes)) updateData.notes = formData.notes;
       if (normalizeString(formData.season) !== normalizeString(team!.season)) updateData.season = formData.season;
 
@@ -227,32 +231,61 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
               />
             </div>
 
-            <FormField
-              control={form.control}
-              name="level"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Level</FormLabel>
-                  <Select
-                    value={field.value || undefined}
-                    onValueChange={field.onChange}
-                    disabled={isPending}
-                  >
-                    <FormControl>
-                      <SelectTrigger data-testid="select-team-level">
-                        <SelectValue placeholder="Select level..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Club">Club</SelectItem>
-                      <SelectItem value="HS">High School</SelectItem>
-                      <SelectItem value="College">College</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="level"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Level</FormLabel>
+                    <Select
+                      value={field.value || undefined}
+                      onValueChange={field.onChange}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-team-level">
+                          <SelectValue placeholder="Select level..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="Club">Club</SelectItem>
+                        <SelectItem value="HS">High School</SelectItem>
+                        <SelectItem value="College">College</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sport"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sport</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      value={field.value || ""}
+                      disabled={isPending}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-team-sport">
+                          <SelectValue placeholder="Select sport" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {AVAILABLE_SPORTS.map((sport) => (
+                          <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
 
             <FormField
               control={form.control}

@@ -6,7 +6,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
-import { requireAuth } from "../middleware";
+import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
+import { storage } from "../storage";
 import {
   insertReportSchema,
   reports,
@@ -15,6 +16,11 @@ import {
   insertReportBenchmarkSchema,
   insertReportSnapshotSchema,
   users,
+  organizations,
+  teams,
+  auditLogs,
+  MAX_INSIGHTS_LENGTH,
+  type Report,
 } from "@shared/schema";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -127,6 +133,17 @@ const publicSnapshotLimiter = rateLimit({
   limit: 10, // Very low limit for unauthenticated public access
   message: {
     message: "Too many public snapshot requests, please try again later.",
+  },
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+});
+
+// Dedicated rate limiting for AI endpoints (very expensive API calls)
+const aiGenerationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 10, // Very low limit for expensive AI API calls
+  message: {
+    message: "Too many AI insight generation requests, please try again later.",
   },
   standardHeaders: "draft-7",
   legacyHeaders: false,
@@ -555,11 +572,14 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied to this report" });
       }
 
+      // Validate request body with Zod schema (partial for updates)
+      const validatedData = insertReportSchema.partial().parse(req.body);
+
       // Update report
       const [updated] = await db
         .update(reports)
         .set({
-          ...req.body,
+          ...validatedData,
           updatedAt: new Date(),
         })
         .where(eq(reports.id, reportId))
@@ -968,7 +988,7 @@ export function registerReportRoutes(app: Express) {
       const reportId = req.params.id;
       const athleteId = req.query.athleteId as string | undefined;
       const format = (req.query.format as string) || 'simplified';
-      let report: any;
+      let report: Report | undefined;
 
       try {
         const user = req.session.user;
@@ -988,7 +1008,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate report data
-        let reportData: any;
+        let reportData: unknown;
         if (report.reportType === 'team') {
           reportData = await reportService.generateTeamReport(reportId, user.id);
         } else {
@@ -1025,7 +1045,6 @@ export function registerReportRoutes(app: Express) {
         res.status(500).json({
           message:
             error instanceof Error ? error.message : "Failed to generate PDF",
-          reportId, // Include for troubleshooting
         });
       }
     }
@@ -1080,6 +1099,242 @@ export function registerReportRoutes(app: Express) {
       }
     }
   );
+
+  /**
+   * Generate AI coaching insights for a report
+   * POST /api/reports/:id/generate-insights
+   *
+   * Requires: AI enabled for organization (both flags)
+   */
+  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+    try {
+      const reportId = req.params.id;
+      const user = req.session?.user || req.user;
+
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get report
+      const report = await storage.getReport(reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // SECURITY: Verify user has access to this report's organization
+      const hasAccess = await reportService["validateOrganizationAccess"](
+        user.id,
+        report.organizationId
+      );
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: "Access denied to this report"
+        });
+      }
+
+      // Get organization to check AI flags
+      const org = await storage.getOrganization(report.organizationId);
+      if (!org) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      // Get site settings to determine which AI model to use
+      const siteSettings = await storage.getSiteSettings();
+      const { AI_MODELS, generateCoachingInsights, isModelAvailable } = await import("../services/ai-insights-service");
+      type AIModelKey = keyof typeof AI_MODELS;
+
+      const modelKey = (siteSettings?.aiModel || "gpt-5-nano") as string;
+
+      // Validate model key exists in AI_MODELS
+      if (!(modelKey in AI_MODELS)) {
+        return res.status(500).json({ message: "Invalid AI model configuration. Please contact your administrator." });
+      }
+
+      // Validate API key is available for the selected model's provider using shared utility
+      const modelAvailability = isModelAvailable(modelKey);
+      if (!modelAvailability.available) {
+        console.error(`AI generation failed: Missing API key for provider ${modelAvailability.provider}`);
+        return res.status(503).json({
+          message: "AI service is not available. Please contact your administrator to configure the AI provider."
+        });
+      }
+
+      // Build report data for AI
+      const reportData = await buildReportDataForAI(report, user.id, reportService);
+
+      // Generate insights using AI service
+      const insights = await generateCoachingInsights(modelKey as AIModelKey, reportData);
+
+      // Validate insights length
+      if (insights.length > MAX_INSIGHTS_LENGTH) {
+        return res.status(400).json({
+          message: `Generated insights exceed maximum length of ${MAX_INSIGHTS_LENGTH} characters. Please try regenerating.`
+        });
+      }
+
+      // Use transaction to ensure atomic update of report and audit log
+      const result = await db.transaction(async (tx) => {
+        // Update report with generated insights
+        const [updatedReport] = await tx
+          .update(reports)
+          .set({
+            coachingInsights: insights,
+            coachingInsightsGeneratedAt: new Date(),
+            coachingInsightsModel: modelKey,
+            updatedAt: new Date(),
+          })
+          .where(eq(reports.id, reportId))
+          .returning();
+
+        // Audit log for AI insight generation
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: 'report_ai_insights_generated',
+          resourceType: 'report',
+          resourceId: reportId,
+          details: JSON.stringify({
+            reportName: report.name,
+            organizationId: report.organizationId,
+            model: modelKey,
+            insightsLength: insights.length
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+
+        return updatedReport;
+      });
+
+      res.json({
+        insights,
+        generatedAt: result.coachingInsightsGeneratedAt,
+        model: modelKey,
+      });
+    } catch (error) {
+      console.error("Error generating coaching insights:", error);
+
+      // Audit log for failed AI generation
+      const user = req.session?.user || req.user;
+      if (user?.id) {
+        try {
+          await storage.createAuditLog({
+            userId: user.id,
+            action: 'report_ai_insights_generation_failed',
+            resourceType: 'report',
+            resourceId: req.params.id,
+            details: JSON.stringify({
+              error: error instanceof Error ? error.message : 'Unknown error'
+            }),
+            ipAddress: req.ip || null,
+            userAgent: req.get('user-agent') || null,
+          });
+        } catch (auditError) {
+          // Log with full context for debugging - audit trail is critical for compliance
+          console.error("CRITICAL: Failed to create audit log for failed AI generation:", {
+            userId: user.id,
+            reportId: req.params.id,
+            originalError: error instanceof Error ? error.message : 'Unknown error',
+            auditError: auditError instanceof Error ? auditError.message : auditError,
+          });
+        }
+      }
+
+      res.status(500).json({
+        message: "Failed to generate coaching insights. Please try again or contact support."
+      });
+    }
+  });
+
+  /**
+   * Update coaching insights for a report (manual edit)
+   * PATCH /api/reports/:id/insights
+   *
+   * Requires: AI enabled for organization (both flags)
+   */
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const reportId = req.params.id;
+      const { coachingInsights } = req.body;
+
+      // Validate insights
+      const { updateReportInsightsSchema } = await import("@shared/schema");
+      updateReportInsightsSchema.parse({ coachingInsights });
+
+      // Get report
+      const report = await storage.getReport(reportId);
+      if (!report) {
+        return res.status(404).json({ message: "Report not found" });
+      }
+
+      // SECURITY: Verify user has access to this organization
+      const hasAccess = await reportService["validateOrganizationAccess"](
+        user.id,
+        report.organizationId
+      );
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: "Access denied to this report"
+        });
+      }
+
+      // Use transaction to ensure atomic update of report and audit log
+      const result = await db.transaction(async (tx) => {
+        // Update report insights
+        // Set model to null to indicate manual edit (not AI-generated)
+        const [updatedReport] = await tx
+          .update(reports)
+          .set({
+            coachingInsights,
+            coachingInsightsGeneratedAt: new Date(),
+            coachingInsightsModel: null, // Clear model to indicate manual edit
+            updatedAt: new Date(),
+          })
+          .where(eq(reports.id, reportId))
+          .returning();
+
+        // Audit log for manual insight update
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: 'report_ai_insights_updated',
+          resourceType: 'report',
+          resourceId: reportId,
+          details: JSON.stringify({
+            reportName: report.name,
+            organizationId: report.organizationId,
+            insightsLength: coachingInsights.length
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+
+        return updatedReport;
+      });
+
+      res.json({
+        insights: result.coachingInsights,
+        generatedAt: result.coachingInsightsGeneratedAt,
+        model: result.coachingInsightsModel,
+      });
+    } catch (error) {
+      console.error("Error updating coaching insights:", error);
+
+      if (error instanceof ZodError) {
+        return res.status(400).json({
+          message: "Validation error",
+          errors: error.errors,
+        });
+      }
+
+      res.status(500).json({
+        message: "Failed to update coaching insights"
+      });
+    }
+  });
 }
 
 /**
@@ -1442,10 +1697,90 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
     }
   }
 
+  // Add Coaching Insights section (if available)
+  if (report.coachingInsights) {
+    // Check if we need a new page
+    if (yPos > 220) {
+      doc.addPage();
+      yPos = 20;
+    }
+
+    doc.setFontSize(16);
+    if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text("Coaching Insights", 14, yPos);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    yPos += 10;
+
+    // Strip markdown formatting for PDF
+    const plainTextInsights = stripMarkdown(report.coachingInsights);
+
+    // Split insights into lines and add with text wrapping
+    const maxWidth = 180; // Maximum text width in PDF units
+    const lineHeight = 5;
+    const lines = doc.splitTextToSize(plainTextInsights, maxWidth);
+
+    lines.forEach((line: string) => {
+      // Check if we need a new page
+      if (yPos > 280) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.setFontSize(10);
+      doc.text(line, 14, yPos);
+      yPos += lineHeight;
+    });
+
+    yPos += 5;
+
+    // Add generation metadata
+    if (report.coachingInsightsGeneratedAt) {
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      const generatedDate = new Date(report.coachingInsightsGeneratedAt).toLocaleString();
+      const modelText = report.coachingInsightsModel ? ` (${report.coachingInsightsModel})` : '';
+      doc.text(`Generated: ${generatedDate}${modelText}`, 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 10;
+    }
+  }
+
   // Add footer to all pages
   addFooterToAllPages(doc);
 
   return doc;
+}
+
+/**
+ * Helper function: Strip markdown formatting for plain text rendering in PDF
+ */
+function stripMarkdown(markdown: string): string {
+  return markdown
+    // Remove headers (# ## ###)
+    .replace(/^#{1,6}\s+/gm, '')
+    // Remove bold (**text** or __text__)
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    // Remove italic (*text* or _text_)
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    // Remove strikethrough (~~text~~)
+    .replace(/~~(.*?)~~/g, '$1')
+    // Remove code blocks (```code```)
+    .replace(/```[\s\S]*?```/g, '')
+    // Remove inline code (`code`)
+    .replace(/`([^`]+)`/g, '$1')
+    // Remove links ([text](url))
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    // Remove images (![alt](url))
+    .replace(/!\[([^\]]*)\]\([^\)]+\)/g, '$1')
+    // Remove blockquotes (> text)
+    .replace(/^>\s+/gm, '')
+    // Remove horizontal rules (--- or ***)
+    .replace(/^(-{3,}|\*{3,})$/gm, '')
+    // Remove list markers (- or * or 1.)
+    .replace(/^[\s]*[-*+]\s+/gm, '• ')
+    .replace(/^[\s]*\d+\.\s+/gm, '')
+    // Clean up extra whitespace
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -1511,3 +1846,305 @@ function calculateBenchmarkAchievements(athleteRankings: any[]) {
   return achievements;
 }
 
+/**
+ * Build report data structure for AI insights generation
+ *
+ * Includes data size limits to prevent extremely large payloads:
+ * - MAX_METRICS: 20 metrics maximum
+ * - MAX_ATHLETES: 100 athletes maximum for team reports
+ * - MAX_VALUES_PER_METRIC: 100 values per metric
+ */
+async function buildReportDataForAI(report: Report, userId: string, reportService: ReportService): Promise<import("../services/ai-insights-service").ReportData> {
+  // Data size limits to prevent large AI payloads
+  const MAX_METRICS = 20;
+  const MAX_ATHLETES = 100;
+  const MAX_VALUES_PER_METRIC = 100;
+
+  try {
+    // Fetch organization details
+    const org = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, report.organizationId))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    // Generate full report data using report service
+    // Use unknown type then narrow based on report type
+    let reportData: unknown;
+    if (report.reportType === 'team') {
+      reportData = await reportService.generateTeamReport(report.id, userId);
+    } else {
+      // For individual reports, we need the athlete ID from the report config
+      const config = isIndividualReportConfig(report.config) ? report.config : null;
+      const athleteId = config?.athleteId;
+
+      if (!athleteId) {
+        throw new Error("Individual report missing athlete ID in config");
+      }
+
+      reportData = await reportService.generateIndividualReport(
+        report.id,
+        userId,
+        athleteId
+      );
+    }
+
+    // Extract timeframe from report config
+    // Use type guards to safely access config properties
+    const reportConfig = isIndividualReportConfig(report.config) || isTeamReportConfig(report.config)
+      ? report.config
+      : null;
+    let timeframe = "Current Season";
+    if (reportConfig?.timeframe) {
+      const { customStart: startDate, customEnd: endDate } = reportConfig.timeframe;
+      if (startDate && endDate) {
+        const start = new Date(startDate).toLocaleDateString();
+        const end = new Date(endDate).toLocaleDateString();
+        timeframe = `${start} to ${end}`;
+      }
+    }
+
+    // Build metrics array from report data
+    const metrics: Array<{
+      code: string;
+      label: string;
+      values: number[];
+      unit: string;
+      lowerIsBetter: boolean;
+    }> = [];
+
+    // Cast reportData to typed object for accessing properties
+    // The report service returns different structures for team vs individual reports
+    const typedReportData = reportData as {
+      teamStatistics?: Array<{ metric: string; units?: string }>;
+      athleteRankings?: Array<{
+        userId: string;
+        userName: string;
+        measurements?: Record<string, number>;
+        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+      }>;
+      athleteCount?: number;
+      teamIds?: string[];
+      athlete?: {
+        userId: string;
+        userName?: string;
+        fullName?: string;
+        position?: string;
+        age?: number;
+        gender?: string;
+        sports?: string[];
+        measurements?: Record<string, number>;
+        benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+      };
+      benchmarkComparisons?: Array<{
+        metric: string;
+        benchmarkName: string;
+        benchmarkValue: number;
+        meetsOrExceeds: boolean;
+      }>;
+    };
+
+    if (report.reportType === 'team' && typedReportData.teamStatistics) {
+      // Limit athlete rankings to prevent large payloads
+      const limitedAthleteRankings = typedReportData.athleteRankings
+        ? typedReportData.athleteRankings.slice(0, MAX_ATHLETES)
+        : [];
+
+      // Team report metrics (limited to MAX_METRICS)
+      const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
+      for (const stat of statsToProcess) {
+        const metricCode = stat.metric;
+        const values: number[] = [];
+
+        // Extract individual values from athlete rankings (limited)
+        for (const athlete of limitedAthleteRankings) {
+          if (athlete.measurements && athlete.measurements[metricCode] !== undefined) {
+            values.push(athlete.measurements[metricCode]);
+          }
+        }
+
+        // Limit values per metric
+        const limitedValues = values.slice(0, MAX_VALUES_PER_METRIC);
+
+        metrics.push({
+          code: metricCode,
+          label: stat.metric, // Human-readable label
+          values: limitedValues,
+          unit: stat.units || "",
+          lowerIsBetter: isMetricLowerBetter(metricCode),
+        });
+      }
+    } else if (report.reportType === 'individual' && typedReportData.athlete) {
+      // Individual report metrics (limited to MAX_METRICS)
+      const athlete = typedReportData.athlete;
+      if (athlete.measurements) {
+        const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
+        for (const [metricCode, value] of entries) {
+          if (typeof value === 'number') {
+            metrics.push({
+              code: metricCode,
+              label: metricCode, // Human-readable label
+              values: [value],
+              unit: getMetricUnit(metricCode),
+              lowerIsBetter: isMetricLowerBetter(metricCode),
+            });
+          }
+        }
+      }
+    }
+
+    // Build improvements array (metrics that improved from previous)
+    const improvements: Array<{ metric: string; improvement: string }> = [];
+    // Note: Would need historical data to calculate improvements
+    // For now, this is a placeholder for future enhancement
+
+    // Build concerns array (metrics below expected performance)
+    const concerns: Array<{ metric: string; concern: string }> = [];
+    if (typedReportData.benchmarkComparisons) {
+      // Identify metrics below benchmarks
+      for (const comparison of typedReportData.benchmarkComparisons) {
+        if (!comparison.meetsOrExceeds) {
+          concerns.push({
+            metric: comparison.metric,
+            concern: `Below ${comparison.benchmarkName} benchmark (${comparison.benchmarkValue})`,
+          });
+        }
+      }
+    }
+
+    // Build benchmark comparisons array
+    const benchmarkComparisons: Array<{ metric: string; performance: string }> = [];
+    if (report.reportType === 'team' && typedReportData.athleteRankings) {
+      // Calculate team benchmark achievement rate
+      const benchmarkStats = new Map<string, { total: number; met: number }>();
+
+      for (const athlete of typedReportData.athleteRankings) {
+        if (athlete.benchmarkComparisons) {
+          for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons)) {
+            if (!benchmarkStats.has(metric)) {
+              benchmarkStats.set(metric, { total: 0, met: 0 });
+            }
+            const stats = benchmarkStats.get(metric)!;
+            for (const comp of comparisons) {
+              stats.total++;
+              if (comp.meetsOrExceeds) stats.met++;
+            }
+          }
+        }
+      }
+
+      for (const [metric, stats] of benchmarkStats) {
+        const percentage = Math.round((stats.met / stats.total) * 100);
+        benchmarkComparisons.push({
+          metric,
+          performance: `${percentage}% of athletes meet benchmarks (${stats.met}/${stats.total})`,
+        });
+      }
+    } else if (report.reportType === 'individual' && typedReportData.athlete?.benchmarkComparisons) {
+      // Individual benchmark comparisons
+      for (const [metric, comparisons] of Object.entries(typedReportData.athlete.benchmarkComparisons)) {
+        const metComparisons = comparisons.filter(c => c.meetsOrExceeds);
+        const totalComparisons = comparisons.length;
+        benchmarkComparisons.push({
+          metric,
+          performance: `Meets ${metComparisons.length}/${totalComparisons} benchmarks`,
+        });
+      }
+    }
+
+    // Build final ReportData object
+    const aiReportData: import("../services/ai-insights-service").ReportData = {
+      reportType: report.reportType as "individual" | "team",
+      reportName: report.name,
+      organizationName: org?.name || "Unknown Organization",
+      timeframe,
+      metrics,
+      improvements,
+      concerns,
+      benchmarkComparisons,
+    };
+
+    // Add team-specific data
+    if (report.reportType === 'team') {
+      aiReportData.athleteCount = typedReportData.athleteCount || 0;
+
+      // Fetch team info (name and sport) from the first team in teamIds
+      if (typedReportData.teamIds && typedReportData.teamIds.length > 0) {
+        const teamData = await db
+          .select({
+            name: teams.name,
+            sport: teams.sport,
+          })
+          .from(teams)
+          .where(eq(teams.id, typedReportData.teamIds[0]))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (teamData) {
+          aiReportData.teamName = teamData.name;
+          aiReportData.teamSport = teamData.sport || undefined;
+        }
+      }
+    }
+
+    // Add individual-specific data
+    if (report.reportType === 'individual' && typedReportData.athlete) {
+      aiReportData.athleteName = typedReportData.athlete.userName || typedReportData.athlete.fullName;
+      aiReportData.athletePosition = typedReportData.athlete.position;
+      aiReportData.athleteAge = typedReportData.athlete.age;
+      aiReportData.athleteGender = typedReportData.athlete.gender;
+      // Extract sport from athlete.sports array (use first sport)
+      aiReportData.athleteSport = typedReportData.athlete.sports?.[0] || undefined;
+    }
+
+    return aiReportData;
+  } catch (error) {
+    console.error("Error building report data for AI:", error);
+    throw new Error(
+      `Failed to prepare report data for AI analysis: ${error instanceof Error ? error.message : "Unknown error"}`
+    );
+  }
+}
+
+/**
+ * Helper: Determine if metric is lower-is-better
+ */
+function isMetricLowerBetter(metricCode: string): boolean {
+  // Metrics where lower values indicate better performance
+  const lowerIsBetterMetrics = [
+    'FLY10_TIME',
+    'AGILITY_505',
+    'AGILITY_5105',
+    'T_TEST',
+    'DASH_40YD',
+    '40_YARD_DASH',
+    'SPRINT_TIME',
+  ];
+
+  return lowerIsBetterMetrics.some(m =>
+    metricCode.toUpperCase().includes(m.toUpperCase())
+  );
+}
+
+/**
+ * Helper: Get unit for metric
+ */
+function getMetricUnit(metricCode: string): string {
+  const upperCode = metricCode.toUpperCase();
+
+  if (upperCode.includes('TIME') || upperCode.includes('DASH') || upperCode.includes('SPRINT')) {
+    return 'seconds';
+  }
+  if (upperCode.includes('JUMP') || upperCode.includes('HEIGHT')) {
+    return 'inches';
+  }
+  if (upperCode.includes('WEIGHT') || upperCode.includes('MASS')) {
+    return 'lbs';
+  }
+  if (upperCode.includes('DISTANCE')) {
+    return 'yards';
+  }
+
+  return ''; // Unknown unit
+}

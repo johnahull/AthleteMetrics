@@ -30,6 +30,7 @@ describe('TeamModal', () => {
     id: 'team-123',
     name: 'Test Team',
     level: 'Club',
+    sport: 'Soccer',
     notes: 'Test notes',
     season: '2024-Fall',
     organizationId: 'org-123',

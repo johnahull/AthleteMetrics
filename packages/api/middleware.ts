@@ -3,7 +3,7 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
 // Extended request type with user info
-interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
@@ -195,18 +195,67 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
   };
 };
 
+// AI Coaching Insights middleware - checks if AI features are enabled for organization
+export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const user = req.session?.user || req.user;
+
+  // Ensure user is authenticated before proceeding
+  if (!user?.id) {
+    return res.status(401).json({ message: "User not authenticated" });
+  }
+
+  // Get organizationId from report or direct parameter
+  let organizationId = req.params.organizationId;
+
+  // If not in params, try to get from report ID
+  if (!organizationId && req.params.id) {
+    const report = await storage.getReport(req.params.id);
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+    organizationId = report.organizationId;
+  }
+
+  if (!organizationId) {
+    return res.status(400).json({ message: "Organization ID required" });
+  }
+
+  // Check organization access before revealing AI status
+  // This prevents information disclosure about AI being enabled for orgs user can't access
+  const hasAccess = await canAccessOrganization(user, organizationId);
+  if (!hasAccess) {
+    return res.status(403).json({ message: "Access denied to this organization" });
+  }
+
+  // Get organization and check AI flags
+  const organization = await storage.getOrganization(organizationId);
+  if (!organization) {
+    return res.status(404).json({ message: "Organization not found" });
+  }
+
+  // Check both AI flags - both must be true
+  if (!organization.aiEnabledBySiteAdmin || !organization.aiEnabled) {
+    return res.status(403).json({
+      message: "AI coaching insights feature is not enabled for this organization",
+    });
+  }
+
+  req.user = user;
+  next();
+};
+
 // Error handling middleware
 export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
   console.error('API Error:', error);
-  
+
   if (error.name === 'ZodError') {
-    return res.status(400).json({ 
-      message: "Validation error", 
-      errors: error.errors 
+    return res.status(400).json({
+      message: "Validation error",
+      errors: error.errors
     });
   }
-  
-  res.status(500).json({ 
-    message: error.message || "Internal server error" 
+
+  res.status(500).json({
+    message: error.message || "Internal server error"
   });
 };

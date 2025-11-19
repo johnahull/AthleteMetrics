@@ -43,6 +43,27 @@ export async function updateOrganization(
   return response.json();
 }
 
+/**
+ * Update organization settings (Org Admin - limited fields)
+ */
+export async function updateOrgAdminSettings(
+  organizationId: string,
+  settings: { aiEnabled: boolean }
+): Promise<Organization> {
+  const response = await fetch(`/api/organizations/${organizationId}/org-settings`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(settings),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to update organization settings');
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // React Query Hooks
 // ============================================================================
@@ -67,6 +88,27 @@ export function useUpdateOrganization(organizationId: string) {
 
   return useMutation({
     mutationFn: (updates: UpdateOrganization) => updateOrganization(organizationId, updates),
+    onSuccess: (updatedOrg) => {
+      // Invalidate and refetch organization queries
+      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
+      queryClient.invalidateQueries({ queryKey: ['organizations'] });
+      queryClient.invalidateQueries({ queryKey: ['my-organizations'] });
+
+      // Optimistically update the cache with the new data
+      queryClient.setQueryData(['organization', organizationId], updatedOrg);
+    },
+  });
+}
+
+/**
+ * Hook to update organization settings (org admin only - limited fields)
+ * Automatically invalidates organization queries on success
+ */
+export function useUpdateOrgAdminSettings(organizationId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (settings: { aiEnabled: boolean }) => updateOrgAdminSettings(organizationId, settings),
     onSuccess: (updatedOrg) => {
       // Invalidate and refetch organization queries
       queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });

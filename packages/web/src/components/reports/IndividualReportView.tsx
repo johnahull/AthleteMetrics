@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,7 +15,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Share2 } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
+import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
+import { useAuth } from "@/lib/auth";
 import type { Report } from "@/types/report-types";
 
 // Version check - this log should appear immediately when the module loads
@@ -31,6 +34,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
+  const { user } = useAuth();
+
+  // Determine if AI is enabled for this organization
+  const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
+    queryKey: [`/api/organizations/${report.organizationId}`],
+    enabled: !!report.organizationId,
+  });
+
+  const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
   // Extract athleteId outside useEffect to avoid dependency issues
   // Type guard to ensure we're accessing IndividualReportConfig properties
@@ -191,6 +203,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           </div>
         </CardHeader>
       </Card>
+
+      {/* Coaching Insights */}
+      <CoachingInsightsCard
+        reportId={report.id}
+        initialInsights={report.coachingInsights}
+        generatedAt={report.coachingInsightsGeneratedAt}
+        model={report.coachingInsightsModel}
+        aiEnabled={aiEnabled || false}
+      />
 
       {/* Performance Table */}
       {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (

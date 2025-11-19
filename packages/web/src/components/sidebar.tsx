@@ -30,7 +30,8 @@ const NAVIGATION_CONFIGS = {
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
-      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" }
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
+      { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -54,7 +55,7 @@ const NAVIGATION_CONFIGS = {
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
-    { name: "Settings", href: "/organizations", icon: Settings }
+    { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings }
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -101,9 +102,10 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   
   // Update org admin organization link with specific ID
   if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
-    const orgIndex = navigation.findIndex(item => item.name === "Settings");
-    if (orgIndex !== -1) {
-      navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;
+    const orgId = userOrganizations[0].organizationId;
+    const settingsIndex = navigation.findIndex(item => item.name === "Settings");
+    if (settingsIndex !== -1) {
+      navigation[settingsIndex].href = `/organizations/${orgId}/settings/admin`;
     }
   }
 

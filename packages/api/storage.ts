@@ -2,6 +2,7 @@ import {
   organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
+  siteSettings, reports,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -10,6 +11,7 @@ import {
   type InsertSiteBenchmark, type InsertCustomBenchmark, type InsertOrganizationBenchmark,
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
+  type SiteSettings, type Report,
   insertUserSchema
 } from "@shared/schema";
 import { db } from "./db";
@@ -265,6 +267,14 @@ export interface IStorage {
   getOrganizationBenchmarksWithDetails(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmarkWithDetails[]>;
   enableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
   disableBenchmarkForOrg(organizationId: string, benchmarkId: string, benchmarkType: 'site' | 'custom'): Promise<OrganizationBenchmark>;
+
+  // Site Settings (Global Settings)
+  getSiteSettings(): Promise<SiteSettings | undefined>;
+  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings>;
+
+  // Reports
+  getReport(id: string): Promise<Report | undefined>;
+  updateReport(id: string, data: Partial<Report>): Promise<Report>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4057,6 +4067,66 @@ export class DatabaseStorage implements IStorage {
     ];
 
     return allBenchmarks;
+  }
+
+  // ==================== Site Settings ====================
+
+  async getSiteSettings(): Promise<SiteSettings | undefined> {
+    const [settings] = await db.select().from(siteSettings).limit(1);
+    return settings || undefined;
+  }
+
+  async updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings> {
+    // Singleton pattern - check if settings exist
+    const existing = await this.getSiteSettings();
+
+    if (existing) {
+      // Update existing settings
+      const [updated] = await db
+        .update(siteSettings)
+        .set({
+          aiModel: settings.aiModel,
+          updatedAt: new Date(),
+          updatedBy: settings.updatedBy,
+        })
+        .where(eq(siteSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      // Create new settings
+      const [created] = await db
+        .insert(siteSettings)
+        .values({
+          aiModel: settings.aiModel,
+          updatedBy: settings.updatedBy,
+        })
+        .returning();
+      return created;
+    }
+  }
+
+  // ==================== Reports ====================
+
+  async getReport(id: string): Promise<Report | undefined> {
+    const [report] = await db.select().from(reports).where(eq(reports.id, id));
+    return report || undefined;
+  }
+
+  async updateReport(id: string, data: Partial<Report>): Promise<Report> {
+    const [updated] = await db
+      .update(reports)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(reports.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Report ${id} not found`);
+    }
+
+    return updated;
   }
 
 }

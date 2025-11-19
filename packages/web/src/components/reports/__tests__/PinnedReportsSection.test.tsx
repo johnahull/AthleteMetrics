@@ -33,6 +33,9 @@ const mockPinnedReports: Report[] = [
     createdAt: new Date('2025-01-15'),
     updatedAt: new Date('2025-01-15'),
     config: { metrics: ['FLY10_TIME'], filters: {} },
+    coachingInsights: null,
+    coachingInsightsGeneratedAt: null,
+    coachingInsightsModel: null,
   },
   {
     id: 'report-2',
@@ -46,6 +49,9 @@ const mockPinnedReports: Report[] = [
     createdAt: new Date('2025-01-10'),
     updatedAt: new Date('2025-01-10'),
     config: { metrics: ['VERTICAL_JUMP'], filters: {} },
+    coachingInsights: null,
+    coachingInsightsGeneratedAt: null,
+    coachingInsightsModel: null,
   },
 ];
 
@@ -174,6 +180,9 @@ describe('PinnedReportsSection', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       config: { metrics: [], filters: {} },
+      coachingInsights: null,
+      coachingInsightsGeneratedAt: null,
+      coachingInsightsModel: null,
     }));
 
     (useReportsWithFilters as any).mockReturnValue({
@@ -203,6 +212,9 @@ describe('PinnedReportsSection', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       config: { metrics: [], filters: {} },
+      coachingInsights: null,
+      coachingInsightsGeneratedAt: null,
+      coachingInsightsModel: null,
     }));
 
     (useReportsWithFilters as any).mockReturnValue({
