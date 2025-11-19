@@ -75,6 +75,28 @@ const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ defaul
 // Re-export ExportFormat from chartExport for backwards compatibility
 export type { ExportFormat };
 
+// Module-level cached check for Web Share API file support
+// This avoids creating File objects on every component render
+const checkShareAvailability = (): boolean => {
+  if (typeof navigator === 'undefined' || !navigator.share) {
+    return false;
+  }
+  // Check if canShare exists and supports file sharing
+  if (typeof navigator.canShare === 'function') {
+    try {
+      // Test if file sharing is supported
+      const testFile = new File(['test'], 'test.png', { type: 'image/png' });
+      return navigator.canShare({ files: [testFile] });
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+// Cache the result at module load time (runs once)
+const isShareApiAvailable = checkShareAvailability();
+
 interface ChartContainerProps {
   title: string;
   subtitle?: string;
@@ -152,23 +174,8 @@ export function ChartContainer({
            window.isSecureContext;
   }, []);
 
-  // Check if Web Share API is available (mobile-first sharing)
-  const isShareAvailable = useMemo(() => {
-    if (typeof navigator === 'undefined' || !navigator.share) {
-      return false;
-    }
-    // Check if canShare exists and supports file sharing
-    if (typeof navigator.canShare === 'function') {
-      try {
-        // Test if file sharing is supported
-        const testFile = new File(['test'], 'test.png', { type: 'image/png' });
-        return navigator.canShare({ files: [testFile] });
-      } catch {
-        return false;
-      }
-    }
-    return false;
-  }, []);
+  // Use module-level cached Web Share API availability check
+  const isShareAvailable = isShareApiAvailable;
 
   // Handle export with format selection and user feedback
   const handleExport = async (format: ExportFormat) => {
@@ -180,7 +187,7 @@ export function ChartContainer({
 
       // Handle share result specially
       if (format === 'share' && result && typeof result === 'object' && 'action' in result) {
-        const shareResult = result as { action: 'shared' | 'clipboard' | 'cancelled' };
+        const shareResult = result as ShareResult;
 
         if (shareResult.action === 'cancelled') {
           // User cancelled - no toast needed
@@ -191,7 +198,7 @@ export function ChartContainer({
           title: shareResult.action === 'shared' ? 'Shared successfully' : 'Copied to clipboard',
           description: shareResult.action === 'shared'
             ? 'Chart shared via your device'
-            : 'Chart copied to clipboard for sharing'
+            : 'Chart image copied - paste into your app to share'
         });
         return;
       }
