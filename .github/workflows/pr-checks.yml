@@ -214,7 +214,7 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           # Get list of added or modified migration files in this PR
-          # shellcheck disable=SC2086 - BASE_REF is set via env and quoted within the string
+          # shellcheck disable=SC2086
           CHANGED_MIGRATIONS=$(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'migrations/*.sql' | grep -v '_down\.sql$' || true)
 
           if [ -z "$CHANGED_MIGRATIONS" ]; then
