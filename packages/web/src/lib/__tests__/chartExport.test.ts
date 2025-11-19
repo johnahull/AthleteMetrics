@@ -42,6 +42,16 @@ vi.mock('html2canvas', () => ({
   default: mockHtml2Canvas
 }));
 
+// Mock devLog at module level for consistent error logging tests
+const mockDevLogError = vi.fn();
+vi.mock('@/utils/dev-logger', () => ({
+  devLog: {
+    log: vi.fn(),
+    warn: vi.fn(),
+    error: mockDevLogError
+  }
+}));
+
 import { downloadCSV, arrayToCSV } from '../csv';
 
 describe('Chart Export Utilities - TDD', () => {
@@ -688,10 +698,6 @@ describe('Chart Export Utilities - TDD', () => {
       const mockShare = vi.fn(() => Promise.reject(notAllowedError));
       const mockCanShare = vi.fn(() => true);
 
-      // Mock devLog to verify error logging
-      const { devLog } = await import('../../utils/dev-logger');
-      const devLogErrorSpy = vi.spyOn(devLog, 'error').mockImplementation(() => {});
-
       vi.stubGlobal('navigator', {
         share: mockShare,
         canShare: mockCanShare,
@@ -702,10 +708,8 @@ describe('Chart Export Utilities - TDD', () => {
       await expect(shareChart(mockContainer, 'Test Chart', 'test.png'))
         .rejects.toThrow('Permission denied');
 
-      // Should have logged the error before re-throwing
-      expect(devLogErrorSpy).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
-
-      devLogErrorSpy.mockRestore();
+      // Should have logged the error before re-throwing (using module-level mock)
+      expect(mockDevLogError).toHaveBeenCalledWith('Error sharing chart:', notAllowedError);
     });
   });
 });

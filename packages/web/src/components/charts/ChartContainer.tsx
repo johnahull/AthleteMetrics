@@ -75,9 +75,11 @@ const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ defaul
 // Re-export ExportFormat from chartExport for backwards compatibility
 export type { ExportFormat };
 
-// Module-level cached check for Web Share API file support
-// This avoids creating File objects on every component render
-// Note: Safe for SSR - returns false when navigator is undefined (server-side)
+// Lazy initialization for Web Share API file support check
+// This avoids creating File objects until first access and handles potential
+// race conditions with module initialization
+let _isShareApiAvailable: boolean | null = null;
+
 const checkShareAvailability = (): boolean => {
   if (typeof navigator === 'undefined' || !navigator.share) {
     return false;
@@ -95,8 +97,13 @@ const checkShareAvailability = (): boolean => {
   return false;
 };
 
-// Cache the result at module load time (runs once)
-const isShareApiAvailable = checkShareAvailability();
+// Lazy getter for share availability - initializes on first access
+const getShareAvailability = (): boolean => {
+  if (_isShareApiAvailable === null) {
+    _isShareApiAvailable = checkShareAvailability();
+  }
+  return _isShareApiAvailable;
+};
 
 interface ChartContainerProps {
   title: string;
@@ -175,8 +182,8 @@ export function ChartContainer({
            window.isSecureContext;
   }, []);
 
-  // Use module-level cached Web Share API availability check
-  const isShareAvailable = isShareApiAvailable;
+  // Use lazy-initialized Web Share API availability check
+  const isShareAvailable = getShareAvailability();
 
   // Handle export with format selection and user feedback
   const handleExport = async (format: ExportFormat) => {

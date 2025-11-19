@@ -343,8 +343,9 @@ export function useAnalyticsExport() {
       format === 'share' ? 'png' : format
     );
 
-    // Generate title for sharing
-    const chartTitle = `${state.metrics.primary} Performance Chart`;
+    // Generate title for sharing using display label from METRIC_CONFIG
+    const primaryLabel = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
+    const chartTitle = `${primaryLabel} Performance Chart`;
 
     switch (format) {
       case 'csv':
