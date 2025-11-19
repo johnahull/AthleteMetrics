@@ -320,7 +320,7 @@ export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
 
   const handleExport = useCallback(async (
-    format: 'csv' | 'png' | 'clipboard',
+    format: 'csv' | 'png' | 'clipboard' | 'share',
     chartRef?: any,
     containerRef?: HTMLElement | null
   ) => {
@@ -333,14 +333,18 @@ export function useAnalyticsExport() {
       exportAnalyticsDataAsCSV,
       exportChartAsPNG,
       copyChartToClipboard,
+      shareChart,
       generateExportFilename
     } = await import('@/lib/chartExport');
 
     const filename = generateExportFilename(
       state.selectedChartType,
       state.metrics,
-      format
+      format === 'share' ? 'png' : format
     );
+
+    // Generate title for sharing
+    const chartTitle = `${state.metrics.primary} Performance Chart`;
 
     switch (format) {
       case 'csv':
@@ -367,6 +371,15 @@ export function useAnalyticsExport() {
           devLog.log('Chart copied to clipboard successfully');
         } else {
           throw new Error('Container not available for clipboard copy');
+        }
+        break;
+
+      case 'share':
+        if (containerRef) {
+          await shareChart(containerRef, chartTitle, filename);
+          devLog.log('Chart share completed:', { filename });
+        } else {
+          throw new Error('Container not available for share');
         }
         break;
     }

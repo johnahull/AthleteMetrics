@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { AlertTriangle, Download, Maximize2, FileText, Image, Clipboard } from 'lucide-react';
+import { AlertTriangle, Download, Maximize2, FileText, Image, Clipboard, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -71,7 +71,7 @@ const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmCha
 const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
-export type ExportFormat = 'csv' | 'png' | 'clipboard';
+export type ExportFormat = 'csv' | 'png' | 'clipboard' | 'share';
 
 interface ChartContainerProps {
   title: string;
@@ -150,6 +150,24 @@ export function ChartContainer({
            window.isSecureContext;
   }, []);
 
+  // Check if Web Share API is available (mobile-first sharing)
+  const isShareAvailable = useMemo(() => {
+    if (typeof navigator === 'undefined' || !navigator.share) {
+      return false;
+    }
+    // Check if canShare exists and supports file sharing
+    if (typeof navigator.canShare === 'function') {
+      try {
+        // Test if file sharing is supported
+        const testFile = new File(['test'], 'test.png', { type: 'image/png' });
+        return navigator.canShare({ files: [testFile] });
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }, []);
+
   // Handle export with format selection and user feedback
   const handleExport = async (format: ExportFormat) => {
     if (!onExport) return;
@@ -159,15 +177,18 @@ export function ChartContainer({
       await onExport(format, undefined, containerRef.current);
 
       // Show success toast
-      const formatNames = {
+      const formatNames: Record<ExportFormat, string> = {
         csv: 'CSV data',
         png: 'PNG image',
-        clipboard: 'Clipboard'
+        clipboard: 'Clipboard',
+        share: 'Share'
       };
 
       toast({
-        title: 'Export successful',
-        description: `${formatNames[format]} export completed successfully`
+        title: format === 'share' ? 'Share initiated' : 'Export successful',
+        description: format === 'share'
+          ? 'Chart ready to share'
+          : `${formatNames[format]} export completed successfully`
       });
     } catch (error) {
       // Show error toast
@@ -371,6 +392,12 @@ export function ChartContainer({
                   <DropdownMenuItem onClick={() => handleExport('clipboard')} disabled={isExporting}>
                     <Clipboard className="mr-2 h-4 w-4" />
                     <span>Copy to Clipboard</span>
+                  </DropdownMenuItem>
+                )}
+                {isShareAvailable && (
+                  <DropdownMenuItem onClick={() => handleExport('share')} disabled={isExporting}>
+                    <Share2 className="mr-2 h-4 w-4" />
+                    <span>Share Chart</span>
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>

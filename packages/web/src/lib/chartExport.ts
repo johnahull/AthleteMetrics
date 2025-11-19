@@ -12,7 +12,7 @@ import type {
 } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 
-export type ExportFormat = 'csv' | 'png' | 'clipboard';
+export type ExportFormat = 'csv' | 'png' | 'clipboard' | 'share';
 
 /**
  * Optional metric label map for dynamic metric labels
@@ -308,4 +308,78 @@ export function generateExportFilename(
   const rawFilename = `analytics_${chartTypeName}_${metricLabels}_${viewType}_${timestamp}.${extension}`;
 
   return sanitizeFilename(rawFilename);
+}
+
+/**
+ * Share chart using Web Share API (mobile-first)
+ * Falls back to clipboard copy on unsupported browsers
+ */
+export async function shareChart(
+  containerElement: HTMLElement | null,
+  title: string,
+  filename: string
+): Promise<void> {
+  if (!containerElement) {
+    throw new Error('No container element available for share');
+  }
+
+  let canvas: HTMLCanvasElement | null = null;
+
+  try {
+    // Dynamically import html2canvas
+    const html2canvas = (await import('html2canvas')).default;
+
+    // Capture the entire container
+    canvas = await html2canvas(containerElement, {
+      backgroundColor: '#ffffff',
+      scale: 2, // Higher quality
+      logging: false,
+      useCORS: true
+    });
+
+    // Convert canvas to blob
+    const blob = await new Promise<Blob | null>((resolve) => {
+      canvas!.toBlob(resolve, 'image/png');
+    });
+
+    if (!blob) {
+      throw new Error('Failed to create image blob for share');
+    }
+
+    // Check Web Share API support with file sharing
+    if (navigator.share && typeof navigator.canShare === 'function') {
+      const file = new File([blob], filename, { type: 'image/png' });
+
+      // Check if sharing files is supported
+      if (navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: title,
+          text: `Performance chart: ${title}`,
+          files: [file]
+        });
+        return;
+      }
+    }
+
+    // Fallback to clipboard copy if Web Share API doesn't support files
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        'image/png': blob
+      })
+    ]);
+
+    // Indicate fallback was used
+    console.log('Web Share API not available, copied to clipboard instead');
+  } finally {
+    // Clean up canvas to free memory
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      canvas.width = 0;
+      canvas.height = 0;
+      canvas = null;
+    }
+  }
 }
