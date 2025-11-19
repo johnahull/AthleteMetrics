@@ -28,6 +28,7 @@ import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { useAuth } from "@/lib/auth";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
 
@@ -453,7 +454,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                       <TableCell className="font-medium">{metricLabels?.[stat.metric] || stat.metric}</TableCell>
                       <TableCell>
                         {stat.average !== null && stat.average !== undefined
-                          ? `${stat.average.toFixed(2)} ${stat.units || ''}`
+                          ? (isFly10Metric(stat.metric)
+                              ? formatFly10Dual(stat.average)
+                              : `${stat.average.toFixed(2)} ${stat.units || ''}`)
                           : "N/A"}
                       </TableCell>
                       {benchmarkColumns.map((benchmarkName) => (
@@ -469,7 +472,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             <div className="font-medium">{stat.topPerformer.userName}</div>
                             <div className="text-sm text-muted-foreground">
                               {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
-                                ? `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`
+                                ? (isFly10Metric(stat.metric)
+                                    ? formatFly10Dual(stat.topPerformer.value)
+                                    : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`)
                                 : "N/A"}
                             </div>
                           </div>
@@ -479,7 +484,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                       </TableCell>
                       <TableCell>
                         {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
-                          ? `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`
+                          ? (isFly10Metric(stat.metric)
+                              ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
+                              : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`)
                           : "N/A"}
                       </TableCell>
                     </TableRow>
@@ -657,7 +664,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             </TableCell>
                             <TableCell>
                               {value !== null && value !== undefined
-                                ? `${value.toFixed(2)} ${stat.units || ''}`
+                                ? (isFly10Metric(stat.metric)
+                                    ? formatFly10Dual(value)
+                                    : `${value.toFixed(2)} ${stat.units || ''}`)
                                 : "N/A"}
                             </TableCell>
                             <TableCell>

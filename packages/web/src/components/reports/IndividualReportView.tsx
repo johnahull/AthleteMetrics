@@ -18,6 +18,7 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
+import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import type { Report } from "@/types/report-types";
 
 // Version check - this log should appear immediately when the module loads
@@ -241,10 +242,18 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                     <TableRow key={metricCode}>
                       <TableCell className="font-medium">{metricLabel}</TableCell>
                       <TableCell>
-                        {typeof value === 'number' ? value.toFixed(2) : "N/A"}
+                        {typeof value === 'number'
+                          ? (isFly10Metric(metricCode)
+                              ? formatFly10Dual(value)
+                              : value.toFixed(2))
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
-                        {teamAverage !== undefined ? teamAverage.toFixed(2) : "N/A"}
+                        {teamAverage !== undefined
+                          ? (isFly10Metric(metricCode)
+                              ? formatFly10Dual(teamAverage)
+                              : teamAverage.toFixed(2))
+                          : "N/A"}
                       </TableCell>
                       <TableCell>
                         {percentile !== undefined ? (
