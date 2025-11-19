@@ -122,7 +122,9 @@ class SimpleCache<T> {
       // Create snapshot of keys to avoid mutation during iteration
       const keysToDelete: string[] = [];
       for (const key of this.cache.keys()) {
-        if (key.includes(pattern)) {
+        // Use startsWith for safer pattern matching to avoid unintended matches
+        // e.g., pattern 'college' only matches 'college_metrics', not 'my_college_data'
+        if (key.startsWith(pattern)) {
           keysToDelete.push(key);
         }
       }

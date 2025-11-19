@@ -630,10 +630,32 @@ class AuditLogFailureQueue {
         continue;
       }
 
-      // Re-queue with incremented retry count
-      // In production, this would attempt to actually save to storage
-      entry.retryCount++;
-      this.queue.push(entry);
+      // Attempt retry - in production, implement actual storage save here
+      // Example: await this.storage.insertAuditLog(entry.auditData);
+      try {
+        // TODO: Replace this with actual storage implementation
+        // For now, we log the retry attempt and treat console.log as "success"
+        // This simulates the retry behavior until storage is properly integrated
+        console.log('RETRY_ATTEMPT: Retrying audit log save:', {
+          retryCount: entry.retryCount + 1,
+          maxRetries: this.maxRetries,
+          userId: entry.auditData.userId,
+          action: entry.auditData.action,
+        });
+
+        // If we get here without throwing, consider it "saved" for now
+        // In production, this would be an actual await storage.insertAuditLog(entry.auditData)
+
+      } catch (retryError) {
+        // Retry failed, re-queue with incremented count
+        entry.retryCount++;
+        this.queue.push(entry);
+        console.warn('RETRY_FAILED: Audit log retry failed, will retry again:', {
+          retryCount: entry.retryCount,
+          maxRetries: this.maxRetries,
+          error: retryError instanceof Error ? retryError.message : 'Unknown error',
+        });
+      }
     }
   }
 
@@ -685,9 +707,15 @@ export function logOrganizationTypeAccess(action: string = 'organization_type_ac
         // Log asynchronously to avoid blocking request
         setImmediate(async () => {
           try {
-            // Assuming storage is available through some dependency injection
-            // This would need to be implemented based on your storage setup
-            console.log('Organization type access logged:', auditData);
+            // TODO: Implement actual audit log storage
+            // This requires storage to be passed via dependency injection or middleware context
+            // Example implementation:
+            //   const storage = req.app.get('storage');
+            //   await storage.insertAuditLog(auditData);
+            //
+            // For now, we log to console as a placeholder
+            // Production deployments should integrate with their audit storage system
+            console.log('AUDIT_LOG:', JSON.stringify(auditData));
           } catch (logError) {
             // CRITICAL: Audit log failure - queue for retry
             const error = logError instanceof Error ? logError : new Error(String(logError));
