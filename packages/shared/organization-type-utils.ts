@@ -339,13 +339,31 @@ export const organizationTypeLookup = new OrganizationTypeLookup();
  * SQL fragment for organization type array filtering
  * Provides optimized SQL for database queries with organization type filtering
  *
- * @deprecated This function uses raw SQL string interpolation. While inputs are validated,
- * prefer using Drizzle ORM's parameterized queries for better type safety and security.
+ * @deprecated **SECURITY WARNING**: This function uses raw SQL string interpolation.
+ * While inputs are validated (column via whitelist, orgType via enum), this pattern
+ * is fragile and should be migrated to Drizzle ORM's parameterized queries.
  *
- * Recommended migration:
+ * **Migration Required Before Next Major Release**
+ *
+ * Current usage (to be replaced):
+ * ```typescript
+ * const filter = getOrganizationTypeFilterSQL('college');
+ * ```
+ *
+ * Recommended migration using Drizzle SQL templates:
  * ```typescript
  * import { sql } from 'drizzle-orm';
- * const filter = sql`(${column} IS NULL OR ${column} && ARRAY[${orgType}]::text[])`;
+ * import { siteMetrics } from '@shared/schema';
+ *
+ * // Using Drizzle's sql template tag for type-safe, parameterized queries
+ * const filter = sql`(${siteMetrics.availableOrgTypes} IS NULL OR ${siteMetrics.availableOrgTypes} && ARRAY[${orgType}]::text[])`;
+ *
+ * // Or use Drizzle's array operators
+ * import { arrayContains, isNull, or } from 'drizzle-orm';
+ * const condition = or(
+ *   isNull(siteMetrics.availableOrgTypes),
+ *   arrayContains(siteMetrics.availableOrgTypes, [orgType])
+ * );
  * ```
  *
  * @param orgType - The organization type to filter by

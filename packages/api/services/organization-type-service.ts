@@ -476,9 +476,19 @@ export class OrganizationTypeService extends BaseService {
 
   /**
    * Get organization type statistics for admin dashboard
-   * 
+   *
    * @param requestingUserId - ID of user making request (must be site admin)
    * @returns Statistics about organization type distribution
+   *
+   * @throws {Error} This endpoint is not yet implemented - storage query pending
+   *
+   * @todo Implement getOrganizationTypeStatistics in storage interface
+   * Implementation requires:
+   * 1. Add getOrganizationTypeStatistics() method to IStorage interface
+   * 2. Implement in DatabaseStorage with query:
+   *    SELECT org_type, COUNT(*) as count FROM organizations
+   *    WHERE org_type IS NOT NULL GROUP BY org_type
+   * 3. Handle null org_type organizations separately
    */
   async getOrganizationTypeStatistics(
     requestingUserId: string
@@ -489,37 +499,24 @@ export class OrganizationTypeService extends BaseService {
         throw new Error("Only site administrators can view organization type statistics");
       }
 
-      // TODO: Implement getOrganizationTypeStatistics in storage interface
-      // This requires:
-      // 1. Add getOrganizationTypeStatistics() method to IStorage interface
-      // 2. Implement in DatabaseStorage with query:
-      //    SELECT org_type, COUNT(*) as count FROM organizations
-      //    WHERE org_type IS NOT NULL GROUP BY org_type
-      // 3. Handle null org_type organizations separately
-      // For now, returns zeros as placeholder
-      const stats: any[] = [];
+      // Endpoint not yet implemented - throw explicit error
+      throw new Error(
+        "Organization type statistics endpoint is not yet implemented. " +
+        "Storage query implementation is pending. " +
+        "See TODO in OrganizationTypeService.getOrganizationTypeStatistics for details."
+      );
 
-      const result: Record<OrganizationType, number> & { total: number } = {
-        youth: 0,
-        high_school: 0,
-        college: 0,
-        club: 0,
-        private_facility: 0,
-        elite_academy: 0,
-        total: 0,
-      };
-
-      let total = 0;
-      for (const stat of stats || []) {
-        const orgType = parseOrganizationType(stat.org_type);
-        const count = parseInt(stat.count, 10);
-        result[orgType] = count;
-        total += count;
-      }
-      
-      result.total = total;
-
-      return result;
+      // Future implementation will return:
+      // const result: Record<OrganizationType, number> & { total: number } = {
+      //   youth: 0,
+      //   high_school: 0,
+      //   college: 0,
+      //   club: 0,
+      //   private_facility: 0,
+      //   elite_academy: 0,
+      //   total: 0,
+      // };
+      // return result;
     } catch (error) {
       console.error(`OrganizationTypeService.getOrganizationTypeStatistics:`, error);
       throw error;

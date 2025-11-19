@@ -88,10 +88,23 @@ class SecurityRateLimitStore {
 
   private readonly windowMs = 15 * 60 * 1000; // 15 minutes
   private readonly cleanupInterval = 60 * 1000; // 1 minute
+  private cleanupIntervalId: NodeJS.Timeout | null = null;
 
   constructor() {
     // Periodic cleanup of old entries
-    setInterval(() => this.cleanup(), this.cleanupInterval);
+    this.cleanupIntervalId = setInterval(() => this.cleanup(), this.cleanupInterval);
+  }
+
+  /**
+   * Destroy the store and clear the cleanup interval
+   * Call this when shutting down the application to prevent memory leaks
+   */
+  destroy(): void {
+    if (this.cleanupIntervalId) {
+      clearInterval(this.cleanupIntervalId);
+      this.cleanupIntervalId = null;
+    }
+    this.store.clear();
   }
 
   /**

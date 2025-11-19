@@ -69,10 +69,11 @@ export interface ContextualLabels {
  * @returns Organization data including orgType
  */
 /**
- * Cache duration for organization data
- * Organization type rarely changes, so we cache for 5 minutes
+ * Cache duration for organization data (5 minutes)
+ * Organization type rarely changes, so we use a longer cache duration.
+ * This matches the CACHE_DURATION_MS in organization-type-service.ts for consistency.
  */
-const ORGANIZATION_CACHE_DURATION = 5 * 60 * 1000;
+const ORGANIZATION_CACHE_DURATION_MS = 5 * 60 * 1000;
 
 function useOrganization(organizationId: string | null) {
   return useQuery({
@@ -87,7 +88,7 @@ function useOrganization(organizationId: string | null) {
       return response.json() as Promise<{ id: string; orgType: OrganizationType }>;
     },
     enabled: !!organizationId,
-    staleTime: ORGANIZATION_CACHE_DURATION,
+    staleTime: ORGANIZATION_CACHE_DURATION_MS,
   });
 }
 

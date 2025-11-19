@@ -155,10 +155,15 @@ export function registerOrganizationTypeRoutes(app: Express) {
           return res.status(400).json({ message: "Invalid organization type" });
         }
 
+        const userId = req.session.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+
         const useCache = req.query.fresh !== 'true';
         const metrics = await organizationTypeService.getMetricsForOrganizationType(
           orgType,
-          req.session.user!.id,
+          userId,
           useCache
         );
 
@@ -204,10 +209,15 @@ export function registerOrganizationTypeRoutes(app: Express) {
           return res.status(400).json({ message: "Invalid organization type" });
         }
 
+        const userId = req.session.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+
         const useCache = req.query.fresh !== 'true';
         const benchmarks = await organizationTypeService.getBenchmarksForOrganizationType(
           orgType,
-          req.session.user!.id,
+          userId,
           useCache
         );
 
@@ -254,10 +264,15 @@ export function registerOrganizationTypeRoutes(app: Express) {
           return res.status(400).json({ message: "Invalid organization type" });
         }
 
+        const userId = req.session.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+
         const includeInactive = req.query.includeInactive === 'true';
         const organizations = await organizationTypeService.getOrganizationsByType(
           orgType,
-          req.session.user!.id,
+          userId,
           includeInactive
         );
 
@@ -289,7 +304,10 @@ export function registerOrganizationTypeRoutes(app: Express) {
     async (req, res) => {
       try {
         const { organizationTypes } = req.body;
-        const userId = req.session.user!.id;
+        const userId = req.session.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
 
         // Fetch metrics for each organization type in parallel
         const metricsPromises = organizationTypes.map((orgType: any) =>
@@ -339,8 +357,13 @@ export function registerOrganizationTypeRoutes(app: Express) {
     logOrganizationTypeAccess('organization_type_statistics_accessed'),
     async (req, res) => {
       try {
+        const userId = req.session.user?.id;
+        if (!userId) {
+          return res.status(401).json({ message: "Authentication required" });
+        }
+
         const statistics = await organizationTypeService.getOrganizationTypeStatistics(
-          req.session.user!.id
+          userId
         );
 
         // Calculate percentages
