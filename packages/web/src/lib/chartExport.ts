@@ -372,7 +372,9 @@ export async function shareChart(
           if (shareError instanceof Error && shareError.name === 'AbortError') {
             return { action: 'cancelled' };
           }
-          throw shareError; // Re-throw actual errors
+          // Log actual errors before re-throwing for better debugging
+          console.error('Error sharing chart:', shareError);
+          throw shareError;
         }
       }
     }
