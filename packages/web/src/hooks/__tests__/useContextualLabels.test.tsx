@@ -7,8 +7,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { useContextualLabels, useContextualLabelsFor } from '../useContextualLabels';
 import type { OrganizationType } from '@shared/organization-type-utils';
+
+// Unmock the module so we can test the actual implementation
+vi.unmock('@/hooks/useContextualLabels');
+
+// Import after unmocking
+const { useContextualLabels, useContextualLabelsFor } = await import('../useContextualLabels');
 
 // Mock useAuth
 const mockOrganizationContext = vi.fn();
