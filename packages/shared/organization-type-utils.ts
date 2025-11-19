@@ -385,6 +385,15 @@ export function getOrganizationTypeFilterSQL(
   orgType: OrganizationType,
   columnName: string = 'available_org_types'
 ): string {
+  // Emit deprecation warning in development mode to encourage migration
+  if (process.env.NODE_ENV !== 'production') {
+    console.warn(
+      'DEPRECATION WARNING: getOrganizationTypeFilterSQL() uses raw SQL string interpolation. ' +
+      'This function will be removed in version 2.0.0. ' +
+      'Migrate to Drizzle ORM parameterized queries. See function JSDoc for migration guide.'
+    );
+  }
+
   // Validate column name against whitelist to prevent SQL injection
   const validColumns = ['available_org_types', 'applicable_org_types'];
   if (!validColumns.includes(columnName)) {

@@ -559,10 +559,11 @@ class AuditLogFailureQueue {
   private queue: FailedAuditEntry[] = [];
   private readonly maxQueueSize = 1000;
   private readonly maxRetries = 3;
+  private intervalId: NodeJS.Timeout | null = null;
 
   private constructor() {
     // Start periodic retry processing
-    setInterval(() => this.processQueue(), 60 * 1000); // Every minute
+    this.intervalId = setInterval(() => this.processQueue(), 60 * 1000); // Every minute
   }
 
   static getInstance(): AuditLogFailureQueue {
@@ -570,6 +571,32 @@ class AuditLogFailureQueue {
       AuditLogFailureQueue.instance = new AuditLogFailureQueue();
     }
     return AuditLogFailureQueue.instance;
+  }
+
+  /**
+   * Destroy the queue instance and clear the interval
+   * Call this during graceful shutdown to prevent memory leaks
+   */
+  destroy(): void {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+
+    // Warn about pending entries that will be lost
+    if (this.queue.length > 0) {
+      console.warn(
+        `WARNING: AuditLogFailureQueue shutdown with ${this.queue.length} pending entries. ` +
+        'These audit logs will be lost. Consider implementing persistent storage (Redis/SQS) for production.'
+      );
+    }
+  }
+
+  /**
+   * Get pending retry count for monitoring
+   */
+  getPendingRetryCount(): number {
+    return this.queue.length;
   }
 
   enqueue(entry: Omit<FailedAuditEntry, 'timestamp' | 'retryCount'>): void {
@@ -613,6 +640,15 @@ class AuditLogFailureQueue {
   getQueueSize(): number {
     return this.queue.length;
   }
+}
+
+/**
+ * Shutdown the audit log failure queue
+ * Call this during graceful application shutdown
+ */
+export function shutdownAuditLogQueue(): void {
+  const instance = AuditLogFailureQueue.getInstance();
+  instance.destroy();
 }
 
 /**

@@ -499,60 +499,31 @@ export class OrganizationTypeService extends BaseService {
     }
   }
 
-  /**
-   * Get organization type statistics for admin dashboard
-   *
-   * @param requestingUserId - ID of user making request (must be site admin)
-   * @returns Statistics about organization type distribution
-   *
-   * @throws {Error} This endpoint is not yet implemented - storage query pending
-   *
-   * @todo Implement getOrganizationTypeStatistics in storage interface
-   * Implementation requires:
-   * 1. Add getOrganizationTypeStatistics() method to IStorage interface
-   * 2. Implement in DatabaseStorage with query:
-   *    SELECT org_type, COUNT(*) as count FROM organizations
-   *    WHERE org_type IS NOT NULL GROUP BY org_type
-   * 3. Handle null org_type organizations separately
-   */
-  async getOrganizationTypeStatistics(
-    requestingUserId: string
-  ): Promise<Record<OrganizationType, number> & { total: number }> {
-    try {
-      // Verify admin permissions
-      if (!(await this.isSiteAdmin(requestingUserId))) {
-        throw new Error("Only site administrators can view organization type statistics");
-      }
-
-      // Endpoint not yet implemented - throw explicit error
-      throw new Error(
-        "Organization type statistics endpoint is not yet implemented. " +
-        "Storage query implementation is pending. " +
-        "See TODO in OrganizationTypeService.getOrganizationTypeStatistics for details."
-      );
-
-      // Future implementation will return:
-      // const result: Record<OrganizationType, number> & { total: number } = {
-      //   youth: 0,
-      //   high_school: 0,
-      //   college: 0,
-      //   club: 0,
-      //   private_facility: 0,
-      //   elite_academy: 0,
-      //   total: 0,
-      // };
-      // return result;
-    } catch (error) {
-      console.error(`OrganizationTypeService.getOrganizationTypeStatistics:`, error);
-      throw error;
-    }
-  }
+  // NOTE: getOrganizationTypeStatistics method was removed as it was unimplemented.
+  // To implement organization type statistics in the future:
+  // 1. Add getOrganizationTypeStatistics() method to IStorage interface
+  // 2. Implement in DatabaseStorage with query:
+  //    SELECT org_type, COUNT(*) as count FROM organizations
+  //    WHERE org_type IS NOT NULL GROUP BY org_type
+  // 3. Uncomment the route in organization-type-routes.ts
+  // 4. Create this method with proper implementation
 
   /**
    * Invalidate caches related to organization types
    * Call this when organization types, metrics, or benchmarks are updated
-   * 
+   *
    * @param pattern - Optional pattern to match cache keys (invalidates all if not provided)
+   *
+   * @note Pattern matching behavior:
+   * - If no pattern provided: ALL cache entries are invalidated
+   * - If pattern provided: Only entries whose keys start with the pattern are invalidated
+   * - Examples:
+   *   - pattern='college' → invalidates 'college_metrics', 'college_benchmarks', etc.
+   *   - pattern='metrics:' → invalidates all metrics-related entries
+   *   - pattern=undefined → invalidates everything
+   *
+   * @warning Pattern matching uses startsWith comparison, so a pattern like 'col'
+   * would match both 'college_data' and 'colorado_team'. Use specific patterns.
    */
   invalidateCache(pattern?: string): void {
     try {

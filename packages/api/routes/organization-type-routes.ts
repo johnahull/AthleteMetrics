@@ -467,6 +467,9 @@ export function registerOrganizationTypeRoutes(app: Express) {
   /**
    * POST /api/organization-types/cache/invalidate
    * Invalidate organization type caches (site admin only)
+   *
+   * @note Pattern validation limits patterns to safe values to prevent
+   * unintended cache invalidation or potential abuse
    */
   app.post(
     "/api/organization-types/cache/invalidate",
@@ -475,6 +478,32 @@ export function registerOrganizationTypeRoutes(app: Express) {
     async (req, res) => {
       try {
         const { pattern } = req.body;
+
+        // Validate pattern against allowed values to prevent abuse
+        // Allowed patterns: organization type names, 'metrics:', 'benchmarks:', 'organizations:'
+        if (pattern !== undefined && pattern !== null) {
+          const allowedPatterns = [
+            // Organization type prefixes
+            'youth', 'high_school', 'college', 'club', 'private_facility', 'elite_academy',
+            // Cache category prefixes
+            'metrics:', 'benchmarks:', 'organizations:',
+            // Exact match patterns (empty string not allowed)
+          ];
+
+          const isValidPattern =
+            typeof pattern === 'string' &&
+            pattern.length > 0 &&
+            pattern.length <= 100 && // Prevent excessively long patterns
+            (allowedPatterns.some(allowed => pattern.startsWith(allowed)) ||
+             allowedPatterns.includes(pattern));
+
+          if (!isValidPattern) {
+            return res.status(400).json({
+              message: "Invalid cache invalidation pattern",
+              allowed: "Pattern must start with an organization type name or cache category prefix (metrics:, benchmarks:, organizations:)",
+            });
+          }
+        }
 
         organizationTypeService.invalidateCache(pattern);
 
@@ -485,8 +514,8 @@ export function registerOrganizationTypeRoutes(app: Express) {
         });
       } catch (error) {
         console.error("Invalidate organization type cache error:", error);
-        res.status(500).json({ 
-          message: sanitizeError(error, "Failed to invalidate cache") 
+        res.status(500).json({
+          message: sanitizeError(error, "Failed to invalidate cache")
         });
       }
     }
