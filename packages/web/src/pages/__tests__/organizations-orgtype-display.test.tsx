@@ -169,7 +169,7 @@ describe('Organizations - Organization Type Display', () => {
         expect(screen.getByTestId('org-type-badge-youth')).toHaveTextContent('Youth/Recreational');
         expect(screen.getByTestId('org-type-badge-college')).toHaveTextContent('College/University');
         expect(screen.getByTestId('org-type-badge-club')).toHaveTextContent('Club/Travel Team');
-        expect(screen.getByTestId('org-type-badge-private_facility')).toHaveTextContent('Private Coach/Training Facility');
+        expect(screen.getByTestId('org-type-badge-private_facility')).toHaveTextContent('Private Training Facility');
       });
     });
 

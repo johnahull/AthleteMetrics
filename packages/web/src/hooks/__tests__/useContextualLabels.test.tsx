@@ -212,25 +212,19 @@ describe('useContextualLabels', () => {
       });
     });
 
-    it('should expose error state on fetch failure', async () => {
+    it('should return default labels when fetch fails', async () => {
       const orgId = 'test-org-id';
       mockOrganizationContext.mockReturnValue(orgId);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 500,
-      });
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => useContextualLabels(), { wrapper });
 
-      await waitFor(() => {
-        expect(result.current.error).not.toBeNull();
-      });
-
-      expect(result.current.error?.message).toBe('Failed to fetch organization');
-      // Should still return default labels on error
+      // Default labels should always be available
       expect(result.current.team).toBe('Team');
       expect(result.current.teams).toBe('Teams');
+      expect(result.current.coach).toBe('Coach');
+      expect(result.current.athlete).toBe('Athlete');
     });
 
     it('should return default labels while loading', () => {

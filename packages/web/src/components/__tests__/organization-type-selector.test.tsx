@@ -105,7 +105,7 @@ describe('OrganizationTypeSelector', () => {
       expect(screen.getByTestId('select-item-high_school')).toHaveTextContent('High School');
       expect(screen.getByTestId('select-item-college')).toHaveTextContent('College/University');
       expect(screen.getByTestId('select-item-club')).toHaveTextContent('Club/Travel Team');
-      expect(screen.getByTestId('select-item-private_facility')).toHaveTextContent('Private Coach/Training Facility');
+      expect(screen.getByTestId('select-item-private_facility')).toHaveTextContent('Private Training Facility');
       expect(screen.getByTestId('select-item-elite_academy')).toHaveTextContent('Elite Academy');
     });
 
