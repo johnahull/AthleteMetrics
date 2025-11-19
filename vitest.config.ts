@@ -19,21 +19,26 @@ export default defineConfig({
     unstubEnvs: true, // Restore environment variables after each test
 
     // Memory optimization strategy:
-    // - 3GB heap (configurable via TEST_HEAP_SIZE env var in package.json, defaults to 3072MB)
+    // - 2GB heap per fork (reduced from 4GB to detect leaks earlier)
     // - 10s test timeout (catches slow tests)
     // - 30s hook timeout (allows cleanup operations)
-    // - maxForks=3 (balances parallelism with memory usage: 3 × ~800MB = ~2.4GB under 3GB heap)
+    // - maxForks=2 (reduced from 3: 2 × ~800MB = ~1.6GB under 2GB heap)
     // - happy-dom environment (2-3x memory reduction vs jsdom)
     // - isolate: true (prevents leak propagation between test files)
+    // - execArgv with gc flags to help Node release memory faster
     pool: 'forks', // Use process forks instead of threads for better memory isolation
     poolOptions: {
       forks: {
         singleFork: false, // Enable parallel test execution for better performance
-        maxForks: 3, // Limit to 3 concurrent forks for memory control (~800MB each)
+        maxForks: 2, // Limit to 2 concurrent forks for memory control (~800MB each)
+        execArgv: [
+          '--expose-gc', // Allow manual garbage collection in tests if needed
+          '--max-old-space-size=2048', // 2GB per fork (overrides package.json for individual workers)
+        ],
       },
     },
     isolate: true, // Isolate tests between files for better cleanup
-    maxConcurrency: 5, // Limit concurrent test execution
+    maxConcurrency: 3, // Reduced from 5 to limit concurrent test execution
 
     exclude: [
       '**/node_modules/**',

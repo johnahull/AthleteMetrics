@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom';
-import { beforeAll, afterEach, vi } from 'vitest';
+import { beforeAll, afterEach, afterAll, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // Setup for all tests
@@ -15,6 +15,20 @@ afterEach(() => {
   // This clears setInterval, setTimeout, and other timer-based code
   vi.clearAllTimers();
   vi.useRealTimers(); // Restore real timers if fake timers were used
+
+  // Clear all mocks to prevent accumulation
+  vi.clearAllMocks();
+});
+
+// Global cleanup after all tests in a file
+afterAll(() => {
+  // Reset modules to free memory from cached imports
+  vi.resetModules();
+
+  // Force garbage collection if available (requires --expose-gc flag)
+  if (global.gc) {
+    global.gc();
+  }
 });
 
 // Mock environment variables for tests

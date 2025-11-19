@@ -65,6 +65,10 @@ describe('Graceful Shutdown', () => {
     // Clean up module mocks
     vi.doUnmock('../../packages/api/routes');
     vi.doUnmock('../../packages/api/vite.js');
+
+    // CRITICAL: Reset all modules after each test to prevent memory leaks
+    // Each test imports packages/api/index which loads the entire server
+    vi.resetModules();
   });
 
   describe('SIGTERM handling', () => {
