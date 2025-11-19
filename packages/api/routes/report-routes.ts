@@ -1219,11 +1219,10 @@ export function registerReportRoutes(app: Express) {
         try {
           await storage.createAuditLog({
             userId: user.id,
-            action: 'report_ai_insights_generated',
+            action: 'report_ai_insights_generation_failed',
             resourceType: 'report',
             resourceId: req.params.id,
             details: JSON.stringify({
-              status: 'failed',
               error: error instanceof Error ? error.message : 'Unknown error'
             }),
             ipAddress: req.ip || null,
