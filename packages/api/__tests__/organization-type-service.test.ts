@@ -39,16 +39,20 @@ describe("Organization Type Service Logic", () => {
   beforeEach(async () => {
     metricService = new MetricService();
     benchmarkService = new BenchmarkService();
-  });
-
-  afterEach(async () => {
-    // Clean up test data after each test
+    // Clean up any leftover test data before each test
     await db.delete(siteBenchmarks).where({
       name: TEST_BENCHMARK_NAME,
     });
-    await db.delete(siteMetrics).where({
-      code: TEST_METRIC_CODE,
+    await db.execute(`DELETE FROM site_metrics WHERE code LIKE '${TEST_METRIC_CODE}%'`);
+  });
+
+  afterEach(async () => {
+    // Clean up test data after each test - use LIKE to catch all variations
+    await db.delete(siteBenchmarks).where({
+      name: TEST_BENCHMARK_NAME,
     });
+    // Delete all metrics that start with our test prefix
+    await db.execute(`DELETE FROM site_metrics WHERE code LIKE '${TEST_METRIC_CODE}%'`);
   });
 
   afterAll(async () => {
