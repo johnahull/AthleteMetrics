@@ -252,6 +252,9 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [type-check, tests, integration-tests, build]
+    # Optimized for speed: Tests run on chromium only in CI (8-10 min)
+    # Full browser matrix (Desktop + Mobile Chrome + Mobile Safari) available for local development
+    # This reduces test time from 45+ min to ~8 min while maintaining comprehensive coverage
 
     services:
       postgres:
