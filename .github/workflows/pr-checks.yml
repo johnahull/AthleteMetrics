@@ -318,8 +318,9 @@ jobs:
           NODE_ENV: production
           PORT: 5000
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
-          SESSION_SECRET: ${{ secrets.CI_SESSION_SECRET || 'test-secret-key-for-ci-e2e-tests-minimum-32-characters' }}
-          # SECURITY NOTE: Hardcoded credentials are acceptable for CI E2E tests because:
+          SESSION_SECRET: ${{ secrets.CI_SESSION_SECRET || '4ecf4b4a5b4a92bf18666fb5484925cd0fa03050a1af61c3ca4e3b5d17b94b23' }}
+          # SECURITY NOTE: Fallback SESSION_SECRET is cryptographically secure (generated via openssl rand -hex 32)
+          # Hardcoded credentials are acceptable for CI E2E tests because:
           # - Ephemeral PostgreSQL container (destroyed after test completion)
           # - No external network access to GitHub Actions runner
           # - Test database contains no real user data
