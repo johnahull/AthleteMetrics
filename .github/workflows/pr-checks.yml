@@ -326,7 +326,7 @@ jobs:
           # - Test database contains no real user data
           # - Port 5000 only accessible within runner localhost
           ADMIN_USER: admin
-          ADMIN_PASS: TestPassword123!
+          ADMIN_PASSWORD: TestPassword123!
 
       - name: Wait for server to be ready
         run: |
