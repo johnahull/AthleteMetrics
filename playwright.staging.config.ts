@@ -94,11 +94,23 @@ export default defineConfig({
     // Mobile viewports
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        // Reuse authentication state if available (same as chromium project)
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
+      },
     },
     {
       name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      use: {
+        ...devices['iPhone 12'],
+        // Reuse authentication state if available (same as chromium project)
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
+      },
     },
   ],
 
