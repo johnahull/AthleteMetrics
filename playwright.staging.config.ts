@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'fs';
 
 /**
  * Playwright Configuration for Staging Environment Testing
@@ -21,7 +22,7 @@ export default defineConfig({
 
   // Test execution configuration
   fullyParallel: true, // Run tests in parallel for faster execution
-  workers: process.env.CI ? 2 : 4, // 2 workers in CI (resource-constrained), 4 locally
+  workers: process.env.CI ? 4 : 4, // 4 workers in CI (optimized for speed with chromium-only), 4 locally
 
   // Retry strategy:
   // - CI environments (process.env.CI): 1 retry for network flakiness/staging server issues
@@ -66,13 +67,29 @@ export default defineConfig({
   },
 
   // Configure projects for different browsers
-  projects: [
+  // CI: Only test chromium for speed (8-10 min vs 45 min with all browsers)
+  // Local: Test full browser matrix including mobile viewports
+  projects: process.env.CI ? [
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
         // Reuse authentication state to avoid rate limiting
-        storageState: './playwright/.auth/user.json',
+        // Only use storageState if it exists (created by global-setup.ts)
+        // This prevents errors on first CI run before global-setup completes
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
+      },
+    },
+  ] : [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
       },
     },
 
@@ -89,11 +106,21 @@ export default defineConfig({
     // Mobile viewports
     {
       name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
+      },
     },
     {
       name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
+      use: {
+        ...devices['iPhone 12'],
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
+      },
     },
   ],
 

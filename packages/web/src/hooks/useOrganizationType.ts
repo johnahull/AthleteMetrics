@@ -11,7 +11,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { 
+import {
   type OrganizationType,
   getOrganizationTypeLabel,
   getOrganizationTypeOptions,
@@ -24,6 +24,7 @@ import {
   type BenchmarksByOrganizationTypeResponse,
   type OrganizationTypeValidationResult,
 } from '@shared/organization-type-types';
+import { STALE_TIME } from '@/lib/queryClient';
 
 /**
  * Hook configuration for organization type operations
@@ -45,7 +46,7 @@ interface UseOrganizationTypeConfig {
 const DEFAULT_CONFIG: Required<UseOrganizationTypeConfig> = {
   enableCache: true,
   cacheTime: 5 * 60 * 1000, // 5 minutes
-  staleTime: 2 * 60 * 1000, // 2 minutes
+  staleTime: STALE_TIME.REALTIME, // 1 minute - organization type data changes occasionally
   refetchOnWindowFocus: true,
 };
 

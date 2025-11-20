@@ -1,5 +1,41 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
+/**
+ * Standard staleTime values for different data types
+ *
+ * Usage: Import STALE_TIME and use appropriate constant based on data freshness requirements
+ *
+ * @example
+ * ```ts
+ * import { STALE_TIME } from './queryClient';
+ *
+ * // For frequently changing data (athlete measurements, status)
+ * useQuery({ queryKey: ['measurements'], staleTime: STALE_TIME.REALTIME });
+ *
+ * // For analytics and reports (default)
+ * useQuery({ queryKey: ['analytics'], staleTime: STALE_TIME.DEFAULT });
+ *
+ * // For static reference data (metrics, benchmarks)
+ * useQuery({ queryKey: ['metrics'], staleTime: STALE_TIME.STATIC });
+ *
+ * // For user preferences (rarely changes)
+ * useQuery({ queryKey: ['preferences'], staleTime: STALE_TIME.INFINITE });
+ * ```
+ */
+export const STALE_TIME = {
+  /** 1 minute - For real-time data: athlete measurements, live status, recent activity */
+  REALTIME: 1 * 60 * 1000,
+
+  /** 5 minutes - Default for most data: analytics, reports, team data */
+  DEFAULT: 5 * 60 * 1000,
+
+  /** 15 minutes - For static/reference data: metric definitions, benchmarks, organization settings */
+  STATIC: 15 * 60 * 1000,
+
+  /** Never expires - For immutable data: user preferences, feature flags (until explicit invalidation) */
+  INFINITE: Infinity,
+} as const;
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     const text = (await res.text()) || res.statusText;
@@ -66,7 +102,7 @@ export const queryClient = new QueryClient({
       queryFn: getQueryFn({ on401: "throw" }),
       refetchInterval: false,
       refetchOnWindowFocus: false,
-      staleTime: Infinity,
+      staleTime: STALE_TIME.DEFAULT, // 5 minutes - balance between data freshness and API load
       retry: false,
     },
     mutations: {

@@ -6,6 +6,7 @@
 import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
 import type { DynamicMetricConfig, OrganizationMetricConfig } from "@shared/analytics-types";
 import type { SiteMetric, InsertSiteMetric, UpdateSiteMetric, OrganizationMetric, UpdateOrganizationMetric } from "@shared/schema";
+import { STALE_TIME } from "@/lib/queryClient";
 
 // ============================================================================
 // API Client Functions
@@ -196,7 +197,7 @@ export function useSiteMetrics(includeInactive = false) {
   return useQuery({
     queryKey: ['siteMetrics', includeInactive],
     queryFn: () => fetchSiteMetrics(includeInactive),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -208,7 +209,7 @@ export function useSiteMetric(code: string) {
     queryKey: ['siteMetric', code],
     queryFn: () => fetchSiteMetric(code),
     enabled: !!code,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -282,7 +283,7 @@ export function useOrganizationMetrics(organizationId: string, enabledOnly = fal
     queryKey: ['organizationMetrics', organizationId, enabledOnly],
     queryFn: () => fetchOrganizationMetrics(organizationId, enabledOnly),
     enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 

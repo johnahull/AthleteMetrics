@@ -3,6 +3,7 @@
  */
 
 import { useQuery } from "@tanstack/react-query";
+import { STALE_TIME } from "@/lib/queryClient";
 import type { TrendData } from "@/components/kpi-card-with-trend";
 
 interface DashboardTrendsResponse {
@@ -31,6 +32,6 @@ export function useDashboardTrends(organizationId: string | null) {
       return response.json() as Promise<DashboardTrendsResponse>;
     },
     enabled: !!organizationId,
-    staleTime: 60000, // Cache for 1 minute (trends don't change frequently)
+    staleTime: STALE_TIME.REALTIME, // Cache for 1 minute (trends change frequently)
   });
 }
