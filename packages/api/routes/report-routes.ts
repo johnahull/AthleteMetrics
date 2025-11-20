@@ -1476,7 +1476,10 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
 
     // 3. Benchmark Achievement Summary
     if (reportData.athleteRankings && reportData.athleteRankings.length > 0) {
-      const benchmarkAchievements = calculateBenchmarkAchievements(reportData.athleteRankings);
+      const benchmarkAchievements = calculateBenchmarkAchievements(
+        reportData.athleteRankings,
+        reportData.teamStatistics
+      );
 
       if (benchmarkAchievements.length > 0) {
         doc.setFontSize(16);
@@ -1486,18 +1489,20 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
         yPos += 10;
 
         const benchmarkRows = benchmarkAchievements.map((achievement: any) => [
-          achievement.tier,
+          achievement.metric,
+          achievement.benchmarkName,
+          `${achievement.benchmarkValue.toFixed(2)} ${achievement.units}`,
           achievement.count.toString(),
           `${achievement.percentage.toFixed(0)}%`,
         ]);
 
         autoTable(doc, {
           startY: yPos,
-          head: [["Benchmark", "Athletes", "Percentage"]],
+          head: [["Metric", "Benchmark", "Value", "Athletes", "Percentage"]],
           body: benchmarkRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.secondary },
-          styles: { fontSize: 10 },
+          styles: { fontSize: 9 },
         });
 
         yPos = (doc as any).lastAutoTable.finalY + 15;
@@ -1792,63 +1797,82 @@ function stripMarkdown(markdown: string): string {
 
 /**
  * Helper function: Calculate benchmark achievements for PDF
+ * Groups by metric + benchmark to show values for each metric
  */
-function calculateBenchmarkAchievements(athleteRankings: any[]) {
+function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?: any[]) {
   if (!athleteRankings || athleteRankings.length === 0) {
     return [];
   }
 
-  // Get all unique benchmark names
-  const allBenchmarkNames = new Set<string>();
+  // Build a map of metric -> benchmark -> { value, units } from teamStatistics
+  const benchmarkValuesMap = new Map<string, Map<string, { value: number; units: string }>>();
+  if (teamStatistics) {
+    teamStatistics.forEach((stat: any) => {
+      if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
+        const metricBenchmarks = new Map<string, { value: number; units: string }>();
+        stat.benchmarks.forEach((benchmark: any) => {
+          metricBenchmarks.set(benchmark.name, {
+            value: benchmark.value,
+            units: stat.units || ''
+          });
+        });
+        benchmarkValuesMap.set(stat.metric, metricBenchmarks);
+      }
+    });
+  }
+
+  // Track achievements by metric + benchmark
+  const achievementMap = new Map<string, {
+    metric: string;
+    benchmarkName: string;
+    benchmarkValue: number;
+    units: string;
+    count: number;
+  }>();
+
+  // Count how many athletes meet each metric-benchmark combination
   athleteRankings.forEach((athlete: any) => {
     if (athlete.benchmarkComparisons) {
-      Object.values(athlete.benchmarkComparisons).forEach((comparisons: any) => {
-        comparisons.forEach((comp: any) => allBenchmarkNames.add(comp.benchmarkName));
-      });
-    }
-  });
-
-  // Count how many athletes meet each benchmark
-  const benchmarkCounts: Record<string, number> = {};
-  Array.from(allBenchmarkNames).forEach((benchmarkName) => {
-    benchmarkCounts[benchmarkName] = 0;
-  });
-
-  // Track which athletes meet at least one benchmark
-  const athletesWithBenchmarks = new Set<string>();
-
-  athleteRankings.forEach((athlete: any) => {
-    if (athlete.benchmarkComparisons) {
-      Object.values(athlete.benchmarkComparisons).forEach((comparisons: any) => {
+      Object.entries(athlete.benchmarkComparisons).forEach(([metric, comparisons]: [string, any]) => {
         comparisons.forEach((comp: any) => {
           if (comp.meetsOrExceeds) {
-            benchmarkCounts[comp.benchmarkName]++;
-            athletesWithBenchmarks.add(athlete.userId);
+            const key = `${metric}:${comp.benchmarkName}`;
+
+            if (!achievementMap.has(key)) {
+              // Get benchmark value from teamStatistics if available
+              const metricBenchmarks = benchmarkValuesMap.get(metric);
+              const benchmarkInfo = metricBenchmarks?.get(comp.benchmarkName);
+
+              achievementMap.set(key, {
+                metric,
+                benchmarkName: comp.benchmarkName,
+                benchmarkValue: benchmarkInfo?.value ?? comp.benchmarkValue,
+                units: benchmarkInfo?.units ?? '',
+                count: 0
+              });
+            }
+
+            achievementMap.get(key)!.count++;
           }
         });
       });
     }
   });
 
-  // Convert to array format, sorted by count descending
-  const achievements = Array.from(allBenchmarkNames)
-    .map((benchmarkName) => ({
-      tier: benchmarkName,
-      count: benchmarkCounts[benchmarkName],
-      percentage: (benchmarkCounts[benchmarkName] / athleteRankings.length) * 100,
+  // Convert to array and calculate percentages
+  const achievements = Array.from(achievementMap.values())
+    .map((achievement) => ({
+      ...achievement,
+      percentage: (achievement.count / athleteRankings.length) * 100,
     }))
     .filter((achievement) => achievement.count > 0)
-    .sort((a, b) => b.count - a.count);
-
-  // Add "no benchmark met" if applicable
-  const noTierCount = athleteRankings.length - athletesWithBenchmarks.size;
-  if (noTierCount > 0) {
-    achievements.push({
-      tier: 'No benchmark met',
-      count: noTierCount,
-      percentage: (noTierCount / athleteRankings.length) * 100,
+    // Sort by metric first, then by count descending
+    .sort((a, b) => {
+      if (a.metric !== b.metric) {
+        return a.metric.localeCompare(b.metric);
+      }
+      return b.count - a.count;
     });
-  }
 
   return achievements;
 }
