@@ -350,8 +350,16 @@ jobs:
           STAGING_USERNAME: admin
           STAGING_PASSWORD: TestPassword123!
           # E2E test role credentials (all map to same admin user in CI)
+          # Note: In CI we only create one admin account, so all roles use same credentials
+          # In staging/production environments, these should be separate users with actual roles
           E2E_SITE_ADMIN_USERNAME: admin
           E2E_SITE_ADMIN_PASSWORD: TestPassword123!
+          E2E_ORG_ADMIN_USERNAME: admin
+          E2E_ORG_ADMIN_PASSWORD: TestPassword123!
+          E2E_COACH_USERNAME: admin
+          E2E_COACH_PASSWORD: TestPassword123!
+          E2E_ATHLETE_USERNAME: admin
+          E2E_ATHLETE_PASSWORD: TestPassword123!
 
       - name: Upload Playwright report
         if: always()
