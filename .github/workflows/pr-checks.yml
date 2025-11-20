@@ -244,6 +244,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
+    needs: [type-check, tests, integration-tests]
 
     services:
       postgres:
@@ -290,6 +291,7 @@ jobs:
         run: npm run build
         env:
           NODE_ENV: production
+          NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Start server in background
         run: |
@@ -318,7 +320,7 @@ jobs:
           exit 1
 
       - name: Run E2E tests
-        run: npx playwright test --config=playwright.staging.config.ts
+        run: npx playwright test --config=playwright.staging.config.ts --project=chromium
         env:
           CI: true
           STAGING_URL: http://localhost:5000
