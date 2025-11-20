@@ -339,7 +339,7 @@ jobs:
         if: always()
         run: |
           if [ -f server.pid ]; then
-            kill $(cat server.pid) || true
+            kill "$(cat server.pid)" || true
           fi
 
       - name: Show server logs on failure

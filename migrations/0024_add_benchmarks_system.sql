@@ -347,11 +347,14 @@ BEGIN
   $trigger$ LANGUAGE plpgsql;
 
   -- Create triggers for cascading deletes from site_benchmarks
+  -- Drop first to ensure idempotency (PostgreSQL doesn't support CREATE TRIGGER IF NOT EXISTS)
+  DROP TRIGGER IF EXISTS cleanup_org_benchmarks_site ON organization_benchmarks;
   CREATE TRIGGER cleanup_org_benchmarks_site
   AFTER DELETE ON site_benchmarks
   FOR EACH ROW EXECUTE FUNCTION cleanup_org_benchmarks('site');
 
   -- Create triggers for cascading deletes from custom_benchmarks
+  DROP TRIGGER IF EXISTS cleanup_org_benchmarks_custom ON organization_benchmarks;
   CREATE TRIGGER cleanup_org_benchmarks_custom
   AFTER DELETE ON custom_benchmarks
   FOR EACH ROW EXECUTE FUNCTION cleanup_org_benchmarks('custom');
