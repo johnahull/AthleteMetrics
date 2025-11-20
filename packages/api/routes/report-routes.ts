@@ -1717,13 +1717,15 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
     const plainTextInsights = stripMarkdown(report.coachingInsights);
 
     // Split insights into lines and add with text wrapping
-    // Calculate max width based on page width with consistent margins (14mm on each side)
+    // Use same width as autoTable content area (page width minus left/right margins)
+    // AutoTable default margins are typically 14mm on each side
     const pageWidth = doc.internal.pageSize.getWidth();
-    const leftMargin = 14;
-    const rightMargin = 14;
-    const maxWidth = pageWidth - leftMargin - rightMargin; // Full content width matching tables
+    const margins = { left: 14, right: 14 };
+    const contentWidth = pageWidth - margins.left - margins.right;
     const lineHeight = 5;
-    const lines = doc.splitTextToSize(plainTextInsights, maxWidth);
+
+    doc.setFontSize(10);
+    const lines = doc.splitTextToSize(plainTextInsights, contentWidth);
 
     lines.forEach((line: string) => {
       // Check if we need a new page
@@ -1731,7 +1733,6 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
         doc.addPage();
         yPos = 20;
       }
-      doc.setFontSize(10);
       doc.text(line, 14, yPos);
       yPos += lineHeight;
     });
