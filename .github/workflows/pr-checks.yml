@@ -349,6 +349,9 @@ jobs:
           STAGING_URL: http://localhost:5000
           STAGING_USERNAME: admin
           STAGING_PASSWORD: TestPassword123!
+          # E2E test role credentials (all map to same admin user in CI)
+          E2E_SITE_ADMIN_USERNAME: admin
+          E2E_SITE_ADMIN_PASSWORD: TestPassword123!
 
       - name: Upload Playwright report
         if: always()
