@@ -308,7 +308,7 @@ jobs:
       - name: Wait for server to be ready
         run: |
           for i in {1..30}; do
-            if curl -f http://localhost:5000/api/health/liveness > /dev/null 2>&1; then
+            if curl -f --max-time 5 http://localhost:5000/api/health/liveness > /dev/null 2>&1; then
               echo "Server is ready!"
               exit 0
             fi
