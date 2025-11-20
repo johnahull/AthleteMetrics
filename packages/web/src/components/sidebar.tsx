@@ -19,11 +19,13 @@ import {
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
 import { OrganizationDisplay } from "./organization-display";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 
 
 // Navigation configurations for each role
-const NAVIGATION_CONFIGS = {
+// Function to generate navigation config with contextual labels
+const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   site_admin: {
     default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -35,8 +37,8 @@ const NAVIGATION_CONFIGS = {
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Teams", href: "/teams", icon: Users },
-      { name: "Athletes", href: "/athletes", icon: UsersRound },
+      { name: teamLabel, href: "/teams", icon: Users },
+      { name: athletesLabel, href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -47,8 +49,8 @@ const NAVIGATION_CONFIGS = {
   },
   org_admin: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Teams", href: "/teams", icon: Users },
-    { name: "Athletes", href: "/athletes", icon: UsersRound },
+    { name: teamLabel, href: "/teams", icon: Users },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -59,8 +61,8 @@ const NAVIGATION_CONFIGS = {
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Teams", href: "/teams", icon: Users },
-    { name: "Athletes", href: "/athletes", icon: UsersRound },
+    { name: teamLabel, href: "/teams", icon: Users },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -71,13 +73,16 @@ const NAVIGATION_CONFIGS = {
   athlete: [
     { name: "Analytics", href: "/analytics", icon: BarChart3 }
   ]
-};
+});
 
-const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string) => {
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes") => {
+  // Get navigation configs with contextual labels
+  const NAVIGATION_CONFIGS = getNavigationConfigs(teamLabel, athletesLabel);
+
   // Site admin navigation
   if (isSiteAdmin) {
-    const config = isInOrganizationContext 
-      ? NAVIGATION_CONFIGS.site_admin.organization_context 
+    const config = isInOrganizationContext
+      ? NAVIGATION_CONFIGS.site_admin.organization_context
       : NAVIGATION_CONFIGS.site_admin.default;
     
     // Add organization context link if needed
@@ -131,6 +136,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
 export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [location] = useLocation();
   const { user: userData, logout } = useAuth();
+  const labels = useContextualLabels(); // Get contextual labels
 
   // Don't render sidebar if no user data
   if (!userData) {
@@ -151,19 +157,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
   const isInOrganizationContext = !!organizationId;
 
-  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId);
-
-  // Get current organization data if in context
-  const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
-    enabled: !!organizationId,
-    queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationId}`);
-      if (!response.ok) return null;
-      return response.json();
-    }
-  });
-
+  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId, labels.teams, labels.athletes);
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">

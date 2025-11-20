@@ -31,12 +31,14 @@ import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/re
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { useAuth } from "@/lib/auth";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface TeamReportViewProps {
   report: Report;
 }
 
 export function TeamReportView({ report }: TeamReportViewProps) {
+  const labels = useContextualLabels();
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
@@ -47,7 +49,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
   // Determine if AI is enabled for this organization
   const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
-    queryKey: [`/api/organizations/${report.organizationId}`],
+    queryKey: ['organizations', report.organizationId, 'details'],
     enabled: !!report.organizationId,
   });
 
@@ -189,7 +191,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     const teamIds = config.filters?.teamIds;
 
     if (!teamIds || teamIds.length === 0) {
-      return 'All Teams';
+      return `All ${labels.teams}`;
     }
 
     if (!teams || teams.length === 0) {
@@ -200,7 +202,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       .map((id: string) => teams.find(t => t.id === id)?.name)
       .filter(Boolean);
 
-    return teamNames.length > 0 ? teamNames.join(', ') : 'All Teams';
+    return teamNames.length > 0 ? teamNames.join(', ') : `All ${labels.teams}`;
   };
 
   // Helper function: Get user-friendly metric names
@@ -355,7 +357,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <Users className="h-5 w-5 text-blue-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">Teams</p>
+                <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
                 <p className="text-base font-semibold mt-1 break-words">{getTeamNames()}</p>
               </div>
             </div>
@@ -377,9 +379,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <TrendingUp className="h-5 w-5 text-purple-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">Athletes Tested</p>
+                <p className="text-sm font-medium text-muted-foreground">{labels.athletes} Tested</p>
                 <p className="text-base font-semibold mt-1">
-                  {reportData.athleteCount} {reportData.athleteCount === 1 ? 'athlete' : 'athletes'}
+                  {reportData.athleteCount} {reportData.athleteCount === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()}
                 </p>
               </div>
             </div>
@@ -418,7 +420,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Test</TableHead>
-                  <TableHead>Team Average</TableHead>
+                  <TableHead>{labels.team} Average</TableHead>
                   {benchmarkColumns.map((benchmarkName) => (
                     <TableHead key={benchmarkName}>{benchmarkName}</TableHead>
                   ))}
@@ -493,7 +495,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             <CardHeader>
               <CardTitle>Benchmark Achievement Summary</CardTitle>
               <CardDescription>
-                Number of athletes meeting each benchmark (athletes may meet multiple benchmarks)
+                Number of {labels.athletes.toLowerCase()} meeting each benchmark ({labels.athletes.toLowerCase()} may meet multiple benchmarks)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -502,7 +504,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                   <div key={achievement.tier} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">
-                        {achievement.count} athlete{achievement.count !== 1 ? 's' : ''} met{' '}
+                        {achievement.count} {achievement.count === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()} met{' '}
                         <Badge variant={achievement.tier === 'No benchmark met' ? 'outline' : 'secondary'}>
                           {achievement.tier}
                         </Badge>
@@ -573,7 +575,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <CardHeader>
                   <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
                   <CardDescription>
-                    Team Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
+                    {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}
                   </CardDescription>
                 </CardHeader>

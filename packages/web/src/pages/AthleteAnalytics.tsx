@@ -12,9 +12,11 @@ import { useAuth } from '@/lib/auth';
 import { useAthleteTeams } from '@/hooks/useAthleteTeams';
 import { getAthleteUserId } from '@/lib/athlete-utils';
 import type { AnalyticsFilters } from '@shared/analytics-types';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 export function AthleteAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
+  const labels = useContextualLabels();
   const { user, organizationContext } = useAuth();
   const { teamIds, isLoading: teamsLoading, error: teamsError } = useAthleteTeams();
 
@@ -98,9 +100,9 @@ export function AthleteAnalytics() {
   if (teamsLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center" role="status" aria-label="Loading teams">
+        <div className="text-center" role="status" aria-label={`Loading ${labels.teams.toLowerCase()}...`}>
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" aria-hidden="true"></div>
-          <p className="text-muted-foreground">Loading your teams...</p>
+          <p className="text-muted-foreground">Loading your {labels.teams.toLowerCase()}...</p>
         </div>
       </div>
     );
@@ -111,7 +113,7 @@ export function AthleteAnalytics() {
     return (
       <div className="p-6">
         <div className="text-center">
-          <h2 className="text-xl font-semibold mb-2 text-destructive">Error Loading Teams</h2>
+          <h2 className="text-xl font-semibold mb-2 text-destructive">Error Loading {labels.teams}</h2>
           <p className="text-muted-foreground mb-4">{teamsError}</p>
           <Button onClick={() => window.location.reload()}>
             <RefreshCw className="h-4 w-4 mr-2" />

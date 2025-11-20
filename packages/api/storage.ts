@@ -12,7 +12,8 @@ import {
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
-  insertUserSchema
+  insertUserSchema,
+  type OrganizationType
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
@@ -46,7 +47,7 @@ export interface IStorage {
   getUserTeams(userId: string): Promise<(UserTeam & { team: Team & { organization: Organization } })[]>;
 
   // Organizations
-  getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]>;
+  getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
   getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
@@ -231,7 +232,7 @@ export interface IStorage {
   getAuditLogs(filters?: { userId?: string; action?: string; limit?: number }): Promise<AuditLog[]>;
 
   // Site Metrics (Master Metric Catalog)
-  getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]>;
+  getSiteMetrics(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteMetric[]>;
   getSiteMetric(code: string): Promise<SiteMetric | undefined>;
   createSiteMetric(metric: InsertSiteMetric, createdBy: string): Promise<SiteMetric>;
   updateSiteMetric(code: string, metric: Partial<UpdateSiteMetric>): Promise<SiteMetric>;
@@ -247,7 +248,7 @@ export interface IStorage {
   bulkEnableMetricsForOrganization(organizationId: string, metricCodes: string[]): Promise<OrganizationMetric[]>;
 
   // Site Benchmarks (Master Benchmark Catalog)
-  getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]>;
+  getSiteBenchmarks(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteBenchmark[]>;
   getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
   getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
   createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
@@ -698,15 +699,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Organizations
-  async getOrganizations(filters?: { includeInactive?: boolean }): Promise<Organization[]> {
-    const query = db.select().from(organizations);
+  async getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]> {
+    const conditions = [];
 
     // By default, exclude inactive organizations
     if (!filters?.includeInactive) {
-      return query.where(eq(organizations.isActive, true)).orderBy(asc(organizations.name));
+      conditions.push(eq(organizations.isActive, true));
     }
 
-    return query.orderBy(asc(organizations.name));
+    // Filter by organization type if provided
+    if (filters?.orgType !== undefined) {
+      if (filters.orgType === null) {
+        conditions.push(isNull(organizations.orgType));
+      } else {
+        conditions.push(eq(organizations.orgType, filters.orgType));
+      }
+    }
+
+    const results = await db
+      .select()
+      .from(organizations)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(asc(organizations.name));
+
+    return results;
   }
 
   async getOrganization(id: string): Promise<Organization | undefined> {
@@ -3183,11 +3199,22 @@ export class DatabaseStorage implements IStorage {
   // SITE METRICS (Master Metric Catalog)
   // ========================================================================
 
-  async getSiteMetrics(filters?: { includeInactive?: boolean }): Promise<SiteMetric[]> {
+  async getSiteMetrics(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteMetric[]> {
     const conditions = [];
 
     if (!filters?.includeInactive) {
       conditions.push(eq(siteMetrics.isActive, true));
+    }
+
+    // Filter by organization type if provided
+    // Metrics are available if availableOrgTypes is NULL (available to all) or contains the specified org type
+    if (filters?.orgType) {
+      conditions.push(
+        or(
+          isNull(siteMetrics.availableOrgTypes),
+          arrayContains(siteMetrics.availableOrgTypes, [filters.orgType])
+        )!
+      );
     }
 
     const results = await db
@@ -3496,11 +3523,22 @@ export class DatabaseStorage implements IStorage {
   // SITE BENCHMARKS (Master benchmark catalog)
   // ========================================================================
 
-  async getSiteBenchmarks(filters?: { includeInactive?: boolean }): Promise<SiteBenchmark[]> {
+  async getSiteBenchmarks(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteBenchmark[]> {
     const conditions = [];
 
     if (!filters?.includeInactive) {
       conditions.push(eq(siteBenchmarks.isActive, true));
+    }
+
+    // Filter by organization type if provided
+    // Benchmarks are applicable if applicableOrgTypes is NULL (applicable to all) or contains the specified org type
+    if (filters?.orgType) {
+      conditions.push(
+        or(
+          isNull(siteBenchmarks.applicableOrgTypes),
+          arrayContains(siteBenchmarks.applicableOrgTypes, [filters.orgType])
+        )!
+      );
     }
 
     const results = await db

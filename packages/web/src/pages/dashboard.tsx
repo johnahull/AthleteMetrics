@@ -16,9 +16,11 @@ import { KPICardWithTrend } from "@/components/kpi-card-with-trend";
 import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MeasurementsTimeline } from "@/components/measurements-timeline";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
+  const labels = useContextualLabels();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
   const [measurementModalOpen, setMeasurementModalOpen] = useState(false);
@@ -90,7 +92,7 @@ export default function Dashboard() {
 
   // Get organization name for context indicator
   const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${effectiveOrganizationId}`],
+    queryKey: ['organizations', effectiveOrganizationId, 'details'],
     enabled: !!effectiveOrganizationId && !!user,
     queryFn: async () => {
       const response = await fetch(`/api/organizations/${effectiveOrganizationId}`, {
@@ -288,7 +290,7 @@ export default function Dashboard() {
         />
 
         <KPICardWithTrend
-          title="Active Teams"
+          title={`Active ${labels.teams}`}
           value={stats.totalTeams || 0}
           icon={Users}
           trend={trendsData?.teams ? {
@@ -360,7 +362,7 @@ export default function Dashboard() {
         <Card className="bg-white">
           <CardContent className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">Team Distribution</h3>
+              <h3 className="text-lg font-semibold text-gray-900">{labels.team} Distribution</h3>
             </div>
             <div className="space-y-4">
               {Array.isArray(teamStats) && teamStats.map((team: any, index: number) => (
@@ -376,11 +378,11 @@ export default function Dashboard() {
                     }`}></div>
                     <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
                   </div>
-                  <span className="text-sm text-gray-600">{team.athleteCount} athletes</span>
+                  <span className="text-sm text-gray-600">{team.athleteCount} {team.athleteCount === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()}</span>
                 </div>
               ))}
               {(!teamStats || teamStats.length === 0) && (
-                <p className="text-sm text-gray-500 text-center py-4">No teams found</p>
+                <p className="text-sm text-gray-500 text-center py-4">No {labels.teams.toLowerCase()} found</p>
               )}
             </div>
           </CardContent>
@@ -430,7 +432,7 @@ export default function Dashboard() {
               <thead>
                 <tr className="text-left text-sm font-medium text-gray-500 border-b border-gray-200">
                   <th className="pb-3">Athlete</th>
-                  <th className="pb-3">Team</th>
+                  <th className="pb-3">{labels.team}</th>
                   <th className="pb-3">Metric</th>
                   <th className="pb-3">Value</th>
                   <th className="pb-3">Date</th>

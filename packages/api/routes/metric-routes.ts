@@ -7,6 +7,7 @@ import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
+import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
 import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema } from "@shared/schema";
 
 const metricService = new MetricService();
@@ -41,19 +42,60 @@ export function registerMetricRoutes(app: Express) {
   // SITE METRICS (Site Admin Only)
   // ========================================================================
 
-  // Get all site metrics
-  app.get("/api/metrics", requireAuth, async (req, res) => {
-    try {
-      const userId = req.session.user!.id;
-      const includeInactive = req.query.includeInactive === 'true';
+  // Get site metrics with organization type filtering (site admin)
+  app.get("/api/site-metrics",
+    requireSiteAdmin,
+    validateOrgTypeQuery('orgType', false), // Validate orgType query param if provided
+    async (req, res) => {
+      try {
+        const userId = req.session.user!.id;
+        const includeInactive = req.query.includeInactive === 'true';
+        const orgType = (req as any).organizationType as string | undefined; // Get validated org type from middleware
 
-      const metrics = await metricService.getSiteMetrics(userId, { includeInactive });
-      res.json(metrics);
-    } catch (error) {
-      console.error("GET /api/metrics error:", error);
-      res.status(500).json({ message: sanitizeError(error, "Failed to fetch metrics") });
+        const metrics = await metricService.getSiteMetrics(userId, { includeInactive, orgType });
+        res.json(metrics);
+      } catch (error) {
+        console.error("GET /api/site-metrics error:", error);
+        res.status(500).json({ message: sanitizeError(error, "Failed to fetch site metrics") });
+      }
     }
-  });
+  );
+
+  // Get all site metrics
+  app.get("/api/metrics",
+    requireAuth,
+    validateOrgTypeQuery('orgType', false), // Validate orgType query param if provided
+    async (req, res) => {
+      try {
+        const userId = req.session.user!.id;
+        const includeInactive = req.query.includeInactive === 'true';
+        const orgType = (req as any).organizationType as string | undefined; // Get validated org type from middleware
+        const organizationId = req.headers['x-organization-id'] as string;
+
+        // If organization ID is provided, filter by that organization's type
+        if (organizationId) {
+          const metrics = await metricService.getSiteMetricsForOrganization(
+            organizationId,
+            userId,
+            { includeInactive }
+          );
+          return res.json(metrics);
+        }
+
+        // If no organization context and user requested org-filtered metrics, require it
+        if (!organizationId && req.path === '/api/metrics' && !orgType) {
+          // For regular /api/metrics without orgType, require organization context
+          return res.status(400).json({ message: "Organization context required" });
+        }
+
+        const metrics = await metricService.getSiteMetrics(userId, { includeInactive, orgType });
+        res.json(metrics);
+      } catch (error) {
+        console.error("GET /api/metrics error:", error);
+        res.status(500).json({ message: sanitizeError(error, "Failed to fetch metrics") });
+      }
+    }
+  );
 
   // Get specific site metric
   app.get("/api/metrics/:code", requireAuth, async (req, res) => {

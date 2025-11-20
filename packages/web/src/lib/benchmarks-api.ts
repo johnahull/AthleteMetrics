@@ -28,7 +28,7 @@ export async function fetchSiteBenchmarks(includeInactive = false): Promise<Site
     params.append('includeInactive', 'true');
   }
 
-  const response = await fetch(`/api/benchmarks?${params.toString()}`);
+  const response = await fetch(`/api/site-benchmarks?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site benchmarks');
   }

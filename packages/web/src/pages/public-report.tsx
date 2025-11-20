@@ -13,8 +13,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Lock } from "lucide-react";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function PublicReport() {
+  const labels = useContextualLabels();
   const [, params] = useRoute("/public/reports/:token");
   const token = params?.token || "";
 
@@ -79,7 +81,7 @@ export default function PublicReport() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Test</TableHead>
-                        <TableHead>Team Average</TableHead>
+                        <TableHead>{labels.team} Average</TableHead>
                         <TableHead>Benchmarks</TableHead>
                         <TableHead>Top Performer</TableHead>
                         <TableHead>Range</TableHead>
@@ -148,7 +150,7 @@ export default function PublicReport() {
                           <TableRow>
                             <TableHead className="w-16">Rank</TableHead>
                             <TableHead>Athlete</TableHead>
-                            <TableHead>Team</TableHead>
+                            <TableHead>{labels.team}</TableHead>
                             <TableHead>Score</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -188,7 +190,7 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead className="w-16">Rank</TableHead>
                         <TableHead>Athlete</TableHead>
-                        <TableHead>Team</TableHead>
+                        <TableHead>{labels.team}</TableHead>
                         <TableHead>Composite Score</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -255,7 +257,7 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead>Metric</TableHead>
                         <TableHead>Best Result</TableHead>
-                        <TableHead>Team Rank</TableHead>
+                        <TableHead>{labels.team} Rank</TableHead>
                         <TableHead>Percentile</TableHead>
                         <TableHead>Benchmarks</TableHead>
                       </TableRow>

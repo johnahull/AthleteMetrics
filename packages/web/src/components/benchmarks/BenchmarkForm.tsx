@@ -42,6 +42,7 @@ import {
   type SiteBenchmark,
 } from "@shared/schema";
 import { z } from "zod";
+import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
 
 interface BenchmarkFormProps {
   open: boolean;
@@ -54,11 +55,11 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   const queryClient = useQueryClient();
   const isEditing = !!benchmark;
 
-  // Fetch available metrics
+  // Fetch available metrics (site admin context)
   const { data: metrics = [] } = useQuery({
-    queryKey: ["/api/metrics"],
+    queryKey: ["/api/site-metrics"],
     queryFn: async () => {
-      const response = await fetch("/api/metrics?includeInactive=false");
+      const response = await fetch("/api/site-metrics?includeInactive=false");
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
     },
@@ -81,6 +82,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
       ageMax: undefined,
       position: undefined,
       level: undefined,
+      applicableOrgTypes: undefined,
       isActive: true,
       displayOrder: undefined,
       color: undefined,
@@ -101,6 +103,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         ageMax: benchmark.ageMax || undefined,
         position: benchmark.position || undefined,
         level: benchmark.level || undefined,
+        applicableOrgTypes: benchmark.applicableOrgTypes || undefined,
         isActive: benchmark.isActive,
         displayOrder: benchmark.displayOrder || undefined,
         color: benchmark.color || undefined,
@@ -118,6 +121,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         ageMax: undefined,
         position: undefined,
         level: undefined,
+        applicableOrgTypes: undefined,
         isActive: true,
         displayOrder: undefined,
         color: undefined,
@@ -401,6 +405,29 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                           />
                         </FormControl>
                         <FormDescription>Skill or competitive level</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Organization Types */}
+                  <FormField
+                    control={form.control}
+                    name="applicableOrgTypes"
+                    render={({ field }) => (
+                      <FormItem className="mt-4">
+                        <FormLabel>Applicable to Organization Types</FormLabel>
+                        <FormControl>
+                          <OrganizationTypeMultiSelect
+                            value={field.value}
+                            onChange={field.onChange}
+                            placeholder="All organizations (default)"
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Leave empty to apply this benchmark to all organization types.
+                          Select specific types to restrict applicability.
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

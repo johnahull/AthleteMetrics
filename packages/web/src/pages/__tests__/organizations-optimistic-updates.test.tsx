@@ -173,9 +173,9 @@ describe('Organizations - Optimistic Updates and Filtering', () => {
       const inactiveOption = await screen.findByText('Inactive Organizations');
       fireEvent.click(inactiveOption);
 
-      // Should show "no inactive organizations" message
+      // Should show "no organizations found" message
       await waitFor(() => {
-        expect(screen.getByText('No inactive organizations found')).toBeInTheDocument();
+        expect(screen.getByText(/No organizations found matching the current filters/i)).toBeInTheDocument();
       });
     });
   });

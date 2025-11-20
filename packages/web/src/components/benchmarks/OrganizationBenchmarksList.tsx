@@ -115,7 +115,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
       </div>
 
       {/* Filters */}
-      <BenchmarkFilters filters={filters} onFiltersChange={setFilters} />
+      <BenchmarkFilters organizationId={organizationId} filters={filters} onFiltersChange={setFilters} />
 
       {/* Search */}
       <Card className="mb-6">

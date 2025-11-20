@@ -16,7 +16,7 @@ export function OrganizationDisplay({ organizationId, userOrganizations, isSiteA
 
   // Get organization data if ID provided
   const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
+    queryKey: ['organizations', organizationId, 'details'],
     enabled: !!organizationId,
     queryFn: async () => {
       const response = await fetch(`/api/organizations/${organizationId}`);

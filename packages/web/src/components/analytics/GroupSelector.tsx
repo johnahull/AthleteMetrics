@@ -17,6 +17,7 @@ import { X, Users, Calendar, Settings, Loader2 } from 'lucide-react';
 import type { GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getGroupColor as getChartGroupColor, sanitizeColor, DEFAULT_GROUP_COLOR } from '@/utils/chart-colors';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 /**
  * Sanitize group name to prevent XSS and ensure valid input
@@ -68,6 +69,7 @@ export function GroupSelector({
   className,
   isLoading = false
 }: GroupSelectorProps) {
+  const labels = useContextualLabels();
   const [activeTab, setActiveTab] = useState<'teams' | 'age' | 'custom'>('teams');
 
   // Parse athlete teams once and memoize for performance
@@ -281,9 +283,9 @@ export function GroupSelector({
         <CardContent className={isLoading ? 'opacity-50 pointer-events-none' : ''}>
           <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'teams' | 'age' | 'custom')}>
             <TabsList className="grid w-full grid-cols-3" role="tablist" aria-label="Group selection methods">
-              <TabsTrigger value="teams" aria-label="Create groups by teams">
+              <TabsTrigger value="teams" aria-label={`Create groups by ${labels.teams.toLowerCase()}`}>
                 <Users className="h-4 w-4 mr-2" aria-hidden="true" />
-                Teams
+                {labels.teams}
               </TabsTrigger>
               <TabsTrigger value="age" aria-label="Create groups by age ranges">
                 <Calendar className="h-4 w-4 mr-2" aria-hidden="true" />
@@ -302,7 +304,7 @@ export function GroupSelector({
               <div className="space-y-2 max-h-48 overflow-y-auto">
                 {uniqueTeams.length === 0 ? (
                   <Alert>
-                    <AlertDescription>No teams found in the selected organization.</AlertDescription>
+                    <AlertDescription>No {labels.teams.toLowerCase()} found in the selected organization.</AlertDescription>
                   </Alert>
                 ) : (
                   uniqueTeams.map((team) => {

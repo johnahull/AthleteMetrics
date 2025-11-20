@@ -63,7 +63,8 @@ const LINT_RULES = [
   {
     id: 'add-column-no-if-not-exists',
     severity: 'error',
-    pattern: /ALTER\s+TABLE\s+(\w+)\s+ADD\s+(?:COLUMN\s+)?(?!IF\s+NOT\s+EXISTS\b)(\w+)\s+(?!CONSTRAINT\b)/gim,
+    // Match ADD COLUMN without IF NOT EXISTS - improved regex to properly handle optional COLUMN keyword
+    pattern: /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)(\w+)/gim,
     message: 'ADD COLUMN without IF NOT EXISTS',
     suggestion: (match) => `ALTER TABLE ${match[1]} ADD COLUMN IF NOT EXISTS ${match[2]}`
   },
