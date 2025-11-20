@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { existsSync } from 'fs';
 
 /**
  * Playwright Configuration for Staging Environment Testing
@@ -72,7 +73,11 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         // Reuse authentication state to avoid rate limiting
-        storageState: './playwright/.auth/user.json',
+        // Only use storageState if it exists (created by global-setup.ts)
+        // This prevents errors on first CI run before global-setup completes
+        ...(existsSync('./playwright/.auth/user.json') && {
+          storageState: './playwright/.auth/user.json',
+        }),
       },
     },
 
