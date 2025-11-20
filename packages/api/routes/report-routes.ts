@@ -1614,6 +1614,8 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
         theme: isVisual ? "striped" : "grid",
         headStyles: { fillColor: colors.primary },
       });
+
+      yPos = (doc as any).lastAutoTable.finalY + 15;
     }
   } else {
     // INDIVIDUAL REPORT
