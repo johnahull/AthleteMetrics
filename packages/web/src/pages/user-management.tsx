@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, STALE_TIME } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { UserPlus, Trash2, Link as LinkIcon, User, CheckCircle, XCircle, Clock, UserCheck, Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
@@ -123,7 +123,7 @@ export default function UserManagement() {
 
   const { data: organizations } = useQuery<Organization[]>({
     queryKey: ["/api/organizations-with-users"],
-    staleTime: 0,
+    staleTime: STALE_TIME.REALTIME, // 1 minute - user management needs frequent updates
     refetchOnMount: true,
     refetchOnWindowFocus: true,
   });

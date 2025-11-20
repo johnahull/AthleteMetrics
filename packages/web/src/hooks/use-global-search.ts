@@ -4,7 +4,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-import { apiRequest } from '@/lib/queryClient';
+import { apiRequest, STALE_TIME } from '@/lib/queryClient';
 import { useDebounce } from './useDebounce';
 
 export interface GlobalSearchResult {
@@ -85,7 +85,7 @@ export function useGlobalSearch(options: UseGlobalSearchOptions) {
     // Only search if query has at least 2 characters (matches backend validation)
     enabled: debouncedQuery.length >= 2,
     // Cache results for 5 minutes
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
     // Don't retry on failure (search should be fast)
     retry: false,
   });
