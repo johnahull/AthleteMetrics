@@ -150,8 +150,11 @@ export default function AdminMeasurementsPage() {
   const buildQueryParams = (filters: FilterFormData) => {
     const params = new URLSearchParams();
 
+    // Client-side filters that should NOT be sent to API
+    const clientSideFilters = ['verificationStatus', 'athleteName'];
+
     Object.entries(filters).forEach(([key, value]) => {
-      if (value && value !== "" && key !== "verificationStatus") {
+      if (value && value !== "" && !clientSideFilters.includes(key)) {
         params.append(key, value);
       }
     });
