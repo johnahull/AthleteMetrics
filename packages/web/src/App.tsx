@@ -52,6 +52,8 @@ const Welcome = React.lazy(() => import("./pages/welcome"));
 // Lazy load wellness pages
 const WellnessTemplates = React.lazy(() => import("./pages/wellness-templates"));
 const WellnessSubmit = React.lazy(() => import("./pages/wellness-submit"));
+const WellnessMyRequests = React.lazy(() => import("./pages/wellness-my-requests"));
+const WellnessHistory = React.lazy(() => import("./pages/wellness-history"));
 
 // Lazy load benchmark pages
 const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
@@ -193,6 +195,16 @@ function Router() {
       <Route path="/wellness">
         <RouteWrapper loadingText="Loading Wellness...">
           <WellnessTemplates />
+        </RouteWrapper>
+      </Route>
+      <Route path="/wellness/my-requests">
+        <RouteWrapper loadingText="Loading Requests...">
+          <WellnessMyRequests />
+        </RouteWrapper>
+      </Route>
+      <Route path="/wellness/history">
+        <RouteWrapper loadingText="Loading History...">
+          <WellnessHistory />
         </RouteWrapper>
       </Route>
       <Route path="/profile">

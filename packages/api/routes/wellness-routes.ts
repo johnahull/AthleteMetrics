@@ -25,6 +25,7 @@ import {
   submitWellnessResponseSchema,
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
+import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
 import { z } from "zod";
 import crypto from "crypto";
 import { emailService } from "../services/email-service";
@@ -618,6 +619,98 @@ export function registerWellnessRoutes(app: Express) {
         console.error("Failed to fetch wellness response:", error);
         res.status(500).json({
           message: "Failed to fetch wellness response",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  // =============================================================================
+  // ATHLETE-SPECIFIC ENDPOINTS
+  // =============================================================================
+
+  /**
+   * GET /api/wellness/my-requests
+   * Get pending wellness requests for authenticated athlete
+   * Access: Authenticated user (athlete)
+   */
+  app.get(
+    "/api/wellness/my-requests",
+    highVolumeLimiter,
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+
+        // Get all wellness requests targeted at this user
+        // This includes requests with targetAthleteIds containing this user
+        // and requests with targetTeamIds where the user is a team member
+        const userTeams = await storage.getUserTeams(userId);
+        const teamIds = userTeams.map(ut => ut.teamId);
+
+        // Get user's organizations to scope requests
+        const userOrgs = await storage.getUserOrganizations(userId);
+        const orgIds = userOrgs.map(uo => uo.organizationId);
+
+        // Get all active requests for user's organizations
+        const allRequests: any[] = [];
+        for (const orgId of orgIds) {
+          const orgRequests = await storage.getWellnessRequests(orgId, { status: 'active' });
+          allRequests.push(...orgRequests);
+        }
+
+        // Filter requests targeted at this user
+        const myRequests = allRequests.filter(request => {
+          // Check if user is directly targeted
+          if (request.targetAthleteIds && request.targetAthleteIds.includes(userId)) {
+            return true;
+          }
+
+          // Check if any of user's teams are targeted
+          if (request.targetTeamIds && request.targetTeamIds.some((teamId: string) => teamIds.includes(teamId))) {
+            return true;
+          }
+
+          return false;
+        });
+
+        res.json(myRequests);
+      } catch (error: any) {
+        console.error("Failed to fetch athlete wellness requests:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness requests",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/wellness/my-responses
+   * Get submission history for authenticated athlete
+   * Access: Authenticated user (athlete)
+   */
+  app.get(
+    "/api/wellness/my-responses",
+    highVolumeLimiter,
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+
+        // Get all responses by this user
+        const allResponses = await storage.getWellnessResponsesByAthlete(userId);
+
+        // Sort by submission date (most recent first)
+        allResponses.sort((a, b) =>
+          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+
+        res.json(allResponses);
+      } catch (error: any) {
+        console.error("Failed to fetch athlete wellness responses:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness responses",
           error: error.message,
         });
       }
