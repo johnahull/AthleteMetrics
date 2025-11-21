@@ -169,6 +169,34 @@ export function registerWellnessRoutes(app: Express) {
   );
 
   /**
+   * GET /api/wellness/templates/:id
+   * Get wellness template by ID (for public wellness submissions)
+   * Access: Public (no authentication required)
+   */
+  app.get(
+    "/api/wellness/templates/:id",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const template = await storage.getWellnessTemplate(id);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        res.json(template);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness template:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness template",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
    * PUT /api/organizations/:organizationId/wellness/templates/:id
    * Update a wellness template
    * Access: Coach, Org Admin
@@ -384,6 +412,39 @@ export function registerWellnessRoutes(app: Express) {
         res.json(request);
       } catch (error: any) {
         console.error("Failed to fetch wellness request:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness request",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/wellness/requests/by-token/:token
+   * Get wellness request by public token (for magic links)
+   * Access: Public (no authentication required)
+   */
+  app.get(
+    "/api/wellness/requests/by-token/:token",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        const request = await storage.getWellnessRequestByToken(token);
+        if (!request) {
+          return res.status(404).json({ message: "Wellness request not found" });
+        }
+
+        // Check if expired
+        if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+          return res.status(410).json({ message: "This wellness request has expired" });
+        }
+
+        res.json(request);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness request by token:", error);
         res.status(500).json({
           message: "Failed to fetch wellness request",
           error: error.message,

@@ -51,6 +51,7 @@ const Welcome = React.lazy(() => import("./pages/welcome"));
 
 // Lazy load wellness pages
 const WellnessTemplates = React.lazy(() => import("./pages/wellness-templates"));
+const WellnessSubmit = React.lazy(() => import("./pages/wellness-submit"));
 
 // Lazy load benchmark pages
 const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
@@ -78,6 +79,7 @@ function Router() {
       <Route path="/reset-password" component={ResetPassword} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/public/reports/:token" component={PublicReport} />
+      <Route path="/wellness/submit/:token" component={WellnessSubmit} />
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
