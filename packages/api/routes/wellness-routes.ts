@@ -31,6 +31,15 @@ import { emailService } from "../services/email-service";
 import { WellnessAccessService } from "../auth/wellness-access";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
+// Helper function to check if rate limiting should be bypassed
+const shouldBypassRateLimit = (): boolean => {
+  // Bypass rate limiting in non-production environments by default
+  if (process.env.NODE_ENV !== 'production') {
+    return true;
+  }
+  return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+};
+
 // Rate limiting configurations
 const batchLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -38,6 +47,7 @@ const batchLimiter = rateLimit({
   message: { message: "Too many requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: () => shouldBypassRateLimit(),
 });
 
 const highVolumeLimiter = rateLimit({
@@ -46,6 +56,7 @@ const highVolumeLimiter = rateLimit({
   message: { message: "Too many requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
+  skip: () => shouldBypassRateLimit(),
 });
 
 /**

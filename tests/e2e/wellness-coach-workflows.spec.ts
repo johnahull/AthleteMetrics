@@ -54,6 +54,7 @@ test.describe('Wellness Coach Interface Tests', () => {
   let createdTemplateIds: string[] = [];
   let createdRequestIds: string[] = [];
   let testOrgId: string;
+  let testOrgName: string;
 
   test.beforeAll(async ({ browser }) => {
     // Get organization ID once for all tests (from config file)
@@ -64,6 +65,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     if (fs.existsSync(configPath)) {
       const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
       testOrgId = config.organizationId;
+      testOrgName = config.organizationName;
     } else {
       throw new Error('Local E2E config not found. Run: node setup-local-e2e.mjs');
     }
@@ -142,7 +144,9 @@ test.describe('Wellness Coach Interface Tests', () => {
 
       // Add scale question
       await page.click('[data-testid="button-add-question"]');
-      await page.selectOption('[data-testid="select-question-type"]', 'scale');
+      // shadcn/ui Select: click trigger, then click option (use nth to get dropdown item, not trigger)
+      await page.click('[data-testid="select-question-type"]');
+      await page.locator('text=Scale (1-10)').nth(1).click({ force: true });
       await page.fill('[data-testid="input-question-label"]', testTemplate.questions[0].label);
       await page.fill('[data-testid="input-scale-min"]', '1');
       await page.fill('[data-testid="input-scale-max"]', '10');
@@ -153,7 +157,9 @@ test.describe('Wellness Coach Interface Tests', () => {
 
       // Add text question
       await page.click('[data-testid="button-add-question"]');
-      await page.selectOption('[data-testid="select-question-type"]', 'text');
+      // shadcn/ui Select: click trigger, then click option
+      await page.click('[data-testid="select-question-type"]');
+      await page.locator('text=Text Response').first().click({ force: true });
       await page.fill('[data-testid="input-question-label"]', testTemplate.questions[1].label);
       if ('placeholder' in testTemplate.questions[1]) {
         await page.fill('[data-testid="input-text-placeholder"]', testTemplate.questions[1].placeholder || '');
@@ -162,7 +168,9 @@ test.describe('Wellness Coach Interface Tests', () => {
 
       // Add boolean question
       await page.click('[data-testid="button-add-question"]');
-      await page.selectOption('[data-testid="select-question-type"]', 'boolean');
+      // shadcn/ui Select: click trigger, then click option
+      await page.click('[data-testid="select-question-type"]');
+      await page.locator('text=Yes/No').first().click({ force: true });
       await page.fill('[data-testid="input-question-label"]', testTemplate.questions[2].label);
       await page.check('[data-testid="checkbox-question-required"]');
       await page.click('[data-testid="button-save-question"]');
