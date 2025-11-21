@@ -160,6 +160,8 @@ export class MeasurementService {
         measurement.metric === 'AGILITY_505' ||
         measurement.metric === 'AGILITY_5105'
           ? 's'
+          : measurement.metric === 'TOP_SPEED'
+          ? 'mph'
           : measurement.metric === 'RSI'
           ? 'ratio'
           : 'in';
@@ -478,7 +480,7 @@ export class MeasurementService {
           updateData.metric = measurement.metric;
 
           // CRITICAL: Recalculate units when metric changes
-          // Different metrics use different units (seconds, inches, ratio)
+          // Different metrics use different units (seconds, inches, ratio, mph)
           const newUnits =
             measurement.metric === 'FLY10_TIME' ||
             measurement.metric === 'T_TEST' ||
@@ -486,6 +488,8 @@ export class MeasurementService {
             measurement.metric === 'AGILITY_505' ||
             measurement.metric === 'AGILITY_5105'
               ? 's'
+              : measurement.metric === 'TOP_SPEED'
+              ? 'mph'
               : measurement.metric === 'RSI'
               ? 'ratio'
               : 'in';

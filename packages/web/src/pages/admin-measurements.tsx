@@ -286,8 +286,8 @@ export default function AdminMeasurementsPage() {
         }
 
         const errorSummary = data.errors?.length > 1
-          ? `First error: ${data.errors[0]}. See console for all ${data.errors.length} errors.`
-          : data.errors?.[0] || 'Unknown error';
+          ? `First error: ${data.errors[0]?.message || data.errors[0]}. See console for all ${data.errors.length} errors.`
+          : data.errors?.[0]?.message || data.errors?.[0] || 'Unknown error';
 
         toast({
           title: "Partial Success",
@@ -334,8 +334,8 @@ export default function AdminMeasurementsPage() {
         }
 
         const errorSummary = data.errors?.length > 1
-          ? `First error: ${data.errors[0]}. See console for all ${data.errors.length} errors.`
-          : data.errors?.[0] || 'Unknown error';
+          ? `First error: ${data.errors[0]?.message || data.errors[0]}. See console for all ${data.errors.length} errors.`
+          : data.errors?.[0]?.message || data.errors?.[0] || 'Unknown error';
 
         toast({
           title: "Partial Success",
