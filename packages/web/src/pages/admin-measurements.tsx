@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -117,6 +119,8 @@ export default function AdminMeasurementsPage() {
   const [selectedMeasurements, setSelectedMeasurements] = useState<string[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Redirect non-site admins
   useEffect(() => {
@@ -178,6 +182,60 @@ export default function AdminMeasurementsPage() {
   } = useQuery<Measurement[]>({
     queryKey: [queryUrl],
     enabled: user?.isSiteAdmin === true,
+  });
+
+  // Bulk verify mutation
+  const bulkVerifyMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/measurements/bulk-verify", { measurementIds: ids });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to verify measurements");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [queryUrl] });
+      clearSelection();
+      toast({
+        title: "Success",
+        description: `${data.verified} measurement(s) verified successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error verifying measurements",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Bulk unverify mutation
+  const bulkUnverifyMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await apiRequest("POST", "/api/measurements/bulk-unverify", { measurementIds: ids });
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to unverify measurements");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [queryUrl] });
+      clearSelection();
+      toast({
+        title: "Success",
+        description: `${data.unverified} measurement(s) unverified successfully`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error unverifying measurements",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   // Client-side filter for "unverified only" option and athlete name search
@@ -667,13 +725,23 @@ export default function AdminMeasurementsPage() {
                     <X className="h-4 w-4 mr-1" />
                     Clear
                   </Button>
-                  <Button size="sm" variant="outline">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => bulkVerifyMutation.mutate(selectedMeasurements)}
+                    disabled={bulkVerifyMutation.isPending}
+                  >
                     <CheckSquare className="h-4 w-4 mr-1" />
-                    Verify Selected
+                    {bulkVerifyMutation.isPending ? "Verifying..." : "Verify Selected"}
                   </Button>
-                  <Button size="sm" variant="outline">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => bulkUnverifyMutation.mutate(selectedMeasurements)}
+                    disabled={bulkUnverifyMutation.isPending}
+                  >
                     <XSquare className="h-4 w-4 mr-1" />
-                    Unverify Selected
+                    {bulkUnverifyMutation.isPending ? "Unverifying..." : "Unverify Selected"}
                   </Button>
                 </div>
               )}

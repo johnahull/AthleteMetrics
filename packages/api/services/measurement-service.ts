@@ -654,6 +654,102 @@ export class MeasurementService {
   }
 
   /**
+   * Bulk verify measurements
+   * IMPORTANT: Each measurement verified in transaction for atomicity
+   * Processes each measurement independently to allow partial success
+   *
+   * @param measurementIds Array of measurement IDs to verify
+   * @param verifiedByUserId User ID of verifier
+   * @param expectedOrganizationId Optional organization ID for IDOR protection (site admins pass undefined)
+   * @returns Result with success count and errors
+   */
+  async bulkVerify(
+    measurementIds: string[],
+    verifiedByUserId: string,
+    expectedOrganizationId?: string
+  ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+    const errors: Array<{ id: string; message: string }> = [];
+    let success = 0;
+
+    // Process each measurement independently
+    for (const id of measurementIds) {
+      try {
+        await this.verifyMeasurement(id, verifiedByUserId, expectedOrganizationId);
+        success++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({ id, message });
+      }
+    }
+
+    return {
+      success,
+      failed: errors.length,
+      errors,
+    };
+  }
+
+  /**
+   * Bulk unverify measurements
+   * IMPORTANT: Each measurement unverified in transaction for atomicity
+   * Processes each measurement independently to allow partial success
+   *
+   * @param measurementIds Array of measurement IDs to unverify
+   * @param expectedOrganizationId Optional organization ID for IDOR protection (site admins pass undefined)
+   * @returns Result with success count and errors
+   */
+  async bulkUnverify(
+    measurementIds: string[],
+    expectedOrganizationId?: string
+  ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+    const errors: Array<{ id: string; message: string }> = [];
+    let success = 0;
+
+    // Process each measurement independently
+    for (const id of measurementIds) {
+      try {
+        await db.transaction(async (tx) => {
+          // Lock the row with FOR UPDATE to prevent concurrent modifications
+          const [existing] = await tx
+            .select()
+            .from(measurements)
+            .where(eq(measurements.id, id))
+            .for('update');
+
+          if (!existing) {
+            throw new Error('Measurement not found');
+          }
+
+          // Defense-in-depth: Verify organization ownership at service layer
+          if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
+            throw new Error('Access denied - measurement belongs to different organization');
+          }
+
+          // Update verification status
+          await tx
+            .update(measurements)
+            .set({
+              isVerified: false,
+              verifiedBy: null,
+            })
+            .where(eq(measurements.id, id));
+        });
+
+        success++;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        errors.push({ id, message });
+      }
+    }
+
+    return {
+      success,
+      failed: errors.length,
+      errors,
+    };
+  }
+
+  /**
    * Get measurements with filters and pagination
    * @param filters Measurement filters including pagination options
    * @param allowCrossOrganization Whether to allow queries without organizationId (site admin only)

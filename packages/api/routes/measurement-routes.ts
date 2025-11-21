@@ -509,4 +509,101 @@ export function registerMeasurementRoutes(app: Express) {
       res.status(statusCode).json({ message });
     }
   });
+
+  /**
+   * Bulk verify measurements (site admins only)
+   */
+  app.post("/api/measurements/bulk-verify", measurementBatchLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate request body
+      const bodySchema = z.object({
+        measurementIds: z.array(z.string().uuid()).min(1).max(100)
+      });
+
+      const validatedBody = bodySchema.parse(req.body);
+      const { measurementIds } = validatedBody;
+
+      // Call bulk verify service method
+      // Site admins can verify across organizations, so pass undefined for expectedOrganizationId
+      const result = await measurementService.bulkVerify(
+        measurementIds,
+        user.id,
+        undefined // Site admins bypass org restriction
+      );
+
+      // Return appropriate status code
+      const statusCode = result.failed === 0 ? 200 : 207; // 207 Multi-Status for partial success
+
+      res.status(statusCode).json({
+        verified: result.success,
+        failed: result.failed,
+        errors: result.errors,
+        message: result.failed === 0
+          ? `All ${result.success} measurement(s) verified successfully`
+          : result.success === 0
+          ? `All measurements failed verification`
+          : `${result.success} measurement(s) verified, ${result.failed} failed`
+      });
+    } catch (error) {
+      console.error("Bulk verify measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to bulk verify measurements";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Bulk unverify measurements (site admins only)
+   */
+  app.post("/api/measurements/bulk-unverify", measurementBatchLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate request body
+      const bodySchema = z.object({
+        measurementIds: z.array(z.string().uuid()).min(1).max(100)
+      });
+
+      const validatedBody = bodySchema.parse(req.body);
+      const { measurementIds } = validatedBody;
+
+      // Call bulk unverify service method
+      // Site admins can unverify across organizations, so pass undefined for expectedOrganizationId
+      const result = await measurementService.bulkUnverify(
+        measurementIds,
+        undefined // Site admins bypass org restriction
+      );
+
+      // Return appropriate status code
+      const statusCode = result.failed === 0 ? 200 : 207; // 207 Multi-Status for partial success
+
+      res.status(statusCode).json({
+        unverified: result.success,
+        failed: result.failed,
+        errors: result.errors,
+        message: result.failed === 0
+          ? `All ${result.success} measurement(s) unverified successfully`
+          : result.success === 0
+          ? `All measurements failed unverification`
+          : `${result.success} measurement(s) unverified, ${result.failed} failed`
+      });
+    } catch (error) {
+      console.error("Bulk unverify measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to bulk unverify measurements";
+      res.status(400).json({ message });
+    }
+  });
 }
