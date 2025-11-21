@@ -18,10 +18,10 @@ export default function WellnessHistory() {
 
   // Fetch submission history for this athlete
   const {
-    data: responses,
+    data: historyData,
     isLoading,
     error,
-  } = useQuery<WellnessResponse[]>({
+  } = useQuery<{ responses: WellnessResponse[]; pagination: { page: number; limit: number; total: number; totalPages: number; hasMore: boolean } }>({
     queryKey: ['wellness-history', user?.id],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/wellness/my-responses`);
@@ -32,6 +32,8 @@ export default function WellnessHistory() {
     },
     enabled: !!user,
   });
+
+  const responses = historyData?.responses;
 
   const formatDate = (dateString: string | Date) => {
     const date = typeof dateString === 'string' ? new Date(dateString) : dateString;

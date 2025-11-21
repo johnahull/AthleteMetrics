@@ -12,6 +12,45 @@
 import { z } from 'zod';
 
 /**
+ * Input Sanitization Helper
+ *
+ * Removes HTML tags and dangerous characters to prevent XSS attacks.
+ * This is a basic sanitization suitable for JSONB text fields.
+ *
+ * Note: For rich text content, use a proper HTML sanitizer like DOMPurify
+ * or sanitize-html instead of this basic implementation.
+ */
+function sanitizeString(input: string): string {
+  return input
+    // Remove HTML tags
+    .replace(/<[^>]*>/g, '')
+    // Remove script and style content (case-insensitive)
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    // Remove event handlers (onclick, onerror, etc.)
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/on\w+\s*=\s*[^\s>]*/gi, '')
+    // Remove javascript: URLs
+    .replace(/javascript:/gi, '')
+    // Trim whitespace
+    .trim();
+}
+
+/**
+ * Create a sanitized string schema with length validation
+ */
+function sanitizedString(maxLength?: number) {
+  let schema = z.string().transform(sanitizeString);
+  if (maxLength) {
+    schema = schema.refine(
+      (val) => val.length <= maxLength,
+      { message: `Text must be ${maxLength} characters or less` }
+    ) as any;
+  }
+  return schema;
+}
+
+/**
  * Question Type Schemas
  */
 
@@ -194,12 +233,12 @@ export const updateWellnessRequestSchema = z.object({
 // Response value based on question type
 export const responseValueSchema = z.union([
   z.number(), // Scale
-  z.string().max(5000), // Text
+  sanitizedString(5000), // Text - sanitized to prevent XSS
   z.boolean(), // Boolean
   z.array(z.object({ // Body map
     x: z.number().min(0).max(1), // Percentage coordinates (0-1)
     y: z.number().min(0).max(1),
-    label: z.string().max(100).optional(),
+    label: sanitizedString(100).optional(), // Sanitized body part labels
   })),
 ]);
 
@@ -256,12 +295,13 @@ export function generateResponseValidationSchema(
       }
 
       case 'text': {
-        let textSchema = z.string().max(
-          question.maxLength || 5000,
-          `Text must be <= ${question.maxLength || 5000} characters`
-        );
+        // Use sanitized string to prevent XSS attacks
+        let textSchema = sanitizedString(question.maxLength || 5000);
         if (question.required) {
-          textSchema = textSchema.min(1, 'This field is required');
+          textSchema = textSchema.refine(
+            (val) => val.length >= 1,
+            { message: 'This field is required' }
+          ) as any;
         }
         valueSchema = textSchema;
         break;
@@ -276,7 +316,8 @@ export function generateResponseValidationSchema(
         let bodyMapSchema = z.array(z.object({
           x: z.number().min(0).max(1),
           y: z.number().min(0).max(1),
-          label: z.string().max(100).optional(),
+          // Sanitize body part labels to prevent XSS
+          label: sanitizedString(100).optional(),
         }));
         if (question.required) {
           bodyMapSchema = bodyMapSchema.min(1, 'At least one point is required');

@@ -41,10 +41,40 @@ export function BodyMapInput({
     onChange([]);
   };
 
+  // Render a body part button with proper accessibility
+  const renderBodyPartButton = (part: string) => {
+    const isSelected = value.includes(part);
+    return (
+      <button
+        key={part}
+        type="button"
+        role="checkbox"
+        aria-checked={isSelected}
+        aria-label={`${part}, ${isSelected ? 'selected' : 'not selected'}`}
+        data-body-part={part.toLowerCase().replace(' ', '-')}
+        onClick={() => toggleBodyPart(part)}
+        className={cn(
+          "px-3 py-2 rounded-md border text-sm transition-colors",
+          "hover:bg-accent hover:text-accent-foreground",
+          "focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+          "min-h-[44px]", // Touch-friendly
+          isSelected
+            ? "bg-primary text-primary-foreground border-primary selected marked active"
+            : "bg-background"
+        )}
+      >
+        {part}
+      </button>
+    );
+  };
+
   return (
     <div className="space-y-4" data-testid="question-body-map">
       <div className="flex items-start justify-between">
-        <Label className="text-base font-medium">
+        <Label
+          id={`${question.id}-label`}
+          className="text-base font-medium"
+        >
           {question.label}
           {question.required && <span className="text-destructive ml-1">*</span>}
         </Label>
@@ -53,6 +83,7 @@ export function BodyMapInput({
             type="button"
             onClick={clearAll}
             className="text-sm text-muted-foreground hover:text-foreground"
+            aria-label={`Clear all ${value.length} selected body parts`}
           >
             Clear all
           </button>
@@ -67,155 +98,56 @@ export function BodyMapInput({
       <div
         className="border rounded-lg p-4 bg-muted/30"
         data-testid="body-diagram"
+        role="group"
+        aria-labelledby={`${question.id}-label`}
+        aria-describedby={question.description ? `${question.id}-description` : undefined}
       >
         <div className="space-y-4">
           {/* Head & Neck */}
-          <div>
+          <div role="group" aria-label="Head">
             <p className="text-xs font-medium text-muted-foreground mb-2">Head</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.head.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]", // Touch-friendly
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.head.map(renderBodyPartButton)}
             </div>
           </div>
 
           {/* Upper Body */}
-          <div>
+          <div role="group" aria-label="Upper Body">
             <p className="text-xs font-medium text-muted-foreground mb-2">Upper Body</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.upperBody.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]",
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.upperBody.map(renderBodyPartButton)}
             </div>
           </div>
 
           {/* Arms */}
-          <div>
+          <div role="group" aria-label="Arms & Hands">
             <p className="text-xs font-medium text-muted-foreground mb-2">Arms & Hands</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.arms.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]",
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.arms.map(renderBodyPartButton)}
             </div>
           </div>
 
           {/* Core */}
-          <div>
+          <div role="group" aria-label="Core">
             <p className="text-xs font-medium text-muted-foreground mb-2">Core</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.core.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]",
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.core.map(renderBodyPartButton)}
             </div>
           </div>
 
           {/* Legs */}
-          <div>
+          <div role="group" aria-label="Legs">
             <p className="text-xs font-medium text-muted-foreground mb-2">Legs</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.legs.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]",
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.legs.map(renderBodyPartButton)}
             </div>
           </div>
 
           {/* Feet */}
-          <div>
+          <div role="group" aria-label="Feet">
             <p className="text-xs font-medium text-muted-foreground mb-2">Feet</p>
             <div className="flex flex-wrap gap-2">
-              {BODY_PARTS.feet.map((part) => (
-                <button
-                  key={part}
-                  type="button"
-                  data-body-part={part.toLowerCase().replace(' ', '-')}
-                  onClick={() => toggleBodyPart(part)}
-                  className={cn(
-                    "px-3 py-2 rounded-md border text-sm transition-colors",
-                    "hover:bg-accent hover:text-accent-foreground",
-                    "min-h-[44px]",
-                    value.includes(part)
-                      ? "bg-primary text-primary-foreground border-primary selected marked active"
-                      : "bg-background"
-                  )}
-                >
-                  {part}
-                </button>
-              ))}
+              {BODY_PARTS.feet.map(renderBodyPartButton)}
             </div>
           </div>
         </div>

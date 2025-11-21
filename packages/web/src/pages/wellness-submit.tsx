@@ -21,7 +21,23 @@ import type {
 
 const API_BASE = '';
 
-// Helper to get local storage key for auto-save
+/**
+ * Helper to get local storage key for auto-save
+ *
+ * SECURITY NOTE: localStorage is used for auto-save convenience but has limitations:
+ * - Data is stored unencrypted on the client device
+ * - Accessible to any JavaScript code on the same origin (vulnerable to XSS)
+ * - Persists until manually cleared (data remains after browser close)
+ * - No server-side control over data retention
+ *
+ * This is acceptable for wellness draft responses because:
+ * - Data is draft-only and cleared on successful submission
+ * - Users are informed via "Previous answers restored" message
+ * - Wellness responses are not considered highly sensitive
+ * - Auto-save is disabled in incognito/private browsing modes
+ *
+ * For sensitive data (auth tokens, PII), use secure httpOnly cookies or sessionStorage
+ */
 function getAutoSaveKey(requestId: string): string {
   return `wellness-draft-${requestId}`;
 }
@@ -80,16 +96,25 @@ export default function WellnessSubmit() {
   const {
     data: template,
     isLoading: isLoadingTemplate,
+    error: templateError,
   } = useQuery<WellnessTemplate>({
     queryKey: ['wellness-template', request?.templateId],
     queryFn: async () => {
       const res = await fetch(`${API_BASE}/api/wellness/templates/${request?.templateId}`);
       if (!res.ok) {
-        throw new Error('Failed to load wellness template');
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to load wellness template');
       }
       return res.json();
     },
     enabled: !!request?.templateId,
+    retry: (failureCount, error) => {
+      // Don't retry on 404 or other client errors
+      if (error.message.includes('not found')) return false;
+      // Retry up to 3 times for server/network errors
+      return failureCount < 3;
+    },
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 30000), // Exponential backoff
   });
 
   // Check if user has already submitted for this request
@@ -257,13 +282,16 @@ export default function WellnessSubmit() {
   }
 
   // Error state
-  if (requestError || !request || !template) {
+  if (requestError || templateError || !request || !template) {
+    const displayError = requestError || templateError;
     return (
       <div className="container max-w-3xl mx-auto py-8 px-4">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>
-            {requestError instanceof Error ? requestError.message : 'Failed to load wellness questionnaire'}
+            {displayError instanceof Error
+              ? displayError.message
+              : 'Failed to load wellness questionnaire. Please try again later.'}
           </AlertDescription>
         </Alert>
       </div>

@@ -7,6 +7,9 @@
 
 import crypto from 'crypto';
 import { storage } from '../storage';
+import { db } from '../db';
+import { userTeams } from '@shared/schema';
+import { eq, and } from 'drizzle-orm';
 
 export class WellnessAccessService {
   /**
@@ -202,11 +205,20 @@ export class WellnessAccessService {
       // Add athletes from targeted teams
       if (request.targetTeamIds) {
         for (const teamId of request.targetTeamIds) {
-          // Get team members via getUserTeams
-          const teamUsers = await storage.getUserTeams(teamId);
-          // Assuming we want the user IDs - need to adjust based on actual structure
-          // For now, skip team member lookup since we don't have getTeamMembers
-          // This can be enhanced later when team member queries are available
+          // Query userTeams table to get all active members of this team
+          const teamMembers = await db
+            .select()
+            .from(userTeams)
+            .where(
+              and(
+                eq(userTeams.teamId, teamId),
+                eq(userTeams.isActive, true)
+              )
+            );
+
+          // Extract user IDs from team memberships
+          const memberIds = teamMembers.map(member => member.userId);
+          targetAthleteIds.push(...memberIds);
         }
       }
 

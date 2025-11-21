@@ -330,6 +330,15 @@ export function registerWellnessRoutes(app: Express) {
         });
 
         // Send email notifications for magic link distribution
+        const MINUTES_PER_QUESTION = 0.5; // 30 seconds per question on average
+        const DEFAULT_QUESTION_COUNT = 5;
+
+        const emailResults = {
+          sent: 0,
+          failed: 0,
+          errors: [] as Array<{ athleteName: string; email: string; error: string }>,
+        };
+
         if (data.distributionMethod === 'magic_link' && publicToken) {
           try {
             const magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
@@ -346,24 +355,39 @@ export function registerWellnessRoutes(app: Express) {
             for (const [athleteId, magicLink] of magicLinks.entries()) {
               const athlete = await storage.getUser(athleteId);
               if (athlete && athlete.emails && athlete.emails.length > 0) {
-                await emailService.sendWellnessRequest(athlete.emails[0], {
-                  athleteName: athlete.fullName,
-                  coachName: coach!.fullName,
-                  organizationName: organization!.name,
-                  magicLink,
-                  expiryDays,
-                  templateName: template!.name,
-                  estimatedMinutes: ((template!.config as any).questions?.length || 5) * 0.5, // Rough estimate
-                });
+                try {
+                  await emailService.sendWellnessRequest(athlete.emails[0], {
+                    athleteName: athlete.fullName,
+                    coachName: coach!.fullName,
+                    organizationName: organization!.name,
+                    magicLink,
+                    expiryDays,
+                    templateName: template!.name,
+                    estimatedMinutes: (template!.config.questions?.length || DEFAULT_QUESTION_COUNT) * MINUTES_PER_QUESTION,
+                  });
+                  emailResults.sent++;
+                } catch (emailError) {
+                  console.error(`Failed to send email to ${athlete.emails[0]}:`, emailError);
+                  emailResults.failed++;
+                  emailResults.errors.push({
+                    athleteName: athlete.fullName,
+                    email: athlete.emails[0],
+                    error: (emailError as Error).message,
+                  });
+                }
               }
             }
           } catch (emailError) {
-            console.error("Failed to send wellness request emails:", emailError);
-            // Don't fail the request creation if emails fail
+            console.error("Failed to generate magic links:", emailError);
+            // Don't fail the request creation if email generation fails
           }
         }
 
-        res.status(201).json(request);
+        // Include email notification status in response
+        res.status(201).json({
+          ...request,
+          emailNotifications: data.distributionMethod === 'magic_link' ? emailResults : undefined,
+        });
       } catch (error: any) {
         console.error("Failed to create wellness request:", error);
         res.status(500).json({
@@ -737,6 +761,11 @@ export function registerWellnessRoutes(app: Express) {
       try {
         const userId = req.user!.id;
 
+        // Parse pagination parameters
+        const page = Math.max(1, parseInt(req.query.page as string) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+        const offset = (page - 1) * limit;
+
         // Get all responses by this user
         const allResponses = await storage.getWellnessResponsesByAthlete(userId);
 
@@ -745,7 +774,20 @@ export function registerWellnessRoutes(app: Express) {
           new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
         );
 
-        res.json(allResponses);
+        // Apply pagination
+        const totalCount = allResponses.length;
+        const paginatedResponses = allResponses.slice(offset, offset + limit);
+
+        res.json({
+          responses: paginatedResponses,
+          pagination: {
+            page,
+            limit,
+            total: totalCount,
+            totalPages: Math.ceil(totalCount / limit),
+            hasMore: offset + limit < totalCount,
+          },
+        });
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness responses:", error);
         res.status(500).json({
