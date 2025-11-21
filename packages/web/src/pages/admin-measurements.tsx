@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -73,7 +74,12 @@ interface Measurement {
   } | null;
 }
 
-// Filter schema matching API measurementQuerySchema
+// Constants
+const MAX_API_FETCH = 1000; // Backend pagination limit
+const TEAM_SELECT_MIN_HEIGHT = 100; // Height in pixels for team multi-select
+const NOTE_TRUNCATE_LENGTH = 30; // Characters before truncating notes display
+
+// Filter schema matching API measurementQuerySchema with validation
 const filterSchema = z.object({
   metric: z.string().optional(),
   gender: z.string().optional(),
@@ -90,7 +96,34 @@ const filterSchema = z.object({
   athleteName: z.string().optional(),
   limit: z.string().optional(),
   offset: z.string().optional(),
-});
+}).refine(
+  (data) => {
+    // Validate date range
+    if (data.dateFrom && data.dateTo) {
+      return new Date(data.dateFrom) <= new Date(data.dateTo);
+    }
+    return true;
+  },
+  { message: "Date From must be before or equal to Date To", path: ["dateFrom"] }
+).refine(
+  (data) => {
+    // Validate age range
+    if (data.ageFrom && data.ageTo) {
+      return parseInt(data.ageFrom) <= parseInt(data.ageTo);
+    }
+    return true;
+  },
+  { message: "Age From must be less than or equal to Age To", path: ["ageFrom"] }
+).refine(
+  (data) => {
+    // Validate birth year range
+    if (data.birthYearFrom && data.birthYearTo) {
+      return parseInt(data.birthYearFrom) <= parseInt(data.birthYearTo);
+    }
+    return true;
+  },
+  { message: "Birth Year From must be less than or equal to Birth Year To", path: ["birthYearFrom"] }
+);
 
 type FilterFormData = z.infer<typeof filterSchema>;
 
@@ -111,7 +144,6 @@ const GENDERS = [
   { value: "Not Specified", label: "Not Specified" },
 ];
 
-const API_FETCH_LIMIT = 1000; // Fetch max from API for client-side filtering/sorting
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = "All"
 
 export default function AdminMeasurementsPage() {
@@ -124,6 +156,7 @@ export default function AdminMeasurementsPage() {
   const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [bulkAction, setBulkAction] = useState<'verify' | 'unverify' | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -138,7 +171,7 @@ export default function AdminMeasurementsPage() {
     resolver: zodResolver(filterSchema),
     defaultValues: {
       verificationStatus: "verified", // Default to showing only verified
-      limit: String(API_FETCH_LIMIT), // Fetch max records for client-side operations
+      limit: String(MAX_API_FETCH), // Fetch max records for client-side operations
     },
   });
 
@@ -151,36 +184,27 @@ export default function AdminMeasurementsPage() {
   });
 
   // Fetch teams for the selected organization
-  const { data: teams = [] } = useQuery<Array<{ id: string; name: string }>>({
+  const { data: teams = [], isLoading: teamsLoading } = useQuery<Array<{ id: string; name: string }>>({
     queryKey: ["/api/teams", watchedFilters.organizationId],
     queryFn: async () => {
       if (!watchedFilters.organizationId) return [];
-      console.log('[Admin Measurements] Fetching teams for org:', watchedFilters.organizationId);
       const response = await fetch(`/api/teams?organizationId=${watchedFilters.organizationId}`);
       if (!response.ok) throw new Error('Failed to fetch teams');
-      const data = await response.json();
-      console.log('[Admin Measurements] Teams fetched:', data);
-      return data;
+      return response.json();
     },
     enabled: !!watchedFilters.organizationId,
-  });
-
-  console.log('[Admin Measurements] Current state:', {
-    organizationId: watchedFilters.organizationId,
-    teamsCount: teams.length,
-    selectedTeamsCount: selectedTeams.length
   });
 
   // Reset selected teams when organization changes
   useEffect(() => {
     setSelectedTeams([]);
-    form.setValue('teamIds', '');
-  }, [watchedFilters.organizationId, form]);
+    form.setValue('teamIds', '', { shouldValidate: false });
+  }, [watchedFilters.organizationId]);
 
   // Sync selectedTeams state with form
   useEffect(() => {
-    form.setValue('teamIds', selectedTeams.join(','));
-  }, [selectedTeams, form]);
+    form.setValue('teamIds', selectedTeams.join(','), { shouldValidate: false });
+  }, [selectedTeams]);
 
   // Build query params from form
   const buildQueryParams = (filters: FilterFormData) => {
@@ -223,6 +247,9 @@ export default function AdminMeasurementsPage() {
     enabled: user?.isSiteAdmin === true,
   });
 
+  // Callbacks for selection management
+  const clearSelection = useCallback(() => setSelectedMeasurements([]), []);
+
   // Bulk verify mutation
   const bulkVerifyMutation = useMutation({
     mutationFn: async (ids: string[]) => {
@@ -236,12 +263,14 @@ export default function AdminMeasurementsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [queryUrl] });
       clearSelection();
+      setBulkAction(null);
       toast({
         title: "Success",
         description: `${data.verified} measurement(s) verified successfully`,
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
+      setBulkAction(null);
       toast({
         title: "Error verifying measurements",
         description: error.message,
@@ -263,12 +292,14 @@ export default function AdminMeasurementsPage() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: [queryUrl] });
       clearSelection();
+      setBulkAction(null);
       toast({
         title: "Success",
         description: `${data.unverified} measurement(s) unverified successfully`,
       });
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
+      setBulkAction(null);
       toast({
         title: "Error unverifying measurements",
         description: error.message,
@@ -277,51 +308,67 @@ export default function AdminMeasurementsPage() {
     },
   });
 
-  // Client-side filter for "unverified only" option and athlete name search
-  // (API doesn't support fetching only unverified, so we filter after fetching)
-  let measurements = rawMeasurements.filter((measurement) => {
-    const verificationStatus = watchedFilters.verificationStatus || "verified";
-    if (verificationStatus === "unverified") {
-      return !measurement.isVerified;
+  // Handler for bulk action confirmation
+  const handleBulkActionConfirm = useCallback(() => {
+    if (bulkAction === 'verify') {
+      bulkVerifyMutation.mutate(selectedMeasurements);
+    } else if (bulkAction === 'unverify') {
+      bulkUnverifyMutation.mutate(selectedMeasurements);
     }
-    return true; // For "all" and "verified", API handles it
-  });
+  }, [bulkAction, selectedMeasurements, bulkVerifyMutation, bulkUnverifyMutation]);
 
-  // Apply client-side athlete name filter
-  if (watchedFilters.athleteName && watchedFilters.athleteName.trim()) {
-    const searchTerm = watchedFilters.athleteName.toLowerCase().trim();
-    measurements = measurements.filter((measurement) =>
-      measurement.user.fullName.toLowerCase().includes(searchTerm)
-    );
-  }
-
-  // Apply sorting
-  if (sortField) {
-    measurements.sort((a, b) => {
-      let aVal: any, bVal: any;
-
-      if (sortField === 'date') {
-        aVal = new Date(a.date).getTime();
-        bVal = new Date(b.date).getTime();
-      } else if (sortField === 'athlete') {
-        aVal = a.user.fullName;
-        bVal = b.user.fullName;
-      } else if (sortField === 'metric') {
-        aVal = a.metric;
-        bVal = b.metric;
-      } else if (sortField === 'value') {
-        aVal = parseFloat(a.value);
-        bVal = parseFloat(b.value);
-      } else if (sortField === 'age') {
-        aVal = a.age;
-        bVal = b.age;
+  // Memoized filtering and sorting
+  const measurements = useMemo(() => {
+    // Step 1: Filter by verification status (client-side)
+    const verificationStatus = watchedFilters.verificationStatus || "verified";
+    let filtered = rawMeasurements.filter((measurement) => {
+      if (verificationStatus === "unverified") {
+        return !measurement.isVerified;
       }
-
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+      return true; // For "all" and "verified", API handles it
     });
-  }
+
+    // Step 2: Filter by athlete name (client-side)
+    if (watchedFilters.athleteName && watchedFilters.athleteName.trim()) {
+      const searchTerm = watchedFilters.athleteName.toLowerCase().trim();
+      filtered = filtered.filter((measurement) =>
+        measurement.user.fullName.toLowerCase().includes(searchTerm)
+      );
+    }
+
+    // Step 3: Sort (create new array to avoid mutation)
+    if (sortField) {
+      return [...filtered].sort((a, b) => {
+        let aVal: string | number | Date;
+        let bVal: string | number | Date;
+
+        if (sortField === 'date') {
+          aVal = new Date(a.date).getTime();
+          bVal = new Date(b.date).getTime();
+        } else if (sortField === 'athlete') {
+          aVal = a.user.fullName;
+          bVal = b.user.fullName;
+        } else if (sortField === 'metric') {
+          aVal = a.metric;
+          bVal = b.metric;
+        } else if (sortField === 'value') {
+          aVal = parseFloat(a.value);
+          bVal = parseFloat(b.value);
+        } else if (sortField === 'age') {
+          aVal = a.age;
+          bVal = b.age;
+        } else {
+          return 0;
+        }
+
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+
+    return filtered;
+  }, [rawMeasurements, watchedFilters.verificationStatus, watchedFilters.athleteName, sortField, sortDirection]);
 
   // Calculate pagination
   const totalMeasurements = measurements.length;
@@ -329,22 +376,32 @@ export default function AdminMeasurementsPage() {
   const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMeasurements / pageSize);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = pageSize === 0 ? totalMeasurements : startIndex + itemsPerPage;
-  const paginatedMeasurements = measurements.slice(startIndex, endIndex);
+  const paginatedMeasurements = useMemo(() =>
+    measurements.slice(startIndex, endIndex),
+    [measurements, startIndex, endIndex]
+  );
+
+  // Reset to page 1 if current page exceeds total pages
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
 
   // Format metric name for display
-  const formatMetricName = (metric: string): string => {
+  const formatMetricName = useCallback((metric: string): string => {
     const found = METRICS.find((m) => m.value === metric);
     return found ? found.label : metric;
-  };
+  }, []);
 
   // Selection functions
-  const toggleMeasurementSelection = (id: string) => {
+  const toggleMeasurementSelection = useCallback((id: string) => {
     setSelectedMeasurements(prev =>
       prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
     );
-  };
+  }, []);
 
-  const toggleSelectAll = () => {
+  const toggleSelectAll = useCallback(() => {
     // Check if all measurements on current page are selected
     const allPageSelected = paginatedMeasurements.every(m => selectedMeasurements.includes(m.id));
 
@@ -358,42 +415,58 @@ export default function AdminMeasurementsPage() {
       const pageIds = paginatedMeasurements.map(m => m.id);
       setSelectedMeasurements(prev => [...new Set([...prev, ...pageIds])]);
     }
-  };
+  }, [paginatedMeasurements, selectedMeasurements]);
 
-  const clearSelection = () => setSelectedMeasurements([]);
+  // CSV Export function with proper error handling
+  const exportToCSV = useCallback(() => {
+    try {
+      const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
 
-  // CSV Export function
-  const exportToCSV = () => {
-    const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
+      const rows = measurements.map(m => [
+        new Date(m.date).toLocaleDateString(),
+        m.user.fullName,
+        m.user.teams?.[0]?.organization.name || m.organizationId || '-',
+        m.teamNameSnapshot || '-',
+        formatMetricName(m.metric),
+        m.value,
+        m.units,
+        m.age,
+        m.submittedByUser?.fullName || 'Unknown',
+        m.verifiedByUser?.fullName || '-',
+        m.isVerified ? 'Verified' : 'Unverified',
+        m.notes || ''
+      ]);
 
-    const rows = measurements.map(m => [
-      new Date(m.date).toLocaleDateString(),
-      m.user.fullName,
-      m.user.teams?.[0]?.organization.name || m.organizationId || '-',
-      m.teamNameSnapshot || '-',
-      formatMetricName(m.metric),
-      m.value,
-      m.units,
-      m.age,
-      m.submittedByUser?.fullName || 'Unknown',
-      m.verifiedByUser?.fullName || '-',
-      m.isVerified ? 'Verified' : 'Unverified',
-      m.notes || ''
-    ]);
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      ].join('\n');
 
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
-    ].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
 
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-  };
+      try {
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+        link.click();
+      } finally {
+        // Always revoke the object URL to prevent memory leaks
+        URL.revokeObjectURL(url);
+      }
+
+      toast({
+        title: "Export successful",
+        description: `Exported ${measurements.length} measurement(s) to CSV`,
+      });
+    } catch (error) {
+      toast({
+        title: "Export failed",
+        description: error instanceof Error ? error.message : "Failed to export CSV",
+        variant: "destructive",
+      });
+    }
+  }, [measurements, formatMetricName, toast]);
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -410,14 +483,14 @@ export default function AdminMeasurementsPage() {
     setCurrentPage(1);
   };
 
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     form.reset({
       verificationStatus: "verified", // Reset to verified only
-      limit: String(API_FETCH_LIMIT), // Maintain max fetch limit
+      limit: String(MAX_API_FETCH), // Maintain max fetch limit
     });
     setSelectedTeams([]);
     setCurrentPage(1);
-  };
+  }, [form]);
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
@@ -428,15 +501,63 @@ export default function AdminMeasurementsPage() {
     setCurrentPage(1); // Reset to page 1 when changing page size
   };
 
-  const hasActiveFilters = Object.entries(watchedFilters).some(
-    ([key, value]) => {
-      // Don't count default verification status as an active filter
-      if (key === "verificationStatus") {
-        return value && value !== "verified";
+  const hasActiveFilters = useMemo(() =>
+    Object.entries(watchedFilters).some(
+      ([key, value]) => {
+        // Don't count default verification status as an active filter
+        if (key === "verificationStatus") {
+          return value && value !== "verified";
+        }
+        return value && value !== "" && key !== "limit" && key !== "offset";
       }
-      return value && value !== "" && key !== "limit" && key !== "offset";
-    }
+    ),
+    [watchedFilters]
   );
+
+  // Memoized statistics cards
+  const statisticsCards = useMemo(() => {
+    if (measurements.length === 0) return null;
+
+    if (watchedFilters.metric) {
+      // Show statistics for the selected metric
+      const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
+      if (metricMeasurements.length === 0) return null;
+
+      return (
+        <div className="grid grid-cols-1 gap-6">
+          <StatisticsSummaryCard
+            measurements={metricMeasurements}
+            metric={watchedFilters.metric}
+          />
+        </div>
+      );
+    } else {
+      // Show statistics for the top 2 metrics with the most measurements
+      const metricCounts = measurements.reduce((acc, m) => {
+        acc[m.metric] = (acc[m.metric] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      const topMetrics = Object.entries(metricCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 2)
+        .map(([metric]) => metric);
+
+      if (topMetrics.length === 0) return null;
+
+      return (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {topMetrics.map((metric) => (
+            <StatisticsSummaryCard
+              key={metric}
+              measurements={measurements.filter((m) => m.metric === metric)}
+              metric={metric}
+            />
+          ))}
+        </div>
+      );
+    }
+  }, [measurements, watchedFilters.metric]);
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -644,9 +765,9 @@ export default function AdminMeasurementsPage() {
                       <FormField
                         control={form.control}
                         name="teamIds"
-                        render={({ field }) => (
+                        render={() => (
                           <FormItem>
-                            <FormLabel>Teams</FormLabel>
+                            <FormLabel>Teams (Hold Ctrl/Cmd to select multiple)</FormLabel>
                             <FormControl>
                               <div className="relative">
                                 <select
@@ -656,11 +777,15 @@ export default function AdminMeasurementsPage() {
                                     const options = Array.from(e.target.selectedOptions);
                                     setSelectedTeams(options.map(opt => opt.value));
                                   }}
-                                  disabled={!watchedFilters.organizationId || teams.length === 0}
-                                  className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
+                                  disabled={!watchedFilters.organizationId || teamsLoading || teams.length === 0}
+                                  className={`w-full p-2 border border-gray-300 rounded-md`}
+                                  style={{ minHeight: `${TEAM_SELECT_MIN_HEIGHT}px` }}
+                                  aria-label="Select teams to filter measurements"
                                 >
                                   {!watchedFilters.organizationId ? (
                                     <option disabled>Select an organization first</option>
+                                  ) : teamsLoading ? (
+                                    <option disabled>Loading teams...</option>
                                   ) : teams.length === 0 ? (
                                     <option disabled>No teams available</option>
                                   ) : (
@@ -767,47 +892,7 @@ export default function AdminMeasurementsPage() {
       </Card>
 
       {/* Statistics Summary */}
-      {measurements.length > 0 && (() => {
-        if (watchedFilters.metric) {
-          // Show statistics for the selected metric
-          const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
-          if (metricMeasurements.length === 0) return null;
-
-          return (
-            <div className="grid grid-cols-1 gap-6">
-              <StatisticsSummaryCard
-                measurements={metricMeasurements}
-                metric={watchedFilters.metric}
-              />
-            </div>
-          );
-        } else {
-          // Show statistics for the top 2 metrics with the most measurements
-          const metricCounts = measurements.reduce((acc, m) => {
-            acc[m.metric] = (acc[m.metric] || 0) + 1;
-            return acc;
-          }, {} as Record<string, number>);
-
-          const topMetrics = Object.entries(metricCounts)
-            .sort(([, a], [, b]) => b - a)
-            .slice(0, 2)
-            .map(([metric]) => metric);
-
-          if (topMetrics.length === 0) return null;
-
-          return (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {topMetrics.map((metric) => (
-                <StatisticsSummaryCard
-                  key={metric}
-                  measurements={measurements.filter((m) => m.metric === metric)}
-                  metric={metric}
-                />
-              ))}
-            </div>
-          );
-        }
-      })()}
+      {statisticsCards}
 
       {/* Results */}
       <Card>
@@ -869,7 +954,7 @@ export default function AdminMeasurementsPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => bulkVerifyMutation.mutate(selectedMeasurements)}
+                    onClick={() => setBulkAction('verify')}
                     disabled={bulkVerifyMutation.isPending}
                   >
                     <CheckSquare className="h-4 w-4 mr-1" />
@@ -878,7 +963,7 @@ export default function AdminMeasurementsPage() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => bulkUnverifyMutation.mutate(selectedMeasurements)}
+                    onClick={() => setBulkAction('unverify')}
                     disabled={bulkUnverifyMutation.isPending}
                   >
                     <XSquare className="h-4 w-4 mr-1" />
@@ -898,6 +983,7 @@ export default function AdminMeasurementsPage() {
                           checked={paginatedMeasurements.length > 0 && paginatedMeasurements.every(m => selectedMeasurements.includes(m.id))}
                           onChange={toggleSelectAll}
                           className="rounded border-gray-300"
+                          aria-label="Select all measurements on current page"
                         />
                       </TableHead>
                       <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
@@ -957,6 +1043,7 @@ export default function AdminMeasurementsPage() {
                             checked={selectedMeasurements.includes(measurement.id)}
                             onChange={() => toggleMeasurementSelection(measurement.id)}
                             className="rounded border-gray-300"
+                            aria-label={`Select measurement for ${measurement.user.fullName}`}
                           />
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
@@ -1040,8 +1127,8 @@ export default function AdminMeasurementsPage() {
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <span className="text-sm truncate block cursor-help">
-                                    {measurement.notes.length > 30
-                                      ? `${measurement.notes.substring(0, 30)}...`
+                                    {measurement.notes.length > NOTE_TRUNCATE_LENGTH
+                                      ? `${measurement.notes.substring(0, NOTE_TRUNCATE_LENGTH)}...`
                                       : measurement.notes}
                                   </span>
                                 </TooltipTrigger>
@@ -1115,6 +1202,29 @@ export default function AdminMeasurementsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Bulk Action Confirmation Dialog */}
+      <AlertDialog open={bulkAction !== null} onOpenChange={() => setBulkAction(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkAction === 'verify' ? 'Verify Measurements' : 'Unverify Measurements'}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkAction === 'verify'
+                ? `Are you sure you want to verify ${selectedMeasurements.length} measurement${selectedMeasurements.length !== 1 ? 's' : ''}? This will mark them as verified.`
+                : `Are you sure you want to unverify ${selectedMeasurements.length} measurement${selectedMeasurements.length !== 1 ? 's' : ''}? This will remove their verified status.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkActionConfirm}>
+              {bulkAction === 'verify' ? 'Verify' : 'Unverify'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
