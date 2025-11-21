@@ -34,10 +34,11 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Helper function to check if rate limiting should be bypassed
 const shouldBypassRateLimit = (): boolean => {
-  // Bypass rate limiting in non-production environments by default
-  if (process.env.NODE_ENV !== 'production') {
-    return true;
+  // SECURITY: Never bypass rate limiting in production
+  if (process.env.NODE_ENV === 'production') {
+    return false;
   }
+  // In non-production environments, allow bypass for testing
   return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
 };
 
@@ -858,16 +859,23 @@ export function registerWellnessRoutes(app: Express) {
           endDate: endDate as string,
         });
 
+        // UUID validation regex (RFC 4122)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
         // Filter by athleteIds if provided
         if (athleteIds && typeof athleteIds === 'string') {
-          const athleteIdArray = athleteIds.split(',').map(id => id.trim());
-          responses = responses.filter(r => athleteIdArray.includes(r.userId));
+          const athleteIdArray = athleteIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
+          if (athleteIdArray.length > 0) {
+            responses = responses.filter(r => athleteIdArray.includes(r.userId));
+          }
         }
 
         // Filter by teamIds if provided
         if (teamIds && typeof teamIds === 'string') {
-          const teamIdArray = teamIds.split(',').map(id => id.trim());
-          responses = responses.filter(r => r.teamId && teamIdArray.includes(r.teamId));
+          const teamIdArray = teamIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
+          if (teamIdArray.length > 0) {
+            responses = responses.filter(r => r.teamId && teamIdArray.includes(r.teamId));
+          }
         }
 
         // Sort by submission date (most recent first)
