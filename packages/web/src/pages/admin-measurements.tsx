@@ -598,10 +598,6 @@ export default function AdminMeasurementsPage() {
   const statisticsCards = useMemo(() => {
     if (measurements.length === 0) return null;
 
-    // Map our Measurement type to the format StatisticsSummaryCard expects
-    // StatisticsSummaryCard only needs { metric: string, value: string }
-    type MeasurementForStats = Pick<Measurement, 'metric' | 'value'>;
-
     if (watchedFilters.metric) {
       // Show statistics for the selected metric
       const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
@@ -610,7 +606,7 @@ export default function AdminMeasurementsPage() {
       return (
         <div className="grid grid-cols-1 gap-6">
           <StatisticsSummaryCard
-            measurements={metricMeasurements as MeasurementForStats[]}
+            measurements={metricMeasurements as any}
             metric={watchedFilters.metric}
           />
         </div>
@@ -634,7 +630,7 @@ export default function AdminMeasurementsPage() {
           {topMetrics.map((metric) => (
             <StatisticsSummaryCard
               key={metric}
-              measurements={measurements.filter((m) => m.metric === metric) as MeasurementForStats[]}
+              measurements={measurements.filter((m) => m.metric === metric) as any}
               metric={metric}
             />
           ))}
