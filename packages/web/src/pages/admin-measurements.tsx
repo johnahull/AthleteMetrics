@@ -156,7 +156,8 @@ const GENDERS = [
   { value: "Not Specified", label: "Not Specified" },
 ];
 
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = "All"
+// Page size options - 0 represents "Show All" (no pagination)
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0];
 
 export default function AdminMeasurementsPage() {
   const { user } = useAuth();
@@ -256,7 +257,12 @@ export default function AdminMeasurementsPage() {
     isLoading,
     error,
   } = useQuery<Measurement[]>({
-    queryKey: [queryUrl],
+    queryKey: ['/api/measurements', watchedFilters],
+    queryFn: async () => {
+      const res = await fetch(queryUrl);
+      if (!res.ok) throw new Error('Failed to fetch measurements');
+      return res.json();
+    },
     enabled: user?.isSiteAdmin === true,
   });
 
@@ -274,7 +280,7 @@ export default function AdminMeasurementsPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [queryUrl] });
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
       clearSelection();
       setBulkAction(null);
 
@@ -322,7 +328,7 @@ export default function AdminMeasurementsPage() {
       return res.json();
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [queryUrl] });
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
       clearSelection();
       setBulkAction(null);
 
@@ -592,6 +598,10 @@ export default function AdminMeasurementsPage() {
   const statisticsCards = useMemo(() => {
     if (measurements.length === 0) return null;
 
+    // Map our Measurement type to the format StatisticsSummaryCard expects
+    // StatisticsSummaryCard only needs { metric: string, value: string }
+    type MeasurementForStats = Pick<Measurement, 'metric' | 'value'>;
+
     if (watchedFilters.metric) {
       // Show statistics for the selected metric
       const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
@@ -600,7 +610,7 @@ export default function AdminMeasurementsPage() {
       return (
         <div className="grid grid-cols-1 gap-6">
           <StatisticsSummaryCard
-            measurements={metricMeasurements as any}
+            measurements={metricMeasurements as MeasurementForStats[]}
             metric={watchedFilters.metric}
           />
         </div>
@@ -624,7 +634,7 @@ export default function AdminMeasurementsPage() {
           {topMetrics.map((metric) => (
             <StatisticsSummaryCard
               key={metric}
-              measurements={measurements.filter((m) => m.metric === metric) as any}
+              measurements={measurements.filter((m) => m.metric === metric) as MeasurementForStats[]}
               metric={metric}
             />
           ))}
@@ -984,7 +994,7 @@ export default function AdminMeasurementsPage() {
                 )}
               </CardDescription>
             </div>
-            <Button onClick={exportToCSV} variant="outline" size="sm">
+            <Button onClick={exportToCSV} variant="outline" size="sm" data-testid="export-csv-button">
               <Download className="h-4 w-4 mr-2" />
               Export CSV
             </Button>
