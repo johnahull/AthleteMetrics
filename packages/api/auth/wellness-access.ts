@@ -78,17 +78,17 @@ export class WellnessAccessService {
       // crypto.randomBytes().toString('hex') produces lowercase, but normalize for safety
       const normalizedToken = token.toLowerCase();
 
-      // Validate token format (64 hex characters)
-      // IMPORTANT: Always perform DB lookup to prevent timing attacks
+      // SECURITY: Always perform database lookup regardless of format to prevent timing attacks
+      // This ensures constant-time validation - both valid and invalid format tokens
+      // take the same amount of time (DB query time), preventing attackers from using
+      // timing analysis to distinguish between malformed tokens and valid-but-nonexistent tokens
+      const request = await storage.getWellnessRequestByToken(normalizedToken);
+
+      // Validate token format (64 hex characters) after DB lookup
       const formatValid = /^[a-f0-9]{64}$/.test(normalizedToken);
 
-      // Always query database regardless of format validation to maintain constant time
-      const request = formatValid
-        ? await storage.getWellnessRequestByToken(normalizedToken)
-        : null;
-
       // Return combined validation result
-      if (!request || !formatValid) {
+      if (!formatValid || !request) {
         return { valid: false, error: 'Invalid or expired token' };
       }
 
