@@ -6,19 +6,19 @@ import { z } from "zod";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { Filter, X, ChevronLeft, ChevronRight, Calendar, User, Building2, AlertCircle } from "lucide-react";
+import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Measurement type from API
+// Note: API returns only basic fields, not full user/org objects for submittedBy/verifiedBy
 interface Measurement {
   id: string;
   userId: string;
@@ -45,23 +45,18 @@ interface Measurement {
     fullName: string;
     gender: string | null;
     birthYear: number | null;
+    birthDate: string | null;
+    sports: string[] | null;
+    positions: string[] | null;
+    teams?: Array<{
+      id: string;
+      name: string;
+      organization: {
+        id: string;
+        name: string;
+      };
+    }>;
   };
-  submittedByUser: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    fullName: string;
-  };
-  verifiedByUser: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    fullName: string;
-  } | null;
-  organization: {
-    id: string;
-    name: string;
-  } | null;
 }
 
 // Filter schema matching API measurementQuerySchema
@@ -490,8 +485,7 @@ export default function AdminMeasurementsPage() {
                       <TableHead>Metric</TableHead>
                       <TableHead>Value</TableHead>
                       <TableHead>Age</TableHead>
-                      <TableHead>Submitted By</TableHead>
-                      <TableHead>Verified By</TableHead>
+                      <TableHead>Status</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -515,11 +509,15 @@ export default function AdminMeasurementsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {measurement.organization ? (
+                          {measurement.user.teams && measurement.user.teams.length > 0 ? (
                             <div className="flex items-center gap-2">
                               <Building2 className="h-4 w-4 text-muted-foreground" />
-                              {measurement.organization.name}
+                              {measurement.user.teams[0].organization.name}
                             </div>
+                          ) : measurement.organizationId ? (
+                            <span className="text-xs text-muted-foreground" title={`Org ID: ${measurement.organizationId}`}>
+                              {measurement.organizationId.substring(0, 8)}...
+                            </span>
                           ) : (
                             <span className="text-muted-foreground">-</span>
                           )}
@@ -539,19 +537,14 @@ export default function AdminMeasurementsPage() {
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
                         <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="h-4 w-4 text-muted-foreground" />
-                            {measurement.submittedByUser.fullName}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          {measurement.verifiedByUser ? (
-                            <div className="flex items-center gap-2">
-                              <User className="h-4 w-4 text-green-600" />
-                              {measurement.verifiedByUser.fullName}
-                            </div>
+                          {measurement.isVerified ? (
+                            <Badge variant="default" className="bg-green-600">
+                              Verified
+                            </Badge>
                           ) : (
-                            <span className="text-muted-foreground">-</span>
+                            <Badge variant="outline">
+                              Unverified
+                            </Badge>
                           )}
                         </TableCell>
                         <TableCell className="max-w-xs">
