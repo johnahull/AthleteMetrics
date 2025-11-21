@@ -235,6 +235,13 @@ export function registerWellnessRoutes(app: Express) {
           return res.status(404).json({ message: "Template not found" });
         }
 
+        // Verify template belongs to the organization
+        if (template.organizationId !== req.params.organizationId) {
+          return res.status(403).json({
+            message: "Access denied to this template"
+          });
+        }
+
         const updated = await storage.updateWellnessTemplate(id, validation.data);
 
         res.json(updated);
@@ -265,6 +272,13 @@ export function registerWellnessRoutes(app: Express) {
         const template = await storage.getWellnessTemplate(id);
         if (!template) {
           return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Verify template belongs to the organization
+        if (template.organizationId !== req.params.organizationId) {
+          return res.status(403).json({
+            message: "Access denied to this template"
+          });
         }
 
         await storage.deleteWellnessTemplate(id);
@@ -363,7 +377,7 @@ export function registerWellnessRoutes(app: Express) {
                     magicLink,
                     expiryDays,
                     templateName: template!.name,
-                    estimatedMinutes: (template!.config.questions?.length || DEFAULT_QUESTION_COUNT) * MINUTES_PER_QUESTION,
+                    estimatedMinutes: ((template!.config as any).questions?.length || DEFAULT_QUESTION_COUNT) * MINUTES_PER_QUESTION,
                   });
                   emailResults.sent++;
                 } catch (emailError) {
@@ -790,6 +804,70 @@ export function registerWellnessRoutes(app: Express) {
         });
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness responses:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness responses",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/responses
+   * Get all wellness responses for an organization with filtering
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/responses",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const { startDate, endDate, teamIds, athleteIds } = req.query;
+
+        // Validate required parameters
+        if (!startDate || !endDate) {
+          return res.status(400).json({
+            message: "startDate and endDate query parameters are required"
+          });
+        }
+
+        // Validate date format (YYYY-MM-DD)
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if (!dateRegex.test(startDate as string) || !dateRegex.test(endDate as string)) {
+          return res.status(400).json({
+            message: "Dates must be in YYYY-MM-DD format"
+          });
+        }
+
+        // Get all responses for the organization within date range
+        let responses = await storage.getWellnessResponsesByOrganization(organizationId, {
+          startDate: startDate as string,
+          endDate: endDate as string,
+        });
+
+        // Filter by athleteIds if provided
+        if (athleteIds && typeof athleteIds === 'string') {
+          const athleteIdArray = athleteIds.split(',').map(id => id.trim());
+          responses = responses.filter(r => athleteIdArray.includes(r.userId));
+        }
+
+        // Filter by teamIds if provided
+        if (teamIds && typeof teamIds === 'string') {
+          const teamIdArray = teamIds.split(',').map(id => id.trim());
+          responses = responses.filter(r => r.teamId && teamIdArray.includes(r.teamId));
+        }
+
+        // Sort by submission date (most recent first)
+        responses.sort((a, b) =>
+          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+
+        res.json(responses);
+      } catch (error: any) {
+        console.error("Failed to fetch organization wellness responses:", error);
         res.status(500).json({
           message: "Failed to fetch wellness responses",
           error: error.message,

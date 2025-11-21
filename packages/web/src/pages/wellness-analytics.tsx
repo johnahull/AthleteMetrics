@@ -9,6 +9,8 @@ import { AlertsCard } from '@/components/wellness/AlertsCard';
 import { WellnessTrendChart } from '@/components/wellness/WellnessTrendChart';
 import { TeamHeatmap } from '@/components/wellness/TeamHeatmap';
 import { WellnessFilters } from '@/components/wellness/WellnessFilters';
+import type { WellnessResponse, WellnessAlert, WellnessResponseData } from '@shared/wellness-types';
+import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 /**
  * Wellness Analytics Dashboard
@@ -62,17 +64,17 @@ export default function WellnessAnalytics() {
   const alerts = useMemo(() => {
     if (!responses || responses.length === 0) return [];
 
-    const athleteData: Record<string, any[]> = {};
+    const athleteData: Record<string, WellnessResponse[]> = {};
 
     // Group responses by athlete
-    responses.forEach((response: any) => {
+    responses.forEach((response: WellnessResponse) => {
       if (!athleteData[response.userId]) {
         athleteData[response.userId] = [];
       }
       athleteData[response.userId].push(response);
     });
 
-    const detectedAlerts: any[] = [];
+    const detectedAlerts: WellnessAlert[] = [];
 
     // Detect concerning patterns
     Object.entries(athleteData).forEach(([userId, userResponses]) => {
@@ -83,10 +85,10 @@ export default function WellnessAnalytics() {
 
       // Calculate average wellness score
       const scores = sorted.map((r) => {
-        const responseData = r.responses as any;
+        const responseData = r.responses as WellnessResponseData;
         const numericScores = Object.values(responseData)
-          .filter((v: any) => typeof v.value === 'number')
-          .map((v: any) => v.value as number);
+          .filter((v) => typeof v.value === 'number')
+          .map((v) => v.value as number);
 
         return numericScores.length > 0
           ? numericScores.reduce((sum, score) => sum + score, 0) / numericScores.length
@@ -95,42 +97,54 @@ export default function WellnessAnalytics() {
 
       if (scores.length < 2) return;
 
-      // Check for significant drop (>20%)
+      // Check for significant drop using constant
       const latest = scores[scores.length - 1];
       const previous = scores[scores.length - 2];
       const dropPercentage = ((previous - latest) / previous) * 100;
 
-      if (dropPercentage > 20) {
+      if (dropPercentage > WELLNESS_CONSTANTS.ALERT_DROP_PERCENTAGE) {
         detectedAlerts.push({
           id: `drop-${userId}`,
           athleteId: userId,
           athleteName: sorted[0].userFullName,
+          questionId: '', // Aggregate alert, not specific to a question
+          questionLabel: 'Overall Wellness',
           severity: 'high',
           type: 'wellness_drop',
           message: `Wellness dropped ${dropPercentage.toFixed(0)}% from previous submission`,
+          value: latest,
+          threshold: previous,
           date: sorted[sorted.length - 1].date,
+          acknowledgedAt: null,
+          acknowledgedBy: null,
         });
       }
 
-      // Check for sustained low wellness (< 4 on 1-10 scale for 3+ consecutive days)
+      // Check for sustained low wellness using constants
       let consecutiveLowDays = 0;
       for (const score of scores.slice(-5)) {
-        if (score < 4) {
+        if (score < WELLNESS_CONSTANTS.ALERT_LOW_SCORE_THRESHOLD) {
           consecutiveLowDays++;
         } else {
           consecutiveLowDays = 0;
         }
       }
 
-      if (consecutiveLowDays >= 3) {
+      if (consecutiveLowDays >= WELLNESS_CONSTANTS.ALERT_CONSECUTIVE_LOW_DAYS) {
         detectedAlerts.push({
           id: `sustained-low-${userId}`,
           athleteId: userId,
           athleteName: sorted[0].userFullName,
+          questionId: '', // Aggregate alert, not specific to a question
+          questionLabel: 'Overall Wellness',
           severity: 'medium',
           type: 'sustained_low',
           message: `Wellness has been low for ${consecutiveLowDays} consecutive days`,
+          value: scores[scores.length - 1],
+          threshold: WELLNESS_CONSTANTS.ALERT_LOW_SCORE_THRESHOLD,
           date: sorted[sorted.length - 1].date,
+          acknowledgedAt: null,
+          acknowledgedBy: null,
         });
       }
     });
@@ -238,7 +252,7 @@ export default function WellnessAnalytics() {
               <Skeleton className="h-96" />
             ) : (
               <WellnessTrendChart
-                trends={trends}
+                trends={trends || []}
                 responses={responses || []}
                 selectedAthleteId={selectedAthleteId}
                 onAthleteSelect={setSelectedAthleteId}

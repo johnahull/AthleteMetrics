@@ -2,9 +2,11 @@ import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
+import type { WellnessResponse, WellnessResponseData, HeatmapCellData } from '@shared/wellness-types';
+import { WELLNESS_CONSTANTS, getWellnessScoreLevel, getHeatmapColor } from '@shared/wellness-constants';
 
 interface TeamHeatmapProps {
-  responses: any[];
+  responses: WellnessResponse[];
   filters: {
     dateFrom: string;
     dateTo: string;
@@ -13,25 +15,25 @@ interface TeamHeatmapProps {
   organizationId: string;
 }
 
+interface HeatmapCell {
+  score: number;
+  athleteName: string;
+  responses: WellnessResponseData;
+}
+
 /**
  * Heatmap visualization showing team wellness across dates
  * Rows = Athletes, Columns = Dates, Color = Wellness Score
  */
 export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
-  const [selectedCell, setSelectedCell] = useState<{
-    athleteId: string;
-    athleteName: string;
-    date: string;
-    score: number;
-    responses: any;
-  } | null>(null);
+  const [selectedCell, setSelectedCell] = useState<HeatmapCellData | null>(null);
 
   // Prepare heatmap data
   const heatmapData = useMemo(() => {
     if (!responses || responses.length === 0) return null;
 
     // Group responses by athlete and date
-    const dataByAthleteAndDate: Record<string, Record<string, any>> = {};
+    const dataByAthleteAndDate: Record<string, Record<string, HeatmapCell>> = {};
 
     responses.forEach((response) => {
       if (!dataByAthleteAndDate[response.userId]) {
@@ -39,10 +41,10 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
       }
 
       // Calculate average wellness score for this response
-      const responseData = response.responses as any;
+      const responseData = response.responses as WellnessResponseData;
       const numericScores = Object.values(responseData)
-        .filter((v: any) => typeof v.value === 'number')
-        .map((v: any) => v.value as number);
+        .filter((v) => typeof v.value === 'number')
+        .map((v) => v.value as number);
 
       const avgScore =
         numericScores.length > 0
@@ -77,20 +79,29 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
     };
   }, [responses]);
 
-  // Get color for wellness score
-  const getScoreColor = (score: number): string => {
-    if (score === 0) return 'bg-gray-100'; // No data
+  // Get Tailwind CSS class for wellness score
+  const getScoreTailwindClass = (score: number | null): string => {
+    if (score === null || score === 0) return 'bg-gray-100'; // No data
 
-    // Color scale from red (low) to yellow (medium) to green (high)
-    if (score < 3) return 'bg-red-500';
-    if (score < 5) return 'bg-orange-400';
-    if (score < 7) return 'bg-yellow-400';
-    if (score < 9) return 'bg-green-400';
-    return 'bg-green-600';
+    const level = getWellnessScoreLevel(score);
+
+    // Map to Tailwind classes for consistency
+    switch (level) {
+      case 'very_low':
+        return 'bg-red-500';
+      case 'low':
+        return 'bg-orange-400';
+      case 'medium':
+        return 'bg-yellow-400';
+      case 'good':
+        return 'bg-green-400';
+      case 'excellent':
+        return 'bg-green-600';
+    }
   };
 
   const getScoreTextColor = (score: number): string => {
-    return score >= 3 ? 'text-white' : 'text-gray-700';
+    return score >= WELLNESS_CONSTANTS.SCORE_LOW_THRESHOLD ? 'text-white' : 'text-gray-700';
   };
 
   if (!heatmapData || heatmapData.athletes.length === 0) {
@@ -166,7 +177,7 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
                         key={`${athlete.id}-${date}`}
                         data-testid={`heatmap-cell-${athlete.id}-${date}`}
                         className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
-                          getScoreColor(score)
+                          getScoreTailwindClass(score)
                         } ${getScoreTextColor(score)}`}
                         onClick={() => {
                           if (cellData) {
@@ -176,6 +187,8 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
                               date,
                               score: cellData.score,
                               responses: cellData.responses,
+                              hasAlert: false,
+                              alertSeverity: undefined,
                             });
                           }
                         }}
@@ -226,27 +239,29 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
               <div>
                 <p className="text-sm text-gray-600">Average Wellness Score</p>
                 <p data-testid="modal-wellness-score" className="text-2xl font-bold text-gray-900">
-                  {selectedCell.score.toFixed(1)} / 10
+                  {(selectedCell.score ?? 0).toFixed(1)} / 10
                 </p>
               </div>
 
               <div>
                 <p className="text-sm font-medium text-gray-700 mb-2">Individual Responses:</p>
                 <div className="space-y-2">
-                  {Object.entries(selectedCell.responses).map(([questionId, data]: [string, any]) => (
-                    <div key={questionId} className="p-2 bg-gray-50 rounded-lg">
-                      <p className="text-sm font-medium text-gray-900">{data.label}</p>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {typeof data.value === 'number'
-                          ? `${data.value} / 10`
-                          : typeof data.value === 'boolean'
-                          ? data.value
-                            ? 'Yes'
-                            : 'No'
-                          : data.value}
-                      </p>
-                    </div>
-                  ))}
+                  {Object.entries(selectedCell.responses as WellnessResponseData).map(
+                    ([questionId, data]) => (
+                      <div key={questionId} className="p-2 bg-gray-50 rounded-lg">
+                        <p className="text-sm font-medium text-gray-900">{data.label}</p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          {typeof data.value === 'number'
+                            ? `${data.value} / 10`
+                            : typeof data.value === 'boolean'
+                            ? data.value
+                              ? 'Yes'
+                              : 'No'
+                            : String(data.value)}
+                        </p>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
             </div>

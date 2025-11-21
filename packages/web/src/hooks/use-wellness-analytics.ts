@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import type { WellnessResponse, WellnessSummary, WellnessResponseData, TrendDirection } from '@shared/wellness-types';
+import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 interface WellnessFilters {
   dateFrom: string;
@@ -28,7 +30,12 @@ export function useWellnessAnalytics({
   enabled = true,
 }: UseWellnessAnalyticsOptions) {
   // Fetch wellness responses
-  const { data: responses, isLoading: responsesLoading } = useQuery({
+  const {
+    data: responses,
+    isLoading: responsesLoading,
+    error: responsesError,
+    refetch: refetchResponses,
+  } = useQuery<WellnessResponse[]>({
     queryKey: [
       '/api/organizations/:orgId/wellness/responses',
       organizationId,
@@ -54,16 +61,25 @@ export function useWellnessAnalytics({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch wellness responses');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to fetch wellness responses');
       }
 
       return response.json();
     },
     enabled: enabled && !!organizationId,
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes (formerly cacheTime)
   });
 
   // Fetch wellness trends
-  const { data: trends, isLoading: trendsLoading } = useQuery({
+  const {
+    data: trends,
+    isLoading: trendsLoading,
+    error: trendsError,
+    refetch: refetchTrends,
+  } = useQuery<any[]>({
     queryKey: [
       '/api/organizations/:orgId/wellness/analytics/trends',
       organizationId,
@@ -85,19 +101,23 @@ export function useWellnessAnalytics({
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch wellness trends');
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to fetch wellness trends');
       }
 
       return response.json();
     },
     enabled: enabled && !!organizationId,
+    retry: 2,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   });
 
   // Calculate summary statistics from responses
-  const summary = responses
+  const summary: WellnessSummary | null = responses
     ? {
         totalResponses: responses.length,
-        uniqueAthletes: new Set(responses.map((r: any) => r.userId)).size,
+        uniqueAthletes: new Set(responses.map((r: WellnessResponse) => r.userId)).size,
         averageWellness: calculateAverageWellness(responses),
         trend: calculateTrend(responses),
         lastUpdated: new Date(),
@@ -109,21 +129,26 @@ export function useWellnessAnalytics({
     trends,
     summary,
     isLoading: responsesLoading || trendsLoading,
+    error: responsesError || trendsError,
+    refetch: () => {
+      refetchResponses();
+      refetchTrends();
+    },
   };
 }
 
 /**
  * Calculate overall average wellness score from responses
  */
-function calculateAverageWellness(responses: any[]): number {
+function calculateAverageWellness(responses: WellnessResponse[]): number {
   if (!responses || responses.length === 0) return 0;
 
   let totalScore = 0;
   let scoreCount = 0;
 
   responses.forEach((response) => {
-    const responseData = response.responses as any;
-    Object.values(responseData).forEach((data: any) => {
+    const responseData = response.responses as WellnessResponseData;
+    Object.values(responseData).forEach((data) => {
       if (typeof data.value === 'number') {
         totalScore += data.value;
         scoreCount++;
@@ -137,7 +162,7 @@ function calculateAverageWellness(responses: any[]): number {
 /**
  * Calculate wellness trend (up, down, or stable)
  */
-function calculateTrend(responses: any[]): 'up' | 'down' | 'stable' {
+function calculateTrend(responses: WellnessResponse[]): TrendDirection {
   if (!responses || responses.length < 2) return 'stable';
 
   // Sort by date
@@ -154,7 +179,10 @@ function calculateTrend(responses: any[]): 'up' | 'down' | 'stable' {
   const secondAvg = calculateAverageWellness(secondHalf);
 
   const difference = secondAvg - firstAvg;
-  const threshold = 0.5; // 5% threshold
+
+  // Use percentage threshold from constants (5% of scale range 1-10 = 0.5 points)
+  const threshold = (WELLNESS_CONSTANTS.TREND_PERCENTAGE_THRESHOLD / 100) *
+    (WELLNESS_CONSTANTS.SCORE_MAX - WELLNESS_CONSTANTS.SCORE_MIN);
 
   if (difference > threshold) return 'up';
   if (difference < -threshold) return 'down';

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -13,6 +13,8 @@ import {
 } from 'chart.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useQuery } from '@tanstack/react-query';
+import type { WellnessResponse, WellnessResponseData } from '@shared/wellness-types';
+import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 // Register Chart.js components
 ChartJS.register(
@@ -25,9 +27,16 @@ ChartJS.register(
   Legend
 );
 
+interface User {
+  id: string;
+  fullName: string;
+  email: string;
+  role: string;
+}
+
 interface WellnessTrendChartProps {
-  trends: any[];
-  responses: any[];
+  trends: any[]; // TODO: Define proper trend type when backend endpoint is implemented
+  responses: WellnessResponse[];
   selectedAthleteId: string | null;
   onAthleteSelect: (athleteId: string | null) => void;
   organizationId: string;
@@ -43,8 +52,20 @@ export function WellnessTrendChart({
   onAthleteSelect,
   organizationId,
 }: WellnessTrendChartProps) {
+  // Chart ref for cleanup
+  const chartRef = useRef<ChartJS<'line'>>(null);
+
+  // Cleanup chart on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+      }
+    };
+  }, []);
+
   // Get list of athletes
-  const { data: users = [] } = useQuery({
+  const { data: users = [] } = useQuery<User[]>({
     queryKey: ['/api/users', organizationId],
     queryFn: async () => {
       const response = await fetch(`/api/users?organizationId=${organizationId}`, {
@@ -55,7 +76,7 @@ export function WellnessTrendChart({
     enabled: !!organizationId,
   });
 
-  const athletes = users.filter((u: any) => u.role === 'athlete');
+  const athletes = users.filter((u: User) => u.role === 'athlete');
 
   // Filter responses for selected athlete
   const athleteResponses = useMemo(() => {
@@ -75,39 +96,37 @@ export function WellnessTrendChart({
     // Get unique question IDs from responses
     const questionIds = new Set<string>();
     athleteResponses.forEach((response) => {
-      Object.keys(response.responses as any).forEach((qId) => questionIds.add(qId));
+      const responseData = response.responses as WellnessResponseData;
+      Object.keys(responseData).forEach((qId) => questionIds.add(qId));
     });
 
     const questionIdArray = Array.from(questionIds);
 
-    // Create datasets for each question
-    const datasets = questionIdArray.map((questionId, index) => {
+    // Create datasets for each question (limit to max)
+    const limitedQuestionIds = questionIdArray.slice(0, WELLNESS_CONSTANTS.CHART_MAX_QUESTIONS);
+
+    const datasets = limitedQuestionIds.map((questionId, index) => {
       const dataPoints = athleteResponses.map((response) => {
-        const responseData = (response.responses as any)[questionId];
-        return responseData && typeof responseData.value === 'number'
-          ? responseData.value
+        const responseData = response.responses as WellnessResponseData;
+        const questionData = responseData[questionId];
+        return questionData && typeof questionData.value === 'number'
+          ? questionData.value
           : null;
       });
 
-      const colors = [
-        'rgb(59, 130, 246)', // Blue
-        'rgb(16, 185, 129)', // Green
-        'rgb(245, 158, 11)', // Orange
-        'rgb(139, 92, 246)', // Purple
-        'rgb(236, 72, 153)', // Pink
-      ];
-
-      const color = colors[index % colors.length];
+      // Use colorblind-friendly palette from constants
+      const color = WELLNESS_CONSTANTS.CHART_COLORS[index % WELLNESS_CONSTANTS.CHART_COLORS.length];
 
       // Get question label from first response that has this question
       const labelResponse = athleteResponses.find((r) => {
-        const data = (r.responses as any)[questionId];
+        const responseData = r.responses as WellnessResponseData;
+        const data = responseData[questionId];
         return data && data.label;
       });
 
       const label =
-        labelResponse && (labelResponse.responses as any)[questionId]?.label
-          ? (labelResponse.responses as any)[questionId].label
+        labelResponse && (labelResponse.responses as WellnessResponseData)[questionId]?.label
+          ? (labelResponse.responses as WellnessResponseData)[questionId].label
           : questionId;
 
       return {
@@ -180,7 +199,7 @@ export function WellnessTrendChart({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Select an athlete...</SelectItem>
-            {athletes.map((athlete: any) => (
+            {athletes.map((athlete: User) => (
               <SelectItem key={athlete.id} value={athlete.id}>
                 {athlete.fullName || athlete.email}
               </SelectItem>
@@ -206,7 +225,7 @@ export function WellnessTrendChart({
         </div>
       ) : (
         <div className="h-96">
-          <Line data={chartData} options={options} />
+          <Line ref={chartRef} data={chartData} options={options} />
         </div>
       )}
     </div>

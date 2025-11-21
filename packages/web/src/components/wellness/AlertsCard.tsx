@@ -1,19 +1,10 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, AlertCircle } from 'lucide-react';
-
-interface Alert {
-  id: string;
-  athleteId: string;
-  athleteName: string;
-  severity: 'high' | 'medium' | 'low';
-  type: string;
-  message: string;
-  date: string;
-}
+import { AlertTriangle, AlertCircle, AlertOctagon } from 'lucide-react';
+import type { WellnessAlert, AlertSeverity } from '@shared/wellness-types';
 
 interface AlertsCardProps {
-  alerts: Alert[];
+  alerts: WellnessAlert[];
   onAlertClick?: (athleteId: string) => void;
   'data-testid'?: string;
 }
@@ -22,7 +13,16 @@ interface AlertsCardProps {
  * Card displaying wellness alerts for concerning patterns
  */
 export function AlertsCard({ alerts, onAlertClick, 'data-testid': testId }: AlertsCardProps) {
-  const severityConfig = {
+  const severityConfig: Record<AlertSeverity, {
+    icon: JSX.Element;
+    color: string;
+    badge: 'destructive' | 'outline' | 'secondary' | 'default';
+  }> = {
+    critical: {
+      icon: <AlertOctagon className="h-4 w-4" />,
+      color: 'bg-red-200 text-red-900 border-red-300',
+      badge: 'destructive' as const,
+    },
     high: {
       icon: <AlertTriangle className="h-4 w-4" />,
       color: 'bg-red-100 text-red-800 border-red-200',

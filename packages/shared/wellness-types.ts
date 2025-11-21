@@ -242,6 +242,8 @@ export interface WellnessTrend {
  * Analytics - Alert Types
  */
 export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type AlertType = 'wellness_drop' | 'sustained_low';
+export type TrendDirection = 'up' | 'down' | 'stable';
 
 export interface WellnessAlert {
   id: string;
@@ -250,6 +252,7 @@ export interface WellnessAlert {
   questionId: string;
   questionLabel: string;
   severity: AlertSeverity;
+  type: AlertType;
   message: string;
   value: ResponseValue;
   threshold: number;
@@ -296,6 +299,51 @@ export interface WellnessHeatmap {
   columns: string[]; // Question IDs
   data: WellnessHeatmapCell[][];
   lastUpdated: Date;
+}
+
+/**
+ * Analytics Dashboard - Summary Card Data
+ */
+export interface WellnessSummary {
+  averageWellness: number;
+  trend: TrendDirection;
+  totalResponses: number;
+  uniqueAthletes: number;
+  lastUpdated: Date;
+}
+
+/**
+ * Analytics Dashboard - Filters
+ */
+export interface WellnessFilters {
+  dateFrom: string; // YYYY-MM-DD
+  dateTo: string;   // YYYY-MM-DD
+  teamIds: string[];
+  athleteIds: string[];
+}
+
+/**
+ * Analytics Dashboard - Completion Rate Data
+ */
+export interface CompletionRateData {
+  percentage: number;
+  completed: number;
+  total: number;
+  periodStart: string; // YYYY-MM-DD
+  periodEnd: string;   // YYYY-MM-DD
+}
+
+/**
+ * Analytics Dashboard - Heatmap Cell Data (for UI components)
+ */
+export interface HeatmapCellData {
+  athleteId: string;
+  athleteName: string;
+  date: string; // YYYY-MM-DD
+  score: number | null;
+  responses: WellnessResponseData;
+  hasAlert: boolean;
+  alertSeverity?: AlertSeverity;
 }
 
 /**
