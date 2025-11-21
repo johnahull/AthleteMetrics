@@ -155,11 +155,20 @@ export default function AdminMeasurementsPage() {
     queryKey: ["/api/teams", watchedFilters.organizationId],
     queryFn: async () => {
       if (!watchedFilters.organizationId) return [];
+      console.log('[Admin Measurements] Fetching teams for org:', watchedFilters.organizationId);
       const response = await fetch(`/api/teams?organizationId=${watchedFilters.organizationId}`);
       if (!response.ok) throw new Error('Failed to fetch teams');
-      return response.json();
+      const data = await response.json();
+      console.log('[Admin Measurements] Teams fetched:', data);
+      return data;
     },
     enabled: !!watchedFilters.organizationId,
+  });
+
+  console.log('[Admin Measurements] Current state:', {
+    organizationId: watchedFilters.organizationId,
+    teamsCount: teams.length,
+    selectedTeamsCount: selectedTeams.length
   });
 
   // Reset selected teams when organization changes
