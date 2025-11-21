@@ -92,6 +92,23 @@ export default function WellnessSubmit() {
     enabled: !!request?.templateId,
   });
 
+  // Check if user has already submitted for this request
+  const {
+    data: submissionCheck,
+    isLoading: isCheckingSubmission,
+  } = useQuery<{ hasSubmitted: boolean; submittedAt?: string; responseId?: string }>({
+    queryKey: ['wellness-submission-check', request?.id],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/wellness/requests/${request?.id}/check-submission`);
+      if (!res.ok) {
+        // If check fails, assume not submitted to allow form access
+        return { hasSubmitted: false };
+      }
+      return res.json();
+    },
+    enabled: !!request?.id,
+  });
+
   // Submit mutation
   const submitMutation = useMutation({
     mutationFn: async (data: { responses: WellnessResponseData }) => {
@@ -165,8 +182,8 @@ export default function WellnessSubmit() {
   // Check if token is expired
   const isExpired = request?.expiresAt && new Date(request.expiresAt) < new Date();
 
-  // Check if already submitted (by checking local storage or API)
-  const hasSubmitted = isSubmitted; // TODO: Check if user already submitted this request
+  // Check if already submitted (checks both API and current session state)
+  const hasSubmitted = isSubmitted || (submissionCheck?.hasSubmitted ?? false);
 
   // Calculate progress
   const questions = template?.config?.questions || [];
@@ -221,7 +238,7 @@ export default function WellnessSubmit() {
   };
 
   // Loading state
-  if (isLoadingRequest || isLoadingTemplate) {
+  if (isLoadingRequest || isLoadingTemplate || isCheckingSubmission) {
     return (
       <div className="container max-w-3xl mx-auto py-8 px-4">
         <Card>
@@ -281,8 +298,10 @@ export default function WellnessSubmit() {
             <CardDescription>Your responses have been recorded</CardDescription>
           </CardHeader>
           <CardContent>
-            {submittedAt && (
-              <p className="text-sm text-muted-foreground">Submitted at {submittedAt}</p>
+            {(submittedAt || submissionCheck?.submittedAt) && (
+              <p className="text-sm text-muted-foreground">
+                Submitted at {submittedAt || new Date(submissionCheck?.submittedAt!).toLocaleString()}
+              </p>
             )}
             <p className="mt-4 text-sm">You have already submitted this questionnaire</p>
           </CardContent>

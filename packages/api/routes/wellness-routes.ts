@@ -717,6 +717,49 @@ export function registerWellnessRoutes(app: Express) {
     }
   );
 
+  /**
+   * GET /api/wellness/requests/:requestId/check-submission
+   * Check if the current user has already submitted a response for this request
+   * Access: Public (supports both authenticated and magic link access)
+   */
+  app.get(
+    "/api/wellness/requests/:requestId/check-submission",
+    highVolumeLimiter,
+    requireWellnessAccess(false),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { requestId } = req.params;
+        const userId = req.user!.id;
+
+        // Get all responses for this user
+        const userResponses = await storage.getWellnessResponsesByAthlete(userId);
+
+        // Check if any response matches this request
+        const existingResponse = userResponses.find(
+          response => response.requestId === requestId
+        );
+
+        if (existingResponse) {
+          return res.json({
+            hasSubmitted: true,
+            submittedAt: existingResponse.submittedAt,
+            responseId: existingResponse.id,
+          });
+        }
+
+        res.json({
+          hasSubmitted: false,
+        });
+      } catch (error: any) {
+        console.error("Failed to check submission status:", error);
+        res.status(500).json({
+          message: "Failed to check submission status",
+          error: error.message,
+        });
+      }
+    }
+  );
+
   // =============================================================================
   // ANALYTICS ENDPOINTS
   // =============================================================================
