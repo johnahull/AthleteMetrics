@@ -599,9 +599,19 @@ export function registerWellnessRoutes(app: Express) {
 
           // For magic link access, verify user is targeted by this request
           if ((req.user as any).accessMethod === 'magic_link') {
-            const isTargeted =
-              (request.targetAthleteIds && request.targetAthleteIds.includes(req.user!.id)) ||
-              (request.targetTeamIds && request.targetTeamIds.length > 0);
+            let isTargeted = false;
+
+            // Check direct athlete targeting
+            if (request.targetAthleteIds && request.targetAthleteIds.includes(req.user!.id)) {
+              isTargeted = true;
+            }
+
+            // Check team-based targeting (verify user is IN targeted teams)
+            if (!isTargeted && request.targetTeamIds && request.targetTeamIds.length > 0) {
+              const userTeams = await storage.getUserTeams(req.user!.id);
+              const userTeamIds = userTeams.map(ut => ut.teamId);
+              isTargeted = request.targetTeamIds.some((teamId: string) => userTeamIds.includes(teamId));
+            }
 
             if (!isTargeted) {
               return res.status(403).json({
