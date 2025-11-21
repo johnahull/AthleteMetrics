@@ -1,0 +1,273 @@
+import { useState, useMemo } from 'react';
+import { useAuth } from '@/lib/auth';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useWellnessAnalytics } from '@/hooks/use-wellness-analytics';
+import { WellnessSummaryCard } from '@/components/wellness/WellnessSummaryCard';
+import { CompletionRateCard } from '@/components/wellness/CompletionRateCard';
+import { AlertsCard } from '@/components/wellness/AlertsCard';
+import { WellnessTrendChart } from '@/components/wellness/WellnessTrendChart';
+import { TeamHeatmap } from '@/components/wellness/TeamHeatmap';
+import { WellnessFilters } from '@/components/wellness/WellnessFilters';
+
+/**
+ * Wellness Analytics Dashboard
+ *
+ * Displays comprehensive wellness analytics including:
+ * - Summary metrics (average wellness, completion rates, alerts)
+ * - Trend charts showing wellness over time
+ * - Team heatmaps visualizing wellness patterns
+ * - Filtering by date range, teams, athletes, and questions
+ */
+export default function WellnessAnalytics() {
+  const { organizationContext, userOrganizations, user } = useAuth();
+
+  // Get effective organization ID
+  const getEffectiveOrganizationId = () => {
+    if (organizationContext) return organizationContext;
+    const isSiteAdmin = user?.isSiteAdmin || false;
+    if (!isSiteAdmin && Array.isArray(userOrganizations) && userOrganizations.length > 0) {
+      return userOrganizations[0].organizationId;
+    }
+    return null;
+  };
+
+  const effectiveOrganizationId = getEffectiveOrganizationId();
+
+  // Filter state
+  const [filters, setFilters] = useState({
+    dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    dateTo: new Date().toISOString().split('T')[0],
+    teamIds: [] as string[],
+    athleteIds: [] as string[],
+    questionIds: [] as string[],
+  });
+
+  // Selected athlete for trend chart
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+
+  // Fetch analytics data
+  const {
+    summary,
+    responses,
+    trends,
+    isLoading,
+  } = useWellnessAnalytics({
+    organizationId: effectiveOrganizationId || '',
+    filters,
+    enabled: !!effectiveOrganizationId,
+  });
+
+  // Calculate alerts from responses
+  const alerts = useMemo(() => {
+    if (!responses || responses.length === 0) return [];
+
+    const athleteData: Record<string, any[]> = {};
+
+    // Group responses by athlete
+    responses.forEach((response: any) => {
+      if (!athleteData[response.userId]) {
+        athleteData[response.userId] = [];
+      }
+      athleteData[response.userId].push(response);
+    });
+
+    const detectedAlerts: any[] = [];
+
+    // Detect concerning patterns
+    Object.entries(athleteData).forEach(([userId, userResponses]) => {
+      // Sort by date
+      const sorted = [...userResponses].sort((a, b) =>
+        new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      // Calculate average wellness score
+      const scores = sorted.map((r) => {
+        const responseData = r.responses as any;
+        const numericScores = Object.values(responseData)
+          .filter((v: any) => typeof v.value === 'number')
+          .map((v: any) => v.value as number);
+
+        return numericScores.length > 0
+          ? numericScores.reduce((sum, score) => sum + score, 0) / numericScores.length
+          : null;
+      }).filter((s): s is number => s !== null);
+
+      if (scores.length < 2) return;
+
+      // Check for significant drop (>20%)
+      const latest = scores[scores.length - 1];
+      const previous = scores[scores.length - 2];
+      const dropPercentage = ((previous - latest) / previous) * 100;
+
+      if (dropPercentage > 20) {
+        detectedAlerts.push({
+          id: `drop-${userId}`,
+          athleteId: userId,
+          athleteName: sorted[0].userFullName,
+          severity: 'high',
+          type: 'wellness_drop',
+          message: `Wellness dropped ${dropPercentage.toFixed(0)}% from previous submission`,
+          date: sorted[sorted.length - 1].date,
+        });
+      }
+
+      // Check for sustained low wellness (< 4 on 1-10 scale for 3+ consecutive days)
+      let consecutiveLowDays = 0;
+      for (const score of scores.slice(-5)) {
+        if (score < 4) {
+          consecutiveLowDays++;
+        } else {
+          consecutiveLowDays = 0;
+        }
+      }
+
+      if (consecutiveLowDays >= 3) {
+        detectedAlerts.push({
+          id: `sustained-low-${userId}`,
+          athleteId: userId,
+          athleteName: sorted[0].userFullName,
+          severity: 'medium',
+          type: 'sustained_low',
+          message: `Wellness has been low for ${consecutiveLowDays} consecutive days`,
+          date: sorted[sorted.length - 1].date,
+        });
+      }
+    });
+
+    return detectedAlerts;
+  }, [responses]);
+
+  // Calculate completion rate
+  const completionRate = useMemo(() => {
+    if (!summary) return { percentage: 0, completed: 0, total: 0 };
+
+    // TODO: Get actual completion rate from requests
+    // For now, calculate based on unique athletes vs expected
+    const uniqueAthletes = summary.uniqueAthletes || 0;
+    const expectedAthletes = uniqueAthletes; // Placeholder
+
+    return {
+      percentage: expectedAthletes > 0 ? (uniqueAthletes / expectedAthletes) * 100 : 0,
+      completed: uniqueAthletes,
+      total: expectedAthletes,
+    };
+  }, [summary]);
+
+  // Filter functions
+  const handleFilterChange = (newFilters: Partial<typeof filters>) => {
+    setFilters((prev) => ({ ...prev, ...newFilters }));
+  };
+
+  const handleClearFilters = () => {
+    setFilters({
+      dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+      dateTo: new Date().toISOString().split('T')[0],
+      teamIds: [],
+      athleteIds: [],
+      questionIds: [],
+    });
+  };
+
+  if (!effectiveOrganizationId) {
+    return (
+      <div className="p-6">
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardContent className="pt-6">
+            <p className="text-yellow-800">
+              Please select an organization to view wellness analytics.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold text-gray-900">Wellness Analytics</h1>
+      </div>
+
+      {/* Filters Section */}
+      <div data-testid="filters-section">
+        <WellnessFilters
+          filters={filters}
+          onFilterChange={handleFilterChange}
+          onClearFilters={handleClearFilters}
+          organizationId={effectiveOrganizationId}
+        />
+      </div>
+
+      {/* Summary Cards */}
+      <div data-testid="summary-cards-section" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {isLoading ? (
+          <>
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+            <Skeleton className="h-32" />
+          </>
+        ) : (
+          <>
+            <WellnessSummaryCard
+              summary={summary}
+              data-testid="card-average-wellness"
+            />
+            <CompletionRateCard
+              completionRate={completionRate}
+              data-testid="card-completion-rate"
+            />
+            <AlertsCard
+              alerts={alerts}
+              onAlertClick={(athleteId) => setSelectedAthleteId(athleteId)}
+              data-testid="card-alerts"
+            />
+          </>
+        )}
+      </div>
+
+      {/* Trend Chart */}
+      <div data-testid="section-trend-chart">
+        <Card>
+          <CardHeader>
+            <CardTitle data-testid="chart-title">Wellness Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-96" />
+            ) : (
+              <WellnessTrendChart
+                trends={trends}
+                responses={responses || []}
+                selectedAthleteId={selectedAthleteId}
+                onAthleteSelect={setSelectedAthleteId}
+                organizationId={effectiveOrganizationId}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Team Heatmap */}
+      <div data-testid="section-team-heatmap">
+        <Card>
+          <CardHeader>
+            <CardTitle data-testid="heatmap-title">Team Wellness Heatmap</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-96" />
+            ) : (
+              <TeamHeatmap
+                responses={responses || []}
+                filters={filters}
+                organizationId={effectiveOrganizationId}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}

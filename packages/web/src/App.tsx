@@ -54,6 +54,7 @@ const WellnessTemplates = React.lazy(() => import("./pages/wellness-templates"))
 const WellnessSubmit = React.lazy(() => import("./pages/wellness-submit"));
 const WellnessMyRequests = React.lazy(() => import("./pages/wellness-my-requests"));
 const WellnessHistory = React.lazy(() => import("./pages/wellness-history"));
+const WellnessAnalytics = React.lazy(() => import("./pages/wellness-analytics"));
 
 // Lazy load benchmark pages
 const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
@@ -190,6 +191,11 @@ function Router() {
       <Route path="/teams">
         <RouteWrapper loadingText="Loading Teams...">
           <Teams />
+        </RouteWrapper>
+      </Route>
+      <Route path="/wellness-analytics">
+        <RouteWrapper loadingText="Loading Wellness Analytics...">
+          <WellnessAnalytics />
         </RouteWrapper>
       </Route>
       <Route path="/wellness">

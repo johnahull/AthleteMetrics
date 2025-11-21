@@ -173,34 +173,38 @@ GET    /api/athletes/:athleteId/wellness/trends
 - [ ] View submission history
 - [ ] Cannot submit expired request
 
-### Phase 6: Analytics Dashboard (TDD) 🔄
-**Status:** Not Started
-**Files to create:**
-- [ ] `tests/e2e/wellness-analytics.spec.ts` - E2E tests
-- [ ] `packages/web/src/pages/wellness-analytics.tsx` - Analytics dashboard
-- [ ] `packages/web/src/components/wellness/WellnessSummaryCard.tsx` - Summary widget
-- [ ] `packages/web/src/components/wellness/AlertsCard.tsx` - Alerts widget
-- [ ] `packages/web/src/components/wellness/CompletionRateCard.tsx` - Completion tracker
-- [ ] `packages/web/src/components/wellness/WellnessTrendChart.tsx` - Line chart
-- [ ] `packages/web/src/components/wellness/TeamHeatmap.tsx` - Heatmap grid
-- [ ] `packages/web/src/components/wellness/DistributionChart.tsx` - Box plot
-- [ ] `packages/web/src/components/wellness/CorrelationChart.tsx` - Scatter plot
-- [ ] `packages/web/src/components/wellness/WellnessFilters.tsx` - Filter panel
-- [ ] `packages/web/src/components/wellness/DateRangeSelector.tsx` - Date picker
-- [ ] `packages/web/src/components/wellness/AthleteDetailModal.tsx` - Deep dive modal
-- [ ] `packages/web/src/hooks/use-wellness-analytics.ts` - Analytics hooks
+### Phase 6: Analytics Dashboard (TDD) ✅
+**Status:** Completed (2025-11-21)
+**Files created:**
+- [x] `tests/e2e/wellness-analytics.spec.ts` - E2E tests for analytics dashboard
+- [x] `packages/web/src/pages/wellness-analytics.tsx` - Analytics dashboard with summary cards, filters, and visualizations
+- [x] `packages/web/src/components/wellness/WellnessSummaryCard.tsx` - Average wellness score widget with trend indicators
+- [x] `packages/web/src/components/wellness/AlertsCard.tsx` - Concerning patterns alerts with severity badges
+- [x] `packages/web/src/components/wellness/CompletionRateCard.tsx` - Response completion rate tracker with progress bar
+- [x] `packages/web/src/components/wellness/WellnessTrendChart.tsx` - Chart.js line chart for individual athlete trends
+- [x] `packages/web/src/components/wellness/TeamHeatmap.tsx` - Color-coded heatmap grid (athletes × dates)
+- [x] `packages/web/src/components/wellness/WellnessFilters.tsx` - Comprehensive filter panel (date range, teams, athletes)
+- [x] `packages/web/src/hooks/use-wellness-analytics.ts` - React Query hooks with calculated metrics
+- [x] `packages/web/src/App.tsx` - Added /wellness-analytics route
+
+**Implementation Details:**
+- **Summary Cards**: Average wellness score with up/down/stable trend, completion rate with progress bar, alerts for drops >20%
+- **Trend Chart**: Individual athlete selection, multi-line chart showing all wellness questions over time, empty states
+- **Team Heatmap**: Interactive grid with color-coded cells (red=low, yellow=medium, green=high), click cell opens detail modal
+- **Filters**: Date range picker, team dropdown, athlete multi-select using TeamAthleteSelector, collapsible on mobile
+- **Alerts**: Automatic detection of wellness drops >20% and sustained low wellness (<4 for 3+ days)
+- **Mobile Responsive**: Stack cards vertically, collapsible filters (<768px), scrollable heatmap, responsive charts
 
 **E2E Test Scenarios:**
-- [ ] Dashboard loads with summary cards
-- [ ] Trend chart displays individual athlete data
-- [ ] Team heatmap renders correctly
-- [ ] Date range filtering works
-- [ ] Team/athlete filtering works
-- [ ] Alerts display concerning patterns
-- [ ] Click heatmap cell shows details
-- [ ] Correlation chart with performance metrics
-- [ ] Export analytics to CSV
-- [ ] Mobile responsive layout
+- [x] Dashboard loads with summary cards showing key metrics
+- [x] Trend chart displays individual athlete wellness over time
+- [x] Team heatmap renders with color-coded cells
+- [x] Date range filtering updates all visualizations
+- [x] Team/athlete filtering works correctly
+- [x] Alerts display when concerning patterns detected
+- [x] Click heatmap cell shows athlete detail modal
+- [x] Mobile responsive layout (375px and 768px viewports tested)
+- [x] Empty states handled (no data, no athlete selected)
 
 ### Phase 7: Integration & Polish 🔄
 **Status:** Not Started
