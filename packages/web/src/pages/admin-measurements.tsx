@@ -126,6 +126,15 @@ const filterSchema = z.object({
     return true;
   },
   { message: "Birth Year From must be less than or equal to Birth Year To", path: ["birthYearFrom"] }
+).refine(
+  (data) => {
+    // Validate team selection requires organization
+    if (data.teamIds && data.teamIds.length > 0 && !data.organizationId) {
+      return false;
+    }
+    return true;
+  },
+  { message: "Please select an organization before selecting teams", path: ["teamIds"] }
 );
 
 type FilterFormData = z.infer<typeof filterSchema>;
@@ -160,6 +169,7 @@ export default function AdminMeasurementsPage() {
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [bulkAction, setBulkAction] = useState<'verify' | 'unverify' | null>(null);
+  const [showExportConfirm, setShowExportConfirm] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -270,9 +280,18 @@ export default function AdminMeasurementsPage() {
 
       // Handle partial success (207 Multi-Status)
       if (data.failed > 0) {
+        // Log all errors to console for debugging
+        if (data.errors?.length > 0) {
+          console.error('Bulk verify errors:', data.errors);
+        }
+
+        const errorSummary = data.errors?.length > 1
+          ? `First error: ${data.errors[0]}. See console for all ${data.errors.length} errors.`
+          : data.errors?.[0] || 'Unknown error';
+
         toast({
           title: "Partial Success",
-          description: `${data.verified} verified, ${data.failed} failed. ${data.errors?.length > 0 ? data.errors[0] : ''}`,
+          description: `${data.verified} verified, ${data.failed} failed. ${errorSummary}`,
           variant: "destructive",
         });
       } else {
@@ -309,9 +328,18 @@ export default function AdminMeasurementsPage() {
 
       // Handle partial success (207 Multi-Status)
       if (data.failed > 0) {
+        // Log all errors to console for debugging
+        if (data.errors?.length > 0) {
+          console.error('Bulk unverify errors:', data.errors);
+        }
+
+        const errorSummary = data.errors?.length > 1
+          ? `First error: ${data.errors[0]}. See console for all ${data.errors.length} errors.`
+          : data.errors?.[0] || 'Unknown error';
+
         toast({
           title: "Partial Success",
-          description: `${data.unverified} unverified, ${data.failed} failed. ${data.errors?.length > 0 ? data.errors[0] : ''}`,
+          description: `${data.unverified} unverified, ${data.failed} failed. ${errorSummary}`,
           variant: "destructive",
         });
       } else {
@@ -443,6 +471,15 @@ export default function AdminMeasurementsPage() {
   // CSV Export function with proper error handling
   const exportToCSV = useCallback(() => {
     try {
+      // Warn for large exports (>500 records)
+      if (measurements.length > 500 && !showExportConfirm) {
+        setShowExportConfirm(true);
+        return;
+      }
+
+      // Reset confirmation state
+      setShowExportConfirm(false);
+
       const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
 
       const rows = measurements.map(m => [
@@ -496,7 +533,7 @@ export default function AdminMeasurementsPage() {
         variant: "destructive",
       });
     }
-  }, [measurements, formatMetricName, toast]);
+  }, [measurements, formatMetricName, toast, showExportConfirm]);
 
   // Sorting function
   const handleSort = (field: string) => {
@@ -1251,6 +1288,24 @@ export default function AdminMeasurementsPage() {
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleBulkActionConfirm}>
               {bulkAction === 'verify' ? 'Verify' : 'Unverify'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* CSV Export Confirmation Dialog */}
+      <AlertDialog open={showExportConfirm} onOpenChange={setShowExportConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Large CSV Export</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to export {measurements.length} measurements to CSV. This may take a moment and could impact browser performance. Do you want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={exportToCSV}>
+              Export {measurements.length} Records
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
