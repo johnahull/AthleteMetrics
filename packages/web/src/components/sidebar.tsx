@@ -14,7 +14,8 @@ import {
   TrendingUp,
   Settings,
   Target,
-  ClipboardList
+  ClipboardList,
+  Activity
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -31,6 +32,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
+      { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
       { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
       { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
