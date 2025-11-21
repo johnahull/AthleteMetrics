@@ -18,6 +18,7 @@ import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle,
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 
 // Measurement type from API
 interface Measurement {
@@ -686,6 +687,33 @@ export default function AdminMeasurementsPage() {
           </Collapsible>
         </CardHeader>
       </Card>
+
+      {/* Statistics Summary */}
+      {measurements.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {watchedFilters.metric ? (
+            // Show statistics for the selected metric
+            <StatisticsSummaryCard
+              measurements={measurements.filter((m) => m.metric === watchedFilters.metric)}
+              metric={watchedFilters.metric}
+            />
+          ) : (
+            // Show statistics for common metrics when no specific metric is selected
+            <>
+              <StatisticsSummaryCard
+                measurements={measurements.filter((m) => m.metric === 'FLY10_TIME')}
+                metric="FLY10_TIME"
+                title="10-Yard Fly Time Statistics"
+              />
+              <StatisticsSummaryCard
+                measurements={measurements.filter((m) => m.metric === 'VERTICAL_JUMP')}
+                metric="VERTICAL_JUMP"
+                title="Vertical Jump Statistics"
+              />
+            </>
+          )}
+        </div>
+      )}
 
       {/* Results */}
       <Card>
