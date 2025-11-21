@@ -85,6 +85,7 @@ const filterSchema = z.object({
   ageFrom: z.string().optional(),
   ageTo: z.string().optional(),
   organizationId: z.string().optional(),
+  teamIds: z.string().optional(), // Comma-separated team IDs
   verificationStatus: z.string().optional(), // "all", "verified", "unverified"
   athleteName: z.string().optional(),
   limit: z.string().optional(),
@@ -120,6 +121,7 @@ export default function AdminMeasurementsPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [selectedMeasurements, setSelectedMeasurements] = useState<string[]>([]);
+  const [selectedTeams, setSelectedTeams] = useState<string[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const { toast } = useToast();
@@ -147,6 +149,29 @@ export default function AdminMeasurementsPage() {
     queryKey: ["/api/organizations"],
     enabled: user?.isSiteAdmin === true,
   });
+
+  // Fetch teams for the selected organization
+  const { data: teams = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["/api/teams", watchedFilters.organizationId],
+    queryFn: async () => {
+      if (!watchedFilters.organizationId) return [];
+      const response = await fetch(`/api/teams?organizationId=${watchedFilters.organizationId}`);
+      if (!response.ok) throw new Error('Failed to fetch teams');
+      return response.json();
+    },
+    enabled: !!watchedFilters.organizationId,
+  });
+
+  // Reset selected teams when organization changes
+  useEffect(() => {
+    setSelectedTeams([]);
+    form.setValue('teamIds', '');
+  }, [watchedFilters.organizationId, form]);
+
+  // Sync selectedTeams state with form
+  useEffect(() => {
+    form.setValue('teamIds', selectedTeams.join(','));
+  }, [selectedTeams, form]);
 
   // Build query params from form
   const buildQueryParams = (filters: FilterFormData) => {
@@ -381,6 +406,7 @@ export default function AdminMeasurementsPage() {
       verificationStatus: "verified", // Reset to verified only
       limit: String(API_FETCH_LIMIT), // Maintain max fetch limit
     });
+    setSelectedTeams([]);
     setCurrentPage(1);
   };
 
@@ -599,6 +625,49 @@ export default function AdminMeasurementsPage() {
                                   </option>
                                 ))}
                               </select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Teams */}
+                      <FormField
+                        control={form.control}
+                        name="teamIds"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Teams</FormLabel>
+                            <FormControl>
+                              <div className="relative">
+                                <select
+                                  multiple
+                                  value={selectedTeams}
+                                  onChange={(e) => {
+                                    const options = Array.from(e.target.selectedOptions);
+                                    setSelectedTeams(options.map(opt => opt.value));
+                                  }}
+                                  disabled={!watchedFilters.organizationId || teams.length === 0}
+                                  className="w-full p-2 border border-gray-300 rounded-md min-h-[100px]"
+                                >
+                                  {!watchedFilters.organizationId ? (
+                                    <option disabled>Select an organization first</option>
+                                  ) : teams.length === 0 ? (
+                                    <option disabled>No teams available</option>
+                                  ) : (
+                                    teams.map((team) => (
+                                      <option key={team.id} value={team.id}>
+                                        {team.name}
+                                      </option>
+                                    ))
+                                  )}
+                                </select>
+                                {selectedTeams.length > 0 && (
+                                  <div className="text-xs text-muted-foreground mt-1">
+                                    {selectedTeams.length} team{selectedTeams.length !== 1 ? 's' : ''} selected
+                                  </div>
+                                )}
+                              </div>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
