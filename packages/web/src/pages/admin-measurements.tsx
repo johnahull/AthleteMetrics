@@ -147,6 +147,7 @@ export default function AdminMeasurementsPage() {
   };
 
   const queryParams = buildQueryParams(watchedFilters);
+  const queryUrl = `/api/measurements${queryParams ? `?${queryParams}` : ''}`;
 
   // Fetch measurements
   const {
@@ -154,7 +155,7 @@ export default function AdminMeasurementsPage() {
     isLoading,
     error,
   } = useQuery<Measurement[]>({
-    queryKey: ["/api/measurements", queryParams],
+    queryKey: [queryUrl],
     enabled: user?.isSiteAdmin === true,
   });
 
