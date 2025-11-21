@@ -109,14 +109,15 @@ const GENDERS = [
   { value: "Not Specified", label: "Not Specified" },
 ];
 
-const ITEMS_PER_PAGE = 50; // Display pagination
 const API_FETCH_LIMIT = 1000; // Fetch max from API for client-side filtering/sorting
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0]; // 0 = "All"
 
 export default function AdminMeasurementsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [selectedMeasurements, setSelectedMeasurements] = useState<string[]>([]);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -289,9 +290,10 @@ export default function AdminMeasurementsPage() {
 
   // Calculate pagination
   const totalMeasurements = measurements.length;
-  const totalPages = Math.ceil(totalMeasurements / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const itemsPerPage = pageSize === 0 ? totalMeasurements : pageSize; // 0 means "All"
+  const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMeasurements / pageSize);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = pageSize === 0 ? totalMeasurements : startIndex + itemsPerPage;
   const paginatedMeasurements = measurements.slice(startIndex, endIndex);
 
   // Format metric name for display
@@ -383,6 +385,11 @@ export default function AdminMeasurementsPage() {
 
   const handlePageChange = (newPage: number) => {
     setCurrentPage(newPage);
+  };
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setCurrentPage(1); // Reset to page 1 when changing page size
   };
 
   const hasActiveFilters = Object.entries(watchedFilters).some(
@@ -932,31 +939,54 @@ export default function AdminMeasurementsPage() {
               </div>
 
               {/* Pagination */}
-              {totalMeasurements > ITEMS_PER_PAGE && (
+              {totalMeasurements > 0 && (
                 <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-muted-foreground">
-                    Page {currentPage} of {totalPages} ({totalMeasurements} total)
+                  <div className="flex items-center gap-4">
+                    {/* Page size selector */}
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={pageSize}
+                        onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                        className="px-3 py-1 border border-gray-300 rounded-md text-sm"
+                      >
+                        {PAGE_SIZE_OPTIONS.map(size => (
+                          <option key={size} value={size}>
+                            {size === 0 ? 'All' : size}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="text-sm text-muted-foreground">
+                        {totalMeasurements} result{totalMeasurements !== 1 ? 's' : ''}
+                      </span>
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage - 1)}
-                      disabled={currentPage === 1}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handlePageChange(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
+
+                  {/* Pagination controls (hide if showing all) */}
+                  {pageSize !== 0 && totalPages > 1 && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center px-3 text-sm text-muted-foreground">
+                        Page {currentPage} of {totalPages}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePageChange(currentPage + 1)}
+                        disabled={currentPage >= totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
             </>
