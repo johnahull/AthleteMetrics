@@ -556,7 +556,7 @@ export default function AdminMeasurementsPage() {
       return (
         <div className="grid grid-cols-1 gap-6">
           <StatisticsSummaryCard
-            measurements={metricMeasurements}
+            measurements={metricMeasurements as any}
             metric={watchedFilters.metric}
           />
         </div>
@@ -580,7 +580,7 @@ export default function AdminMeasurementsPage() {
           {topMetrics.map((metric) => (
             <StatisticsSummaryCard
               key={metric}
-              measurements={measurements.filter((m) => m.metric === metric)}
+              measurements={measurements.filter((m) => m.metric === metric) as any}
               metric={metric}
             />
           ))}
