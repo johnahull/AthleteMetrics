@@ -53,12 +53,28 @@ function generateTestTemplate() {
 test.describe('Wellness Coach Interface Tests', () => {
   let createdTemplateIds: string[] = [];
   let createdRequestIds: string[] = [];
+  let testOrgId: string;
+
+  test.beforeAll(async ({ browser }) => {
+    // Get organization ID once for all tests (from config file)
+    const fs = await import('fs');
+    const path = await import('path');
+    const configPath = path.join(process.cwd(), 'tests/e2e/.local-e2e-config.json');
+
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      testOrgId = config.organizationId;
+    } else {
+      throw new Error('Local E2E config not found. Run: node setup-local-e2e.mjs');
+    }
+  });
 
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
 
     // Navigate to wellness templates page
     await page.goto('/wellness');
+    await page.waitForLoadState('networkidle');
 
     // Reset cleanup trackers
     createdTemplateIds = [];
@@ -103,9 +119,9 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should navigate to wellness templates page', async ({ page }) => {
       // Verify page loaded
       await expect(page).toHaveURL(/\/wellness/);
-      await expect(page.locator('h1')).toContainText('Wellness');
+      await expect(page.locator('h1').nth(1)).toContainText('Wellness');
 
-      // Should see tabs: Templates, Requests, Analytics
+      // Should see tabs: Templates, Requests
       await expect(page.locator('[role="tablist"]')).toBeVisible();
       await expect(page.locator('[role="tab"]:has-text("Templates")')).toBeVisible();
       await expect(page.locator('[role="tab"]:has-text("Requests")')).toBeVisible();
@@ -175,7 +191,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should edit existing template', async ({ page }) => {
       // First create a template
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -213,7 +229,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should preview template as athlete would see it', async ({ page }) => {
       // Create a template first
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -245,7 +261,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should delete template', async ({ page }) => {
       // Create a template
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -276,7 +292,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should set template as default', async ({ page }) => {
       // Create a template
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -316,7 +332,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should send request via magic link to specific athletes', async ({ page }) => {
       // Create a template first
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -372,7 +388,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should send request to entire team', async ({ page }) => {
       // Create a template
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -417,7 +433,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should generate QR code for team link', async ({ page }) => {
       // Create a template
       const testTemplate = generateTestTemplate();
-      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const createResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -503,7 +519,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should view request details with completion rate', async ({ page }) => {
       // Create a request first
       const testTemplate = generateTestTemplate();
-      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -515,7 +531,7 @@ test.describe('Wellness Coach Interface Tests', () => {
       const template = await templateResponse.json();
       createdTemplateIds.push(template.id);
 
-      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/requests`, {
+      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`, {
         data: {
           templateId: template.id,
           distributionMethod: 'magic_link',
@@ -545,7 +561,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should cancel active request', async ({ page }) => {
       // Create a request
       const testTemplate = generateTestTemplate();
-      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -557,7 +573,7 @@ test.describe('Wellness Coach Interface Tests', () => {
       const template = await templateResponse.json();
       createdTemplateIds.push(template.id);
 
-      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/requests`, {
+      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`, {
         data: {
           templateId: template.id,
           distributionMethod: 'magic_link',
@@ -584,7 +600,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should display completion rate progress bar', async ({ page }) => {
       // Create a request
       const testTemplate = generateTestTemplate();
-      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -596,7 +612,7 @@ test.describe('Wellness Coach Interface Tests', () => {
       const template = await templateResponse.json();
       createdTemplateIds.push(template.id);
 
-      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/requests`, {
+      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`, {
         data: {
           templateId: template.id,
           distributionMethod: 'magic_link',
@@ -622,7 +638,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should copy QR code link to clipboard', async ({ page }) => {
       // Create a request with QR code distribution
       const testTemplate = generateTestTemplate();
-      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -634,7 +650,7 @@ test.describe('Wellness Coach Interface Tests', () => {
       const template = await templateResponse.json();
       createdTemplateIds.push(template.id);
 
-      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/requests`, {
+      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`, {
         data: {
           templateId: template.id,
           distributionMethod: 'qr_code',
@@ -664,7 +680,7 @@ test.describe('Wellness Coach Interface Tests', () => {
     test('should download QR code as PNG', async ({ page }) => {
       // Create a request with QR code
       const testTemplate = generateTestTemplate();
-      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/templates`, {
+      const templateResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`, {
         data: {
           name: testTemplate.name,
           description: testTemplate.description,
@@ -676,7 +692,7 @@ test.describe('Wellness Coach Interface Tests', () => {
       const template = await templateResponse.json();
       createdTemplateIds.push(template.id);
 
-      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/test-org-id/wellness/requests`, {
+      const requestResponse = await page.request.post(`${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`, {
         data: {
           templateId: template.id,
           distributionMethod: 'qr_code',
