@@ -71,13 +71,17 @@ export class WellnessAccessService {
     error?: string;
   }> {
     try {
+      // Normalize token to lowercase for consistent validation
+      // crypto.randomBytes().toString('hex') produces lowercase, but normalize for safety
+      const normalizedToken = token.toLowerCase();
+
       // Validate token format (64 hex characters)
-      if (!/^[a-f0-9]{64}$/.test(token)) {
+      if (!/^[a-f0-9]{64}$/.test(normalizedToken)) {
         return { valid: false, error: 'Invalid token format' };
       }
 
-      // Find request by token
-      const request = await storage.getWellnessRequestByToken(token);
+      // Find request by normalized token
+      const request = await storage.getWellnessRequestByToken(normalizedToken);
       if (!request) {
         return { valid: false, error: 'Invalid or expired token' };
       }

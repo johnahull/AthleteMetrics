@@ -173,6 +173,7 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/templates/:id
    * Get wellness template by ID (for public wellness submissions)
    * Access: Public (no authentication required)
+   * Note: Returns only public-safe fields (excludes createdBy, organizationId for security)
    */
   app.get(
     "/api/wellness/templates/:id",
@@ -186,7 +187,17 @@ export function registerWellnessRoutes(app: Express) {
           return res.status(404).json({ message: "Template not found" });
         }
 
-        res.json(template);
+        // Return only public-safe fields for unauthenticated access
+        // Exclude sensitive fields: organizationId, createdBy
+        const publicTemplate = {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          config: template.config, // Question configuration is safe to expose
+          isActive: template.isActive,
+        };
+
+        res.json(publicTemplate);
       } catch (error: any) {
         console.error("Failed to fetch wellness template:", error);
         res.status(500).json({
@@ -531,6 +542,34 @@ export function registerWellnessRoutes(app: Express) {
             return res.status(403).json({
               message: "You don't have access to this organization's wellness requests"
             });
+          }
+        }
+
+        // Validate requestId belongs to same organization as template (prevents cross-org data leakage)
+        if (data.requestId) {
+          const request = await storage.getWellnessRequest(data.requestId);
+          if (!request) {
+            return res.status(404).json({ message: "Request not found" });
+          }
+
+          // Verify request belongs to same organization as template
+          if (request.organizationId !== template.organizationId) {
+            return res.status(400).json({
+              message: "Request and template must belong to the same organization"
+            });
+          }
+
+          // For magic link access, verify user is targeted by this request
+          if ((req.user as any).accessMethod === 'magic_link') {
+            const isTargeted =
+              (request.targetAthleteIds && request.targetAthleteIds.includes(req.user!.id)) ||
+              (request.targetTeamIds && request.targetTeamIds.length > 0);
+
+            if (!isTargeted) {
+              return res.status(403).json({
+                message: "You are not authorized to respond to this request"
+              });
+            }
           }
         }
 
