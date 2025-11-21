@@ -81,6 +81,11 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await expect(verifyButton).toBeVisible();
       await verifyButton.click();
 
+      // Wait for and confirm the AlertDialog
+      const confirmButton = page.locator('button:has-text("Verify")').last();
+      await expect(confirmButton).toBeVisible({ timeout: 5000 });
+      await confirmButton.click();
+
       // Wait for success toast
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/verified|success/i, { timeout: 10000 });
 
@@ -163,6 +168,11 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await expect(unverifyButton).toBeVisible();
       await unverifyButton.click();
 
+      // Wait for and confirm the AlertDialog
+      const confirmButton = page.locator('button:has-text("Unverify")').last();
+      await expect(confirmButton).toBeVisible({ timeout: 5000 });
+      await confirmButton.click();
+
       // Wait for success toast
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/unverified|success/i, { timeout: 10000 });
 
@@ -221,6 +231,11 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       // Click verify button
       const verifyButton = page.locator('button:has-text("Verify Selected")');
       await verifyButton.click();
+
+      // Confirm the AlertDialog
+      const confirmButton = page.locator('button:has-text("Verify")').last();
+      await expect(confirmButton).toBeVisible({ timeout: 5000 });
+      await confirmButton.click();
 
       // Wait for success
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/verified|success/i, { timeout: 10000 });

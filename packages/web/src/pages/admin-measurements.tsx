@@ -462,7 +462,14 @@ export default function AdminMeasurementsPage() {
 
       const csvContent = [
         headers.join(','),
-        ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        ...rows.map(row => row.map(cell => {
+          // Escape double quotes, newlines, and carriage returns for CSV
+          const escaped = String(cell)
+            .replace(/"/g, '""')
+            .replace(/\n/g, '\\n')
+            .replace(/\r/g, '\\r');
+          return `"${escaped}"`;
+        }).join(','))
       ].join('\n');
 
       const blob = new Blob([csvContent], { type: 'text/csv' });
