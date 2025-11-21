@@ -17,7 +17,8 @@ import {
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql, desc, inArray, alias } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 
 export interface MeasurementFilters {
