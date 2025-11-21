@@ -500,8 +500,15 @@ export default function AdminMeasurementsPage() {
       const csvContent = [
         headers.join(','),
         ...rows.map(row => row.map(cell => {
+          // Sanitize formula injection (CSV Injection vulnerability)
+          // Cells starting with =, +, -, @ can execute as formulas in Excel/Google Sheets
+          let sanitized = String(cell);
+          if (/^[=+\-@]/.test(sanitized)) {
+            sanitized = "'" + sanitized; // Prefix with single quote to prevent formula execution
+          }
+
           // Escape double quotes, newlines, and carriage returns for CSV
-          const escaped = String(cell)
+          const escaped = sanitized
             .replace(/"/g, '""')
             .replace(/\n/g, '\\n')
             .replace(/\r/g, '\\r');

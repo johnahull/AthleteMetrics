@@ -656,8 +656,8 @@ export class MeasurementService {
 
   /**
    * Bulk verify measurements
-   * IMPORTANT: Each measurement verified in transaction for atomicity
-   * Processes each measurement independently to allow partial success
+   * IMPORTANT: Uses single transaction with batch update for performance
+   * Validates all measurements before updating to allow partial success on validation failures
    *
    * @param measurementIds Array of measurement IDs to verify
    * @param verifiedByUserId User ID of verifier
@@ -670,30 +670,70 @@ export class MeasurementService {
     expectedOrganizationId?: string
   ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
     const errors: Array<{ id: string; message: string }> = [];
-    let success = 0;
 
-    // Process each measurement independently
-    for (const id of measurementIds) {
-      try {
-        await this.verifyMeasurement(id, verifiedByUserId, expectedOrganizationId);
-        success++;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        errors.push({ id, message });
-      }
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock and validate all measurements with FOR UPDATE
+        const existingMeasurements = await tx
+          .select()
+          .from(measurements)
+          .where(inArray(measurements.id, measurementIds))
+          .for('update');
+
+        // Build map of found measurements
+        const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+
+        // Validate each measurement and collect valid IDs
+        const validIds: string[] = [];
+        for (const id of measurementIds) {
+          const measurement = foundMap.get(id);
+
+          if (!measurement) {
+            errors.push({ id, message: 'Measurement not found' });
+            continue;
+          }
+
+          // Defense-in-depth: Verify organization ownership
+          if (expectedOrganizationId && measurement.organizationId !== expectedOrganizationId) {
+            errors.push({ id, message: 'Access denied - measurement belongs to different organization' });
+            continue;
+          }
+
+          validIds.push(id);
+        }
+
+        // Batch update all valid measurements
+        if (validIds.length > 0) {
+          await tx
+            .update(measurements)
+            .set({
+              isVerified: true,
+              verifiedBy: verifiedByUserId,
+            })
+            .where(inArray(measurements.id, validIds));
+        }
+
+        return {
+          success: validIds.length,
+          failed: errors.length,
+          errors,
+        };
+      });
+    } catch (error) {
+      // Transaction failed - all measurements failed
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: 0,
+        failed: measurementIds.length,
+        errors: measurementIds.map(id => ({ id, message })),
+      };
     }
-
-    return {
-      success,
-      failed: errors.length,
-      errors,
-    };
   }
 
   /**
    * Bulk unverify measurements
-   * IMPORTANT: Each measurement unverified in transaction for atomicity
-   * Processes each measurement independently to allow partial success
+   * IMPORTANT: Uses single transaction with batch update for performance
+   * Validates all measurements before updating to allow partial success on validation failures
    *
    * @param measurementIds Array of measurement IDs to unverify
    * @param expectedOrganizationId Optional organization ID for IDOR protection (site admins pass undefined)
@@ -704,50 +744,64 @@ export class MeasurementService {
     expectedOrganizationId?: string
   ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
     const errors: Array<{ id: string; message: string }> = [];
-    let success = 0;
 
-    // Process each measurement independently
-    for (const id of measurementIds) {
-      try {
-        await db.transaction(async (tx) => {
-          // Lock the row with FOR UPDATE to prevent concurrent modifications
-          const [existing] = await tx
-            .select()
-            .from(measurements)
-            .where(eq(measurements.id, id))
-            .for('update');
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock and validate all measurements with FOR UPDATE
+        const existingMeasurements = await tx
+          .select()
+          .from(measurements)
+          .where(inArray(measurements.id, measurementIds))
+          .for('update');
 
-          if (!existing) {
-            throw new Error('Measurement not found');
+        // Build map of found measurements
+        const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+
+        // Validate each measurement and collect valid IDs
+        const validIds: string[] = [];
+        for (const id of measurementIds) {
+          const measurement = foundMap.get(id);
+
+          if (!measurement) {
+            errors.push({ id, message: 'Measurement not found' });
+            continue;
           }
 
-          // Defense-in-depth: Verify organization ownership at service layer
-          if (expectedOrganizationId && existing.organizationId !== expectedOrganizationId) {
-            throw new Error('Access denied - measurement belongs to different organization');
+          // Defense-in-depth: Verify organization ownership
+          if (expectedOrganizationId && measurement.organizationId !== expectedOrganizationId) {
+            errors.push({ id, message: 'Access denied - measurement belongs to different organization' });
+            continue;
           }
 
-          // Update verification status
+          validIds.push(id);
+        }
+
+        // Batch update all valid measurements
+        if (validIds.length > 0) {
           await tx
             .update(measurements)
             .set({
               isVerified: false,
               verifiedBy: null,
             })
-            .where(eq(measurements.id, id));
-        });
+            .where(inArray(measurements.id, validIds));
+        }
 
-        success++;
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        errors.push({ id, message });
-      }
+        return {
+          success: validIds.length,
+          failed: errors.length,
+          errors,
+        };
+      });
+    } catch (error) {
+      // Transaction failed - all measurements failed
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: 0,
+        failed: measurementIds.length,
+        errors: measurementIds.map(id => ({ id, message })),
+      };
     }
-
-    return {
-      success,
-      failed: errors.length,
-      errors,
-    };
   }
 
   /**
