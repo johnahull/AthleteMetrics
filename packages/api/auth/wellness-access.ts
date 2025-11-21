@@ -79,13 +79,16 @@ export class WellnessAccessService {
       const normalizedToken = token.toLowerCase();
 
       // Validate token format (64 hex characters)
-      if (!/^[a-f0-9]{64}$/.test(normalizedToken)) {
-        return { valid: false, error: 'Invalid token format' };
-      }
+      // IMPORTANT: Always perform DB lookup to prevent timing attacks
+      const formatValid = /^[a-f0-9]{64}$/.test(normalizedToken);
 
-      // Find request by normalized token
-      const request = await storage.getWellnessRequestByToken(normalizedToken);
-      if (!request) {
+      // Always query database regardless of format validation to maintain constant time
+      const request = formatValid
+        ? await storage.getWellnessRequestByToken(normalizedToken)
+        : null;
+
+      // Return combined validation result
+      if (!request || !formatValid) {
         return { valid: false, error: 'Invalid or expired token' };
       }
 

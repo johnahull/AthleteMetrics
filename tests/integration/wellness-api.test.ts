@@ -147,8 +147,8 @@ afterAll(async () => {
   }
   createdTemplateIds.length = 0;
 
-  // Clean up test data (organization cascade delete will handle templates/requests)
-  // Remove user from team first to avoid FK constraint issues
+  // Clean up test data (order matters due to FK constraints)
+  // 1. Remove user from team first to avoid FK constraint issues
   if (testAthlete && testTeam) {
     try {
       await storage.removeUserFromTeam(testAthlete.id, testTeam.id);
@@ -157,20 +157,61 @@ afterAll(async () => {
     }
   }
 
+  // 2. Delete team (must be before removing users from org)
   if (testTeam) {
-    await db.delete(teams).where(eq(teams.id, testTeam.id));
+    try {
+      await db.delete(teams).where(eq(teams.id, testTeam.id));
+    } catch (e) {
+      // Ignore if already deleted
+    }
   }
+
+  // 3. Remove users from organization (must be before deleting users)
+  if (testAthlete && testOrg) {
+    try {
+      await storage.removeUserFromOrganization(testAthlete.id, testOrg.id);
+    } catch (e) {
+      // Ignore if already removed
+    }
+  }
+  if (testUser && testOrg) {
+    try {
+      await storage.removeUserFromOrganization(testUser.id, testOrg.id);
+    } catch (e) {
+      // Ignore if already removed
+    }
+  }
+
+  // 4. Delete users
   if (testAthlete) {
-    await db.delete(users).where(eq(users.id, testAthlete.id));
+    try {
+      await db.delete(users).where(eq(users.id, testAthlete.id));
+    } catch (e) {
+      // Ignore if already deleted
+    }
   }
   if (testUser) {
-    await db.delete(users).where(eq(users.id, testUser.id));
+    try {
+      await db.delete(users).where(eq(users.id, testUser.id));
+    } catch (e) {
+      // Ignore if already deleted
+    }
   }
   if (siteAdmin) {
-    await db.delete(users).where(eq(users.id, siteAdmin.id));
+    try {
+      await db.delete(users).where(eq(users.id, siteAdmin.id));
+    } catch (e) {
+      // Ignore if already deleted
+    }
   }
+
+  // 5. Delete organization (last)
   if (testOrg) {
-    await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    try {
+      await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+    } catch (e) {
+      // Ignore if already deleted
+    }
   }
 });
 

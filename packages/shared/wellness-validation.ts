@@ -10,30 +10,27 @@
  */
 
 import { z } from 'zod';
+import DOMPurify from 'isomorphic-dompurify';
 
 /**
  * Input Sanitization Helper
  *
- * Removes HTML tags and dangerous characters to prevent XSS attacks.
- * This is a basic sanitization suitable for JSONB text fields.
+ * Uses DOMPurify to remove all HTML tags and dangerous content to prevent XSS attacks.
+ * This is a robust sanitization suitable for JSONB text fields.
  *
- * Note: For rich text content, use a proper HTML sanitizer like DOMPurify
- * or sanitize-html instead of this basic implementation.
+ * DOMPurify handles:
+ * - All HTML tags (including malformed ones)
+ * - Event handlers (onclick, onerror, etc.)
+ * - JavaScript URLs (javascript:, data:, etc.)
+ * - HTML entities that could decode to dangerous content
+ * - Case variations and encoding bypasses
  */
 function sanitizeString(input: string): string {
-  return input
-    // Remove HTML tags
-    .replace(/<[^>]*>/g, '')
-    // Remove script and style content (case-insensitive)
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
-    // Remove event handlers (onclick, onerror, etc.)
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/on\w+\s*=\s*[^\s>]*/gi, '')
-    // Remove javascript: URLs
-    .replace(/javascript:/gi, '')
-    // Trim whitespace
-    .trim();
+  return DOMPurify.sanitize(input, {
+    ALLOWED_TAGS: [], // Strip all HTML tags
+    ALLOWED_ATTR: [], // Strip all attributes
+    KEEP_CONTENT: true, // Keep text content
+  }).trim();
 }
 
 /**
