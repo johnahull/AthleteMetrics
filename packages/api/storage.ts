@@ -3,6 +3,7 @@ import {
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
+  wellnessTemplates, wellnessRequests, wellnessResponses,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -12,6 +13,7 @@ import {
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
+  type WellnessTemplate, type WellnessRequest, type WellnessResponse,
   insertUserSchema,
   type OrganizationType
 } from "@shared/schema";
@@ -276,6 +278,33 @@ export interface IStorage {
   // Reports
   getReport(id: string): Promise<Report | undefined>;
   updateReport(id: string, data: Partial<Report>): Promise<Report>;
+
+  // Wellness Templates
+  createWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate>;
+  getWellnessTemplates(organizationId: string, filters?: { activeOnly?: boolean }): Promise<WellnessTemplate[]>;
+  getWellnessTemplate(id: string): Promise<WellnessTemplate | undefined>;
+  updateWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate>;
+  deleteWellnessTemplate(id: string): Promise<void>;
+
+  // Wellness Requests
+  createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest>;
+  getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]>;
+  getWellnessRequest(id: string): Promise<WellnessRequest | undefined>;
+  getWellnessRequestByToken(token: string): Promise<WellnessRequest | undefined>;
+  updateWellnessRequest(id: string, request: Partial<WellnessRequest>): Promise<WellnessRequest>;
+  deleteWellnessRequest(id: string): Promise<void>;
+
+  // Wellness Responses
+  createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse>;
+  getWellnessResponse(id: string): Promise<WellnessResponse | undefined>;
+  getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
+  getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]>;
+
+  // Wellness Analytics
+  getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any>;
+  getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
+  getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<any[]>;
+  getRequestCompletionRate(requestId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -736,8 +765,31 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createOrganization(organization: InsertOrganization): Promise<Organization> {
-    const [newOrg] = await db.insert(organizations).values(organization).returning();
-    return newOrg;
+    // Use transaction to ensure organization and metrics are created atomically
+    return await db.transaction(async (tx: any) => {
+      // Create the organization
+      const [newOrg] = await tx.insert(organizations).values(organization).returning();
+
+      // Get all active site metrics that are available to this organization's type
+      const availableMetrics = await this.getSiteMetrics({
+        includeInactive: false,
+        orgType: newOrg.orgType
+      });
+
+      // Create organization_metrics entries for each available metric
+      if (availableMetrics.length > 0) {
+        const organizationMetricsEntries = availableMetrics.map(metric => ({
+          organizationId: newOrg.id,
+          metricCode: metric.code,
+          isEnabled: true,
+          createdAt: new Date(),
+        }));
+
+        await tx.insert(organizationMetrics).values(organizationMetricsEntries);
+      }
+
+      return newOrg;
+    });
   }
 
   async updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization> {
@@ -4165,6 +4217,333 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated;
+  }
+
+  // ==================== Wellness Templates ====================
+
+  async createWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    const [created] = await db
+      .insert(wellnessTemplates)
+      .values({
+        ...template,
+        isDefault: template.isDefault ?? false,
+        isActive: template.isActive ?? true,
+      } as any)
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to create wellness template');
+    }
+
+    return created;
+  }
+
+  async getWellnessTemplates(organizationId: string, filters?: { activeOnly?: boolean }): Promise<WellnessTemplate[]> {
+    const conditions: SQL[] = [eq(wellnessTemplates.organizationId, organizationId)];
+
+    if (filters?.activeOnly) {
+      conditions.push(eq(wellnessTemplates.isActive, true));
+    }
+
+    return await db
+      .select()
+      .from(wellnessTemplates)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessTemplates.createdAt));
+  }
+
+  async getWellnessTemplate(id: string): Promise<WellnessTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(wellnessTemplates)
+      .where(eq(wellnessTemplates.id, id));
+
+    return template || undefined;
+  }
+
+  async updateWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    const [updated] = await db
+      .update(wellnessTemplates)
+      .set({
+        ...template,
+        updatedAt: new Date(),
+      })
+      .where(eq(wellnessTemplates.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Wellness template ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteWellnessTemplate(id: string): Promise<void> {
+    await db
+      .delete(wellnessTemplates)
+      .where(eq(wellnessTemplates.id, id));
+  }
+
+  // ==================== Wellness Requests ====================
+
+  async createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest> {
+    const [created] = await db
+      .insert(wellnessRequests)
+      .values({
+        ...request,
+        status: request.status ?? 'active',
+        requiresAuth: request.requiresAuth ?? false,
+        targetAthleteIds: request.targetAthleteIds ?? null,
+        targetTeamIds: request.targetTeamIds ?? null,
+      } as any)
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to create wellness request');
+    }
+
+    return created;
+  }
+
+  async getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]> {
+    const conditions: SQL[] = [eq(wellnessRequests.organizationId, organizationId)];
+
+    if (filters?.status) {
+      conditions.push(eq(wellnessRequests.status, filters.status));
+    }
+
+    return await db
+      .select()
+      .from(wellnessRequests)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessRequests.createdAt));
+  }
+
+  async getWellnessRequest(id: string): Promise<WellnessRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(wellnessRequests)
+      .where(eq(wellnessRequests.id, id));
+
+    return request || undefined;
+  }
+
+  async getWellnessRequestByToken(token: string): Promise<WellnessRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(wellnessRequests)
+      .where(eq(wellnessRequests.publicToken, token));
+
+    return request || undefined;
+  }
+
+  async updateWellnessRequest(id: string, request: Partial<WellnessRequest>): Promise<WellnessRequest> {
+    const [updated] = await db
+      .update(wellnessRequests)
+      .set(request)
+      .where(eq(wellnessRequests.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Wellness request ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteWellnessRequest(id: string): Promise<void> {
+    await db
+      .delete(wellnessRequests)
+      .where(eq(wellnessRequests.id, id));
+  }
+
+  // ==================== Wellness Responses ====================
+
+  async createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse> {
+    const [created] = await db
+      .insert(wellnessResponses)
+      .values({
+        ...response,
+        submittedAt: response.submittedAt ?? new Date(),
+      } as any)
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to create wellness response');
+    }
+
+    return created;
+  }
+
+  async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
+    const [response] = await db
+      .select()
+      .from(wellnessResponses)
+      .where(eq(wellnessResponses.id, id));
+
+    return response || undefined;
+  }
+
+  async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+    const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
+
+    if (filters?.startDate) {
+      conditions.push(gte(wellnessResponses.date, filters.startDate));
+    }
+
+    if (filters?.endDate) {
+      conditions.push(lte(wellnessResponses.date, filters.endDate));
+    }
+
+    return await db
+      .select()
+      .from(wellnessResponses)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessResponses.submittedAt));
+  }
+
+  async getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId)];
+
+    if (filters?.startDate) {
+      conditions.push(gte(wellnessResponses.date, filters.startDate));
+    }
+
+    if (filters?.endDate) {
+      conditions.push(lte(wellnessResponses.date, filters.endDate));
+    }
+
+    return await db
+      .select()
+      .from(wellnessResponses)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessResponses.submittedAt));
+  }
+
+  // ==================== Wellness Analytics ====================
+
+  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+    const responses = await db
+      .select()
+      .from(wellnessResponses)
+      .where(
+        and(
+          eq(wellnessResponses.teamId, teamId),
+          gte(wellnessResponses.date, filters.startDate),
+          lte(wellnessResponses.date, filters.endDate)
+        )
+      );
+
+    const uniqueAthletes = new Set(responses.map(r => r.userId)).size;
+    const totalResponses = responses.length;
+
+    // Calculate average scores per question
+    const averageScores: Record<string, number> = {};
+    const questionCounts: Record<string, number> = {};
+
+    responses.forEach(response => {
+      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
+        if (typeof data.value === 'number') {
+          averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
+          questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
+        }
+      });
+    });
+
+    Object.keys(averageScores).forEach(questionId => {
+      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
+    });
+
+    return {
+      teamId,
+      teamName: responses[0]?.teamNameSnapshot || 'Unknown',
+      totalResponses,
+      uniqueAthletes,
+      completionRate: 0, // TODO: Calculate based on request targets
+      averageScores,
+      lastUpdated: new Date(),
+    };
+  }
+
+  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+    const responses = await this.getWellnessResponsesByAthlete(userId, filters);
+
+    const totalResponses = responses.length;
+
+    // Calculate average scores per question
+    const averageScores: Record<string, number> = {};
+    const questionCounts: Record<string, number> = {};
+
+    responses.forEach(response => {
+      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
+        if (typeof data.value === 'number') {
+          averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
+          questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
+        }
+      });
+    });
+
+    Object.keys(averageScores).forEach(questionId => {
+      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
+    });
+
+    return {
+      userId,
+      userFullName: responses[0]?.userFullName || 'Unknown',
+      totalResponses,
+      latestResponse: responses[0]?.submittedAt || null,
+      averageScores,
+      trends: {}, // TODO: Calculate trends
+    };
+  }
+
+  async getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<any[]> {
+    const responses = await this.getWellnessResponsesByOrganization(organizationId, filters);
+
+    const trendsByQuestion: Record<string, any> = {};
+
+    responses.forEach(response => {
+      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
+        if (filters.questionIds && !filters.questionIds.includes(questionId)) {
+          return;
+        }
+
+        if (!trendsByQuestion[questionId]) {
+          trendsByQuestion[questionId] = {
+            questionId,
+            questionLabel: data.label,
+            dataPoints: [],
+            trend: 'stable' as const,
+            trendPercentage: 0,
+          };
+        }
+
+        trendsByQuestion[questionId].dataPoints.push({
+          date: response.date,
+          value: typeof data.value === 'number' ? data.value : 0,
+          count: 1,
+        });
+      });
+    });
+
+    return Object.values(trendsByQuestion);
+  }
+
+  async getRequestCompletionRate(requestId: string): Promise<number> {
+    const request = await this.getWellnessRequest(requestId);
+    if (!request) return 0;
+
+    const targetCount = (request.targetAthleteIds?.length || 0) +
+                       (request.targetTeamIds?.length || 0);
+
+    if (targetCount === 0) return 0;
+
+    const responses = await db
+      .select()
+      .from(wellnessResponses)
+      .where(eq(wellnessResponses.requestId, requestId));
+
+    return responses.length / targetCount;
   }
 
 }

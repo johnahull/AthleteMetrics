@@ -16,6 +16,7 @@ import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
+import { registerWellnessRoutes } from "./wellness-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -60,6 +61,9 @@ export function registerAllRoutes(app: Express) {
 
   // Site settings routes (AI model configuration)
   app.use("/api/site-settings", siteSettingsRoutes);
+
+  // Wellness questionnaire routes
+  registerWellnessRoutes(app);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);

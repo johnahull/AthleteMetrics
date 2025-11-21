@@ -1,0 +1,664 @@
+/**
+ * Wellness Questionnaire REST API Routes
+ *
+ * Provides endpoints for:
+ * - Template management (CRUD)
+ * - Request creation and distribution
+ * - Response submission (both authenticated and magic link)
+ * - Analytics queries (team summaries, athlete trends)
+ */
+
+import type { Express, Response } from "express";
+import rateLimit from "express-rate-limit";
+import { storage } from "../storage";
+import {
+  requireAuth,
+  requireOrganizationAccess,
+  requireWellnessAccess,
+  type AuthenticatedRequest,
+} from "../middleware";
+import {
+  createWellnessTemplateSchema,
+  updateWellnessTemplateSchema,
+  createWellnessRequestSchema,
+  updateWellnessRequestSchema,
+  submitWellnessResponseSchema,
+  generateResponseValidationSchema,
+} from "@shared/wellness-validation";
+import { z } from "zod";
+import crypto from "crypto";
+import { emailService } from "../services/email-service";
+import { WellnessAccessService } from "../auth/wellness-access";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+
+// Rate limiting configurations
+const batchLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.BATCH,
+  message: { message: "Too many requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+const highVolumeLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.HIGH_VOLUME,
+  message: { message: "Too many requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+/**
+ * Register all wellness questionnaire routes
+ */
+export function registerWellnessRoutes(app: Express) {
+  // =============================================================================
+  // TEMPLATE ENDPOINTS
+  // =============================================================================
+
+  /**
+   * POST /api/organizations/:organizationId/wellness/templates
+   * Create a new wellness template
+   * Access: Coach, Org Admin
+   */
+  app.post(
+    "/api/organizations/:organizationId/wellness/templates",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const validation = createWellnessTemplateSchema.safeParse(req.body);
+
+        if (!validation.success) {
+          return res.status(400).json({
+            message: "Invalid template data",
+            errors: validation.error.errors,
+          });
+        }
+
+        const template = await storage.createWellnessTemplate({
+          organizationId,
+          name: validation.data.name,
+          description: validation.data.description,
+          config: validation.data.config,
+          isDefault: validation.data.isDefault,
+          isActive: validation.data.isActive,
+          createdBy: req.user!.id,
+        });
+
+        res.status(201).json(template);
+      } catch (error: any) {
+        console.error("Failed to create wellness template:", error);
+        res.status(500).json({
+          message: "Failed to create wellness template",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/templates
+   * List all templates for an organization
+   * Access: All authenticated users in organization
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/templates",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const activeOnly = req.query.activeOnly === 'true';
+
+        const templates = await storage.getWellnessTemplates(organizationId, { activeOnly });
+
+        res.json(templates);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness templates:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness templates",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/templates/:id
+   * Get single template by ID
+   * Access: All authenticated users in organization
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/templates/:id",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const template = await storage.getWellnessTemplate(id);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        res.json(template);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness template:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness template",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/organizations/:organizationId/wellness/templates/:id
+   * Update a wellness template
+   * Access: Coach, Org Admin
+   */
+  app.put(
+    "/api/organizations/:organizationId/wellness/templates/:id",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+        const validation = updateWellnessTemplateSchema.safeParse(req.body);
+
+        if (!validation.success) {
+          return res.status(400).json({
+            message: "Invalid template data",
+            errors: validation.error.errors,
+          });
+        }
+
+        const template = await storage.getWellnessTemplate(id);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        const updated = await storage.updateWellnessTemplate(id, validation.data);
+
+        res.json(updated);
+      } catch (error: any) {
+        console.error("Failed to update wellness template:", error);
+        res.status(500).json({
+          message: "Failed to update wellness template",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * DELETE /api/organizations/:organizationId/wellness/templates/:id
+   * Delete a wellness template
+   * Access: Coach, Org Admin
+   */
+  app.delete(
+    "/api/organizations/:organizationId/wellness/templates/:id",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const template = await storage.getWellnessTemplate(id);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        await storage.deleteWellnessTemplate(id);
+
+        res.status(204).send();
+      } catch (error: any) {
+        console.error("Failed to delete wellness template:", error);
+        res.status(500).json({
+          message: "Failed to delete wellness template",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  // =============================================================================
+  // REQUEST ENDPOINTS
+  // =============================================================================
+
+  /**
+   * POST /api/organizations/:organizationId/wellness/requests
+   * Create a new wellness request and send notifications
+   * Access: Coach, Org Admin
+   */
+  app.post(
+    "/api/organizations/:organizationId/wellness/requests",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const validation = createWellnessRequestSchema.safeParse(req.body);
+
+        if (!validation.success) {
+          return res.status(400).json({
+            message: "Invalid request data",
+            errors: validation.error.errors,
+          });
+        }
+
+        const data = validation.data;
+
+        // Generate public token for magic link methods
+        let publicToken: string | undefined;
+        if (data.distributionMethod === 'magic_link' || data.distributionMethod === 'qr_code' || data.distributionMethod === 'team_link') {
+          publicToken = WellnessAccessService.generateMagicLinkToken();
+        }
+
+        // Create request
+        const request = await storage.createWellnessRequest({
+          organizationId,
+          templateId: data.templateId,
+          requestedBy: req.user!.id,
+          distributionMethod: data.distributionMethod,
+          targetAthleteIds: data.targetAthleteIds || [],
+          targetTeamIds: data.targetTeamIds || [],
+          publicToken,
+          requiresAuth: data.requiresAuth || false,
+          scheduledFor: data.scheduledFor ? new Date(data.scheduledFor) : undefined,
+          expiresAt: data.expiresAt ? new Date(data.expiresAt) : undefined,
+          status: 'active',
+        });
+
+        // Send email notifications for magic link distribution
+        if (data.distributionMethod === 'magic_link' && publicToken) {
+          try {
+            const magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
+            const template = await storage.getWellnessTemplate(data.templateId);
+            const coach = await storage.getUser(req.user!.id);
+            const organization = await storage.getOrganization(organizationId);
+
+            // Calculate expiry days
+            const expiryDays = data.expiresAt
+              ? Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+              : 7;
+
+            // Send email to each targeted athlete
+            for (const [athleteId, magicLink] of magicLinks.entries()) {
+              const athlete = await storage.getUser(athleteId);
+              if (athlete && athlete.emails && athlete.emails.length > 0) {
+                await emailService.sendWellnessRequest(athlete.emails[0], {
+                  athleteName: athlete.fullName,
+                  coachName: coach!.fullName,
+                  organizationName: organization!.name,
+                  magicLink,
+                  expiryDays,
+                  templateName: template!.name,
+                  estimatedMinutes: ((template!.config as any).questions?.length || 5) * 0.5, // Rough estimate
+                });
+              }
+            }
+          } catch (emailError) {
+            console.error("Failed to send wellness request emails:", emailError);
+            // Don't fail the request creation if emails fail
+          }
+        }
+
+        res.status(201).json(request);
+      } catch (error: any) {
+        console.error("Failed to create wellness request:", error);
+        res.status(500).json({
+          message: "Failed to create wellness request",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/requests
+   * List all requests for an organization
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/requests",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const status = req.query.status as string | undefined;
+
+        const requests = await storage.getWellnessRequests(organizationId, { status: status as any });
+
+        res.json(requests);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness requests:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness requests",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/requests/:id
+   * Get single request by ID
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/requests/:id",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const request = await storage.getWellnessRequest(id);
+        if (!request) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        res.json(request);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness request:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness request",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * PUT /api/organizations/:organizationId/wellness/requests/:id/cancel
+   * Cancel a wellness request
+   * Access: Coach, Org Admin
+   */
+  app.put(
+    "/api/organizations/:organizationId/wellness/requests/:id/cancel",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const request = await storage.getWellnessRequest(id);
+        if (!request) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        const updated = await storage.updateWellnessRequest(id, { status: 'cancelled' });
+
+        res.json(updated);
+      } catch (error: any) {
+        console.error("Failed to cancel wellness request:", error);
+        res.status(500).json({
+          message: "Failed to cancel wellness request",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  // =============================================================================
+  // RESPONSE ENDPOINTS
+  // =============================================================================
+
+  /**
+   * POST /api/wellness/responses
+   * Submit a wellness response (supports both authenticated and magic link access)
+   * Access: Authenticated user OR valid magic link
+   */
+  app.post(
+    "/api/wellness/responses",
+    highVolumeLimiter,
+    requireWellnessAccess(false),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const validation = submitWellnessResponseSchema.safeParse(req.body);
+
+        if (!validation.success) {
+          return res.status(400).json({
+            message: "Invalid response data",
+            errors: validation.error.errors,
+          });
+        }
+
+        const data = validation.data;
+
+        // Get template to validate responses match question structure
+        const template = await storage.getWellnessTemplate(data.templateId);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Validate responses match template questions
+        try {
+          const responseSchema = generateResponseValidationSchema(template.config as any);
+          responseSchema.parse(data.responses);
+        } catch (validationError: any) {
+          return res.status(400).json({
+            message: "Response validation failed",
+            errors: validationError.errors,
+          });
+        }
+
+        // Get user details
+        const user = await storage.getUser(req.user!.id);
+        if (!user) {
+          return res.status(404).json({ message: "User not found" });
+        }
+
+        // Get team details if user belongs to teams
+        const userTeams = await storage.getUserTeams(req.user!.id);
+        const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+
+        // Create response
+        const response = await storage.createWellnessResponse({
+          requestId: data.requestId,
+          organizationId: template.organizationId,
+          templateId: data.templateId,
+          userId: user.id,
+          userFullName: user.fullName,
+          teamId: primaryTeam?.id,
+          teamNameSnapshot: primaryTeam?.name,
+          submittedAt: new Date(),
+          date: data.date,
+          responses: data.responses,
+          accessMethod: (req.user as any).accessMethod || data.accessMethod || 'authenticated',
+          ipAddress: req.ip || req.socket.remoteAddress || null,
+          userAgent: req.get('user-agent') || null,
+        });
+
+        res.status(201).json(response);
+      } catch (error: any) {
+        console.error("Failed to submit wellness response:", error);
+        res.status(500).json({
+          message: "Failed to submit wellness response",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/wellness/responses/:id
+   * Get single response by ID
+   * Access: Authenticated user (coach/athlete viewing own data)
+   */
+  app.get(
+    "/api/wellness/responses/:id",
+    highVolumeLimiter,
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const response = await storage.getWellnessResponse(id);
+        if (!response) {
+          return res.status(404).json({ message: "Response not found" });
+        }
+
+        // Check authorization - user can only view their own responses or coach can view team responses
+        if (req.user!.id !== response.userId) {
+          // Check if user is a coach in the organization
+          const userOrgs = await storage.getUserOrganizations(req.user!.id);
+          const hasOrgAccess = userOrgs.some(org =>
+            org.organizationId === response.organizationId && (org.role === 'coach' || org.role === 'org_admin')
+          );
+
+          if (!hasOrgAccess && !req.user!.isSiteAdmin) {
+            return res.status(403).json({ message: "Access denied" });
+          }
+        }
+
+        res.json(response);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness response:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness response",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  // =============================================================================
+  // ANALYTICS ENDPOINTS
+  // =============================================================================
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/analytics/team
+   * Get team wellness summary
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/analytics/team",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { teamId, startDate, endDate } = req.query;
+
+        if (!teamId || !startDate || !endDate) {
+          return res.status(400).json({
+            message: "teamId, startDate, and endDate are required",
+          });
+        }
+
+        const summary = await storage.getTeamWellnessSummary(teamId as string, {
+          startDate: startDate as string,
+          endDate: endDate as string,
+        });
+
+        res.json(summary);
+      } catch (error: any) {
+        console.error("Failed to fetch team wellness summary:", error);
+        res.status(500).json({
+          message: "Failed to fetch team wellness summary",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/analytics/athlete/:athleteId
+   * Get athlete wellness summary
+   * Access: Coach, Org Admin, Athlete (own data)
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/analytics/athlete/:athleteId",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { athleteId } = req.params;
+        const { startDate, endDate } = req.query;
+
+        if (!startDate || !endDate) {
+          return res.status(400).json({
+            message: "startDate and endDate are required",
+          });
+        }
+
+        // Check authorization - athletes can only view their own data
+        if (req.user!.role === 'athlete' && req.user!.id !== athleteId) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+
+        const summary = await storage.getAthleteWellnessSummary(athleteId, {
+          startDate: startDate as string,
+          endDate: endDate as string,
+        });
+
+        res.json(summary);
+      } catch (error: any) {
+        console.error("Failed to fetch athlete wellness summary:", error);
+        res.status(500).json({
+          message: "Failed to fetch athlete wellness summary",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/analytics/trends
+   * Get wellness trends for organization
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/analytics/trends",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const { startDate, endDate, questionIds } = req.query;
+
+        if (!startDate || !endDate) {
+          return res.status(400).json({
+            message: "startDate and endDate are required",
+          });
+        }
+
+        const questionIdArray = questionIds
+          ? (questionIds as string).split(',').map(id => id.trim())
+          : undefined;
+
+        const trends = await storage.getWellnessTrends(organizationId, {
+          startDate: startDate as string,
+          endDate: endDate as string,
+          questionIds: questionIdArray,
+        });
+
+        res.json(trends);
+      } catch (error: any) {
+        console.error("Failed to fetch wellness trends:", error);
+        res.status(500).json({
+          message: "Failed to fetch wellness trends",
+          error: error.message,
+        });
+      }
+    }
+  );
+
+  console.log("✅ Wellness routes registered successfully");
+}

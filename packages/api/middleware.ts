@@ -12,6 +12,7 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     isSiteAdmin?: boolean;
     primaryOrganizationId?: string;
+    accessMethod?: string; // For wellness access tracking
   };
 }
 
@@ -242,6 +243,79 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
 
   req.user = user;
   next();
+};
+
+// Wellness access middleware - supports both authenticated and magic link access
+export const requireWellnessAccess = (requireAuth: boolean = false) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      // Check 1: Authenticated session (athlete accessing own data or coach)
+      const sessionUser = req.session?.user || req.user;
+
+      if (sessionUser?.id) {
+        // User is authenticated via session
+        const email = (sessionUser as any).emails?.[0] || sessionUser.email || '';
+        req.user = {
+          id: sessionUser.id,
+          email,
+          firstName: sessionUser.firstName,
+          lastName: sessionUser.lastName,
+          role: sessionUser.role || 'athlete',
+          isSiteAdmin: sessionUser.isSiteAdmin,
+          primaryOrganizationId: sessionUser.primaryOrganizationId,
+          accessMethod: 'authenticated',
+        };
+        return next();
+      }
+
+      // Check 2: Magic link token (query params: token + athlete)
+      const token = req.query.token as string;
+      const athleteId = req.query.athlete as string;
+
+      if (!token || !athleteId) {
+        if (requireAuth) {
+          return res.status(401).json({
+            message: "Authentication required. Please log in or use a valid magic link."
+          });
+        }
+        return res.status(401).json({
+          message: "Missing authentication credentials"
+        });
+      }
+
+      // Check 3: Validate token
+      const { WellnessAccessService } = await import('./auth/wellness-access');
+      const validation = await WellnessAccessService.validateMagicLink(token, athleteId);
+
+      if (!validation.valid) {
+        return res.status(403).json({
+          message: validation.error || "Invalid or expired magic link"
+        });
+      }
+
+      // Check 4: Validate athlete is in target list (already done in validateMagicLink)
+      // Set authenticated user context
+      req.user = {
+        id: validation.athlete!.id,
+        email: validation.athlete!.emails?.[0] || '',
+        firstName: validation.athlete!.firstName,
+        lastName: validation.athlete!.lastName,
+        role: 'athlete',
+        isSiteAdmin: false,
+        accessMethod: 'magic_link',
+      };
+
+      // Attach request details for downstream use
+      (req as any).wellnessRequest = validation.request;
+
+      next();
+    } catch (error) {
+      console.error('Wellness access middleware error:', error);
+      return res.status(500).json({
+        message: "Failed to validate access"
+      });
+    }
+  };
 };
 
 // Error handling middleware

@@ -15,7 +15,8 @@ import {
   Settings,
   Target,
   ClipboardList,
-  Activity
+  Activity,
+  Heart
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -42,6 +43,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: teamLabel, href: "/teams", icon: Users },
       { name: athletesLabel, href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+      { name: "Wellness", href: "/wellness", icon: Heart },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Reports", href: "/reports", icon: ClipboardList },
       { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -54,6 +56,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: teamLabel, href: "/teams", icon: Users },
     { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -66,6 +69,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: teamLabel, href: "/teams", icon: Users },
     { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },

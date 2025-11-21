@@ -1,0 +1,352 @@
+/**
+ * Wellness Questionnaire System - TypeScript Type Definitions
+ *
+ * Defines types for:
+ * - Template configurations
+ * - Question definitions
+ * - Request distribution methods
+ * - Response data structures
+ * - Analytics aggregations
+ */
+
+import { z } from 'zod';
+
+/**
+ * Question Types
+ */
+export type QuestionType = 'scale' | 'text' | 'boolean' | 'body_map';
+
+/**
+ * Scale Question Configuration
+ */
+export interface ScaleQuestionConfig {
+  id: string;
+  type: 'scale';
+  label: string;
+  description?: string;
+  scaleMin: number;
+  scaleMax: number;
+  minLabel?: string; // e.g., "Poor"
+  maxLabel?: string; // e.g., "Excellent"
+  required: boolean;
+}
+
+/**
+ * Text Question Configuration
+ */
+export interface TextQuestionConfig {
+  id: string;
+  type: 'text';
+  label: string;
+  description?: string;
+  placeholder?: string;
+  maxLength?: number;
+  required: boolean;
+}
+
+/**
+ * Boolean (Yes/No) Question Configuration
+ */
+export interface BooleanQuestionConfig {
+  id: string;
+  type: 'boolean';
+  label: string;
+  description?: string;
+  required: boolean;
+}
+
+/**
+ * Body Map Question Configuration
+ */
+export interface BodyMapQuestionConfig {
+  id: string;
+  type: 'body_map';
+  label: string;
+  description?: string;
+  allowMultiple: boolean; // Allow multiple pain points
+  required: boolean;
+}
+
+/**
+ * Union of all question types
+ */
+export type QuestionConfig =
+  | ScaleQuestionConfig
+  | TextQuestionConfig
+  | BooleanQuestionConfig
+  | BodyMapQuestionConfig;
+
+/**
+ * Wellness Template Configuration (stored as JSONB)
+ */
+export interface WellnessTemplateConfig {
+  questions: QuestionConfig[];
+  settings?: {
+    allowAnonymous?: boolean;
+    showProgressBar?: boolean;
+    requireAllQuestions?: boolean;
+    customThankYouMessage?: string;
+  };
+}
+
+/**
+ * Wellness Template (from database)
+ */
+export interface WellnessTemplate {
+  id: string;
+  organizationId: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  config: WellnessTemplateConfig;
+  createdBy: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
+ * Distribution Methods for Wellness Requests
+ */
+export type DistributionMethod =
+  | 'magic_link'      // Unauthenticated access via unique token
+  | 'athlete_account' // Authenticated access via athlete login
+  | 'team_link'       // Shared team link (optional auth)
+  | 'qr_code';        // QR code scan (magic link in disguise)
+
+/**
+ * Request Status
+ */
+export type RequestStatus = 'active' | 'completed' | 'expired' | 'cancelled';
+
+/**
+ * Wellness Request (from database)
+ */
+export interface WellnessRequest {
+  id: string;
+  organizationId: string;
+  templateId: string;
+  requestedBy: string | null;
+  distributionMethod: DistributionMethod;
+  targetAthleteIds: string[] | null;
+  targetTeamIds: string[] | null;
+  publicToken: string | null;
+  requiresAuth: boolean;
+  scheduledFor: Date | null;
+  expiresAt: Date | null;
+  status: RequestStatus;
+  createdAt: Date;
+}
+
+/**
+ * Response value for different question types
+ */
+export type ResponseValue =
+  | number                // Scale question
+  | string                // Text question
+  | boolean               // Boolean question
+  | { x: number; y: number; label?: string }[]; // Body map (array of coordinates)
+
+/**
+ * Individual question response
+ */
+export interface QuestionResponse {
+  questionId: string;
+  value: ResponseValue;
+  answeredAt?: string; // ISO timestamp
+}
+
+/**
+ * Wellness Response Data (stored as JSONB)
+ */
+export interface WellnessResponseData {
+  [questionId: string]: {
+    value: ResponseValue;
+    label: string; // Question label at time of submission
+  };
+}
+
+/**
+ * Wellness Response (from database)
+ */
+export interface WellnessResponse {
+  id: string;
+  requestId: string | null;
+  organizationId: string; // Historical reference (no FK)
+  templateId: string;     // Historical reference (no FK)
+  userId: string;         // Historical reference (no FK)
+  userFullName: string;   // Snapshot at submission
+  teamId: string | null;  // Historical reference (no FK)
+  teamNameSnapshot: string | null;
+  submittedAt: Date;
+  date: string; // YYYY-MM-DD format
+  responses: WellnessResponseData;
+  accessMethod: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: Date;
+}
+
+/**
+ * Analytics - Team Summary
+ */
+export interface WellnessTeamSummary {
+  teamId: string;
+  teamName: string;
+  totalResponses: number;
+  uniqueAthletes: number;
+  completionRate: number; // Percentage
+  averageScores: {
+    [questionId: string]: number;
+  };
+  lastUpdated: Date;
+}
+
+/**
+ * Analytics - Individual Athlete Summary
+ */
+export interface WellnessAthleteSummary {
+  userId: string;
+  userFullName: string;
+  totalResponses: number;
+  latestResponse: Date | null;
+  averageScores: {
+    [questionId: string]: number;
+  };
+  trends: {
+    [questionId: string]: 'improving' | 'declining' | 'stable';
+  };
+}
+
+/**
+ * Analytics - Trend Data Point
+ */
+export interface WellnessTrendDataPoint {
+  date: string; // YYYY-MM-DD
+  value: number;
+  count: number; // Number of responses on this date
+}
+
+/**
+ * Analytics - Question Trend
+ */
+export interface WellnessTrend {
+  questionId: string;
+  questionLabel: string;
+  dataPoints: WellnessTrendDataPoint[];
+  trend: 'improving' | 'declining' | 'stable';
+  trendPercentage: number; // % change over time period
+}
+
+/**
+ * Analytics - Alert Types
+ */
+export type AlertSeverity = 'low' | 'medium' | 'high' | 'critical';
+
+export interface WellnessAlert {
+  id: string;
+  athleteId: string;
+  athleteName: string;
+  questionId: string;
+  questionLabel: string;
+  severity: AlertSeverity;
+  message: string;
+  value: ResponseValue;
+  threshold: number;
+  date: string; // YYYY-MM-DD
+  acknowledgedAt: Date | null;
+  acknowledgedBy: string | null;
+}
+
+/**
+ * Analytics - Wellness Analytics Response
+ */
+export interface WellnessAnalytics {
+  organizationId: string;
+  dateRange: {
+    start: string; // YYYY-MM-DD
+    end: string;   // YYYY-MM-DD
+  };
+  summary: {
+    totalResponses: number;
+    uniqueAthletes: number;
+    completionRate: number;
+    activeAlerts: number;
+  };
+  teamSummaries: WellnessTeamSummary[];
+  athleteSummaries: WellnessAthleteSummary[];
+  trends: WellnessTrend[];
+  alerts: WellnessAlert[];
+}
+
+/**
+ * Wellness Heatmap Data (for team wellness grid visualization)
+ */
+export interface WellnessHeatmapCell {
+  athleteId: string;
+  athleteName: string;
+  questionId: string;
+  value: number | null;
+  date: string; // YYYY-MM-DD
+  severity: AlertSeverity | null;
+}
+
+export interface WellnessHeatmap {
+  rows: string[]; // Athlete IDs
+  columns: string[]; // Question IDs
+  data: WellnessHeatmapCell[][];
+  lastUpdated: Date;
+}
+
+/**
+ * Correlation Data (wellness vs performance metrics)
+ */
+export interface WellnessCorrelation {
+  questionId: string;
+  questionLabel: string;
+  metricCode: string;
+  metricLabel: string;
+  correlationCoefficient: number; // -1 to 1
+  sampleSize: number;
+  pValue: number; // Statistical significance
+  dataPoints: {
+    wellnessScore: number;
+    metricValue: number;
+    date: string;
+  }[];
+}
+
+/**
+ * Request Creation Payload
+ */
+export interface CreateWellnessRequest {
+  templateId: string;
+  distributionMethod: DistributionMethod;
+  targetAthleteIds?: string[];
+  targetTeamIds?: string[];
+  requiresAuth?: boolean;
+  scheduledFor?: Date | string;
+  expiresAt?: Date | string;
+}
+
+/**
+ * Template Creation Payload
+ */
+export interface CreateWellnessTemplate {
+  name: string;
+  description?: string;
+  config: WellnessTemplateConfig;
+  isDefault?: boolean;
+  isActive?: boolean;
+}
+
+/**
+ * Response Submission Payload
+ */
+export interface SubmitWellnessResponse {
+  requestId?: string;
+  templateId: string;
+  date: string; // YYYY-MM-DD
+  responses: WellnessResponseData;
+  accessMethod?: string;
+}
