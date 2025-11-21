@@ -75,6 +75,9 @@ interface Measurement {
 }
 
 // Constants
+// Note: Fetching up to 1000 records for client-side filtering/sorting provides better UX
+// for site admins. For datasets >1000 measurements, browser performance may degrade.
+// Consider implementing virtual scrolling if this becomes an issue.
 const MAX_API_FETCH = 1000; // Backend pagination limit
 const TEAM_SELECT_MIN_HEIGHT = 100; // Height in pixels for team multi-select
 const NOTE_TRUNCATE_LENGTH = 30; // Characters before truncating notes display
@@ -264,10 +267,20 @@ export default function AdminMeasurementsPage() {
       queryClient.invalidateQueries({ queryKey: [queryUrl] });
       clearSelection();
       setBulkAction(null);
-      toast({
-        title: "Success",
-        description: `${data.verified} measurement(s) verified successfully`,
-      });
+
+      // Handle partial success (207 Multi-Status)
+      if (data.failed > 0) {
+        toast({
+          title: "Partial Success",
+          description: `${data.verified} verified, ${data.failed} failed. ${data.errors?.length > 0 ? data.errors[0] : ''}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `${data.verified} measurement(s) verified successfully`,
+        });
+      }
     },
     onError: (error: Error) => {
       setBulkAction(null);
@@ -293,10 +306,20 @@ export default function AdminMeasurementsPage() {
       queryClient.invalidateQueries({ queryKey: [queryUrl] });
       clearSelection();
       setBulkAction(null);
-      toast({
-        title: "Success",
-        description: `${data.unverified} measurement(s) unverified successfully`,
-      });
+
+      // Handle partial success (207 Multi-Status)
+      if (data.failed > 0) {
+        toast({
+          title: "Partial Success",
+          description: `${data.unverified} unverified, ${data.failed} failed. ${data.errors?.length > 0 ? data.errors[0] : ''}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Success",
+          description: `${data.unverified} measurement(s) unverified successfully`,
+        });
+      }
     },
     onError: (error: Error) => {
       setBulkAction(null);
