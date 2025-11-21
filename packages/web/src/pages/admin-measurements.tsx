@@ -71,6 +71,7 @@ const filterSchema = z.object({
   ageFrom: z.string().optional(),
   ageTo: z.string().optional(),
   organizationId: z.string().optional(),
+  verificationStatus: z.string().optional(), // "all", "verified", "unverified"
   limit: z.string().optional(),
   offset: z.string().optional(),
 });
@@ -112,6 +113,7 @@ export default function AdminMeasurementsPage() {
   const form = useForm<FilterFormData>({
     resolver: zodResolver(filterSchema),
     defaultValues: {
+      verificationStatus: "verified", // Default to showing only verified
       limit: String(ITEMS_PER_PAGE),
       offset: "0",
     },
@@ -130,13 +132,22 @@ export default function AdminMeasurementsPage() {
     const params = new URLSearchParams();
 
     Object.entries(filters).forEach(([key, value]) => {
-      if (value && value !== "") {
+      if (value && value !== "" && key !== "verificationStatus") {
         params.append(key, value);
       }
     });
 
-    // Ensure we're only fetching verified measurements
-    params.append("includeUnverified", "false");
+    // Handle verification status filter
+    const verificationStatus = filters.verificationStatus || "verified";
+    if (verificationStatus === "all") {
+      params.append("includeUnverified", "true");
+    } else if (verificationStatus === "verified") {
+      params.append("includeUnverified", "false");
+    } else if (verificationStatus === "unverified") {
+      params.append("includeUnverified", "true");
+      // Note: We'll need to filter on the client side for unverified only
+      // since the API doesn't have an "only unverified" option
+    }
 
     return params.toString();
   };
@@ -146,12 +157,22 @@ export default function AdminMeasurementsPage() {
 
   // Fetch measurements
   const {
-    data: measurements = [],
+    data: rawMeasurements = [],
     isLoading,
     error,
   } = useQuery<Measurement[]>({
     queryKey: [queryUrl],
     enabled: user?.isSiteAdmin === true,
+  });
+
+  // Client-side filter for "unverified only" option
+  // (API doesn't support fetching only unverified, so we filter after fetching)
+  const measurements = rawMeasurements.filter((measurement) => {
+    const verificationStatus = watchedFilters.verificationStatus || "verified";
+    if (verificationStatus === "unverified") {
+      return !measurement.isVerified;
+    }
+    return true; // For "all" and "verified", API handles it
   });
 
   const onSubmit = (data: FilterFormData) => {
@@ -162,6 +183,7 @@ export default function AdminMeasurementsPage() {
 
   const handleClearFilters = () => {
     form.reset({
+      verificationStatus: "verified", // Reset to verified only
       limit: String(ITEMS_PER_PAGE),
       offset: "0",
     });
@@ -175,7 +197,13 @@ export default function AdminMeasurementsPage() {
   };
 
   const hasActiveFilters = Object.entries(watchedFilters).some(
-    ([key, value]) => value && value !== "" && key !== "limit" && key !== "offset"
+    ([key, value]) => {
+      // Don't count default verification status as an active filter
+      if (key === "verificationStatus") {
+        return value && value !== "verified";
+      }
+      return value && value !== "" && key !== "limit" && key !== "offset";
+    }
   );
 
   const totalPages = Math.ceil(measurements.length / ITEMS_PER_PAGE);
@@ -279,6 +307,28 @@ export default function AdminMeasurementsPage() {
                                     {metric.label}
                                   </option>
                                 ))}
+                              </select>
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Verification Status */}
+                      <FormField
+                        control={form.control}
+                        name="verificationStatus"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Verification Status</FormLabel>
+                            <FormControl>
+                              <select
+                                {...field}
+                                className="w-full p-2 border border-gray-300 rounded-md"
+                              >
+                                <option value="verified">Verified Only</option>
+                                <option value="unverified">Unverified Only</option>
+                                <option value="all">All Measurements</option>
                               </select>
                             </FormControl>
                             <FormMessage />
