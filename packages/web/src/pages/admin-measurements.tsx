@@ -109,7 +109,8 @@ const GENDERS = [
   { value: "Not Specified", label: "Not Specified" },
 ];
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 50; // Display pagination
+const API_FETCH_LIMIT = 1000; // Fetch max from API for client-side filtering/sorting
 
 export default function AdminMeasurementsPage() {
   const { user } = useAuth();
@@ -133,8 +134,7 @@ export default function AdminMeasurementsPage() {
     resolver: zodResolver(filterSchema),
     defaultValues: {
       verificationStatus: "verified", // Default to showing only verified
-      limit: String(ITEMS_PER_PAGE),
-      offset: "0",
+      limit: String(API_FETCH_LIMIT), // Fetch max records for client-side operations
     },
   });
 
@@ -287,6 +287,13 @@ export default function AdminMeasurementsPage() {
     });
   }
 
+  // Calculate pagination
+  const totalMeasurements = measurements.length;
+  const totalPages = Math.ceil(totalMeasurements / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const paginatedMeasurements = measurements.slice(startIndex, endIndex);
+
   // Format metric name for display
   const formatMetricName = (metric: string): string => {
     const found = METRICS.find((m) => m.value === metric);
@@ -301,10 +308,18 @@ export default function AdminMeasurementsPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedMeasurements.length === measurements.length) {
-      setSelectedMeasurements([]);
+    // Check if all measurements on current page are selected
+    const allPageSelected = paginatedMeasurements.every(m => selectedMeasurements.includes(m.id));
+
+    if (allPageSelected) {
+      // Deselect all on current page
+      setSelectedMeasurements(prev =>
+        prev.filter(id => !paginatedMeasurements.find(m => m.id === id))
+      );
     } else {
-      setSelectedMeasurements(measurements.map(m => m.id));
+      // Select all on current page
+      const pageIds = paginatedMeasurements.map(m => m.id);
+      setSelectedMeasurements(prev => [...new Set([...prev, ...pageIds])]);
     }
   };
 
@@ -356,21 +371,17 @@ export default function AdminMeasurementsPage() {
   const onSubmit = (data: FilterFormData) => {
     // Reset to page 1 when filters change
     setCurrentPage(1);
-    form.setValue("offset", "0");
   };
 
   const handleClearFilters = () => {
     form.reset({
       verificationStatus: "verified", // Reset to verified only
-      limit: String(ITEMS_PER_PAGE),
-      offset: "0",
+      limit: String(API_FETCH_LIMIT), // Maintain max fetch limit
     });
     setCurrentPage(1);
   };
 
   const handlePageChange = (newPage: number) => {
-    const offset = (newPage - 1) * ITEMS_PER_PAGE;
-    form.setValue("offset", String(offset));
     setCurrentPage(newPage);
   };
 
@@ -383,8 +394,6 @@ export default function AdminMeasurementsPage() {
       return value && value !== "" && key !== "limit" && key !== "offset";
     }
   );
-
-  const totalPages = Math.ceil(measurements.length / ITEMS_PER_PAGE);
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -683,7 +692,7 @@ export default function AdminMeasurementsPage() {
                 ) : error ? (
                   "Error loading measurements"
                 ) : (
-                  `Showing ${measurements.length} measurement${measurements.length !== 1 ? "s" : ""}`
+                  `Showing ${startIndex + 1}-${Math.min(endIndex, totalMeasurements)} of ${totalMeasurements} measurement${totalMeasurements !== 1 ? "s" : ""}`
                 )}
               </CardDescription>
             </div>
@@ -707,7 +716,7 @@ export default function AdminMeasurementsPage() {
                 Failed to load measurements. Please try again.
               </AlertDescription>
             </Alert>
-          ) : measurements.length === 0 ? (
+          ) : totalMeasurements === 0 ? (
             <div className="text-center py-12">
               <p className="text-muted-foreground">No measurements found matching your filters.</p>
               {hasActiveFilters && (
@@ -757,7 +766,7 @@ export default function AdminMeasurementsPage() {
                       <TableHead className="w-4">
                         <input
                           type="checkbox"
-                          checked={measurements.length > 0 && selectedMeasurements.length === measurements.length}
+                          checked={paginatedMeasurements.length > 0 && paginatedMeasurements.every(m => selectedMeasurements.includes(m.id))}
                           onChange={toggleSelectAll}
                           className="rounded border-gray-300"
                         />
@@ -811,7 +820,7 @@ export default function AdminMeasurementsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {measurements.map((measurement) => (
+                    {paginatedMeasurements.map((measurement) => (
                       <TableRow key={measurement.id}>
                         <TableCell className="w-4">
                           <input
@@ -923,12 +932,10 @@ export default function AdminMeasurementsPage() {
               </div>
 
               {/* Pagination */}
-              {measurements.length >= ITEMS_PER_PAGE && (
+              {totalMeasurements > ITEMS_PER_PAGE && (
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-sm text-muted-foreground">
-                    Showing {((currentPage - 1) * ITEMS_PER_PAGE) + 1} to{" "}
-                    {Math.min(currentPage * ITEMS_PER_PAGE, measurements.length)} of{" "}
-                    {measurements.length} results
+                    Page {currentPage} of {totalPages} ({totalMeasurements} total)
                   </div>
                   <div className="flex gap-2">
                     <Button
