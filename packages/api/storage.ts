@@ -4533,8 +4533,24 @@ export class DatabaseStorage implements IStorage {
     const request = await this.getWellnessRequest(requestId);
     if (!request) return 0;
 
-    const targetCount = (request.targetAthleteIds?.length || 0) +
-                       (request.targetTeamIds?.length || 0);
+    // Start with individual athlete targets
+    let targetCount = request.targetAthleteIds?.length || 0;
+
+    // For each team, count actual athletes in the team
+    if (request.targetTeamIds && request.targetTeamIds.length > 0) {
+      for (const teamId of request.targetTeamIds) {
+        const teamUsers = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .where(
+            and(
+              eq(userTeams.teamId, teamId),
+              eq(userTeams.isActive, true)
+            )
+          );
+        targetCount += teamUsers.length;
+      }
+    }
 
     if (targetCount === 0) return 0;
 
@@ -4543,7 +4559,10 @@ export class DatabaseStorage implements IStorage {
       .from(wellnessResponses)
       .where(eq(wellnessResponses.requestId, requestId));
 
-    return responses.length / targetCount;
+    // Count unique respondents to prevent duplicate counting
+    const uniqueRespondents = new Set(responses.map(r => r.userId)).size;
+
+    return uniqueRespondents / targetCount;
   }
 
 }

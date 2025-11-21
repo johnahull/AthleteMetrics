@@ -456,6 +456,22 @@ export function registerWellnessRoutes(app: Express) {
           return res.status(404).json({ message: "Template not found" });
         }
 
+        // For authenticated users (not magic link access), verify organization membership
+        if ((req.user as any).accessMethod === 'authenticated' || !(req.user as any).accessMethod) {
+          const userOrgs = await storage.getUserOrganizations(req.user!.id);
+          const hasAccess = userOrgs.some(uo => uo.organizationId === template.organizationId);
+
+          // Site admins can access any organization
+          const user = await storage.getUser(req.user!.id);
+          const isSiteAdmin = user?.isSiteAdmin === true;
+
+          if (!hasAccess && !isSiteAdmin) {
+            return res.status(403).json({
+              message: "You don't have access to this organization's wellness requests"
+            });
+          }
+        }
+
         // Validate responses match template questions
         try {
           const responseSchema = generateResponseValidationSchema(template.config as any);
