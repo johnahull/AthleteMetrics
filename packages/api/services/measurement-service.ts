@@ -17,7 +17,7 @@ import {
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray, alias } from 'drizzle-orm';
 import { PAGINATION } from '../constants/pagination';
 
 export interface MeasurementFilters {
@@ -808,6 +808,10 @@ export class MeasurementService {
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
+    // Create aliases for submitter and verifier users
+    const submitterUser = alias(users, 'submitter_user');
+    const verifierUser = alias(users, 'verifier_user');
+
     // Execute query with pagination and count in parallel
     const [results, countResult] = await Promise.all([
       db.select({
@@ -830,7 +834,7 @@ export class MeasurementService {
         season: measurements.season,
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
-        // User data
+        // User data (athlete)
         user: sql<{
           id: string;
           firstName: string;
@@ -852,9 +856,35 @@ export class MeasurementService {
           'gender', ${users.gender},
           'positions', ${users.positions}
         )`,
+        // Submitter user data
+        submittedByUser: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+        } | null>`CASE WHEN ${submitterUser.id} IS NOT NULL THEN jsonb_build_object(
+          'id', ${submitterUser.id},
+          'firstName', ${submitterUser.firstName},
+          'lastName', ${submitterUser.lastName},
+          'fullName', ${submitterUser.fullName}
+        ) ELSE NULL END`,
+        // Verifier user data
+        verifiedByUser: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+        } | null>`CASE WHEN ${verifierUser.id} IS NOT NULL THEN jsonb_build_object(
+          'id', ${verifierUser.id},
+          'firstName', ${verifierUser.firstName},
+          'lastName', ${verifierUser.lastName},
+          'fullName', ${verifierUser.fullName}
+        ) ELSE NULL END`,
       })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(submitterUser, eq(measurements.submittedBy, submitterUser.id))
+        .leftJoin(verifierUser, eq(measurements.verifiedBy, verifierUser.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)

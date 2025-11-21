@@ -12,13 +12,12 @@ import { Badge } from "@/components/ui/badge";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
-import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle } from "lucide-react";
+import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Measurement type from API
-// Note: API returns only basic fields, not full user/org objects for submittedBy/verifiedBy
 interface Measurement {
   id: string;
   userId: string;
@@ -57,6 +56,18 @@ interface Measurement {
       };
     }>;
   };
+  submittedByUser: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+  } | null;
+  verifiedByUser: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+  } | null;
 }
 
 // Filter schema matching API measurementQuerySchema
@@ -72,6 +83,7 @@ const filterSchema = z.object({
   ageTo: z.string().optional(),
   organizationId: z.string().optional(),
   verificationStatus: z.string().optional(), // "all", "verified", "unverified"
+  athleteName: z.string().optional(),
   limit: z.string().optional(),
   offset: z.string().optional(),
 });
@@ -102,6 +114,9 @@ export default function AdminMeasurementsPage() {
   const [, setLocation] = useLocation();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedMeasurements, setSelectedMeasurements] = useState<string[]>([]);
+  const [sortField, setSortField] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   // Redirect non-site admins
   useEffect(() => {
@@ -165,15 +180,117 @@ export default function AdminMeasurementsPage() {
     enabled: user?.isSiteAdmin === true,
   });
 
-  // Client-side filter for "unverified only" option
+  // Client-side filter for "unverified only" option and athlete name search
   // (API doesn't support fetching only unverified, so we filter after fetching)
-  const measurements = rawMeasurements.filter((measurement) => {
+  let measurements = rawMeasurements.filter((measurement) => {
     const verificationStatus = watchedFilters.verificationStatus || "verified";
     if (verificationStatus === "unverified") {
       return !measurement.isVerified;
     }
     return true; // For "all" and "verified", API handles it
   });
+
+  // Apply client-side athlete name filter
+  if (watchedFilters.athleteName && watchedFilters.athleteName.trim()) {
+    const searchTerm = watchedFilters.athleteName.toLowerCase().trim();
+    measurements = measurements.filter((measurement) =>
+      measurement.user.fullName.toLowerCase().includes(searchTerm)
+    );
+  }
+
+  // Apply sorting
+  if (sortField) {
+    measurements.sort((a, b) => {
+      let aVal: any, bVal: any;
+
+      if (sortField === 'date') {
+        aVal = new Date(a.date).getTime();
+        bVal = new Date(b.date).getTime();
+      } else if (sortField === 'athlete') {
+        aVal = a.user.fullName;
+        bVal = b.user.fullName;
+      } else if (sortField === 'metric') {
+        aVal = a.metric;
+        bVal = b.metric;
+      } else if (sortField === 'value') {
+        aVal = parseFloat(a.value);
+        bVal = parseFloat(b.value);
+      } else if (sortField === 'age') {
+        aVal = a.age;
+        bVal = b.age;
+      }
+
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Format metric name for display
+  const formatMetricName = (metric: string): string => {
+    const found = METRICS.find((m) => m.value === metric);
+    return found ? found.label : metric;
+  };
+
+  // Selection functions
+  const toggleMeasurementSelection = (id: string) => {
+    setSelectedMeasurements(prev =>
+      prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedMeasurements.length === measurements.length) {
+      setSelectedMeasurements([]);
+    } else {
+      setSelectedMeasurements(measurements.map(m => m.id));
+    }
+  };
+
+  const clearSelection = () => setSelectedMeasurements([]);
+
+  // CSV Export function
+  const exportToCSV = () => {
+    const headers = ['Date', 'Athlete', 'Organization', 'Team', 'Metric', 'Value', 'Units', 'Age', 'Submitted By', 'Verified By', 'Status', 'Notes'];
+
+    const rows = measurements.map(m => [
+      new Date(m.date).toLocaleDateString(),
+      m.user.fullName,
+      m.user.teams?.[0]?.organization.name || m.organizationId || '-',
+      m.teamNameSnapshot || '-',
+      formatMetricName(m.metric),
+      m.value,
+      m.units,
+      m.age,
+      m.submittedByUser?.fullName || 'Unknown',
+      m.verifiedByUser?.fullName || '-',
+      m.isVerified ? 'Verified' : 'Unverified',
+      m.notes || ''
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Sorting function
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
 
   const onSubmit = (data: FilterFormData) => {
     // Reset to page 1 when filters change
@@ -207,12 +324,6 @@ export default function AdminMeasurementsPage() {
   );
 
   const totalPages = Math.ceil(measurements.length / ITEMS_PER_PAGE);
-
-  // Format metric name for display
-  const formatMetricName = (metric: string): string => {
-    const found = METRICS.find((m) => m.value === metric);
-    return found ? found.label : metric;
-  };
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -376,6 +487,21 @@ export default function AdminMeasurementsPage() {
                         )}
                       />
 
+                      {/* Athlete Name Search */}
+                      <FormField
+                        control={form.control}
+                        name="athleteName"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Athlete Name</FormLabel>
+                            <FormControl>
+                              <Input placeholder="Search by name..." {...field} />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
                       {/* Organization */}
                       <FormField
                         control={form.control}
@@ -487,16 +613,24 @@ export default function AdminMeasurementsPage() {
       {/* Results */}
       <Card>
         <CardHeader>
-          <CardTitle>Measurements</CardTitle>
-          <CardDescription>
-            {isLoading ? (
-              "Loading measurements..."
-            ) : error ? (
-              "Error loading measurements"
-            ) : (
-              `Showing ${measurements.length} verified measurement${measurements.length !== 1 ? "s" : ""}`
-            )}
-          </CardDescription>
+          <div className="flex items-center justify-between w-full">
+            <div>
+              <CardTitle>Measurements</CardTitle>
+              <CardDescription>
+                {isLoading ? (
+                  "Loading measurements..."
+                ) : error ? (
+                  "Error loading measurements"
+                ) : (
+                  `Showing ${measurements.length} measurement${measurements.length !== 1 ? "s" : ""}`
+                )}
+              </CardDescription>
+            </div>
+            <Button onClick={exportToCSV} variant="outline" size="sm">
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
           {isLoading ? (
@@ -523,18 +657,84 @@ export default function AdminMeasurementsPage() {
             </div>
           ) : (
             <>
+              {/* Bulk Actions */}
+              {selectedMeasurements.length > 0 && (
+                <div className="flex items-center gap-2 mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <span className="text-sm font-medium">
+                    {selectedMeasurements.length} selected
+                  </span>
+                  <Button size="sm" variant="outline" onClick={clearSelection}>
+                    <X className="h-4 w-4 mr-1" />
+                    Clear
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    <CheckSquare className="h-4 w-4 mr-1" />
+                    Verify Selected
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    <XSquare className="h-4 w-4 mr-1" />
+                    Unverify Selected
+                  </Button>
+                </div>
+              )}
+
               {/* Table */}
               <div className="rounded-md border overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Athlete</TableHead>
+                      <TableHead className="w-4">
+                        <input
+                          type="checkbox"
+                          checked={measurements.length > 0 && selectedMeasurements.length === measurements.length}
+                          onChange={toggleSelectAll}
+                          className="rounded border-gray-300"
+                        />
+                      </TableHead>
+                      <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
+                        <div className="flex items-center gap-1">
+                          Date
+                          {sortField === 'date' && (
+                            <ArrowUpDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer" onClick={() => handleSort('athlete')}>
+                        <div className="flex items-center gap-1">
+                          Athlete
+                          {sortField === 'athlete' && (
+                            <ArrowUpDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </TableHead>
                       <TableHead>Organization</TableHead>
                       <TableHead>Team</TableHead>
-                      <TableHead>Metric</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>Age</TableHead>
+                      <TableHead className="cursor-pointer" onClick={() => handleSort('metric')}>
+                        <div className="flex items-center gap-1">
+                          Metric
+                          {sortField === 'metric' && (
+                            <ArrowUpDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer" onClick={() => handleSort('value')}>
+                        <div className="flex items-center gap-1">
+                          Value
+                          {sortField === 'value' && (
+                            <ArrowUpDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead className="cursor-pointer" onClick={() => handleSort('age')}>
+                        <div className="flex items-center gap-1">
+                          Age
+                          {sortField === 'age' && (
+                            <ArrowUpDown className="h-4 w-4" />
+                          )}
+                        </div>
+                      </TableHead>
+                      <TableHead>Submitted By</TableHead>
+                      <TableHead>Verified By</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
@@ -542,6 +742,14 @@ export default function AdminMeasurementsPage() {
                   <TableBody>
                     {measurements.map((measurement) => (
                       <TableRow key={measurement.id}>
+                        <TableCell className="w-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedMeasurements.includes(measurement.id)}
+                            onChange={() => toggleMeasurementSelection(measurement.id)}
+                            className="rounded border-gray-300"
+                          />
+                        </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <div className="flex items-center gap-2">
                             <Calendar className="h-4 w-4 text-muted-foreground" />
@@ -586,6 +794,26 @@ export default function AdminMeasurementsPage() {
                           {measurement.value} {measurement.units}
                         </TableCell>
                         <TableCell>{measurement.age}</TableCell>
+                        <TableCell>
+                          {measurement.submittedByUser ? (
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm">{measurement.submittedByUser.fullName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Unknown</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {measurement.verifiedByUser ? (
+                            <div className="flex items-center gap-2">
+                              <User className="h-4 w-4 text-green-600" />
+                              <span className="text-sm">{measurement.verifiedByUser.fullName}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
                         <TableCell>
                           {measurement.isVerified ? (
                             <Badge variant="default" className="bg-green-600">
