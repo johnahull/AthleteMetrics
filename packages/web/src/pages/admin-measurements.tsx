@@ -689,31 +689,47 @@ export default function AdminMeasurementsPage() {
       </Card>
 
       {/* Statistics Summary */}
-      {measurements.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {watchedFilters.metric ? (
-            // Show statistics for the selected metric
-            <StatisticsSummaryCard
-              measurements={measurements.filter((m) => m.metric === watchedFilters.metric)}
-              metric={watchedFilters.metric}
-            />
-          ) : (
-            // Show statistics for common metrics when no specific metric is selected
-            <>
+      {measurements.length > 0 && (() => {
+        if (watchedFilters.metric) {
+          // Show statistics for the selected metric
+          const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
+          if (metricMeasurements.length === 0) return null;
+
+          return (
+            <div className="grid grid-cols-1 gap-6">
               <StatisticsSummaryCard
-                measurements={measurements.filter((m) => m.metric === 'FLY10_TIME')}
-                metric="FLY10_TIME"
-                title="10-Yard Fly Time Statistics"
+                measurements={metricMeasurements}
+                metric={watchedFilters.metric}
               />
-              <StatisticsSummaryCard
-                measurements={measurements.filter((m) => m.metric === 'VERTICAL_JUMP')}
-                metric="VERTICAL_JUMP"
-                title="Vertical Jump Statistics"
-              />
-            </>
-          )}
-        </div>
-      )}
+            </div>
+          );
+        } else {
+          // Show statistics for the top 2 metrics with the most measurements
+          const metricCounts = measurements.reduce((acc, m) => {
+            acc[m.metric] = (acc[m.metric] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>);
+
+          const topMetrics = Object.entries(metricCounts)
+            .sort(([, a], [, b]) => b - a)
+            .slice(0, 2)
+            .map(([metric]) => metric);
+
+          if (topMetrics.length === 0) return null;
+
+          return (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {topMetrics.map((metric) => (
+                <StatisticsSummaryCard
+                  key={metric}
+                  measurements={measurements.filter((m) => m.metric === metric)}
+                  metric={metric}
+                />
+              ))}
+            </div>
+          );
+        }
+      })()}
 
       {/* Results */}
       <Card>

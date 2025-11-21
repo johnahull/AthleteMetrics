@@ -898,6 +898,21 @@ export class MeasurementService {
       }
     }
 
+    // Age filtering (applied to measurements table)
+    // Age is stored in the measurements table, calculated at measurement creation time
+    if (filters?.ageFrom !== undefined && filters?.ageTo !== undefined) {
+      conditions.push(
+        and(
+          gte(measurements.age, filters.ageFrom),
+          lte(measurements.age, filters.ageTo)
+        )!
+      );
+    } else if (filters?.ageFrom !== undefined) {
+      conditions.push(gte(measurements.age, filters.ageFrom));
+    } else if (filters?.ageTo !== undefined) {
+      conditions.push(lte(measurements.age, filters.ageTo));
+    }
+
     // Pagination parameters with safety limits to prevent memory exhaustion
     const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
     const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
