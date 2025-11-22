@@ -611,8 +611,25 @@ export function registerWellnessRoutes(app: Express) {
             });
           }
 
-          // For magic link access, verify user is targeted by this request
+          // For magic link access, verify the submitted requestId and templateId match the validated request
           if ((req.user as any).accessMethod === 'magic_link') {
+            const validatedRequest = (req as any).wellnessRequest;
+
+            // SECURITY: Verify that the request and template IDs in the body match what was validated in middleware
+            // This prevents attackers from submitting responses to different requests/templates using a stolen token
+            if (!validatedRequest || validatedRequest.id !== data.requestId) {
+              return res.status(403).json({
+                message: "Request ID does not match the authenticated magic link"
+              });
+            }
+
+            if (validatedRequest.templateId !== data.templateId) {
+              return res.status(403).json({
+                message: "Template ID does not match the authenticated magic link"
+              });
+            }
+
+            // Verify user is targeted by this request
             let isTargeted = false;
 
             // Check direct athlete targeting

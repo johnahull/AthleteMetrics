@@ -270,6 +270,7 @@ export const submitWellnessResponseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
   responses: responseDataSchema,
   accessMethod: z.string().max(50).optional(),
+  athleteName: sanitizedString(200).optional(), // For magic link submissions - sanitized to prevent XSS
 }).refine(
   (data) => {
     // Date cannot be in the future
