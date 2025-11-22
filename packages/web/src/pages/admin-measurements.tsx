@@ -80,6 +80,7 @@ interface Measurement {
 // for site admins. For datasets >1000 measurements, browser performance may degrade.
 // Consider implementing virtual scrolling if this becomes an issue.
 const MAX_API_FETCH = 1000; // Backend pagination limit
+const MAX_SHOW_ALL = 500; // Maximum records to display when "Show All" is selected (browser performance threshold)
 const TEAM_SELECT_MIN_HEIGHT = 100; // Height in pixels for team multi-select
 const NOTE_TRUNCATE_LENGTH = 30; // Characters before truncating notes display
 
@@ -448,8 +449,6 @@ export default function AdminMeasurementsPage() {
 
   // Calculate pagination
   const totalMeasurements = measurements.length;
-  // Cap "Show All" at 500 records to prevent browser performance issues
-  const MAX_SHOW_ALL = 500;
   const itemsPerPage = pageSize === 0 ? Math.min(totalMeasurements, MAX_SHOW_ALL) : pageSize; // 0 means "All" (capped)
   const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMeasurements / pageSize);
   const startIndex = (currentPage - 1) * itemsPerPage;
