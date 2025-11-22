@@ -17,7 +17,7 @@ import {
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 
@@ -922,14 +922,13 @@ export class MeasurementService {
 
     // Sport filtering (applied to users table with array containment)
     // PostgreSQL array operator @> checks if left array contains right array
-    // SECURITY: Drizzle's sql template tag automatically parameterizes ${filters.sport}
-    // to prevent SQL injection. The value is bound as a parameter, not concatenated.
+    // SECURITY: Using Drizzle's arrayContains() function for proper parameterization
     if (filters?.sport) {
       // Validate BEFORE using in query for clarity and safety
       if (filters.sport.length > 100) {
         throw new Error('Sport parameter exceeds maximum length');
       }
-      conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
+      conditions.push(arrayContains(users.sports, [filters.sport]));
     }
 
     // Birth year filtering (applied to users table)
