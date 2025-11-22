@@ -11,13 +11,14 @@ import TemplateBuilder from '@/components/wellness/TemplateBuilder';
 import TemplateCard from '@/components/wellness/TemplateCard';
 import RequestModal from '@/components/wellness/RequestModal';
 import RequestsList from '@/components/wellness/RequestsList';
+import WellnessAnalytics from './wellness-analytics';
 
 export default function WellnessTemplates() {
   const { organizationContext, userOrganizations, user } = useAuth();
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'templates' | 'requests'>('templates');
+  const [selectedTab, setSelectedTab] = useState<'templates' | 'requests' | 'analytics'>('templates');
 
   // Get effective organization ID
   const getEffectiveOrganizationId = () => {
@@ -71,6 +72,9 @@ export default function WellnessTemplates() {
           </TabsTrigger>
           <TabsTrigger value="requests" role="tab">
             Requests
+          </TabsTrigger>
+          <TabsTrigger value="analytics" role="tab">
+            Analytics
           </TabsTrigger>
         </TabsList>
 
@@ -145,6 +149,11 @@ export default function WellnessTemplates() {
               />
             )}
           </div>
+        </TabsContent>
+
+        {/* Analytics Tab */}
+        <TabsContent value="analytics">
+          <WellnessAnalytics />
         </TabsContent>
       </Tabs>
 
