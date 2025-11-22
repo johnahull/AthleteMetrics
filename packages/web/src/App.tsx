@@ -74,15 +74,47 @@ const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-
 function Router() {
   return (
     <Switch>
-      <Route path="/accept-invitation" component={AcceptInvitation} />
-      <Route path="/register" component={AcceptInvitation} />
+      <Route path="/accept-invitation">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <AcceptInvitation />
+        </Suspense>
+      </Route>
+      <Route path="/register">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <AcceptInvitation />
+        </Suspense>
+      </Route>
       <Route path="/login" component={Login} />
-      <Route path="/enhanced-login" component={EnhancedLogin} />
-      <Route path="/forgot-password" component={ForgotPassword} />
-      <Route path="/reset-password" component={ResetPassword} />
-      <Route path="/verify-email" component={VerifyEmail} />
-      <Route path="/public/reports/:token" component={PublicReport} />
-      <Route path="/wellness/submit/:token" component={WellnessSubmit} />
+      <Route path="/enhanced-login">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <EnhancedLogin />
+        </Suspense>
+      </Route>
+      <Route path="/forgot-password">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ForgotPassword />
+        </Suspense>
+      </Route>
+      <Route path="/reset-password">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ResetPassword />
+        </Suspense>
+      </Route>
+      <Route path="/verify-email">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <VerifyEmail />
+        </Suspense>
+      </Route>
+      <Route path="/public/reports/:token">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <PublicReport />
+        </Suspense>
+      </Route>
+      <Route path="/wellness/submit/:token">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <WellnessSubmit />
+        </Suspense>
+      </Route>
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
