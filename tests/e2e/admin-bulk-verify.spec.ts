@@ -613,6 +613,85 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
         console.log('No statistics cards found - may not be visible for current dataset');
       }
     });
+
+    test('should handle multiple filter combinations', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Test 1: Age range filter
+      const ageFromInput = page.locator('input[name="ageFrom"]');
+      const ageToInput = page.locator('input[name="ageTo"]');
+      await ageFromInput.fill('15');
+      await ageToInput.fill('18');
+
+      // Apply filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Verify results are filtered
+      const firstResultCount = await page.locator('table tbody tr').count();
+      console.log(`Age filter 15-18: ${firstResultCount} results`);
+
+      // Test 2: Add verification status filter
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('verified');
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      const secondResultCount = await page.locator('table tbody tr').count();
+      console.log(`Age 15-18 + verified: ${secondResultCount} results`);
+
+      // Verify second filter reduced or maintained count
+      expect(secondResultCount).toBeLessThanOrEqual(firstResultCount);
+
+      // Test 3: Clear filters
+      const clearButton = page.locator('button:has-text("Clear Filters")');
+      await clearButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Verify all results are shown again
+      const clearedResultCount = await page.locator('table tbody tr').count();
+      console.log(`After clearing filters: ${clearedResultCount} results`);
+      expect(clearedResultCount).toBeGreaterThanOrEqual(secondResultCount);
+
+      // Test 4: Team filter (if teams exist)
+      const teamSelect = page.locator('select[name="teamIds"], [multiple][name="teamIds"]');
+      if (await teamSelect.isVisible()) {
+        const teamOptions = await teamSelect.locator('option').count();
+        if (teamOptions > 1) {
+          // Select first team
+          await teamSelect.selectOption({ index: 1 });
+          await applyButton.click();
+          await page.waitForLoadState('networkidle');
+
+          const teamFilteredCount = await page.locator('table tbody tr').count();
+          console.log(`Team filter: ${teamFilteredCount} results`);
+        }
+      }
+
+      // Test 5: Athlete name search (client-side filter)
+      const athleteNameInput = page.locator('input[name="athleteName"], input[placeholder*="athlete" i]');
+      if (await athleteNameInput.isVisible()) {
+        await athleteNameInput.fill('Test');
+        await page.waitForTimeout(400); // Wait for debounce
+        await page.waitForLoadState('networkidle');
+
+        const nameSearchCount = await page.locator('table tbody tr').count();
+        console.log(`Athlete name search "Test": ${nameSearchCount} results`);
+      }
+    });
   });
 
   test.describe('Edge Cases', () => {
