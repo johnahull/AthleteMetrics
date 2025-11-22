@@ -16,7 +16,7 @@ interface QuestionEditorProps {
 }
 
 export default function QuestionEditor({ isOpen, onClose, onSave, question }: QuestionEditorProps) {
-  const [questionType, setQuestionType] = useState<'scale' | 'text' | 'boolean' | 'body_map'>(
+  const [questionType, setQuestionType] = useState<'scale' | 'text' | 'boolean' | 'body_map' | 'multiple_choice'>(
     question?.type || 'scale'
   );
   const [label, setLabel] = useState(question?.label || '');
@@ -47,7 +47,13 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
 
   // Body map-specific
   const [allowMultiple, setAllowMultiple] = useState(
-    question?.type === 'body_map' ? question.allowMultiple : false
+    question?.type === 'body_map' ? question.allowMultiple :
+    question?.type === 'multiple_choice' ? question.allowMultiple : false
+  );
+
+  // Multiple choice-specific
+  const [options, setOptions] = useState<string[]>(
+    question?.type === 'multiple_choice' ? question.options : ['Option 1', 'Option 2']
   );
 
   const handleSave = () => {
@@ -92,6 +98,14 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
           allowMultiple,
         };
         break;
+      case 'multiple_choice':
+        newQuestion = {
+          ...baseQuestion,
+          type: 'multiple_choice',
+          options: options.filter(opt => opt.trim().length > 0),
+          allowMultiple,
+        };
+        break;
       default:
         return;
     }
@@ -122,6 +136,7 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
                 <SelectItem value="text">Text Response</SelectItem>
                 <SelectItem value="boolean">Yes/No</SelectItem>
                 <SelectItem value="body_map">Body Map</SelectItem>
+                <SelectItem value="multiple_choice">Multiple Choice</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -234,6 +249,58 @@ export default function QuestionEditor({ isOpen, onClose, onSave, question }: Qu
               />
               <Label htmlFor="allow-multiple">Allow multiple pain points</Label>
             </div>
+          )}
+
+          {questionType === 'multiple_choice' && (
+            <>
+              <div className="space-y-2">
+                <Label>Answer Options *</Label>
+                {options.map((option, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={option}
+                      onChange={(e) => {
+                        const newOptions = [...options];
+                        newOptions[index] = e.target.value;
+                        setOptions(newOptions);
+                      }}
+                      placeholder={`Option ${index + 1}`}
+                    />
+                    {options.length > 2 && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        onClick={() => {
+                          setOptions(options.filter((_, i) => i !== index));
+                        }}
+                      >
+                        ×
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                {options.length < 10 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setOptions([...options, `Option ${options.length + 1}`]);
+                    }}
+                  >
+                    Add Option
+                  </Button>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="allow-multiple-mc"
+                  checked={allowMultiple}
+                  onCheckedChange={(checked) => setAllowMultiple(checked as boolean)}
+                />
+                <Label htmlFor="allow-multiple-mc">Allow selecting multiple options</Label>
+              </div>
+            </>
           )}
 
           {/* Required Checkbox */}

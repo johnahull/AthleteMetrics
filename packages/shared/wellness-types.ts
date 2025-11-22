@@ -14,7 +14,7 @@ import { z } from 'zod';
 /**
  * Question Types
  */
-export type QuestionType = 'scale' | 'text' | 'boolean' | 'body_map';
+export type QuestionType = 'scale' | 'text' | 'boolean' | 'body_map' | 'multiple_choice';
 
 /**
  * Scale Question Configuration
@@ -68,13 +68,27 @@ export interface BodyMapQuestionConfig {
 }
 
 /**
+ * Multiple Choice Question Configuration
+ */
+export interface MultipleChoiceQuestionConfig {
+  id: string;
+  type: 'multiple_choice';
+  label: string;
+  description?: string;
+  options: string[]; // Array of choice options (min 2, max 10)
+  allowMultiple: boolean; // Single-select (false) vs multi-select (true)
+  required: boolean;
+}
+
+/**
  * Union of all question types
  */
 export type QuestionConfig =
   | ScaleQuestionConfig
   | TextQuestionConfig
   | BooleanQuestionConfig
-  | BodyMapQuestionConfig;
+  | BodyMapQuestionConfig
+  | MultipleChoiceQuestionConfig;
 
 /**
  * Wellness Template Configuration (stored as JSONB)
@@ -143,8 +157,9 @@ export interface WellnessRequest {
  */
 export type ResponseValue =
   | number                // Scale question
-  | string                // Text question
+  | string                // Text question or single-select multiple choice
   | boolean               // Boolean question
+  | string[]              // Multi-select multiple choice
   | { x: number; y: number; label?: string }[]; // Body map (array of coordinates)
 
 /**

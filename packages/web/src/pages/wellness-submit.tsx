@@ -12,6 +12,7 @@ import { ScaleQuestionInput } from '@/components/wellness/ScaleQuestionInput';
 import { TextQuestionInput } from '@/components/wellness/TextQuestionInput';
 import { BooleanQuestionInput } from '@/components/wellness/BooleanQuestionInput';
 import { BodyMapInput } from '@/components/wellness/BodyMapInput';
+import { MultipleChoiceQuestionInput } from '@/components/wellness/MultipleChoiceQuestionInput';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type {
@@ -219,7 +220,23 @@ export default function WellnessSubmit() {
   const questions = template?.config?.questions || [];
   const answeredCount = questions.filter((q) => {
     const answer = responses[q.id];
-    return answer !== null && answer !== undefined && answer !== '';
+
+    // Check if answer is not empty based on question type
+    if (answer === null || answer === undefined) {
+      return false;
+    }
+
+    if (q.type === 'multiple_choice' && q.allowMultiple) {
+      // For multi-select, check if array has items
+      return Array.isArray(answer) && answer.length > 0;
+    }
+
+    if (typeof answer === 'string') {
+      return answer !== '';
+    }
+
+    // For other types (number, boolean, array), just check it exists
+    return true;
   }).length;
   const progressPercentage = questions.length > 0 ? (answeredCount / questions.length) * 100 : 0;
 
@@ -246,7 +263,20 @@ export default function WellnessSubmit() {
     questions.forEach((question) => {
       if (question.required) {
         const answer = responses[question.id];
-        if (answer === null || answer === undefined || answer === '') {
+
+        // Check if answer is empty based on question type
+        let isEmpty = false;
+
+        if (answer === null || answer === undefined) {
+          isEmpty = true;
+        } else if (question.type === 'multiple_choice' && question.allowMultiple) {
+          // For multi-select, check if array is empty
+          isEmpty = !Array.isArray(answer) || answer.length === 0;
+        } else if (typeof answer === 'string' && answer === '') {
+          isEmpty = true;
+        }
+
+        if (isEmpty) {
           newErrors[question.id] = 'This question is required';
         }
       }
@@ -454,6 +484,16 @@ export default function WellnessSubmit() {
                       key={question.id}
                       question={question}
                       value={value || []}
+                      onChange={(val) => handleQuestionChange(question.id, val)}
+                      error={error}
+                    />
+                  );
+                case 'multiple_choice':
+                  return (
+                    <MultipleChoiceQuestionInput
+                      key={question.id}
+                      question={question}
+                      value={value || (question.allowMultiple ? [] : null)}
                       onChange={(val) => handleQuestionChange(question.id, val)}
                       error={error}
                     />

@@ -97,12 +97,26 @@ export const bodyMapQuestionSchema = z.object({
   required: z.boolean(),
 });
 
+// Multiple Choice Question Schema
+export const multipleChoiceQuestionSchema = z.object({
+  id: z.string().min(1, 'Question ID is required'),
+  type: z.literal('multiple_choice'),
+  label: z.string().min(1, 'Question label is required').max(200),
+  description: z.string().max(500).optional(),
+  options: z.array(z.string().min(1).max(200))
+    .min(2, 'At least 2 options are required')
+    .max(10, 'Maximum 10 options allowed'),
+  allowMultiple: z.boolean(),
+  required: z.boolean(),
+});
+
 // Union of all question types
 export const questionConfigSchema = z.union([
   scaleQuestionSchema,
   textQuestionSchema,
   booleanQuestionSchema,
   bodyMapQuestionSchema,
+  multipleChoiceQuestionSchema,
 ]);
 
 /**
@@ -230,8 +244,9 @@ export const updateWellnessRequestSchema = z.object({
 // Response value based on question type
 export const responseValueSchema = z.union([
   z.number(), // Scale
-  sanitizedString(5000), // Text - sanitized to prevent XSS
+  sanitizedString(5000), // Text or single-select multiple choice - sanitized to prevent XSS
   z.boolean(), // Boolean
+  z.array(z.string()), // Multi-select multiple choice
   z.array(z.object({ // Body map
     x: z.number().min(0).max(1), // Percentage coordinates (0-1)
     y: z.number().min(0).max(1),
@@ -320,6 +335,34 @@ export function generateResponseValidationSchema(
           bodyMapSchema = bodyMapSchema.min(1, 'At least one point is required');
         }
         valueSchema = bodyMapSchema;
+        break;
+      }
+
+      case 'multiple_choice': {
+        if (question.allowMultiple) {
+          // Multi-select: array of strings
+          let multiSelectSchema = z.array(z.string().refine(
+            (val) => question.options.includes(val),
+            { message: 'Invalid option selected' }
+          ));
+          if (question.required) {
+            multiSelectSchema = multiSelectSchema.min(1, 'At least one option is required');
+          }
+          valueSchema = multiSelectSchema;
+        } else {
+          // Single-select: string
+          if (question.required) {
+            valueSchema = z.string().min(1, 'This field is required').refine(
+              (val) => question.options.includes(val),
+              { message: 'Invalid option selected' }
+            );
+          } else {
+            valueSchema = z.string().refine(
+              (val) => question.options.includes(val),
+              { message: 'Invalid option selected' }
+            );
+          }
+        }
         break;
       }
     }

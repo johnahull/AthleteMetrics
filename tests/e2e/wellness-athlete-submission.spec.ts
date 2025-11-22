@@ -303,6 +303,368 @@ test.describe('Wellness Athlete Submission Interface Tests', () => {
     });
   });
 
+  test.describe('Multiple Choice Question Type', () => {
+    let multipleChoiceTemplate: any;
+    let multipleChoiceRequest: any;
+    let multipleChoiceLinkUrl: string;
+
+    test.beforeAll(async ({ browser }) => {
+      // Create a template with multiple choice questions
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await loginAsDefaultUser(page);
+
+      const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+      const response = await page.request.post(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates`,
+        {
+          data: {
+            name: `Multiple Choice Test Template ${uniqueId}`,
+            description: 'Test template for multiple choice questions',
+            config: {
+              questions: [
+                {
+                  id: `mc_single_${uniqueId}`,
+                  type: 'multiple_choice',
+                  label: 'What is your primary training goal?',
+                  description: 'Select the option that best describes your current focus',
+                  options: ['Strength', 'Speed', 'Endurance', 'Flexibility', 'Recovery'],
+                  allowMultiple: false,
+                  required: true,
+                },
+                {
+                  id: `mc_multi_${uniqueId}`,
+                  type: 'multiple_choice',
+                  label: 'Which areas need improvement?',
+                  description: 'Select all that apply',
+                  options: ['Sleep Quality', 'Nutrition', 'Hydration', 'Stress Management', 'Mobility'],
+                  allowMultiple: true,
+                  required: false,
+                },
+              ],
+            },
+            isActive: true,
+          },
+        }
+      );
+
+      multipleChoiceTemplate = await response.json();
+
+      // Create request for this template
+      const requestResponse = await page.request.post(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`,
+        {
+          data: {
+            templateId: multipleChoiceTemplate.id,
+            distributionMethod: 'magic_link',
+            targetAthleteIds: [],
+            requiresAuth: false,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        }
+      );
+
+      multipleChoiceRequest = await requestResponse.json();
+      multipleChoiceLinkUrl = `${BASE_URL}/wellness/submit/${multipleChoiceRequest.publicToken}`;
+
+      await context.close();
+    });
+
+    test.afterAll(async ({ browser }) => {
+      // Cleanup
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      await loginAsDefaultUser(page);
+
+      try {
+        await page.request.delete(
+          `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${multipleChoiceRequest.id}`
+        );
+        await page.request.delete(
+          `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${multipleChoiceTemplate.id}`
+        );
+      } catch (error) {
+        console.warn('Cleanup failed:', error);
+      }
+
+      await context.close();
+    });
+
+    test('should display single-select multiple choice with radio buttons', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      // Find the single-select multiple choice question
+      const mcQuestion = page.locator('[data-testid="question-multiple-choice"]').first();
+
+      // Should see question label
+      await expect(mcQuestion.locator('text=What is your primary training goal?')).toBeVisible();
+
+      // Should see required indicator
+      await expect(mcQuestion.locator('text=*')).toBeVisible();
+
+      // Should see description
+      await expect(mcQuestion.locator('text=Select the option that best describes your current focus')).toBeVisible();
+
+      // Should see all options as radio buttons
+      await expect(mcQuestion.locator('text=Strength')).toBeVisible();
+      await expect(mcQuestion.locator('text=Speed')).toBeVisible();
+      await expect(mcQuestion.locator('text=Endurance')).toBeVisible();
+      await expect(mcQuestion.locator('text=Flexibility')).toBeVisible();
+      await expect(mcQuestion.locator('text=Recovery')).toBeVisible();
+
+      // Should have radio group role
+      const radioGroup = mcQuestion.locator('[role="radiogroup"]');
+      await expect(radioGroup).toBeVisible();
+    });
+
+    test('should allow selecting one option in single-select mode', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      const mcQuestion = page.locator('[data-testid="question-multiple-choice"]').first();
+
+      // Click on "Speed" option
+      const speedOption = mcQuestion.locator('text=Speed').locator('..').locator('..'); // Get parent container
+      await speedOption.click();
+
+      // Speed should be selected
+      const speedRadio = mcQuestion.locator('[value="Speed"]');
+      await expect(speedRadio).toBeChecked();
+
+      // Click on "Strength" option
+      const strengthOption = mcQuestion.locator('text=Strength').locator('..').locator('..');
+      await strengthOption.click();
+
+      // Strength should be selected, Speed should be deselected (only one can be selected)
+      const strengthRadio = mcQuestion.locator('[value="Strength"]');
+      await expect(strengthRadio).toBeChecked();
+      await expect(speedRadio).not.toBeChecked();
+    });
+
+    test('should display multi-select multiple choice with checkboxes', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      // Find the multi-select multiple choice question (second one)
+      const mcQuestion = page.locator('[data-testid="question-multiple-choice"]').nth(1);
+
+      // Should see question label
+      await expect(mcQuestion.locator('text=Which areas need improvement?')).toBeVisible();
+
+      // Should see description
+      await expect(mcQuestion.locator('text=Select all that apply')).toBeVisible();
+
+      // Should see all options as checkboxes
+      await expect(mcQuestion.locator('text=Sleep Quality')).toBeVisible();
+      await expect(mcQuestion.locator('text=Nutrition')).toBeVisible();
+      await expect(mcQuestion.locator('text=Hydration')).toBeVisible();
+      await expect(mcQuestion.locator('text=Stress Management')).toBeVisible();
+      await expect(mcQuestion.locator('text=Mobility')).toBeVisible();
+    });
+
+    test('should allow selecting multiple options in multi-select mode', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      const mcQuestion = page.locator('[data-testid="question-multiple-choice"]').nth(1);
+
+      // Click on "Sleep Quality" option
+      const sleepCheckbox = mcQuestion.locator('text=Sleep Quality').locator('..').locator('input[type="checkbox"]');
+      await sleepCheckbox.click();
+
+      // Sleep Quality should be checked
+      await expect(sleepCheckbox).toBeChecked();
+
+      // Click on "Nutrition" option
+      const nutritionCheckbox = mcQuestion.locator('text=Nutrition').locator('..').locator('input[type="checkbox"]');
+      await nutritionCheckbox.click();
+
+      // Both should be checked (multiple selections allowed)
+      await expect(sleepCheckbox).toBeChecked();
+      await expect(nutritionCheckbox).toBeChecked();
+
+      // Click on "Hydration" option
+      const hydrationCheckbox = mcQuestion.locator('text=Hydration').locator('..').locator('input[type="checkbox"]');
+      await hydrationCheckbox.click();
+
+      // All three should be checked
+      await expect(sleepCheckbox).toBeChecked();
+      await expect(nutritionCheckbox).toBeChecked();
+      await expect(hydrationCheckbox).toBeChecked();
+    });
+
+    test('should validate required single-select multiple choice', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      // Fill athlete name
+      await page.locator('[data-testid="athlete-name-input"]').fill('Test Athlete');
+
+      // Try to submit without selecting required question
+      await page.locator('button:has-text("Submit")').click();
+
+      // Should see validation error
+      await expect(page.locator('text=This question is required')).toBeVisible();
+    });
+
+    test('should submit successfully with multiple choice responses', async ({ page }) => {
+      await page.goto(multipleChoiceLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      // Fill athlete name
+      await page.locator('[data-testid="athlete-name-input"]').fill('Test Athlete MC');
+
+      // Select single-select option
+      const mcSingle = page.locator('[data-testid="question-multiple-choice"]').first();
+      const strengthOption = mcSingle.locator('text=Strength').locator('..').locator('..');
+      await strengthOption.click();
+
+      // Select multi-select options (optional, but let's select some)
+      const mcMulti = page.locator('[data-testid="question-multiple-choice"]').nth(1);
+      await mcMulti.locator('text=Sleep Quality').locator('..').locator('input[type="checkbox"]').click();
+      await mcMulti.locator('text=Nutrition').locator('..').locator('input[type="checkbox"]').click();
+
+      // Submit
+      await page.locator('button:has-text("Submit")').click();
+
+      // Should see success message
+      await expect(page.locator('text=Thank you for completing the wellness questionnaire')).toBeVisible();
+      await expect(page.locator('text=Your responses have been recorded')).toBeVisible();
+    });
+
+    test('should store single-select response as string', async ({ page, browser }) => {
+      // Create a fresh request for this test
+      const context = await browser.newContext();
+      const adminPage = await context.newPage();
+      await loginAsDefaultUser(adminPage);
+
+      const requestResponse = await adminPage.request.post(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`,
+        {
+          data: {
+            templateId: multipleChoiceTemplate.id,
+            distributionMethod: 'magic_link',
+            targetAthleteIds: [],
+            requiresAuth: false,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        }
+      );
+
+      const newRequest = await requestResponse.json();
+      const newLinkUrl = `${BASE_URL}/wellness/submit/${newRequest.publicToken}`;
+
+      await context.close();
+
+      // Submit questionnaire
+      await page.goto(newLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      await page.locator('[data-testid="athlete-name-input"]').fill('Test Response Format');
+
+      const mcSingle = page.locator('[data-testid="question-multiple-choice"]').first();
+      const enduranceOption = mcSingle.locator('text=Endurance').locator('..').locator('..');
+      await enduranceOption.click();
+
+      await page.locator('button:has-text("Submit")').click();
+      await expect(page.locator('text=Thank you')).toBeVisible();
+
+      // Verify response data format via API
+      const context2 = await browser.newContext();
+      const adminPage2 = await context2.newPage();
+      await loginAsDefaultUser(adminPage2);
+
+      const responsesResponse = await adminPage2.request.get(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/responses?requestId=${newRequest.id}`
+      );
+
+      const responsesData = await responsesResponse.json();
+      const submittedResponse = responsesData.responses[0];
+
+      // Single-select should be stored as string
+      const questionId = Object.keys(submittedResponse.responses).find(key => key.includes('mc_single'));
+      expect(typeof submittedResponse.responses[questionId].value).toBe('string');
+      expect(submittedResponse.responses[questionId].value).toBe('Endurance');
+
+      // Cleanup
+      await adminPage2.request.delete(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${newRequest.id}`
+      );
+      await context2.close();
+    });
+
+    test('should store multi-select response as string array', async ({ page, browser }) => {
+      // Create a fresh request for this test
+      const context = await browser.newContext();
+      const adminPage = await context.newPage();
+      await loginAsDefaultUser(adminPage);
+
+      const requestResponse = await adminPage.request.post(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests`,
+        {
+          data: {
+            templateId: multipleChoiceTemplate.id,
+            distributionMethod: 'magic_link',
+            targetAthleteIds: [],
+            requiresAuth: false,
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          },
+        }
+      );
+
+      const newRequest = await requestResponse.json();
+      const newLinkUrl = `${BASE_URL}/wellness/submit/${newRequest.publicToken}`;
+
+      await context.close();
+
+      // Submit questionnaire
+      await page.goto(newLinkUrl);
+      await page.waitForLoadState('networkidle');
+
+      await page.locator('[data-testid="athlete-name-input"]').fill('Test Multi Format');
+
+      // Select required single-select
+      const mcSingle = page.locator('[data-testid="question-multiple-choice"]').first();
+      await mcSingle.locator('text=Speed').locator('..').locator('..').click();
+
+      // Select multiple options in multi-select
+      const mcMulti = page.locator('[data-testid="question-multiple-choice"]').nth(1);
+      await mcMulti.locator('text=Sleep Quality').locator('..').locator('input[type="checkbox"]').click();
+      await mcMulti.locator('text=Hydration').locator('..').locator('input[type="checkbox"]').click();
+      await mcMulti.locator('text=Mobility').locator('..').locator('input[type="checkbox"]').click();
+
+      await page.locator('button:has-text("Submit")').click();
+      await expect(page.locator('text=Thank you')).toBeVisible();
+
+      // Verify response data format via API
+      const context2 = await browser.newContext();
+      const adminPage2 = await context2.newPage();
+      await loginAsDefaultUser(adminPage2);
+
+      const responsesResponse = await adminPage2.request.get(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/responses?requestId=${newRequest.id}`
+      );
+
+      const responsesData = await responsesResponse.json();
+      const submittedResponse = responsesData.responses[0];
+
+      // Multi-select should be stored as array
+      const questionId = Object.keys(submittedResponse.responses).find(key => key.includes('mc_multi'));
+      expect(Array.isArray(submittedResponse.responses[questionId].value)).toBe(true);
+      expect(submittedResponse.responses[questionId].value).toEqual(
+        expect.arrayContaining(['Sleep Quality', 'Hydration', 'Mobility'])
+      );
+      expect(submittedResponse.responses[questionId].value.length).toBe(3);
+
+      // Cleanup
+      await adminPage2.request.delete(
+        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${newRequest.id}`
+      );
+      await context2.close();
+    });
+  });
+
   test.describe('Form Validation', () => {
     test('should show validation errors for required fields', async ({ page }) => {
       await page.goto(magicLinkUrl);
