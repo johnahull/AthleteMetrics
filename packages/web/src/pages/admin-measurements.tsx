@@ -1087,7 +1087,19 @@ export default function AdminMeasurementsPage() {
                           aria-label="Select all measurements on current page"
                         />
                       </TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSort('date')}>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => handleSort('date')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSort('date');
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-sort={sortField === 'date' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
                         <div className="flex items-center gap-1">
                           Date
                           {sortField === 'date' && (
@@ -1095,7 +1107,19 @@ export default function AdminMeasurementsPage() {
                           )}
                         </div>
                       </TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSort('athlete')}>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => handleSort('athlete')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSort('athlete');
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-sort={sortField === 'athlete' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
                         <div className="flex items-center gap-1">
                           Athlete
                           {sortField === 'athlete' && (
@@ -1105,7 +1129,19 @@ export default function AdminMeasurementsPage() {
                       </TableHead>
                       <TableHead>Organization</TableHead>
                       <TableHead>Team</TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSort('metric')}>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => handleSort('metric')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSort('metric');
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-sort={sortField === 'metric' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
                         <div className="flex items-center gap-1">
                           Metric
                           {sortField === 'metric' && (
@@ -1113,7 +1149,19 @@ export default function AdminMeasurementsPage() {
                           )}
                         </div>
                       </TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSort('value')}>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => handleSort('value')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSort('value');
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-sort={sortField === 'value' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
                         <div className="flex items-center gap-1">
                           Value
                           {sortField === 'value' && (
@@ -1121,7 +1169,19 @@ export default function AdminMeasurementsPage() {
                           )}
                         </div>
                       </TableHead>
-                      <TableHead className="cursor-pointer" onClick={() => handleSort('age')}>
+                      <TableHead
+                        className="cursor-pointer"
+                        onClick={() => handleSort('age')}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleSort('age');
+                          }
+                        }}
+                        tabIndex={0}
+                        role="button"
+                        aria-sort={sortField === 'age' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      >
                         <div className="flex items-center gap-1">
                           Age
                           {sortField === 'age' && (

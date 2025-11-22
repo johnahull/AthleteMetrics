@@ -36,7 +36,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
       if (await filtersButton.isVisible()) {
         await filtersButton.click();
-        await page.waitForTimeout(500); // Wait for collapsible animation
+        // Wait for filter form to be visible
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
       }
 
       // Set filter to "Unverified Only"
@@ -89,8 +90,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       // Wait for success toast
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/verified|success/i, { timeout: 10000 });
 
-      // Wait for table to update
-      await page.waitForTimeout(1000);
+      // Wait for table to update (toast should disappear or table should refresh)
+      await page.waitForLoadState('networkidle');
 
       // Verify measurements disappeared from unverified list (since filter is still "unverified only")
       const newRowCount = await page.locator('table tbody tr').count();
@@ -124,7 +125,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
       if (await filtersButton.isVisible()) {
         await filtersButton.click();
-        await page.waitForTimeout(500);
+        // Wait for filter form to be visible
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
       }
 
       // Set filter to "Verified Only"
@@ -176,8 +178,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       // Wait for success toast
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/unverified|success/i, { timeout: 10000 });
 
-      // Wait for table to update
-      await page.waitForTimeout(1000);
+      // Wait for table to update (toast should disappear or table should refresh)
+      await page.waitForLoadState('networkidle');
 
       // Verify measurements disappeared from verified list
       const newRowCount = await page.locator('table tbody tr').count();
@@ -207,7 +209,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
       if (await filtersButton.isVisible()) {
         await filtersButton.click();
-        await page.waitForTimeout(500);
+        // Wait for filter form to be visible
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
       }
 
       // Set filter to show unverified
@@ -240,8 +243,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       // Wait for success
       await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/verified|success/i, { timeout: 10000 });
 
-      // Wait a moment for state to update
-      await page.waitForTimeout(500);
+      // Wait for selection state to update (selection bar should disappear)
+      await expect(page.locator('text=/\\d+ selected/i')).not.toBeVisible();
 
       // Verify bulk action bar is hidden (selection cleared)
       await expect(page.locator('text=/\\d+ selected/i')).not.toBeVisible();
@@ -274,6 +277,115 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
         // Successfully redirected away from admin page
         expect(isOnAdminPage).toBe(false);
       }
+    });
+  });
+
+  test.describe('Edge Cases', () => {
+    test.beforeEach(async ({ page }) => {
+      const siteAdmin = getUserByRole('site_admin');
+      await loginWithCredentials(page, siteAdmin.username, siteAdmin.password);
+    });
+
+    test('should show empty state when no measurements match filters', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set impossible filter combination (e.g., very recent date that likely has no data)
+      const startDateInput = page.locator('input[name="startDate"]');
+      const endDateInput = page.locator('input[name="endDate"]');
+
+      // Set date range to tomorrow (should have no measurements)
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+      await startDateInput.fill(tomorrowStr);
+      await endDateInput.fill(tomorrowStr);
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Should show empty state message
+      await expect(page.locator('body')).toContainText(/no measurements found|no results/i, { timeout: 5000 });
+
+      // Verify no table rows are visible (or empty table message)
+      const rowCount = await page.locator('table tbody tr').count();
+      expect(rowCount).toBe(0);
+    });
+
+    test('should handle network errors gracefully', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "Unverified Only"
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('unverified');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      const initialRows = await page.locator('table tbody tr').count();
+
+      if (initialRows === 0) {
+        console.log('No unverified measurements found - skipping network error test');
+        test.skip();
+      }
+
+      // Select one measurement
+      const firstCheckbox = page.locator('table tbody tr').first().locator('input[type="checkbox"]');
+      await firstCheckbox.check();
+
+      // Intercept the bulk verify API call and force it to fail
+      await page.route('**/api/measurements/bulk-verify', route => {
+        route.abort('failed');
+      });
+
+      // Click verify button
+      const verifyButton = page.locator('button:has-text("Verify Selected")');
+      await verifyButton.click();
+
+      // Confirm the AlertDialog
+      const confirmButton = page.locator('button:has-text("Verify")').last();
+      await expect(confirmButton).toBeVisible({ timeout: 5000 });
+      await confirmButton.click();
+
+      // Should show error toast
+      await expect(page.locator('.toast, [role="status"], [role="alert"]')).toContainText(/error|failed/i, { timeout: 10000 });
+
+      // Verify selection is NOT cleared (allows retry)
+      await expect(page.locator('text=/1 selected/i')).toBeVisible();
+
+      // Clean up route intercept
+      await page.unroute('**/api/measurements/bulk-verify');
     });
   });
 });
