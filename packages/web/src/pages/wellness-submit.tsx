@@ -12,6 +12,8 @@ import { ScaleQuestionInput } from '@/components/wellness/ScaleQuestionInput';
 import { TextQuestionInput } from '@/components/wellness/TextQuestionInput';
 import { BooleanQuestionInput } from '@/components/wellness/BooleanQuestionInput';
 import { BodyMapInput } from '@/components/wellness/BodyMapInput';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import type {
   WellnessRequest,
   WellnessTemplate,
@@ -69,6 +71,7 @@ export default function WellnessSubmit() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [showDraftRestored, setShowDraftRestored] = useState(false);
+  const [athleteName, setAthleteName] = useState('');
 
   // Debounce responses for auto-save
   const debouncedResponses = useDebounce(responses, 1000);
@@ -136,14 +139,16 @@ export default function WellnessSubmit() {
 
   // Submit mutation
   const submitMutation = useMutation({
-    mutationFn: async (data: { responses: WellnessResponseData }) => {
+    mutationFn: async (data: { responses: WellnessResponseData; athleteName?: string }) => {
       const res = await fetch(`${API_BASE}/api/wellness/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           requestId: request?.id,
           token,
+          templateId: template?.id,
           responses: data.responses,
+          athleteName: data.athleteName,
           date: new Date().toISOString().split('T')[0],
         }),
       });
@@ -233,6 +238,11 @@ export default function WellnessSubmit() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
+    // Validate athlete name
+    if (!athleteName || athleteName.trim().length === 0) {
+      newErrors['athleteName'] = 'Please enter your name';
+    }
+
     questions.forEach((question) => {
       if (question.required) {
         const answer = responses[question.id];
@@ -259,7 +269,7 @@ export default function WellnessSubmit() {
       return;
     }
 
-    submitMutation.mutate({ responses });
+    submitMutation.mutate({ responses, athleteName: athleteName.trim() });
   };
 
   // Loading state
@@ -357,6 +367,38 @@ export default function WellnessSubmit() {
               <AlertDescription>Previous answers restored</AlertDescription>
             </Alert>
           )}
+
+          {/* Athlete Name Input */}
+          <div className="mb-8 p-4 border rounded-md bg-muted/50">
+            <Label htmlFor="athleteName" className="text-base font-semibold">
+              Your Name <span className="text-red-500">*</span>
+            </Label>
+            <p className="text-sm text-muted-foreground mb-3">
+              Please enter your full name so we know who submitted this questionnaire
+            </p>
+            <Input
+              id="athleteName"
+              type="text"
+              placeholder="Enter your full name"
+              value={athleteName}
+              onChange={(e) => {
+                setAthleteName(e.target.value);
+                // Clear error when user starts typing
+                if (errors['athleteName']) {
+                  setErrors((prev) => {
+                    const newErrors = { ...prev };
+                    delete newErrors['athleteName'];
+                    return newErrors;
+                  });
+                }
+              }}
+              className={errors['athleteName'] ? 'border-red-500' : ''}
+              data-testid="athlete-name-input"
+            />
+            {errors['athleteName'] && (
+              <p className="text-sm text-red-500 mt-1">{errors['athleteName']}</p>
+            )}
+          </div>
 
           {/* Progress indicator */}
           <div className="mb-8" data-testid="progress-indicator">

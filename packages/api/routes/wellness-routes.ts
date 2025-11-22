@@ -646,25 +646,44 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
-        // Get user details
-        const user = await storage.getUser(req.user!.id);
-        if (!user) {
-          return res.status(404).json({ message: "User not found" });
-        }
+        // Get user details (handle both authenticated and magic link submissions)
+        let userId: string;
+        let userFullName: string;
+        let teamId: string | undefined;
+        let teamNameSnapshot: string | undefined;
 
-        // Get team details if user belongs to teams
-        const userTeams = await storage.getUserTeams(req.user!.id);
-        const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+        if ((req.user as any).accessMethod === 'magic_link') {
+          // Magic link submission: use provided athlete name or default
+          userId = 'magic-link-submission';
+          userFullName = (req.body.athleteName as string) || 'Anonymous Athlete';
+          teamId = undefined;
+          teamNameSnapshot = undefined;
+        } else {
+          // Authenticated submission: get user from database
+          const user = await storage.getUser(req.user!.id);
+          if (!user) {
+            return res.status(404).json({ message: "User not found" });
+          }
+
+          // Get team details if user belongs to teams
+          const userTeams = await storage.getUserTeams(req.user!.id);
+          const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+
+          userId = user.id;
+          userFullName = user.fullName;
+          teamId = primaryTeam?.id;
+          teamNameSnapshot = primaryTeam?.name;
+        }
 
         // Create response
         const response = await storage.createWellnessResponse({
           requestId: data.requestId,
           organizationId: template.organizationId,
           templateId: data.templateId,
-          userId: user.id,
-          userFullName: user.fullName,
-          teamId: primaryTeam?.id,
-          teamNameSnapshot: primaryTeam?.name,
+          userId,
+          userFullName,
+          teamId,
+          teamNameSnapshot,
           submittedAt: new Date(),
           date: data.date,
           responses: data.responses,
