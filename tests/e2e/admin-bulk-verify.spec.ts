@@ -280,6 +280,341 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
     });
   });
 
+  test.describe('Large Dataset Handling', () => {
+    test.beforeEach(async ({ page }) => {
+      const siteAdmin = getUserByRole('site_admin');
+      await loginWithCredentials(page, siteAdmin.username, siteAdmin.password);
+    });
+
+    test('should handle pagination with >100 records', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "All Measurements" to maximize dataset
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('all');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Check total count in description
+      const description = page.locator('p:has-text("Showing")');
+      const descriptionText = await description.textContent();
+      const totalMatch = descriptionText?.match(/of (\d+) measurement/);
+      const totalRecords = totalMatch ? parseInt(totalMatch[1]) : 0;
+
+      console.log(`Total records: ${totalRecords}`);
+
+      // If dataset has >100 records, test pagination
+      if (totalRecords > 100) {
+        // Set page size to 100
+        const pageSizeSelect = page.locator('select').filter({ hasText: /^(10|25|50|100|All)$/ });
+        await pageSizeSelect.selectOption('100');
+        await page.waitForLoadState('networkidle');
+
+        // Verify we're on page 1
+        await expect(page.locator('text=/Page 1 of/i')).toBeVisible();
+
+        // Verify 100 rows are displayed
+        const rowCount = await page.locator('table tbody tr').count();
+        expect(rowCount).toBe(100);
+
+        // Navigate to page 2
+        const nextButton = page.locator('button:has-text("Next")');
+        await nextButton.click();
+        await page.waitForLoadState('networkidle');
+
+        // Verify we're on page 2
+        await expect(page.locator('text=/Page 2 of/i')).toBeVisible();
+
+        // Verify rows are still displayed
+        const page2RowCount = await page.locator('table tbody tr').count();
+        expect(page2RowCount).toBeGreaterThan(0);
+
+        // Navigate back to page 1
+        const previousButton = page.locator('button:has-text("Previous")');
+        await previousButton.click();
+        await page.waitForLoadState('networkidle');
+
+        // Verify we're back on page 1
+        await expect(page.locator('text=/Page 1 of/i')).toBeVisible();
+      } else {
+        console.log('Dataset has ≤100 records, skipping pagination test');
+        test.skip();
+      }
+    });
+
+    test('should cap "Show All" at 500 records', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "All Measurements" to maximize dataset
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('all');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Check total count
+      const description = page.locator('p:has-text("Showing")');
+      const descriptionText = await description.textContent();
+      const totalMatch = descriptionText?.match(/of (\d+) measurement/);
+      const totalRecords = totalMatch ? parseInt(totalMatch[1]) : 0;
+
+      console.log(`Total records: ${totalRecords}`);
+
+      // Select "Show All"
+      const pageSizeSelect = page.locator('select').filter({ hasText: /^(10|25|50|100|All)$/ });
+      await pageSizeSelect.selectOption('0'); // 0 = All
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to render
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Count displayed rows
+      const displayedRows = await page.locator('table tbody tr').count();
+
+      // Verify that if total > 500, only 500 are displayed
+      if (totalRecords > 500) {
+        expect(displayedRows).toBe(500);
+
+        // Verify description shows the cap
+        const updatedDescription = await page.locator('p:has-text("Showing")').textContent();
+        expect(updatedDescription).toContain('Showing 1-500');
+      } else {
+        // If total ≤ 500, all records should be displayed
+        expect(displayedRows).toBe(totalRecords);
+      }
+
+      // Verify pagination controls are hidden when "All" is selected
+      await expect(page.locator('button:has-text("Previous")')).not.toBeVisible();
+      await expect(page.locator('button:has-text("Next")')).not.toBeVisible();
+    });
+
+    test('should show confirmation dialog for CSV export with >500 records', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "All Measurements" to maximize dataset
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('all');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Check total count
+      const description = page.locator('p:has-text("Showing")');
+      const descriptionText = await description.textContent();
+      const totalMatch = descriptionText?.match(/of (\d+) measurement/);
+      const totalRecords = totalMatch ? parseInt(totalMatch[1]) : 0;
+
+      console.log(`Total records: ${totalRecords}`);
+
+      if (totalRecords > 500) {
+        // Click export button
+        const exportButton = page.locator('button[data-testid="export-csv-button"]');
+        await exportButton.click();
+
+        // Wait for confirmation dialog to appear
+        await expect(page.locator('[role="dialog"], [role="alertdialog"]')).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('text=/Large CSV Export/i')).toBeVisible();
+        await expect(page.locator(`text=/export ${totalRecords} measurements/i`)).toBeVisible();
+
+        // Verify Cancel and Confirm buttons exist
+        await expect(page.locator('button:has-text("Cancel")')).toBeVisible();
+        await expect(page.locator('button:has-text("Export")')).toBeVisible();
+
+        // Cancel the export
+        await page.locator('button:has-text("Cancel")').click();
+
+        // Verify dialog closes
+        await expect(page.locator('[role="dialog"], [role="alertdialog"]')).not.toBeVisible();
+      } else {
+        console.log('Dataset has ≤500 records, skipping confirmation dialog test');
+        test.skip();
+      }
+    });
+
+    test('should handle column sorting with large datasets', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "All Measurements" to maximize dataset
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('all');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Get initial first row data
+      const firstRowBefore = page.locator('table tbody tr').first();
+      const firstAthleteBefore = await firstRowBefore.locator('td').nth(2).textContent();
+
+      // Click on "Athlete" column header to sort
+      const athleteHeader = page.locator('thead th', { hasText: 'Athlete' }).first();
+      await athleteHeader.click();
+
+      // Wait for sort to complete
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(500); // Brief wait for UI to update
+
+      // Get first row data after sort
+      const firstRowAfter = page.locator('table tbody tr').first();
+      const firstAthleteAfter = await firstRowAfter.locator('td').nth(2).textContent();
+
+      // Verify sort indicator appears
+      await expect(athleteHeader.locator('[data-icon="arrow-up-down"]')).toBeVisible();
+
+      // Click again to sort descending
+      await athleteHeader.click();
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(500);
+
+      // Get first row data after reverse sort
+      const firstRowReversed = page.locator('table tbody tr').first();
+      const firstAthleteReversed = await firstRowReversed.locator('td').nth(2).textContent();
+
+      // Athletes should be different after sorting (unless there's only 1 athlete)
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount > 1) {
+        expect(firstAthleteBefore).not.toBe(firstAthleteAfter);
+      }
+
+      console.log(`Sorting test completed with ${rowCount} rows`);
+    });
+
+    test('should handle statistics card edge cases', async ({ page }) => {
+      // Navigate to admin measurements page
+      await page.goto(`${TESTING_URL}/admin/measurements`);
+      await page.waitForLoadState('networkidle');
+
+      // Wait for page to load
+      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Open filters if collapsed
+      const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
+      if (await filtersButton.isVisible()) {
+        await filtersButton.click();
+        await page.waitForSelector('select[name="verificationStatus"], [name="verificationStatus"]', { state: 'visible', timeout: 5000 });
+      }
+
+      // Set filter to "All Measurements"
+      const verificationFilter = page.locator('select[name="verificationStatus"], [name="verificationStatus"]');
+      await verificationFilter.selectOption('all');
+
+      // Submit filters
+      const applyButton = page.locator('button:has-text("Apply"), button[type="submit"]').first();
+      await applyButton.click();
+      await page.waitForLoadState('networkidle');
+
+      // Wait for table to load
+      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+
+      // Check if statistics cards are displayed
+      const statsCards = page.locator('[class*="StatisticsSummary"], div:has(> h3:has-text("Statistics"))');
+      const hasStatsCards = await statsCards.count() > 0;
+
+      if (hasStatsCards) {
+        console.log('Statistics cards found, verifying they display correctly');
+
+        // Verify stats cards render without errors
+        await expect(statsCards.first()).toBeVisible();
+
+        // Check for key statistics (mean, median, etc.)
+        const statsText = await statsCards.first().textContent();
+        expect(statsText).toBeTruthy();
+
+        // Test edge case: Filter to a single athlete (if possible)
+        const athleteNameInput = page.locator('input[name="athleteName"]');
+        await athleteNameInput.fill('Test'); // Search for any athlete with "Test" in name
+
+        // Wait for debounce
+        await page.waitForTimeout(400);
+        await page.waitForLoadState('networkidle');
+
+        // Check if results exist
+        const hasResults = await page.locator('table tbody tr').count() > 0;
+
+        if (hasResults) {
+          // Stats should still display for filtered results
+          const filteredStatsCards = page.locator('[class*="StatisticsSummary"], div:has(> h3:has-text("Statistics"))');
+          const hasFilteredStats = await filteredStatsCards.count() > 0;
+
+          if (hasFilteredStats) {
+            await expect(filteredStatsCards.first()).toBeVisible();
+            console.log('Statistics cards display correctly with filtered data');
+          }
+        }
+      } else {
+        console.log('No statistics cards found - may not be visible for current dataset');
+      }
+    });
+  });
+
   test.describe('Edge Cases', () => {
     test.beforeEach(async ({ page }) => {
       const siteAdmin = getUserByRole('site_admin');
