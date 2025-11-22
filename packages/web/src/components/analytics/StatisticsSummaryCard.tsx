@@ -9,7 +9,7 @@ import { calculateStatistics } from '@shared/analytics-utils';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 
 interface StatisticsSummaryCardProps {
-  measurements: { metric: string; value: string }[];
+  measurements: Array<{ metric: string; value: string }>;
   metric: string;
   title?: string;
 }

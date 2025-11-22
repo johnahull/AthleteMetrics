@@ -91,8 +91,14 @@ const filterSchema = z.object({
   dateTo: z.string().optional(),
   birthYearFrom: z.string().optional(),
   birthYearTo: z.string().optional(),
-  ageFrom: z.string().optional(),
-  ageTo: z.string().optional(),
+  ageFrom: z.string().optional().refine(
+    (val) => !val || (parseInt(val) >= 0 && parseInt(val) <= 120),
+    { message: "Age must be between 0 and 120" }
+  ),
+  ageTo: z.string().optional().refine(
+    (val) => !val || (parseInt(val) >= 0 && parseInt(val) <= 120),
+    { message: "Age must be between 0 and 120" }
+  ),
   organizationId: z.string().optional(),
   teamIds: z.string().optional(), // Comma-separated team IDs
   verificationStatus: z.string().optional(), // "all", "verified", "unverified"
