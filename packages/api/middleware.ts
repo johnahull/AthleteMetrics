@@ -268,11 +268,11 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
         return next();
       }
 
-      // Check 2: Magic link token (query params: token + athlete)
-      const token = req.query.token as string;
-      const athleteId = req.query.athlete as string;
+      // Check 2: Magic link token (from body, params, or query)
+      // Priority: body (POST submission) > params (URL path) > query (URL parameters)
+      const token = req.body.token || req.params.token || req.query.token as string;
 
-      if (!token || !athleteId) {
+      if (!token) {
         if (requireAuth) {
           return res.status(401).json({
             message: "Authentication required. Please log in or use a valid magic link."
@@ -283,30 +283,44 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
         });
       }
 
-      // Check 3: Validate token
-      const { WellnessAccessService } = await import('./auth/wellness-access');
-      const validation = await WellnessAccessService.validateMagicLink(token, athleteId);
+      // Check 3: Validate token and retrieve request details
+      const { storage } = await import('./storage');
+      const wellnessRequest = await storage.getWellnessRequestByToken(token);
 
-      if (!validation.valid) {
+      if (!wellnessRequest) {
         return res.status(403).json({
-          message: validation.error || "Invalid or expired magic link"
+          message: "Invalid or expired magic link"
         });
       }
 
-      // Check 4: Validate athlete is in target list (already done in validateMagicLink)
-      // Set authenticated user context
+      // Check if request is active
+      if (wellnessRequest.status !== 'active') {
+        return res.status(403).json({
+          message: "This wellness request is no longer active"
+        });
+      }
+
+      // Check if expired
+      if (wellnessRequest.expiresAt && new Date() > new Date(wellnessRequest.expiresAt)) {
+        return res.status(403).json({
+          message: "This wellness request has expired"
+        });
+      }
+
+      // For public wellness links (requiresAuth: false), allow anonymous submission
+      // Set a generic magic link user context
       req.user = {
-        id: validation.athlete!.id,
-        email: validation.athlete!.emails?.[0] || '',
-        firstName: validation.athlete!.firstName,
-        lastName: validation.athlete!.lastName,
+        id: 'magic-link-user',
+        email: '',
+        firstName: 'Wellness',
+        lastName: 'Respondent',
         role: 'athlete',
         isSiteAdmin: false,
         accessMethod: 'magic_link',
       };
 
       // Attach request details for downstream use
-      (req as any).wellnessRequest = validation.request;
+      (req as any).wellnessRequest = wellnessRequest;
 
       next();
     } catch (error) {
