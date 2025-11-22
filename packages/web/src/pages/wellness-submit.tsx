@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { AlertCircle, CheckCircle2, Clock } from 'lucide-react';
 import { ScaleQuestionInput } from '@/components/wellness/ScaleQuestionInput';
@@ -72,6 +73,8 @@ export default function WellnessSubmit() {
   const [isSubmitted, setIsSubmitted] = useState(false);
   const [submittedAt, setSubmittedAt] = useState<string | null>(null);
   const [showDraftRestored, setShowDraftRestored] = useState(false);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+  const [showManualEntry, setShowManualEntry] = useState(false);
   const [athleteName, setAthleteName] = useState('');
 
   // Debounce responses for auto-save
@@ -138,9 +141,23 @@ export default function WellnessSubmit() {
     enabled: !!request?.id,
   });
 
+  // Fetch targeted athletes for dropdown
+  const {
+    data: targetedAthletes,
+    isLoading: isLoadingAthletes,
+  } = useQuery<{ athletes: Array<{ id: string; fullName: string; teamName: string | null; teamId: string | null }> }>({
+    queryKey: ['targeted-athletes', token],
+    queryFn: async () => {
+      const res = await fetch(`${API_BASE}/api/wellness/requests/by-token/${token}/targeted-athletes`);
+      if (!res.ok) throw new Error('Failed to load athletes');
+      return res.json();
+    },
+    enabled: !!token,
+  });
+
   // Submit mutation
   const submitMutation = useMutation({
-    mutationFn: async (data: { responses: WellnessResponseData; athleteName?: string }) => {
+    mutationFn: async (data: { responses: WellnessResponseData; selectedAthleteId?: string | null; athleteName?: string }) => {
       const res = await fetch(`${API_BASE}/api/wellness/responses`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -149,6 +166,7 @@ export default function WellnessSubmit() {
           token,
           templateId: template?.id,
           responses: data.responses,
+          selectedAthleteId: data.selectedAthleteId,
           athleteName: data.athleteName,
           date: new Date().toISOString().split('T')[0],
         }),
@@ -255,8 +273,10 @@ export default function WellnessSubmit() {
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    // Validate athlete name
-    if (!athleteName || athleteName.trim().length === 0) {
+    // Validate athlete selection OR manual name
+    if (!showManualEntry && !selectedAthleteId) {
+      newErrors['athleteSelection'] = 'Please select your name or choose manual entry';
+    } else if (showManualEntry && (!athleteName || athleteName.trim().length === 0)) {
       newErrors['athleteName'] = 'Please enter your name';
     }
 
@@ -299,7 +319,11 @@ export default function WellnessSubmit() {
       return;
     }
 
-    submitMutation.mutate({ responses, athleteName: athleteName.trim() });
+    submitMutation.mutate({
+      responses,
+      selectedAthleteId: showManualEntry ? null : selectedAthleteId,
+      athleteName: showManualEntry ? athleteName.trim() : undefined
+    });
   };
 
   // Loading state
@@ -398,35 +422,99 @@ export default function WellnessSubmit() {
             </Alert>
           )}
 
-          {/* Athlete Name Input */}
+          {/* Athlete Selection */}
           <div className="mb-8 p-4 border rounded-md bg-muted/50">
-            <Label htmlFor="athleteName" className="text-base font-semibold">
+            <Label className="text-base font-semibold">
               Your Name <span className="text-red-500">*</span>
             </Label>
             <p className="text-sm text-muted-foreground mb-3">
-              Please enter your full name so we know who submitted this questionnaire
+              Please select your name from the list below
             </p>
-            <Input
-              id="athleteName"
-              type="text"
-              placeholder="Enter your full name"
-              value={athleteName}
-              onChange={(e) => {
-                setAthleteName(e.target.value);
-                // Clear error when user starts typing
-                if (errors['athleteName']) {
-                  setErrors((prev) => {
-                    const newErrors = { ...prev };
-                    delete newErrors['athleteName'];
-                    return newErrors;
-                  });
-                }
-              }}
-              className={errors['athleteName'] ? 'border-red-500' : ''}
-              data-testid="athlete-name-input"
-            />
-            {errors['athleteName'] && (
-              <p className="text-sm text-red-500 mt-1">{errors['athleteName']}</p>
+
+            {isLoadingAthletes ? (
+              <Skeleton className="h-10 w-full" />
+            ) : !showManualEntry ? (
+              <>
+                <Select
+                  value={selectedAthleteId || ""}
+                  onValueChange={(value) => {
+                    if (value === "manual-entry") {
+                      setShowManualEntry(true);
+                      setSelectedAthleteId(null);
+                    } else {
+                      setSelectedAthleteId(value);
+                      // Clear error when athlete is selected
+                      if (errors['athleteSelection']) {
+                        setErrors((prev) => {
+                          const newErrors = { ...prev };
+                          delete newErrors['athleteSelection'];
+                          return newErrors;
+                        });
+                      }
+                    }
+                  }}
+                >
+                  <SelectTrigger data-testid="athlete-selector">
+                    <SelectValue placeholder="Select your name..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {targetedAthletes?.athletes?.map((athlete) => (
+                      <SelectItem key={athlete.id} value={athlete.id}>
+                        {athlete.fullName}{athlete.teamName ? ` (${athlete.teamName})` : ''}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="manual-entry" className="border-t mt-2">
+                      <span className="italic">Not listed? Enter manually</span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors['athleteSelection'] && (
+                  <p className="text-sm text-red-500 mt-1">{errors['athleteSelection']}</p>
+                )}
+              </>
+            ) : (
+              <>
+                <Input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={athleteName}
+                  onChange={(e) => {
+                    setAthleteName(e.target.value);
+                    // Clear error when user starts typing
+                    if (errors['athleteName']) {
+                      setErrors((prev) => {
+                        const newErrors = { ...prev };
+                        delete newErrors['athleteName'];
+                        return newErrors;
+                      });
+                    }
+                  }}
+                  data-testid="manual-name-input"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setShowManualEntry(false);
+                    setAthleteName('');
+                    // Clear error
+                    if (errors['athleteName']) {
+                      setErrors((prev) => {
+                        const newErrors = { ...prev };
+                        delete newErrors['athleteName'];
+                        return newErrors;
+                      });
+                    }
+                  }}
+                  className="mt-2"
+                >
+                  ← Back to athlete list
+                </Button>
+                {errors['athleteName'] && (
+                  <p className="text-sm text-red-500 mt-1">{errors['athleteName']}</p>
+                )}
+              </>
             )}
           </div>
 

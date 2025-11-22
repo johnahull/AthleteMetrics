@@ -11,6 +11,7 @@
 import type { Express, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
+import { db } from "../db";
 import {
   requireAuth,
   requireOrganizationAccess,
@@ -26,6 +27,8 @@ import {
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
 import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
+import { userTeams } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { emailService } from "../services/email-service";
@@ -50,6 +53,23 @@ const createErrorResponse = (message: string, error?: Error) => {
   }
   return response;
 };
+
+// Helper function to verify if an athlete is targeted by a wellness request
+async function verifyAthleteIsTargeted(request: WellnessRequest, athleteId: string): Promise<boolean> {
+  // Check direct targeting
+  if (request.targetAthleteIds?.includes(athleteId)) {
+    return true;
+  }
+
+  // Check team-based targeting
+  if (request.targetTeamIds && request.targetTeamIds.length > 0) {
+    const athleteTeams = await storage.getUserTeams(athleteId);
+    const athleteTeamIds = athleteTeams.map(ut => ut.team.id);
+    return request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+  }
+
+  return false;
+}
 
 // Rate limiting configurations
 const batchLimiter = rateLimit({
@@ -489,6 +509,86 @@ export function registerWellnessRoutes(app: Express) {
   );
 
   /**
+   * GET /api/wellness/requests/by-token/:token/targeted-athletes
+   * Get list of targeted athletes for a wellness request (for athlete dropdown)
+   * Access: Public (no authentication required)
+   */
+  app.get(
+    "/api/wellness/requests/by-token/:token/targeted-athletes",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        // Get wellness request by token
+        const request = await storage.getWellnessRequestByToken(token);
+        if (!request) {
+          return res.status(404).json({ message: "Wellness request not found" });
+        }
+
+        // Check if expired
+        if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+          return res.status(410).json({ message: "This wellness request has expired" });
+        }
+
+        // Collect all target athlete IDs
+        const targetAthleteIds: string[] = [];
+
+        // Add directly targeted athletes
+        if (request.targetAthleteIds) {
+          targetAthleteIds.push(...request.targetAthleteIds);
+        }
+
+        // Add athletes from targeted teams (query userTeams table)
+        if (request.targetTeamIds && request.targetTeamIds.length > 0) {
+          for (const teamId of request.targetTeamIds) {
+            // Query userTeams table to get all active members of this team
+            const teamMembers = await db
+              .select()
+              .from(userTeams)
+              .where(
+                and(
+                  eq(userTeams.teamId, teamId),
+                  eq(userTeams.isActive, true)
+                )
+              );
+
+            // Extract user IDs from team memberships
+            const memberIds = teamMembers.map((member: any) => member.userId);
+            targetAthleteIds.push(...memberIds);
+          }
+        }
+
+        // Remove duplicates
+        const uniqueAthleteIds = [...new Set(targetAthleteIds)];
+
+        // Batch fetch user details
+        const athletes = await storage.getUsersByIds(uniqueAthleteIds);
+
+        // Get primary team for each athlete
+        const athletesWithTeams = await Promise.all(
+          athletes.map(async (athlete) => {
+            const userTeams = await storage.getUserTeams(athlete.id);
+            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+
+            return {
+              id: athlete.id,
+              fullName: athlete.fullName,
+              teamName: primaryTeam?.name || null,
+              teamId: primaryTeam?.id || null,
+            };
+          })
+        );
+
+        res.json({ athletes: athletesWithTeams });
+      } catch (error: any) {
+        console.error("Failed to fetch targeted athletes:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch targeted athletes", error));
+      }
+    }
+  );
+
+  /**
    * PUT /api/organizations/:organizationId/wellness/requests/:id/cancel
    * Cancel a wellness request
    * Access: Coach, Org Admin
@@ -670,11 +770,43 @@ export function registerWellnessRoutes(app: Express) {
         let teamNameSnapshot: string | undefined;
 
         if ((req.user as any).accessMethod === 'magic_link') {
-          // Magic link submission: use provided athlete name or default
-          userId = 'magic-link-submission';
-          userFullName = (req.body.athleteName as string) || 'Anonymous Athlete';
-          teamId = undefined;
-          teamNameSnapshot = undefined;
+          const selectedAthleteId = req.body.selectedAthleteId;
+
+          if (selectedAthleteId) {
+            // Athlete selected from dropdown - use real user ID
+            // SECURITY: Verify athlete is in targeted list
+            const request = await storage.getWellnessRequest(data.requestId!);
+            if (!request) {
+              return res.status(404).json({ message: "Request not found" });
+            }
+
+            const isTargeted = await verifyAthleteIsTargeted(request as any, selectedAthleteId);
+
+            if (!isTargeted) {
+              return res.status(403).json({
+                message: "Selected athlete is not authorized for this request"
+              });
+            }
+
+            const user = await storage.getUser(selectedAthleteId);
+            if (!user) {
+              return res.status(404).json({ message: "Selected athlete not found" });
+            }
+
+            const userTeams = await storage.getUserTeams(selectedAthleteId);
+            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+
+            userId = user.id;
+            userFullName = user.fullName;
+            teamId = primaryTeam?.id;
+            teamNameSnapshot = primaryTeam?.name;
+          } else {
+            // Manual entry fallback - current behavior
+            userId = 'magic-link-submission';
+            userFullName = (req.body.athleteName as string) || 'Anonymous Athlete';
+            teamId = undefined;
+            teamNameSnapshot = undefined;
+          }
         } else {
           // Authenticated submission: get user from database
           const user = await storage.getUser(req.user!.id);
