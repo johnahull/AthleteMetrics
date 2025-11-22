@@ -18,7 +18,7 @@ export default function QRCodeGenerator({ request, isOpen, onClose }: QRCodeGene
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // Generate wellness link
-  const wellnessLink = `${window.location.origin}/wellness/submit?token=${request.publicToken}`;
+  const wellnessLink = `${window.location.origin}/wellness/submit/${request.publicToken}`;
 
   useEffect(() => {
     if (isOpen && wellnessLink) {
