@@ -436,6 +436,21 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getUsersByIds(userIds: string[]): Promise<User[]> {
+    if (userIds.length === 0) {
+      return [];
+    }
+    return await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          inArray(users.id, userIds),
+          whereUserNotDeleted() // Exclude soft-deleted users
+        )
+      );
+  }
+
   async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
     // List of valid database columns that can be updated
     const validUserColumns = [
@@ -4307,6 +4322,27 @@ export class DatabaseStorage implements IStorage {
 
   async getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]> {
     const conditions: SQL[] = [eq(wellnessRequests.organizationId, organizationId)];
+
+    if (filters?.status) {
+      conditions.push(eq(wellnessRequests.status, filters.status));
+    }
+
+    return await db
+      .select()
+      .from(wellnessRequests)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessRequests.createdAt));
+  }
+
+  async getWellnessRequestsByOrganizations(
+    organizationIds: string[],
+    filters?: { status?: string }
+  ): Promise<WellnessRequest[]> {
+    if (organizationIds.length === 0) {
+      return [];
+    }
+
+    const conditions: SQL[] = [inArray(wellnessRequests.organizationId, organizationIds)];
 
     if (filters?.status) {
       conditions.push(eq(wellnessRequests.status, filters.status));

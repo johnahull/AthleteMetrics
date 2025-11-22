@@ -52,7 +52,10 @@ export class WellnessAccessService {
     }
 
     // Construct magic link URL
-    const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+    const baseUrl = process.env.BASE_URL;
+    if (!baseUrl) {
+      throw new Error('BASE_URL environment variable is required for magic link generation');
+    }
     const magicLink = `${baseUrl}/wellness/submit/${request.publicToken}`;
 
     return magicLink;

@@ -42,6 +42,15 @@ const shouldBypassRateLimit = (): boolean => {
   return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
 };
 
+// Helper function to create secure error response (prevents error message leakage in production)
+const createErrorResponse = (message: string, error?: Error) => {
+  const response: any = { message };
+  if (process.env.NODE_ENV !== 'production' && error) {
+    response.error = error.message;
+  }
+  return response;
+};
+
 // Rate limiting configurations
 const batchLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -104,10 +113,7 @@ export function registerWellnessRoutes(app: Express) {
         res.status(201).json(template);
       } catch (error: any) {
         console.error("Failed to create wellness template:", error);
-        res.status(500).json({
-          message: "Failed to create wellness template",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to create wellness template", error));
       }
     }
   );
@@ -132,10 +138,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(templates);
       } catch (error: any) {
         console.error("Failed to fetch wellness templates:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness templates",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness templates", error));
       }
     }
   );
@@ -162,10 +165,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(template);
       } catch (error: any) {
         console.error("Failed to fetch wellness template:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness template",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness template", error));
       }
     }
   );
@@ -201,10 +201,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(publicTemplate);
       } catch (error: any) {
         console.error("Failed to fetch wellness template:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness template",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness template", error));
       }
     }
   );
@@ -248,10 +245,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(updated);
       } catch (error: any) {
         console.error("Failed to update wellness template:", error);
-        res.status(500).json({
-          message: "Failed to update wellness template",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to update wellness template", error));
       }
     }
   );
@@ -287,10 +281,7 @@ export function registerWellnessRoutes(app: Express) {
         res.status(204).send();
       } catch (error: any) {
         console.error("Failed to delete wellness template:", error);
-        res.status(500).json({
-          message: "Failed to delete wellness template",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to delete wellness template", error));
       }
     }
   );
@@ -366,9 +357,14 @@ export function registerWellnessRoutes(app: Express) {
               ? Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
               : 7;
 
+            // Batch fetch all athletes to avoid N+1 query
+            const athleteIds = Array.from(magicLinks.keys());
+            const athletes = await storage.getUsersByIds(athleteIds);
+            const athleteMap = new Map(athletes.map(a => [a.id, a]));
+
             // Send email to each targeted athlete
             for (const [athleteId, magicLink] of magicLinks.entries()) {
-              const athlete = await storage.getUser(athleteId);
+              const athlete = athleteMap.get(athleteId);
               if (athlete && athlete.emails && athlete.emails.length > 0) {
                 try {
                   await emailService.sendWellnessRequest(athlete.emails[0], {
@@ -405,10 +401,7 @@ export function registerWellnessRoutes(app: Express) {
         });
       } catch (error: any) {
         console.error("Failed to create wellness request:", error);
-        res.status(500).json({
-          message: "Failed to create wellness request",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to create wellness request", error));
       }
     }
   );
@@ -433,10 +426,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(requests);
       } catch (error: any) {
         console.error("Failed to fetch wellness requests:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness requests",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
       }
     }
   );
@@ -463,10 +453,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(request);
       } catch (error: any) {
         console.error("Failed to fetch wellness request:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness request",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness request", error));
       }
     }
   );
@@ -496,10 +483,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(request);
       } catch (error: any) {
         console.error("Failed to fetch wellness request by token:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness request",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness request", error));
       }
     }
   );
@@ -528,10 +512,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(updated);
       } catch (error: any) {
         console.error("Failed to cancel wellness request:", error);
-        res.status(500).json({
-          message: "Failed to cancel wellness request",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to cancel wellness request", error));
       }
     }
   );
@@ -663,10 +644,7 @@ export function registerWellnessRoutes(app: Express) {
         res.status(201).json(response);
       } catch (error: any) {
         console.error("Failed to submit wellness response:", error);
-        res.status(500).json({
-          message: "Failed to submit wellness response",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to submit wellness response", error));
       }
     }
   );
@@ -705,10 +683,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(response);
       } catch (error: any) {
         console.error("Failed to fetch wellness response:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness response",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness response", error));
       }
     }
   );
@@ -740,12 +715,8 @@ export function registerWellnessRoutes(app: Express) {
         const userOrgs = await storage.getUserOrganizations(userId);
         const orgIds = userOrgs.map(uo => uo.organizationId);
 
-        // Get all active requests for user's organizations
-        const allRequests: any[] = [];
-        for (const orgId of orgIds) {
-          const orgRequests = await storage.getWellnessRequests(orgId, { status: 'active' });
-          allRequests.push(...orgRequests);
-        }
+        // Get all active requests for user's organizations (batch query to avoid N+1)
+        const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds, { status: 'active' });
 
         // Filter requests targeted at this user
         const myRequests = allRequests.filter(request => {
@@ -765,10 +736,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(myRequests);
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness requests:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness requests",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));
       }
     }
   );
@@ -815,10 +783,7 @@ export function registerWellnessRoutes(app: Express) {
         });
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness responses:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness responses",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness responses", error));
       }
     }
   );
@@ -886,10 +851,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(responses);
       } catch (error: any) {
         console.error("Failed to fetch organization wellness responses:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness responses",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness responses", error));
       }
     }
   );
@@ -929,10 +891,7 @@ export function registerWellnessRoutes(app: Express) {
         });
       } catch (error: any) {
         console.error("Failed to check submission status:", error);
-        res.status(500).json({
-          message: "Failed to check submission status",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to check submission status", error));
       }
     }
   );
@@ -969,10 +928,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(summary);
       } catch (error: any) {
         console.error("Failed to fetch team wellness summary:", error);
-        res.status(500).json({
-          message: "Failed to fetch team wellness summary",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch team wellness summary", error));
       }
     }
   );
@@ -1011,10 +967,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(summary);
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness summary:", error);
-        res.status(500).json({
-          message: "Failed to fetch athlete wellness summary",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch athlete wellness summary", error));
       }
     }
   );
@@ -1053,10 +1006,7 @@ export function registerWellnessRoutes(app: Express) {
         res.json(trends);
       } catch (error: any) {
         console.error("Failed to fetch wellness trends:", error);
-        res.status(500).json({
-          message: "Failed to fetch wellness trends",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to fetch wellness trends", error));
       }
     }
   );
