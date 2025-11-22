@@ -918,7 +918,7 @@ export class MeasurementService {
     // Gender filtering (applied to users table)
     // Note: Gender is validated as enum at route level (Zod schema)
     if (filters?.gender) {
-      conditions.push(eq(users.gender, filters.gender));
+      conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
     }
 
     // Sport filtering (applied to users table with array containment)
