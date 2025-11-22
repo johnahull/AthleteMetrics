@@ -53,7 +53,7 @@ export class WellnessAccessService {
 
     // Construct magic link URL
     const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-    const magicLink = `${baseUrl}/wellness/submit?token=${request.publicToken}&athlete=${athleteId}`;
+    const magicLink = `${baseUrl}/wellness/submit/${request.publicToken}`;
 
     return magicLink;
   }
