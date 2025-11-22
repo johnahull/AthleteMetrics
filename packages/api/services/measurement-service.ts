@@ -707,18 +707,30 @@ export class MeasurementService {
         }
 
         // Batch update all valid measurements
+        let actualUpdated = 0;
         if (validIds.length > 0) {
-          await tx
+          const result = await tx
             .update(measurements)
             .set({
               isVerified: true,
               verifiedBy: verifiedByUserId,
             })
-            .where(inArray(measurements.id, validIds));
+            .where(inArray(measurements.id, validIds))
+            .returning({ id: measurements.id });
+
+          actualUpdated = result.length;
+
+          // Verify all expected measurements were updated (race condition check)
+          if (actualUpdated !== validIds.length) {
+            const missingIds = validIds.filter(id => !result.some(r => r.id === id));
+            missingIds.forEach(id => {
+              errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+            });
+          }
         }
 
         return {
-          success: validIds.length,
+          success: actualUpdated,
           failed: errors.length,
           errors,
         };
@@ -781,18 +793,30 @@ export class MeasurementService {
         }
 
         // Batch update all valid measurements
+        let actualUpdated = 0;
         if (validIds.length > 0) {
-          await tx
+          const result = await tx
             .update(measurements)
             .set({
               isVerified: false,
               verifiedBy: null,
             })
-            .where(inArray(measurements.id, validIds));
+            .where(inArray(measurements.id, validIds))
+            .returning({ id: measurements.id });
+
+          actualUpdated = result.length;
+
+          // Verify all expected measurements were updated (race condition check)
+          if (actualUpdated !== validIds.length) {
+            const missingIds = validIds.filter(id => !result.some(r => r.id === id));
+            missingIds.forEach(id => {
+              errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+            });
+          }
         }
 
         return {
-          success: validIds.length,
+          success: actualUpdated,
           failed: errors.length,
           errors,
         };

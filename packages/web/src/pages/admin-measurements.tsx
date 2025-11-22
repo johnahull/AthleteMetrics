@@ -15,6 +15,7 @@ import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useDebounce } from "@/hooks/useDebounce";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -100,7 +101,16 @@ const filterSchema = z.object({
     { message: "Age must be between 0 and 120" }
   ),
   organizationId: z.string().optional(),
-  teamIds: z.string().optional(), // Comma-separated team IDs
+  teamIds: z.string().optional().refine(
+    (val) => {
+      if (!val) return true;
+      // Validate that all comma-separated values are valid UUIDs
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const ids = val.split(',').map(id => id.trim());
+      return ids.every(id => uuidRegex.test(id));
+    },
+    { message: "Invalid team ID format" }
+  ), // Comma-separated team IDs (UUIDs)
   verificationStatus: z.string().optional(), // "all", "verified", "unverified"
   athleteName: z.string().optional(),
   limit: z.string().optional(),
@@ -196,6 +206,9 @@ export default function AdminMeasurementsPage() {
   });
 
   const watchedFilters = form.watch();
+
+  // Debounce athlete name search to avoid excessive re-renders (300ms delay)
+  const debouncedAthleteName = useDebounce(watchedFilters.athleteName || '', 300);
 
   // Fetch organizations for filter dropdown
   const { data: organizations = [] } = useQuery<Array<{ id: string; name: string }>>({
@@ -391,9 +404,9 @@ export default function AdminMeasurementsPage() {
       return true; // For "all" and "verified", API handles it
     });
 
-    // Step 2: Filter by athlete name (client-side)
-    if (watchedFilters.athleteName && watchedFilters.athleteName.trim()) {
-      const searchTerm = watchedFilters.athleteName.toLowerCase().trim();
+    // Step 2: Filter by athlete name (client-side, debounced)
+    if (debouncedAthleteName && debouncedAthleteName.trim()) {
+      const searchTerm = debouncedAthleteName.toLowerCase().trim();
       filtered = filtered.filter((measurement) =>
         measurement.user.fullName.toLowerCase().includes(searchTerm)
       );
@@ -431,14 +444,16 @@ export default function AdminMeasurementsPage() {
     }
 
     return filtered;
-  }, [rawMeasurements, watchedFilters.verificationStatus, watchedFilters.athleteName, sortField, sortDirection]);
+  }, [rawMeasurements, watchedFilters.verificationStatus, debouncedAthleteName, sortField, sortDirection]);
 
   // Calculate pagination
   const totalMeasurements = measurements.length;
-  const itemsPerPage = pageSize === 0 ? totalMeasurements : pageSize; // 0 means "All"
+  // Cap "Show All" at 500 records to prevent browser performance issues
+  const MAX_SHOW_ALL = 500;
+  const itemsPerPage = pageSize === 0 ? Math.min(totalMeasurements, MAX_SHOW_ALL) : pageSize; // 0 means "All" (capped)
   const totalPages = pageSize === 0 ? 1 : Math.ceil(totalMeasurements / pageSize);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = pageSize === 0 ? totalMeasurements : startIndex + itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
   const paginatedMeasurements = useMemo(() =>
     measurements.slice(startIndex, endIndex),
     [measurements, startIndex, endIndex]
@@ -513,9 +528,9 @@ export default function AdminMeasurementsPage() {
         headers.join(','),
         ...rows.map(row => row.map(cell => {
           // Sanitize formula injection (CSV Injection vulnerability)
-          // Cells starting with =, +, -, @ can execute as formulas in Excel/Google Sheets
+          // Cells starting with =, +, -, @, or tab can execute as formulas in Excel/Google Sheets
           let sanitized = String(cell);
-          if (/^[=+\-@]/.test(sanitized)) {
+          if (/^[=+\-@\t]/.test(sanitized)) {
             sanitized = "'" + sanitized; // Prefix with single quote to prevent formula execution
           }
 
