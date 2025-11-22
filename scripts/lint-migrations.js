@@ -49,7 +49,7 @@ const LINT_RULES = [
   {
     id: 'create-index-no-if-not-exists',
     severity: 'error',
-    pattern: /^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(?!CONCURRENTLY\s+)?(?!IF\s+NOT\s+EXISTS\b)(\w+)/gim,
+    pattern: /^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(?!CONCURRENTLY\s+)(?!IF\s+NOT\s+EXISTS\b)(\w+)/gim,
     message: 'CREATE INDEX without IF NOT EXISTS',
     suggestion: (match) => `CREATE ${match[1] || ''}INDEX IF NOT EXISTS ${match[2]}`
   },
