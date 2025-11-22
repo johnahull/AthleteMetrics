@@ -802,4 +802,98 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.unroute('**/api/measurements/bulk-verify');
     });
   });
+
+  test.describe('API-Level Authorization', () => {
+    test('should reject bulk verify API calls from org_admin', async ({ page }) => {
+      // Login as org_admin
+      const orgAdmin = getUserByRole('org_admin');
+      await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
+
+      // Try to call bulk verify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-verify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 403 Forbidden (site admin only)
+      expect(response.status()).toBe(403);
+    });
+
+    test('should reject bulk verify API calls from coach', async ({ page }) => {
+      // Login as coach
+      const coach = getUserByRole('coach');
+      await loginWithCredentials(page, coach.username, coach.password);
+
+      // Try to call bulk verify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-verify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 403 Forbidden (site admin only)
+      expect(response.status()).toBe(403);
+    });
+
+    test('should reject bulk unverify API calls from org_admin', async ({ page }) => {
+      // Login as org_admin
+      const orgAdmin = getUserByRole('org_admin');
+      await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
+
+      // Try to call bulk unverify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-unverify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 403 Forbidden (site admin only)
+      expect(response.status()).toBe(403);
+    });
+
+    test('should reject bulk unverify API calls from coach', async ({ page }) => {
+      // Login as coach
+      const coach = getUserByRole('coach');
+      await loginWithCredentials(page, coach.username, coach.password);
+
+      // Try to call bulk unverify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-unverify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 403 Forbidden (site admin only)
+      expect(response.status()).toBe(403);
+    });
+
+    test('should reject unauthenticated bulk verify API calls', async ({ page }) => {
+      // Don't log in - test unauthenticated access
+
+      // Try to call bulk verify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-verify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 401 Unauthorized or 403 Forbidden
+      expect([401, 403]).toContain(response.status());
+    });
+
+    test('should reject unauthenticated bulk unverify API calls', async ({ page }) => {
+      // Don't log in - test unauthenticated access
+
+      // Try to call bulk unverify API directly
+      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-unverify`, {
+        data: {
+          measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
+        }
+      });
+
+      // Should be rejected with 401 Unauthorized or 403 Forbidden
+      expect([401, 403]).toContain(response.status());
+    });
+  });
 });

@@ -16,6 +16,7 @@ import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { PAGINATION } from "../constants/pagination";
+import { storage } from "../storage";
 
 // Rate limiting for measurement endpoints
 const measurementLimiter = rateLimit({
@@ -536,6 +537,24 @@ export function registerMeasurementRoutes(app: Express) {
         undefined // Site admins bypass org restriction
       );
 
+      // Create audit log for bulk verify operation
+      if (result.success > 0) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: 'measurements_bulk_verify',
+          resourceType: 'measurement',
+          resourceId: `bulk:${result.success}/${measurementIds.length}`,
+          details: JSON.stringify({
+            totalRequested: measurementIds.length,
+            succeeded: result.success,
+            failed: result.failed,
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      }
+
       // Return appropriate status code
       const statusCode = result.failed === 0 ? 200 : 207; // 207 Multi-Status for partial success
 
@@ -583,6 +602,24 @@ export function registerMeasurementRoutes(app: Express) {
         measurementIds,
         undefined // Site admins bypass org restriction
       );
+
+      // Create audit log for bulk unverify operation
+      if (result.success > 0) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: 'measurements_bulk_unverify',
+          resourceType: 'measurement',
+          resourceId: `bulk:${result.success}/${measurementIds.length}`,
+          details: JSON.stringify({
+            totalRequested: measurementIds.length,
+            succeeded: result.success,
+            failed: result.failed,
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      }
 
       // Return appropriate status code
       const statusCode = result.failed === 0 ? 200 : 207; // 207 Multi-Status for partial success
