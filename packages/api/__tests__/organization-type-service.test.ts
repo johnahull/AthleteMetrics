@@ -14,10 +14,13 @@ describe("Organization Type Service Logic", () => {
   let benchmarkService: BenchmarkService;
   let testOrgId: string;
   
-  // Generate unique suffix for this test run
-  const testSuffix = `${Date.now()}_${Math.random().toString(36).substring(7)}`;
+  // Generate unique suffix for this test run (shortened to fit DB constraints)
+  // Use only uppercase letters and numbers to match metric code format constraint: ^[A-Z0-9_]+$
+  const timestamp = Date.now().toString();
+  const randomNum = Math.floor(Math.random() * 10000);
+  const testSuffix = `${timestamp}_${randomNum}`;
   const TEST_ORG_NAME = `Test Service Org ${testSuffix}`;
-  const TEST_METRIC_CODE = `TEST_METRIC_ORG_FILTER_${testSuffix}`;
+  const TEST_METRIC_CODE = `TSTORG${timestamp.substring(8)}${randomNum}`; // Format: TSTORG<last5digits><random> to fit varchar(50) and ^[A-Z0-9_]+$
   const TEST_BENCHMARK_NAME = `Test College Benchmark ${testSuffix}`;
 
   beforeAll(async () => {
@@ -43,7 +46,7 @@ describe("Organization Type Service Logic", () => {
     await db.delete(siteBenchmarks).where({
       name: TEST_BENCHMARK_NAME,
     });
-    await db.execute(`DELETE FROM site_metrics WHERE code LIKE '${TEST_METRIC_CODE}%'`);
+    await db.execute(`DELETE FROM site_metrics WHERE code LIKE 'TSTORG%'`);
   });
 
   afterEach(async () => {
@@ -52,7 +55,7 @@ describe("Organization Type Service Logic", () => {
       name: TEST_BENCHMARK_NAME,
     });
     // Delete all metrics that start with our test prefix
-    await db.execute(`DELETE FROM site_metrics WHERE code LIKE '${TEST_METRIC_CODE}%'`);
+    await db.execute(`DELETE FROM site_metrics WHERE code LIKE 'TSTORG%'`);
   });
 
   afterAll(async () => {
@@ -65,7 +68,7 @@ describe("Organization Type Service Logic", () => {
   describe("MetricService Organization Type Filtering", () => {
     it("should filter metrics by organization type", async () => {
       // Create test metric available only to college orgs
-      const testMetricCode = `${TEST_METRIC_CODE}_filter`;
+      const testMetricCode = `${TEST_METRIC_CODE}_FILTER`;
       const [metric] = await db.insert(siteMetrics).values({
         code: testMetricCode,
         label: "College-only Metric",

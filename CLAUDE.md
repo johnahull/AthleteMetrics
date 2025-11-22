@@ -352,6 +352,7 @@ The application runs as a **single-process Node.js server** without clustering:
 - AGILITY_5105 (5-10-5 agility test in seconds)
 - T_TEST (T-test agility in seconds)
 - DASH_40YD (40-yard dash in seconds)
+- TOP_SPEED (top speed in mph)
 - RSI (Reactive Strength Index)
 
 ### Environment Variables Required

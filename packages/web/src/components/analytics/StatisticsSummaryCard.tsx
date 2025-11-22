@@ -6,11 +6,10 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import type { Measurement } from '@shared/schema';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 
 interface StatisticsSummaryCardProps {
-  measurements: Measurement[];
+  measurements: Array<{ metric: string; value: string }>;
   metric: string;
   title?: string;
 }

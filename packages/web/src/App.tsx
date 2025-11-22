@@ -26,6 +26,7 @@ const DataEntry = React.lazy(() => import("./pages/data-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
 const AdminPage = React.lazy(() => import("./pages/admin"));
+const AdminMeasurementsPage = React.lazy(() => import("./pages/admin-measurements"));
 const MetricsManagement = React.lazy(() => import("./pages/metrics-management"));
 const Organizations = React.lazy(() => import("./pages/organizations"));
 const UserManagement = React.lazy(() => import("./pages/user-management"));
@@ -147,6 +148,11 @@ function Router() {
       <Route path="/admin">
         <RouteWrapper loadingText="Loading Admin...">
           <AdminPage />
+        </RouteWrapper>
+      </Route>
+      <Route path="/admin/measurements">
+        <RouteWrapper loadingText="Loading Measurements...">
+          <AdminMeasurementsPage />
         </RouteWrapper>
       </Route>
       <Route path="/metrics">
