@@ -22,7 +22,9 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 
-// Measurement type from API
+// Measurement type from API (extended from @shared/schema Measurement with joined user data)
+// Note: This is intentionally duplicated rather than importing from shared types because
+// the API returns enriched data with user joins that don't exist in the base schema
 interface Measurement {
   id: string;
   userId: string;
@@ -94,11 +96,19 @@ const filterSchema = z.object({
   birthYearFrom: z.string().optional(),
   birthYearTo: z.string().optional(),
   ageFrom: z.string().optional().refine(
-    (val) => !val || (parseInt(val) >= 0 && parseInt(val) <= 120),
+    (val) => {
+      if (!val) return true;
+      const parsed = parseInt(val, 10);
+      return !isNaN(parsed) && parsed >= 0 && parsed <= 120;
+    },
     { message: "Age must be between 0 and 120" }
   ),
   ageTo: z.string().optional().refine(
-    (val) => !val || (parseInt(val) >= 0 && parseInt(val) <= 120),
+    (val) => {
+      if (!val) return true;
+      const parsed = parseInt(val, 10);
+      return !isNaN(parsed) && parsed >= 0 && parsed <= 120;
+    },
     { message: "Age must be between 0 and 120" }
   ),
   organizationId: z.string().optional(),
@@ -465,6 +475,12 @@ export default function AdminMeasurementsPage() {
     }
   }, [totalPages, currentPage]);
 
+  // Clear selections when filtered measurements change (prevents phantom selections)
+  useEffect(() => {
+    const measurementIds = new Set(measurements.map(m => m.id));
+    setSelectedMeasurements(prev => prev.filter(id => measurementIds.has(id)));
+  }, [measurements]);
+
   // Format metric name for display
   const formatMetricName = useCallback((metric: string): string => {
     const found = METRICS.find((m) => m.value === metric);
@@ -480,17 +496,21 @@ export default function AdminMeasurementsPage() {
 
   const toggleSelectAll = useCallback(() => {
     // Check if all measurements on current page are selected
+    const pageIdSet = new Set(paginatedMeasurements.map(m => m.id));
     const allPageSelected = paginatedMeasurements.every(m => selectedMeasurements.includes(m.id));
 
     if (allPageSelected) {
       // Deselect all on current page
       setSelectedMeasurements(prev =>
-        prev.filter(id => !paginatedMeasurements.find(m => m.id === id))
+        prev.filter(id => !pageIdSet.has(id))
       );
     } else {
-      // Select all on current page
-      const pageIds = paginatedMeasurements.map(m => m.id);
-      setSelectedMeasurements(prev => [...new Set([...prev, ...pageIds])]);
+      // Select all on current page (merge with existing, avoiding duplicates)
+      setSelectedMeasurements(prev => {
+        const existingSet = new Set(prev);
+        pageIdSet.forEach(id => existingSet.add(id));
+        return Array.from(existingSet);
+      });
     }
   }, [paginatedMeasurements, selectedMeasurements]);
 
@@ -1017,6 +1037,14 @@ export default function AdminMeasurementsPage() {
           </div>
         </CardHeader>
         <CardContent>
+          {/* Screen reader announcements for dynamic content */}
+          <div aria-live="polite" aria-atomic="true" className="sr-only">
+            {isLoading ? "Loading measurements..." :
+             error ? "Error loading measurements" :
+             totalMeasurements === 0 ? "No measurements found" :
+             `Showing ${totalMeasurements} measurement${totalMeasurements !== 1 ? 's' : ''}`}
+          </div>
+
           {isLoading ? (
             <div className="space-y-2">
               {[...Array(10)].map((_, i) => (

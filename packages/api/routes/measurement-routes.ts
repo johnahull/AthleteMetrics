@@ -538,7 +538,7 @@ export function registerMeasurementRoutes(app: Express) {
       );
 
       // Create audit log for bulk verify operation
-      if (result.success > 0) {
+      if (result.success > 0 || result.failed > 0) {
         await storage.createAuditLog({
           userId: user.id,
           action: 'measurements_bulk_verify',
@@ -548,6 +548,7 @@ export function registerMeasurementRoutes(app: Express) {
             totalRequested: measurementIds.length,
             succeeded: result.success,
             failed: result.failed,
+            errors: result.errors.length > 0 ? result.errors : undefined,
             timestamp: new Date().toISOString()
           }),
           ipAddress: req.ip || null,
@@ -604,7 +605,7 @@ export function registerMeasurementRoutes(app: Express) {
       );
 
       // Create audit log for bulk unverify operation
-      if (result.success > 0) {
+      if (result.success > 0 || result.failed > 0) {
         await storage.createAuditLog({
           userId: user.id,
           action: 'measurements_bulk_unverify',
@@ -614,6 +615,7 @@ export function registerMeasurementRoutes(app: Express) {
             totalRequested: measurementIds.length,
             succeeded: result.success,
             failed: result.failed,
+            errors: result.errors.length > 0 ? result.errors : undefined,
             timestamp: new Date().toISOString()
           }),
           ipAddress: req.ip || null,
