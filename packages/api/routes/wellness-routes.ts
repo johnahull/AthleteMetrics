@@ -517,6 +517,38 @@ export function registerWellnessRoutes(app: Express) {
     }
   );
 
+  /**
+   * DELETE /api/organizations/:organizationId/wellness/requests/:id
+   * Delete a wellness request permanently
+   * Access: Coach, Org Admin
+   */
+  app.delete(
+    "/api/organizations/:organizationId/wellness/requests/:id",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { id } = req.params;
+
+        const request = await storage.getWellnessRequest(id);
+        if (!request) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        await storage.deleteWellnessRequest(id);
+
+        res.status(204).send();
+      } catch (error: any) {
+        console.error("Failed to delete wellness request:", error);
+        res.status(500).json({
+          message: "Failed to delete wellness request",
+          error: error.message,
+        });
+      }
+    }
+  );
+
   // =============================================================================
   // RESPONSE ENDPOINTS
   // =============================================================================

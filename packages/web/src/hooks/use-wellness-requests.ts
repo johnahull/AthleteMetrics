@@ -126,6 +126,40 @@ export function useCancelWellnessRequest(organizationId: string) {
 }
 
 /**
+ * Delete a wellness request permanently
+ */
+export function useDeleteWellnessRequest(organizationId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (requestId: string) => {
+      const response = await apiRequest(
+        'DELETE',
+        `/api/organizations/${organizationId}/wellness/requests/${requestId}`,
+        undefined
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to delete wellness request');
+      }
+
+      // 204 No Content has no body
+      return;
+    },
+    onSuccess: (_, requestId) => {
+      // Invalidate both list and single request queries
+      queryClient.invalidateQueries({
+        queryKey: ['/api/wellness/requests', organizationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ['/api/wellness/requests', requestId],
+      });
+    },
+  });
+}
+
+/**
  * Get completion rate for a wellness request
  * Returns { completed: number, total: number, rate: number }
  */

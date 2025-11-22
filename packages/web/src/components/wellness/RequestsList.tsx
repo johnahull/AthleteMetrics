@@ -4,9 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Eye, X, QrCode } from 'lucide-react';
+import { Eye, X, QrCode, Trash2 } from 'lucide-react';
 import type { WellnessRequest, RequestStatus } from '@shared/wellness-types';
-import { useCancelWellnessRequest } from '@/hooks/use-wellness-requests';
+import { useCancelWellnessRequest, useDeleteWellnessRequest } from '@/hooks/use-wellness-requests';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import QRCodeGenerator from './QRCodeGenerator';
@@ -19,6 +19,7 @@ interface RequestsListProps {
 export default function RequestsList({ requests, organizationId }: RequestsListProps) {
   const { toast } = useToast();
   const cancelRequest = useCancelWellnessRequest(organizationId);
+  const deleteRequest = useDeleteWellnessRequest(organizationId);
   const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
   const [viewingQRRequest, setViewingQRRequest] = useState<WellnessRequest | null>(null);
 
@@ -39,6 +40,24 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
         toast({
           title: 'Error',
           description: 'Failed to cancel request',
+          variant: 'destructive',
+        });
+      }
+    }
+  };
+
+  const handleDelete = async (requestId: string) => {
+    if (window.confirm('Are you sure you want to permanently delete this request? This action cannot be undone.')) {
+      try {
+        await deleteRequest.mutateAsync(requestId);
+        toast({
+          title: 'Success',
+          description: 'Request deleted successfully',
+        });
+      } catch (error) {
+        toast({
+          title: 'Error',
+          description: 'Failed to delete request',
           variant: 'destructive',
         });
       }
@@ -169,6 +188,15 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
                               <X className="h-4 w-4" />
                             </Button>
                           )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDelete(request.id)}
+                            data-testid={`button-delete-request-${request.id}`}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
