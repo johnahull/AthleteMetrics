@@ -65,18 +65,16 @@ export function WellnessTrendChart({
   }, []);
 
   // Get list of athletes
-  const { data: users = [] } = useQuery<User[]>({
-    queryKey: ['/api/users', organizationId],
+  const { data: athletes = [] } = useQuery<User[]>({
+    queryKey: ['/api/users', organizationId, 'athlete'],
     queryFn: async () => {
-      const response = await fetch(`/api/users?organizationId=${organizationId}`, {
+      const response = await fetch(`/api/users?organizationId=${organizationId}&role=athlete`, {
         credentials: 'include',
       });
       return response.json();
     },
     enabled: !!organizationId,
   });
-
-  const athletes = users.filter((u: User) => u.role === 'athlete');
 
   // Filter responses for selected athlete
   const athleteResponses = useMemo(() => {
