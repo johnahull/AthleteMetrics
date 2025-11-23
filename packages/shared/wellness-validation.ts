@@ -268,7 +268,7 @@ export const submitWellnessResponseSchema = z.object({
   requestId: z.string().uuid().optional(),
   templateId: z.string().uuid('Invalid template ID'),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format'),
-  responses: responseDataSchema,
+  responses: z.record(z.string(), z.any()), // Accept any responses structure, will be validated against template later
   accessMethod: z.string().max(50).optional(),
   athleteName: sanitizedString(200).optional(), // For magic link submissions - sanitized to prevent XSS
   token: z.string().optional(), // Magic link token (also available in URL params)
