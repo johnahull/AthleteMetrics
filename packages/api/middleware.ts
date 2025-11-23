@@ -307,13 +307,48 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
         });
       }
 
-      // For public wellness links (requiresAuth: false), allow anonymous submission
-      // Set a generic magic link user context
+      // For magic link access, extract athlete ID from query parameter
+      // Priority: query > body
+      const athleteId = req.query.athlete as string || req.body.athlete as string;
+
+      if (!athleteId) {
+        return res.status(400).json({
+          message: "Missing athlete parameter for magic link submission"
+        });
+      }
+
+      // Verify athlete is targeted by this request
+      const isTargetedDirectly = wellnessRequest.targetAthleteIds?.includes(athleteId);
+
+      // Check team-based targeting if not directly targeted
+      let isTargetedViaTeam = false;
+      if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
+        const athleteTeams = await storage.getUserTeams(athleteId);
+        const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
+        isTargetedViaTeam = wellnessRequest.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+      }
+
+      if (!isTargetedDirectly && !isTargetedViaTeam) {
+        return res.status(403).json({
+          message: "Athlete is not authorized for this wellness request"
+        });
+      }
+
+      // Get athlete details for user context
+      const athlete = await storage.getUser(athleteId);
+      if (!athlete) {
+        return res.status(404).json({
+          message: "Athlete not found"
+        });
+      }
+
+      // For public wellness links (requiresAuth: false), set magic link user context
+      // with the actual athlete's ID and details
       req.user = {
-        id: 'magic-link-user',
-        email: '',
-        firstName: 'Wellness',
-        lastName: 'Respondent',
+        id: athlete.id,
+        email: athlete.emails?.[0] || '',
+        firstName: athlete.firstName || 'Wellness',
+        lastName: athlete.lastName || 'Respondent',
         role: 'athlete',
         isSiteAdmin: false,
         accessMethod: 'magic_link',

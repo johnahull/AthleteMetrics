@@ -729,26 +729,8 @@ export function registerWellnessRoutes(app: Express) {
               });
             }
 
-            // Verify user is targeted by this request
-            let isTargeted = false;
-
-            // Check direct athlete targeting
-            if (request.targetAthleteIds && request.targetAthleteIds.includes(req.user!.id)) {
-              isTargeted = true;
-            }
-
-            // Check team-based targeting (verify user is IN targeted teams)
-            if (!isTargeted && request.targetTeamIds && request.targetTeamIds.length > 0) {
-              const userTeams = await storage.getUserTeams(req.user!.id);
-              const userTeamIds = userTeams.map(ut => ut.teamId);
-              isTargeted = request.targetTeamIds.some((teamId: string) => userTeamIds.includes(teamId));
-            }
-
-            if (!isTargeted) {
-              return res.status(403).json({
-                message: "You are not authorized to respond to this request"
-              });
-            }
+            // NOTE: Authorization check (athlete is targeted) is already performed in requireWellnessAccess middleware
+            // No need to duplicate the check here
           }
         }
 

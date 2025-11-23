@@ -274,9 +274,10 @@ export const submitWellnessResponseSchema = z.object({
 }).refine(
   (data) => {
     // Date cannot be in the future
-    const submissionDate = new Date(data.date);
+    // Parse date string as midnight UTC to avoid timezone issues
+    const submissionDate = new Date(data.date + 'T00:00:00Z');
     const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    today.setUTCHours(0, 0, 0, 0);
     return submissionDate <= today;
   },
   {
