@@ -319,8 +319,19 @@ export default function WellnessSubmit() {
       return;
     }
 
+    // Transform responses to include question labels (required by API schema)
+    const formattedResponses: WellnessResponseData = {};
+    questions.forEach((question) => {
+      if (responses[question.id] !== undefined && responses[question.id] !== null) {
+        formattedResponses[question.id] = {
+          value: responses[question.id],
+          label: question.label,
+        };
+      }
+    });
+
     submitMutation.mutate({
-      responses,
+      responses: formattedResponses,
       selectedAthleteId: showManualEntry ? null : selectedAthleteId,
       athleteName: showManualEntry ? athleteName.trim() : undefined
     });
