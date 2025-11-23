@@ -214,13 +214,29 @@ export default function WellnessSubmit() {
 
   // Restore draft from local storage on mount
   useEffect(() => {
-    if (request?.id) {
+    if (request?.id && template) {
       const key = getAutoSaveKey(request.id);
       const saved = localStorage.getItem(key);
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setResponses(parsed);
+
+          // Migrate old body_map string values to coordinate objects
+          const migratedResponses: Record<string, any> = {};
+          for (const [questionId, value] of Object.entries(parsed)) {
+            const question = template.config.questions.find((q: any) => q.id === questionId);
+
+            // If it's a body_map question and the value is an array of strings, skip it
+            // (force user to re-select, as we can't reliably map strings to coordinates)
+            if (question?.type === 'body_map' && Array.isArray(value) && value.length > 0 && typeof value[0] === 'string') {
+              console.log(`Clearing old body_map data for question ${questionId}`);
+              continue; // Skip this question, user will need to re-select
+            }
+
+            migratedResponses[questionId] = value;
+          }
+
+          setResponses(migratedResponses);
           setShowDraftRestored(true);
           setTimeout(() => setShowDraftRestored(false), 5000);
         } catch (error) {
@@ -228,7 +244,7 @@ export default function WellnessSubmit() {
         }
       }
     }
-  }, [request?.id]);
+  }, [request?.id, template]);
 
   // Check if token is expired
   const isExpired = request?.expiresAt && new Date(request.expiresAt) < new Date();
