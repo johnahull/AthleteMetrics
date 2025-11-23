@@ -737,8 +737,11 @@ export function registerWellnessRoutes(app: Express) {
         // Validate responses match template questions
         try {
           const responseSchema = generateResponseValidationSchema(template.config as any);
+          console.log('Template config questions:', JSON.stringify(template.config, null, 2));
+          console.log('Submitted responses:', JSON.stringify(data.responses, null, 2));
           responseSchema.parse(data.responses);
         } catch (validationError: any) {
+          console.error('Response validation error:', validationError);
           return res.status(400).json({
             message: "Response validation failed",
             errors: validationError.errors,
