@@ -166,6 +166,7 @@ export default function WellnessSubmit() {
           token,
           templateId: template?.id,
           responses: data.responses,
+          athlete: data.selectedAthleteId, // Middleware expects 'athlete' parameter
           selectedAthleteId: data.selectedAthleteId,
           athleteName: data.athleteName,
           date: new Date().toISOString().split('T')[0],
