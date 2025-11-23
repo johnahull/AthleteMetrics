@@ -271,6 +271,8 @@ export const submitWellnessResponseSchema = z.object({
   responses: responseDataSchema,
   accessMethod: z.string().max(50).optional(),
   athleteName: sanitizedString(200).optional(), // For magic link submissions - sanitized to prevent XSS
+  token: z.string().optional(), // Magic link token (also available in URL params)
+  selectedAthleteId: z.string().uuid().optional(), // Athlete selected from dropdown
 }).refine(
   (data) => {
     // Date cannot be in the future
