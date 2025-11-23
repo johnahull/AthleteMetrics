@@ -174,6 +174,7 @@ export default function WellnessSubmit() {
 
       if (!res.ok) {
         const error = await res.json();
+        console.error('Wellness submission failed:', error);
         throw new Error(error.message || 'Failed to submit wellness response');
       }
 
@@ -328,6 +329,14 @@ export default function WellnessSubmit() {
           label: question.label,
         };
       }
+    });
+
+    console.log('Submitting wellness response:', {
+      requestId: request?.id,
+      templateId: template?.id,
+      responses: formattedResponses,
+      selectedAthleteId: showManualEntry ? null : selectedAthleteId,
+      athleteName: showManualEntry ? athleteName.trim() : undefined,
     });
 
     submitMutation.mutate({
