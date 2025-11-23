@@ -3,14 +3,49 @@ import { Badge } from '@/components/ui/badge';
 import type { BodyMapQuestionConfig } from '@shared/wellness-types';
 import { cn } from '@/lib/utils';
 
+interface BodyMapPoint {
+  x: number;
+  y: number;
+  label?: string;
+}
+
 interface BodyMapInputProps {
   question: BodyMapQuestionConfig;
-  value: string[];
-  onChange: (value: string[]) => void;
+  value: BodyMapPoint[];
+  onChange: (value: BodyMapPoint[]) => void;
   error?: string;
 }
 
-// Body parts organized by region
+// Body parts with fixed coordinates (normalized 0-1)
+const BODY_PARTS_WITH_COORDS: Record<string, { x: number; y: number; label: string }> = {
+  'Head': { x: 0.5, y: 0.1, label: 'Head' },
+  'Neck': { x: 0.5, y: 0.15, label: 'Neck' },
+  'Left Shoulder': { x: 0.3, y: 0.2, label: 'Left Shoulder' },
+  'Right Shoulder': { x: 0.7, y: 0.2, label: 'Right Shoulder' },
+  'Chest': { x: 0.5, y: 0.25, label: 'Chest' },
+  'Upper Back': { x: 0.5, y: 0.25, label: 'Upper Back' },
+  'Left Elbow': { x: 0.2, y: 0.35, label: 'Left Elbow' },
+  'Right Elbow': { x: 0.8, y: 0.35, label: 'Right Elbow' },
+  'Left Wrist': { x: 0.15, y: 0.45, label: 'Left Wrist' },
+  'Right Wrist': { x: 0.85, y: 0.45, label: 'Right Wrist' },
+  'Left Hand': { x: 0.1, y: 0.5, label: 'Left Hand' },
+  'Right Hand': { x: 0.9, y: 0.5, label: 'Right Hand' },
+  'Abdomen': { x: 0.5, y: 0.4, label: 'Abdomen' },
+  'Lower Back': { x: 0.5, y: 0.45, label: 'Lower Back' },
+  'Hips': { x: 0.5, y: 0.5, label: 'Hips' },
+  'Left Thigh': { x: 0.4, y: 0.6, label: 'Left Thigh' },
+  'Right Thigh': { x: 0.6, y: 0.6, label: 'Right Thigh' },
+  'Left Knee': { x: 0.4, y: 0.7, label: 'Left Knee' },
+  'Right Knee': { x: 0.6, y: 0.7, label: 'Right Knee' },
+  'Left Shin': { x: 0.4, y: 0.8, label: 'Left Shin' },
+  'Right Shin': { x: 0.6, y: 0.8, label: 'Right Shin' },
+  'Left Ankle': { x: 0.4, y: 0.9, label: 'Left Ankle' },
+  'Right Ankle': { x: 0.6, y: 0.9, label: 'Right Ankle' },
+  'Left Foot': { x: 0.4, y: 0.95, label: 'Left Foot' },
+  'Right Foot': { x: 0.6, y: 0.95, label: 'Right Foot' },
+};
+
+// Body parts organized by region for display
 const BODY_PARTS = {
   head: ['Head', 'Neck'],
   upperBody: ['Left Shoulder', 'Right Shoulder', 'Chest', 'Upper Back'],
@@ -20,20 +55,23 @@ const BODY_PARTS = {
   feet: ['Left Ankle', 'Right Ankle', 'Left Foot', 'Right Foot'],
 };
 
-const ALL_BODY_PARTS = Object.values(BODY_PARTS).flat();
-
 export function BodyMapInput({
   question,
   value = [],
   onChange,
   error,
 }: BodyMapInputProps) {
-  const toggleBodyPart = (part: string) => {
+  const toggleBodyPart = (partLabel: string) => {
     const normalizedValue = value || [];
-    if (normalizedValue.includes(part)) {
-      onChange(normalizedValue.filter((p) => p !== part));
+    const exists = normalizedValue.some((p) => p.label === partLabel);
+
+    if (exists) {
+      onChange(normalizedValue.filter((p) => p.label !== partLabel));
     } else {
-      onChange([...normalizedValue, part]);
+      const coords = BODY_PARTS_WITH_COORDS[partLabel];
+      if (coords) {
+        onChange([...normalizedValue, coords]);
+      }
     }
   };
 
@@ -43,7 +81,7 @@ export function BodyMapInput({
 
   // Render a body part button with proper accessibility
   const renderBodyPartButton = (part: string) => {
-    const isSelected = value.includes(part);
+    const isSelected = value.some((p) => p.label === part);
     return (
       <button
         key={part}
@@ -158,13 +196,13 @@ export function BodyMapInput({
         <div className="space-y-2">
           <p className="text-sm font-medium">Selected areas ({value.length}):</p>
           <div className="flex flex-wrap gap-2">
-            {value.map((part) => (
+            {value.map((point, idx) => (
               <Badge
-                key={part}
+                key={`${point.label}-${idx}`}
                 variant="secondary"
                 className="text-sm"
               >
-                {part}
+                {point.label}
               </Badge>
             ))}
           </div>
