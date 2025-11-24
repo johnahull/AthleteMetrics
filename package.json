@@ -75,9 +75,6 @@
     "workbox-precaching": "^7.3.0",
     "workbox-window": "^7.3.0"
   },
-  "optionalDependencies": {
-    "bufferutil": "^4.0.9"
-  },
   "overrides": {
     "esbuild": "^0.25.0",
     "glob": "^11.1.0"
