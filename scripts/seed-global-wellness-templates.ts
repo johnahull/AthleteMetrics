@@ -54,7 +54,7 @@ async function main() {
   });
 
   console.log('\n🌐 Global templates are now available to ALL organizations!');
-  console.log('   Site admins can manage them at /admin/wellness-templates\n');
+  console.log('   Site admins can manage them at /wellness-templates\n');
 
   process.exit(0);
 }

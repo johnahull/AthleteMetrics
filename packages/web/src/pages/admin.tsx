@@ -244,7 +244,7 @@ export default function AdminPage() {
             Create and manage global wellness questionnaire templates that all organizations can clone and customize.
           </p>
           <Button asChild>
-            <Link href="/admin/wellness-templates">
+            <Link href="/wellness-templates">
               Manage Templates
             </Link>
           </Button>

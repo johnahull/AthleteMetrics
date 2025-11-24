@@ -192,8 +192,8 @@ function Router() {
           <AdminMeasurementsPage />
         </RouteWrapper>
       </Route>
-      <Route path="/admin/wellness-templates">
-        <RouteWrapper loadingText="Loading Admin Wellness Templates...">
+      <Route path="/wellness-templates">
+        <RouteWrapper loadingText="Loading Wellness Templates...">
           <AdminWellnessTemplates />
         </RouteWrapper>
       </Route>

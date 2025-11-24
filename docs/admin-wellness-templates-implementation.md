@@ -68,7 +68,7 @@ Updated library endpoint:
 ### 7. Admin Navigation
 **Files:**
 - `packages/web/src/pages/admin.tsx` - Added "Global Wellness Templates" card with link
-- `packages/web/src/App.tsx` - Added route `/admin/wellness-templates`
+- `packages/web/src/App.tsx` - Added route `/wellness-templates`
 
 ## Security Considerations
 
@@ -90,7 +90,7 @@ Updated library endpoint:
 ## Usage Flow
 
 ### Creating a Global Template
-1. Site admin navigates to `/admin/wellness-templates`
+1. Site admin navigates to `/wellness-templates`
 2. Clicks "Create Template"
 3. Uses `TemplateBuilder` to define questions and settings
 4. Template is saved with `organization_id=NULL` and `is_system_seeded=true`
@@ -129,7 +129,7 @@ Updated library endpoint:
 2. Restart API server to load new routes
 
 3. Verify:
-   - Site admin can access `/admin/wellness-templates`
+   - Site admin can access `/wellness-templates`
    - Can create/edit/delete system templates
    - Templates appear in org libraries
    - Clone functionality works correctly
