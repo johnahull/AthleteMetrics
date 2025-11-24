@@ -288,28 +288,21 @@ export class OrganizationService extends BaseService {
    */
   async getAccessibleOrganizations(userId: string, cachedIsSiteAdmin?: boolean): Promise<Organization[]> {
     try {
-      console.log("🔍 getAccessibleOrganizations called for userId:", userId);
-
       // Use cached value if provided, otherwise query database
       // This prevents N+1 queries when called multiple times with session data
       const userIsSiteAdmin = cachedIsSiteAdmin ?? await this.isSiteAdmin(userId);
-      console.log("🔍 userIsSiteAdmin:", userIsSiteAdmin);
 
       // Site admins can access all organizations (including inactive ones for management)
       if (userIsSiteAdmin) {
-        const orgs = await this.storage.getOrganizations({ includeInactive: true });
-        console.log("🔍 Site admin - fetched organizations count:", orgs.length);
-        return orgs;
+        return await this.storage.getOrganizations({ includeInactive: true });
       }
 
       // Regular users get only their assigned organizations
       // Extract the organization object from the nested structure
       const userOrgs = await this.storage.getUserOrganizations(userId);
-      console.log("🔍 Regular user - fetched user organizations count:", userOrgs.length);
       return userOrgs.map((userOrg: UserOrganizationWithOrg) => userOrg.organization);
     } catch (error) {
-      console.error("❌ OrganizationService.getAccessibleOrganizations ERROR:", error);
-      console.error("❌ Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+      console.error("OrganizationService.getAccessibleOrganizations:", error);
       return [];
     }
   }
