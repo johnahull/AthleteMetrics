@@ -26,8 +26,15 @@ export default function AdminWellnessTemplatesPage() {
   const queryClient = useQueryClient();
 
   // Fetch system templates
-  const { data: templates, isLoading } = useQuery<WellnessTemplate[]>({
+  const { data: templates, isLoading, error } = useQuery<WellnessTemplate[]>({
     queryKey: ['/api/admin/wellness/templates'],
+  });
+
+  // Debug: Log query state
+  console.log('🔍 [AdminWellnessTemplates] Query state:', {
+    templatesCount: templates?.length,
+    isLoading,
+    error: error ? String(error) : null
   });
 
   // Delete mutation
