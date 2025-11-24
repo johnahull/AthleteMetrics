@@ -2,6 +2,7 @@
  * Organization Admin Settings Page
  * Allows org admins to manage their organization settings including:
  * - AI Coaching Insights (if enabled by site admin)
+ * - Wellness Module (if enabled by site admin)
  * - Coaches & Administrators management
  * - Metrics Configuration
  */
@@ -14,7 +15,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } fr
 import { Switch } from "@/components/ui/switch";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail } from "lucide-react";
+import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -44,6 +45,7 @@ type OrganizationProfile = {
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
+  wellnessEnabled: z.boolean().default(true),
 });
 
 type OrgAdminSettings = z.infer<typeof orgAdminSettingsSchema>;
@@ -74,22 +76,33 @@ export default function OrgAdminSettings() {
     enabled: !!organizationId,
   });
 
+  // Fetch site settings to check wellness module status
+  const { data: siteSettings } = useQuery({
+    queryKey: ["/api/site-settings/public"],
+    enabled: !!organizationId,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Update mutation
   const updateMutation = useUpdateOrgAdminSettings(organizationId!);
 
   // Form setup with React Hook Form + Zod validation
-  // If site admin has disabled AI, force the value to false
+  // If site admin has disabled features, force the values to false
   const form = useForm<OrgAdminSettings>({
     resolver: zodResolver(orgAdminSettingsSchema),
     values: organization ? {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
+      wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
     } : undefined,
   });
 
   // Handle form submission
   const onSubmit = async (data: OrgAdminSettings) => {
     try {
-      await updateMutation.mutateAsync({ aiEnabled: data.aiEnabled });
+      await updateMutation.mutateAsync({
+        aiEnabled: data.aiEnabled,
+        wellnessEnabled: data.wellnessEnabled,
+      });
 
       toast({
         title: "Settings updated",
@@ -168,6 +181,7 @@ export default function OrgAdminSettings() {
   }
 
   const aiEnabledBySiteAdmin = organization.aiEnabledBySiteAdmin || false;
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
@@ -226,6 +240,52 @@ export default function OrgAdminSettings() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={!aiEnabledBySiteAdmin}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Wellness Module */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Heart className="h-5 w-5" />
+                Wellness Module
+              </CardTitle>
+              <CardDescription>
+                Enable wellness questionnaires and tracking for your organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!wellnessModuleEnabled && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    Wellness module must be enabled by your administrator before you can use it.
+                    Please contact your site administrator to enable this feature for your organization.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <FormField
+                control={form.control}
+                name="wellnessEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Enable Wellness Module</FormLabel>
+                      <FormDescription>
+                        Allow users to create and complete wellness questionnaires
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={!wellnessModuleEnabled}
                       />
                     </FormControl>
                   </FormItem>
