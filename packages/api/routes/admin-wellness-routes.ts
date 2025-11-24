@@ -34,10 +34,13 @@ export function registerAdminWellnessRoutes(app: Express) {
     requireSiteAdmin,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
+        console.log("🔍 GET /api/admin/wellness/templates - fetching system templates");
         const templates = await storage.getSystemWellnessTemplates();
+        console.log("🔍 Fetched templates count:", templates.length);
         res.json(templates);
       } catch (error: any) {
-        console.error("Failed to fetch system wellness templates:", error);
+        console.error("❌ Failed to fetch system wellness templates:", error);
+        console.error("❌ Error stack:", error.stack);
         res.status(500).json({
           message: "Failed to fetch system wellness templates",
           error: process.env.NODE_ENV !== 'production' ? error.message : undefined,
