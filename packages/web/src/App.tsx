@@ -186,12 +186,7 @@ function Router() {
           <ImportExport />
         </RouteWrapper>
       </Route>
-      <Route path="/admin">
-        <RouteWrapper loadingText="Loading Admin...">
-          <AdminPage />
-        </RouteWrapper>
-      </Route>
-<<<<<<< HEAD
+      {/* More specific /admin/* routes must come before /admin */}
       <Route path="/admin/measurements">
         <RouteWrapper loadingText="Loading Measurements...">
           <AdminMeasurementsPage />
@@ -200,6 +195,11 @@ function Router() {
       <Route path="/admin/wellness-templates">
         <RouteWrapper loadingText="Loading Admin Wellness Templates...">
           <AdminWellnessTemplates />
+        </RouteWrapper>
+      </Route>
+      <Route path="/admin">
+        <RouteWrapper loadingText="Loading Admin...">
+          <AdminPage />
         </RouteWrapper>
       </Route>
       <Route path="/metrics">
