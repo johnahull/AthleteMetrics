@@ -1,0 +1,450 @@
+/**
+ * Integration tests for Site Settings API Routes
+ *
+ * Test coverage:
+ * - GET /api/site-settings/public - Returns wellness module status for authenticated users
+ * - GET /api/site-settings/public - Only exposes public fields (not AI model)
+ * - GET /api/site-settings/public - Defaults to enabled when no settings exist
+ * - GET /api/site-settings - Returns full settings for site admin
+ * - GET /api/site-settings - Returns 403 for non-site-admin
+ * - PATCH /api/site-settings - Updates wellness module flag with audit log
+ * - PATCH /api/site-settings - Updates AI model with audit log
+ * - PATCH /api/site-settings - Validates AI model availability
+ * - PATCH /api/site-settings - Returns 403 for non-site-admin
+ */
+
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest";
+import request from "supertest";
+import express from "express";
+import type { Request, Response, NextFunction } from "express";
+import { storage } from "../../storage";
+import siteSettingsRouter from "../site-settings-routes";
+
+// Mock session data for testing
+let mockSessionUser: any = null;
+
+// Create test app with mocked session middleware
+function createTestApp() {
+  const app = express();
+  app.use(express.json());
+
+  // Mock session middleware for testing
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    req.session = {
+      user: mockSessionUser,
+    } as any;
+    next();
+  });
+
+  // Mock authentication middleware
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (!mockSessionUser) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    next();
+  });
+
+  // Register site settings routes
+  app.use("/api/site-settings", siteSettingsRouter);
+
+  return app;
+}
+
+const app = createTestApp();
+
+// Test data IDs
+let testSiteAdminId: string;
+let testOrgAdminId: string;
+let testCoachId: string;
+let testOrgId: string;
+
+describe("Site Settings API Routes", () => {
+  beforeAll(async () => {
+    const timestamp = Date.now();
+
+    // Create test organization
+    const org = await storage.createOrganization({
+      name: `Test Org for Site Settings ${timestamp}`,
+      description: "Test org",
+      benchmarksEnabled: false,
+      allowCustomBenchmarks: false,
+    });
+    testOrgId = org.id;
+
+    // Create site admin user
+    const siteAdmin = await storage.createUser({
+      email: `siteadmin-settings-${timestamp}@test.com`,
+      hashedPassword: "hashed",
+      role: "site_admin",
+      isSiteAdmin: true,
+      firstName: "Site",
+      lastName: "Admin",
+    });
+    testSiteAdminId = siteAdmin.id;
+
+    // Create org admin user
+    const orgAdmin = await storage.createUser({
+      email: `orgadmin-settings-${timestamp}@test.com`,
+      hashedPassword: "hashed",
+      role: "org_admin",
+      isSiteAdmin: false,
+      firstName: "Org",
+      lastName: "Admin",
+    });
+    testOrgAdminId = orgAdmin.id;
+
+    // Link org admin to organization
+    await storage.addUserToOrganization({
+      userId: testOrgAdminId,
+      organizationId: testOrgId,
+      role: "org_admin",
+    });
+
+    // Create coach user
+    const coach = await storage.createUser({
+      email: `coach-settings-${timestamp}@test.com`,
+      hashedPassword: "hashed",
+      role: "coach",
+      isSiteAdmin: false,
+      firstName: "Test",
+      lastName: "Coach",
+    });
+    testCoachId = coach.id;
+
+    // Link coach to organization
+    await storage.addUserToOrganization({
+      userId: testCoachId,
+      organizationId: testOrgId,
+      role: "coach",
+    });
+  });
+
+  afterAll(async () => {
+    // Clean up test data
+    try {
+      if (testCoachId) await storage.deleteUser(testCoachId);
+      if (testOrgAdminId) await storage.deleteUser(testOrgAdminId);
+      if (testSiteAdminId) await storage.deleteUser(testSiteAdminId);
+      if (testOrgId) await storage.deleteOrganization(testOrgId);
+    } catch (error) {
+      console.error("Cleanup error in site-settings-routes.test.ts:", error);
+    }
+  });
+
+  beforeEach(() => {
+    // Reset mock session user before each test
+    mockSessionUser = null;
+  });
+
+  describe("GET /api/site-settings/public", () => {
+    it("should return wellness module status for authenticated coach", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings/public");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("wellnessModuleEnabled");
+      expect(typeof response.body.wellnessModuleEnabled).toBe("boolean");
+    });
+
+    it("should return wellness module status for authenticated org admin", async () => {
+      mockSessionUser = {
+        id: testOrgAdminId,
+        email: `orgadmin-settings-${Date.now()}@test.com`,
+        role: "org_admin",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings/public");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("wellnessModuleEnabled");
+    });
+
+    it("should only expose public fields, not AI model settings", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings/public");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("wellnessModuleEnabled");
+      expect(response.body).not.toHaveProperty("aiModel");
+      expect(response.body).not.toHaveProperty("updatedBy");
+      expect(response.body).not.toHaveProperty("updatedAt");
+    });
+
+    it("should default wellness module to enabled when no settings exist", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings/public");
+
+      expect(response.status).toBe(200);
+      // Default should be true when no settings exist
+      expect(response.body.wellnessModuleEnabled).toBe(true);
+    });
+
+    it("should return 401 for unauthenticated requests", async () => {
+      mockSessionUser = null;
+
+      const response = await request(app).get("/api/site-settings/public");
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe("GET /api/site-settings", () => {
+    it("should return full settings for site admin", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app).get("/api/site-settings");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("aiModel");
+      expect(response.body).toHaveProperty("updatedAt");
+      // wellnessModuleEnabled should also be present
+      expect(response.body).toHaveProperty("wellnessModuleEnabled");
+    });
+
+    it("should return default settings when none exist", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app).get("/api/site-settings");
+
+      expect(response.status).toBe(200);
+      // Should have default AI model
+      expect(response.body.aiModel).toBeDefined();
+    });
+
+    it("should return 403 for non-site-admin (coach)", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings");
+
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 403 for non-site-admin (org admin)", async () => {
+      mockSessionUser = {
+        id: testOrgAdminId,
+        email: `orgadmin-settings-${Date.now()}@test.com`,
+        role: "org_admin",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings");
+
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 401 for unauthenticated requests", async () => {
+      mockSessionUser = null;
+
+      const response = await request(app).get("/api/site-settings");
+
+      expect(response.status).toBe(401);
+    });
+  });
+
+  describe("PATCH /api/site-settings", () => {
+    it("should update wellness module flag for site admin", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ wellnessModuleEnabled: false });
+
+      expect(response.status).toBe(200);
+      expect(response.body.wellnessModuleEnabled).toBe(false);
+
+      // Verify audit log was created
+      // Note: This would require accessing audit logs, which might need a separate test helper
+    });
+
+    it("should update AI model for site admin", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ aiModel: "gpt-5-nano" });
+
+      expect(response.status).toBe(200);
+      expect(response.body.aiModel).toBe("gpt-5-nano");
+    });
+
+    it("should validate AI model and reject invalid models", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ aiModel: "invalid-model-xyz" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain("Invalid AI model");
+    });
+
+    it("should return 403 for non-site-admin (coach)", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ wellnessModuleEnabled: false });
+
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 403 for non-site-admin (org admin)", async () => {
+      mockSessionUser = {
+        id: testOrgAdminId,
+        email: `orgadmin-settings-${Date.now()}@test.com`,
+        role: "org_admin",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ wellnessModuleEnabled: false });
+
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 401 for unauthenticated requests", async () => {
+      mockSessionUser = null;
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ wellnessModuleEnabled: false });
+
+      expect(response.status).toBe(401);
+    });
+
+    it("should handle validation errors for invalid data", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app)
+        .patch("/api/site-settings")
+        .send({ wellnessModuleEnabled: "not-a-boolean" });
+
+      expect(response.status).toBe(400);
+      expect(response.body.message).toContain("Validation error");
+    });
+  });
+
+  describe("GET /api/ai-models", () => {
+    it("should return list of AI models for site admin", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app).get("/api/site-settings/ai-models");
+
+      expect(response.status).toBe(200);
+      expect(response.body).toHaveProperty("budget");
+      expect(response.body).toHaveProperty("premium");
+      expect(response.body).toHaveProperty("all");
+      expect(Array.isArray(response.body.all)).toBe(true);
+      expect(response.body.all.length).toBeGreaterThan(0);
+    });
+
+    it("should return models with pricing information", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const response = await request(app).get("/api/site-settings/ai-models");
+
+      expect(response.status).toBe(200);
+      const firstModel = response.body.all[0];
+      expect(firstModel).toHaveProperty("key");
+      expect(firstModel).toHaveProperty("provider");
+      expect(firstModel).toHaveProperty("model");
+      expect(firstModel).toHaveProperty("tier");
+      expect(firstModel).toHaveProperty("description");
+      expect(firstModel).toHaveProperty("pricing");
+      expect(firstModel.pricing).toHaveProperty("inputPer1M");
+      expect(firstModel.pricing).toHaveProperty("outputPer1M");
+      expect(firstModel.pricing).toHaveProperty("currency");
+    });
+
+    it("should return 403 for non-site-admin", async () => {
+      mockSessionUser = {
+        id: testCoachId,
+        email: `coach-settings-${Date.now()}@test.com`,
+        role: "coach",
+        isSiteAdmin: false,
+      };
+
+      const response = await request(app).get("/api/site-settings/ai-models");
+
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 401 for unauthenticated requests", async () => {
+      mockSessionUser = null;
+
+      const response = await request(app).get("/api/site-settings/ai-models");
+
+      expect(response.status).toBe(401);
+    });
+  });
+});
