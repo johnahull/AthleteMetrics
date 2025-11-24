@@ -18,7 +18,11 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
+console.log('🔍 [admin-wellness-templates.tsx] Module loaded');
+
 export default function AdminWellnessTemplatesPage() {
+  console.log('🔍 [AdminWellnessTemplatesPage] Component rendering');
+
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WellnessTemplate | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
