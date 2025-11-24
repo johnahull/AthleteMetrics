@@ -158,8 +158,12 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   });
 
   // Fetch site settings to check wellness module status
+  // Use public endpoint for non-site-admins, full endpoint for site admins
+  const siteSettingsEndpoint = userData?.isSiteAdmin
+    ? "/api/site-settings"
+    : "/api/site-settings/public";
   const { data: siteSettings } = useQuery({
-    queryKey: ["/api/site-settings"],
+    queryKey: [siteSettingsEndpoint],
     enabled: !!userData.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });

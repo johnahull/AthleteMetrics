@@ -46,6 +46,27 @@ function sanitizeError(error: unknown, fallback: string): string {
 }
 
 /**
+ * GET /api/site-settings/public
+ * Get public site settings (wellness module status only)
+ * Access: Any authenticated user
+ */
+router.get("/public", async (req, res) => {
+  try {
+    const settings = await storage.getSiteSettings();
+
+    // Only return public information
+    return res.json({
+      wellnessModuleEnabled: settings?.wellnessModuleEnabled ?? true,
+    });
+  } catch (error) {
+    console.error("Error fetching public site settings:", error);
+    res.status(500).json({
+      message: sanitizeError(error, "Failed to fetch site settings"),
+    });
+  }
+});
+
+/**
  * GET /api/site-settings
  * Get current site settings
  * Access: Site admin only

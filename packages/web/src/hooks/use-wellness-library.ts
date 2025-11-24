@@ -80,7 +80,7 @@ export function useCloneWellnessTemplate(organizationId: string) {
         queryKey: ['/api/organizations/:organizationId/wellness/library', organizationId],
       });
       queryClient.invalidateQueries({
-        queryKey: ['/api/organizations/:organizationId/wellness/templates', organizationId],
+        queryKey: ['/api/wellness/templates', organizationId],
       });
     },
   });

@@ -312,7 +312,8 @@ export function registerWellnessRoutes(app: Express) {
 
   /**
    * GET /api/organizations/:organizationId/wellness/library
-   * Get wellness template library (global system templates + org templates)
+   * Get wellness template library (global system templates only)
+   * Organization-specific templates appear in the Templates tab instead
    * Access: All authenticated users in organization
    */
   app.get(
@@ -325,16 +326,11 @@ export function registerWellnessRoutes(app: Express) {
         const { organizationId } = req.params;
         const { category, tags, search } = req.query;
 
-        // Get global system templates (NULL organization_id)
+        // Get ONLY global system templates (NULL organization_id)
+        // Library tab should only show system-seeded templates
         const globalTemplates = await storage.getSystemWellnessTemplates();
 
-        // Get org-specific templates
-        const organizationTemplates = await storage.getWellnessTemplates(organizationId, { activeOnly: true });
-
-        // Combine both lists
-        const allTemplates = [...globalTemplates, ...organizationTemplates];
-
-        let filteredTemplates = allTemplates;
+        let filteredTemplates = globalTemplates;
 
         // Filter by category if provided
         if (category && typeof category === 'string') {
@@ -358,13 +354,11 @@ export function registerWellnessRoutes(app: Express) {
           );
         }
 
-        // Separate system-seeded from org-specific for easier UI handling
-        const systemTemplates = filteredTemplates.filter(t => t.isSystemSeeded);
-        const orgTemplates = filteredTemplates.filter(t => !t.isSystemSeeded);
-
+        // Library only shows system-seeded templates (organizationId IS NULL)
+        // Organization-specific templates appear in the Templates tab instead
         res.json({
-          systemTemplates,
-          orgTemplates,
+          systemTemplates: filteredTemplates,
+          orgTemplates: [], // Empty - org templates don't appear in library
           total: filteredTemplates.length,
         });
       } catch (error: any) {
@@ -1507,6 +1501,4 @@ export function registerWellnessRoutes(app: Express) {
       }
     }
   );
-
-  console.log("✅ Wellness routes registered successfully");
 }

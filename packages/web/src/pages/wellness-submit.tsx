@@ -348,14 +348,6 @@ export default function WellnessSubmit() {
       }
     });
 
-    console.log('Submitting wellness response:', {
-      requestId: request?.id,
-      templateId: template?.id,
-      responses: formattedResponses,
-      selectedAthleteId: showManualEntry ? null : selectedAthleteId,
-      athleteName: showManualEntry ? athleteName.trim() : undefined,
-    });
-
     submitMutation.mutate({
       responses: formattedResponses,
       selectedAthleteId: showManualEntry ? null : selectedAthleteId,

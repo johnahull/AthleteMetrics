@@ -34,9 +34,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     requireSiteAdmin,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
-        console.log("🔍 GET /api/admin/wellness/templates - fetching system templates");
         const templates = await storage.getSystemWellnessTemplates();
-        console.log("🔍 Fetched templates count:", templates.length);
         res.json(templates);
       } catch (error: any) {
         console.error("❌ Failed to fetch system wellness templates:", error);
@@ -205,6 +203,4 @@ export function registerAdminWellnessRoutes(app: Express) {
       }
     }
   );
-
-  console.log("✅ Admin wellness routes registered successfully");
 }

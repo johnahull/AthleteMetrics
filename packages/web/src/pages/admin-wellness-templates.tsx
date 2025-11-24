@@ -18,11 +18,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 
-console.log('🔍 [admin-wellness-templates.tsx] Module loaded');
-
 export default function AdminWellnessTemplatesPage() {
-  console.log('🔍 [AdminWellnessTemplatesPage] Component rendering');
-
   const [isBuilderOpen, setIsBuilderOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<WellnessTemplate | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<any>(null);
@@ -32,13 +28,6 @@ export default function AdminWellnessTemplatesPage() {
   // Fetch system templates
   const { data: templates, isLoading, error } = useQuery<WellnessTemplate[]>({
     queryKey: ['/api/admin/wellness/templates'],
-  });
-
-  // Debug: Log query state
-  console.log('🔍 [AdminWellnessTemplates] Query state:', {
-    templatesCount: templates?.length,
-    isLoading,
-    error: error ? String(error) : null
   });
 
   // Delete mutation
@@ -218,7 +207,10 @@ function TemplateCard({ template, onEdit, onDelete }: TemplateCardProps) {
     fetch(`/api/admin/wellness/templates/${template.id}/usage`)
       .then(res => res.json())
       .then(setUsage)
-      .catch(console.error);
+      .catch(() => {
+        // Silently fail - usage count is non-critical
+        setUsage({ organizationCount: 0 });
+      });
   });
 
   return (
