@@ -120,6 +120,35 @@ export const questionConfigSchema = z.union([
 ]);
 
 /**
+ * Status Configuration Schema
+ */
+export const wellnessStatusConfigSchema = z.object({
+  scaleOrientation: z.enum(['higher_is_better', 'lower_is_better'], {
+    errorMap: () => ({ message: 'Scale orientation must be either "higher_is_better" or "lower_is_better"' }),
+  }),
+  calculationMethod: z.enum(['average', 'sum']).optional().default('average'),
+  redThreshold: z.number().min(0, 'Red threshold must be >= 0'),
+  yellowThreshold: z.number().min(0, 'Yellow threshold must be >= 0'),
+  injuryQuestionIds: z.array(z.string()),
+  injuryOverride: z.boolean(),
+}).refine(
+  (data) => {
+    // Validate threshold ordering based on scale orientation
+    if (data.scaleOrientation === 'higher_is_better') {
+      // For higher_is_better: red < yellow (lower scores are worse)
+      return data.redThreshold < data.yellowThreshold;
+    } else {
+      // For lower_is_better: red > yellow (higher scores are worse)
+      return data.redThreshold > data.yellowThreshold;
+    }
+  },
+  {
+    message: 'Threshold ordering must match scale orientation. For "higher_is_better": red < yellow. For "lower_is_better": red > yellow.',
+    path: ['redThreshold'],
+  }
+);
+
+/**
  * Template Configuration Schema
  */
 export const wellnessTemplateConfigSchema = z.object({
@@ -130,6 +159,12 @@ export const wellnessTemplateConfigSchema = z.object({
     requireAllQuestions: z.boolean().optional(),
     customThankYouMessage: z.string().max(500).optional(),
   }).optional(),
+  colorConfig: z.object({
+    lowThreshold: z.number().min(0, 'Low threshold must be >= 0'),
+    mediumThreshold: z.number().min(0, 'Medium threshold must be >= 0'),
+    highThreshold: z.number().min(0, 'High threshold must be >= 0'),
+  }).optional(),
+  statusConfig: wellnessStatusConfigSchema.optional(),
 }).refine(
   (data) => {
     // Ensure question IDs are unique
@@ -137,6 +172,16 @@ export const wellnessTemplateConfigSchema = z.object({
     return ids.length === new Set(ids).size;
   },
   { message: 'Question IDs must be unique', path: ['questions'] }
+).refine(
+  (data) => {
+    // Validate color threshold ordering if provided
+    if (data.colorConfig) {
+      const { lowThreshold, mediumThreshold, highThreshold } = data.colorConfig;
+      return lowThreshold < mediumThreshold && mediumThreshold < highThreshold;
+    }
+    return true;
+  },
+  { message: 'Color thresholds must be in ascending order: low < medium < high', path: ['colorConfig'] }
 );
 
 /**
@@ -150,6 +195,13 @@ export const createWellnessTemplateSchema = z.object({
   config: wellnessTemplateConfigSchema,
   isDefault: z.boolean().default(false),
   isActive: z.boolean().default(true),
+  // Library fields
+  category: z.string().max(50, 'Category must be 50 characters or less').optional(),
+  tags: z.array(z.string().min(1).max(30, 'Tag must be 30 characters or less'))
+    .max(20, 'Maximum 20 tags allowed')
+    .optional(),
+  isSystemSeeded: z.boolean().default(false),
+  sourceTemplateId: z.string().uuid('Source template ID must be a valid UUID').optional(),
 });
 
 // Update Template
@@ -159,6 +211,12 @@ export const updateWellnessTemplateSchema = z.object({
   config: wellnessTemplateConfigSchema.optional(),
   isDefault: z.boolean().optional(),
   isActive: z.boolean().optional(),
+  // Library fields
+  category: z.string().max(50, 'Category must be 50 characters or less').optional().nullable(),
+  tags: z.array(z.string().min(1).max(30, 'Tag must be 30 characters or less'))
+    .max(20, 'Maximum 20 tags allowed')
+    .optional(),
+  sourceTemplateId: z.string().uuid('Source template ID must be a valid UUID').optional().nullable(),
 });
 
 /**

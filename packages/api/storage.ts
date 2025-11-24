@@ -286,6 +286,13 @@ export interface IStorage {
   updateWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate>;
   deleteWellnessTemplate(id: string): Promise<void>;
 
+  // System Wellness Templates (Admin)
+  getSystemWellnessTemplates(): Promise<WellnessTemplate[]>;
+  getSystemTemplateUsage(templateId: string): Promise<{ templateId: string; organizationCount: number; cloneCount: number }>;
+  createSystemWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate>;
+  updateSystemWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate>;
+  deleteSystemWellnessTemplate(id: string): Promise<void>;
+
   // Wellness Requests
   createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest>;
   getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]>;
@@ -4181,19 +4188,28 @@ export class DatabaseStorage implements IStorage {
     return settings || undefined;
   }
 
-  async updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings> {
+  async updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
     const existing = await this.getSiteSettings();
 
     if (existing) {
-      // Update existing settings
+      // Update existing settings - only update fields that are provided
+      const updateData: any = {
+        updatedAt: new Date(),
+        updatedBy: settings.updatedBy,
+      };
+
+      if (settings.aiModel !== undefined) {
+        updateData.aiModel = settings.aiModel;
+      }
+
+      if (settings.wellnessModuleEnabled !== undefined) {
+        updateData.wellnessModuleEnabled = settings.wellnessModuleEnabled;
+      }
+
       const [updated] = await db
         .update(siteSettings)
-        .set({
-          aiModel: settings.aiModel,
-          updatedAt: new Date(),
-          updatedBy: settings.updatedBy,
-        })
+        .set(updateData)
         .where(eq(siteSettings.id, existing.id))
         .returning();
       return updated;
@@ -4202,7 +4218,8 @@ export class DatabaseStorage implements IStorage {
       const [created] = await db
         .insert(siteSettings)
         .values({
-          aiModel: settings.aiModel,
+          aiModel: settings.aiModel || 'gpt-5-nano',
+          wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
           updatedBy: settings.updatedBy,
         })
         .returning();
@@ -4297,6 +4314,93 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(wellnessTemplates)
       .where(eq(wellnessTemplates.id, id));
+  }
+
+  // ==================== System Wellness Templates (Admin) ====================
+
+  async getSystemWellnessTemplates(): Promise<WellnessTemplate[]> {
+    return await db
+      .select()
+      .from(wellnessTemplates)
+      .where(
+        and(
+          eq(wellnessTemplates.isSystemSeeded, true),
+          isNull(wellnessTemplates.organizationId)
+        )
+      )
+      .orderBy(desc(wellnessTemplates.createdAt));
+  }
+
+  async getSystemTemplateUsage(templateId: string): Promise<{ templateId: string; organizationCount: number; cloneCount: number }> {
+    // Count how many orgs have cloned this template
+    const clones = await db
+      .select()
+      .from(wellnessTemplates)
+      .where(eq(wellnessTemplates.sourceTemplateId, templateId));
+
+    const uniqueOrgs = new Set(
+      clones
+        .map(c => c.organizationId)
+        .filter((id): id is string => id !== null)
+    );
+
+    return {
+      templateId,
+      organizationCount: uniqueOrgs.size,
+      cloneCount: clones.length,
+    };
+  }
+
+  async createSystemWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    const [created] = await db
+      .insert(wellnessTemplates)
+      .values({
+        ...template,
+        organizationId: null, // System templates have NULL org_id
+        isSystemSeeded: true,
+        isDefault: template.isDefault ?? false,
+        isActive: template.isActive ?? true,
+      } as any)
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to create system wellness template');
+    }
+
+    return created;
+  }
+
+  async updateSystemWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    const [updated] = await db
+      .update(wellnessTemplates)
+      .set({
+        ...template,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(wellnessTemplates.id, id),
+          eq(wellnessTemplates.isSystemSeeded, true)
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`System wellness template ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async deleteSystemWellnessTemplate(id: string): Promise<void> {
+    await db
+      .delete(wellnessTemplates)
+      .where(
+        and(
+          eq(wellnessTemplates.id, id),
+          eq(wellnessTemplates.isSystemSeeded, true)
+        )
+      );
   }
 
   // ==================== Wellness Requests ====================

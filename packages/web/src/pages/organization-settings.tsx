@@ -60,6 +60,7 @@ export default function OrganizationSettings() {
       benchmarksEnabled: organization.benchmarksEnabled || false,
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
+      wellnessEnabled: organization.wellnessEnabled ?? true,
     } : undefined,
   });
 
@@ -92,6 +93,9 @@ export default function OrganizationSettings() {
       }
       if (data.aiEnabledBySiteAdmin !== organization?.aiEnabledBySiteAdmin) {
         changedFields.aiEnabledBySiteAdmin = data.aiEnabledBySiteAdmin;
+      }
+      if (data.wellnessEnabled !== organization?.wellnessEnabled) {
+        changedFields.wellnessEnabled = data.wellnessEnabled;
       }
 
       // If no changes, don't make API call
@@ -344,6 +348,27 @@ export default function OrganizationSettings() {
                       <FormLabel className="text-base">Coaching Insights</FormLabel>
                       <FormDescription>
                         Allow coaches to generate AI insights in reports (Site Admin Only)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="wellnessEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Wellness Module</FormLabel>
+                      <FormDescription>
+                        Enable wellness questionnaires and health tracking for this organization
                       </FormDescription>
                     </div>
                     <FormControl>

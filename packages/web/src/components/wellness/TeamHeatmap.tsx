@@ -2,11 +2,19 @@ import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
-import type { WellnessResponse, WellnessResponseData, HeatmapCellData } from '@shared/wellness-types';
-import { WELLNESS_CONSTANTS, getWellnessScoreLevel, getHeatmapColor } from '@shared/wellness-constants';
+import type { WellnessResponse, WellnessResponseData, HeatmapCellData, WellnessTemplate } from '@shared/wellness-types';
+import {
+  WELLNESS_CONSTANTS,
+  getWellnessScoreLevel,
+  getWellnessScoreLevelWithThresholds,
+  getHeatmapColor,
+  getTemplateScaleRange,
+  autoGenerateColorThresholds
+} from '@shared/wellness-constants';
 
 interface TeamHeatmapProps {
   responses: WellnessResponse[];
+  template: WellnessTemplate; // Template for this set of responses
   filters: {
     dateFrom: string;
     dateTo: string;
@@ -25,8 +33,24 @@ interface HeatmapCell {
  * Heatmap visualization showing team wellness across dates
  * Rows = Athletes, Columns = Dates, Color = Wellness Score
  */
-export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
+export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
   const [selectedCell, setSelectedCell] = useState<HeatmapCellData | null>(null);
+
+  // Extract scale range from template
+  const scaleRange = useMemo(() => getTemplateScaleRange(template), [template]);
+
+  // Get or generate color thresholds
+  const colorThresholds = useMemo(() => {
+    if (template.config.colorConfig) {
+      return template.config.colorConfig;
+    }
+    // Auto-generate if not configured
+    if (scaleRange) {
+      return autoGenerateColorThresholds(scaleRange.min, scaleRange.max);
+    }
+    // Fallback to legacy 1-10 scale
+    return { lowThreshold: 3, mediumThreshold: 7, highThreshold: 8 };
+  }, [template, scaleRange]);
 
   // Prepare heatmap data
   const heatmapData = useMemo(() => {
@@ -83,7 +107,15 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
   const getScoreTailwindClass = (score: number | null): string => {
     if (score === null || score === 0) return 'bg-gray-100'; // No data
 
-    const level = getWellnessScoreLevel(score);
+    const level = scaleRange
+      ? getWellnessScoreLevelWithThresholds(
+          score,
+          colorThresholds.lowThreshold,
+          colorThresholds.mediumThreshold,
+          colorThresholds.highThreshold,
+          scaleRange.max
+        )
+      : getWellnessScoreLevel(score);
 
     // Map to Tailwind classes for consistency
     switch (level) {
@@ -123,15 +155,21 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
         <div className="flex items-center space-x-2">
           <div className="flex items-center space-x-1">
             <div className="w-4 h-4 bg-red-500 rounded"></div>
-            <span className="text-xs text-gray-600">Low (1-3)</span>
+            <span className="text-xs text-gray-600">
+              Low ({scaleRange?.min || 1}-{colorThresholds.lowThreshold})
+            </span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-4 h-4 bg-yellow-400 rounded"></div>
-            <span className="text-xs text-gray-600">Medium (4-7)</span>
+            <span className="text-xs text-gray-600">
+              Medium ({colorThresholds.lowThreshold + 1}-{colorThresholds.mediumThreshold})
+            </span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-4 h-4 bg-green-600 rounded"></div>
-            <span className="text-xs text-gray-600">High (8-10)</span>
+            <span className="text-xs text-gray-600">
+              High ({colorThresholds.mediumThreshold + 1}-{scaleRange?.max || 10})
+            </span>
           </div>
           <div className="flex items-center space-x-1">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
@@ -239,7 +277,7 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
               <div>
                 <p className="text-sm text-gray-600">Average Wellness Score</p>
                 <p data-testid="modal-wellness-score" className="text-2xl font-bold text-gray-900">
-                  {(selectedCell.score ?? 0).toFixed(1)} / 10
+                  {(selectedCell.score ?? 0).toFixed(1)} / {scaleRange?.max || 10}
                 </p>
               </div>
 
@@ -252,7 +290,7 @@ export function TeamHeatmap({ responses, filters }: TeamHeatmapProps) {
                         <p className="text-sm font-medium text-gray-900">{data.label}</p>
                         <p className="text-sm text-gray-600 mt-1">
                           {typeof data.value === 'number'
-                            ? `${data.value} / 10`
+                            ? `${data.value} / ${scaleRange?.max || 10}`
                             : typeof data.value === 'boolean'
                             ? data.value
                               ? 'Yes'

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import type { WellnessResponse, WellnessSummary, WellnessResponseData, TrendDirection } from '@shared/wellness-types';
+import { useMemo } from 'react';
+import type { WellnessResponse, WellnessSummary, WellnessResponseData, TrendDirection, WellnessTemplate, WellnessRequest } from '@shared/wellness-types';
 import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 interface WellnessFilters {
@@ -113,6 +114,80 @@ export function useWellnessAnalytics({
     gcTime: 10 * 60 * 1000, // 10 minutes
   });
 
+  // Fetch wellness requests for completion rate calculation
+  const {
+    data: requests,
+    isLoading: requestsLoading,
+  } = useQuery<WellnessRequest[]>({
+    queryKey: [
+      '/api/organizations/:orgId/wellness/requests',
+      organizationId,
+      filters.dateFrom,
+      filters.dateTo,
+    ],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/organizations/${organizationId}/wellness/requests`,
+        { credentials: 'include' }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || 'Failed to fetch wellness requests');
+      }
+
+      return response.json();
+    },
+    enabled: enabled && !!organizationId,
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
+  });
+
+  // Get unique template IDs from responses
+  const templateIds = useMemo(() => {
+    if (!responses || responses.length === 0) return [];
+    return [...new Set(responses.map((r) => r.templateId))];
+  }, [responses]);
+
+  // Fetch templates for responses
+  const {
+    data: templates,
+    isLoading: templatesLoading,
+  } = useQuery<WellnessTemplate[]>({
+    queryKey: ['/api/wellness/templates', templateIds],
+    queryFn: async () => {
+      // Fetch all unique templates used in responses
+      const templatePromises = templateIds.map(async (templateId) => {
+        const response = await fetch(`/api/wellness/templates/${templateId}`, {
+          credentials: 'include',
+        });
+        if (!response.ok) return null;
+        return response.json();
+      });
+
+      const results = await Promise.all(templatePromises);
+      return results.filter((t): t is WellnessTemplate => t !== null);
+    },
+    enabled: enabled && templateIds.length > 0,
+    staleTime: 10 * 60 * 1000, // 10 minutes (templates change rarely)
+  });
+
+  // Group responses by template
+  const responsesByTemplate = useMemo(() => {
+    if (!responses || !templates) return {};
+
+    const grouped: Record<string, { template: WellnessTemplate; responses: WellnessResponse[] }> = {};
+
+    templates.forEach((template) => {
+      grouped[template.id] = {
+        template,
+        responses: responses.filter((r) => r.templateId === template.id),
+      };
+    });
+
+    return grouped;
+  }, [responses, templates]);
+
   // Calculate summary statistics from responses
   const summary: WellnessSummary | null = responses
     ? {
@@ -124,11 +199,61 @@ export function useWellnessAnalytics({
       }
     : null;
 
+  // Calculate completion rate based on requests and responses
+  const completionRate = useMemo(() => {
+    if (!requests || requests.length === 0) {
+      return { percentage: 0, completed: 0, total: 0 };
+    }
+
+    // Filter requests to the date range
+    const relevantRequests = requests.filter(req => {
+      const createdDate = new Date(req.createdAt);
+      const fromDate = new Date(filters.dateFrom);
+      const toDate = new Date(filters.dateTo);
+      return createdDate >= fromDate && createdDate <= toDate;
+    });
+
+    if (relevantRequests.length === 0) {
+      return { percentage: 0, completed: 0, total: 0 };
+    }
+
+    // Get all unique athletes targeted by requests
+    const targetedAthletes = new Set<string>();
+    relevantRequests.forEach(req => {
+      // Add directly targeted athletes
+      if (req.targetAthleteIds) {
+        req.targetAthleteIds.forEach(id => targetedAthletes.add(id));
+      }
+      // Note: targetTeamIds would require additional API call to resolve athletes
+      // For now, we'll work with direct athlete targeting
+    });
+
+    // Get unique athletes who responded
+    const respondedAthletes = responses
+      ? new Set(responses.map(r => r.userId))
+      : new Set();
+
+    const total = targetedAthletes.size;
+    const completed = Array.from(targetedAthletes).filter(id =>
+      respondedAthletes.has(id)
+    ).length;
+
+    return {
+      percentage: total > 0 ? (completed / total) * 100 : 0,
+      completed,
+      total,
+    };
+  }, [requests, responses, filters.dateFrom, filters.dateTo]);
+
   return {
     responses,
     trends,
     summary,
-    isLoading: responsesLoading || trendsLoading,
+    templates,
+    responsesByTemplate,
+    requests,
+    completionRate,
+    isLoading: responsesLoading || trendsLoading || templatesLoading || requestsLoading,
     error: responsesError || trendsError,
     refetch: () => {
       refetchResponses();

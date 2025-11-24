@@ -16,7 +16,8 @@ import {
   Target,
   ClipboardList,
   Activity,
-  Heart
+  Heart,
+  ClipboardCheck
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -34,6 +35,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
       { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
+      { name: "Wellness Templates", href: "/admin/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
       { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
       { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
@@ -155,15 +157,39 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     enabled: !!userData.id && !userData.isSiteAdmin,
   });
 
+  // Fetch site settings to check wellness module status
+  const { data: siteSettings } = useQuery({
+    queryKey: ["/api/site-settings"],
+    enabled: !!userData.id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch organization to check org-level wellness status
+  const organizationId = userOrganizations?.[0]?.organizationId;
+  const { data: organization } = useQuery({
+    queryKey: [`/api/organizations/${organizationId}`],
+    enabled: !!organizationId && !userData.isSiteAdmin,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
 
   // Extract organization ID from URL - check both organization profile and context switching
-  const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
-  const isInOrganizationContext = !!organizationId;
+  const orgIdFromUrl = location.match(/\/organizations\/([^\/]+)/)?.[1];
+  const isInOrganizationContext = !!orgIdFromUrl;
 
-  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId, labels.teams, labels.athletes);
+  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes);
+
+  // Filter out Wellness link if wellness module is disabled
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
+  const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
+
+  if (!isWellnessEnabled) {
+    navigation = navigation.filter(item => item.name !== "Wellness");
+  }
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">

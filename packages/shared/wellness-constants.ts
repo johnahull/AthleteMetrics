@@ -56,7 +56,7 @@ export const WELLNESS_CONSTANTS = {
 export type WellnessScoreLevel = 'very_low' | 'low' | 'medium' | 'good' | 'excellent';
 
 /**
- * Get wellness score level based on score value
+ * Get wellness score level based on score value (legacy 1-10 scale)
  */
 export function getWellnessScoreLevel(score: number): WellnessScoreLevel {
   if (score <= WELLNESS_CONSTANTS.SCORE_LOW_THRESHOLD) return 'very_low';
@@ -64,6 +64,69 @@ export function getWellnessScoreLevel(score: number): WellnessScoreLevel {
   if (score <= WELLNESS_CONSTANTS.SCORE_MEDIUM_THRESHOLD) return 'medium';
   if (score <= 9) return 'good';
   return 'excellent';
+}
+
+/**
+ * Get wellness score level with custom thresholds
+ * @param score - The wellness score value
+ * @param lowThreshold - Scores at or below this are "low"
+ * @param mediumThreshold - Scores at or below this are "medium"
+ * @param highThreshold - Scores above this are "high"
+ * @param scaleMax - Maximum value of the scale
+ */
+export function getWellnessScoreLevelWithThresholds(
+  score: number,
+  lowThreshold: number,
+  mediumThreshold: number,
+  highThreshold: number,
+  scaleMax: number
+): WellnessScoreLevel {
+  // Normalize thresholds if they seem to be on wrong scale
+  const normalizedLow = lowThreshold > scaleMax ? lowThreshold / scaleMax : lowThreshold;
+  const normalizedMedium = mediumThreshold > scaleMax ? mediumThreshold / scaleMax : mediumThreshold;
+  const normalizedHigh = highThreshold > scaleMax ? highThreshold / scaleMax : highThreshold;
+
+  // Calculate mid-points for more granular levels
+  const veryLowCutoff = normalizedLow * 0.7; // Bottom 70% of low range
+  const goodCutoff = normalizedHigh + (scaleMax - normalizedHigh) * 0.5; // Middle of high range
+
+  if (score <= veryLowCutoff) return 'very_low';
+  if (score <= normalizedLow) return 'low';
+  if (score <= normalizedMedium) return 'medium';
+  if (score <= normalizedHigh) return 'good';
+  return 'excellent';
+}
+
+/**
+ * Extract scale range from template configuration
+ * Returns the min and max values from scale questions
+ */
+export function getTemplateScaleRange(template: any): { min: number; max: number } | null {
+  if (!template?.config?.questions) return null;
+
+  const scaleQuestions = template.config.questions.filter((q: any) => q.type === 'scale');
+  if (scaleQuestions.length === 0) return null;
+
+  // Find the most common scale range (in case of mixed scales)
+  const ranges = scaleQuestions.map((q: any) => ({ min: q.scaleMin, max: q.scaleMax }));
+
+  // Use the first scale range as default (most templates have consistent scales)
+  return ranges[0] || null;
+}
+
+/**
+ * Auto-generate color thresholds based on scale range
+ * @param scaleMin - Minimum value of the scale
+ * @param scaleMax - Maximum value of the scale
+ */
+export function autoGenerateColorThresholds(scaleMin: number, scaleMax: number) {
+  const range = scaleMax - scaleMin;
+
+  return {
+    lowThreshold: scaleMin + Math.round(range * 0.3),      // Bottom 30%
+    mediumThreshold: scaleMin + Math.round(range * 0.6),   // Middle 60%
+    highThreshold: scaleMin + Math.round(range * 0.8),     // Top 80%
+  };
 }
 
 /**

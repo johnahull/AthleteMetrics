@@ -1,26 +1,33 @@
 import { useState, useEffect } from "react";
+import { Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Heart, AlertTriangle, FileText } from "lucide-react";
 
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // AI Model Configuration
-  const { data: siteSettings } = useQuery<{ aiModel: string }>({
+  // Site Settings
+  const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean }>({
     queryKey: ["/api/site-settings"],
   });
 
   const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
+  const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
 
   useEffect(() => {
     if (siteSettings?.aiModel) {
       setSelectedModel(siteSettings.aiModel);
+    }
+    if (siteSettings?.wellnessModuleEnabled !== undefined) {
+      setWellnessEnabled(siteSettings.wellnessModuleEnabled);
     }
   }, [siteSettings]);
 
@@ -36,6 +43,29 @@ export default function AdminPage() {
     onError: (error: any) => {
       toast({
         title: "Error updating AI model",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const updateWellnessMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/site-settings", { wellnessModuleEnabled: enabled });
+      return res.json();
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
+      toast({
+        title: enabled ? "Wellness module enabled" : "Wellness module disabled",
+        description: enabled
+          ? "All organizations can now use wellness features."
+          : "Wellness features are now disabled for all organizations.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating wellness module",
         description: error.message,
         variant: "destructive"
       });
@@ -66,6 +96,11 @@ export default function AdminPage() {
     }
     setSelectedModel(model);
     updateAiModelMutation.mutate(model);
+  };
+
+  const handleWellnessToggle = (enabled: boolean) => {
+    setWellnessEnabled(enabled);
+    updateWellnessMutation.mutate(enabled);
   };
 
   const selectedModelData = aiModels.find(m => m.value === selectedModel);
@@ -148,6 +183,71 @@ export default function AdminPage() {
               </div>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Wellness Module Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Heart className="h-5 w-5" />
+            Wellness Module
+          </CardTitle>
+          <CardDescription>
+            Control global access to wellness questionnaires and health tracking
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <div className="font-medium">Enable Wellness Module</div>
+              <div className="text-sm text-muted-foreground">
+                When disabled, wellness features are hidden for all organizations
+              </div>
+            </div>
+            <Switch
+              checked={wellnessEnabled}
+              onCheckedChange={handleWellnessToggle}
+              disabled={updateWellnessMutation.isPending}
+              data-testid="wellness-module-toggle"
+            />
+          </div>
+
+          {!wellnessEnabled && (
+            <div className="flex items-start gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium">Wellness Module Disabled</p>
+                <p className="mt-1">
+                  All organizations are currently unable to access wellness features.
+                  Organization-level settings are frozen until you re-enable this module.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Global Wellness Templates */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Global Wellness Templates
+          </CardTitle>
+          <CardDescription>
+            Manage system templates that appear in all organizations' wellness libraries
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-gray-600 mb-4">
+            Create and manage global wellness questionnaire templates that all organizations can clone and customize.
+          </p>
+          <Button asChild>
+            <Link href="/admin/wellness-templates">
+              Manage Templates
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

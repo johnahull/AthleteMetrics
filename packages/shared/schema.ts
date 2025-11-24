@@ -29,6 +29,8 @@ export const organizations = pgTable("organizations", {
   // AI Coaching Insights feature flags (added in migrations 0037)
   aiEnabledBySiteAdmin: boolean("ai_enabled_by_site_admin").default(false).notNull(),
   aiEnabled: boolean("ai_enabled").default(false).notNull(),
+  // Wellness module feature flag (added in migration 0042)
+  wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -377,6 +379,7 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   aiModel: text("ai_model").notNull().default("gpt-5-nano"),
+  wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
 });
@@ -721,18 +724,25 @@ export const reportBenchmarksRelations = relations(reportBenchmarks, ({ one }) =
 // Wellness Questionnaire System
 export const wellnessTemplates = pgTable("wellness_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for system templates
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description"),
   isDefault: boolean("is_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   config: jsonb("config").notNull(), // Question definitions and settings
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  // Library fields (added in wellness library feature)
+  category: text("category"), // e.g., "general", "recovery", "performance", "injury", "training"
+  tags: text("tags").array(), // e.g., ["daily", "wellness", "fatigue"]
+  isSystemSeeded: boolean("is_system_seeded").default(false).notNull(), // True for pre-built system templates
+  sourceTemplateId: varchar("source_template_id"), // ID of template this was cloned from (self-reference, no FK to allow deleting source)
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
   orgIdx: index("wellness_templates_org_idx").on(table.organizationId),
   activeIdx: index("wellness_templates_active_idx").on(table.isActive),
+  categoryIdx: index("wellness_templates_category_idx").on(table.category),
+  systemSeededIdx: index("wellness_templates_system_seeded_idx").on(table.isSystemSeeded),
 }));
 
 export const wellnessRequests = pgTable("wellness_requests", {
@@ -850,6 +860,7 @@ export const updateOrganizationSchema = z.object({
   allowCustomBenchmarks: z.boolean().optional(),
   aiEnabledBySiteAdmin: z.boolean().optional(), // Only site admin can set this
   aiEnabled: z.boolean().optional(), // Org admin can set this
+  wellnessEnabled: z.boolean().optional(), // Org admin can set this (only effective when site wellness enabled)
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
@@ -1583,7 +1594,8 @@ export const AI_MODELS = [
 export type AIModel = typeof AI_MODELS[number];
 
 export const updateSiteSettingsSchema = z.object({
-  aiModel: z.enum(AI_MODELS),
+  aiModel: z.enum(AI_MODELS).optional(),
+  wellnessModuleEnabled: z.boolean().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

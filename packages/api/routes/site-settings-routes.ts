@@ -84,35 +84,45 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
     // Validate request body
     const validated = updateSiteSettingsSchema.parse(req.body);
 
-    // Validate that the selected model has its API key configured using shared utility
-    const modelAvailability = isModelAvailable(validated.aiModel);
-    if (!modelAvailability.provider) {
-      return res.status(400).json({ message: "Invalid AI model" });
+    // Prepare update data
+    const updateData: any = {
+      updatedBy: user?.id || null,
+    };
+
+    // Validate AI model if provided
+    if (validated.aiModel !== undefined) {
+      const modelAvailability = isModelAvailable(validated.aiModel);
+      if (!modelAvailability.provider) {
+        return res.status(400).json({ message: "Invalid AI model" });
+      }
+
+      if (!modelAvailability.available) {
+        // Log internally but don't expose provider details to client
+        console.error(`AI Service Error: Missing API key ${modelAvailability.envVar} for provider ${modelAvailability.provider}`);
+        return res.status(400).json({
+          message: "Selected model is not available. Please contact administrator."
+        });
+      }
+
+      updateData.aiModel = validated.aiModel;
     }
 
-    if (!modelAvailability.available) {
-      // Log internally but don't expose provider details to client
-      console.error(`AI Service Error: Missing API key ${modelAvailability.envVar} for provider ${modelAvailability.provider}`);
-      return res.status(400).json({
-        message: "Selected model is not available. Please contact administrator."
-      });
+    // Add wellness module flag if provided
+    if (validated.wellnessModuleEnabled !== undefined) {
+      updateData.wellnessModuleEnabled = validated.wellnessModuleEnabled;
     }
-
-    // Get the model config for audit logging
-    const modelConfig = AI_MODELS_CONFIG[validated.aiModel as keyof typeof AI_MODELS_CONFIG];
 
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
     const previousModel = previousSettings?.aiModel || 'gpt-5-nano';
+    const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
 
     // Update or create settings
-    const updatedSettings = await storage.updateSiteSettings({
-      aiModel: validated.aiModel,
-      updatedBy: user?.id || null,
-    });
+    const updatedSettings = await storage.updateSiteSettings(updateData);
 
     // Audit log for AI model change
-    if (user?.id && previousModel !== validated.aiModel) {
+    if (user?.id && validated.aiModel !== undefined && previousModel !== validated.aiModel) {
+      const modelConfig = AI_MODELS_CONFIG[validated.aiModel as keyof typeof AI_MODELS_CONFIG];
       await storage.createAuditLog({
         userId: user.id,
         action: 'site_ai_model_changed',
@@ -122,6 +132,22 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
           previousModel,
           newModel: validated.aiModel,
           provider: modelConfig.provider
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+    }
+
+    // Audit log for wellness module toggle
+    if (user?.id && validated.wellnessModuleEnabled !== undefined && previousWellness !== validated.wellnessModuleEnabled) {
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'site_wellness_module_toggled',
+        resourceType: 'site_settings',
+        resourceId: 'global',
+        details: JSON.stringify({
+          previousEnabled: previousWellness,
+          newEnabled: validated.wellnessModuleEnabled,
         }),
         ipAddress: req.ip || null,
         userAgent: req.get('user-agent') || null,

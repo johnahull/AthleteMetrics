@@ -9,16 +9,18 @@ import { useWellnessTemplates } from '@/hooks/use-wellness-templates';
 import { useWellnessRequests } from '@/hooks/use-wellness-requests';
 import TemplateBuilder from '@/components/wellness/TemplateBuilder';
 import TemplateCard from '@/components/wellness/TemplateCard';
+import TemplateLibrary from '@/components/wellness/TemplateLibrary';
 import RequestModal from '@/components/wellness/RequestModal';
 import RequestsList from '@/components/wellness/RequestsList';
 import WellnessAnalytics from './wellness-analytics';
+import WellnessDashboard from './wellness-dashboard';
 
 export default function WellnessTemplates() {
   const { organizationContext, userOrganizations, user } = useAuth();
   const [showTemplateBuilder, setShowTemplateBuilder] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<any | null>(null);
   const [showRequestModal, setShowRequestModal] = useState(false);
-  const [selectedTab, setSelectedTab] = useState<'templates' | 'requests' | 'analytics'>('templates');
+  const [selectedTab, setSelectedTab] = useState<'dashboard' | 'templates' | 'library' | 'requests' | 'analytics'>('dashboard');
 
   // Get effective organization ID
   const getEffectiveOrganizationId = () => {
@@ -67,8 +69,14 @@ export default function WellnessTemplates() {
       {/* Tabs */}
       <Tabs value={selectedTab} onValueChange={(value) => setSelectedTab(value as any)} className="space-y-6">
         <TabsList>
+          <TabsTrigger value="dashboard" role="tab">
+            Dashboard
+          </TabsTrigger>
           <TabsTrigger value="templates" role="tab">
             Templates
+          </TabsTrigger>
+          <TabsTrigger value="library" role="tab">
+            Library
           </TabsTrigger>
           <TabsTrigger value="requests" role="tab">
             Requests
@@ -77,6 +85,11 @@ export default function WellnessTemplates() {
             Analytics
           </TabsTrigger>
         </TabsList>
+
+        {/* Dashboard Tab */}
+        <TabsContent value="dashboard">
+          <WellnessDashboard organizationId={effectiveOrganizationId} />
+        </TabsContent>
 
         {/* Templates Tab */}
         <TabsContent value="templates">
@@ -125,6 +138,11 @@ export default function WellnessTemplates() {
               </Card>
             )}
           </div>
+        </TabsContent>
+
+        {/* Library Tab */}
+        <TabsContent value="library">
+          <TemplateLibrary organizationId={effectiveOrganizationId} />
         </TabsContent>
 
         {/* Requests Tab */}

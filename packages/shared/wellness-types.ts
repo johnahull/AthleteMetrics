@@ -91,6 +91,42 @@ export type QuestionConfig =
   | MultipleChoiceQuestionConfig;
 
 /**
+ * Color configuration for wellness analytics heatmap
+ */
+export interface WellnessColorConfig {
+  lowThreshold: number;      // Scores at or below this are "low" (red/orange)
+  mediumThreshold: number;   // Scores at or below this are "medium" (yellow)
+  highThreshold: number;     // Scores above this are "high" (green)
+}
+
+/**
+ * Scale orientation for status calculation
+ * - higher_is_better: Higher scores = better health (e.g., 5 = excellent, 1 = poor)
+ * - lower_is_better: Lower scores = better health (e.g., 1 = excellent, 5 = poor)
+ */
+export type ScaleOrientation = 'higher_is_better' | 'lower_is_better';
+
+/**
+ * Calculation method for wellness score
+ * - average: Calculate average of all scale question responses (default, backward compatible)
+ * - sum: Calculate sum of all scale question responses (Modified Hooper Index)
+ */
+export type CalculationMethod = 'average' | 'sum';
+
+/**
+ * Status configuration for wellness dashboard
+ * Defines how athlete wellness scores map to red/yellow/green status
+ */
+export interface WellnessStatusConfig {
+  scaleOrientation: ScaleOrientation;  // Determines how thresholds are interpreted
+  calculationMethod?: CalculationMethod; // How to aggregate scale scores (default: 'average')
+  redThreshold: number;                // For higher_is_better: scores <= this = red; for lower_is_better: scores >= this = red
+  yellowThreshold: number;             // For higher_is_better: scores <= this = yellow; for lower_is_better: scores >= this = yellow
+  injuryQuestionIds: string[];         // Question IDs that indicate injuries (typically body_map)
+  injuryOverride: boolean;             // If true, any injury = red regardless of wellness score
+}
+
+/**
  * Wellness Template Configuration (stored as JSONB)
  */
 export interface WellnessTemplateConfig {
@@ -101,6 +137,8 @@ export interface WellnessTemplateConfig {
     requireAllQuestions?: boolean;
     customThankYouMessage?: string;
   };
+  colorConfig?: WellnessColorConfig; // Optional color thresholds for analytics heatmap
+  statusConfig?: WellnessStatusConfig; // Optional status configuration for team dashboard
 }
 
 /**
@@ -115,6 +153,11 @@ export interface WellnessTemplate {
   isActive: boolean;
   config: WellnessTemplateConfig;
   createdBy: string | null;
+  // Library fields
+  category?: string | null;
+  tags?: string[] | null;
+  isSystemSeeded: boolean;
+  sourceTemplateId?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -401,6 +444,11 @@ export interface CreateWellnessTemplate {
   config: WellnessTemplateConfig;
   isDefault?: boolean;
   isActive?: boolean;
+  // Library fields
+  category?: string;
+  tags?: string[];
+  isSystemSeeded?: boolean;
+  sourceTemplateId?: string;
 }
 
 /**

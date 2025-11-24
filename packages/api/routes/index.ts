@@ -17,6 +17,7 @@ import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
+import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -64,6 +65,9 @@ export function registerAllRoutes(app: Express) {
 
   // Wellness questionnaire routes
   registerWellnessRoutes(app);
+
+  // Admin wellness routes (site admin only)
+  registerAdminWellnessRoutes(app);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);

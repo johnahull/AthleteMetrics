@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWellnessAnalytics } from '@/hooks/use-wellness-analytics';
 import { WellnessSummaryCard } from '@/components/wellness/WellnessSummaryCard';
 import { CompletionRateCard } from '@/components/wellness/CompletionRateCard';
@@ -9,6 +10,11 @@ import { AlertsCard } from '@/components/wellness/AlertsCard';
 import { WellnessTrendChart } from '@/components/wellness/WellnessTrendChart';
 import { TeamHeatmap } from '@/components/wellness/TeamHeatmap';
 import { WellnessFilters } from '@/components/wellness/WellnessFilters';
+import { TeamComparisonCard } from '@/components/wellness/TeamComparisonCard';
+import { QuestionAnalyticsTable } from '@/components/wellness/QuestionAnalyticsTable';
+import { StatusTrendChart } from '@/components/wellness/StatusTrendChart';
+import { InjuryTrendChart } from '@/components/wellness/InjuryTrendChart';
+import { InjuryBodyMapHeatmap } from '@/components/wellness/InjuryBodyMapHeatmap';
 import type { WellnessResponse, WellnessAlert, WellnessResponseData } from '@shared/wellness-types';
 import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
@@ -53,6 +59,9 @@ export default function WellnessAnalytics() {
     summary,
     responses,
     trends,
+    templates,
+    responsesByTemplate,
+    completionRate,
     isLoading,
   } = useWellnessAnalytics({
     organizationId: effectiveOrganizationId || '',
@@ -152,21 +161,7 @@ export default function WellnessAnalytics() {
     return detectedAlerts;
   }, [responses]);
 
-  // Calculate completion rate
-  const completionRate = useMemo(() => {
-    if (!summary) return { percentage: 0, completed: 0, total: 0 };
-
-    // TODO: Get actual completion rate from requests
-    // For now, calculate based on unique athletes vs expected
-    const uniqueAthletes = summary.uniqueAthletes || 0;
-    const expectedAthletes = uniqueAthletes; // Placeholder
-
-    return {
-      percentage: expectedAthletes > 0 ? (uniqueAthletes / expectedAthletes) * 100 : 0,
-      completed: uniqueAthletes,
-      total: expectedAthletes,
-    };
-  }, [summary]);
+  // Completion rate is now calculated in useWellnessAnalytics hook
 
   // Filter functions
   const handleFilterChange = (newFilters: Partial<typeof filters>) => {
@@ -241,47 +236,170 @@ export default function WellnessAnalytics() {
         )}
       </div>
 
-      {/* Trend Chart */}
-      <div data-testid="section-trend-chart">
-        <Card>
-          <CardHeader>
-            <CardTitle data-testid="chart-title">Wellness Trend</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-96" />
-            ) : (
-              <WellnessTrendChart
-                trends={trends || []}
-                responses={responses || []}
-                selectedAthleteId={selectedAthleteId}
-                onAthleteSelect={setSelectedAthleteId}
-                organizationId={effectiveOrganizationId}
-              />
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* Analytics Tabs */}
+      <Tabs defaultValue="overview" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="teams">Teams</TabsTrigger>
+          <TabsTrigger value="questions">Questions</TabsTrigger>
+          <TabsTrigger value="status">Status Trends</TabsTrigger>
+          <TabsTrigger value="injuries">Injuries</TabsTrigger>
+        </TabsList>
 
-      {/* Team Heatmap */}
-      <div data-testid="section-team-heatmap">
-        <Card>
-          <CardHeader>
-            <CardTitle data-testid="heatmap-title">Team Wellness Heatmap</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          {/* Trend Chart */}
+          <div data-testid="section-trend-chart">
+            <Card>
+              <CardHeader>
+                <CardTitle data-testid="chart-title">Wellness Trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-96" />
+                ) : (
+                  <WellnessTrendChart
+                    trends={trends || []}
+                    responses={responses || []}
+                    selectedAthleteId={selectedAthleteId}
+                    onAthleteSelect={setSelectedAthleteId}
+                    organizationId={effectiveOrganizationId}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Team Heatmaps (one per template) */}
+          <div data-testid="section-team-heatmap" className="space-y-6">
             {isLoading ? (
-              <Skeleton className="h-96" />
+              <Card>
+                <CardHeader>
+                  <CardTitle data-testid="heatmap-title">Team Wellness Heatmap</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-96" />
+                </CardContent>
+              </Card>
+            ) : responsesByTemplate && Object.keys(responsesByTemplate).length > 0 ? (
+              Object.entries(responsesByTemplate).map(([templateId, { template, responses: templateResponses }]) => (
+                <Card key={templateId}>
+                  <CardHeader>
+                    <CardTitle data-testid={`heatmap-title-${templateId}`}>
+                      {template.name} - Team Wellness Heatmap
+                    </CardTitle>
+                    {template.description && (
+                      <p className="text-sm text-gray-600 mt-1">{template.description}</p>
+                    )}
+                  </CardHeader>
+                  <CardContent>
+                    <TeamHeatmap
+                      responses={templateResponses}
+                      template={template}
+                      filters={filters}
+                      organizationId={effectiveOrganizationId}
+                    />
+                  </CardContent>
+                </Card>
+              ))
             ) : (
-              <TeamHeatmap
-                responses={responses || []}
-                filters={filters}
-                organizationId={effectiveOrganizationId}
-              />
+              <Card>
+                <CardHeader>
+                  <CardTitle data-testid="heatmap-title">Team Wellness Heatmap</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-gray-500 text-center py-8">No wellness data available</p>
+                </CardContent>
+              </Card>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </TabsContent>
+
+        {/* Teams Tab */}
+        <TabsContent value="teams" className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-96" />
+          ) : (
+            <TeamComparisonCard
+              responses={responses || []}
+              responsesByTemplate={responsesByTemplate || {}}
+              filters={filters}
+              onTeamClick={(teamId) => {
+                // Update filters to show only this team
+                handleFilterChange({ teamIds: [teamId] });
+              }}
+            />
+          )}
+        </TabsContent>
+
+        {/* Questions Tab */}
+        <TabsContent value="questions" className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-96" />
+          ) : (
+            <QuestionAnalyticsTable
+              responses={responses || []}
+              responsesByTemplate={responsesByTemplate || {}}
+            />
+          )}
+        </TabsContent>
+
+        {/* Status Trends Tab */}
+        <TabsContent value="status" className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-96" />
+          ) : responsesByTemplate && Object.keys(responsesByTemplate).length > 0 ? (
+            Object.entries(responsesByTemplate).map(([templateId, { template, responses: templateResponses }]) => (
+              <StatusTrendChart
+                key={templateId}
+                template={template}
+                responses={templateResponses}
+                filters={filters}
+              />
+            ))
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Status Trends</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500 text-center py-8">No status data available</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Injuries Tab */}
+        <TabsContent value="injuries" className="space-y-6">
+          {isLoading ? (
+            <Skeleton className="h-96" />
+          ) : responsesByTemplate && Object.keys(responsesByTemplate).length > 0 ? (
+            Object.entries(responsesByTemplate).map(([templateId, { template, responses: templateResponses }]) => (
+              <div key={templateId} className="space-y-6">
+                <InjuryTrendChart
+                  template={template}
+                  responses={templateResponses}
+                  filters={filters}
+                />
+                <InjuryBodyMapHeatmap
+                  template={template}
+                  responses={templateResponses}
+                  filters={filters}
+                />
+              </div>
+            ))
+          ) : (
+            <Card>
+              <CardHeader>
+                <CardTitle>Injury Trends</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-gray-500 text-center py-8">No injury data available</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

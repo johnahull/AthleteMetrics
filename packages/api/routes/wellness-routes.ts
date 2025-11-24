@@ -16,6 +16,7 @@ import {
   requireAuth,
   requireOrganizationAccess,
   requireWellnessAccess,
+  requireWellnessEnabled,
   type AuthenticatedRequest,
 } from "../middleware";
 import {
@@ -27,7 +28,8 @@ import {
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
 import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
-import { userTeams } from "@shared/schema";
+import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
+import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
@@ -108,6 +110,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
+    requireWellnessEnabled,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId } = req.params;
@@ -148,6 +151,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess(),
+    requireWellnessEnabled,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId } = req.params;
@@ -302,6 +306,113 @@ export function registerWellnessRoutes(app: Express) {
       } catch (error: any) {
         console.error("Failed to delete wellness template:", error);
         res.status(500).json(createErrorResponse("Failed to delete wellness template", error));
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/library
+   * Get wellness template library (global system templates + org templates)
+   * Access: All authenticated users in organization
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/library",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const { category, tags, search } = req.query;
+
+        // Get global system templates (NULL organization_id)
+        const globalTemplates = await storage.getSystemWellnessTemplates();
+
+        // Get org-specific templates
+        const organizationTemplates = await storage.getWellnessTemplates(organizationId, { activeOnly: true });
+
+        // Combine both lists
+        const allTemplates = [...globalTemplates, ...organizationTemplates];
+
+        let filteredTemplates = allTemplates;
+
+        // Filter by category if provided
+        if (category && typeof category === 'string') {
+          filteredTemplates = filteredTemplates.filter(t => t.category === category);
+        }
+
+        // Filter by tags if provided (comma-separated)
+        if (tags && typeof tags === 'string') {
+          const tagArray = tags.split(',').map(t => t.trim());
+          filteredTemplates = filteredTemplates.filter(t =>
+            t.tags && tagArray.some(tag => t.tags!.includes(tag))
+          );
+        }
+
+        // Search in name and description if provided
+        if (search && typeof search === 'string') {
+          const searchLower = search.toLowerCase();
+          filteredTemplates = filteredTemplates.filter(t =>
+            t.name.toLowerCase().includes(searchLower) ||
+            (t.description && t.description.toLowerCase().includes(searchLower))
+          );
+        }
+
+        // Separate system-seeded from org-specific for easier UI handling
+        const systemTemplates = filteredTemplates.filter(t => t.isSystemSeeded);
+        const orgTemplates = filteredTemplates.filter(t => !t.isSystemSeeded);
+
+        res.json({
+          systemTemplates,
+          orgTemplates,
+          total: filteredTemplates.length,
+        });
+      } catch (error: any) {
+        console.error("Failed to fetch wellness library:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch wellness library", error));
+      }
+    }
+  );
+
+  /**
+   * POST /api/organizations/:organizationId/wellness/templates/:id/clone
+   * Clone a template to the organization
+   * Access: Coach, Org Admin
+   */
+  app.post(
+    "/api/organizations/:organizationId/wellness/templates/:id/clone",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId, id } = req.params;
+
+        // Get the source template
+        const sourceTemplate = await storage.getWellnessTemplate(id);
+        if (!sourceTemplate) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Clone the template
+        const clonedTemplate = await storage.createWellnessTemplate({
+          organizationId,
+          name: `${sourceTemplate.name} (Copy)`,
+          description: sourceTemplate.description,
+          config: sourceTemplate.config,
+          isDefault: false,
+          isActive: true,
+          category: sourceTemplate.category,
+          tags: sourceTemplate.tags,
+          isSystemSeeded: false, // Cloned templates are not system-seeded
+          sourceTemplateId: sourceTemplate.id, // Track the source
+          createdBy: req.user!.id,
+        });
+
+        res.status(201).json(clonedTemplate);
+      } catch (error: any) {
+        console.error("Failed to clone wellness template:", error);
+        res.status(500).json(createErrorResponse("Failed to clone wellness template", error));
       }
     }
   );
@@ -812,12 +923,12 @@ export function registerWellnessRoutes(app: Express) {
         // Create response
         const response = await storage.createWellnessResponse({
           requestId: data.requestId,
-          organizationId: template.organizationId,
+          organizationId: template.organizationId || '',
           templateId: data.templateId,
           userId,
           userFullName,
-          teamId,
-          teamNameSnapshot,
+          teamId: teamId || null,
+          teamNameSnapshot: teamNameSnapshot || null,
           submittedAt: new Date(),
           date: data.date,
           responses: data.responses,
@@ -1192,6 +1303,207 @@ export function registerWellnessRoutes(app: Express) {
       } catch (error: any) {
         console.error("Failed to fetch wellness trends:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness trends", error));
+      }
+    }
+  );
+
+  /**
+   * GET /api/organizations/:organizationId/wellness/dashboard
+   * Get team wellness dashboard data with status calculations
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/dashboard",
+    highVolumeLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+        const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+        const teamIdsParam = req.query.teamIds as string | undefined;
+        const teamIds = teamIdsParam ? teamIdsParam.split(',').map(id => id.trim()) : undefined;
+
+        // Fetch teams
+        let teams = await storage.getTeams(organizationId);
+        if (teamIds && teamIds.length > 0) {
+          teams = teams.filter(t => teamIds.includes(t.id));
+        }
+
+        const dashboardData = [];
+
+        for (const team of teams) {
+          // Get team roster using userTeams table joined with userOrganizations to filter by role
+          const roster = await db.select({
+            userId: userTeams.userId,
+          })
+            .from(userTeams)
+            .innerJoin(userOrganizations, eq(userTeams.userId, userOrganizations.userId))
+            .where(
+              and(
+                eq(userTeams.teamId, team.id),
+                eq(userTeams.isActive, true),
+                eq(userOrganizations.organizationId, organizationId),
+                eq(userOrganizations.role, 'athlete')
+              )
+            );
+
+          const athleteIds = roster.map(r => r.userId);
+
+          if (athleteIds.length === 0) {
+            // Skip teams with no athletes
+            continue;
+          }
+
+          // Get wellness responses for the specified date
+          const responses = await storage.getWellnessResponsesByOrganization(organizationId, {
+            startDate: date,
+            endDate: date,
+          });
+
+          // Filter responses for this team's athletes
+          const teamResponses = responses.filter(r => athleteIds.includes(r.userId));
+
+          // Get unique template IDs and fetch templates
+          const templateIds = [...new Set(teamResponses.map(r => r.templateId))];
+          const templates = await Promise.all(
+            templateIds.map(id => storage.getWellnessTemplate(id))
+          );
+          const templateMap = new Map(templates.filter(t => t !== null && t !== undefined).map(t => [t!.id, t!]));
+
+          // Calculate athlete statuses
+          const athleteStatuses = athleteIds.map(athleteId => {
+            const athleteResponse = teamResponses.find(r => r.userId === athleteId);
+            if (!athleteResponse) {
+              return null;
+            }
+
+            const template = templateMap.get(athleteResponse.templateId);
+            if (!template) {
+              return null;
+            }
+
+            // Cast template config to WellnessTemplateConfig to ensure type safety
+            const typedTemplate: any = {
+              ...template,
+              config: template.config as any, // Storage returns unknown, but we validate at creation
+            };
+
+            // Cast response to expected type
+            const typedResponse = athleteResponse as WellnessResponse;
+            const status = calculateAthleteStatus(typedResponse, typedTemplate);
+            return {
+              id: athleteId,
+              name: athleteResponse.userFullName,
+              status: status.status,
+              score: status.score,
+              injuries: status.injuries,
+              lastSubmission: athleteResponse.submittedAt,
+            };
+          }).filter((a): a is NonNullable<typeof a> => a !== null);
+
+          // Count by status
+          const redCount = athleteStatuses.filter(a => a.status === 'red').length;
+          const yellowCount = athleteStatuses.filter(a => a.status === 'yellow').length;
+          const greenCount = athleteStatuses.filter(a => a.status === 'green').length;
+
+          // Calculate team status based on average of athlete scores
+          let teamStatus: 'red' | 'yellow' | 'green' = 'green';
+          let teamAverageScore: number | null = null;
+
+          const athleteScores = athleteStatuses
+            .map(a => a.score)
+            .filter((s): s is number => s !== null);
+
+          if (athleteScores.length > 0) {
+            teamAverageScore = athleteScores.reduce((sum, score) => sum + score, 0) / athleteScores.length;
+
+            // Get first template's status config to determine team status
+            const firstTemplate = templateMap.values().next().value;
+            if (firstTemplate?.config && (firstTemplate.config as any)?.statusConfig) {
+              const config = (firstTemplate.config as any).statusConfig as any;
+              const scaleOrientation = config.scaleOrientation || 'higher_is_better';
+
+              if (scaleOrientation === 'higher_is_better') {
+                // Higher scores are better
+                if (teamAverageScore <= config.redThreshold) {
+                  teamStatus = 'red';
+                } else if (teamAverageScore <= config.yellowThreshold) {
+                  teamStatus = 'yellow';
+                } else {
+                  teamStatus = 'green';
+                }
+              } else {
+                // Lower scores are better
+                if (teamAverageScore >= config.redThreshold) {
+                  teamStatus = 'red';
+                } else if (teamAverageScore >= config.yellowThreshold) {
+                  teamStatus = 'yellow';
+                } else {
+                  teamStatus = 'green';
+                }
+              }
+            }
+          }
+
+          // Calculate completion rate
+          const completionRate = athleteIds.length > 0
+            ? Math.round((athleteStatuses.length / athleteIds.length) * 100)
+            : 0;
+
+          // Get common injuries
+          const commonInjuries = getCommonInjuries(athleteStatuses);
+
+          // Calculate trend (compare to previous day)
+          const previousDate = new Date(date);
+          previousDate.setDate(previousDate.getDate() - 1);
+          const previousDateStr = previousDate.toISOString().split('T')[0];
+
+          const previousResponses = await storage.getWellnessResponsesByOrganization(organizationId, {
+            startDate: previousDateStr,
+            endDate: previousDateStr,
+          });
+
+          const teamPreviousResponses = previousResponses.filter(r => athleteIds.includes(r.userId));
+
+          const currentScores = athleteStatuses
+            .map(a => a.score)
+            .filter((s): s is number => s !== null);
+
+          const previousScores = teamPreviousResponses.map(r => {
+            const template = templateMap.get(r.templateId);
+            if (!template) return null;
+            const typedTemplate: any = {
+              ...template,
+              config: template.config as any,
+            };
+            const typedResponse = r as WellnessResponse;
+            const status = calculateAthleteStatus(typedResponse, typedTemplate);
+            return status.score;
+          }).filter((s): s is number => s !== null);
+
+          const trend = calculateTrend(currentScores, previousScores);
+
+          dashboardData.push({
+            teamId: team.id,
+            teamName: team.name,
+            teamStatus,
+            teamAverageScore,
+            redCount,
+            yellowCount,
+            greenCount,
+            totalAthletes: athleteIds.length,
+            completionRate,
+            trend,
+            commonInjuries,
+            athletes: athleteStatuses,
+          });
+        }
+
+        res.json(dashboardData);
+      } catch (error: any) {
+        console.error("Dashboard API error:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch dashboard data", error));
       }
     }
   );
