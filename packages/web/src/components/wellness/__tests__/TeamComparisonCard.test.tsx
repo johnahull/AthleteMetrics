@@ -203,7 +203,7 @@ describe('TeamComparisonCard', () => {
       expect(screen.getByText('6.8')).toBeInTheDocument();
     });
 
-    it('should display completion rates', () => {
+    it('should display respondent counts', () => {
       render(
         <TeamComparisonCard
           responses={mockResponses}
@@ -213,9 +213,10 @@ describe('TeamComparisonCard', () => {
         />
       );
 
-      // Check for percentage signs (completion rate display)
-      const percentageTexts = screen.getAllByText(/%/);
-      expect(percentageTexts.length).toBeGreaterThan(0);
+      // Check for respondent counts (changed from completion rate display)
+      // Team A has 2 athletes, Team B has 2 athletes
+      const athleteTexts = screen.getAllByText(/athlete/i);
+      expect(athleteTexts.length).toBeGreaterThan(0);
     });
   });
 

@@ -94,15 +94,19 @@ beforeAll(async () => {
     res.json({ success: true });
   });
 
-  // Import and register wellness routes
-  const { registerWellnessRoutes } = await import('../../packages/api/routes/wellness-routes');
-  registerWellnessRoutes(app);
+  // Enable wellness module at site level BEFORE registering routes
+  // Clear any existing site_settings rows (singleton table)
+  await db.delete(siteSettings);
 
-  // Enable wellness module at site level
+  // Insert fresh site settings with wellness enabled
   await db.insert(siteSettings).values({
     aiModel: 'claude-sonnet-4.5',
     wellnessModuleEnabled: true,
-  }).onConflictDoNothing();
+  });
+
+  // Import and register wellness routes
+  const { registerWellnessRoutes } = await import('../../packages/api/routes/wellness-routes');
+  registerWellnessRoutes(app);
 
   // Create test organization
   const [org] = await db.insert(organizations).values({

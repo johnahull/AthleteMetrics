@@ -29,9 +29,8 @@ export const organizations = pgTable("organizations", {
   // AI Coaching Insights feature flags (added in migrations 0037)
   aiEnabledBySiteAdmin: boolean("ai_enabled_by_site_admin").default(false).notNull(),
   aiEnabled: boolean("ai_enabled").default(false).notNull(),
-  // Wellness module feature flag (added in migration 0042)
-  // TEMPORARILY COMMENTED OUT: Migration 0042 doesn't exist yet, blocking performance tests
-  // wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
+  // Wellness module feature flag (added in migration 0054)
+  wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
