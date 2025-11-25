@@ -64,7 +64,12 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
       organizationId = req.query.organizationId as string || req.body.organizationId;
     }
 
+    // DEBUG logging
+    console.log('[DEBUG requireOrgAccess] User:', JSON.stringify({ id: user?.id, role: user?.role, isSiteAdmin: user?.isSiteAdmin }));
+    console.log('[DEBUG requireOrgAccess] Target orgId:', organizationId);
+
     if (!user?.id) {
+      console.log('[DEBUG requireOrgAccess] FAIL: No user ID');
       return res.status(401).json({ message: "User not authenticated" });
     }
 
@@ -80,7 +85,11 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
 
     // Check organization access
     const hasAccess = await canAccessOrganization(user, organizationId);
+    console.log('[DEBUG requireOrgAccess] hasAccess:', hasAccess);
     if (!hasAccess) {
+      // Get user's orgs for debugging
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      console.log('[DEBUG requireOrgAccess] User orgs:', userOrgs.map(o => o.organizationId));
       return res.status(403).json({ message: "Access denied to this organization" });
     }
 

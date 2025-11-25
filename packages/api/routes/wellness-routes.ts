@@ -150,6 +150,15 @@ export function registerWellnessRoutes(app: Express) {
     "/api/organizations/:organizationId/wellness/templates",
     highVolumeLimiter,
     requireAuth,
+    (req: AuthenticatedRequest, res: Response, next: any) => {
+      console.log('[DEBUG wellness-templates] User after requireAuth:', JSON.stringify({
+        id: req.user?.id,
+        role: req.user?.role,
+        isSiteAdmin: req.user?.isSiteAdmin,
+      }));
+      console.log('[DEBUG wellness-templates] Organization ID:', req.params.organizationId);
+      next();
+    },
     requireOrganizationAccess(),
     requireWellnessEnabled,
     async (req: AuthenticatedRequest, res: Response) => {
