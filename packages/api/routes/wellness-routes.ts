@@ -387,6 +387,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
+    requireWellnessEnabled,
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId, id } = req.params;

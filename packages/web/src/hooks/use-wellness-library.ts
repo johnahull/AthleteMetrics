@@ -5,6 +5,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { apiRequest } from '@/lib/queryClient';
 import type { WellnessTemplate } from '@shared/wellness-types';
 
 interface LibraryResponse {
@@ -34,13 +35,7 @@ export function useWellnessLibrary(organizationId: string, filters?: LibraryFilt
       const queryString = params.toString();
       const url = `/api/organizations/${organizationId}/wellness/library${queryString ? `?${queryString}` : ''}`;
 
-      const response = await fetch(url, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to fetch wellness library: ${response.statusText}`);
-      }
+      const response = await apiRequest('GET', url);
 
       return response.json();
     },
@@ -56,21 +51,10 @@ export function useCloneWellnessTemplate(organizationId: string) {
 
   return useMutation({
     mutationFn: async (templateId: string) => {
-      const response = await fetch(
-        `/api/organizations/${organizationId}/wellness/templates/${templateId}/clone`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-        }
+      const response = await apiRequest(
+        'POST',
+        `/api/organizations/${organizationId}/wellness/templates/${templateId}/clone`
       );
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to clone template');
-      }
 
       return response.json();
     },

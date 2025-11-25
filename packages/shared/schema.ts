@@ -30,8 +30,7 @@ export const organizations = pgTable("organizations", {
   aiEnabledBySiteAdmin: boolean("ai_enabled_by_site_admin").default(false).notNull(),
   aiEnabled: boolean("ai_enabled").default(false).notNull(),
   // Wellness module feature flag (added in migration 0042)
-  // TEMPORARILY COMMENTED OUT: Testing DB doesn't have this column yet
-  // wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
+  wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
