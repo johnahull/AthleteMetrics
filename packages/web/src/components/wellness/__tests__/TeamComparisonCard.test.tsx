@@ -267,7 +267,7 @@ describe('TeamComparisonCard', () => {
       expect(screen.getByText('Team Name')).toBeInTheDocument();
       expect(screen.getByText('Avg Wellness')).toBeInTheDocument();
       expect(screen.getByText('Alerts')).toBeInTheDocument();
-      expect(screen.getByText('Completion')).toBeInTheDocument();
+      expect(screen.getByText('Respondents')).toBeInTheDocument();
       expect(screen.getByText('Trend')).toBeInTheDocument();
     });
   });
