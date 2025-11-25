@@ -102,6 +102,7 @@ beforeAll(async () => {
     name: `Wellness Routes Test Org ${Date.now()}`,
     description: 'Test organization for wellness route tests',
     orgType: 'club',
+    wellnessEnabled: true, // Enable wellness module for tests
   }).returning();
   testOrg = org;
 
@@ -835,6 +836,7 @@ describe('Authorization & Cross-Organization Access', () => {
     const [org] = await db.insert(organizations).values({
       name: `Second Org Routes ${Date.now()}`,
       orgType: 'college',
+      wellnessEnabled: true, // Enable wellness module for tests
     }).returning();
     org2 = org;
 

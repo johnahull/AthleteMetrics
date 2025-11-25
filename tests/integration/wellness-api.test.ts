@@ -947,10 +947,12 @@ describe('Wellness Analytics API', () => {
     createdResponseIds.push(response.id);
 
     // Calculate completion rate
-    const completionRate = await storage.getRequestCompletionRate(request.id);
+    const completionRate = await storage.getRequestCompletionRate(testOrg.id, request.id);
     expect(completionRate).toBeDefined();
-    expect(completionRate).toBeGreaterThanOrEqual(0);
-    expect(completionRate).toBeLessThanOrEqual(1);
+    expect(completionRate.completed).toBeGreaterThanOrEqual(0);
+    expect(completionRate.total).toBeGreaterThanOrEqual(0);
+    expect(completionRate.percentage).toBeGreaterThanOrEqual(0);
+    expect(completionRate.percentage).toBeLessThanOrEqual(100);
   });
 });
 
