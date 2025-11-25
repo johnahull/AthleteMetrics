@@ -10,10 +10,16 @@ import {
   userTeams,
   userOrganizations,
   measurements,
+  coachTeams,
+  users,
   type Team,
   type Organization,
   type UserTeam,
   type InsertTeam,
+  type CoachTeam,
+  type InsertCoachTeam,
+  type UpdateCoachTeam,
+  type CoachTeamWithDetails,
 } from '@shared/schema';
 import { db } from '../db';
 import { eq, and, asc, ne, sql } from 'drizzle-orm';
@@ -550,5 +556,370 @@ export class TeamService {
           )
         );
     });
+  }
+
+  // ==========================================
+  // Coach-Team Assignment Methods
+  // ==========================================
+
+  /**
+   * Get all coaches assigned to a team
+   * @param teamId Team ID
+   * @param activeOnly Only return active assignments (default: true)
+   * @returns Array of coach assignments with coach details
+   */
+  async getTeamCoaches(
+    teamId: string,
+    activeOnly: boolean = true
+  ): Promise<CoachTeamWithDetails[]> {
+    const conditions = [eq(coachTeams.teamId, teamId)];
+
+    if (activeOnly) {
+      conditions.push(eq(coachTeams.isActive, true));
+    }
+
+    const result = await db
+      .select({
+        coachTeam: coachTeams,
+        coach: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          fullName: users.fullName,
+          emails: users.emails,
+        },
+        team: {
+          id: teams.id,
+          name: teams.name,
+          organizationId: teams.organizationId,
+        },
+      })
+      .from(coachTeams)
+      .innerJoin(users, eq(coachTeams.coachId, users.id))
+      .innerJoin(teams, eq(coachTeams.teamId, teams.id))
+      .where(and(...conditions))
+      .orderBy(asc(users.fullName));
+
+    return result.map(({ coachTeam, coach, team }) => ({
+      ...coachTeam,
+      coach,
+      team,
+    }));
+  }
+
+  /**
+   * Get all teams assigned to a coach
+   * @param coachId Coach user ID
+   * @param activeOnly Only return active assignments (default: true)
+   * @returns Array of coach assignments with team details
+   */
+  async getCoachTeams(
+    coachId: string,
+    activeOnly: boolean = true
+  ): Promise<CoachTeamWithDetails[]> {
+    const conditions = [eq(coachTeams.coachId, coachId)];
+
+    if (activeOnly) {
+      conditions.push(eq(coachTeams.isActive, true));
+    }
+
+    const result = await db
+      .select({
+        coachTeam: coachTeams,
+        coach: {
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          fullName: users.fullName,
+          emails: users.emails,
+        },
+        team: {
+          id: teams.id,
+          name: teams.name,
+          organizationId: teams.organizationId,
+        },
+      })
+      .from(coachTeams)
+      .innerJoin(users, eq(coachTeams.coachId, users.id))
+      .innerJoin(teams, eq(coachTeams.teamId, teams.id))
+      .where(and(...conditions))
+      .orderBy(asc(teams.name));
+
+    return result.map(({ coachTeam, coach, team }) => ({
+      ...coachTeam,
+      coach,
+      team,
+    }));
+  }
+
+  /**
+   * Assign a coach to a team
+   * Validates that the coach has a coach role in the organization
+   *
+   * @param coachId Coach user ID
+   * @param teamId Team ID
+   * @param role Coach role in team (head_coach, assistant_coach, stats_manager)
+   * @param assignedById User ID of who is making the assignment
+   * @param notes Optional notes about the assignment
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @returns Created coach team assignment
+   */
+  async assignCoachToTeam(
+    coachId: string,
+    teamId: string,
+    role: 'head_coach' | 'assistant_coach' | 'stats_manager' = 'assistant_coach',
+    assignedById?: string,
+    notes?: string,
+    expectedOrganizationId?: string
+  ): Promise<CoachTeam> {
+    return await db.transaction(async (tx) => {
+      // Get team and verify organization
+      const [team] = await tx
+        .select()
+        .from(teams)
+        .where(eq(teams.id, teamId))
+        .for('update');
+
+      if (!team) {
+        throw new Error('Team not found');
+      }
+
+      // TOCTOU-safe organization validation
+      if (expectedOrganizationId && team.organizationId !== expectedOrganizationId) {
+        throw new Error('Access denied - team belongs to different organization');
+      }
+
+      // Verify coach is a coach in this organization
+      const [coachOrg] = await tx
+        .select()
+        .from(userOrganizations)
+        .where(
+          and(
+            eq(userOrganizations.userId, coachId),
+            eq(userOrganizations.organizationId, team.organizationId)
+          )
+        );
+
+      if (!coachOrg) {
+        throw new Error('Coach does not belong to this organization');
+      }
+
+      if (coachOrg.role !== 'coach' && coachOrg.role !== 'org_admin') {
+        throw new Error('User must have coach or org_admin role to be assigned to a team');
+      }
+
+      // Check for existing active assignment
+      const [existingActive] = await tx
+        .select()
+        .from(coachTeams)
+        .where(
+          and(
+            eq(coachTeams.coachId, coachId),
+            eq(coachTeams.teamId, teamId),
+            eq(coachTeams.isActive, true)
+          )
+        )
+        .for('update');
+
+      if (existingActive) {
+        // Update existing assignment if role changed
+        if (existingActive.role !== role) {
+          const [updated] = await tx
+            .update(coachTeams)
+            .set({ role, notes })
+            .where(eq(coachTeams.id, existingActive.id))
+            .returning();
+          return updated;
+        }
+        return existingActive;
+      }
+
+      // Check for inactive assignment to reactivate
+      const [existingInactive] = await tx
+        .select()
+        .from(coachTeams)
+        .where(
+          and(
+            eq(coachTeams.coachId, coachId),
+            eq(coachTeams.teamId, teamId),
+            eq(coachTeams.isActive, false)
+          )
+        );
+
+      if (existingInactive) {
+        const [reactivated] = await tx
+          .update(coachTeams)
+          .set({
+            isActive: true,
+            removedAt: null,
+            assignedAt: new Date(),
+            role,
+            assignedBy: assignedById,
+            notes,
+          })
+          .where(eq(coachTeams.id, existingInactive.id))
+          .returning();
+        return reactivated;
+      }
+
+      // Create new assignment
+      const [newAssignment] = await tx
+        .insert(coachTeams)
+        .values({
+          coachId,
+          teamId,
+          role,
+          assignedBy: assignedById,
+          notes,
+          isActive: true,
+        })
+        .returning();
+
+      return newAssignment;
+    });
+  }
+
+  /**
+   * Remove a coach from a team (marks inactive, preserves history)
+   *
+   * @param coachId Coach user ID
+   * @param teamId Team ID
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   */
+  async removeCoachFromTeam(
+    coachId: string,
+    teamId: string,
+    expectedOrganizationId?: string
+  ): Promise<void> {
+    await db.transaction(async (tx) => {
+      // Validate organization if provided
+      if (expectedOrganizationId) {
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .for('update');
+
+        if (!team) {
+          throw new Error('Team not found');
+        }
+
+        if (team.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - team belongs to different organization');
+        }
+      }
+
+      // Mark assignment as inactive
+      const [updated] = await tx
+        .update(coachTeams)
+        .set({
+          isActive: false,
+          removedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(coachTeams.coachId, coachId),
+            eq(coachTeams.teamId, teamId),
+            eq(coachTeams.isActive, true)
+          )
+        )
+        .returning();
+
+      if (!updated) {
+        throw new Error('Coach assignment not found');
+      }
+    });
+  }
+
+  /**
+   * Update a coach's team assignment (role, notes)
+   *
+   * @param coachId Coach user ID
+   * @param teamId Team ID
+   * @param updates Updates to apply
+   * @param expectedOrganizationId Optional organization ID for TOCTOU-safe validation
+   * @returns Updated assignment
+   */
+  async updateCoachTeamAssignment(
+    coachId: string,
+    teamId: string,
+    updates: UpdateCoachTeam,
+    expectedOrganizationId?: string
+  ): Promise<CoachTeam> {
+    return await db.transaction(async (tx) => {
+      // Validate organization if provided
+      if (expectedOrganizationId) {
+        const [team] = await tx
+          .select()
+          .from(teams)
+          .where(eq(teams.id, teamId))
+          .for('update');
+
+        if (!team) {
+          throw new Error('Team not found');
+        }
+
+        if (team.organizationId !== expectedOrganizationId) {
+          throw new Error('Access denied - team belongs to different organization');
+        }
+      }
+
+      // Update the assignment
+      const [updated] = await tx
+        .update(coachTeams)
+        .set(updates)
+        .where(
+          and(
+            eq(coachTeams.coachId, coachId),
+            eq(coachTeams.teamId, teamId),
+            eq(coachTeams.isActive, true)
+          )
+        )
+        .returning();
+
+      if (!updated) {
+        throw new Error('Coach assignment not found');
+      }
+
+      return updated;
+    });
+  }
+
+  /**
+   * Get coaches for notification purposes
+   * Returns active coaches for a team with their email addresses
+   * Useful for sending notifications about team events
+   *
+   * @param teamId Team ID
+   * @returns Array of coach info for notifications
+   */
+  async getTeamCoachesForNotification(teamId: string): Promise<{
+    coachId: string;
+    fullName: string;
+    emails: string[];
+    role: string;
+  }[]> {
+    const result = await db
+      .select({
+        coachId: coachTeams.coachId,
+        fullName: users.fullName,
+        emails: users.emails,
+        role: coachTeams.role,
+      })
+      .from(coachTeams)
+      .innerJoin(users, eq(coachTeams.coachId, users.id))
+      .where(
+        and(
+          eq(coachTeams.teamId, teamId),
+          eq(coachTeams.isActive, true)
+        )
+      );
+
+    return result.map(r => ({
+      coachId: r.coachId,
+      fullName: r.fullName,
+      emails: r.emails,
+      role: r.role || 'assistant_coach',
+    }));
   }
 }

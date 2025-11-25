@@ -95,6 +95,31 @@ export const userTeams = pgTable("user_teams", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Coach-team assignments (allows assigning coaches to specific teams)
+export const coachTeams = pgTable("coach_teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  coachId: varchar("coach_id").notNull().references(() => users.id),
+  teamId: varchar("team_id").notNull().references(() => teams.id),
+  // Coach role within the team
+  role: text("role").$type<"head_coach" | "assistant_coach" | "stats_manager">().default("assistant_coach"),
+  // Temporal assignment fields
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  removedAt: timestamp("removed_at"), // NULL = currently assigned
+  isActive: boolean("is_active").default(true).notNull(),
+  // Assignment metadata
+  assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }), // Who made this assignment
+  notes: text("notes"), // Optional notes about this assignment
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Unique active assignment per coach per team
+  uniqueActiveCoachTeam: unique("coach_teams_coach_team_unique").on(table.coachId, table.teamId),
+  // Indexes for common queries
+  coachIdx: index("coach_teams_coach_idx").on(table.coachId),
+  teamIdx: index("coach_teams_team_idx").on(table.teamId),
+  activeIdx: index("coach_teams_active_idx").on(table.isActive),
+  teamActiveIdx: index("coach_teams_team_active_idx").on(table.teamId, table.isActive),
+}));
+
 // Site-level metric definitions (master catalog)
 export const siteMetrics = pgTable("site_metrics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -514,11 +539,13 @@ export const teamsRelations = relations(teams, ({ one, many }) => ({
     references: [organizations.id],
   }),
   userTeams: many(userTeams),
+  coachTeams: many(coachTeams),
 }));
 
 export const usersRelations = relations(users, ({ many, one }) => ({
   userOrganizations: many(userOrganizations),
   userTeams: many(userTeams),
+  coachTeams: many(coachTeams),
   measurements: many(measurements, { relationName: "userMeasurements" }),
   submittedMeasurements: many(measurements, { relationName: "submittedMeasurements" }),
   verifiedMeasurements: many(measurements, { relationName: "verifiedMeasurements" }),
@@ -559,6 +586,21 @@ export const userTeamsRelations = relations(userTeams, ({ one }) => ({
   team: one(teams, {
     fields: [userTeams.teamId],
     references: [teams.id],
+  }),
+}));
+
+export const coachTeamsRelations = relations(coachTeams, ({ one }) => ({
+  coach: one(users, {
+    fields: [coachTeams.coachId],
+    references: [users.id],
+  }),
+  team: one(teams, {
+    fields: [coachTeams.teamId],
+    references: [teams.id],
+  }),
+  assignedByUser: one(users, {
+    fields: [coachTeams.assignedBy],
+    references: [users.id],
   }),
 }));
 
@@ -846,6 +888,34 @@ export const insertUserTeamSchema = createInsertSchema(userTeams).omit({
 }).extend({
   season: z.string().optional(),
   leftAt: z.coerce.date().optional(),
+});
+
+// Coach team role enum for validation
+export const CoachTeamRole = {
+  HEAD_COACH: "head_coach",
+  ASSISTANT_COACH: "assistant_coach",
+  STATS_MANAGER: "stats_manager",
+} as const;
+
+export const insertCoachTeamSchema = createInsertSchema(coachTeams).omit({
+  id: true,
+  createdAt: true,
+  assignedAt: true, // Managed by system
+  isActive: true, // Managed by system
+  assignedBy: true, // Set from session
+}).extend({
+  coachId: z.string().min(1, "Coach ID is required"),
+  teamId: z.string().min(1, "Team ID is required"),
+  role: z.enum(["head_coach", "assistant_coach", "stats_manager"]).default("assistant_coach"),
+  notes: z.string().max(500, "Notes cannot exceed 500 characters").optional(),
+  removedAt: z.coerce.date().optional(),
+});
+
+export const updateCoachTeamSchema = z.object({
+  role: z.enum(["head_coach", "assistant_coach", "stats_manager"]).optional(),
+  notes: z.string().max(500, "Notes cannot exceed 500 characters").optional(),
+  isActive: z.boolean().optional(),
+  removedAt: z.coerce.date().optional(),
 });
 
 export const insertInvitationSchema = createInsertSchema(invitations).omit({
@@ -1241,6 +1311,26 @@ export type UserOrganization = typeof userOrganizations.$inferSelect;
 
 export type InsertUserTeam = z.infer<typeof insertUserTeamSchema>;
 export type UserTeam = typeof userTeams.$inferSelect;
+
+export type InsertCoachTeam = z.infer<typeof insertCoachTeamSchema>;
+export type UpdateCoachTeam = z.infer<typeof updateCoachTeamSchema>;
+export type CoachTeam = typeof coachTeams.$inferSelect;
+
+// Enriched type for coach team assignment with full coach details
+export type CoachTeamWithDetails = CoachTeam & {
+  coach: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    emails: string[];
+  };
+  team: {
+    id: string;
+    name: string;
+    organizationId: string;
+  };
+};
 
 export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 export type Invitation = typeof invitations.$inferSelect;
