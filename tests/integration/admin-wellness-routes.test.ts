@@ -309,6 +309,64 @@ describe('POST /api/admin/wellness/templates', () => {
     expect(res.body).toHaveProperty('errors');
   });
 
+  it('should return 400 for empty config questions array', async () => {
+    const res = await request(app)
+      .post('/api/admin/wellness/templates')
+      .set('Cookie', siteAdminCookie)
+      .send({
+        name: 'Invalid Config Template',
+        config: {
+          questions: [], // Empty questions should be invalid
+          statusConfig: validTemplateConfig.statusConfig,
+        },
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should return 400 for malformed question in config', async () => {
+    const res = await request(app)
+      .post('/api/admin/wellness/templates')
+      .set('Cookie', siteAdminCookie)
+      .send({
+        name: 'Malformed Question Template',
+        config: {
+          questions: [
+            {
+              // Missing required fields like 'id', 'type', 'label'
+              required: true,
+            },
+          ],
+          statusConfig: validTemplateConfig.statusConfig,
+        },
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('should return 400 for invalid scale question missing range', async () => {
+    const res = await request(app)
+      .post('/api/admin/wellness/templates')
+      .set('Cookie', siteAdminCookie)
+      .send({
+        name: 'Invalid Scale Template',
+        config: {
+          questions: [
+            {
+              id: 'q1',
+              type: 'scale',
+              label: 'Test Question',
+              required: true,
+              // Missing scaleMin and scaleMax
+            },
+          ],
+          statusConfig: validTemplateConfig.statusConfig,
+        },
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it('should return 401 without authentication', async () => {
     const res = await request(app)
       .post('/api/admin/wellness/templates')

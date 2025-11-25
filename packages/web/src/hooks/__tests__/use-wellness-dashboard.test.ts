@@ -262,10 +262,13 @@ describe('useWellnessDashboard Hook', () => {
     });
 
     it('should set error when response is not ok', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ message: 'Custom error message' }),
-      });
+      // Use mockImplementation to handle retries (hook has retry: 2)
+      mockFetch.mockImplementation(() =>
+        Promise.resolve({
+          ok: false,
+          json: async () => ({ message: 'Custom error message' }),
+        })
+      );
 
       const { result } = renderHook(
         () => useWellnessDashboard({ organizationId: 'org-123' }),
@@ -277,6 +280,7 @@ describe('useWellnessDashboard Hook', () => {
       }, { timeout: 5000 });
 
       expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toBe('Custom error message');
     });
 
     it('should include credentials in request', async () => {
@@ -301,7 +305,10 @@ describe('useWellnessDashboard Hook', () => {
     });
 
     it('should handle network errors', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+      // Use mockImplementation to handle retries (hook has retry: 2)
+      mockFetch.mockImplementation(() =>
+        Promise.reject(new Error('Network error'))
+      );
 
       const { result } = renderHook(
         () => useWellnessDashboard({ organizationId: 'org-123' }),
@@ -315,6 +322,7 @@ describe('useWellnessDashboard Hook', () => {
 
       // Error should be set after network failure
       expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toBe('Network error');
     });
   });
 
@@ -360,7 +368,10 @@ describe('useWellnessDashboard Hook', () => {
     });
 
     it('should expose error property', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Test error'));
+      // Use mockImplementation to handle retries (hook has retry: 2)
+      mockFetch.mockImplementation(() =>
+        Promise.reject(new Error('Test error'))
+      );
 
       const { result } = renderHook(
         () => useWellnessDashboard({ organizationId: 'org-123' }),
@@ -372,6 +383,7 @@ describe('useWellnessDashboard Hook', () => {
       }, { timeout: 5000 });
 
       expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toBe('Test error');
     });
 
     it('should expose refetch function', async () => {

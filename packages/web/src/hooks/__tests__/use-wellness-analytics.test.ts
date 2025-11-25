@@ -431,6 +431,31 @@ describe('useWellnessAnalytics Hook', () => {
       );
       expect(templateCalls.length).toBe(0);
     });
+
+    it('should include credentials in template fetch requests', async () => {
+      const responses = [createMockResponse({ templateId: 'template-1' })];
+      const templates = [createMockTemplate({ id: 'template-1' })];
+
+      setupStandardMocks({ responses, templates });
+
+      const { result } = renderHook(
+        () => useWellnessAnalytics({
+          organizationId: 'org-123',
+          filters: defaultFilters,
+        }),
+        { wrapper }
+      );
+
+      await waitFor(() => {
+        expect(result.current.templates).toBeDefined();
+      });
+
+      const templateCalls = mockFetch.mock.calls.filter((call: any) =>
+        call[0].includes('/wellness/templates/')
+      );
+      expect(templateCalls.length).toBe(1);
+      expect(templateCalls[0][1]).toEqual(expect.objectContaining({ credentials: 'include' }));
+    });
   });
 
   describe('computed values', () => {
@@ -671,6 +696,40 @@ describe('useWellnessAnalytics Hook', () => {
       }, { timeout: 5000 });
 
       expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toBe('Responses fetch failed');
+    });
+
+    it('should expose error from trends query', async () => {
+      mockFetch.mockImplementation((url: string) => {
+        if (url.includes('/wellness/responses')) {
+          return Promise.resolve({ ok: true, json: async () => [] });
+        }
+        if (url.includes('/wellness/analytics/trends')) {
+          return Promise.resolve({
+            ok: false,
+            json: async () => ({ message: 'Trends fetch failed' }),
+          });
+        }
+        if (url.includes('/wellness/requests')) {
+          return Promise.resolve({ ok: true, json: async () => [] });
+        }
+        return Promise.resolve({ ok: false, json: async () => ({}) });
+      });
+
+      const { result } = renderHook(
+        () => useWellnessAnalytics({
+          organizationId: 'org-123',
+          filters: defaultFilters,
+        }),
+        { wrapper }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      }, { timeout: 5000 });
+
+      expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toBe('Trends fetch failed');
     });
   });
 
