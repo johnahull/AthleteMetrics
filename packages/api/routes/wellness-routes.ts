@@ -41,6 +41,7 @@ import {
 import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
+import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
 import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { z } from "zod";
@@ -104,6 +105,16 @@ const highVolumeLimiter = rateLimit({
   skip: () => shouldBypassRateLimit(),
 });
 
+// Stricter rate limiting for analytics endpoints (sensitive athlete data)
+const analyticsLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.ANALYTICS, // 50 requests per 15 min (vs 200 for high volume)
+  message: { message: "Too many analytics requests. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: () => shouldBypassRateLimit(),
+});
+
 /**
  * Register all wellness questionnaire routes
  */
@@ -162,15 +173,6 @@ export function registerWellnessRoutes(app: Express) {
     "/api/organizations/:organizationId/wellness/templates",
     highVolumeLimiter,
     requireAuth,
-    (req: AuthenticatedRequest, res: Response, next: any) => {
-      console.log('[DEBUG wellness-templates] User after requireAuth:', JSON.stringify({
-        id: req.user?.id,
-        role: req.user?.role,
-        isSiteAdmin: req.user?.isSiteAdmin,
-      }));
-      console.log('[DEBUG wellness-templates] Organization ID:', req.params.organizationId);
-      next();
-    },
     requireOrganizationAccess(),
     requireWellnessEnabled,
     async (req: AuthenticatedRequest, res: Response) => {
@@ -483,9 +485,6 @@ export function registerWellnessRoutes(app: Express) {
         });
 
         // Send email notifications for magic link distribution
-        const MINUTES_PER_QUESTION = 0.5; // 30 seconds per question on average
-        const DEFAULT_QUESTION_COUNT = 5;
-
         const emailResults = {
           sent: 0,
           failed: 0,
@@ -521,7 +520,7 @@ export function registerWellnessRoutes(app: Express) {
                     magicLink,
                     expiryDays,
                     templateName: template!.name,
-                    estimatedMinutes: ((template!.config as any).questions?.length || DEFAULT_QUESTION_COUNT) * MINUTES_PER_QUESTION,
+                    estimatedMinutes: ((template!.config as any).questions?.length || WELLNESS_CONSTANTS.DEFAULT_QUESTION_COUNT) * WELLNESS_CONSTANTS.MINUTES_PER_QUESTION,
                   });
                   emailResults.sent++;
                 } catch (emailError) {
@@ -892,14 +891,31 @@ export function registerWellnessRoutes(app: Express) {
         // Validate responses match template questions
         try {
           const responseSchema = generateResponseValidationSchema(template.config as any);
-          console.log('Template config questions:', JSON.stringify(template.config, null, 2));
-          console.log('Submitted responses:', JSON.stringify(data.responses, null, 2));
           responseSchema.parse(data.responses);
         } catch (validationError: any) {
-          console.error('Response validation error:', validationError);
+          // Log validation error for debugging (without sensitive response data)
+          console.error('Response validation error:', validationError.message || 'Unknown validation error');
+
+          // Transform Zod errors into user-friendly messages
+          const friendlyErrors = validationError.errors?.map((err: any) => {
+            const field = err.path.join('.');
+            let message = err.message;
+
+            // Customize messages for common validation failures
+            if (err.code === 'invalid_type' && err.expected === 'object') {
+              message = `Question "${field}" requires an answer`;
+            } else if (err.code === 'too_small') {
+              message = `Answer for "${field}" is too short (minimum ${err.minimum} characters)`;
+            } else if (err.code === 'too_big') {
+              message = `Answer for "${field}" is too long (maximum ${err.maximum} characters)`;
+            }
+
+            return { field, message };
+          }) || [];
+
           return res.status(400).json({
-            message: "Response validation failed",
-            errors: validationError.errors,
+            message: "Some answers don't match the expected format. Please check your responses and try again.",
+            errors: friendlyErrors,
           });
         }
 
@@ -1247,7 +1263,7 @@ export function registerWellnessRoutes(app: Express) {
    */
   app.get(
     "/api/organizations/:organizationId/wellness/analytics/team",
-    highVolumeLimiter,
+    analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
     async (req: AuthenticatedRequest, res: Response) => {
@@ -1280,7 +1296,7 @@ export function registerWellnessRoutes(app: Express) {
    */
   app.get(
     "/api/organizations/:organizationId/wellness/analytics/athlete/:athleteId",
-    highVolumeLimiter,
+    analyticsLimiter,
     requireAuth,
     requireOrganizationAccess(),
     async (req: AuthenticatedRequest, res: Response) => {
@@ -1319,7 +1335,7 @@ export function registerWellnessRoutes(app: Express) {
    */
   app.get(
     "/api/organizations/:organizationId/wellness/analytics/trends",
-    highVolumeLimiter,
+    analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
     async (req: AuthenticatedRequest, res: Response) => {
@@ -1436,10 +1452,9 @@ export function registerWellnessRoutes(app: Express) {
           }
 
           // Limit athlete count to prevent memory exhaustion (Issue #4)
-          const MAX_ATHLETES_PER_TEAM = 500;
-          if (athleteIds.length > MAX_ATHLETES_PER_TEAM) {
-            console.warn(`Team ${team.id} has ${athleteIds.length} athletes, limiting to ${MAX_ATHLETES_PER_TEAM}`);
-            athleteIds = limitArraySize(athleteIds, MAX_ATHLETES_PER_TEAM, `Team ${team.id} athletes`);
+          if (athleteIds.length > WELLNESS_CONSTANTS.MAX_ATHLETES_PER_TEAM) {
+            console.warn(`Team ${team.id} has ${athleteIds.length} athletes, limiting to ${WELLNESS_CONSTANTS.MAX_ATHLETES_PER_TEAM}`);
+            athleteIds = limitArraySize(athleteIds, WELLNESS_CONSTANTS.MAX_ATHLETES_PER_TEAM, `Team ${team.id} athletes`);
           }
 
           // Filter responses for this team's athletes (in-memory operation)

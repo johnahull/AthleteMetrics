@@ -60,6 +60,13 @@ export const WELLNESS_CONSTANTS = {
   SCORE_LOW_THRESHOLD: 3, // Below this is "concerning"
   SCORE_MEDIUM_THRESHOLD: 7, // Above this is "good"
 
+  // Request Time Estimation
+  MINUTES_PER_QUESTION: 0.5, // 30 seconds per question on average
+  DEFAULT_QUESTION_COUNT: 5, // Default count when template has no questions
+
+  // Dashboard Performance Limits
+  MAX_ATHLETES_PER_TEAM: 500, // Limit athletes per team in dashboard queries
+
   // Chart Colors (colorblind-friendly palette)
   CHART_COLORS: [
     'rgb(59, 130, 246)',   // blue
