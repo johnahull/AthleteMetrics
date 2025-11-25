@@ -160,9 +160,9 @@ export const wellnessTemplateConfigSchema = z.object({
     customThankYouMessage: z.string().max(500).optional(),
   }).optional(),
   colorConfig: z.object({
-    lowThreshold: z.number().min(0, 'Low threshold must be >= 0'),
-    mediumThreshold: z.number().min(0, 'Medium threshold must be >= 0'),
-    highThreshold: z.number().min(0, 'High threshold must be >= 0'),
+    lowThreshold: z.number().min(0, 'Low threshold must be >= 0').optional(),
+    mediumThreshold: z.number().min(0, 'Medium threshold must be >= 0').optional(),
+    highThreshold: z.number().min(0, 'High threshold must be >= 0').optional(),
   }).optional(),
   statusConfig: wellnessStatusConfigSchema.optional(),
 }).refine(
@@ -174,10 +174,13 @@ export const wellnessTemplateConfigSchema = z.object({
   { message: 'Question IDs must be unique', path: ['questions'] }
 ).refine(
   (data) => {
-    // Validate color threshold ordering if provided
+    // Validate color threshold ordering only if ALL values are provided
     if (data.colorConfig) {
       const { lowThreshold, mediumThreshold, highThreshold } = data.colorConfig;
-      return lowThreshold < mediumThreshold && mediumThreshold < highThreshold;
+      // Only validate if all three are provided
+      if (lowThreshold !== undefined && mediumThreshold !== undefined && highThreshold !== undefined) {
+        return lowThreshold < mediumThreshold && mediumThreshold < highThreshold;
+      }
     }
     return true;
   },

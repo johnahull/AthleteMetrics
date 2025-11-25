@@ -92,11 +92,12 @@ export type QuestionConfig =
 
 /**
  * Color configuration for wellness analytics heatmap
+ * All fields are optional - if not provided, auto-generation will be used
  */
 export interface WellnessColorConfig {
-  lowThreshold: number;      // Scores at or below this are "low" (red/orange)
-  mediumThreshold: number;   // Scores at or below this are "medium" (yellow)
-  highThreshold: number;     // Scores above this are "high" (green)
+  lowThreshold?: number;      // Scores at or below this are "low" (red/orange)
+  mediumThreshold?: number;   // Scores at or below this are "medium" (yellow)
+  highThreshold?: number;     // Scores above this are "high" (green)
 }
 
 /**

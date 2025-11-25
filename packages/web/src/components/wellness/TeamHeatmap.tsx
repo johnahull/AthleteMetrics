@@ -41,10 +41,14 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
 
   // Get or generate color thresholds
   const colorThresholds = useMemo(() => {
-    if (template.config.colorConfig) {
-      return template.config.colorConfig;
+    // Use custom config only if all thresholds are defined
+    const config = template.config.colorConfig;
+    if (config?.lowThreshold !== undefined &&
+        config?.mediumThreshold !== undefined &&
+        config?.highThreshold !== undefined) {
+      return config as { lowThreshold: number; mediumThreshold: number; highThreshold: number };
     }
-    // Auto-generate if not configured
+    // Auto-generate if not configured or partially configured
     if (scaleRange) {
       return autoGenerateColorThresholds(scaleRange.min, scaleRange.max);
     }
