@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ArrowUpDown } from 'lucide-react';
+import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
+import { StatusDot } from './ui/WellnessUIComponents';
 
 interface Athlete {
   id: string;
@@ -16,44 +17,22 @@ interface TeamAthleteListProps {
   onAthleteClick?: (athleteId: string) => void;
 }
 
-type SortField = 'name' | 'status' | 'score' | 'lastSubmission';
-type SortDirection = 'asc' | 'desc';
-
 export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthleteListProps) {
-  const [sortField, setSortField] = useState<SortField>('status');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  // Transform athlete data to include sortable status priority
+  const athletesWithPriority = useMemo(() => {
+    const statusOrder = { red: 0, yellow: 1, green: 2 };
+    return athletes.map(athlete => ({
+      ...athlete,
+      statusPriority: statusOrder[athlete.status],
+      lastSubmissionTime: new Date(athlete.lastSubmission).getTime(),
+    }));
+  }, [athletes]);
 
-  const statusOrder = { red: 0, yellow: 1, green: 2 };
-
-  const sortedAthletes = [...athletes].sort((a, b) => {
-    let comparison = 0;
-
-    switch (sortField) {
-      case 'status':
-        comparison = statusOrder[a.status] - statusOrder[b.status];
-        break;
-      case 'name':
-        comparison = a.name.localeCompare(b.name);
-        break;
-      case 'score':
-        comparison = (a.score || 0) - (b.score || 0);
-        break;
-      case 'lastSubmission':
-        comparison = new Date(a.lastSubmission).getTime() - new Date(b.lastSubmission).getTime();
-        break;
-    }
-
-    return sortDirection === 'asc' ? comparison : -comparison;
+  // Use sortable table hook with status as default sort
+  const { sortedData: sortedAthletes, handleSort, SortIcon } = useSortableTable(athletesWithPriority, {
+    defaultSortField: 'statusPriority',
+    defaultSortDirection: 'asc',
   });
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
 
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat('en-US', {
@@ -66,9 +45,9 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
   };
 
   const statusConfig = {
-    red: { label: 'Red', dotClass: 'bg-red-500' },
-    yellow: { label: 'Yellow', dotClass: 'bg-yellow-500' },
-    green: { label: 'Green', dotClass: 'bg-green-500' },
+    red: { label: 'Red' },
+    yellow: { label: 'Yellow' },
+    green: { label: 'Green' },
   };
 
   if (athletes.length === 0) {
@@ -84,26 +63,18 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('status')}>
-              <div className="flex items-center gap-1">
-                Status <ArrowUpDown className="w-3 h-3" />
-              </div>
+            <TableHead className="cursor-pointer" onClick={() => handleSort('statusPriority')}>
+              Status <SortIcon field="statusPriority" />
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
-              <div className="flex items-center gap-1">
-                Athlete <ArrowUpDown className="w-3 h-3" />
-              </div>
+              Athlete <SortIcon field="name" />
             </TableHead>
             <TableHead className="cursor-pointer" onClick={() => handleSort('score')}>
-              <div className="flex items-center gap-1">
-                Score <ArrowUpDown className="w-3 h-3" />
-              </div>
+              Score <SortIcon field="score" />
             </TableHead>
             <TableHead>Injuries</TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('lastSubmission')}>
-              <div className="flex items-center gap-1">
-                Last Submission <ArrowUpDown className="w-3 h-3" />
-              </div>
+            <TableHead className="cursor-pointer" onClick={() => handleSort('lastSubmissionTime')}>
+              Last Submission <SortIcon field="lastSubmissionTime" />
             </TableHead>
           </TableRow>
         </TableHeader>
@@ -116,7 +87,7 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
             >
               <TableCell>
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${statusConfig[athlete.status].dotClass}`} />
+                  <StatusDot status={athlete.status} />
                   <span className="text-sm">{statusConfig[athlete.status].label}</span>
                 </div>
               </TableCell>

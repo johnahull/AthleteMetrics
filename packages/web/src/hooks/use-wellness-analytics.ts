@@ -1,7 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import type { WellnessResponse, WellnessSummary, WellnessResponseData, TrendDirection, WellnessTemplate, WellnessRequest } from '@shared/wellness-types';
+import type { WellnessResponse, WellnessSummary, WellnessResponseData, TrendDirection, WellnessTemplate, WellnessRequest, WellnessTrend } from '@shared/wellness-types';
+import type { CompletionRate, ResponsesByTemplate } from '@shared/wellness-analytics-types';
 import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
+import { calculateAverageWellness, calculateTrend } from '@/utils/wellness-analytics';
 
 interface WellnessFilters {
   dateFrom: string;
@@ -80,13 +82,13 @@ export function useWellnessAnalytics({
     isLoading: trendsLoading,
     error: trendsError,
     refetch: refetchTrends,
-  } = useQuery<any[]>({
+  } = useQuery<WellnessTrend[]>({
     queryKey: [
       '/api/organizations/:orgId/wellness/analytics/trends',
       organizationId,
       filters,
     ],
-    queryFn: async () => {
+    queryFn: async (): Promise<WellnessTrend[]> => {
       const params = new URLSearchParams({
         startDate: filters.dateFrom,
         endDate: filters.dateTo,
@@ -173,10 +175,10 @@ export function useWellnessAnalytics({
   });
 
   // Group responses by template
-  const responsesByTemplate = useMemo(() => {
+  const responsesByTemplate = useMemo((): ResponsesByTemplate => {
     if (!responses || !templates) return {};
 
-    const grouped: Record<string, { template: WellnessTemplate; responses: WellnessResponse[] }> = {};
+    const grouped: ResponsesByTemplate = {};
 
     templates.forEach((template) => {
       grouped[template.id] = {
@@ -188,19 +190,38 @@ export function useWellnessAnalytics({
     return grouped;
   }, [responses, templates]);
 
+  // Get scale orientation from first template (for trend calculation)
+  const scaleOrientation = useMemo(() => {
+    if (!templates || templates.length === 0) return 'higher_is_better' as const;
+    return templates[0].config.statusConfig?.scaleOrientation || 'higher_is_better';
+  }, [templates]);
+
+  // Get scale range from first template for trend calculation
+  const scaleRange = useMemo(() => {
+    if (!templates || templates.length === 0) return 10; // Default to 10
+    const firstTemplate = templates[0];
+    const scaleQuestions = firstTemplate.config.questions.filter(q => q.type === 'scale');
+    if (scaleQuestions.length === 0) return 10;
+    const firstScale = scaleQuestions[0];
+    if ('scaleMax' in firstScale) {
+      return firstScale.scaleMax;
+    }
+    return 10;
+  }, [templates]);
+
   // Calculate summary statistics from responses
   const summary: WellnessSummary | null = responses
     ? {
         totalResponses: responses.length,
         uniqueAthletes: new Set(responses.map((r: WellnessResponse) => r.userId)).size,
         averageWellness: calculateAverageWellness(responses),
-        trend: calculateTrend(responses),
+        trend: calculateTrend(responses, scaleOrientation, scaleRange),
         lastUpdated: new Date(),
       }
     : null;
 
   // Calculate completion rate based on requests and responses
-  const completionRate = useMemo(() => {
+  const completionRate = useMemo((): CompletionRate => {
     if (!requests || requests.length === 0) {
       return { percentage: 0, completed: 0, total: 0 };
     }
@@ -253,6 +274,7 @@ export function useWellnessAnalytics({
     responsesByTemplate,
     requests,
     completionRate,
+    scaleOrientation,
     isLoading: responsesLoading || trendsLoading || templatesLoading || requestsLoading,
     error: responsesError || trendsError,
     refetch: () => {
@@ -262,54 +284,3 @@ export function useWellnessAnalytics({
   };
 }
 
-/**
- * Calculate overall average wellness score from responses
- */
-function calculateAverageWellness(responses: WellnessResponse[]): number {
-  if (!responses || responses.length === 0) return 0;
-
-  let totalScore = 0;
-  let scoreCount = 0;
-
-  responses.forEach((response) => {
-    const responseData = response.responses as WellnessResponseData;
-    Object.values(responseData).forEach((data) => {
-      if (typeof data.value === 'number') {
-        totalScore += data.value;
-        scoreCount++;
-      }
-    });
-  });
-
-  return scoreCount > 0 ? totalScore / scoreCount : 0;
-}
-
-/**
- * Calculate wellness trend (up, down, or stable)
- */
-function calculateTrend(responses: WellnessResponse[]): TrendDirection {
-  if (!responses || responses.length < 2) return 'stable';
-
-  // Sort by date
-  const sorted = [...responses].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
-
-  // Split into two halves and compare averages
-  const midpoint = Math.floor(sorted.length / 2);
-  const firstHalf = sorted.slice(0, midpoint);
-  const secondHalf = sorted.slice(midpoint);
-
-  const firstAvg = calculateAverageWellness(firstHalf);
-  const secondAvg = calculateAverageWellness(secondHalf);
-
-  const difference = secondAvg - firstAvg;
-
-  // Use percentage threshold from constants (5% of scale range 1-10 = 0.5 points)
-  const threshold = (WELLNESS_CONSTANTS.TREND_PERCENTAGE_THRESHOLD / 100) *
-    (WELLNESS_CONSTANTS.SCORE_MAX - WELLNESS_CONSTANTS.SCORE_MIN);
-
-  if (difference > threshold) return 'up';
-  if (difference < -threshold) return 'down';
-  return 'stable';
-}

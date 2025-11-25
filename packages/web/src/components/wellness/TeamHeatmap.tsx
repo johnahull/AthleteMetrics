@@ -3,14 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
 import type { WellnessResponse, WellnessResponseData, HeatmapCellData, WellnessTemplate } from '@shared/wellness-types';
-import {
-  WELLNESS_CONSTANTS,
-  getWellnessScoreLevel,
-  getWellnessScoreLevelWithThresholds,
-  getHeatmapColor,
-  getTemplateScaleRange,
-  autoGenerateColorThresholds
-} from '@shared/wellness-constants';
+import { getTemplateScaleRange } from '@shared/wellness-constants';
+import { calculateAthleteStatus, getDefaultStatusConfig } from '@shared/wellness-status-utils';
 
 interface TeamHeatmapProps {
   responses: WellnessResponse[];
@@ -24,7 +18,8 @@ interface TeamHeatmapProps {
 }
 
 interface HeatmapCell {
-  score: number;
+  score: number | null;
+  status: 'red' | 'yellow' | 'green';
   athleteName: string;
   responses: WellnessResponseData;
 }
@@ -39,24 +34,22 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
   // Extract scale range from template
   const scaleRange = useMemo(() => getTemplateScaleRange(template), [template]);
 
-  // Get or generate color thresholds
-  const colorThresholds = useMemo(() => {
-    // Use custom config only if all thresholds are defined
-    const config = template.config.colorConfig;
-    if (config?.lowThreshold !== undefined &&
-        config?.mediumThreshold !== undefined &&
-        config?.highThreshold !== undefined) {
-      return config as { lowThreshold: number; mediumThreshold: number; highThreshold: number };
-    }
-    // Auto-generate if not configured or partially configured
-    if (scaleRange) {
-      return autoGenerateColorThresholds(scaleRange.min, scaleRange.max);
-    }
-    // Fallback to legacy 1-10 scale
-    return { lowThreshold: 3, mediumThreshold: 7, highThreshold: 8 };
-  }, [template, scaleRange]);
+  // Get scale orientation from template
+  const scaleOrientation = useMemo(() => {
+    return template.config.statusConfig?.scaleOrientation || 'higher_is_better';
+  }, [template]);
 
-  // Prepare heatmap data
+  // Get status thresholds from template config (same as calculateAthleteStatus uses)
+  const statusThresholds = useMemo(() => {
+    const config = getDefaultStatusConfig(template);
+    return {
+      redThreshold: template.config.statusConfig?.redThreshold ?? config.redThreshold,
+      yellowThreshold: template.config.statusConfig?.yellowThreshold ?? config.yellowThreshold,
+      calculationMethod: template.config.statusConfig?.calculationMethod ?? config.calculationMethod,
+    };
+  }, [template]);
+
+  // Prepare heatmap data using template's score calculation method
   const heatmapData = useMemo(() => {
     if (!responses || responses.length === 0) return null;
 
@@ -68,19 +61,13 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
         dataByAthleteAndDate[response.userId] = {};
       }
 
-      // Calculate average wellness score for this response
-      const responseData = response.responses as WellnessResponseData;
-      const numericScores = Object.values(responseData)
-        .filter((v) => typeof v.value === 'number')
-        .map((v) => v.value as number);
-
-      const avgScore =
-        numericScores.length > 0
-          ? numericScores.reduce((sum, score) => sum + score, 0) / numericScores.length
-          : 0;
+      // Use calculateAthleteStatus to get score and status based on template config
+      // This respects calculationMethod (average/sum), scaleOrientation, and thresholds
+      const { score, status } = calculateAthleteStatus(response, template);
 
       dataByAthleteAndDate[response.userId][response.date] = {
-        score: avgScore,
+        score,
+        status,
         athleteName: response.userFullName,
         responses: response.responses,
       };
@@ -105,39 +92,28 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
       dates: allDates,
       data: dataByAthleteAndDate,
     };
-  }, [responses]);
+  }, [responses, template]);
 
-  // Get Tailwind CSS class for wellness score
-  const getScoreTailwindClass = (score: number | null): string => {
-    if (score === null || score === 0) return 'bg-gray-100'; // No data
-
-    const level = scaleRange
-      ? getWellnessScoreLevelWithThresholds(
-          score,
-          colorThresholds.lowThreshold,
-          colorThresholds.mediumThreshold,
-          colorThresholds.highThreshold,
-          scaleRange.max
-        )
-      : getWellnessScoreLevel(score);
-
-    // Map to Tailwind classes for consistency
-    switch (level) {
-      case 'very_low':
+  // Get Tailwind CSS class for wellness status
+  // Uses the pre-calculated status from calculateAthleteStatus which respects template config
+  const getStatusTailwindClass = (status: 'red' | 'yellow' | 'green' | null): string => {
+    switch (status) {
+      case 'red':
         return 'bg-red-500';
-      case 'low':
-        return 'bg-orange-400';
-      case 'medium':
+      case 'yellow':
         return 'bg-yellow-400';
-      case 'good':
-        return 'bg-green-400';
-      case 'excellent':
-        return 'bg-green-600';
+      case 'green':
+        return 'bg-green-500';
+      default:
+        return 'bg-gray-100'; // No data
     }
   };
 
-  const getScoreTextColor = (score: number): string => {
-    return score >= WELLNESS_CONSTANTS.SCORE_LOW_THRESHOLD ? 'text-white' : 'text-gray-700';
+  // Get text color based on status background
+  const getStatusTextColor = (status: 'red' | 'yellow' | 'green' | null): string => {
+    if (status === 'yellow') return 'text-gray-900';
+    if (status === 'red' || status === 'green') return 'text-white';
+    return 'text-gray-400';
   };
 
   if (!heatmapData || heatmapData.athletes.length === 0) {
@@ -153,28 +129,57 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
 
   return (
     <div>
-      {/* Legend */}
+      {/* Legend - adapts to scale orientation and calculation method */}
       <div className="mb-4 flex items-center justify-between" data-testid="heatmap-legend">
-        <span className="text-sm font-medium text-gray-700">Wellness Score:</span>
+        <span className="text-sm font-medium text-gray-700">
+          Wellness {statusThresholds.calculationMethod === 'sum' ? 'Total' : 'Score'}:
+        </span>
         <div className="flex items-center space-x-2">
-          <div className="flex items-center space-x-1">
-            <div className="w-4 h-4 bg-red-500 rounded"></div>
-            <span className="text-xs text-gray-600">
-              Low ({scaleRange?.min || 1}-{colorThresholds.lowThreshold})
-            </span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <div className="w-4 h-4 bg-yellow-400 rounded"></div>
-            <span className="text-xs text-gray-600">
-              Medium ({colorThresholds.lowThreshold + 1}-{colorThresholds.mediumThreshold})
-            </span>
-          </div>
-          <div className="flex items-center space-x-1">
-            <div className="w-4 h-4 bg-green-600 rounded"></div>
-            <span className="text-xs text-gray-600">
-              High ({colorThresholds.mediumThreshold + 1}-{scaleRange?.max || 10})
-            </span>
-          </div>
+          {scaleOrientation === 'lower_is_better' ? (
+            // For lower_is_better: low scores = good (green), high scores = bad (red)
+            <>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Good (&lt;{statusThresholds.yellowThreshold})
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Moderate ({statusThresholds.yellowThreshold}-{statusThresholds.redThreshold - 1})
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-red-500 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Concerning (≥{statusThresholds.redThreshold})
+                </span>
+              </div>
+            </>
+          ) : (
+            // For higher_is_better: low scores = bad (red), high scores = good (green)
+            <>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-red-500 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Low (≤{statusThresholds.redThreshold})
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Medium ({statusThresholds.redThreshold + 1}-{statusThresholds.yellowThreshold})
+                </span>
+              </div>
+              <div className="flex items-center space-x-1">
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <span className="text-xs text-gray-600">
+                  Good (&gt;{statusThresholds.yellowThreshold})
+                </span>
+              </div>
+            </>
+          )}
           <div className="flex items-center space-x-1">
             <div className="w-4 h-4 bg-gray-100 border border-gray-300 rounded"></div>
             <span className="text-xs text-gray-600">No data</span>
@@ -212,15 +217,16 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                   </td>
                   {heatmapData.dates.map((date) => {
                     const cellData = heatmapData.data[athlete.id]?.[date];
-                    const score = cellData?.score || 0;
+                    const score = cellData?.score;
+                    const status = cellData?.status || null;
 
                     return (
                       <td
                         key={`${athlete.id}-${date}`}
                         data-testid={`heatmap-cell-${athlete.id}-${date}`}
                         className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
-                          getScoreTailwindClass(score)
-                        } ${getScoreTextColor(score)}`}
+                          getStatusTailwindClass(status)
+                        } ${getStatusTextColor(status)}`}
                         onClick={() => {
                           if (cellData) {
                             setSelectedCell({
@@ -236,7 +242,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                         }}
                       >
                         <div className="flex items-center justify-center h-12 w-full">
-                          {score > 0 ? (
+                          {score !== null && score !== undefined ? (
                             <span className="text-sm font-medium">{score.toFixed(1)}</span>
                           ) : (
                             <span className="text-xs text-gray-400">-</span>
@@ -279,9 +285,12 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
               </div>
 
               <div>
-                <p className="text-sm text-gray-600">Average Wellness Score</p>
+                <p className="text-sm text-gray-600">
+                  {statusThresholds.calculationMethod === 'sum' ? 'Total' : 'Average'} Wellness Score
+                </p>
                 <p data-testid="modal-wellness-score" className="text-2xl font-bold text-gray-900">
-                  {(selectedCell.score ?? 0).toFixed(1)} / {scaleRange?.max || 10}
+                  {(selectedCell.score ?? 0).toFixed(1)}
+                  {statusThresholds.calculationMethod !== 'sum' && ` / ${scaleRange?.max || 10}`}
                 </p>
               </div>
 
@@ -292,15 +301,37 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                     ([questionId, data]) => (
                       <div key={questionId} className="p-2 bg-gray-50 rounded-lg">
                         <p className="text-sm font-medium text-gray-900">{data.label}</p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {typeof data.value === 'number'
-                            ? `${data.value} / ${scaleRange?.max || 10}`
-                            : typeof data.value === 'boolean'
-                            ? data.value
-                              ? 'Yes'
-                              : 'No'
-                            : String(data.value)}
-                        </p>
+                        <div className="text-sm text-gray-600 mt-1">
+                          {typeof data.value === 'number' ? (
+                            `${data.value} / ${scaleRange?.max || 10}`
+                          ) : typeof data.value === 'boolean' ? (
+                            data.value ? 'Yes' : 'No'
+                          ) : Array.isArray(data.value) ? (
+                            // Body map injuries - array of {x, y, label?} objects
+                            // Or multi-select multiple choice - array of strings
+                            data.value.length === 0 ? (
+                              <span className="text-green-600">None reported</span>
+                            ) : (
+                              <ul className="list-disc list-inside">
+                                {data.value.map((item, idx) => {
+                                  // String array (multiple choice)
+                                  if (typeof item === 'string') {
+                                    return <li key={idx}>{item}</li>;
+                                  }
+                                  // Body map object {x, y, label?}
+                                  if (typeof item === 'object' && item !== null && 'x' in item && 'y' in item) {
+                                    const bodyMapItem = item as { x: number; y: number; label?: string };
+                                    return <li key={idx}>{bodyMapItem.label || 'Unmarked area'}</li>;
+                                  }
+                                  // Fallback
+                                  return <li key={idx}>{String(item)}</li>;
+                                })}
+                              </ul>
+                            )
+                          ) : (
+                            String(data.value)
+                          )}
+                        </div>
                       </div>
                     )
                   )}

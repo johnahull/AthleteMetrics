@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowUp, ArrowDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
+import { calculateTrend } from '@/utils/wellness-analytics';
+import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
+import { TrendIndicator } from './ui/WellnessUIComponents';
 
 interface QuestionStats {
   questionId: string;
@@ -23,18 +25,15 @@ interface QuestionStats {
 interface QuestionAnalyticsTableProps {
   responses: WellnessResponse[];
   responsesByTemplate: Record<string, { template: WellnessTemplate; responses: WellnessResponse[] }>;
+  scaleOrientation?: 'higher_is_better' | 'lower_is_better';
 }
-
-type SortField = 'questionLabel' | 'avgScore' | 'responseCount' | 'stdDev';
-type SortDirection = 'asc' | 'desc';
 
 export function QuestionAnalyticsTable({
   responses,
   responsesByTemplate,
+  scaleOrientation = 'higher_is_better',
 }: QuestionAnalyticsTableProps) {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('all');
-  const [sortField, setSortField] = useState<SortField>('questionLabel');
-  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
   // Calculate question-level statistics
   const questionStats = useMemo(() => {
@@ -107,24 +106,21 @@ export function QuestionAnalyticsTable({
         const variance = values.reduce((sum, val) => sum + Math.pow(val - avgScore, 2), 0) / values.length;
         const stdDev = Math.sqrt(variance);
 
-        // Calculate trend (first half vs second half)
-        const sortedByDate = [...templateResponses]
-          .filter(r => r.responses[question.id] !== undefined && typeof r.responses[question.id].value === 'number')
-          .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+        // Get scale range for this question
+        const scaleMax = 'scaleMax' in question ? question.scaleMax : 10;
 
-        let trend: 'up' | 'down' | 'stable' = 'stable';
-        if (sortedByDate.length >= 4) {
-          const midpoint = Math.floor(sortedByDate.length / 2);
-          const firstHalf = sortedByDate.slice(0, midpoint);
-          const secondHalf = sortedByDate.slice(midpoint);
+        // Calculate trend using shared utility
+        // Filter responses to this specific question
+        const questionResponses = templateResponses
+          .map(r => ({
+            ...r,
+            responses: {
+              [question.id]: r.responses[question.id]
+            }
+          }))
+          .filter(r => r.responses[question.id] !== undefined && typeof r.responses[question.id].value === 'number');
 
-          const firstAvg = firstHalf.reduce((sum, r) => sum + (r.responses[question.id].value as number), 0) / firstHalf.length;
-          const secondAvg = secondHalf.reduce((sum, r) => sum + (r.responses[question.id].value as number), 0) / secondHalf.length;
-
-          const diff = secondAvg - firstAvg;
-          if (diff > 0.5) trend = 'up';
-          else if (diff < -0.5) trend = 'down';
-        }
+        const trend = calculateTrend(questionResponses, scaleOrientation, scaleMax);
 
         stats.push({
           questionId: question.id,
@@ -143,48 +139,13 @@ export function QuestionAnalyticsTable({
     });
 
     return stats;
-  }, [responses, responsesByTemplate, selectedTemplateId]);
+  }, [responses, responsesByTemplate, selectedTemplateId, scaleOrientation]);
 
-  // Sort question stats
-  const sortedStats = useMemo(() => {
-    const sorted = [...questionStats].sort((a, b) => {
-      let comparison = 0;
-      switch (sortField) {
-        case 'questionLabel':
-          comparison = a.questionLabel.localeCompare(b.questionLabel);
-          break;
-        case 'avgScore':
-          comparison = (a.avgScore || 0) - (b.avgScore || 0);
-          break;
-        case 'responseCount':
-          comparison = a.responseCount - b.responseCount;
-          break;
-        case 'stdDev':
-          comparison = (a.stdDev || 0) - (b.stdDev || 0);
-          break;
-      }
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-    return sorted;
-  }, [questionStats, sortField, sortDirection]);
-
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field) return null;
-    return sortDirection === 'asc' ? (
-      <ArrowUp className="inline w-4 h-4 ml-1" />
-    ) : (
-      <ArrowDown className="inline w-4 h-4 ml-1" />
-    );
-  };
+  // Use sortable table hook
+  const { sortedData: sortedStats, handleSort, SortIcon } = useSortableTable(questionStats, {
+    defaultSortField: 'questionLabel',
+    defaultSortDirection: 'asc',
+  });
 
   const templates = Object.values(responsesByTemplate).map(rt => rt.template);
 
@@ -310,24 +271,7 @@ export function QuestionAnalyticsTable({
                     <span className="font-medium">{stat.responseCount}</span>
                   </TableCell>
                   <TableCell>
-                    {stat.trend === 'up' && (
-                      <div className="flex items-center text-green-600">
-                        <TrendingUp className="w-4 h-4 mr-1" />
-                        <span className="text-xs">Up</span>
-                      </div>
-                    )}
-                    {stat.trend === 'down' && (
-                      <div className="flex items-center text-red-600">
-                        <TrendingDown className="w-4 h-4 mr-1" />
-                        <span className="text-xs">Down</span>
-                      </div>
-                    )}
-                    {stat.trend === 'stable' && (
-                      <div className="flex items-center text-gray-600">
-                        <Minus className="w-4 h-4 mr-1" />
-                        <span className="text-xs">Stable</span>
-                      </div>
-                    )}
+                    <TrendIndicator trend={stat.trend} />
                   </TableCell>
                 </TableRow>
               ))}

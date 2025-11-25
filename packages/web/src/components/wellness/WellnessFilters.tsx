@@ -32,6 +32,7 @@ export function WellnessFilters({
   organizationId,
 }: WellnessFiltersProps) {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [isAthletesExpanded, setIsAthletesExpanded] = useState(false); // Collapsed by default
 
   // Fetch teams for team selector
   const { data: teams = [] } = useQuery({
@@ -117,22 +118,37 @@ export function WellnessFilters({
             </Select>
           </div>
 
-          {/* Athlete Multi-Select */}
+          {/* Athlete Multi-Select (Collapsible) */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Athletes
-              {filters.athleteIds.length > 0 && (
-                <span data-testid="athletes-selected-count" className="ml-2 text-xs text-gray-500">
-                  ({filters.athleteIds.length} selected)
-                </span>
+            <button
+              type="button"
+              onClick={() => setIsAthletesExpanded(!isAthletesExpanded)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <label className="block text-sm font-medium text-gray-700 cursor-pointer">
+                Athletes
+                {filters.athleteIds.length > 0 && (
+                  <span data-testid="athletes-selected-count" className="ml-2 text-xs text-gray-500">
+                    ({filters.athleteIds.length} selected)
+                  </span>
+                )}
+              </label>
+              {isAthletesExpanded ? (
+                <ChevronUp className="h-4 w-4 text-gray-500" />
+              ) : (
+                <ChevronDown className="h-4 w-4 text-gray-500" />
               )}
-            </label>
-            <TeamAthleteSelector
-              organizationId={organizationId}
-              selectedAthleteIds={filters.athleteIds}
-              onSelectionChange={(athleteIds: string[]) => onFilterChange({ athleteIds })}
-              data-testid="select-athletes"
-            />
+            </button>
+            {isAthletesExpanded && (
+              <div className="mt-2">
+                <TeamAthleteSelector
+                  organizationId={organizationId}
+                  selectedAthleteIds={filters.athleteIds}
+                  onSelectionChange={(athleteIds: string[]) => onFilterChange({ athleteIds })}
+                  data-testid="select-athletes"
+                />
+              </div>
+            )}
           </div>
 
           {/* Active Filters Display */}

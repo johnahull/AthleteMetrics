@@ -1,14 +1,5 @@
 import React, { useMemo } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions
-} from 'chart.js';
+import type { ChartOptions } from 'chart.js';
 import { Bar } from 'react-chartjs-2';
 import type {
   ChartDataPoint,
@@ -40,15 +31,7 @@ function getBestPerformingAthlete(
   return athletes.find(a => a.value === bestValue);
 }
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 interface BarChartProps {
   data: ChartDataPoint[];

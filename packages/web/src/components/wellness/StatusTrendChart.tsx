@@ -1,31 +1,9 @@
 import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ChartOptions,
-} from 'chart.js';
+import type { ChartOptions } from 'chart.js';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateAthleteStatus } from '@shared/wellness-status-utils';
-
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
 
 interface StatusTrendChartProps {
   template: WellnessTemplate;

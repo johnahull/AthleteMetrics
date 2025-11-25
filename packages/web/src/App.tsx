@@ -17,6 +17,9 @@ import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-sho
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PWAInstallPrompt } from "./components/pwa-install-prompt";
 
+// Register all Chart.js components once at app level
+import "./lib/chart-setup";
+
 // Lazy load heavy pages to reduce initial bundle size
 const Dashboard = React.lazy(() => import("./pages/dashboard"));
 const Teams = React.lazy(() => import("./pages/teams"));

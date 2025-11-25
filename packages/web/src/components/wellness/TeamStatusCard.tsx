@@ -3,8 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import TeamAthleteList from './TeamAthleteList';
+import { TrendIndicator, ScoreDisplay, StatusDot } from './ui/WellnessUIComponents';
 
 interface AthleteData {
   id: string;
@@ -53,15 +54,9 @@ export default function TeamStatusCard({
   // teamStatus is now calculated by API based on average of athlete scores
 
   const statusConfig = {
-    red: { label: 'At Risk', bgClass: 'bg-red-100', textClass: 'text-red-800', dotClass: 'bg-red-500' },
-    yellow: { label: 'Caution', bgClass: 'bg-yellow-100', textClass: 'text-yellow-800', dotClass: 'bg-yellow-500' },
-    green: { label: 'Good', bgClass: 'bg-green-100', textClass: 'text-green-800', dotClass: 'bg-green-500' },
-  };
-
-  const trendConfig = {
-    up: { icon: TrendingUp, label: 'Improving', color: 'text-green-600' },
-    down: { icon: TrendingDown, label: 'Declining', color: 'text-red-600' },
-    stable: { icon: Minus, label: 'Stable', color: 'text-gray-600' },
+    red: { label: 'At Risk', bgClass: 'bg-red-100', textClass: 'text-red-800' },
+    yellow: { label: 'Caution', bgClass: 'bg-yellow-100', textClass: 'text-yellow-800' },
+    green: { label: 'Good', bgClass: 'bg-green-100', textClass: 'text-green-800' },
   };
 
   const handleToggleExpand = () => {
@@ -71,7 +66,6 @@ export default function TeamStatusCard({
     }
   };
 
-  const TrendIcon = trendConfig[trend].icon;
   const submittedCount = Math.round((completionRate / 100) * totalAthletes);
 
   return (
@@ -82,7 +76,9 @@ export default function TeamStatusCard({
             <CardTitle className="text-lg">{teamName}</CardTitle>
           </div>
           <Badge className={`${statusConfig[teamStatus].bgClass} ${statusConfig[teamStatus].textClass} border-0`}>
-            <div className={`w-2 h-2 rounded-full ${statusConfig[teamStatus].dotClass} mr-2`} />
+            <div className="mr-2">
+              <StatusDot status={teamStatus} />
+            </div>
             {statusConfig[teamStatus].label}
           </Badge>
         </div>
@@ -93,24 +89,26 @@ export default function TeamStatusCard({
         {teamAverageScore !== null && (
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <span className="text-sm font-medium text-gray-700">Team Average Score</span>
-            <span className="text-lg font-bold text-gray-900">{teamAverageScore.toFixed(1)}</span>
+            <span className="text-lg text-gray-900">
+              <ScoreDisplay score={teamAverageScore} max={10} className="font-bold" />
+            </span>
           </div>
         )}
 
         {/* Athlete Status Counts */}
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-red-500" />
+            <StatusDot status="red" />
             <span className="font-medium">{redCount}</span>
             <span className="text-gray-600">red</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-yellow-500" />
+            <StatusDot status="yellow" />
             <span className="font-medium">{yellowCount}</span>
             <span className="text-gray-600">yellow</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded-full bg-green-500" />
+            <StatusDot status="green" />
             <span className="font-medium">{greenCount}</span>
             <span className="text-gray-600">green</span>
           </div>
@@ -129,9 +127,8 @@ export default function TeamStatusCard({
         </div>
 
         {/* Trend */}
-        <div className="flex items-center gap-2 text-sm">
-          <TrendIcon className={`w-4 h-4 ${trendConfig[trend].color}`} />
-          <span className={trendConfig[trend].color}>{trendConfig[trend].label}</span>
+        <div className="text-sm">
+          <TrendIndicator trend={trend} />
         </div>
 
         {/* Common Injuries */}

@@ -1,41 +1,12 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ChartOptions,
-} from 'chart.js';
+import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useQuery } from '@tanstack/react-query';
-import type { WellnessResponse, WellnessResponseData } from '@shared/wellness-types';
+import type { WellnessResponse, WellnessResponseData, WellnessTrend } from '@shared/wellness-types';
 import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
-interface User {
-  id: string;
-  fullName: string;
-  email: string;
-  role: string;
-}
-
 interface WellnessTrendChartProps {
-  trends: any[]; // TODO: Define proper trend type when backend endpoint is implemented
+  trends: WellnessTrend[];
   responses: WellnessResponse[];
   selectedAthleteId: string | null;
   onAthleteSelect: (athleteId: string | null) => void;
@@ -64,17 +35,25 @@ export function WellnessTrendChart({
     };
   }, []);
 
-  // Get list of athletes
-  const { data: athletes = [] } = useQuery<User[]>({
-    queryKey: ['/api/users', organizationId, 'athlete'],
-    queryFn: async () => {
-      const response = await fetch(`/api/users?organizationId=${organizationId}&role=athlete`, {
-        credentials: 'include',
-      });
-      return response.json();
-    },
-    enabled: !!organizationId,
-  });
+  // Get unique athletes from responses (instead of separate API call)
+  const athletes = useMemo(() => {
+    if (!responses || responses.length === 0) return [];
+
+    const athleteMap = new Map<string, { id: string; fullName: string }>();
+    responses.forEach((response) => {
+      if (!athleteMap.has(response.userId)) {
+        athleteMap.set(response.userId, {
+          id: response.userId,
+          fullName: response.userFullName,
+        });
+      }
+    });
+
+    // Sort alphabetically by name
+    return Array.from(athleteMap.values()).sort((a, b) =>
+      a.fullName.localeCompare(b.fullName)
+    );
+  }, [responses]);
 
   // Filter responses for selected athlete
   const athleteResponses = useMemo(() => {
@@ -197,9 +176,9 @@ export function WellnessTrendChart({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="none">Select an athlete...</SelectItem>
-            {athletes.map((athlete: User) => (
+            {athletes.map((athlete) => (
               <SelectItem key={athlete.id} value={athlete.id}>
-                {athlete.fullName || athlete.email}
+                {athlete.fullName}
               </SelectItem>
             ))}
           </SelectContent>

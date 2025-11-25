@@ -66,18 +66,6 @@ interface AthleteData {
 }
 
 // Register Chart.js components
-ChartJS.register(
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ScatterController,
-  LineController,
-  Filler,
-  annotationPlugin
-);
 
 // Constants for quadrant calculations
 const QUADRANT_PADDING_RATIO = 0.1; // 10% padding around data bounds

@@ -196,11 +196,13 @@ export function getCommonInjuries(
 
 /**
  * Calculate trend by comparing current and previous scores
+ * Handles edge cases: empty arrays, zero averages, NaN values
  */
 export function calculateTrend(
   currentScores: number[],
   previousScores: number[]
 ): 'up' | 'down' | 'stable' {
+  // Handle empty arrays
   if (previousScores.length === 0 || currentScores.length === 0) {
     return 'stable';
   }
@@ -208,7 +210,27 @@ export function calculateTrend(
   const currentAvg = currentScores.reduce((sum, val) => sum + val, 0) / currentScores.length;
   const previousAvg = previousScores.reduce((sum, val) => sum + val, 0) / previousScores.length;
 
+  // Handle NaN values (shouldn't happen with filtered data, but defensive)
+  if (isNaN(currentAvg) || isNaN(previousAvg)) {
+    return 'stable';
+  }
+
+  // Handle zero previous average (can't calculate percentage change)
+  if (previousAvg === 0) {
+    // If previous was 0 and current is positive, that's an increase
+    if (currentAvg > 0) return 'up';
+    // If previous was 0 and current is negative, that's a decrease (unlikely in wellness)
+    if (currentAvg < 0) return 'down';
+    // Both are 0
+    return 'stable';
+  }
+
   const percentChange = ((currentAvg - previousAvg) / previousAvg) * 100;
+
+  // Handle Infinity or NaN from division (shouldn't happen now, but defensive)
+  if (!isFinite(percentChange)) {
+    return 'stable';
+  }
 
   if (percentChange > 5) return 'up';
   if (percentChange < -5) return 'down';

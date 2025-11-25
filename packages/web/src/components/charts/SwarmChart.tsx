@@ -19,13 +19,6 @@ import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
-ChartJS.register(
-  LinearScale,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface SwarmChartProps {
   data: ChartDataPoint[];

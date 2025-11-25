@@ -1,12 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useWellnessAnalytics } from '@/hooks/use-wellness-analytics';
 import { WellnessSummaryCard } from '@/components/wellness/WellnessSummaryCard';
-import { CompletionRateCard } from '@/components/wellness/CompletionRateCard';
-import { AlertsCard } from '@/components/wellness/AlertsCard';
+import { AtRiskAthletesCard } from '@/components/wellness/AtRiskAthletesCard';
+import { InjurySummaryCard } from '@/components/wellness/InjurySummaryCard';
 import { WellnessTrendChart } from '@/components/wellness/WellnessTrendChart';
 import { TeamHeatmap } from '@/components/wellness/TeamHeatmap';
 import { WellnessFilters } from '@/components/wellness/WellnessFilters';
@@ -15,14 +15,13 @@ import { QuestionAnalyticsTable } from '@/components/wellness/QuestionAnalyticsT
 import { StatusTrendChart } from '@/components/wellness/StatusTrendChart';
 import { InjuryTrendChart } from '@/components/wellness/InjuryTrendChart';
 import { InjuryBodyMapHeatmap } from '@/components/wellness/InjuryBodyMapHeatmap';
-import type { WellnessResponse, WellnessAlert, WellnessResponseData } from '@shared/wellness-types';
-import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
+import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 
 /**
  * Wellness Analytics Dashboard
  *
  * Displays comprehensive wellness analytics including:
- * - Summary metrics (average wellness, completion rates, alerts)
+ * - Summary metrics (average wellness, at-risk athletes, injuries)
  * - Trend charts showing wellness over time
  * - Team heatmaps visualizing wellness patterns
  * - Filtering by date range, teams, athletes, and questions
@@ -61,7 +60,7 @@ export default function WellnessAnalytics() {
     trends,
     templates,
     responsesByTemplate,
-    completionRate,
+    scaleOrientation,
     isLoading,
   } = useWellnessAnalytics({
     organizationId: effectiveOrganizationId || '',
@@ -69,99 +68,31 @@ export default function WellnessAnalytics() {
     enabled: !!effectiveOrganizationId,
   });
 
-  // Calculate alerts from responses
-  const alerts = useMemo(() => {
-    if (!responses || responses.length === 0) return [];
+  // Extract scale from first template's first scale question
+  const getTemplateScale = (templateData?: Record<string, { template: WellnessTemplate; responses: WellnessResponse[] }>) => {
+    if (!templateData || Object.keys(templateData).length === 0) {
+      return 10; // Default to 10 if no templates
+    }
 
-    const athleteData: Record<string, WellnessResponse[]> = {};
+    // Get first template
+    const firstTemplateData = Object.values(templateData)[0];
+    const template = firstTemplateData?.template;
 
-    // Group responses by athlete
-    responses.forEach((response: WellnessResponse) => {
-      if (!athleteData[response.userId]) {
-        athleteData[response.userId] = [];
-      }
-      athleteData[response.userId].push(response);
-    });
+    if (!template) {
+      return 10;
+    }
 
-    const detectedAlerts: WellnessAlert[] = [];
+    // Find first scale question
+    const scaleQuestion = template.config.questions.find(q => q.type === 'scale');
+    if (scaleQuestion && scaleQuestion.type === 'scale') {
+      return scaleQuestion.scaleMax;
+    }
 
-    // Detect concerning patterns
-    Object.entries(athleteData).forEach(([userId, userResponses]) => {
-      // Sort by date
-      const sorted = [...userResponses].sort((a, b) =>
-        new Date(a.date).getTime() - new Date(b.date).getTime()
-      );
+    // No scale questions found, default to 10
+    return 10;
+  };
 
-      // Calculate average wellness score
-      const scores = sorted.map((r) => {
-        const responseData = r.responses as WellnessResponseData;
-        const numericScores = Object.values(responseData)
-          .filter((v) => typeof v.value === 'number')
-          .map((v) => v.value as number);
-
-        return numericScores.length > 0
-          ? numericScores.reduce((sum, score) => sum + score, 0) / numericScores.length
-          : null;
-      }).filter((s): s is number => s !== null);
-
-      if (scores.length < 2) return;
-
-      // Check for significant drop using constant
-      const latest = scores[scores.length - 1];
-      const previous = scores[scores.length - 2];
-      const dropPercentage = ((previous - latest) / previous) * 100;
-
-      if (dropPercentage > WELLNESS_CONSTANTS.ALERT_DROP_PERCENTAGE) {
-        detectedAlerts.push({
-          id: `drop-${userId}`,
-          athleteId: userId,
-          athleteName: sorted[0].userFullName,
-          questionId: '', // Aggregate alert, not specific to a question
-          questionLabel: 'Overall Wellness',
-          severity: 'high',
-          type: 'wellness_drop',
-          message: `Wellness dropped ${dropPercentage.toFixed(0)}% from previous submission`,
-          value: latest,
-          threshold: previous,
-          date: sorted[sorted.length - 1].date,
-          acknowledgedAt: null,
-          acknowledgedBy: null,
-        });
-      }
-
-      // Check for sustained low wellness using constants
-      let consecutiveLowDays = 0;
-      for (const score of scores.slice(-5)) {
-        if (score < WELLNESS_CONSTANTS.ALERT_LOW_SCORE_THRESHOLD) {
-          consecutiveLowDays++;
-        } else {
-          consecutiveLowDays = 0;
-        }
-      }
-
-      if (consecutiveLowDays >= WELLNESS_CONSTANTS.ALERT_CONSECUTIVE_LOW_DAYS) {
-        detectedAlerts.push({
-          id: `sustained-low-${userId}`,
-          athleteId: userId,
-          athleteName: sorted[0].userFullName,
-          questionId: '', // Aggregate alert, not specific to a question
-          questionLabel: 'Overall Wellness',
-          severity: 'medium',
-          type: 'sustained_low',
-          message: `Wellness has been low for ${consecutiveLowDays} consecutive days`,
-          value: scores[scores.length - 1],
-          threshold: WELLNESS_CONSTANTS.ALERT_LOW_SCORE_THRESHOLD,
-          date: sorted[sorted.length - 1].date,
-          acknowledgedAt: null,
-          acknowledgedBy: null,
-        });
-      }
-    });
-
-    return detectedAlerts;
-  }, [responses]);
-
-  // Completion rate is now calculated in useWellnessAnalytics hook
+  const scaleMax = getTemplateScale(responsesByTemplate);
 
   // Filter functions
   const handleFilterChange = (newFilters: Partial<typeof filters>) => {
@@ -221,16 +152,19 @@ export default function WellnessAnalytics() {
           <>
             <WellnessSummaryCard
               summary={summary}
+              scaleMax={scaleMax}
               data-testid="card-average-wellness"
             />
-            <CompletionRateCard
-              completionRate={completionRate}
-              data-testid="card-completion-rate"
+            <AtRiskAthletesCard
+              responses={responses || []}
+              responsesByTemplate={responsesByTemplate || {}}
+              onAthleteClick={(athleteId) => setSelectedAthleteId(athleteId)}
+              data-testid="card-at-risk-athletes"
             />
-            <AlertsCard
-              alerts={alerts}
-              onAlertClick={(athleteId) => setSelectedAthleteId(athleteId)}
-              data-testid="card-alerts"
+            <InjurySummaryCard
+              responses={responses || []}
+              responsesByTemplate={responsesByTemplate || {}}
+              data-testid="card-injury-summary"
             />
           </>
         )}
@@ -248,28 +182,6 @@ export default function WellnessAnalytics() {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          {/* Trend Chart */}
-          <div data-testid="section-trend-chart">
-            <Card>
-              <CardHeader>
-                <CardTitle data-testid="chart-title">Wellness Trend</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <Skeleton className="h-96" />
-                ) : (
-                  <WellnessTrendChart
-                    trends={trends || []}
-                    responses={responses || []}
-                    selectedAthleteId={selectedAthleteId}
-                    onAthleteSelect={setSelectedAthleteId}
-                    organizationId={effectiveOrganizationId}
-                  />
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Team Heatmaps (one per template) */}
           <div data-testid="section-team-heatmap" className="space-y-6">
             {isLoading ? (
@@ -313,6 +225,28 @@ export default function WellnessAnalytics() {
               </Card>
             )}
           </div>
+
+          {/* Individual Athlete Trend Chart */}
+          <div data-testid="section-trend-chart">
+            <Card>
+              <CardHeader>
+                <CardTitle data-testid="chart-title">Individual Wellness Trend</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <Skeleton className="h-96" />
+                ) : (
+                  <WellnessTrendChart
+                    trends={trends || []}
+                    responses={responses || []}
+                    selectedAthleteId={selectedAthleteId}
+                    onAthleteSelect={setSelectedAthleteId}
+                    organizationId={effectiveOrganizationId}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
 
         {/* Teams Tab */}
@@ -324,6 +258,8 @@ export default function WellnessAnalytics() {
               responses={responses || []}
               responsesByTemplate={responsesByTemplate || {}}
               filters={filters}
+              scaleMax={scaleMax}
+              scaleOrientation={scaleOrientation}
               onTeamClick={(teamId) => {
                 // Update filters to show only this team
                 handleFilterChange({ teamIds: [teamId] });
@@ -340,6 +276,7 @@ export default function WellnessAnalytics() {
             <QuestionAnalyticsTable
               responses={responses || []}
               responsesByTemplate={responsesByTemplate || {}}
+              scaleOrientation={scaleOrientation}
             />
           )}
         </TabsContent>

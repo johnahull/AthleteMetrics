@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendIndicator, ScoreDisplay } from './ui/WellnessUIComponents';
 
 interface WellnessSummaryCardProps {
   summary: {
@@ -7,33 +7,16 @@ interface WellnessSummaryCardProps {
     trend: 'up' | 'down' | 'stable';
     totalResponses: number;
   } | null;
+  scaleMax: number;
   'data-testid'?: string;
 }
 
 /**
  * Summary card displaying average wellness score and trend indicator
  */
-export function WellnessSummaryCard({ summary, 'data-testid': testId }: WellnessSummaryCardProps) {
+export function WellnessSummaryCard({ summary, scaleMax, 'data-testid': testId }: WellnessSummaryCardProps) {
   const trend = summary?.trend || 'stable';
   const score = summary?.averageWellness || 0;
-
-  const trendIcons = {
-    up: <TrendingUp className="h-4 w-4 text-green-600" />,
-    down: <TrendingDown className="h-4 w-4 text-red-600" />,
-    stable: <Minus className="h-4 w-4 text-gray-600" />,
-  };
-
-  const trendColors = {
-    up: 'text-green-600',
-    down: 'text-red-600',
-    stable: 'text-gray-600',
-  };
-
-  const trendText = {
-    up: 'Improving',
-    down: 'Declining',
-    stable: 'Stable',
-  };
 
   return (
     <Card data-testid={testId}>
@@ -44,16 +27,11 @@ export function WellnessSummaryCard({ summary, 'data-testid': testId }: Wellness
       </CardHeader>
       <CardContent>
         <div className="flex items-baseline justify-between">
-          <div data-testid="wellness-score" className="text-3xl font-bold text-gray-900">
-            {score.toFixed(1)}
-            <span className="text-sm font-normal text-gray-500 ml-1">/ 10</span>
+          <div data-testid="wellness-score" className="text-3xl text-gray-900">
+            <ScoreDisplay score={score} max={scaleMax} />
           </div>
-          <div
-            data-testid="trend-indicator"
-            className={`flex items-center space-x-1 ${trendColors[trend]}`}
-          >
-            {trendIcons[trend]}
-            <span className="text-sm font-medium">{trendText[trend]}</span>
+          <div data-testid="trend-indicator">
+            <TrendIndicator trend={trend} />
           </div>
         </div>
 

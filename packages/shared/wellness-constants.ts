@@ -5,6 +5,39 @@
  * to ensure consistency across frontend and backend.
  */
 
+/**
+ * Status color mappings for UI components
+ * Provides consistent Tailwind CSS classes for red/yellow/green status indicators
+ */
+export const STATUS_COLORS = {
+  red: {
+    bg: 'bg-red-500',
+    text: 'text-red-600',
+    border: 'border-red-500',
+    badgeVariant: 'destructive' as const,
+  },
+  yellow: {
+    bg: 'bg-yellow-500',
+    text: 'text-yellow-700',
+    border: 'border-yellow-500',
+    badgeVariant: 'outline' as const,
+  },
+  green: {
+    bg: 'bg-green-500',
+    text: 'text-green-700',
+    border: 'border-green-500',
+    badgeVariant: 'outline' as const,
+  },
+} as const;
+
+/**
+ * Default pagination settings for wellness data queries
+ */
+export const PAGINATION_DEFAULTS = {
+  DEFAULT_PAGE_SIZE: 50,
+  MAX_PAGE_SIZE: 200,
+} as const;
+
 export const WELLNESS_CONSTANTS = {
   // Date Range
   DEFAULT_DATE_RANGE_DAYS: 30,

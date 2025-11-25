@@ -13,6 +13,17 @@ import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
+  validateDateString,
+  validateQuestionIds,
+  validateDateRange,
+  limitArraySize,
+} from "../lib/validation-utils";
+import {
+  validateTemplate,
+  hasValidStatusConfig,
+  getStatusConfig,
+} from "../lib/wellness-type-guards";
+import {
   requireAuth,
   requireOrganizationAccess,
   requireWellnessAccess,
@@ -28,6 +39,7 @@ import {
   generateResponseValidationSchema,
 } from "@shared/wellness-validation";
 import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
+import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
 import { userTeams, userOrganizations } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
@@ -764,6 +776,34 @@ export function registerWellnessRoutes(app: Express) {
     }
   );
 
+  /**
+   * GET /api/organizations/:organizationId/wellness/requests/:requestId/completion-rate
+   * Get accurate completion rate for a wellness request
+   * Properly expands team targets to athlete counts
+   * Access: Coach, Org Admin
+   */
+  app.get(
+    "/api/organizations/:organizationId/wellness/requests/:requestId/completion-rate",
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    requireWellnessEnabled,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const { organizationId, requestId } = req.params;
+
+        const completionRate = await storage.getRequestCompletionRate(
+          organizationId,
+          requestId
+        );
+
+        res.json(completionRate);
+      } catch (error: any) {
+        console.error("Error calculating completion rate:", error);
+        res.status(500).json(createErrorResponse("Failed to calculate completion rate", error));
+      }
+    }
+  );
+
   // =============================================================================
   // RESPONSE ENDPOINTS
   // =============================================================================
@@ -1293,13 +1333,19 @@ export function registerWellnessRoutes(app: Express) {
           });
         }
 
-        const questionIdArray = questionIds
-          ? (questionIds as string).split(',').map(id => id.trim())
-          : undefined;
+        // Validate dates
+        const validatedStartDate = validateDateString(startDate as string, 'startDate');
+        const validatedEndDate = validateDateString(endDate as string, 'endDate');
+
+        // Validate date range (max 365 days)
+        validateDateRange(validatedStartDate, validatedEndDate, 365);
+
+        // Validate and sanitize question IDs (prevents SQL injection)
+        const questionIdArray = validateQuestionIds(questionIds as string | undefined, 50);
 
         const trends = await storage.getWellnessTrends(organizationId, {
-          startDate: startDate as string,
-          endDate: endDate as string,
+          startDate: validatedStartDate,
+          endDate: validatedEndDate,
           questionIds: questionIdArray,
         });
 
@@ -1324,7 +1370,10 @@ export function registerWellnessRoutes(app: Express) {
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId } = req.params;
-        const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+
+        // Validate date parameter
+        const date = validateDateString(req.query.date as string | undefined, 'date');
+
         const teamIdsParam = req.query.teamIds as string | undefined;
         const teamIds = teamIdsParam ? teamIdsParam.split(',').map(id => id.trim()) : undefined;
 
@@ -1334,46 +1383,67 @@ export function registerWellnessRoutes(app: Express) {
           teams = teams.filter(t => teamIds.includes(t.id));
         }
 
+        // PERFORMANCE OPTIMIZATION: Batch fetch all data upfront (reduces N+1 queries)
+        // Before: 5-15 queries per team (40-60+ total for 5 teams)
+        // After: 4 queries total for all teams
+
+        // Query 1: Batch fetch all team rosters for the organization
+        const allRosters = await storage.getTeamRostersBatch(organizationId);
+        const rostersByTeam = new Map<string, typeof allRosters>();
+        for (const roster of allRosters) {
+          if (!rostersByTeam.has(roster.teamId)) {
+            rostersByTeam.set(roster.teamId, []);
+          }
+          rostersByTeam.get(roster.teamId)!.push(roster);
+        }
+
+        // Query 2: Batch fetch responses for both current and previous dates
+        const previousDate = new Date(date);
+        previousDate.setDate(previousDate.getDate() - 1);
+        const previousDateStr = previousDate.toISOString().split('T')[0];
+
+        const allResponses = await storage.getWellnessResponsesByOrganization(organizationId, {
+          startDate: previousDateStr,
+          endDate: date,
+        });
+
+        // Group responses by date for easy filtering
+        const currentDateResponses = allResponses.filter(r => r.date === date);
+        const previousDateResponses = allResponses.filter(r => r.date === previousDateStr);
+
+        // Query 3: Batch fetch all unique templates
+        const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
+        const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
+        const templateMap = new Map(templates.map(t => [t.id, t]));
+
+        // Log warning if any templates are missing
+        const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
+        if (missingTemplates.length > 0) {
+          console.warn(`Dashboard: Missing templates [${missingTemplates.join(', ')}] - filtering out responses`);
+        }
+
+        // Now process each team using in-memory data (fast)
         const dashboardData = [];
 
         for (const team of teams) {
-          // Get team roster using userTeams table joined with userOrganizations to filter by role
-          const roster = await db.select({
-            userId: userTeams.userId,
-          })
-            .from(userTeams)
-            .innerJoin(userOrganizations, eq(userTeams.userId, userOrganizations.userId))
-            .where(
-              and(
-                eq(userTeams.teamId, team.id),
-                eq(userTeams.isActive, true),
-                eq(userOrganizations.organizationId, organizationId),
-                eq(userOrganizations.role, 'athlete')
-              )
-            );
-
-          const athleteIds = roster.map(r => r.userId);
+          // Get team roster from batched data
+          const teamRoster = rostersByTeam.get(team.id) || [];
+          let athleteIds = teamRoster.map(r => r.userId);
 
           if (athleteIds.length === 0) {
             // Skip teams with no athletes
             continue;
           }
 
-          // Get wellness responses for the specified date
-          const responses = await storage.getWellnessResponsesByOrganization(organizationId, {
-            startDate: date,
-            endDate: date,
-          });
+          // Limit athlete count to prevent memory exhaustion (Issue #4)
+          const MAX_ATHLETES_PER_TEAM = 500;
+          if (athleteIds.length > MAX_ATHLETES_PER_TEAM) {
+            console.warn(`Team ${team.id} has ${athleteIds.length} athletes, limiting to ${MAX_ATHLETES_PER_TEAM}`);
+            athleteIds = limitArraySize(athleteIds, MAX_ATHLETES_PER_TEAM, `Team ${team.id} athletes`);
+          }
 
-          // Filter responses for this team's athletes
-          const teamResponses = responses.filter(r => athleteIds.includes(r.userId));
-
-          // Get unique template IDs and fetch templates
-          const templateIds = [...new Set(teamResponses.map(r => r.templateId))];
-          const templates = await Promise.all(
-            templateIds.map(id => storage.getWellnessTemplate(id))
-          );
-          const templateMap = new Map(templates.filter(t => t !== null && t !== undefined).map(t => [t!.id, t!]));
+          // Filter responses for this team's athletes (in-memory operation)
+          const teamResponses = currentDateResponses.filter(r => athleteIds.includes(r.userId));
 
           // Calculate athlete statuses
           const athleteStatuses = athleteIds.map(athleteId => {
@@ -1387,15 +1457,16 @@ export function registerWellnessRoutes(app: Express) {
               return null;
             }
 
-            // Cast template config to WellnessTemplateConfig to ensure type safety
-            const typedTemplate: any = {
-              ...template,
-              config: template.config as any, // Storage returns unknown, but we validate at creation
-            };
+            // Validate template config using type guard (replaces unsafe any cast)
+            const validatedTemplate = validateTemplate(template);
+            if (!validatedTemplate) {
+              console.error(`Invalid template config for athlete ${athleteId}, template ${template.id}`);
+              return null;
+            }
 
             // Cast response to expected type
             const typedResponse = athleteResponse as WellnessResponse;
-            const status = calculateAthleteStatus(typedResponse, typedTemplate);
+            const status = calculateAthleteStatus(typedResponse, validatedTemplate);
             return {
               id: athleteId,
               name: athleteResponse.userFullName,
@@ -1424,27 +1495,30 @@ export function registerWellnessRoutes(app: Express) {
 
             // Get first template's status config to determine team status
             const firstTemplate = templateMap.values().next().value;
-            if (firstTemplate?.config && (firstTemplate.config as any)?.statusConfig) {
-              const config = (firstTemplate.config as any).statusConfig as any;
-              const scaleOrientation = config.scaleOrientation || 'higher_is_better';
+            const validatedFirstTemplate = firstTemplate ? validateTemplate(firstTemplate) : null;
+            if (validatedFirstTemplate && hasValidStatusConfig(validatedFirstTemplate)) {
+              const config = getStatusConfig(validatedFirstTemplate);
+              if (config) {
+                const scaleOrientation = config.scaleOrientation;
 
-              if (scaleOrientation === 'higher_is_better') {
-                // Higher scores are better
-                if (teamAverageScore <= config.redThreshold) {
-                  teamStatus = 'red';
-                } else if (teamAverageScore <= config.yellowThreshold) {
-                  teamStatus = 'yellow';
+                if (scaleOrientation === 'higher_is_better') {
+                  // Higher scores are better
+                  if (teamAverageScore <= config.redThreshold) {
+                    teamStatus = 'red';
+                  } else if (teamAverageScore <= config.yellowThreshold) {
+                    teamStatus = 'yellow';
+                  } else {
+                    teamStatus = 'green';
+                  }
                 } else {
-                  teamStatus = 'green';
-                }
-              } else {
-                // Lower scores are better
-                if (teamAverageScore >= config.redThreshold) {
-                  teamStatus = 'red';
-                } else if (teamAverageScore >= config.yellowThreshold) {
-                  teamStatus = 'yellow';
-                } else {
-                  teamStatus = 'green';
+                  // Lower scores are better
+                  if (teamAverageScore >= config.redThreshold) {
+                    teamStatus = 'red';
+                  } else if (teamAverageScore >= config.yellowThreshold) {
+                    teamStatus = 'yellow';
+                  } else {
+                    teamStatus = 'green';
+                  }
                 }
               }
             }
@@ -1458,17 +1532,8 @@ export function registerWellnessRoutes(app: Express) {
           // Get common injuries
           const commonInjuries = getCommonInjuries(athleteStatuses);
 
-          // Calculate trend (compare to previous day)
-          const previousDate = new Date(date);
-          previousDate.setDate(previousDate.getDate() - 1);
-          const previousDateStr = previousDate.toISOString().split('T')[0];
-
-          const previousResponses = await storage.getWellnessResponsesByOrganization(organizationId, {
-            startDate: previousDateStr,
-            endDate: previousDateStr,
-          });
-
-          const teamPreviousResponses = previousResponses.filter(r => athleteIds.includes(r.userId));
+          // Calculate trend (compare to previous day) - using batched data
+          const teamPreviousResponses = previousDateResponses.filter(r => athleteIds.includes(r.userId));
 
           const currentScores = athleteStatuses
             .map(a => a.score)
@@ -1477,12 +1542,15 @@ export function registerWellnessRoutes(app: Express) {
           const previousScores = teamPreviousResponses.map(r => {
             const template = templateMap.get(r.templateId);
             if (!template) return null;
-            const typedTemplate: any = {
-              ...template,
-              config: template.config as any,
-            };
+
+            // Validate template using type guard (replaces unsafe any cast)
+            const validatedTemplate = validateTemplate(template);
+            if (!validatedTemplate) {
+              return null;
+            }
+
             const typedResponse = r as WellnessResponse;
-            const status = calculateAthleteStatus(typedResponse, typedTemplate);
+            const status = calculateAthleteStatus(typedResponse, validatedTemplate);
             return status.score;
           }).filter((s): s is number => s !== null);
 
