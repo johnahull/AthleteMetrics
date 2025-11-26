@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { wellnessTemplateConfigSchema, wellnessStatusConfigSchema } from '../wellness-validation';
+import { wellnessTemplateConfigSchema, wellnessStatusConfigSchema, generateResponseValidationSchema } from '../wellness-validation';
 
 describe('wellnessStatusConfigSchema', () => {
   it('should validate valid statusConfig with all fields', () => {
@@ -208,5 +208,81 @@ describe('wellnessStatusConfigSchema', () => {
       },
     };
     expect(() => wellnessTemplateConfigSchema.parse(configFalse)).not.toThrow();
+  });
+});
+
+describe('generateResponseValidationSchema', () => {
+  it('should allow optional questions to be omitted from responses', () => {
+    const config = {
+      questions: [
+        { id: 'q_1', type: 'scale' as const, label: 'Energy', scaleMin: 1, scaleMax: 10, required: true },
+        { id: 'q_2', type: 'body_map' as const, label: 'Injuries', allowMultiple: true, required: false },
+        { id: 'q_3', type: 'text' as const, label: 'Notes', required: false },
+      ],
+    };
+
+    const responseSchema = generateResponseValidationSchema(config);
+
+    // Valid: Include only required question
+    const responseOnlyRequired = {
+      q_1: { value: 7, label: 'Energy' },
+    };
+    expect(() => responseSchema.parse(responseOnlyRequired)).not.toThrow();
+
+    // Valid: Include all questions
+    const responseAll = {
+      q_1: { value: 7, label: 'Energy' },
+      q_2: { value: [{ x: 0.5, y: 0.3, label: 'Knee' }], label: 'Injuries' },
+      q_3: { value: 'Feeling good', label: 'Notes' },
+    };
+    expect(() => responseSchema.parse(responseAll)).not.toThrow();
+
+    // Valid: Include required + some optional
+    const responsePartial = {
+      q_1: { value: 7, label: 'Energy' },
+      q_3: { value: 'Feeling good', label: 'Notes' },
+    };
+    expect(() => responseSchema.parse(responsePartial)).not.toThrow();
+  });
+
+  it('should reject responses missing required questions', () => {
+    const config = {
+      questions: [
+        { id: 'q_1', type: 'scale' as const, label: 'Energy', scaleMin: 1, scaleMax: 10, required: true },
+        { id: 'q_2', type: 'text' as const, label: 'Notes', required: false },
+      ],
+    };
+
+    const responseSchema = generateResponseValidationSchema(config);
+
+    // Invalid: Missing required question
+    const responseMissingRequired = {
+      q_2: { value: 'Just notes', label: 'Notes' },
+    };
+    expect(() => responseSchema.parse(responseMissingRequired)).toThrow();
+  });
+
+  it('should handle optional body_map questions correctly', () => {
+    const config = {
+      questions: [
+        { id: 'q_1', type: 'scale' as const, label: 'Pain', scaleMin: 0, scaleMax: 10, required: true },
+        { id: 'q_2', type: 'body_map' as const, label: 'Pain Points', allowMultiple: true, required: false },
+      ],
+    };
+
+    const responseSchema = generateResponseValidationSchema(config);
+
+    // Valid: Omit optional body_map
+    const responseNoBodyMap = {
+      q_1: { value: 2, label: 'Pain' },
+    };
+    expect(() => responseSchema.parse(responseNoBodyMap)).not.toThrow();
+
+    // Valid: Include empty body_map array
+    const responseEmptyBodyMap = {
+      q_1: { value: 2, label: 'Pain' },
+      q_2: { value: [], label: 'Pain Points' },
+    };
+    expect(() => responseSchema.parse(responseEmptyBodyMap)).not.toThrow();
   });
 });

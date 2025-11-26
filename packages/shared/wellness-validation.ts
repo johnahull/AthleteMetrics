@@ -434,10 +434,17 @@ export function generateResponseValidationSchema(
     }
 
     if (valueSchema) {
-      questionSchemas[question.id] = z.object({
+      let questionSchema = z.object({
         value: valueSchema,
         label: z.string(),
       });
+
+      // Make optional questions truly optional (allow the entire response to be omitted)
+      if (!question.required) {
+        questionSchema = questionSchema.optional() as any;
+      }
+
+      questionSchemas[question.id] = questionSchema;
     }
   }
 
