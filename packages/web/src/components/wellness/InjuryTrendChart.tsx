@@ -1,8 +1,8 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
-import type { ChartOptions } from 'chart.js';
+import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { getCommonInjuries, calculateAthleteStatus } from '@shared/wellness-status-utils';
 
@@ -22,6 +22,17 @@ interface DailyInjuryData {
 }
 
 export function InjuryTrendChart({ template, responses, filters }: InjuryTrendChartProps) {
+  // Chart ref for cleanup
+  const chartRef = useRef<ChartJS<'line'>>(null);
+
+  // Cleanup chart on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+      }
+    };
+  }, []);
   // Calculate daily injury trends
   const dailyInjuryData = useMemo(() => {
     if (!responses || responses.length === 0) return [];

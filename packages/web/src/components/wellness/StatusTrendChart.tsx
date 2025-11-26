@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
-import type { ChartOptions } from 'chart.js';
+import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateAthleteStatus } from '@shared/wellness-status-utils';
 
@@ -22,6 +22,17 @@ interface DailyStatusBreakdown {
 }
 
 export function StatusTrendChart({ template, responses, filters }: StatusTrendChartProps) {
+  // Chart ref for cleanup
+  const chartRef = useRef<ChartJS<'line'>>(null);
+
+  // Cleanup chart on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      if (chartRef.current) {
+        chartRef.current.destroy();
+      }
+    };
+  }, []);
   // Calculate daily status breakdowns
   const dailyBreakdowns = useMemo(() => {
     if (!responses || responses.length === 0) return [];

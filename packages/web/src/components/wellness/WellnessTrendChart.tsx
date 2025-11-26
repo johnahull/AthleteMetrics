@@ -130,6 +130,24 @@ export function WellnessTrendChart({
     };
   }, [athleteResponses]);
 
+  // Calculate dynamic scale max from actual data (with 10% headroom)
+  const scaleMax = useMemo(() => {
+    if (athleteResponses.length === 0) return 10; // Default fallback
+
+    let maxValue = 0;
+    athleteResponses.forEach((response) => {
+      const responseData = response.responses as WellnessResponseData;
+      Object.values(responseData).forEach((questionData) => {
+        if (typeof questionData.value === 'number' && questionData.value > maxValue) {
+          maxValue = questionData.value;
+        }
+      });
+    });
+
+    // Add 10% headroom and round up to nearest integer
+    return Math.ceil(maxValue * 1.1) || 10;
+  }, [athleteResponses]);
+
   // Chart options
   const options: ChartOptions<'line'> = {
     responsive: true,
@@ -147,7 +165,7 @@ export function WellnessTrendChart({
     scales: {
       y: {
         beginAtZero: true,
-        max: 10,
+        max: scaleMax,
         title: {
           display: true,
           text: 'Wellness Score',
