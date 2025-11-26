@@ -45,9 +45,19 @@ export class WellnessAccessService {
     }
 
     // Verify athlete is in target list
-    const isTargeted =
-      request.targetAthleteIds?.includes(athleteId) ||
-      (request.targetTeamIds && request.targetTeamIds.length > 0);
+    let isTargeted = false;
+
+    // Check direct athlete targeting
+    if (request.targetAthleteIds?.includes(athleteId)) {
+      isTargeted = true;
+    }
+
+    // Check team-based targeting (verify actual membership!)
+    if (!isTargeted && request.targetTeamIds && request.targetTeamIds.length > 0) {
+      const athleteTeams = await storage.getUserTeams(athleteId);
+      const athleteTeamIds = athleteTeams.map(ut => ut.team.id);
+      isTargeted = request.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+    }
 
     if (!isTargeted) {
       throw new Error('Athlete is not in target list for this request');
@@ -184,10 +194,10 @@ export class WellnessAccessService {
         return { valid: false, error: 'You are not authorized to access this questionnaire' };
       }
 
-      // If requiresAuth is true, verify athlete has account
-      if (request.requiresAuth) {
-        return { valid: false, error: 'This questionnaire requires authentication. Please log in.' };
-      }
+      // Note: The requiresAuth flag is handled by the requireWellnessAccess middleware
+      // which supports both authenticated sessions and magic link access.
+      // We don't reject magic links here - the middleware will determine the appropriate
+      // authentication method based on the requiresAuth parameter.
 
       return {
         valid: true,
