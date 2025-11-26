@@ -957,8 +957,8 @@ export function registerWellnessRoutes(app: Express) {
             teamId = primaryTeam?.id;
             teamNameSnapshot = primaryTeam?.name;
           } else {
-            // Manual entry fallback - current behavior
-            userId = 'magic-link-submission';
+            // Manual entry fallback - use well-known UUID constant
+            userId = WELLNESS_CONSTANTS.ANONYMOUS_SUBMISSION_USER_ID;
             userFullName = (req.body.athleteName as string) || 'Anonymous Athlete';
             teamId = undefined;
             teamNameSnapshot = undefined;
@@ -1180,12 +1180,12 @@ export function registerWellnessRoutes(app: Express) {
           endDate: endDate as string,
         });
 
-        // UUID validation regex (RFC 4122)
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        // UUID validation using Zod for consistency
+        const uuidSchema = z.string().uuid();
 
         // Filter by athleteIds if provided
         if (athleteIds && typeof athleteIds === 'string') {
-          const athleteIdArray = athleteIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
+          const athleteIdArray = athleteIds.split(',').map(id => id.trim()).filter(id => uuidSchema.safeParse(id).success);
           if (athleteIdArray.length > 0) {
             responses = responses.filter(r => athleteIdArray.includes(r.userId));
           }
@@ -1193,7 +1193,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Filter by teamIds if provided
         if (teamIds && typeof teamIds === 'string') {
-          const teamIdArray = teamIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
+          const teamIdArray = teamIds.split(',').map(id => id.trim()).filter(id => uuidSchema.safeParse(id).success);
           if (teamIdArray.length > 0) {
             responses = responses.filter(r => r.teamId && teamIdArray.includes(r.teamId));
           }
