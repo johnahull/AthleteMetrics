@@ -3,11 +3,19 @@
 
 DO $$
 BEGIN
-  -- Drop existing constraint
-  ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
+  -- Drop existing constraint if it exists
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_action_valid'
+  ) THEN
+    ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
+  END IF;
 
-  -- Recreate constraint with new actions
-  ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
+  -- Re-create with ALL existing actions plus the new actions
+  -- Only add if it doesn't exist (handles partial migration runs)
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_action_valid'
+  ) THEN
+    ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     -- Organization actions
     'organization_created',
     'organization_updated',
@@ -98,5 +106,10 @@ BEGIN
     -- Organization wellness actions
     'org_wellness_enabled',
     'org_wellness_disabled'
-  ));
+    ));
+
+    -- Update comment to reflect new actions
+    COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS
+      'Valid audit log actions including org wellness enable/disable (updated in migration 0055)';
+  END IF;
 END $$;
