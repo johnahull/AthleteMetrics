@@ -21,6 +21,7 @@ interface TeamStatusCardProps {
   teamName: string;
   teamStatus: 'red' | 'yellow' | 'green';
   teamAverageScore: number | null;
+  scaleMax: number;
   redCount: number;
   yellowCount: number;
   greenCount: number;
@@ -38,6 +39,7 @@ export default function TeamStatusCard({
   teamName,
   teamStatus,
   teamAverageScore,
+  scaleMax,
   redCount,
   yellowCount,
   greenCount,
@@ -90,7 +92,7 @@ export default function TeamStatusCard({
           <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
             <span className="text-sm font-medium text-gray-700">Team Average Score</span>
             <span className="text-lg text-gray-900">
-              <ScoreDisplay score={teamAverageScore} max={10} className="font-bold" />
+              <ScoreDisplay score={teamAverageScore} max={scaleMax} className="font-bold" />
             </span>
           </div>
         )}

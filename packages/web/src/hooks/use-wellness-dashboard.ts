@@ -14,6 +14,7 @@ interface TeamDashboardData {
   teamName: string;
   teamStatus: 'red' | 'yellow' | 'green';
   teamAverageScore: number | null;
+  scaleMax: number;
   redCount: number;
   yellowCount: number;
   greenCount: number;

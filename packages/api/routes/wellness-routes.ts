@@ -1500,6 +1500,7 @@ export function registerWellnessRoutes(app: Express) {
           // Calculate team status based on average of athlete scores
           let teamStatus: 'red' | 'yellow' | 'green' = 'green';
           let teamAverageScore: number | null = null;
+          let scaleMax = 10; // Default scale max
 
           const athleteScores = athleteStatuses
             .map(a => a.score)
@@ -1513,6 +1514,25 @@ export function registerWellnessRoutes(app: Express) {
             const validatedFirstTemplate = firstTemplate ? validateTemplate(firstTemplate) : null;
             if (validatedFirstTemplate && hasValidStatusConfig(validatedFirstTemplate)) {
               const config = getStatusConfig(validatedFirstTemplate);
+
+              if (config) {
+                // Extract scaleMax from template's scale questions
+                const scaleQuestions = validatedFirstTemplate.config.questions.filter(q => q.type === 'scale');
+                if (scaleQuestions.length > 0) {
+                  const firstScale = scaleQuestions[0];
+                  if ('scaleMax' in firstScale) {
+                    const calculationMethod = config.calculationMethod || 'average';
+                    if (calculationMethod === 'sum') {
+                      // For sum method, max is scaleMax * number of questions
+                      scaleMax = firstScale.scaleMax * scaleQuestions.length;
+                    } else {
+                      // For average method, use single question's scaleMax
+                      scaleMax = firstScale.scaleMax;
+                    }
+                  }
+                }
+              }
+
               if (config) {
                 const scaleOrientation = config.scaleOrientation;
 
@@ -1576,6 +1596,7 @@ export function registerWellnessRoutes(app: Express) {
             teamName: team.name,
             teamStatus,
             teamAverageScore,
+            scaleMax,
             redCount,
             yellowCount,
             greenCount,
