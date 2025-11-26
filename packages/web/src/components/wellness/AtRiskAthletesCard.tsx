@@ -106,13 +106,13 @@ export const AtRiskAthletesCard = memo(function AtRiskAthletesCard({
             <div className="flex gap-4 mb-3 text-sm">
               {redCount > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  <span className="w-2 h-2 rounded-full bg-red-600"></span>
                   <span className="text-gray-600">{redCount} critical</span>
                 </span>
               )}
               {yellowCount > 0 && (
                 <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                   <span className="text-gray-600">{yellowCount} moderate</span>
                 </span>
               )}
@@ -129,7 +129,7 @@ export const AtRiskAthletesCard = memo(function AtRiskAthletesCard({
                   <div className="flex items-center gap-2">
                     <span
                       className={`w-2 h-2 rounded-full ${
-                        athlete.status === 'red' ? 'bg-red-500' : 'bg-yellow-400'
+                        athlete.status === 'red' ? 'bg-red-600' : 'bg-yellow-500'
                       }`}
                     ></span>
                     <span className="text-sm font-medium text-gray-900 truncate max-w-[120px]">

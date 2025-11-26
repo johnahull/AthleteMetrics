@@ -141,19 +141,19 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
             // For lower_is_better: low scores = good (green), high scores = bad (red)
             <>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <div className="w-4 h-4 bg-green-600 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&lt;{statusThresholds.yellowThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Moderate ({statusThresholds.yellowThreshold}-{statusThresholds.redThreshold - 1})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-red-500 rounded"></div>
+                <div className="w-4 h-4 bg-red-600 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Concerning (≥{statusThresholds.redThreshold})
                 </span>
@@ -163,19 +163,19 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
             // For higher_is_better: low scores = bad (red), high scores = good (green)
             <>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-red-500 rounded"></div>
+                <div className="w-4 h-4 bg-red-600 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Low (≤{statusThresholds.redThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
+                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Medium ({statusThresholds.redThreshold + 1}-{statusThresholds.yellowThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-green-500 rounded"></div>
+                <div className="w-4 h-4 bg-green-600 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&gt;{statusThresholds.yellowThreshold})
                 </span>
