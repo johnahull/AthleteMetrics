@@ -529,6 +529,116 @@ export class EmailService {
       throw new Error('Failed to generate email template');
     }
   }
+
+  /**
+   * Send wellness request email with magic link
+   */
+  async sendWellnessRequest(email: string, data: {
+    athleteName: string;
+    coachName: string;
+    organizationName: string;
+    magicLink: string;
+    expiryDays: number;
+    templateName: string;
+    estimatedMinutes: number;
+  }): Promise<boolean> {
+    const html = this.generateWellnessRequestTemplate(data);
+
+    return this.sendEmail({
+      to: email,
+      subject: `${data.organizationName}: Complete Your Wellness Check-In`,
+      html
+    });
+  }
+
+  /**
+   * Generate wellness request email template
+   */
+  private generateWellnessRequestTemplate(data: {
+    athleteName: string;
+    coachName: string;
+    organizationName: string;
+    magicLink: string;
+    expiryDays: number;
+    templateName: string;
+    estimatedMinutes: number;
+  }): string {
+    try {
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f5f7fb;">
+  <table cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto; padding: 20px;">
+    <tr>
+      <td>
+        <table cellpadding="0" cellspacing="0" style="width: 100%; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+          <tr>
+            <td style="padding: 30px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0; text-align: center;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
+                Wellness Check-In Request
+              </h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 30px 40px;">
+              <p style="margin: 0 0 16px; color: #2d3748; font-size: 16px;">
+                Hi ${escapeHtml(data.athleteName)},
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 14px;">
+                ${escapeHtml(data.coachName)} from ${escapeHtml(data.organizationName)} has requested a wellness check-in from you.
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 14px;">
+                <strong>Questionnaire:</strong> ${escapeHtml(data.templateName)}<br>
+                <strong>Estimated time:</strong> ${data.estimatedMinutes} minutes
+              </p>
+
+              <p style="text-align: center; margin: 0 0 24px;">
+                <a href="${escapeHtml(data.magicLink)}"
+                   style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                  Complete Check-In
+                </a>
+              </p>
+
+              <p style="margin: 0 0 16px; color: #718096; font-size: 12px; text-align: center;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(data.magicLink)}
+              </p>
+
+              <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                This link will expire in ${data.expiryDays} days. Your responses help your coaching staff monitor your well-being and optimize your training.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Athletic Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate wellness request email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
 }
 
 // Export singleton instance

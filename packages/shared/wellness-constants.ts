@@ -39,6 +39,10 @@ export const PAGINATION_DEFAULTS = {
 } as const;
 
 export const WELLNESS_CONSTANTS = {
+  // Anonymous Submission User ID
+  // Well-known UUID constant for magic link submissions without athlete selection
+  ANONYMOUS_SUBMISSION_USER_ID: '00000000-0000-0000-0000-000000000001',
+
   // Date Range
   DEFAULT_DATE_RANGE_DAYS: 30,
 

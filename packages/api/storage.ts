@@ -3,6 +3,7 @@ import {
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
+  wellnessTemplates, wellnessRequests, wellnessResponses,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -12,6 +13,7 @@ import {
   type UpdateSiteMetric, type UpdateOrganizationMetric,
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
+  type WellnessTemplate, type WellnessRequest, type WellnessResponse,
   insertUserSchema,
   type OrganizationType
 } from "@shared/schema";
@@ -4175,6 +4177,689 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated;
+  }
+
+  // ==================== Wellness Templates ====================
+
+  async getWellnessTemplate(id: string): Promise<WellnessTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(wellnessTemplates)
+      .where(eq(wellnessTemplates.id, id));
+    return template || undefined;
+  }
+
+  async getWellnessTemplates(organizationId: string, options?: { activeOnly?: boolean }): Promise<WellnessTemplate[]> {
+    const conditions = [eq(wellnessTemplates.organizationId, organizationId)];
+
+    if (options?.activeOnly) {
+      conditions.push(eq(wellnessTemplates.isActive, true));
+    }
+
+    return db
+      .select()
+      .from(wellnessTemplates)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessTemplates.createdAt));
+  }
+
+  async getSystemWellnessTemplates(): Promise<WellnessTemplate[]> {
+    return db
+      .select()
+      .from(wellnessTemplates)
+      .where(
+        and(
+          isNull(wellnessTemplates.organizationId),
+          eq(wellnessTemplates.isSystemSeeded, true)
+        )
+      )
+      .orderBy(desc(wellnessTemplates.createdAt));
+  }
+
+  async getSystemTemplateUsage(templateId: string): Promise<{ organizationCount: number; responseCount: number }> {
+    // Count organizations that cloned this template
+    const clonedCount = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(wellnessTemplates)
+      .where(eq(wellnessTemplates.sourceTemplateId, templateId));
+
+    // Count responses using this template
+    const responseCount = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(wellnessResponses)
+      .where(eq(wellnessResponses.templateId, templateId));
+
+    return {
+      organizationCount: clonedCount[0]?.count || 0,
+      responseCount: responseCount[0]?.count || 0,
+    };
+  }
+
+  async createWellnessTemplate(data: {
+    organizationId?: string | null;
+    name: string;
+    description?: string;
+    config: any;
+    createdBy?: string;
+    category?: string;
+    tags?: string[];
+    isSystemSeeded?: boolean;
+    sourceTemplateId?: string;
+    isDefault?: boolean;
+    isActive?: boolean;
+  }): Promise<WellnessTemplate> {
+    const [template] = await db
+      .insert(wellnessTemplates)
+      .values({
+        organizationId: data.organizationId || null,
+        name: data.name,
+        description: data.description || null,
+        config: data.config,
+        createdBy: data.createdBy || null,
+        category: data.category || null,
+        tags: data.tags || [],
+        isSystemSeeded: data.isSystemSeeded || false,
+        sourceTemplateId: data.sourceTemplateId || null,
+        isDefault: data.isDefault || false,
+        isActive: data.isActive !== undefined ? data.isActive : true,
+      })
+      .returning();
+    return template;
+  }
+
+  async createSystemWellnessTemplate(data: {
+    name: string;
+    description?: string;
+    config: any;
+    createdBy?: string;
+    category?: string;
+    tags?: string[];
+  }): Promise<WellnessTemplate> {
+    return this.createWellnessTemplate({
+      ...data,
+      organizationId: null,
+      isSystemSeeded: true,
+    });
+  }
+
+  async updateWellnessTemplate(id: string, data: Partial<{
+    name: string;
+    description: string | null;
+    config: any;
+    category: string | null;
+    tags: string[];
+    isActive: boolean;
+    isDefault: boolean;
+  }>): Promise<WellnessTemplate> {
+    const [updated] = await db
+      .update(wellnessTemplates)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(wellnessTemplates.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Wellness template ${id} not found`);
+    }
+    return updated;
+  }
+
+  async updateSystemWellnessTemplate(id: string, data: Partial<{
+    name: string;
+    description: string | null;
+    config: any;
+    category: string | null;
+    tags: string[];
+    isActive: boolean;
+  }>): Promise<WellnessTemplate> {
+    return this.updateWellnessTemplate(id, data);
+  }
+
+  async deleteWellnessTemplate(id: string): Promise<void> {
+    await db.delete(wellnessTemplates).where(eq(wellnessTemplates.id, id));
+  }
+
+  async deleteSystemWellnessTemplate(id: string): Promise<void> {
+    // Verify it's a system template before deleting
+    const template = await this.getWellnessTemplate(id);
+    if (template && !template.isSystemSeeded) {
+      throw new Error('Cannot use deleteSystemWellnessTemplate for non-system templates');
+    }
+    await this.deleteWellnessTemplate(id);
+  }
+
+  async getWellnessTemplatesBatch(ids: string[]): Promise<WellnessTemplate[]> {
+    if (ids.length === 0) return [];
+
+    const templates = await db
+      .select()
+      .from(wellnessTemplates)
+      .where(inArray(wellnessTemplates.id, ids));
+
+    return templates;
+  }
+
+  // ==================== Wellness Requests ====================
+
+  async getWellnessRequest(id: string): Promise<WellnessRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(wellnessRequests)
+      .where(eq(wellnessRequests.id, id));
+    return request || undefined;
+  }
+
+  async getWellnessRequestByToken(token: string): Promise<WellnessRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(wellnessRequests)
+      .where(eq(wellnessRequests.publicToken, token));
+    return request || undefined;
+  }
+
+  async getWellnessRequests(organizationId: string, options?: {
+    status?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<WellnessRequest[]> {
+    const conditions = [eq(wellnessRequests.organizationId, organizationId)];
+
+    if (options?.status) {
+      conditions.push(eq(wellnessRequests.status, options.status));
+    }
+
+    let query = db
+      .select()
+      .from(wellnessRequests)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessRequests.createdAt));
+
+    if (options?.limit) {
+      query = query.limit(options.limit) as any;
+    }
+
+    if (options?.offset) {
+      query = query.offset(options.offset) as any;
+    }
+
+    return query;
+  }
+
+  async getWellnessRequestsByOrganizations(organizationIds: string[]): Promise<WellnessRequest[]> {
+    if (organizationIds.length === 0) return [];
+
+    return db
+      .select()
+      .from(wellnessRequests)
+      .where(inArray(wellnessRequests.organizationId, organizationIds))
+      .orderBy(desc(wellnessRequests.createdAt));
+  }
+
+  async createWellnessRequest(data: {
+    organizationId: string;
+    templateId: string;
+    requestedBy?: string;
+    distributionMethod: string;
+    targetAthleteIds?: string[];
+    targetTeamIds?: string[];
+    publicToken?: string;
+    requiresAuth?: boolean;
+    scheduledFor?: Date;
+    expiresAt?: Date;
+    status?: string;
+  }): Promise<WellnessRequest> {
+    const [request] = await db
+      .insert(wellnessRequests)
+      .values({
+        organizationId: data.organizationId,
+        templateId: data.templateId,
+        requestedBy: data.requestedBy || null,
+        distributionMethod: data.distributionMethod,
+        targetAthleteIds: data.targetAthleteIds || [],
+        targetTeamIds: data.targetTeamIds || [],
+        publicToken: data.publicToken || null,
+        requiresAuth: data.requiresAuth || false,
+        scheduledFor: data.scheduledFor || null,
+        expiresAt: data.expiresAt || null,
+        status: data.status || 'active',
+      })
+      .returning();
+    return request;
+  }
+
+  async updateWellnessRequest(id: string, data: Partial<{
+    status: string;
+    expiresAt: Date | null;
+  }>): Promise<WellnessRequest> {
+    const [updated] = await db
+      .update(wellnessRequests)
+      .set(data)
+      .where(eq(wellnessRequests.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Wellness request ${id} not found`);
+    }
+    return updated;
+  }
+
+  async deleteWellnessRequest(id: string): Promise<void> {
+    await db.delete(wellnessRequests).where(eq(wellnessRequests.id, id));
+  }
+
+  async getRequestCompletionRate(organizationId: string, requestId: string): Promise<{
+    total: number;
+    completed: number;
+    percentage: number;
+  }> {
+    const request = await this.getWellnessRequest(requestId);
+    if (!request) {
+      return { total: 0, completed: 0, percentage: 0 };
+    }
+
+    // Count targeted athletes (direct + team members), excluding deleted users
+    let total = 0;
+
+    // Collect all unique athlete IDs (deduplicating individuals and team members)
+    const targetedAthleteIds = new Set<string>();
+
+    // Add directly targeted athletes
+    if (request.targetAthleteIds) {
+      request.targetAthleteIds.forEach(id => targetedAthleteIds.add(id));
+    }
+
+    // Add team members
+    if (request.targetTeamIds && request.targetTeamIds.length > 0) {
+      const teamMembers = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .where(
+          and(
+            inArray(userTeams.teamId, request.targetTeamIds),
+            eq(userTeams.isActive, true)
+          )
+        );
+      teamMembers.forEach(m => targetedAthleteIds.add(m.userId));
+    }
+
+    // Count only active, non-deleted users from the targeted set
+    if (targetedAthleteIds.size > 0) {
+      const activeUsersResult = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(
+          and(
+            inArray(users.id, [...targetedAthleteIds]),
+            eq(users.isActive, true),
+            whereUserNotDeleted()
+          )
+        );
+      total = activeUsersResult[0]?.count || 0;
+    }
+
+    // Count completed responses (distinct users who responded)
+    const completedResult = await db
+      .select({ count: sql<number>`count(distinct ${wellnessResponses.userId})::int` })
+      .from(wellnessResponses)
+      .where(eq(wellnessResponses.requestId, requestId));
+
+    const completed = completedResult[0]?.count || 0;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+
+    return { total, completed, percentage };
+  }
+
+  // ==================== Wellness Responses ====================
+
+  async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
+    const [response] = await db
+      .select()
+      .from(wellnessResponses)
+      .where(eq(wellnessResponses.id, id));
+    return response || undefined;
+  }
+
+  async getWellnessResponsesByAthlete(userId: string, options?: {
+    limit?: number;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<WellnessResponse[]> {
+    const conditions = [eq(wellnessResponses.userId, userId)];
+
+    if (options?.startDate) {
+      conditions.push(gte(wellnessResponses.date, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(wellnessResponses.date, options.endDate));
+    }
+
+    let query = db
+      .select()
+      .from(wellnessResponses)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessResponses.submittedAt));
+
+    if (options?.limit) {
+      query = query.limit(options.limit) as any;
+    }
+
+    return query;
+  }
+
+  async getWellnessResponsesByOrganization(organizationId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+    teamId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<WellnessResponse[]> {
+    const conditions = [eq(wellnessResponses.organizationId, organizationId)];
+
+    if (options?.startDate) {
+      conditions.push(gte(wellnessResponses.date, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(wellnessResponses.date, options.endDate));
+    }
+    if (options?.teamId) {
+      conditions.push(eq(wellnessResponses.teamId, options.teamId));
+    }
+
+    let query = db
+      .select()
+      .from(wellnessResponses)
+      .where(and(...conditions))
+      .orderBy(desc(wellnessResponses.submittedAt));
+
+    if (options?.limit) {
+      query = query.limit(options.limit) as any;
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset) as any;
+    }
+
+    return query;
+  }
+
+  async createWellnessResponse(data: {
+    requestId?: string | null;
+    organizationId: string;
+    templateId: string;
+    userId: string;
+    userFullName: string;
+    teamId?: string | null;
+    teamNameSnapshot?: string | null;
+    submittedAt: Date;
+    date: string;
+    responses: any;
+    accessMethod?: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }): Promise<WellnessResponse> {
+    const [response] = await db
+      .insert(wellnessResponses)
+      .values({
+        requestId: data.requestId || null,
+        organizationId: data.organizationId,
+        templateId: data.templateId,
+        userId: data.userId,
+        userFullName: data.userFullName,
+        teamId: data.teamId || null,
+        teamNameSnapshot: data.teamNameSnapshot || null,
+        submittedAt: data.submittedAt,
+        date: data.date,
+        responses: data.responses,
+        accessMethod: data.accessMethod || null,
+        ipAddress: data.ipAddress || null,
+        userAgent: data.userAgent || null,
+      })
+      .returning();
+    return response;
+  }
+
+  // ==================== Wellness Analytics ====================
+
+  async getTeamWellnessSummary(teamId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    responseCount: number;
+    athleteCount: number;
+    averageScore?: number;
+  }> {
+    const conditions = [eq(wellnessResponses.teamId, teamId)];
+
+    if (options?.startDate) {
+      conditions.push(gte(wellnessResponses.date, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(wellnessResponses.date, options.endDate));
+    }
+
+    const result = await db
+      .select({
+        responseCount: sql<number>`count(*)::int`,
+        athleteCount: sql<number>`count(distinct ${wellnessResponses.userId})::int`,
+      })
+      .from(wellnessResponses)
+      .where(and(...conditions));
+
+    return {
+      responseCount: result[0]?.responseCount || 0,
+      athleteCount: result[0]?.athleteCount || 0,
+    };
+  }
+
+  async getAthleteWellnessSummary(userId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<{
+    responseCount: number;
+    lastSubmittedAt?: Date;
+  }> {
+    const conditions = [eq(wellnessResponses.userId, userId)];
+
+    if (options?.startDate) {
+      conditions.push(gte(wellnessResponses.date, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(wellnessResponses.date, options.endDate));
+    }
+
+    const result = await db
+      .select({
+        responseCount: sql<number>`count(*)::int`,
+        lastSubmittedAt: sql<Date>`max(${wellnessResponses.submittedAt})`,
+      })
+      .from(wellnessResponses)
+      .where(and(...conditions));
+
+    return {
+      responseCount: result[0]?.responseCount || 0,
+      lastSubmittedAt: result[0]?.lastSubmittedAt || undefined,
+    };
+  }
+
+  async getWellnessTrends(organizationId: string, options?: {
+    startDate?: string;
+    endDate?: string;
+    questionIds?: string[];
+    groupBy?: 'day' | 'week' | 'month';
+  }): Promise<Array<{
+    questionId: string;
+    questionLabel: string;
+    dataPoints: Array<{
+      date: string;
+      value: number;
+      count: number;
+    }>;
+    trend: 'improving' | 'declining' | 'stable';
+    trendPercentage: number;
+  }>> {
+    const conditions = [eq(wellnessResponses.organizationId, organizationId)];
+
+    if (options?.startDate) {
+      conditions.push(gte(wellnessResponses.date, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(wellnessResponses.date, options.endDate));
+    }
+
+    // Fetch all responses for the organization within date range
+    const responses = await db
+      .select()
+      .from(wellnessResponses)
+      .where(and(...conditions))
+      .orderBy(asc(wellnessResponses.date));
+
+    // Process responses to extract question-level data
+    const questionDataMap = new Map<string, {
+      label: string;
+      dataByDate: Map<string, { total: number; count: number }>;
+    }>();
+
+    for (const response of responses) {
+      const responseData = response.responses as Record<string, { label?: string; value: number | string | null }> | null;
+      if (!responseData) continue;
+
+      for (const [questionId, answer] of Object.entries(responseData)) {
+        // Filter by questionIds if provided
+        if (options?.questionIds && options.questionIds.length > 0 && !options.questionIds.includes(questionId)) {
+          continue;
+        }
+
+        // Only process numeric values
+        const numericValue = typeof answer?.value === 'number' ? answer.value : null;
+        if (numericValue === null) continue;
+
+        if (!questionDataMap.has(questionId)) {
+          questionDataMap.set(questionId, {
+            label: answer?.label || questionId,
+            dataByDate: new Map(),
+          });
+        }
+
+        const questionData = questionDataMap.get(questionId)!;
+        const dateKey = response.date;
+
+        if (!questionData.dataByDate.has(dateKey)) {
+          questionData.dataByDate.set(dateKey, { total: 0, count: 0 });
+        }
+
+        const dateData = questionData.dataByDate.get(dateKey)!;
+        dateData.total += numericValue;
+        dateData.count += 1;
+      }
+    }
+
+    // Convert to output format with trend calculation
+    const trends: Array<{
+      questionId: string;
+      questionLabel: string;
+      dataPoints: Array<{ date: string; value: number; count: number }>;
+      trend: 'improving' | 'declining' | 'stable';
+      trendPercentage: number;
+    }> = [];
+
+    for (const [questionId, data] of questionDataMap) {
+      const dataPoints = Array.from(data.dataByDate.entries())
+        .map(([date, { total, count }]) => ({
+          date,
+          value: Math.round((total / count) * 100) / 100, // 2 decimal places
+          count,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (dataPoints.length === 0) continue;
+
+      // Calculate trend
+      let trend: 'improving' | 'declining' | 'stable' = 'stable';
+      let trendPercentage = 0;
+
+      if (dataPoints.length >= 2) {
+        const firstValue = dataPoints[0].value;
+        const lastValue = dataPoints[dataPoints.length - 1].value;
+        trendPercentage = firstValue !== 0
+          ? Math.round(((lastValue - firstValue) / firstValue) * 100)
+          : 0;
+
+        if (trendPercentage > 5) trend = 'improving';
+        else if (trendPercentage < -5) trend = 'declining';
+      }
+
+      trends.push({
+        questionId,
+        questionLabel: data.label,
+        dataPoints,
+        trend,
+        trendPercentage,
+      });
+    }
+
+    return trends;
+  }
+
+  // ==================== Helper Methods ====================
+
+  async getUsersByIds(ids: string[]): Promise<Map<string, User>> {
+    if (ids.length === 0) return new Map();
+
+    const userList = await db
+      .select()
+      .from(users)
+      .where(and(inArray(users.id, ids), whereUserNotDeleted()));
+
+    const map = new Map<string, User>();
+    userList.forEach(u => map.set(u.id, u));
+    return map;
+  }
+
+  async getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>> {
+    const results = await db
+      .select({
+        teamId: userTeams.teamId,
+        userId: userTeams.userId,
+        userFullName: users.fullName,
+      })
+      .from(userTeams)
+      .innerJoin(users, eq(userTeams.userId, users.id))
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          eq(teams.organizationId, organizationId),
+          eq(userTeams.isActive, true),
+          whereUserNotDeleted()
+        )
+      );
+
+    return results;
+  }
+
+  /**
+   * Get all team rosters for an organization
+   * Returns an array of roster entries with teamId for grouping
+   */
+  async getOrganizationRosters(organizationId: string): Promise<Array<{ teamId: string; userId: string; user: User }>> {
+    const results = await db
+      .select({
+        teamId: userTeams.teamId,
+        userId: userTeams.userId,
+        user: users,
+      })
+      .from(userTeams)
+      .innerJoin(users, eq(userTeams.userId, users.id))
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          eq(teams.organizationId, organizationId),
+          eq(userTeams.isActive, true),
+          whereUserNotDeleted()
+        )
+      );
+
+    return results;
   }
 
 }

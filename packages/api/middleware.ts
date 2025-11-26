@@ -2,6 +2,9 @@ import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
+// Re-export wellness access middleware
+export { requireWellnessAccess } from "./auth/wellness-access";
+
 // Extended request type with user info
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -259,3 +262,6 @@ export const errorHandler = (error: any, req: Request, res: Response, next: Next
     message: error.message || "Internal server error"
   });
 };
+
+// Re-export wellness middleware
+export { requireWellnessEnabled, checkWellnessEnabled } from './middleware/require-wellness-enabled';
