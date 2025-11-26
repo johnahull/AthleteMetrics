@@ -724,7 +724,7 @@ export const reportBenchmarksRelations = relations(reportBenchmarks, ({ one }) =
 // Wellness Questionnaire System
 export const wellnessTemplates = pgTable("wellness_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for system templates
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'set null' }), // Nullable for system templates, SET NULL to preserve historical wellness_responses
   name: varchar("name", { length: 200 }).notNull(),
   description: text("description"),
   isDefault: boolean("is_default").default(false).notNull(),
