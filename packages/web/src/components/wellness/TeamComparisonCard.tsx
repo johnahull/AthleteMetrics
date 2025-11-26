@@ -133,36 +133,36 @@ export function TeamComparisonCard({
         </p>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('teamName')}
                 >
                   Team Name <SortIcon field="teamName" />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('avgWellness')}
                 >
                   Avg Wellness <SortIcon field="avgWellness" />
                 </TableHead>
-                <TableHead>Status Breakdown</TableHead>
+                <TableHead className="hidden md:table-cell text-xs sm:text-sm">Status Breakdown</TableHead>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('alertCount')}
                 >
                   Alerts <SortIcon field="alertCount" />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="hidden md:table-cell cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('respondentCount')}
                 >
                   Respondents <SortIcon field="respondentCount" />
                 </TableHead>
-                <TableHead>Trend</TableHead>
+                <TableHead className="text-xs sm:text-sm">Trend</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -176,7 +176,7 @@ export function TeamComparisonCard({
                   <TableCell>
                     <ScoreDisplay score={team.avgWellness} max={scaleMax} className="font-semibold" />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <StatusBreakdownBadges
                       red={team.statusBreakdown.red}
                       yellow={team.statusBreakdown.yellow}
@@ -190,7 +190,7 @@ export function TeamComparisonCard({
                       <span className="text-muted-foreground">0</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <span className="font-medium">{team.respondentCount}</span>
                     <span className="text-xs text-muted-foreground ml-1">athletes</span>
                   </TableCell>

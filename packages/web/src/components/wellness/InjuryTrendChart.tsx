@@ -199,7 +199,7 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
       </CardHeader>
       <CardContent className="space-y-6">
         {/* Trend Chart */}
-        <div className="h-80">
+        <div className="h-64 sm:h-80 lg:h-96">
           <Line data={chartData} options={options} />
         </div>
 
@@ -219,13 +219,13 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
         {commonInjuries.length > 0 && (
           <div>
             <h3 className="font-semibold mb-3">Most Common Injury Locations</h3>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Body Part</TableHead>
-                    <TableHead className="text-right">Reports</TableHead>
-                    <TableHead className="text-right">% of Total</TableHead>
+                    <TableHead className="text-xs sm:text-sm">Body Part</TableHead>
+                    <TableHead className="text-right text-xs sm:text-sm">Reports</TableHead>
+                    <TableHead className="hidden md:table-cell text-right text-xs sm:text-sm">% of Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -233,7 +233,7 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
                     <TableRow key={injury.label}>
                       <TableCell className="font-medium">{injury.label}</TableCell>
                       <TableCell className="text-right">{injury.count}</TableCell>
-                      <TableCell className="text-right">
+                      <TableCell className="hidden md:table-cell text-right">
                         {((injury.count / totalInjuryReports) * 100).toFixed(1)}%
                       </TableCell>
                     </TableRow>

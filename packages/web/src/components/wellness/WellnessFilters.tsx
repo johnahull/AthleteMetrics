@@ -4,7 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ChevronDown, ChevronUp, X } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
+import { ChevronDown, ChevronUp, X, SlidersHorizontal } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { TeamAthleteSelector } from '@/components/ui/team-athlete-selector';
 
@@ -55,24 +56,8 @@ export function WellnessFilters({
 
   const hasFilters = activeFilterCount > 1; // More than just default date range
 
-  return (
-    <Card>
-      <CardContent className="pt-6">
-        {/* Mobile toggle button */}
-        <div className="md:hidden mb-4">
-          <Button
-            variant="outline"
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="w-full flex items-center justify-between"
-            data-testid="button-toggle-filters"
-          >
-            <span>Filters ({activeFilterCount})</span>
-            {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-          </Button>
-        </div>
-
-        {/* Filters content (collapsible on mobile) */}
-        <div className={`space-y-4 ${!isExpanded ? 'hidden md:block' : ''}`}>
+  const FiltersContent = () => (
+    <div className="space-y-4">
           {/* Date Range */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -123,7 +108,7 @@ export function WellnessFilters({
             <button
               type="button"
               onClick={() => setIsAthletesExpanded(!isAthletesExpanded)}
-              className="flex items-center justify-between w-full text-left"
+              className="flex items-center justify-between w-full text-left min-h-[44px] py-2"
             >
               <label className="block text-sm font-medium text-gray-700 cursor-pointer">
                 Athletes
@@ -204,8 +189,48 @@ export function WellnessFilters({
               </Button>
             </div>
           )}
-        </div>
-      </CardContent>
-    </Card>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Mobile: Sheet/Drawer Pattern */}
+      <div className="md:hidden">
+        <Sheet>
+          <SheetTrigger asChild>
+            <Button
+              variant="outline"
+              className="w-full flex items-center justify-between min-h-[44px]"
+              data-testid="button-toggle-filters"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-4 w-4" />
+                Filters ({activeFilterCount})
+              </span>
+              {hasFilters && (
+                <Badge variant="secondary" className="ml-2">
+                  {activeFilterCount}
+                </Badge>
+              )}
+            </Button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="h-[85vh]">
+            <SheetHeader>
+              <SheetTitle>Filter Wellness Data</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6 overflow-y-auto h-[calc(100%-60px)]">
+              <FiltersContent />
+            </div>
+          </SheetContent>
+        </Sheet>
+      </div>
+
+      {/* Desktop: Card Pattern */}
+      <Card className="hidden md:block">
+        <CardContent className="pt-6">
+          <FiltersContent />
+        </CardContent>
+      </Card>
+    </>
   );
 }

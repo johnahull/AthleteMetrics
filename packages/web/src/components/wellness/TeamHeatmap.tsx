@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { X, LayoutGrid, Table as TableIcon } from 'lucide-react';
 import type { WellnessResponse, WellnessResponseData, HeatmapCellData, WellnessTemplate } from '@shared/wellness-types';
 import { getTemplateScaleRange } from '@shared/wellness-constants';
 import { calculateAthleteStatus, getDefaultStatusConfig } from '@shared/wellness-status-utils';
@@ -30,6 +31,7 @@ interface HeatmapCell {
  */
 export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
   const [selectedCell, setSelectedCell] = useState<HeatmapCellData | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
   // Extract scale range from template
   const scaleRange = useMemo(() => getTemplateScaleRange(template), [template]);
@@ -130,11 +132,11 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
   return (
     <div>
       {/* Legend - adapts to scale orientation and calculation method */}
-      <div className="mb-4 flex items-center justify-between" data-testid="heatmap-legend">
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-0" data-testid="heatmap-legend">
         <span className="text-sm font-medium text-gray-700">
           Wellness {statusThresholds.calculationMethod === 'sum' ? 'Total' : 'Score'}:
         </span>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:gap-y-0">
           {scaleOrientation === 'lower_is_better' ? (
             // For lower_is_better: low scores = good (green), high scores = bad (red)
             <>
@@ -187,19 +189,128 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
         </div>
       </div>
 
-      {/* Heatmap Grid (scrollable) */}
-      <div className="overflow-x-auto">
+      {/* View Mode Toggle (Mobile Only) */}
+      <div className="md:hidden flex justify-end mb-4 gap-2">
+        <Button
+          variant={viewMode === 'cards' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setViewMode('cards')}
+          className="flex items-center gap-1"
+        >
+          <LayoutGrid className="h-4 w-4" />
+          Cards
+        </Button>
+        <Button
+          variant={viewMode === 'table' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setViewMode('table')}
+          className="flex items-center gap-1"
+        >
+          <TableIcon className="h-4 w-4" />
+          Table
+        </Button>
+      </div>
+
+      {/* Mobile Card View */}
+      {viewMode === 'cards' && heatmapData && (
+        <div className="md:hidden space-y-3 mb-6">
+          {heatmapData.athletes.map((athlete) => {
+            const latestDate = heatmapData.dates[heatmapData.dates.length - 1];
+            const latestData = heatmapData.data[athlete.id]?.[latestDate];
+            const allAthleteData = heatmapData.dates
+              .map(date => ({ date, ...heatmapData.data[athlete.id]?.[date] }))
+              .filter(d => d.score !== undefined);
+
+            if (allAthleteData.length === 0) return null;
+
+            const avgScore = allAthleteData.reduce((sum, d) => sum + (d.score || 0), 0) / allAthleteData.length;
+            const latestScore = latestData?.score || null;
+            const latestStatus = latestData?.status || null;
+
+            const getStatusBgClass = (status: 'red' | 'yellow' | 'green' | null) => {
+              if (status === 'red') return 'bg-red-50 border-red-200';
+              if (status === 'yellow') return 'bg-yellow-50 border-yellow-200';
+              if (status === 'green') return 'bg-green-50 border-green-200';
+              return 'bg-gray-50 border-gray-200';
+            };
+
+            const getStatusBadgeVariant = (status: 'red' | 'yellow' | 'green' | null) => {
+              if (status === 'red') return 'destructive';
+              if (status === 'yellow') return 'secondary';
+              return 'default';
+            };
+
+            return (
+              <div
+                key={athlete.id}
+                className={`p-4 border-2 rounded-lg ${getStatusBgClass(latestStatus)}`}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{athlete.name}</h4>
+                    <p className="text-xs text-gray-600 mt-1">
+                      {allAthleteData.length} submission{allAthleteData.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                  {latestStatus && (
+                    <Badge variant={getStatusBadgeVariant(latestStatus)}>
+                      {latestStatus.charAt(0).toUpperCase() + latestStatus.slice(1)}
+                    </Badge>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-gray-600 text-xs">Latest Score</p>
+                    <p className="font-bold text-lg">
+                      {latestScore !== null ? latestScore.toFixed(1) : 'N/A'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-gray-600 text-xs">Average</p>
+                    <p className="font-semibold text-lg text-gray-700">
+                      {avgScore.toFixed(1)}
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    if (latestData) {
+                      setSelectedCell({
+                        athleteId: athlete.id,
+                        athleteName: athlete.name,
+                        date: latestDate,
+                        score: latestData.score,
+                        responses: latestData.responses,
+                        hasAlert: false,
+                        alertSeverity: undefined,
+                      });
+                    }
+                  }}
+                  className="mt-3 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  View Details →
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Heatmap Grid (scrollable) - Hidden on mobile when cards view is active */}
+      <div className={`overflow-x-auto -mx-6 px-6 ${viewMode === 'cards' ? 'hidden md:block' : ''}`}>
         <div data-testid="heatmap-grid" className="inline-block min-w-full">
           <table className="border-collapse">
             <thead>
               <tr>
-                <th className="sticky left-0 z-10 bg-white border border-gray-300 p-2 text-left text-xs font-medium text-gray-700">
+                <th className="sticky left-0 z-10 bg-white border border-gray-300 p-2 text-left text-xs font-medium text-gray-700 min-w-[100px] sm:min-w-[150px]">
                   Athlete
                 </th>
                 {heatmapData.dates.map((date) => (
                   <th
                     key={date}
-                    className="border border-gray-300 p-2 text-xs font-medium text-gray-700 min-w-[80px]"
+                    className="border border-gray-300 p-1 sm:p-2 text-xs font-medium text-gray-700 min-w-[60px] sm:min-w-[80px]"
                   >
                     {new Date(date).toLocaleDateString('en-US', {
                       month: 'short',
@@ -212,7 +323,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
             <tbody>
               {heatmapData.athletes.map((athlete) => (
                 <tr key={athlete.id}>
-                  <td className="sticky left-0 z-10 bg-white border border-gray-300 p-2 text-sm font-medium text-gray-900 min-w-[150px]">
+                  <td className="sticky left-0 z-10 bg-white border border-gray-300 p-2 text-sm font-medium text-gray-900 min-w-[100px] sm:min-w-[150px]">
                     {athlete.name}
                   </td>
                   {heatmapData.dates.map((date) => {
@@ -241,11 +352,11 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                           }
                         }}
                       >
-                        <div className="flex items-center justify-center h-12 w-full">
+                        <div className="flex items-center justify-center h-10 sm:h-12 w-full text-xs sm:text-sm">
                           {score !== null && score !== undefined ? (
-                            <span className="text-sm font-medium">{score.toFixed(1)}</span>
+                            <span className="font-medium">{score.toFixed(1)}</span>
                           ) : (
-                            <span className="text-xs text-gray-400">-</span>
+                            <span className="text-gray-400">-</span>
                           )}
                         </div>
                       </td>

@@ -190,40 +190,40 @@ export function QuestionAnalyticsTable({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('questionLabel')}
                 >
                   Question <SortIcon field="questionLabel" />
                 </TableHead>
-                <TableHead>Type</TableHead>
+                <TableHead className="hidden md:table-cell text-xs sm:text-sm">Type</TableHead>
                 {templates.length > 1 && selectedTemplateId === 'all' && (
-                  <TableHead>Template</TableHead>
+                  <TableHead className="hidden lg:table-cell">Template</TableHead>
                 )}
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('avgScore')}
                 >
                   Avg Score <SortIcon field="avgScore" />
                 </TableHead>
-                <TableHead>Min/Max</TableHead>
+                <TableHead className="hidden lg:table-cell">Min/Max</TableHead>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="hidden lg:table-cell cursor-pointer hover:bg-muted/50"
                   onClick={() => handleSort('stdDev')}
                 >
                   Std Dev <SortIcon field="stdDev" />
                 </TableHead>
                 <TableHead
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="hidden md:table-cell cursor-pointer hover:bg-muted/50 text-xs sm:text-sm"
                   onClick={() => handleSort('responseCount')}
                 >
                   Responses <SortIcon field="responseCount" />
                 </TableHead>
-                <TableHead>Trend</TableHead>
+                <TableHead className="text-xs sm:text-sm">Trend</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -234,13 +234,13 @@ export function QuestionAnalyticsTable({
                       {stat.questionLabel}
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <Badge variant="outline" className="text-xs capitalize">
                       {stat.questionType.replace('_', ' ')}
                     </Badge>
                   </TableCell>
                   {templates.length > 1 && selectedTemplateId === 'all' && (
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell className="hidden lg:table-cell text-sm text-muted-foreground">
                       {stat.templateName}
                     </TableCell>
                   )}
@@ -251,7 +251,7 @@ export function QuestionAnalyticsTable({
                       <span className="text-muted-foreground">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     {stat.min !== null && stat.max !== null ? (
                       <span className="text-sm text-muted-foreground">
                         {stat.min.toFixed(1)} - {stat.max.toFixed(1)}
@@ -260,14 +260,14 @@ export function QuestionAnalyticsTable({
                       <span className="text-muted-foreground">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden lg:table-cell">
                     {stat.stdDev !== null ? (
                       <span className="text-sm">{stat.stdDev.toFixed(2)}</span>
                     ) : (
                       <span className="text-muted-foreground">N/A</span>
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="hidden md:table-cell">
                     <span className="font-medium">{stat.responseCount}</span>
                   </TableCell>
                   <TableCell>

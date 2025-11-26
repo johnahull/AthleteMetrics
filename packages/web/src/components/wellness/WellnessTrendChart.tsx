@@ -201,7 +201,7 @@ export function WellnessTrendChart({
           <p className="text-gray-500">No wellness data available for selected athlete</p>
         </div>
       ) : (
-        <div className="h-96">
+        <div className="h-64 sm:h-96">
           <Line ref={chartRef} data={chartData} options={options} />
         </div>
       )}

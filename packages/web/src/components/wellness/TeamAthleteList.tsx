@@ -59,21 +59,21 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
   }
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto -mx-6 px-6 md:mx-0 md:px-0">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('statusPriority')}>
+            <TableHead className="cursor-pointer text-xs sm:text-sm" onClick={() => handleSort('statusPriority')}>
               Status <SortIcon field="statusPriority" />
             </TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
+            <TableHead className="cursor-pointer text-xs sm:text-sm" onClick={() => handleSort('name')}>
               Athlete <SortIcon field="name" />
             </TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('score')}>
+            <TableHead className="cursor-pointer text-xs sm:text-sm" onClick={() => handleSort('score')}>
               Score <SortIcon field="score" />
             </TableHead>
-            <TableHead>Injuries</TableHead>
-            <TableHead className="cursor-pointer" onClick={() => handleSort('lastSubmissionTime')}>
+            <TableHead className="hidden md:table-cell text-xs sm:text-sm">Injuries</TableHead>
+            <TableHead className="hidden lg:table-cell cursor-pointer text-xs sm:text-sm" onClick={() => handleSort('lastSubmissionTime')}>
               Last Submission <SortIcon field="lastSubmissionTime" />
             </TableHead>
           </TableRow>
@@ -93,7 +93,7 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
               </TableCell>
               <TableCell className="font-medium">{athlete.name}</TableCell>
               <TableCell>{athlete.score !== null ? athlete.score.toFixed(1) : 'N/A'}</TableCell>
-              <TableCell>
+              <TableCell className="hidden md:table-cell">
                 {athlete.injuries.length > 0 ? (
                   <span className="text-sm">
                     {athlete.injuries.map(i => i.label).filter(Boolean).join(', ') || 'Unlabeled'}
@@ -102,7 +102,7 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
                   <span className="text-sm text-gray-500">None</span>
                 )}
               </TableCell>
-              <TableCell className="text-sm text-gray-600">
+              <TableCell className="hidden lg:table-cell text-sm text-gray-600">
                 {formatDate(athlete.lastSubmission)}
               </TableCell>
             </TableRow>

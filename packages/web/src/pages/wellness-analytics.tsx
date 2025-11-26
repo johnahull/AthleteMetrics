@@ -124,7 +124,7 @@ export default function WellnessAnalytics() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold text-gray-900">Wellness Analytics</h1>
@@ -141,7 +141,7 @@ export default function WellnessAnalytics() {
       </div>
 
       {/* Summary Cards */}
-      <div data-testid="summary-cards-section" className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div data-testid="summary-cards-section" className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {isLoading ? (
           <>
             <Skeleton className="h-32" />
@@ -172,12 +172,12 @@ export default function WellnessAnalytics() {
 
       {/* Analytics Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="teams">Teams</TabsTrigger>
-          <TabsTrigger value="questions">Questions</TabsTrigger>
-          <TabsTrigger value="status">Status Trends</TabsTrigger>
-          <TabsTrigger value="injuries">Injuries</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-1">
+          <TabsTrigger value="overview" className="min-h-[44px] py-3">Overview</TabsTrigger>
+          <TabsTrigger value="teams" className="min-h-[44px] py-3">Teams</TabsTrigger>
+          <TabsTrigger value="questions" className="min-h-[44px] py-3">Questions</TabsTrigger>
+          <TabsTrigger value="status" className="min-h-[44px] py-3">Status Trends</TabsTrigger>
+          <TabsTrigger value="injuries" className="min-h-[44px] py-3">Injuries</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
