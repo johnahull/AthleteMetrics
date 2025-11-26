@@ -393,3 +393,4 @@ The application runs as a **single-process Node.js server** without clustering:
   - **Safety Margin**: 90s provides 6x safety margin for cold starts
   - **Platform Alignment**: Railway's default timeout is 100s, so 90s aligns with platform limits
   - **Documentation**: See `railway.json` for current configuration
+- .env.testing contains the instance information for the testing app and db on railway
