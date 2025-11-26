@@ -42,8 +42,8 @@ import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
-import { userTeams, userOrganizations } from "@shared/schema";
-import { eq, and } from "drizzle-orm";
+import { userTeams, userOrganizations, teams } from "@shared/schema";
+import { eq, and, inArray } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { emailService } from "../services/email-service";
@@ -666,22 +666,20 @@ export function registerWellnessRoutes(app: Express) {
 
         // Add athletes from targeted teams (query userTeams table)
         if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-          for (const teamId of request.targetTeamIds) {
-            // Query userTeams table to get all active members of this team
-            const teamMembers = await db
-              .select()
-              .from(userTeams)
-              .where(
-                and(
-                  eq(userTeams.teamId, teamId),
-                  eq(userTeams.isActive, true)
-                )
-              );
+          // Use inArray() to fetch all team members in a single query (prevents N+1)
+          const teamMembers = await db
+            .select()
+            .from(userTeams)
+            .where(
+              and(
+                inArray(userTeams.teamId, request.targetTeamIds),
+                eq(userTeams.isActive, true)
+              )
+            );
 
-            // Extract user IDs from team memberships
-            const memberIds = teamMembers.map((member: any) => member.userId);
-            targetAthleteIds.push(...memberIds);
-          }
+          // Extract user IDs from team memberships
+          const memberIds = teamMembers.map((member: any) => member.userId);
+          targetAthleteIds.push(...memberIds);
         }
 
         // Remove duplicates
@@ -690,20 +688,46 @@ export function registerWellnessRoutes(app: Express) {
         // Batch fetch user details
         const athleteMap = await storage.getUsersByIds(uniqueAthleteIds);
 
-        // Get primary team for each athlete
-        const athletesWithTeams = await Promise.all(
-          Array.from(athleteMap.values()).map(async (athlete) => {
-            const userTeams = await storage.getUserTeams(athlete.id);
-            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
-
-            return {
-              id: athlete.id,
-              fullName: athlete.fullName,
-              teamName: primaryTeam?.name || null,
-              teamId: primaryTeam?.id || null,
-            };
+        // Batch fetch all user teams with team details in a single query (prevents N+1)
+        const allUserTeamsResults = await db
+          .select({
+            userId: userTeams.userId,
+            teamId: userTeams.teamId,
+            teamName: teams.name,
           })
-        );
+          .from(userTeams)
+          .leftJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              inArray(userTeams.userId, uniqueAthleteIds),
+              eq(userTeams.isActive, true)
+            )
+          );
+
+        // Group teams by user ID and get primary team for each athlete
+        const userPrimaryTeamMap = new Map<string, { teamId: string; teamName: string } | null>();
+
+        for (const ut of allUserTeamsResults) {
+          if (!userPrimaryTeamMap.has(ut.userId)) {
+            // Store first team as primary team
+            userPrimaryTeamMap.set(ut.userId, {
+              teamId: ut.teamId,
+              teamName: ut.teamName || 'Unknown Team',
+            });
+          }
+        }
+
+        // Build response with athlete data and primary teams
+        const athletesWithTeams = Array.from(athleteMap.values()).map((athlete) => {
+          const primaryTeam = userPrimaryTeamMap.get(athlete.id);
+
+          return {
+            id: athlete.id,
+            fullName: athlete.fullName,
+            teamName: primaryTeam?.teamName || null,
+            teamId: primaryTeam?.teamId || null,
+          };
+        });
 
         res.json({ athletes: athletesWithTeams });
       } catch (error: any) {
@@ -766,10 +790,7 @@ export function registerWellnessRoutes(app: Express) {
         res.status(204).send();
       } catch (error: any) {
         console.error("Failed to delete wellness request:", error);
-        res.status(500).json({
-          message: "Failed to delete wellness request",
-          error: error.message,
-        });
+        res.status(500).json(createErrorResponse("Failed to delete wellness request", error));
       }
     }
   );
@@ -945,7 +966,19 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Selected athlete not found" });
             }
 
+            // SECURITY: Verify athlete belongs to same organization as the request
+            // This prevents cross-organization data submission via stolen tokens
             const userTeams = await storage.getUserTeams(selectedAthleteId);
+            const athleteBelongsToOrg = userTeams.some(
+              ut => ut.team.organization.id === request.organizationId
+            );
+
+            if (!athleteBelongsToOrg) {
+              return res.status(403).json({
+                message: "Selected athlete does not belong to this organization"
+              });
+            }
+
             const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
 
             userId = user.id;
