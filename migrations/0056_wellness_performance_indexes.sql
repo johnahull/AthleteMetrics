@@ -209,16 +209,17 @@ WHERE organization_id IS NOT NULL;
 -- Migration completed successfully
 DO $$
 BEGIN
-  RAISE NOTICE ' ';
+  RAISE NOTICE '================================================================';
   RAISE NOTICE '✅ Migration 0056 completed successfully!';
-  RAISE NOTICE ' ';
+  RAISE NOTICE '================================================================';
   RAISE NOTICE 'Created 7 strategic indexes for wellness performance optimization:';
   RAISE NOTICE '  - 5 wellness_responses indexes (dashboard, analytics, pagination)';
   RAISE NOTICE '  - 2 wellness_templates indexes (library, org management)';
-  RAISE NOTICE ' ';
-  RAISE NOTICE 'Expected performance improvement: 50-80% faster queries';
+  RAISE NOTICE '----------------------------------------------------------------';
+  RAISE NOTICE 'Expected performance improvement: 50-80%% faster queries';
   RAISE NOTICE 'Index overhead: ~50-100MB (for 100k responses)';
-  RAISE NOTICE ' ';
+  RAISE NOTICE '----------------------------------------------------------------';
   RAISE NOTICE 'Run EXPLAIN ANALYZE on your queries to verify index usage.';
   RAISE NOTICE 'See migration comments for verification queries and rollback instructions.';
+  RAISE NOTICE '================================================================';
 END $$;
