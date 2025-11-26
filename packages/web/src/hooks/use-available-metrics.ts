@@ -99,8 +99,8 @@ export function useAvailableMetrics(): {
     // Fallback to active site metrics (for site admins without org context)
     if (siteMetrics) {
       return siteMetrics
-        .filter(sm => sm.isActive) // Only active metrics
-        .map(sm => ({
+        .filter((sm: any) => sm.isActive) // Only active metrics
+        .map((sm: any) => ({
           code: sm.code,
           label: sm.label,
           unit: sm.unit || '',
