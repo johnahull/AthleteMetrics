@@ -7,4 +7,8 @@
 -- Drop the case-insensitive unique index
 DROP INDEX IF EXISTS idx_wellness_requests_public_token_lower;
 
-RAISE NOTICE '✅ Migration 0057 Rollback: Removed case-insensitive unique index on wellness_requests.public_token';
+-- Success notification
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Migration 0057 Rollback: Removed case-insensitive unique index on wellness_requests.public_token';
+END $$;

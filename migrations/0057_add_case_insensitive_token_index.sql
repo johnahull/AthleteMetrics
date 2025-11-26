@@ -27,4 +27,8 @@ CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_requests_public_toke
 COMMENT ON INDEX idx_wellness_requests_public_token_lower IS
   'Case-insensitive unique constraint on wellness request tokens for security (migration 0057)';
 
-RAISE NOTICE '✅ Migration 0057: Case-insensitive unique index on wellness_requests.public_token created';
+-- Success notification
+DO $$
+BEGIN
+  RAISE NOTICE '✅ Migration 0057: Case-insensitive unique index on wellness_requests.public_token created';
+END $$;
