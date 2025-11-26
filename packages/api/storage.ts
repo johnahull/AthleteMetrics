@@ -4330,17 +4330,15 @@ export class DatabaseStorage implements IStorage {
     await this.deleteWellnessTemplate(id);
   }
 
-  async getWellnessTemplatesBatch(ids: string[]): Promise<Map<string, WellnessTemplate>> {
-    if (ids.length === 0) return new Map();
+  async getWellnessTemplatesBatch(ids: string[]): Promise<WellnessTemplate[]> {
+    if (ids.length === 0) return [];
 
     const templates = await db
       .select()
       .from(wellnessTemplates)
       .where(inArray(wellnessTemplates.id, ids));
 
-    const map = new Map<string, WellnessTemplate>();
-    templates.forEach(t => map.set(t.id, t));
-    return map;
+    return templates;
   }
 
   // ==================== Wellness Requests ====================
@@ -4451,22 +4449,31 @@ export class DatabaseStorage implements IStorage {
     await db.delete(wellnessRequests).where(eq(wellnessRequests.id, id));
   }
 
-  async getRequestCompletionRate(requestId: string): Promise<{
-    totalTargeted: number;
+  async getRequestCompletionRate(organizationId: string, requestId: string): Promise<{
+    total: number;
     completed: number;
-    completionRate: number;
+    percentage: number;
   }> {
     const request = await this.getWellnessRequest(requestId);
     if (!request) {
-      return { totalTargeted: 0, completed: 0, completionRate: 0 };
+      return { total: 0, completed: 0, percentage: 0 };
     }
 
-    // Count targeted athletes (direct + team members)
-    let totalTargeted = request.targetAthleteIds?.length || 0;
+    // Count targeted athletes (direct + team members), excluding deleted users
+    let total = 0;
 
+    // Collect all unique athlete IDs (deduplicating individuals and team members)
+    const targetedAthleteIds = new Set<string>();
+
+    // Add directly targeted athletes
+    if (request.targetAthleteIds) {
+      request.targetAthleteIds.forEach(id => targetedAthleteIds.add(id));
+    }
+
+    // Add team members
     if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-      const teamMembersResult = await db
-        .select({ count: sql<number>`count(distinct ${userTeams.userId})::int` })
+      const teamMembers = await db
+        .select({ userId: userTeams.userId })
         .from(userTeams)
         .where(
           and(
@@ -4474,19 +4481,34 @@ export class DatabaseStorage implements IStorage {
             eq(userTeams.isActive, true)
           )
         );
-      totalTargeted += teamMembersResult[0]?.count || 0;
+      teamMembers.forEach(m => targetedAthleteIds.add(m.userId));
     }
 
-    // Count completed responses
+    // Count only active, non-deleted users from the targeted set
+    if (targetedAthleteIds.size > 0) {
+      const activeUsersResult = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(users)
+        .where(
+          and(
+            inArray(users.id, [...targetedAthleteIds]),
+            eq(users.isActive, true),
+            whereUserNotDeleted()
+          )
+        );
+      total = activeUsersResult[0]?.count || 0;
+    }
+
+    // Count completed responses (distinct users who responded)
     const completedResult = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(distinct ${wellnessResponses.userId})::int` })
       .from(wellnessResponses)
       .where(eq(wellnessResponses.requestId, requestId));
 
     const completed = completedResult[0]?.count || 0;
-    const completionRate = totalTargeted > 0 ? (completed / totalTargeted) * 100 : 0;
+    const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-    return { totalTargeted, completed, completionRate };
+    return { total, completed, percentage };
   }
 
   // ==================== Wellness Responses ====================
@@ -4663,11 +4685,18 @@ export class DatabaseStorage implements IStorage {
   async getWellnessTrends(organizationId: string, options?: {
     startDate?: string;
     endDate?: string;
+    questionIds?: string[];
     groupBy?: 'day' | 'week' | 'month';
   }): Promise<Array<{
-    date: string;
-    responseCount: number;
-    athleteCount: number;
+    questionId: string;
+    questionLabel: string;
+    dataPoints: Array<{
+      date: string;
+      value: number;
+      count: number;
+    }>;
+    trend: 'improving' | 'declining' | 'stable';
+    trendPercentage: number;
   }>> {
     const conditions = [eq(wellnessResponses.organizationId, organizationId)];
 
@@ -4678,19 +4707,98 @@ export class DatabaseStorage implements IStorage {
       conditions.push(lte(wellnessResponses.date, options.endDate));
     }
 
-    // Group by date for daily trends
-    const results = await db
-      .select({
-        date: wellnessResponses.date,
-        responseCount: sql<number>`count(*)::int`,
-        athleteCount: sql<number>`count(distinct ${wellnessResponses.userId})::int`,
-      })
+    // Fetch all responses for the organization within date range
+    const responses = await db
+      .select()
       .from(wellnessResponses)
       .where(and(...conditions))
-      .groupBy(wellnessResponses.date)
       .orderBy(asc(wellnessResponses.date));
 
-    return results;
+    // Process responses to extract question-level data
+    const questionDataMap = new Map<string, {
+      label: string;
+      dataByDate: Map<string, { total: number; count: number }>;
+    }>();
+
+    for (const response of responses) {
+      const responseData = response.responses as Record<string, { label?: string; value: number | string | null }> | null;
+      if (!responseData) continue;
+
+      for (const [questionId, answer] of Object.entries(responseData)) {
+        // Filter by questionIds if provided
+        if (options?.questionIds && options.questionIds.length > 0 && !options.questionIds.includes(questionId)) {
+          continue;
+        }
+
+        // Only process numeric values
+        const numericValue = typeof answer?.value === 'number' ? answer.value : null;
+        if (numericValue === null) continue;
+
+        if (!questionDataMap.has(questionId)) {
+          questionDataMap.set(questionId, {
+            label: answer?.label || questionId,
+            dataByDate: new Map(),
+          });
+        }
+
+        const questionData = questionDataMap.get(questionId)!;
+        const dateKey = response.date;
+
+        if (!questionData.dataByDate.has(dateKey)) {
+          questionData.dataByDate.set(dateKey, { total: 0, count: 0 });
+        }
+
+        const dateData = questionData.dataByDate.get(dateKey)!;
+        dateData.total += numericValue;
+        dateData.count += 1;
+      }
+    }
+
+    // Convert to output format with trend calculation
+    const trends: Array<{
+      questionId: string;
+      questionLabel: string;
+      dataPoints: Array<{ date: string; value: number; count: number }>;
+      trend: 'improving' | 'declining' | 'stable';
+      trendPercentage: number;
+    }> = [];
+
+    for (const [questionId, data] of questionDataMap) {
+      const dataPoints = Array.from(data.dataByDate.entries())
+        .map(([date, { total, count }]) => ({
+          date,
+          value: Math.round((total / count) * 100) / 100, // 2 decimal places
+          count,
+        }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (dataPoints.length === 0) continue;
+
+      // Calculate trend
+      let trend: 'improving' | 'declining' | 'stable' = 'stable';
+      let trendPercentage = 0;
+
+      if (dataPoints.length >= 2) {
+        const firstValue = dataPoints[0].value;
+        const lastValue = dataPoints[dataPoints.length - 1].value;
+        trendPercentage = firstValue !== 0
+          ? Math.round(((lastValue - firstValue) / firstValue) * 100)
+          : 0;
+
+        if (trendPercentage > 5) trend = 'improving';
+        else if (trendPercentage < -5) trend = 'declining';
+      }
+
+      trends.push({
+        questionId,
+        questionLabel: data.label,
+        dataPoints,
+        trend,
+        trendPercentage,
+      });
+    }
+
+    return trends;
   }
 
   // ==================== Helper Methods ====================
@@ -4708,34 +4816,25 @@ export class DatabaseStorage implements IStorage {
     return map;
   }
 
-  async getTeamRostersBatch(teamIds: string[]): Promise<Map<string, User[]>> {
-    if (teamIds.length === 0) return new Map();
-
-    const memberships = await db
+  async getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>> {
+    const results = await db
       .select({
         teamId: userTeams.teamId,
-        user: users,
+        userId: userTeams.userId,
+        userFullName: users.fullName,
       })
       .from(userTeams)
       .innerJoin(users, eq(userTeams.userId, users.id))
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .where(
         and(
-          inArray(userTeams.teamId, teamIds),
+          eq(teams.organizationId, organizationId),
           eq(userTeams.isActive, true),
           whereUserNotDeleted()
         )
       );
 
-    const map = new Map<string, User[]>();
-    teamIds.forEach(id => map.set(id, []));
-
-    memberships.forEach(m => {
-      const roster = map.get(m.teamId) || [];
-      roster.push(m.user);
-      map.set(m.teamId, roster);
-    });
-
-    return map;
+    return results;
   }
 
   /**

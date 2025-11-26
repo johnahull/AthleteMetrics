@@ -810,7 +810,7 @@ export function registerWellnessRoutes(app: Express) {
       try {
         const { organizationId, requestId } = req.params;
 
-        const completionRate = await storage.getRequestCompletionRate(requestId);
+        const completionRate = await storage.getRequestCompletionRate(organizationId, requestId);
 
         res.json(completionRate);
       } catch (error: any) {
@@ -1390,13 +1390,13 @@ export function registerWellnessRoutes(app: Express) {
         // Validate date range (max 365 days)
         validateDateRange(validatedStartDate, validatedEndDate, 365);
 
-        // Validate and sanitize question IDs (prevents SQL injection) - reserved for future filtering
-        const _questionIdArray = validateQuestionIds(questionIds as string | undefined, 50);
+        // Validate and sanitize question IDs (prevents SQL injection)
+        const questionIdArray = validateQuestionIds(questionIds as string | undefined, 50);
 
         const trends = await storage.getWellnessTrends(organizationId, {
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          // Note: questionIds filtering to be implemented in future
+          questionIds: questionIdArray.length > 0 ? questionIdArray : undefined,
         });
 
         res.json(trends);
@@ -1438,8 +1438,8 @@ export function registerWellnessRoutes(app: Express) {
         // After: 4 queries total for all teams
 
         // Query 1: Batch fetch all team rosters for the organization
-        const allRosters = await storage.getOrganizationRosters(organizationId);
-        const rostersByTeam = new Map<string, typeof allRosters>();
+        const allRosters = await storage.getTeamRostersBatch(organizationId);
+        const rostersByTeam = new Map<string, Array<{ teamId: string; userId: string; userFullName: string }>>();
         for (const roster of allRosters) {
           if (!rostersByTeam.has(roster.teamId)) {
             rostersByTeam.set(roster.teamId, []);
@@ -1463,7 +1463,8 @@ export function registerWellnessRoutes(app: Express) {
 
         // Query 3: Batch fetch all unique templates
         const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
-        const templateMap = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
+        const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
+        const templateMap = new Map(templates.map(t => [t.id, t]));
 
         // Log warning if any templates are missing
         const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
