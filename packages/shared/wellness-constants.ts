@@ -67,6 +67,10 @@ export const WELLNESS_CONSTANTS = {
   // Dashboard Performance Limits
   MAX_ATHLETES_PER_TEAM: 500, // Limit athletes per team in dashboard queries
 
+  // Dashboard Polling (for near-real-time updates)
+  DASHBOARD_POLL_INTERVAL_MS: 30 * 1000, // 30 seconds when tab is active
+  DASHBOARD_STALE_TIME_MS: 60 * 1000, // 1 minute stale time
+
   // Chart Colors (colorblind-friendly palette)
   CHART_COLORS: [
     'rgb(59, 130, 246)',   // blue

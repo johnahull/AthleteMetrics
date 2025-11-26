@@ -10,6 +10,7 @@ import { useWellnessDashboard } from '@/hooks/use-wellness-dashboard';
 import { useTeams } from '@/hooks/use-teams';
 import TeamStatusCard from '@/components/wellness/TeamStatusCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { formatDistanceToNow } from 'date-fns';
 
 interface WellnessDashboardProps {
   organizationId: string;
@@ -32,17 +33,24 @@ export default function WellnessDashboard({ organizationId }: WellnessDashboardP
     organizationId,
   });
 
-  // Fetch dashboard data
+  // Fetch dashboard data with automatic polling
   const {
     data: dashboardData,
     isLoading,
+    isFetching,
     error,
     refetch,
+    dataUpdatedAt,
   } = useWellnessDashboard({
     organizationId,
     date: selectedDate,
     teamIds: selectedTeamIds.length > 0 ? selectedTeamIds : undefined,
   });
+
+  // Format "Last updated" text
+  const lastUpdatedText = dataUpdatedAt
+    ? formatDistanceToNow(new Date(dataUpdatedAt), { addSuffix: true })
+    : null;
 
   const handleTeamToggle = (teamId: string) => {
     setSelectedTeamIds((prev) =>
@@ -148,7 +156,13 @@ export default function WellnessDashboard({ organizationId }: WellnessDashboardP
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center">
+              {/* Last Updated Timestamp */}
+              {lastUpdatedText && !isLoading && (
+                <span className="text-xs text-gray-500 mr-2">
+                  Updated {lastUpdatedText}
+                </span>
+              )}
               <Button
                 variant="outline"
                 size="sm"
@@ -160,9 +174,9 @@ export default function WellnessDashboard({ organizationId }: WellnessDashboardP
                 variant="outline"
                 size="sm"
                 onClick={() => refetch()}
-                disabled={isLoading}
+                disabled={isFetching}
               >
-                <RefreshCw className={`w-4 h-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+                <RefreshCw className={`w-4 h-4 mr-2 ${isFetching ? 'animate-spin' : ''}`} />
                 Refresh
               </Button>
             </div>

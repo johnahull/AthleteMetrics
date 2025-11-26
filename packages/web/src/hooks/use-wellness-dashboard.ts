@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useCallback } from 'react';
+import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 interface AthleteData {
   id: string;
@@ -30,24 +32,30 @@ interface UseWellnessDashboardOptions {
   date?: string; // YYYY-MM-DD format
   teamIds?: string[];
   enabled?: boolean;
+  enablePolling?: boolean; // Enable automatic polling for real-time updates
 }
 
 /**
  * Custom hook for fetching wellness dashboard data
  *
- * Fetches team-level wellness status summaries with athlete details
+ * Fetches team-level wellness status summaries with athlete details.
+ * Supports automatic polling for near-real-time updates when athletes
+ * submit wellness questionnaires.
  */
 export function useWellnessDashboard({
   organizationId,
   date,
   teamIds,
   enabled = true,
+  enablePolling = true,
 }: UseWellnessDashboardOptions) {
   const {
     data: dashboardData,
     isLoading,
+    isFetching,
     error,
     refetch,
+    dataUpdatedAt,
   } = useQuery<TeamDashboardData[]>({
     queryKey: [
       '/api/organizations/:orgId/wellness/dashboard',
@@ -80,14 +88,51 @@ export function useWellnessDashboard({
     },
     enabled: enabled && !!organizationId,
     retry: 2,
-    staleTime: 2 * 60 * 1000, // 2 minutes (shorter for dashboard data)
+    staleTime: WELLNESS_CONSTANTS.DASHBOARD_STALE_TIME_MS, // 1 minute
     gcTime: 5 * 60 * 1000, // 5 minutes
+    // Polling configuration for near-real-time updates
+    refetchInterval: enablePolling ? WELLNESS_CONSTANTS.DASHBOARD_POLL_INTERVAL_MS : false,
+    refetchIntervalInBackground: false, // Don't poll when tab is hidden (save battery)
   });
+
+  // Track if we need to refetch on visibility change
+  const lastVisibilityRefetch = useRef<number>(0);
+
+  // Stable refetch callback for effect dependency
+  const stableRefetch = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  // Refetch immediately when tab becomes visible after being hidden
+  useEffect(() => {
+    if (!enabled || !organizationId || !enablePolling) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        const now = Date.now();
+        // Only refetch if enough time has passed (avoid double-fetching)
+        const timeSinceLastRefetch = now - lastVisibilityRefetch.current;
+        const isStale = dataUpdatedAt && (now - dataUpdatedAt) > WELLNESS_CONSTANTS.DASHBOARD_STALE_TIME_MS;
+
+        if (isStale && timeSinceLastRefetch > 5000) {
+          lastVisibilityRefetch.current = now;
+          stableRefetch();
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [enabled, organizationId, enablePolling, dataUpdatedAt, stableRefetch]);
 
   return {
     data: dashboardData,
     isLoading,
+    isFetching, // True during background refetch (for UI indicator)
     error,
     refetch,
+    dataUpdatedAt, // Timestamp of last successful fetch (for "Last updated" display)
   };
 }
