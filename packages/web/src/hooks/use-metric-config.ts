@@ -93,7 +93,7 @@ export function useMetricConfig(): MetricConfigLookup {
       );
     } else if (siteMetrics) {
       return Object.fromEntries(
-        siteMetrics.map(sm => [
+        siteMetrics.map((sm: any) => [
           sm.code,
           {
             code: sm.code,

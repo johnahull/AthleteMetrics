@@ -271,7 +271,7 @@ export interface IStorage {
 
   // Site Settings (Global Settings)
   getSiteSettings(): Promise<SiteSettings | undefined>;
-  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings>;
+  updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings>;
 
   // Reports
   getReport(id: string): Promise<Report | undefined>;
@@ -4114,28 +4114,38 @@ export class DatabaseStorage implements IStorage {
     return settings || undefined;
   }
 
-  async updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings> {
+  async updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
     const existing = await this.getSiteSettings();
 
     if (existing) {
       // Update existing settings
+      const updateData: any = {
+        updatedAt: new Date(),
+        updatedBy: settings.updatedBy,
+      };
+
+      // Only update fields that are provided
+      if (settings.aiModel !== undefined) {
+        updateData.aiModel = settings.aiModel;
+      }
+      if (settings.wellnessModuleEnabled !== undefined) {
+        updateData.wellnessModuleEnabled = settings.wellnessModuleEnabled;
+      }
+
       const [updated] = await db
         .update(siteSettings)
-        .set({
-          aiModel: settings.aiModel,
-          updatedAt: new Date(),
-          updatedBy: settings.updatedBy,
-        })
+        .set(updateData)
         .where(eq(siteSettings.id, existing.id))
         .returning();
       return updated;
     } else {
-      // Create new settings
+      // Create new settings with defaults
       const [created] = await db
         .insert(siteSettings)
         .values({
-          aiModel: settings.aiModel,
+          aiModel: settings.aiModel || 'gpt-5-nano',
+          wellnessModuleEnabled: settings.wellnessModuleEnabled !== undefined ? settings.wellnessModuleEnabled : true,
           updatedBy: settings.updatedBy,
         })
         .returning();
