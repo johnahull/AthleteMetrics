@@ -331,24 +331,35 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
                     const score = cellData?.score;
                     const status = cellData?.status || null;
 
+                    const handleCellActivate = () => {
+                      if (cellData) {
+                        setSelectedCell({
+                          athleteId: athlete.id,
+                          athleteName: athlete.name,
+                          date,
+                          score: cellData.score,
+                          responses: cellData.responses,
+                          hasAlert: false,
+                          alertSeverity: undefined,
+                        });
+                      }
+                    };
+
                     return (
                       <td
                         key={`${athlete.id}-${date}`}
                         data-testid={`heatmap-cell-${athlete.id}-${date}`}
-                        className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`${athlete.name}, ${date}, wellness score ${score !== null && score !== undefined ? score.toFixed(1) : 'not recorded'}, status ${status || 'unknown'}`}
+                        className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 focus:ring-2 focus:ring-primary focus:outline-none transition-all ${
                           getStatusTailwindClass(status)
                         } ${getStatusTextColor(status)}`}
-                        onClick={() => {
-                          if (cellData) {
-                            setSelectedCell({
-                              athleteId: athlete.id,
-                              athleteName: athlete.name,
-                              date,
-                              score: cellData.score,
-                              responses: cellData.responses,
-                              hasAlert: false,
-                              alertSeverity: undefined,
-                            });
+                        onClick={handleCellActivate}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handleCellActivate();
                           }
                         }}
                       >
