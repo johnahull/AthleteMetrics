@@ -73,6 +73,7 @@ describe("Site Settings API Routes", () => {
 
     // Create site admin user
     const siteAdmin = await storage.createUser({
+      username: `siteadmin-${timestamp}`,
       email: `siteadmin-settings-${timestamp}@test.com`,
       hashedPassword: "hashed",
       role: "site_admin",
@@ -84,6 +85,7 @@ describe("Site Settings API Routes", () => {
 
     // Create org admin user
     const orgAdmin = await storage.createUser({
+      username: `orgadmin-${timestamp}`,
       email: `orgadmin-settings-${timestamp}@test.com`,
       hashedPassword: "hashed",
       role: "org_admin",
@@ -94,14 +96,11 @@ describe("Site Settings API Routes", () => {
     testOrgAdminId = orgAdmin.id;
 
     // Link org admin to organization
-    await storage.addUserToOrganization({
-      userId: testOrgAdminId,
-      organizationId: testOrgId,
-      role: "org_admin",
-    });
+    await storage.addUserToOrganization(testOrgAdminId, testOrgId, "org_admin");
 
     // Create coach user
     const coach = await storage.createUser({
+      username: `coach-${timestamp}`,
       email: `coach-settings-${timestamp}@test.com`,
       hashedPassword: "hashed",
       role: "coach",
@@ -112,11 +111,7 @@ describe("Site Settings API Routes", () => {
     testCoachId = coach.id;
 
     // Link coach to organization
-    await storage.addUserToOrganization({
-      userId: testCoachId,
-      organizationId: testOrgId,
-      role: "coach",
-    });
+    await storage.addUserToOrganization(testCoachId, testOrgId, "coach");
   });
 
   afterAll(async () => {
