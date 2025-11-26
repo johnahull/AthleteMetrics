@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef } from 'react';
 import { WELLNESS_CONSTANTS } from '@shared/wellness-constants';
 
 interface AthleteData {
@@ -95,13 +95,12 @@ export function useWellnessDashboard({
     refetchIntervalInBackground: false, // Don't poll when tab is hidden (save battery)
   });
 
-  // Track if we need to refetch on visibility change
+  // Track timing for visibility refetch to avoid double-fetching
   const lastVisibilityRefetch = useRef<number>(0);
+  const dataUpdatedAtRef = useRef<number | undefined>(dataUpdatedAt);
 
-  // Stable refetch callback for effect dependency
-  const stableRefetch = useCallback(() => {
-    refetch();
-  }, [refetch]);
+  // Keep ref in sync with latest value (avoids stale closure without adding to deps)
+  dataUpdatedAtRef.current = dataUpdatedAt;
 
   // Refetch immediately when tab becomes visible after being hidden
   useEffect(() => {
@@ -112,11 +111,12 @@ export function useWellnessDashboard({
         const now = Date.now();
         // Only refetch if enough time has passed (avoid double-fetching)
         const timeSinceLastRefetch = now - lastVisibilityRefetch.current;
-        const isStale = dataUpdatedAt && (now - dataUpdatedAt) > WELLNESS_CONSTANTS.DASHBOARD_STALE_TIME_MS;
+        const currentDataUpdatedAt = dataUpdatedAtRef.current;
+        const isStale = currentDataUpdatedAt && (now - currentDataUpdatedAt) > WELLNESS_CONSTANTS.DASHBOARD_STALE_TIME_MS;
 
         if (isStale && timeSinceLastRefetch > 5000) {
           lastVisibilityRefetch.current = now;
-          stableRefetch();
+          refetch();
         }
       }
     };
@@ -125,7 +125,7 @@ export function useWellnessDashboard({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [enabled, organizationId, enablePolling, dataUpdatedAt, stableRefetch]);
+  }, [enabled, organizationId, enablePolling, refetch]);
 
   return {
     data: dashboardData,
