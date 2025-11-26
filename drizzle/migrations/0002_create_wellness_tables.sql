@@ -79,18 +79,5 @@ ALTER TABLE "wellness_responses"
   ADD CONSTRAINT "wellness_responses_request_id_fk"
   FOREIGN KEY ("request_id") REFERENCES "wellness_requests"("id") ON DELETE SET NULL;
 
--- Create base indexes from schema.ts
-CREATE INDEX IF NOT EXISTS "wellness_templates_org_idx" ON "wellness_templates"("organization_id");
-CREATE INDEX IF NOT EXISTS "wellness_templates_active_idx" ON "wellness_templates"("is_active");
-
-CREATE INDEX IF NOT EXISTS "wellness_requests_org_idx" ON "wellness_requests"("organization_id");
-CREATE INDEX IF NOT EXISTS "wellness_requests_token_idx" ON "wellness_requests"("public_token");
-CREATE INDEX IF NOT EXISTS "wellness_requests_status_idx" ON "wellness_requests"("status");
-CREATE INDEX IF NOT EXISTS "wellness_requests_scheduled_idx" ON "wellness_requests"("scheduled_for");
-
-CREATE INDEX IF NOT EXISTS "wellness_responses_user_idx" ON "wellness_responses"("user_id");
-CREATE INDEX IF NOT EXISTS "wellness_responses_org_idx" ON "wellness_responses"("organization_id");
-CREATE INDEX IF NOT EXISTS "wellness_responses_date_idx" ON "wellness_responses"("date");
-CREATE INDEX IF NOT EXISTS "wellness_responses_team_idx" ON "wellness_responses"("team_id");
-CREATE INDEX IF NOT EXISTS "wellness_responses_submitted_idx" ON "wellness_responses"("submitted_at");
-CREATE INDEX IF NOT EXISTS "wellness_responses_user_date_idx" ON "wellness_responses"("user_id", "date");
+-- Note: Base indexes are created in migration 0049 (wellness indexes migration)
+-- This migration only creates the tables and foreign key constraints
