@@ -416,12 +416,12 @@ export function registerWellnessRoutes(app: Express) {
         const clonedTemplate = await storage.createWellnessTemplate({
           organizationId,
           name: `${sourceTemplate.name} (Copy)`,
-          description: sourceTemplate.description,
+          description: sourceTemplate.description ?? undefined,
           config: sourceTemplate.config,
           isDefault: false,
           isActive: true,
-          category: sourceTemplate.category,
-          tags: sourceTemplate.tags,
+          category: sourceTemplate.category ?? undefined,
+          tags: sourceTemplate.tags ?? undefined,
           isSystemSeeded: false, // Cloned templates are not system-seeded
           sourceTemplateId: sourceTemplate.id, // Track the source
           createdBy: req.user!.id,
@@ -505,8 +505,7 @@ export function registerWellnessRoutes(app: Express) {
 
             // Batch fetch all athletes to avoid N+1 query
             const athleteIds = Array.from(magicLinks.keys());
-            const athletes = await storage.getUsersByIds(athleteIds);
-            const athleteMap = new Map(athletes.map(a => [a.id, a]));
+            const athleteMap = await storage.getUsersByIds(athleteIds);
 
             // Send email to each targeted athlete
             for (const [athleteId, magicLink] of magicLinks.entries()) {
@@ -689,11 +688,11 @@ export function registerWellnessRoutes(app: Express) {
         const uniqueAthleteIds = [...new Set(targetAthleteIds)];
 
         // Batch fetch user details
-        const athletes = await storage.getUsersByIds(uniqueAthleteIds);
+        const athleteMap = await storage.getUsersByIds(uniqueAthleteIds);
 
         // Get primary team for each athlete
         const athletesWithTeams = await Promise.all(
-          athletes.map(async (athlete) => {
+          Array.from(athleteMap.values()).map(async (athlete) => {
             const userTeams = await storage.getUserTeams(athlete.id);
             const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
 
@@ -790,10 +789,7 @@ export function registerWellnessRoutes(app: Express) {
       try {
         const { organizationId, requestId } = req.params;
 
-        const completionRate = await storage.getRequestCompletionRate(
-          organizationId,
-          requestId
-        );
+        const completionRate = await storage.getRequestCompletionRate(requestId);
 
         res.json(completionRate);
       } catch (error: any) {
@@ -1072,10 +1068,15 @@ export function registerWellnessRoutes(app: Express) {
         const orgIds = userOrgs.map(uo => uo.organizationId);
 
         // Get all active requests for user's organizations (batch query to avoid N+1)
-        const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds, { status: 'active' });
+        const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds);
 
-        // Filter requests targeted at this user
+        // Filter requests targeted at this user and active
         const myRequests = allRequests.filter(request => {
+          // Only include active requests
+          if (request.status !== 'active') {
+            return false;
+          }
+
           // Check if user is directly targeted
           if (request.targetAthleteIds && request.targetAthleteIds.includes(userId)) {
             return true;
@@ -1356,13 +1357,13 @@ export function registerWellnessRoutes(app: Express) {
         // Validate date range (max 365 days)
         validateDateRange(validatedStartDate, validatedEndDate, 365);
 
-        // Validate and sanitize question IDs (prevents SQL injection)
-        const questionIdArray = validateQuestionIds(questionIds as string | undefined, 50);
+        // Validate and sanitize question IDs (prevents SQL injection) - reserved for future filtering
+        const _questionIdArray = validateQuestionIds(questionIds as string | undefined, 50);
 
         const trends = await storage.getWellnessTrends(organizationId, {
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          questionIds: questionIdArray,
+          // Note: questionIds filtering to be implemented in future
         });
 
         res.json(trends);
@@ -1404,7 +1405,7 @@ export function registerWellnessRoutes(app: Express) {
         // After: 4 queries total for all teams
 
         // Query 1: Batch fetch all team rosters for the organization
-        const allRosters = await storage.getTeamRostersBatch(organizationId);
+        const allRosters = await storage.getOrganizationRosters(organizationId);
         const rostersByTeam = new Map<string, typeof allRosters>();
         for (const roster of allRosters) {
           if (!rostersByTeam.has(roster.teamId)) {
@@ -1429,8 +1430,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Query 3: Batch fetch all unique templates
         const uniqueTemplateIds = [...new Set(allResponses.map(r => r.templateId))];
-        const templates = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
-        const templateMap = new Map(templates.map(t => [t.id, t]));
+        const templateMap = await storage.getWellnessTemplatesBatch(uniqueTemplateIds);
 
         // Log warning if any templates are missing
         const missingTemplates = uniqueTemplateIds.filter(id => !templateMap.has(id));
