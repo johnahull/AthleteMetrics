@@ -31,7 +31,6 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
-        chartRef.current = null;
       }
     };
   }, []);

@@ -30,7 +30,6 @@ export const InjuryTrendChart = memo(function InjuryTrendChart({ template, respo
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
-        chartRef.current = null;
       }
     };
   }, []);

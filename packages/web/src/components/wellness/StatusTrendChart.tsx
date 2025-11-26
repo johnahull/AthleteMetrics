@@ -30,7 +30,6 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
-        chartRef.current = null;
       }
     };
   }, []);
