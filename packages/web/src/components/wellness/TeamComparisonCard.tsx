@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateAthleteStatus } from '@shared/wellness-status-utils';
 import { calculateAverageWellness, calculateTrend } from '@/utils/wellness-analytics';
-import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
+import { useSortableTable } from '@/hooks/use-sortable-table';
 import { TrendIndicator, StatusBreakdownBadges, ScoreDisplay } from './ui/WellnessUIComponents';
 
 interface TeamComparisonData {

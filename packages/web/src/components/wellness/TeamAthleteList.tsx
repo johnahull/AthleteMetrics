@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
+import { useSortableTable } from '@/hooks/use-sortable-table';
 import { StatusDot } from './ui/WellnessUIComponents';
 
 interface Athlete {

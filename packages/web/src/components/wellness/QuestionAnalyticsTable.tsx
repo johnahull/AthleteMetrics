@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateTrend } from '@/utils/wellness-analytics';
-import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
+import { useSortableTable } from '@/hooks/use-sortable-table';
 import { TrendIndicator } from './ui/WellnessUIComponents';
 
 interface QuestionStats {
