@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, memo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ interface QuestionAnalyticsTableProps {
   scaleOrientation?: 'higher_is_better' | 'lower_is_better';
 }
 
-export function QuestionAnalyticsTable({
+export const QuestionAnalyticsTable = memo(function QuestionAnalyticsTable({
   responses,
   responsesByTemplate,
   scaleOrientation = 'higher_is_better',
@@ -281,4 +281,4 @@ export function QuestionAnalyticsTable({
       </CardContent>
     </Card>
   );
-}
+});

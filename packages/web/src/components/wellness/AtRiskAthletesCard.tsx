@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AlertTriangle, UserCheck } from 'lucide-react';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
@@ -23,7 +23,7 @@ interface AtRiskAthlete {
 /**
  * Summary card showing athletes in red or yellow status who may need attention
  */
-export function AtRiskAthletesCard({
+export const AtRiskAthletesCard = memo(function AtRiskAthletesCard({
   responses,
   responsesByTemplate,
   onAthleteClick,
@@ -152,4 +152,4 @@ export function AtRiskAthletesCard({
       </CardContent>
     </Card>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useSortableTable } from '@/hooks/use-sortable-table';
 import { StatusDot } from './ui/WellnessUIComponents';
@@ -17,7 +17,7 @@ interface TeamAthleteListProps {
   onAthleteClick?: (athleteId: string) => void;
 }
 
-export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthleteListProps) {
+const TeamAthleteList = memo(function TeamAthleteList({ athletes, onAthleteClick }: TeamAthleteListProps) {
   // Transform athlete data to include sortable status priority
   const athletesWithPriority = useMemo(() => {
     const statusOrder = { red: 0, yellow: 1, green: 2 };
@@ -111,4 +111,7 @@ export default function TeamAthleteList({ athletes, onAthleteClick }: TeamAthlet
       </Table>
     </div>
   );
-}
+});
+
+export default TeamAthleteList;
+

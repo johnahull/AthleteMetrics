@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, memo, useRef, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,7 +16,7 @@ interface WellnessTrendChartProps {
 /**
  * Line chart showing wellness trends over time for individual athlete
  */
-export function WellnessTrendChart({
+export const WellnessTrendChart = memo(function WellnessTrendChart({
   trends,
   responses,
   selectedAthleteId,
@@ -225,4 +225,4 @@ export function WellnessTrendChart({
       )}
     </div>
   );
-}
+});

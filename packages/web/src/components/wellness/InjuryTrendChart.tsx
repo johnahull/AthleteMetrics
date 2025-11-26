@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, memo, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
@@ -21,7 +21,7 @@ interface DailyInjuryData {
   injuryBreakdown: Map<string, number>;
 }
 
-export function InjuryTrendChart({ template, responses, filters }: InjuryTrendChartProps) {
+export const InjuryTrendChart = memo(function InjuryTrendChart({ template, responses, filters }: InjuryTrendChartProps) {
   // Chart ref for cleanup
   const chartRef = useRef<ChartJS<'line'>>(null);
 
@@ -257,4 +257,4 @@ export function InjuryTrendChart({ template, responses, filters }: InjuryTrendCh
       </CardContent>
     </Card>
   );
-}
+});

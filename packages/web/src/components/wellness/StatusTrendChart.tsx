@@ -1,4 +1,4 @@
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, memo, useRef, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
 import type { Chart as ChartJS, ChartOptions } from 'chart.js';
@@ -21,7 +21,7 @@ interface DailyStatusBreakdown {
   total: number;
 }
 
-export function StatusTrendChart({ template, responses, filters }: StatusTrendChartProps) {
+export const StatusTrendChart = memo(function StatusTrendChart({ template, responses, filters }: StatusTrendChartProps) {
   // Chart ref for cleanup
   const chartRef = useRef<ChartJS<'line'>>(null);
 
@@ -227,4 +227,4 @@ export function StatusTrendChart({ template, responses, filters }: StatusTrendCh
       </CardContent>
     </Card>
   );
-}
+});

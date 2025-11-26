@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -31,7 +31,7 @@ interface TeamComparisonCardProps {
   onTeamClick?: (teamId: string) => void;
 }
 
-export function TeamComparisonCard({
+export const TeamComparisonCard = memo(function TeamComparisonCard({
   responses,
   responsesByTemplate,
   filters,
@@ -205,4 +205,4 @@ export function TeamComparisonCard({
       </CardContent>
     </Card>
   );
-}
+});

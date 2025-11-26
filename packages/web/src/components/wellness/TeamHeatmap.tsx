@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, memo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ interface HeatmapCell {
  * Heatmap visualization showing team wellness across dates
  * Rows = Athletes, Columns = Dates, Color = Wellness Score
  */
-export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
+export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
   const [selectedCell, setSelectedCell] = useState<HeatmapCellData | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
@@ -465,4 +465,4 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
       </Dialog>
     </div>
   );
-}
+});

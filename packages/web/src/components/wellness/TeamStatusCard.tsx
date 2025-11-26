@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, memo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +34,7 @@ interface TeamStatusCardProps {
   onExpand?: (teamId: string) => void;
 }
 
-export default function TeamStatusCard({
+const TeamStatusCard = memo(function TeamStatusCard({
   teamId,
   teamName,
   teamStatus,
@@ -178,4 +178,7 @@ export default function TeamStatusCard({
       </CardContent>
     </Card>
   );
-}
+});
+
+export default TeamStatusCard;
+
