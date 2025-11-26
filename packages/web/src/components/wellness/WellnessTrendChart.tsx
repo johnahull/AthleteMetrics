@@ -31,6 +31,7 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
+        chartRef.current = null;
       }
     };
   }, []);
@@ -148,8 +149,8 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
     return Math.ceil(maxValue * 1.1) || 10;
   }, [athleteResponses]);
 
-  // Chart options
-  const options: ChartOptions<'line'> = {
+  // Chart options (memoized to prevent unnecessary re-renders)
+  const options: ChartOptions<'line'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -178,7 +179,7 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
         },
       },
     },
-  };
+  }), [scaleMax]);
 
   return (
     <div>

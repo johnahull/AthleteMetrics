@@ -27,15 +27,23 @@ export function ScaleQuestionInput({
   return (
     <div className="space-y-4" data-testid="question-scale">
       <div className="flex items-start justify-between">
-        <Label className="text-base font-medium">
+        <Label id={`${question.id}-label`} className="text-base font-medium">
           {question.label}
           {question.required && <span className="text-destructive ml-1">*</span>}
         </Label>
-        <span className="text-2xl font-bold text-primary">{localValue}</span>
+        <span
+          id={`${question.id}-value`}
+          className="text-2xl font-bold text-primary"
+          aria-live="polite"
+        >
+          {localValue}
+        </span>
       </div>
 
       {question.description && (
-        <p className="text-sm text-muted-foreground">{question.description}</p>
+        <p id={`${question.id}-description`} className="text-sm text-muted-foreground">
+          {question.description}
+        </p>
       )}
 
       <div className="space-y-4 py-4">
@@ -46,6 +54,12 @@ export function ScaleQuestionInput({
           value={[localValue]}
           onValueChange={handleChange}
           className="touch-action-none" // Better touch support
+          aria-labelledby={`${question.id}-label`}
+          aria-describedby={question.description ? `${question.id}-description` : undefined}
+          aria-valuemin={question.scaleMin}
+          aria-valuemax={question.scaleMax}
+          aria-valuenow={localValue}
+          aria-valuetext={`${localValue} out of ${question.scaleMax}`}
         />
 
         <div className="flex justify-between text-sm text-muted-foreground">
@@ -54,7 +68,11 @@ export function ScaleQuestionInput({
         </div>
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
+      {error && (
+        <p className="text-sm text-destructive" role="alert">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

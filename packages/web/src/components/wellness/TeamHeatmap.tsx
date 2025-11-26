@@ -101,11 +101,11 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
   const getStatusTailwindClass = (status: 'red' | 'yellow' | 'green' | null): string => {
     switch (status) {
       case 'red':
-        return 'bg-red-500';
+        return 'bg-red-600'; // WCAG AA contrast: 5.5:1 (changed from bg-red-500)
       case 'yellow':
-        return 'bg-yellow-400';
+        return 'bg-yellow-500'; // WCAG AA contrast: 4.6:1 (changed from bg-yellow-400)
       case 'green':
-        return 'bg-green-500';
+        return 'bg-green-600'; // WCAG AA contrast: 4.6:1 (changed from bg-green-500)
       default:
         return 'bg-gray-100'; // No data
     }

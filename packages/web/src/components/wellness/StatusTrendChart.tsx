@@ -30,6 +30,7 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
+        chartRef.current = null;
       }
     };
   }, []);
@@ -121,7 +122,7 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
     };
   }, [dailyBreakdowns]);
 
-  const options: ChartOptions<'line'> = {
+  const options: ChartOptions<'line'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -176,7 +177,7 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
       axis: 'x',
       intersect: false,
     },
-  };
+  }), [dailyBreakdowns]);
 
   // Calculate overall trend
   const overallTrend = useMemo(() => {

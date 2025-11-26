@@ -30,6 +30,7 @@ export const InjuryTrendChart = memo(function InjuryTrendChart({ template, respo
     return () => {
       if (chartRef.current) {
         chartRef.current.destroy();
+        chartRef.current = null;
       }
     };
   }, []);
@@ -139,7 +140,7 @@ export const InjuryTrendChart = memo(function InjuryTrendChart({ template, respo
     };
   }, [dailyInjuryData]);
 
-  const options: ChartOptions<'line'> = {
+  const options: ChartOptions<'line'> = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -178,7 +179,7 @@ export const InjuryTrendChart = memo(function InjuryTrendChart({ template, respo
       axis: 'x',
       intersect: false,
     },
-  };
+  }), []);
 
   if (dailyInjuryData.length === 0) {
     return (
