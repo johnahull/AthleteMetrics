@@ -4,7 +4,7 @@
  */
 
 import type { Response, NextFunction } from "express";
-import type { AuthenticatedRequest } from "./index";
+import type { AuthenticatedRequest } from "../middleware";
 import { db } from "../db";
 import { siteSettings, organizations, userOrganizations } from "@shared/schema";
 import { eq } from "drizzle-orm";

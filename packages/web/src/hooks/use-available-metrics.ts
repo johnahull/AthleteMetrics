@@ -60,7 +60,15 @@ export function useAvailableMetrics(): {
     data: siteMetrics,
     isLoading: loadingSite,
     error: errorSite
-  } = useQuery({
+  } = useQuery<Array<{
+    code: string;
+    label: string;
+    unit: string | null;
+    lowerIsBetter: boolean;
+    category: string | null;
+    description: string | null;
+    isActive: boolean;
+  }>>({
     queryKey: ['siteMetrics', false],
     queryFn: async () => {
       const params = new URLSearchParams();

@@ -57,7 +57,16 @@ export function useMetricConfig(): MetricConfigLookup {
   );
 
   // Fallback to site metrics ONLY for site admins without org context
-  const { data: siteMetrics, isLoading: loadingSite } = useQuery({
+  const { data: siteMetrics, isLoading: loadingSite } = useQuery<Array<{
+    code: string;
+    label: string;
+    unit: string | null;
+    lowerIsBetter: boolean;
+    category: string | null;
+    description: string | null;
+    isActive: boolean;
+    isSystemDefault: boolean;
+  }>>({
     queryKey: ['siteMetrics', false],
     queryFn: async () => {
       const params = new URLSearchParams();

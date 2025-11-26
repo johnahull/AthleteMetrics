@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
+import type { SiteSettings, Organization, UserOrganization } from "@shared/schema";
 import {
   BarChart3,
   Building2,
@@ -152,7 +153,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   }
 
   // Get user's organizations for context
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizations } = useQuery<UserOrganization[]>({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!userData.id && !userData.isSiteAdmin,
   });
@@ -162,7 +163,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const siteSettingsEndpoint = userData?.isSiteAdmin
     ? "/api/site-settings"
     : "/api/site-settings/public";
-  const { data: siteSettings } = useQuery({
+  const { data: siteSettings } = useQuery<SiteSettings>({
     queryKey: [siteSettingsEndpoint],
     enabled: !!userData.id,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
@@ -170,7 +171,7 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   // Fetch organization to check org-level wellness status
   const organizationId = userOrganizations?.[0]?.organizationId;
-  const { data: organization } = useQuery({
+  const { data: organization } = useQuery<Organization>({
     queryKey: [`/api/organizations/${organizationId}`],
     enabled: !!organizationId && !userData.isSiteAdmin,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes

@@ -54,98 +54,38 @@
 -- Performance: Enables fast ordering by submitted_at DESC
 -- Query: ORDER BY submitted_at DESC
 -- Note: Covers all rows (no partial WHERE clause) to avoid NOW() IMMUTABLE constraint
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_responses_recent'
-  ) THEN
-    CREATE INDEX idx_wellness_responses_recent
-      ON wellness_responses(submitted_at DESC);
-    RAISE NOTICE 'Created index: idx_wellness_responses_recent';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_responses_recent';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_recent
+ON wellness_responses(submitted_at DESC);
 
 -- Index 2: Composite org + date range + submitted_at (dashboard queries)
 -- Use case: Dashboard queries filtering by org + date range with sorting
 -- Performance: Eliminates sequential scans, enables index-only scans
 -- Query: WHERE organization_id = ? AND date BETWEEN ? AND ? ORDER BY submitted_at DESC
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_responses_org_date_submitted'
-  ) THEN
-    CREATE INDEX idx_wellness_responses_org_date_submitted
-      ON wellness_responses(organization_id, date DESC, submitted_at DESC);
-    RAISE NOTICE 'Created index: idx_wellness_responses_org_date_submitted';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_responses_org_date_submitted';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_org_date_submitted
+ON wellness_responses(organization_id, date DESC, submitted_at DESC);
 
 -- Index 3: Request completion lookups (duplicate submission checks)
 -- Use case: Fast lookup to check if athlete already submitted response
 -- Performance: Instant lookups instead of full table scans
 -- Query: WHERE request_id = ? AND user_id = ?
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_responses_request_user'
-  ) THEN
-    CREATE INDEX idx_wellness_responses_request_user
-      ON wellness_responses(request_id, user_id)
-      WHERE request_id IS NOT NULL;
-    RAISE NOTICE 'Created index: idx_wellness_responses_request_user';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_responses_request_user';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_request_user
+ON wellness_responses(request_id, user_id)
+WHERE request_id IS NOT NULL;
 
 -- Index 4: Team + date composite for team analytics
 -- Use case: Team-specific analytics and dashboards
 -- Performance: Fast filtering for team dashboards, includes submitted_at ordering
 -- Query: WHERE team_id = ? AND date = ? ORDER BY submitted_at DESC
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_responses_team_date_submitted'
-  ) THEN
-    CREATE INDEX idx_wellness_responses_team_date_submitted
-      ON wellness_responses(team_id, date DESC, submitted_at DESC)
-      WHERE team_id IS NOT NULL;
-    RAISE NOTICE 'Created index: idx_wellness_responses_team_date_submitted';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_responses_team_date_submitted';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_team_date_submitted
+ON wellness_responses(team_id, date DESC, submitted_at DESC)
+WHERE team_id IS NOT NULL;
 
 -- Index 5: User response history with ordering
 -- Use case: Athlete dashboard showing submission history with pagination
 -- Performance: Fast pagination queries with proper ordering
 -- Query: WHERE user_id = ? ORDER BY submitted_at DESC LIMIT 20
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_responses_user_submitted'
-  ) THEN
-    CREATE INDEX idx_wellness_responses_user_submitted
-      ON wellness_responses(user_id, submitted_at DESC);
-    RAISE NOTICE 'Created index: idx_wellness_responses_user_submitted';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_responses_user_submitted';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_user_submitted
+ON wellness_responses(user_id, submitted_at DESC);
 
 -- ============================================================================
 -- WELLNESS TEMPLATES INDEXES (Template Library Queries)
@@ -155,41 +95,17 @@ END $$;
 -- Use case: Template library browsing (global/system templates only)
 -- Performance: Fast filtering of active, system-seeded templates
 -- Query: WHERE organization_id IS NULL AND is_active = true AND is_system_seeded = true
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_templates_system_active'
-  ) THEN
-    CREATE INDEX idx_wellness_templates_system_active
-      ON wellness_templates(is_system_seeded, is_active, created_at DESC)
-      WHERE organization_id IS NULL AND is_active = true;
-    RAISE NOTICE 'Created index: idx_wellness_templates_system_active';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_templates_system_active';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_templates_system_active
+ON wellness_templates(is_system_seeded, is_active, created_at DESC)
+WHERE organization_id IS NULL AND is_active = true;
 
 -- Index 7: Organization's active templates
 -- Use case: Organization template management and selection
 -- Performance: Fast org-specific template queries
 -- Query: WHERE organization_id = ? AND is_active = true ORDER BY created_at DESC
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_indexes
-    WHERE schemaname = 'public'
-      AND indexname = 'idx_wellness_templates_org_active'
-  ) THEN
-    CREATE INDEX idx_wellness_templates_org_active
-      ON wellness_templates(organization_id, is_active, created_at DESC)
-      WHERE organization_id IS NOT NULL;
-    RAISE NOTICE 'Created index: idx_wellness_templates_org_active';
-  ELSE
-    RAISE NOTICE 'Index already exists: idx_wellness_templates_org_active';
-  END IF;
-END $$;
+CREATE INDEX IF NOT EXISTS idx_wellness_templates_org_active
+ON wellness_templates(organization_id, is_active, created_at DESC)
+WHERE organization_id IS NOT NULL;
 
 -- ============================================================================
 -- INDEX ANALYSIS & VERIFICATION QUERIES

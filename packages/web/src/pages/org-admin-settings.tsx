@@ -9,6 +9,7 @@
 
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
+import type { SiteSettings } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
@@ -77,7 +78,7 @@ export default function OrgAdminSettings() {
   });
 
   // Fetch site settings to check wellness module status
-  const { data: siteSettings } = useQuery({
+  const { data: siteSettings } = useQuery<SiteSettings>({
     queryKey: ["/api/site-settings/public"],
     enabled: !!organizationId,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
