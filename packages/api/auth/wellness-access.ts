@@ -58,6 +58,53 @@ export class WellnessAccessService {
     if (!baseUrl) {
       throw new Error('BASE_URL environment variable is required for magic link generation');
     }
+
+    // SECURITY: Validate BASE_URL to prevent SSRF attacks
+    try {
+      const url = new URL(baseUrl);
+
+      // Only allow HTTP/HTTPS protocols
+      if (!['http:', 'https:'].includes(url.protocol)) {
+        throw new Error('BASE_URL must use http or https protocol');
+      }
+
+      // In production, require HTTPS
+      if (process.env.NODE_ENV === 'production' && url.protocol !== 'https:') {
+        throw new Error('BASE_URL must use https in production');
+      }
+
+      // Prevent localhost/private IPs in production (SSRF protection)
+      if (process.env.NODE_ENV === 'production') {
+        const hostname = url.hostname.toLowerCase();
+        const privatePatterns = [
+          'localhost',
+          '127.0.0.1',
+          '0.0.0.0',
+          /^10\./,
+          /^172\.(1[6-9]|2[0-9]|3[01])\./,
+          /^192\.168\./,
+          /^\[::1\]$/,
+          /^\[::ffff:127\.0\.0\.1\]$/,
+        ];
+
+        const isPrivate = privatePatterns.some(pattern => {
+          if (typeof pattern === 'string') {
+            return hostname === pattern || hostname.startsWith(pattern);
+          }
+          return pattern.test(hostname);
+        });
+
+        if (isPrivate) {
+          throw new Error('BASE_URL cannot be a private/local address in production');
+        }
+      }
+    } catch (error) {
+      if (error instanceof TypeError) {
+        throw new Error('BASE_URL is not a valid URL');
+      }
+      throw error;
+    }
+
     const magicLink = `${baseUrl}/wellness/submit/${request.publicToken}`;
 
     return magicLink;
