@@ -115,6 +115,16 @@ const analyticsLimiter = rateLimit({
   skip: () => shouldBypassRateLimit(),
 });
 
+// Very strict rate limiting for token validation (prevents enumeration attacks)
+const tokenValidationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.TOKEN_VALIDATION, // 10 requests per 15 min (prevents brute force)
+  message: { message: "Too many requests. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: () => shouldBypassRateLimit(),
+});
+
 /**
  * Register all wellness questionnaire routes
  */
@@ -607,10 +617,11 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/requests/by-token/:token
    * Get wellness request by public token (for magic links)
    * Access: Public (no authentication required)
+   * SECURITY: Strict rate limiting (10/15min) to prevent token enumeration
    */
   app.get(
     "/api/wellness/requests/by-token/:token",
-    highVolumeLimiter,
+    tokenValidationLimiter,
     async (req, res: Response) => {
       try {
         const { token } = req.params;
@@ -637,10 +648,11 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/requests/by-token/:token/targeted-athletes
    * Get list of targeted athletes for a wellness request (for athlete dropdown)
    * Access: Public (no authentication required)
+   * SECURITY: Strict rate limiting (10/15min) to prevent token enumeration
    */
   app.get(
     "/api/wellness/requests/by-token/:token/targeted-athletes",
-    highVolumeLimiter,
+    tokenValidationLimiter,
     async (req, res: Response) => {
       try {
         const { token } = req.params;
