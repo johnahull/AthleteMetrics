@@ -739,10 +739,21 @@ export const wellnessTemplates = pgTable("wellness_templates", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 }, (table) => ({
+  // Existing indexes (migrations 0002, 0003)
   orgIdx: index("wellness_templates_org_idx").on(table.organizationId),
   activeIdx: index("wellness_templates_active_idx").on(table.isActive),
   categoryIdx: index("wellness_templates_category_idx").on(table.category),
   systemSeededIdx: index("wellness_templates_system_seeded_idx").on(table.isSystemSeeded),
+
+  // Performance indexes (migration 0056)
+  // Active system templates for library queries
+  systemActiveIdx: index("idx_wellness_templates_system_active")
+    .on(table.isSystemSeeded, table.isActive, table.createdAt.desc())
+    .where(sql`${table.organizationId} IS NULL AND ${table.isActive} = true`),
+  // Organization's active templates
+  orgActiveIdx: index("idx_wellness_templates_org_active")
+    .on(table.organizationId, table.isActive, table.createdAt.desc())
+    .where(sql`${table.organizationId} IS NOT NULL`),
 }));
 
 export const wellnessRequests = pgTable("wellness_requests", {
@@ -784,6 +795,7 @@ export const wellnessResponses = pgTable("wellness_responses", {
   userAgent: varchar("user_agent", { length: 500 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
+  // Existing indexes (migrations 0002, 0049)
   userIdx: index("wellness_responses_user_idx").on(table.userId),
   orgIdx: index("wellness_responses_org_idx").on(table.organizationId),
   dateIdx: index("wellness_responses_date_idx").on(table.date),
@@ -791,6 +803,25 @@ export const wellnessResponses = pgTable("wellness_responses", {
   submittedIdx: index("wellness_responses_submitted_idx").on(table.submittedAt),
   // Composite index for user + date queries (common pattern)
   userDateIdx: index("wellness_responses_user_date_idx").on(table.userId, table.date),
+
+  // Performance indexes (migration 0056)
+  // Recent responses index for dashboard queries
+  recentIdx: index("idx_wellness_responses_recent")
+    .on(table.submittedAt.desc()),
+  // Composite org + date + submitted_at for dashboard queries
+  orgDateSubmittedIdx: index("idx_wellness_responses_org_date_submitted")
+    .on(table.organizationId, table.date.desc(), table.submittedAt.desc()),
+  // Request completion lookups (duplicate submission checks)
+  requestUserIdx: index("idx_wellness_responses_request_user")
+    .on(table.requestId, table.userId)
+    .where(sql`${table.requestId} IS NOT NULL`),
+  // Team + date composite for team analytics
+  teamDateSubmittedIdx: index("idx_wellness_responses_team_date_submitted")
+    .on(table.teamId, table.date.desc(), table.submittedAt.desc())
+    .where(sql`${table.teamId} IS NOT NULL`),
+  // User response history with ordering for pagination
+  userSubmittedIdx: index("idx_wellness_responses_user_submitted")
+    .on(table.userId, table.submittedAt.desc()),
 }));
 
 // Wellness Relations

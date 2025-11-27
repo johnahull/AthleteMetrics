@@ -115,6 +115,20 @@ const analyticsLimiter = rateLimit({
   skip: () => shouldBypassRateLimit(),
 });
 
+// Strict rate limiting for magic link token validation (security-sensitive)
+const tokenValidationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.TOKEN_VALIDATION, // 10 requests per 15 min - prevents brute force
+  message: { message: "Too many authentication attempts. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: () => shouldBypassRateLimit(),
+  keyGenerator: (req) => {
+    // Rate limit by IP address for unauthenticated requests
+    return req.ip || 'unknown';
+  },
+});
+
 /**
  * Register all wellness questionnaire routes
  */
@@ -221,6 +235,7 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/templates/:id
    * Get wellness template by ID (for public wellness submissions)
    * Access: Public (no authentication required)
+   * Security: Only returns system templates or templates accessed via valid magic link
    * Note: Returns only public-safe fields (excludes createdBy, organizationId for security)
    */
   app.get(
@@ -232,6 +247,12 @@ export function registerWellnessRoutes(app: Express) {
 
         const template = await storage.getWellnessTemplate(id);
         if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // SECURITY: Only allow access to system templates via public endpoint
+        // Organization-specific templates require authentication or valid magic link
+        if (template.organizationId !== null && !template.isSystemSeeded) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -811,10 +832,11 @@ export function registerWellnessRoutes(app: Express) {
    * POST /api/wellness/responses
    * Submit a wellness response (supports both authenticated and magic link access)
    * Access: Authenticated user OR valid magic link
+   * Security: Uses strict token validation rate limiter to prevent brute force attacks
    */
   app.post(
     "/api/wellness/responses",
-    highVolumeLimiter,
+    tokenValidationLimiter, // Stricter rate limiting for magic link validation
     requireWellnessAccess(false),
     async (req: AuthenticatedRequest, res: Response) => {
       try {

@@ -75,6 +75,13 @@ export const RATE_LIMITS = {
    * @default 10 requests per 15-minute window (up to 1000 measurements)
    */
   BATCH: 10,
+
+  /**
+   * Magic link token validation (security-sensitive)
+   * Strict limit to prevent token brute-force attacks
+   * @default 10 requests per 15-minute window
+   */
+  TOKEN_VALIDATION: 10,
 } as const;
 
 /**
