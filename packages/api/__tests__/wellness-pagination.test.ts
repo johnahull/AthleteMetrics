@@ -16,17 +16,21 @@ import {
   wellnessTemplates,
   wellnessResponses,
 } from '@shared/schema';
+import { inArray } from 'drizzle-orm';
 import { eq } from 'drizzle-orm';
 
 describe('Wellness Response Pagination', () => {
   let testOrgId: string;
   let testTeamId: string;
   let testTemplateId: string;
+  let testUserId: string;
 
   beforeEach(async () => {
+    const timestamp = Date.now();
+
     // Create test organization (minimal fields to avoid schema issues)
     const [org] = await db.insert(organizations).values({
-      name: 'Pagination Test Org',
+      name: `Pagination Test Org ${timestamp}`,
     }).returning();
     testOrgId = org.id;
 
@@ -68,10 +72,13 @@ describe('Wellness Response Pagination', () => {
 
     // Create test user
     const [user] = await db.insert(users).values({
-      username: 'test-athlete@test.com',
+      username: `test-athlete-${timestamp}@test.com`,
       password: 'test',
       fullName: 'Test Athlete',
+      firstName: 'Test',
+      lastName: 'Athlete',
     }).returning();
+    testUserId = user.id;
 
     await db.insert(userOrganizations).values({
       userId: user.id,
@@ -107,6 +114,10 @@ describe('Wellness Response Pagination', () => {
       await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, testOrgId));
       await db.delete(teams).where(eq(teams.organizationId, testOrgId));
       await db.delete(organizations).where(eq(organizations.id, testOrgId));
+    }
+    // Clean up test user
+    if (testUserId) {
+      await db.delete(users).where(eq(users.id, testUserId));
     }
   });
 
