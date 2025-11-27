@@ -461,18 +461,96 @@ export function registerOrganizationRoutes(app: Express) {
       if (!isValidUUID(organizationId)) {
         return res.status(400).json({ message: "Invalid organization ID format" });
       }
-      
+
       const user = await organizationService.addUserToOrganization(
         organizationId,
         req.body,
         req.session.user!.id
       );
-      
+
       res.status(201).json(user);
     } catch (error) {
       console.error("Add user to organization error:", error);
       const message = sanitizeError(error, "Failed to add user to organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 400;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Update user role within organization
+   * Allows org admins to change roles of users within their organization
+   */
+  app.put("/api/organizations/:id/users/:userId/role", updateLimiter, requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId, userId } = req.params;
+      const { role } = req.body;
+      const requestingUser = req.session.user!;
+
+      // Validate UUID formats
+      if (!isValidUUID(organizationId) || !isValidUUID(userId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      // Validate role
+      const validRoles = ['org_admin', 'coach', 'athlete'];
+      if (!role || !validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role. Must be org_admin, coach, or athlete" });
+      }
+
+      // Prevent users from changing their own role
+      if (userId === requestingUser.id) {
+        return res.status(403).json({ message: "Cannot change your own role" });
+      }
+
+      // Check requesting user's access to this organization
+      const requestingUserRoles = await storage.getUserRoles(requestingUser.id, organizationId);
+      const isOrgAdmin = requestingUserRoles.includes('org_admin');
+      const isSiteAdmin = requestingUser.isSiteAdmin === true;
+
+      if (!isOrgAdmin && !isSiteAdmin) {
+        return res.status(403).json({ message: "Access denied. Only organization administrators can change user roles." });
+      }
+
+      // Check if target user is in this organization
+      const targetUserRoles = await storage.getUserRoles(userId, organizationId);
+      if (targetUserRoles.length === 0) {
+        return res.status(404).json({ message: "User not found in this organization" });
+      }
+
+      // Additional permission checks for org admins (not site admins)
+      if (!isSiteAdmin) {
+        const targetCurrentRole = targetUserRoles[0];
+
+        // Org admins can't demote other org admins (only site admins can)
+        if (targetCurrentRole === 'org_admin' && role !== 'org_admin') {
+          return res.status(403).json({ message: "Only site administrators can demote organization administrators" });
+        }
+      }
+
+      // Update the user's role in the organization
+      await storage.updateUserOrganizationRole(userId, organizationId, role);
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: requestingUser.id,
+        action: 'user_role_updated',
+        resourceType: 'user_organization',
+        resourceId: userId,
+        details: JSON.stringify({
+          organizationId,
+          newRole: role,
+          updatedBy: requestingUser.id
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+
+      res.json({ message: "User role updated successfully", role });
+    } catch (error) {
+      console.error("Update user organization role error:", error);
+      const message = sanitizeError(error, "Failed to update user role");
+      const statusCode = message.includes("Unauthorized") || message.includes("Access denied") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
   });
