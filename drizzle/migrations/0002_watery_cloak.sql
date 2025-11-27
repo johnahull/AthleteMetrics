@@ -212,18 +212,3 @@ BEGIN
     ALTER TABLE "wellness_templates" ADD CONSTRAINT "wellness_templates_created_by_users_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;
   END IF;
 END $$;
---> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_requests_org_idx" ON "wellness_requests" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_requests_token_idx" ON "wellness_requests" USING btree ("public_token");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_requests_status_idx" ON "wellness_requests" USING btree ("status");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_requests_scheduled_idx" ON "wellness_requests" USING btree ("scheduled_for");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_user_idx" ON "wellness_responses" USING btree ("user_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_org_idx" ON "wellness_responses" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_date_idx" ON "wellness_responses" USING btree ("date");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_team_idx" ON "wellness_responses" USING btree ("team_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_submitted_idx" ON "wellness_responses" USING btree ("submitted_at");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_responses_user_date_idx" ON "wellness_responses" USING btree ("user_id","date");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_templates_org_idx" ON "wellness_templates" USING btree ("organization_id");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "wellness_templates_active_idx" ON "wellness_templates" USING btree ("is_active");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "site_benchmarks_org_types_idx" ON "site_benchmarks" USING btree ("applicable_org_types");--> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "site_metrics_available_org_types_idx" ON "site_metrics" USING btree ("available_org_types");
