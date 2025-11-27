@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS "wellness_responses" (
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "wellness_templates" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-	"organization_id" varchar NOT NULL,
+	"organization_id" varchar,
 	"name" varchar(200) NOT NULL,
 	"description" text,
 	"is_default" boolean DEFAULT false NOT NULL,
