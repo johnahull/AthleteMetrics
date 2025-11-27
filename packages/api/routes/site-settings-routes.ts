@@ -79,6 +79,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
       // Return default settings if none exist
       return res.json({
         aiModel: "gpt-5-nano",
+        wellnessModuleEnabled: true,
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
