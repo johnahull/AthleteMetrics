@@ -100,6 +100,33 @@ interface PasswordResetData {
   resetLink: string;
 }
 
+interface WellnessRequestEmailData {
+  athleteName: string;
+  coachName: string;
+  organizationName: string;
+  magicLink: string;
+  expiryDays: number;
+  templateName: string;
+  estimatedMinutes: number;
+}
+
+interface WellnessReminderEmailData {
+  athleteName: string;
+  coachName: string;
+  organizationName: string;
+  magicLink: string;
+  hoursUntilExpiry: number;
+  templateName: string;
+}
+
+interface WellnessAlertEmailData {
+  coachName: string;
+  athleteName: string;
+  alertType: string;
+  summary: string;
+  viewLink: string;
+}
+
 export class EmailService {
   private fromEmail: string;
   private fromName: string;
@@ -213,6 +240,45 @@ export class EmailService {
     return this.sendEmail({
       to: email,
       subject: 'Reset your AthleteMetrics password',
+      html
+    });
+  }
+
+  /**
+   * Send wellness questionnaire request notification
+   */
+  async sendWellnessRequest(email: string, data: WellnessRequestEmailData): Promise<boolean> {
+    const html = this.generateWellnessRequestTemplate(data);
+
+    return this.sendEmail({
+      to: email,
+      subject: `${data.coachName} has sent you a wellness check from ${data.organizationName}`,
+      html
+    });
+  }
+
+  /**
+   * Send wellness questionnaire reminder notification
+   */
+  async sendWellnessReminder(email: string, data: WellnessReminderEmailData): Promise<boolean> {
+    const html = this.generateWellnessReminderTemplate(data);
+
+    return this.sendEmail({
+      to: email,
+      subject: `Reminder: Complete your wellness check for ${data.organizationName}`,
+      html
+    });
+  }
+
+  /**
+   * Send wellness alert notification to coaches
+   */
+  async sendWellnessAlert(email: string, data: WellnessAlertEmailData): Promise<boolean> {
+    const html = this.generateWellnessAlertTemplate(data);
+
+    return this.sendEmail({
+      to: email,
+      subject: `Wellness Alert: ${data.athleteName} - ${data.alertType}`,
       html
     });
   }
@@ -531,99 +597,81 @@ export class EmailService {
   }
 
   /**
-   * Send wellness request email with magic link
-   */
-  async sendWellnessRequest(email: string, data: {
-    athleteName: string;
-    coachName: string;
-    organizationName: string;
-    magicLink: string;
-    expiryDays: number;
-    templateName: string;
-    estimatedMinutes: number;
-  }): Promise<boolean> {
-    const html = this.generateWellnessRequestTemplate(data);
-
-    return this.sendEmail({
-      to: email,
-      subject: `${data.organizationName}: Complete Your Wellness Check-In`,
-      html
-    });
-  }
-
-  /**
    * Generate wellness request email template
    */
-  private generateWellnessRequestTemplate(data: {
-    athleteName: string;
-    coachName: string;
-    organizationName: string;
-    magicLink: string;
-    expiryDays: number;
-    templateName: string;
-    estimatedMinutes: number;
-  }): string {
+  private generateWellnessRequestTemplate(data: WellnessRequestEmailData): string {
     try {
+      const sanitizedMagicLink = sanitizeUrl(data.magicLink);
+
       return `
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wellness Check Request</title>
 </head>
-<body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; margin: 0; padding: 0; background-color: #f5f7fb;">
-  <table cellpadding="0" cellspacing="0" style="width: 100%; max-width: 600px; margin: 0 auto; padding: 20px;">
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
     <tr>
-      <td>
-        <table cellpadding="0" cellspacing="0" style="width: 100%; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);">
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
           <tr>
-            <td style="padding: 30px 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0; text-align: center;">
-              <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
-                Wellness Check-In Request
-              </h1>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Wellness Check</h1>
             </td>
           </tr>
 
+          <!-- Content -->
           <tr>
-            <td style="padding: 30px 40px;">
-              <p style="margin: 0 0 16px; color: #2d3748; font-size: 16px;">
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #1a202c; font-size: 22px; font-weight: 600;">
+                How are you feeling today?
+              </h2>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
                 Hi ${escapeHtml(data.athleteName)},
               </p>
 
-              <p style="margin: 0 0 24px; color: #4a5568; font-size: 14px;">
-                ${escapeHtml(data.coachName)} from ${escapeHtml(data.organizationName)} has requested a wellness check-in from you.
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                <strong>${escapeHtml(data.coachName)}</strong> from <strong>${escapeHtml(data.organizationName)}</strong> has sent you a wellness questionnaire: <strong>${escapeHtml(data.templateName)}</strong>.
               </p>
 
-              <p style="margin: 0 0 24px; color: #4a5568; font-size: 14px;">
-                <strong>Questionnaire:</strong> ${escapeHtml(data.templateName)}<br>
-                <strong>Estimated time:</strong> ${data.estimatedMinutes} minutes
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Your feedback helps us understand how you're doing and provide better support. This should take about <strong>${data.estimatedMinutes} minutes</strong> to complete.
               </p>
 
-              <p style="text-align: center; margin: 0 0 24px;">
-                <a href="${escapeHtml(data.magicLink)}"
-                   style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
-                  Complete Check-In
-                </a>
-              </p>
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedMagicLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      Complete Wellness Check
+                    </a>
+                  </td>
+                </tr>
+              </table>
 
-              <p style="margin: 0 0 16px; color: #718096; font-size: 12px; text-align: center;">
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
                 Or copy and paste this link into your browser:
               </p>
 
-              <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
+              <p style="margin: 0 0 24px; color: #10b981; font-size: 14px; word-break: break-all;">
                 ${escapeHtml(data.magicLink)}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
-                This link will expire in ${data.expiryDays} days. Your responses help your coaching staff monitor your well-being and optimize your training.
+                This link will expire in ${data.expiryDays} days. Your responses are confidential and help us support your well-being.
               </p>
             </td>
           </tr>
 
+          <!-- Footer -->
           <tr>
             <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
               <p style="margin: 0; color: #a0aec0; font-size: 12px;">
-                AthleteMetrics - Athletic Performance Tracking
+                This email was sent by ${escapeHtml(data.organizationName)} via AthleteMetrics.
               </p>
             </td>
           </tr>
@@ -636,6 +684,188 @@ export class EmailService {
       `.trim();
     } catch (error) {
       console.error('Failed to generate wellness request email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate wellness reminder email template
+   */
+  private generateWellnessReminderTemplate(data: WellnessReminderEmailData): string {
+    try {
+      const sanitizedMagicLink = sanitizeUrl(data.magicLink);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wellness Check Reminder</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Reminder: Wellness Check</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.athleteName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                This is a friendly reminder to complete your wellness questionnaire: <strong>${escapeHtml(data.templateName)}</strong>.
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Your feedback is important to <strong>${escapeHtml(data.coachName)}</strong> and the team at <strong>${escapeHtml(data.organizationName)}</strong>.
+              </p>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedMagicLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      Complete Now
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #f59e0b; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(data.magicLink)}
+              </p>
+
+              <p style="margin: 0; color: #dc2626; font-size: 13px; line-height: 1.6; font-weight: 500;">
+                ⏰ This link expires in ${data.hoursUntilExpiry} hours.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                This email was sent by ${escapeHtml(data.organizationName)} via AthleteMetrics.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate wellness reminder email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate wellness alert email template (for coaches)
+   */
+  private generateWellnessAlertTemplate(data: WellnessAlertEmailData): string {
+    try {
+      const sanitizedViewLink = sanitizeUrl(data.viewLink);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wellness Alert</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">⚠️ Wellness Alert</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.coachName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                An automated wellness alert has been triggered for <strong>${escapeHtml(data.athleteName)}</strong>.
+              </p>
+
+              <!-- Alert Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; background-color: #fef2f2; border-left: 4px solid #ef4444; border-radius: 4px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <p style="margin: 0 0 8px; color: #991b1b; font-size: 14px; font-weight: 600; text-transform: uppercase;">
+                      ${escapeHtml(data.alertType)}
+                    </p>
+                    <p style="margin: 0; color: #7f1d1d; font-size: 15px; line-height: 1.5;">
+                      ${escapeHtml(data.summary)}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 24px 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                We recommend checking in with this athlete to ensure they're receiving the support they need.
+              </p>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedViewLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      View Athlete Wellness Data
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 0; color: #718096; font-size: 13px; line-height: 1.6;">
+                This is an automated notification based on wellness questionnaire responses. Please use your professional judgment when following up with athletes.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Athletic Performance & Wellness Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate wellness alert email template:', error);
       throw new Error('Failed to generate email template');
     }
   }

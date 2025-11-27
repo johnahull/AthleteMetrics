@@ -107,7 +107,7 @@ describe('StatusBreakdownBadges', () => {
     render(<StatusBreakdownBadges yellow={2} />);
     const badge = screen.getByText('2 Yellow');
     expect(badge).toHaveClass('bg-yellow-50');
-    expect(badge).toHaveClass('text-yellow-800');
+    expect(badge).toHaveClass('text-yellow-700');
     expect(badge).toHaveClass('border-yellow-200');
   });
 
@@ -115,7 +115,7 @@ describe('StatusBreakdownBadges', () => {
     render(<StatusBreakdownBadges green={7} />);
     const badge = screen.getByText('7 Green');
     expect(badge).toHaveClass('bg-green-50');
-    expect(badge).toHaveClass('text-green-800');
+    expect(badge).toHaveClass('text-green-700');
     expect(badge).toHaveClass('border-green-200');
   });
 });

@@ -19,7 +19,6 @@ import {
   Tooltip,
   Legend,
   Filler,
-  BarController,
   ScatterController,
   LineController,
 } from 'chart.js';
@@ -46,7 +45,6 @@ ChartJS.register(
   Filler,
 
   // Controllers
-  BarController,
   ScatterController,
   LineController,
 

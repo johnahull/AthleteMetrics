@@ -296,19 +296,48 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied. Org admin role required." });
       }
 
-      // Only allow updating aiEnabled field
-      const { aiEnabled } = req.body;
+      // Only allow updating aiEnabled and wellnessEnabled fields
+      const { aiEnabled, wellnessEnabled } = req.body;
 
-      // Validate that aiEnabled is provided
-      if (typeof aiEnabled !== 'boolean') {
-        return res.status(400).json({ message: "aiEnabled field is required and must be boolean" });
+      // Build updates object with only the fields that were provided
+      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean } = {};
+
+      // Validate and handle aiEnabled
+      if (aiEnabled !== undefined) {
+        if (typeof aiEnabled !== 'boolean') {
+          return res.status(400).json({ message: "aiEnabled must be boolean" });
+        }
+
+        // If trying to enable AI, check that site admin has permitted it
+        if (aiEnabled === true && !org.aiEnabledBySiteAdmin) {
+          return res.status(403).json({
+            message: "AI features must be enabled by site administrator first"
+          });
+        }
+
+        updates.aiEnabled = aiEnabled;
       }
 
-      // If trying to enable AI, check that site admin has permitted it
-      if (aiEnabled === true && !org.aiEnabledBySiteAdmin) {
-        return res.status(403).json({
-          message: "AI features must be enabled by site administrator first"
-        });
+      // Validate and handle wellnessEnabled
+      if (wellnessEnabled !== undefined) {
+        if (typeof wellnessEnabled !== 'boolean') {
+          return res.status(400).json({ message: "wellnessEnabled must be boolean" });
+        }
+
+        // Check if wellness is enabled at site level
+        const siteSettings = await storage.getSiteSettings();
+        if (wellnessEnabled === true && !siteSettings?.wellnessModuleEnabled) {
+          return res.status(403).json({
+            message: "Wellness module must be enabled by site administrator first"
+          });
+        }
+
+        updates.wellnessEnabled = wellnessEnabled;
+      }
+
+      // Require at least one field to update
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "At least one field (aiEnabled or wellnessEnabled) is required" });
       }
 
       // Capture request context for audit logging
@@ -317,23 +346,40 @@ export function registerOrganizationRoutes(app: Express) {
         userAgent: req.get('user-agent')
       };
 
-      // Update only the aiEnabled field
-      const updated = await storage.updateOrganization(organizationId, { aiEnabled });
+      // Update the allowed fields
+      const updated = await storage.updateOrganization(organizationId, updates);
 
       // Invalidate organization type caches when organization is updated
       organizationTypeService.invalidateCache(`orgs:`);
 
       // Create audit log for AI flag change by org admin
-      if (aiEnabled !== org.aiEnabled) {
+      if (updates.aiEnabled !== undefined && updates.aiEnabled !== org.aiEnabled) {
         await storage.createAuditLog({
           userId: user.id,
-          action: aiEnabled ? 'org_ai_enabled_by_org_admin' : 'org_ai_disabled_by_org_admin',
+          action: updates.aiEnabled ? 'org_ai_enabled_by_org_admin' : 'org_ai_disabled_by_org_admin',
           resourceType: 'organization',
           resourceId: organizationId,
           details: JSON.stringify({
             organizationName: org.name,
             previousValue: org.aiEnabled,
-            newValue: aiEnabled
+            newValue: updates.aiEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      // Create audit log for wellness flag change by org admin
+      if (updates.wellnessEnabled !== undefined && updates.wellnessEnabled !== org.wellnessEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: updates.wellnessEnabled ? 'org_wellness_enabled' : 'org_wellness_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.wellnessEnabled,
+            newValue: updates.wellnessEnabled
           }),
           ipAddress: context.ipAddress || null,
           userAgent: context.userAgent || null,

@@ -1,4 +1,4 @@
-import { useMemo, memo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { Line } from 'react-chartjs-2';
 import type { Chart as ChartJS, ChartOptions } from 'chart.js';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -16,7 +16,7 @@ interface WellnessTrendChartProps {
 /**
  * Line chart showing wellness trends over time for individual athlete
  */
-export const WellnessTrendChart = memo(function WellnessTrendChart({
+export function WellnessTrendChart({
   trends,
   responses,
   selectedAthleteId,
@@ -130,26 +130,8 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
     };
   }, [athleteResponses]);
 
-  // Calculate dynamic scale max from actual data (with 10% headroom)
-  const scaleMax = useMemo(() => {
-    if (athleteResponses.length === 0) return 10; // Default fallback
-
-    let maxValue = 0;
-    athleteResponses.forEach((response) => {
-      const responseData = response.responses as WellnessResponseData;
-      Object.values(responseData).forEach((questionData) => {
-        if (typeof questionData.value === 'number' && questionData.value > maxValue) {
-          maxValue = questionData.value;
-        }
-      });
-    });
-
-    // Add 10% headroom and round up to nearest integer
-    return Math.ceil(maxValue * 1.1) || 10;
-  }, [athleteResponses]);
-
-  // Chart options (memoized to prevent unnecessary re-renders)
-  const options: ChartOptions<'line'> = useMemo(() => ({
+  // Chart options
+  const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -165,7 +147,7 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
     scales: {
       y: {
         beginAtZero: true,
-        max: scaleMax,
+        max: 10,
         title: {
           display: true,
           text: 'Wellness Score',
@@ -178,7 +160,7 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
         },
       },
     },
-  }), [scaleMax]);
+  };
 
   return (
     <div>
@@ -225,4 +207,4 @@ export const WellnessTrendChart = memo(function WellnessTrendChart({
       )}
     </div>
   );
-});
+}

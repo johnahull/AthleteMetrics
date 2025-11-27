@@ -2,9 +2,6 @@ import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
-// Re-export wellness access middleware
-export { requireWellnessAccess } from "./auth/wellness-access";
-
 // Extended request type with user info
 export interface AuthenticatedRequest extends Request {
   user?: {
@@ -15,6 +12,7 @@ export interface AuthenticatedRequest extends Request {
     role: string;
     isSiteAdmin?: boolean;
     primaryOrganizationId?: string;
+    accessMethod?: string; // For wellness access tracking
   };
 }
 
@@ -66,7 +64,12 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
       organizationId = req.query.organizationId as string || req.body.organizationId;
     }
 
+    // DEBUG logging
+    console.log('[DEBUG requireOrgAccess] User:', JSON.stringify({ id: user?.id, role: user?.role, isSiteAdmin: user?.isSiteAdmin }));
+    console.log('[DEBUG requireOrgAccess] Target orgId:', organizationId);
+
     if (!user?.id) {
+      console.log('[DEBUG requireOrgAccess] FAIL: No user ID');
       return res.status(401).json({ message: "User not authenticated" });
     }
 
@@ -82,7 +85,11 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
 
     // Check organization access
     const hasAccess = await canAccessOrganization(user, organizationId);
+    console.log('[DEBUG requireOrgAccess] hasAccess:', hasAccess);
     if (!hasAccess) {
+      // Get user's orgs for debugging
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      console.log('[DEBUG requireOrgAccess] User orgs:', userOrgs.map(o => o.organizationId));
       return res.status(403).json({ message: "Access denied to this organization" });
     }
 
@@ -247,6 +254,131 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
   next();
 };
 
+// Wellness access middleware - supports both authenticated and magic link access
+export const requireWellnessAccess = (requireAuth: boolean = false) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      // Check 1: Authenticated session (athlete accessing own data or coach)
+      const sessionUser = req.session?.user || req.user;
+
+      if (sessionUser?.id) {
+        // User is authenticated via session
+        const email = (sessionUser as any).emails?.[0] || sessionUser.email || '';
+        req.user = {
+          id: sessionUser.id,
+          email,
+          firstName: sessionUser.firstName,
+          lastName: sessionUser.lastName,
+          role: sessionUser.role || 'athlete',
+          isSiteAdmin: sessionUser.isSiteAdmin,
+          primaryOrganizationId: sessionUser.primaryOrganizationId,
+          accessMethod: 'authenticated',
+        };
+        return next();
+      }
+
+      // Check 2: Magic link token (from body, params, or query)
+      // Priority: body (POST submission) > params (URL path) > query (URL parameters)
+      const token = req.body.token || req.params.token || req.query.token as string;
+
+      if (!token) {
+        if (requireAuth) {
+          return res.status(401).json({
+            message: "Authentication required. Please log in or use a valid magic link."
+          });
+        }
+        return res.status(401).json({
+          message: "Missing authentication credentials"
+        });
+      }
+
+      // Check 3: Validate token and retrieve request details
+      const { storage } = await import('./storage');
+      const wellnessRequest = await storage.getWellnessRequestByToken(token);
+
+      if (!wellnessRequest) {
+        return res.status(403).json({
+          message: "Invalid or expired magic link"
+        });
+      }
+
+      // Check if request is active
+      if (wellnessRequest.status !== 'active') {
+        return res.status(403).json({
+          message: "This wellness request is no longer active"
+        });
+      }
+
+      // Check if expired
+      if (wellnessRequest.expiresAt && new Date() > new Date(wellnessRequest.expiresAt)) {
+        return res.status(403).json({
+          message: "This wellness request has expired"
+        });
+      }
+
+      // For magic link access, extract athlete ID from query parameter
+      // Priority: query > body
+      const athleteId = req.query.athlete as string || req.body.athlete as string;
+
+      if (!athleteId) {
+        return res.status(400).json({
+          message: "Missing athlete parameter for magic link submission"
+        });
+      }
+
+      // Verify athlete is targeted by this request
+      const isTargetedDirectly = wellnessRequest.targetAthleteIds?.includes(athleteId);
+
+      // Check team-based targeting if not directly targeted
+      let isTargetedViaTeam = false;
+      if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
+        const athleteTeams = await storage.getUserTeams(athleteId);
+        const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
+        isTargetedViaTeam = wellnessRequest.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+      }
+
+      if (!isTargetedDirectly && !isTargetedViaTeam) {
+        return res.status(403).json({
+          message: "Athlete is not authorized for this wellness request"
+        });
+      }
+
+      // Get athlete details for user context
+      const athlete = await storage.getUser(athleteId);
+      if (!athlete) {
+        return res.status(404).json({
+          message: "Athlete not found"
+        });
+      }
+
+      // For public wellness links (requiresAuth: false), set magic link user context
+      // with the actual athlete's ID and details
+      req.user = {
+        id: athlete.id,
+        email: athlete.emails?.[0] || '',
+        firstName: athlete.firstName || 'Wellness',
+        lastName: athlete.lastName || 'Respondent',
+        role: 'athlete',
+        isSiteAdmin: false,
+        accessMethod: 'magic_link',
+      };
+
+      // Attach request details for downstream use
+      (req as any).wellnessRequest = wellnessRequest;
+
+      next();
+    } catch (error) {
+      console.error('Wellness access middleware error:', error);
+      return res.status(500).json({
+        message: "Failed to validate access"
+      });
+    }
+  };
+};
+
+// Wellness feature flag middleware - checks if wellness module is enabled
+export { requireWellnessEnabled, checkWellnessEnabled } from './middleware/require-wellness-enabled';
+
 // Error handling middleware
 export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
   console.error('API Error:', error);
@@ -262,6 +394,3 @@ export const errorHandler = (error: any, req: Request, res: Response, next: Next
     message: error.message || "Internal server error"
   });
 };
-
-// Re-export wellness middleware
-export { requireWellnessEnabled, checkWellnessEnabled } from './middleware/require-wellness-enabled';

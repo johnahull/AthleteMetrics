@@ -26,16 +26,6 @@ import type { AthleteDataPoint, ChartDataPoint, LabelPosition, ChartInstance, To
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
 // Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  Title,
-  Tooltip,
-  Legend,
-  ScatterController,
-  PointElement,
-  LineElement
-);
 
 interface TimeSeriesBoxSwarmProps {
   data: TrendData[];

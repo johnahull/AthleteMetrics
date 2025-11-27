@@ -63,8 +63,10 @@ export function registerAllRoutes(app: Express) {
   // Site settings routes (AI model configuration)
   app.use("/api/site-settings", siteSettingsRoutes);
 
-  // Wellness module routes
+  // Wellness questionnaire routes
   registerWellnessRoutes(app);
+
+  // Admin wellness routes (site admin only)
   registerAdminWellnessRoutes(app);
 
   // TODO: Add remaining route modules
@@ -89,9 +91,8 @@ export function getRouteStats() {
       metrics: "✅ Registered (new service)",
       benchmarks: "✅ Registered (new service)",
       reports: "✅ Registered (new service)",
-      wellness: "✅ Registered (new module)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 11/12 modules refactored"
+    status: "Migration nearly complete - 10/11 modules refactored"
   };
 }

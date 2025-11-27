@@ -1,4 +1,4 @@
-import { useMemo, useState, memo } from 'react';
+import { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +29,7 @@ interface HeatmapCell {
  * Heatmap visualization showing team wellness across dates
  * Rows = Athletes, Columns = Dates, Color = Wellness Score
  */
-export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
+export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) {
   const [selectedCell, setSelectedCell] = useState<HeatmapCellData | null>(null);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
 
@@ -101,11 +101,11 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
   const getStatusTailwindClass = (status: 'red' | 'yellow' | 'green' | null): string => {
     switch (status) {
       case 'red':
-        return 'bg-red-600'; // WCAG AA contrast: 5.5:1 (changed from bg-red-500)
+        return 'bg-red-500';
       case 'yellow':
-        return 'bg-yellow-500'; // WCAG AA contrast: 4.6:1 (changed from bg-yellow-400)
+        return 'bg-yellow-400';
       case 'green':
-        return 'bg-green-600'; // WCAG AA contrast: 4.6:1 (changed from bg-green-500)
+        return 'bg-green-500';
       default:
         return 'bg-gray-100'; // No data
     }
@@ -141,19 +141,19 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
             // For lower_is_better: low scores = good (green), high scores = bad (red)
             <>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-green-600 rounded"></div>
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&lt;{statusThresholds.yellowThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Moderate ({statusThresholds.yellowThreshold}-{statusThresholds.redThreshold - 1})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-red-600 rounded"></div>
+                <div className="w-4 h-4 bg-red-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Concerning (≥{statusThresholds.redThreshold})
                 </span>
@@ -163,19 +163,19 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
             // For higher_is_better: low scores = bad (red), high scores = good (green)
             <>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-red-600 rounded"></div>
+                <div className="w-4 h-4 bg-red-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Low (≤{statusThresholds.redThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-yellow-500 rounded"></div>
+                <div className="w-4 h-4 bg-yellow-400 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Medium ({statusThresholds.redThreshold + 1}-{statusThresholds.yellowThreshold})
                 </span>
               </div>
               <div className="flex items-center space-x-1">
-                <div className="w-4 h-4 bg-green-600 rounded"></div>
+                <div className="w-4 h-4 bg-green-500 rounded"></div>
                 <span className="text-xs text-gray-600">
                   Good (&gt;{statusThresholds.yellowThreshold})
                 </span>
@@ -331,35 +331,24 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
                     const score = cellData?.score;
                     const status = cellData?.status || null;
 
-                    const handleCellActivate = () => {
-                      if (cellData) {
-                        setSelectedCell({
-                          athleteId: athlete.id,
-                          athleteName: athlete.name,
-                          date,
-                          score: cellData.score,
-                          responses: cellData.responses,
-                          hasAlert: false,
-                          alertSeverity: undefined,
-                        });
-                      }
-                    };
-
                     return (
                       <td
                         key={`${athlete.id}-${date}`}
                         data-testid={`heatmap-cell-${athlete.id}-${date}`}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`${athlete.name}, ${date}, wellness score ${score !== null && score !== undefined ? score.toFixed(1) : 'not recorded'}, status ${status || 'unknown'}`}
-                        className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 focus:ring-2 focus:ring-primary focus:outline-none transition-all ${
+                        className={`border border-gray-300 p-0 cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all ${
                           getStatusTailwindClass(status)
                         } ${getStatusTextColor(status)}`}
-                        onClick={handleCellActivate}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            handleCellActivate();
+                        onClick={() => {
+                          if (cellData) {
+                            setSelectedCell({
+                              athleteId: athlete.id,
+                              athleteName: athlete.name,
+                              date,
+                              score: cellData.score,
+                              responses: cellData.responses,
+                              hasAlert: false,
+                              alertSeverity: undefined,
+                            });
                           }
                         }}
                       >
@@ -465,4 +454,4 @@ export const TeamHeatmap = memo(function TeamHeatmap({ responses, template, filt
       </Dialog>
     </div>
   );
-});
+}

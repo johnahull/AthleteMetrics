@@ -71,14 +71,14 @@ export const RATE_LIMITS = {
 
   /**
    * Batch operations (measurements batch create)
-   * Stricter limit since each batch can contain up to 1000 measurements
+   * Stricter limit since each batch can contain up to 100 measurements
    * @default 10 requests per 15-minute window (up to 1000 measurements)
    */
   BATCH: 10,
 
   /**
-   * Token validation operations (magic links, password reset)
-   * Very strict limit to prevent token enumeration attacks
+   * Magic link token validation (security-sensitive)
+   * Strict limit to prevent token brute-force attacks
    * @default 10 requests per 15-minute window
    */
   TOKEN_VALIDATION: 10,

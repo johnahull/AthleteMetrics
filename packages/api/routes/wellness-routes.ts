@@ -42,8 +42,8 @@ import type { WellnessRequest, WellnessResponse } from "@shared/wellness-types";
 import type { WellnessTrendDataPoint } from "@shared/wellness-analytics-types";
 import { calculateAthleteStatus, getCommonInjuries, calculateTrend } from "@shared/wellness-status-utils";
 import { WELLNESS_CONSTANTS } from "@shared/wellness-constants";
-import { userTeams, userOrganizations, teams } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import { userTeams, userOrganizations } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import { emailService } from "../services/email-service";
@@ -115,14 +115,18 @@ const analyticsLimiter = rateLimit({
   skip: () => shouldBypassRateLimit(),
 });
 
-// Very strict rate limiting for token validation (prevents enumeration attacks)
+// Strict rate limiting for magic link token validation (security-sensitive)
 const tokenValidationLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
-  limit: RATE_LIMITS.TOKEN_VALIDATION, // 10 requests per 15 min (prevents brute force)
-  message: { message: "Too many requests. Please try again later." },
+  limit: RATE_LIMITS.TOKEN_VALIDATION, // 10 requests per 15 min - prevents brute force
+  message: { message: "Too many authentication attempts. Please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: () => shouldBypassRateLimit(),
+  keyGenerator: (req) => {
+    // Rate limit by IP address for unauthenticated requests
+    return req.ip || 'unknown';
+  },
 });
 
 /**
@@ -231,6 +235,7 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/templates/:id
    * Get wellness template by ID (for public wellness submissions)
    * Access: Public (no authentication required)
+   * Security: Only returns system templates or templates accessed via valid magic link
    * Note: Returns only public-safe fields (excludes createdBy, organizationId for security)
    */
   app.get(
@@ -242,6 +247,12 @@ export function registerWellnessRoutes(app: Express) {
 
         const template = await storage.getWellnessTemplate(id);
         if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // SECURITY: Only allow access to system templates via public endpoint
+        // Organization-specific templates require authentication or valid magic link
+        if (template.organizationId !== null && !template.isSystemSeeded) {
           return res.status(404).json({ message: "Template not found" });
         }
 
@@ -426,12 +437,12 @@ export function registerWellnessRoutes(app: Express) {
         const clonedTemplate = await storage.createWellnessTemplate({
           organizationId,
           name: `${sourceTemplate.name} (Copy)`,
-          description: sourceTemplate.description ?? undefined,
+          description: sourceTemplate.description,
           config: sourceTemplate.config,
           isDefault: false,
           isActive: true,
-          category: sourceTemplate.category ?? undefined,
-          tags: sourceTemplate.tags ?? undefined,
+          category: sourceTemplate.category,
+          tags: sourceTemplate.tags,
           isSystemSeeded: false, // Cloned templates are not system-seeded
           sourceTemplateId: sourceTemplate.id, // Track the source
           createdBy: req.user!.id,
@@ -515,7 +526,8 @@ export function registerWellnessRoutes(app: Express) {
 
             // Batch fetch all athletes to avoid N+1 query
             const athleteIds = Array.from(magicLinks.keys());
-            const athleteMap = await storage.getUsersByIds(athleteIds);
+            const athletes = await storage.getUsersByIds(athleteIds);
+            const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
             // Send email to each targeted athlete
             for (const [athleteId, magicLink] of magicLinks.entries()) {
@@ -617,11 +629,10 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/requests/by-token/:token
    * Get wellness request by public token (for magic links)
    * Access: Public (no authentication required)
-   * SECURITY: Strict rate limiting (10/15min) to prevent token enumeration
    */
   app.get(
     "/api/wellness/requests/by-token/:token",
-    tokenValidationLimiter,
+    highVolumeLimiter,
     async (req, res: Response) => {
       try {
         const { token } = req.params;
@@ -648,11 +659,10 @@ export function registerWellnessRoutes(app: Express) {
    * GET /api/wellness/requests/by-token/:token/targeted-athletes
    * Get list of targeted athletes for a wellness request (for athlete dropdown)
    * Access: Public (no authentication required)
-   * SECURITY: Strict rate limiting (10/15min) to prevent token enumeration
    */
   app.get(
     "/api/wellness/requests/by-token/:token/targeted-athletes",
-    tokenValidationLimiter,
+    highVolumeLimiter,
     async (req, res: Response) => {
       try {
         const { token } = req.params;
@@ -678,68 +688,44 @@ export function registerWellnessRoutes(app: Express) {
 
         // Add athletes from targeted teams (query userTeams table)
         if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-          // Use inArray() to fetch all team members in a single query (prevents N+1)
-          const teamMembers = await db
-            .select()
-            .from(userTeams)
-            .where(
-              and(
-                inArray(userTeams.teamId, request.targetTeamIds),
-                eq(userTeams.isActive, true)
-              )
-            );
+          for (const teamId of request.targetTeamIds) {
+            // Query userTeams table to get all active members of this team
+            const teamMembers = await db
+              .select()
+              .from(userTeams)
+              .where(
+                and(
+                  eq(userTeams.teamId, teamId),
+                  eq(userTeams.isActive, true)
+                )
+              );
 
-          // Extract user IDs from team memberships
-          const memberIds = teamMembers.map((member: any) => member.userId);
-          targetAthleteIds.push(...memberIds);
+            // Extract user IDs from team memberships
+            const memberIds = teamMembers.map((member: any) => member.userId);
+            targetAthleteIds.push(...memberIds);
+          }
         }
 
         // Remove duplicates
         const uniqueAthleteIds = [...new Set(targetAthleteIds)];
 
         // Batch fetch user details
-        const athleteMap = await storage.getUsersByIds(uniqueAthleteIds);
+        const athletes = await storage.getUsersByIds(uniqueAthleteIds);
 
-        // Batch fetch all user teams with team details in a single query (prevents N+1)
-        const allUserTeamsResults = await db
-          .select({
-            userId: userTeams.userId,
-            teamId: userTeams.teamId,
-            teamName: teams.name,
+        // Get primary team for each athlete
+        const athletesWithTeams = await Promise.all(
+          athletes.map(async (athlete) => {
+            const userTeams = await storage.getUserTeams(athlete.id);
+            const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
+
+            return {
+              id: athlete.id,
+              fullName: athlete.fullName,
+              teamName: primaryTeam?.name || null,
+              teamId: primaryTeam?.id || null,
+            };
           })
-          .from(userTeams)
-          .leftJoin(teams, eq(userTeams.teamId, teams.id))
-          .where(
-            and(
-              inArray(userTeams.userId, uniqueAthleteIds),
-              eq(userTeams.isActive, true)
-            )
-          );
-
-        // Group teams by user ID and get primary team for each athlete
-        const userPrimaryTeamMap = new Map<string, { teamId: string; teamName: string } | null>();
-
-        for (const ut of allUserTeamsResults) {
-          if (!userPrimaryTeamMap.has(ut.userId)) {
-            // Store first team as primary team
-            userPrimaryTeamMap.set(ut.userId, {
-              teamId: ut.teamId,
-              teamName: ut.teamName || 'Unknown Team',
-            });
-          }
-        }
-
-        // Build response with athlete data and primary teams
-        const athletesWithTeams = Array.from(athleteMap.values()).map((athlete) => {
-          const primaryTeam = userPrimaryTeamMap.get(athlete.id);
-
-          return {
-            id: athlete.id,
-            fullName: athlete.fullName,
-            teamName: primaryTeam?.teamName || null,
-            teamId: primaryTeam?.teamId || null,
-          };
-        });
+        );
 
         res.json({ athletes: athletesWithTeams });
       } catch (error: any) {
@@ -802,7 +788,10 @@ export function registerWellnessRoutes(app: Express) {
         res.status(204).send();
       } catch (error: any) {
         console.error("Failed to delete wellness request:", error);
-        res.status(500).json(createErrorResponse("Failed to delete wellness request", error));
+        res.status(500).json({
+          message: "Failed to delete wellness request",
+          error: error.message,
+        });
       }
     }
   );
@@ -822,7 +811,10 @@ export function registerWellnessRoutes(app: Express) {
       try {
         const { organizationId, requestId } = req.params;
 
-        const completionRate = await storage.getRequestCompletionRate(organizationId, requestId);
+        const completionRate = await storage.getRequestCompletionRate(
+          organizationId,
+          requestId
+        );
 
         res.json(completionRate);
       } catch (error: any) {
@@ -840,10 +832,11 @@ export function registerWellnessRoutes(app: Express) {
    * POST /api/wellness/responses
    * Submit a wellness response (supports both authenticated and magic link access)
    * Access: Authenticated user OR valid magic link
+   * Security: Uses strict token validation rate limiter to prevent brute force attacks
    */
   app.post(
     "/api/wellness/responses",
-    highVolumeLimiter,
+    tokenValidationLimiter, // Stricter rate limiting for magic link validation
     requireWellnessAccess(false),
     async (req: AuthenticatedRequest, res: Response) => {
       try {
@@ -978,19 +971,7 @@ export function registerWellnessRoutes(app: Express) {
               return res.status(404).json({ message: "Selected athlete not found" });
             }
 
-            // SECURITY: Verify athlete belongs to same organization as the request
-            // This prevents cross-organization data submission via stolen tokens
             const userTeams = await storage.getUserTeams(selectedAthleteId);
-            const athleteBelongsToOrg = userTeams.some(
-              ut => ut.team.organization.id === request.organizationId
-            );
-
-            if (!athleteBelongsToOrg) {
-              return res.status(403).json({
-                message: "Selected athlete does not belong to this organization"
-              });
-            }
-
             const primaryTeam = userTeams.length > 0 ? userTeams[0].team : null;
 
             userId = user.id;
@@ -998,8 +979,8 @@ export function registerWellnessRoutes(app: Express) {
             teamId = primaryTeam?.id;
             teamNameSnapshot = primaryTeam?.name;
           } else {
-            // Manual entry fallback - use well-known UUID constant
-            userId = WELLNESS_CONSTANTS.ANONYMOUS_SUBMISSION_USER_ID;
+            // Manual entry fallback - current behavior
+            userId = 'magic-link-submission';
             userFullName = (req.body.athleteName as string) || 'Anonymous Athlete';
             teamId = undefined;
             teamNameSnapshot = undefined;
@@ -1113,15 +1094,10 @@ export function registerWellnessRoutes(app: Express) {
         const orgIds = userOrgs.map(uo => uo.organizationId);
 
         // Get all active requests for user's organizations (batch query to avoid N+1)
-        const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds);
+        const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds, { status: 'active' });
 
-        // Filter requests targeted at this user and active
+        // Filter requests targeted at this user
         const myRequests = allRequests.filter(request => {
-          // Only include active requests
-          if (request.status !== 'active') {
-            return false;
-          }
-
           // Check if user is directly targeted
           if (request.targetAthleteIds && request.targetAthleteIds.includes(userId)) {
             return true;
@@ -1226,12 +1202,12 @@ export function registerWellnessRoutes(app: Express) {
           endDate: endDate as string,
         });
 
-        // UUID validation using Zod for consistency
-        const uuidSchema = z.string().uuid();
+        // UUID validation regex (RFC 4122)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
         // Filter by athleteIds if provided
         if (athleteIds && typeof athleteIds === 'string') {
-          const athleteIdArray = athleteIds.split(',').map(id => id.trim()).filter(id => uuidSchema.safeParse(id).success);
+          const athleteIdArray = athleteIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
           if (athleteIdArray.length > 0) {
             responses = responses.filter(r => athleteIdArray.includes(r.userId));
           }
@@ -1239,7 +1215,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Filter by teamIds if provided
         if (teamIds && typeof teamIds === 'string') {
-          const teamIdArray = teamIds.split(',').map(id => id.trim()).filter(id => uuidSchema.safeParse(id).success);
+          const teamIdArray = teamIds.split(',').map(id => id.trim()).filter(id => uuidRegex.test(id));
           if (teamIdArray.length > 0) {
             responses = responses.filter(r => r.teamId && teamIdArray.includes(r.teamId));
           }
@@ -1408,7 +1384,7 @@ export function registerWellnessRoutes(app: Express) {
         const trends = await storage.getWellnessTrends(organizationId, {
           startDate: validatedStartDate,
           endDate: validatedEndDate,
-          questionIds: questionIdArray.length > 0 ? questionIdArray : undefined,
+          questionIds: questionIdArray,
         });
 
         res.json(trends);
@@ -1451,7 +1427,7 @@ export function registerWellnessRoutes(app: Express) {
 
         // Query 1: Batch fetch all team rosters for the organization
         const allRosters = await storage.getTeamRostersBatch(organizationId);
-        const rostersByTeam = new Map<string, Array<{ teamId: string; userId: string; userFullName: string }>>();
+        const rostersByTeam = new Map<string, typeof allRosters>();
         for (const roster of allRosters) {
           if (!rostersByTeam.has(roster.teamId)) {
             rostersByTeam.set(roster.teamId, []);

@@ -8,17 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Info, RotateCcw } from 'lucide-react';
 import { ErrorBoundary } from '../ErrorBoundary';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-import zoomPlugin from 'chartjs-plugin-zoom';
+import { Chart as ChartJS } from 'chart.js';
 import type {
   ChartDataPoint,
   ChartConfiguration,
@@ -30,17 +20,7 @@ import type {
 } from '@shared/analytics-types';
 import { getChartDataForType } from './chartDataUtils';
 
-// Register zoom plugin for fullscreen charts
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  zoomPlugin
-);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 // Lazy load chart components
 const BoxPlotChart = React.lazy(() => import('./BoxPlotChart').then(m => ({ default: m.BoxPlotChart })));

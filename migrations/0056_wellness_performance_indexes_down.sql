@@ -17,16 +17,13 @@ DROP INDEX IF EXISTS idx_wellness_responses_user_submitted;
 DROP INDEX IF EXISTS idx_wellness_templates_system_active;
 DROP INDEX IF EXISTS idx_wellness_templates_org_active;
 
--- Summary
-DO $$
-BEGIN
-  RAISE NOTICE '';
-  RAISE NOTICE '✅ Rollback of migration 0056 completed successfully!';
-  RAISE NOTICE '';
-  RAISE NOTICE 'Removed 7 performance indexes:';
-  RAISE NOTICE '  - 5 wellness_responses indexes';
-  RAISE NOTICE '  - 2 wellness_templates indexes';
-  RAISE NOTICE '';
-  RAISE NOTICE 'Data preserved - only indexes removed';
-  RAISE NOTICE 'Queries will use existing indexes from migrations 0049-0050';
-END $$;
+-- ============================================================================
+-- ROLLBACK SUMMARY
+-- ============================================================================
+-- Removed 7 performance indexes:
+--   - 5 wellness_responses indexes
+--   - 2 wellness_templates indexes
+--
+-- Data preserved - only indexes removed
+-- Queries will use existing indexes from migrations 0049-0050
+-- ============================================================================

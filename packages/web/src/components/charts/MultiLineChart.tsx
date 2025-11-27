@@ -42,17 +42,7 @@ import { ResponsiveChartWrapper } from './responsive-chart-wrapper';
 import { mergeChartOptions } from '@/utils/responsive-chart-options';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 
 interface MultiLineChartProps {

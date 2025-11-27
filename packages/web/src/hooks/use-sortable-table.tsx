@@ -1,87 +1,89 @@
 import { useState, useMemo } from 'react';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronUp, ChevronDown } from 'lucide-react';
 
 export type SortDirection = 'asc' | 'desc';
 
-interface UseSortableTableOptions {
-  defaultSortField?: string;
+interface UseSortableTableOptions<T> {
+  defaultSortField?: keyof T;
   defaultSortDirection?: SortDirection;
 }
 
-interface SortState {
-  field: string | null;
-  direction: SortDirection;
+interface UseSortableTableReturn<T> {
+  sortedData: T[];
+  sortField: keyof T | undefined;
+  sortDirection: SortDirection;
+  handleSort: (field: keyof T) => void;
+  SortIcon: React.FC<{ field: keyof T }>;
 }
 
-export function useSortableTable<T extends Record<string, any>>(
+export function useSortableTable<T>(
   data: T[],
-  options: UseSortableTableOptions = {}
-) {
-  const { defaultSortField, defaultSortDirection = 'asc' } = options;
+  options?: UseSortableTableOptions<T>
+): UseSortableTableReturn<T> {
+  const [sortField, setSortField] = useState<keyof T | undefined>(
+    options?.defaultSortField
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    options?.defaultSortDirection ?? 'asc'
+  );
 
-  const [sortState, setSortState] = useState<SortState>({
-    field: defaultSortField || null,
-    direction: defaultSortDirection,
-  });
-
-  const handleSort = (field: string) => {
-    setSortState((prev) => {
-      if (prev.field === field) {
-        // Toggle direction if same field
-        return {
-          field,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        };
-      }
-      // New field, start with ascending
-      return {
-        field,
-        direction: 'asc',
-      };
-    });
+  const handleSort = (field: keyof T) => {
+    if (sortField === field) {
+      // Toggle direction for current field
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      // New field - reset to ascending
+      setSortField(field);
+      setSortDirection('asc');
+    }
   };
 
   const sortedData = useMemo(() => {
-    if (!sortState.field) return data;
+    if (!sortField) {
+      return data;
+    }
 
     return [...data].sort((a, b) => {
-      const aValue = a[sortState.field!];
-      const bValue = b[sortState.field!];
+      const aValue = a[sortField];
+      const bValue = b[sortField];
 
-      // Handle null/undefined values
+      // Handle null/undefined - push to end
       if (aValue == null && bValue == null) return 0;
       if (aValue == null) return 1;
       if (bValue == null) return -1;
 
       // Compare values
       let comparison = 0;
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        comparison = aValue.localeCompare(bValue);
-      } else if (typeof aValue === 'number' && typeof bValue === 'number') {
+      if (typeof aValue === 'number' && typeof bValue === 'number') {
         comparison = aValue - bValue;
+      } else if (typeof aValue === 'string' && typeof bValue === 'string') {
+        comparison = aValue.localeCompare(bValue);
       } else {
-        // Fallback to string comparison
+        // Fallback for other types - convert to string
         comparison = String(aValue).localeCompare(String(bValue));
       }
 
-      return sortState.direction === 'asc' ? comparison : -comparison;
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [data, sortState]);
+  }, [data, sortField, sortDirection]);
 
-  const SortIcon = ({ field }: { field: string }) => {
-    if (sortState.field !== field) {
-      return <ArrowUpDown className="ml-2 h-4 w-4 text-muted-foreground" />;
+  const SortIcon: React.FC<{ field: keyof T }> = ({ field }) => {
+    if (sortField !== field) {
+      return null;
     }
-    if (sortState.direction === 'asc') {
-      return <ArrowUp className="ml-2 h-4 w-4" />;
-    }
-    return <ArrowDown className="ml-2 h-4 w-4" />;
+
+    return sortDirection === 'asc' ? (
+      <ChevronUp className="ml-1 inline h-4 w-4" />
+    ) : (
+      <ChevronDown className="ml-1 inline h-4 w-4" />
+    );
   };
 
   return {
     sortedData,
+    sortField,
+    sortDirection,
     handleSort,
     SortIcon,
-    sortState,
   };
 }

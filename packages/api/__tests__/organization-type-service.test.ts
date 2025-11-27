@@ -13,7 +13,7 @@ describe("Organization Type Service Logic", () => {
   let metricService: MetricService;
   let benchmarkService: BenchmarkService;
   let testOrgId: string;
-  
+
   // Generate unique suffix for this test run (shortened to fit DB constraints)
   // Use only uppercase letters and numbers to match metric code format constraint: ^[A-Z0-9_]+$
   const timestamp = Date.now().toString();

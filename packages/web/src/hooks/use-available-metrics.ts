@@ -60,7 +60,15 @@ export function useAvailableMetrics(): {
     data: siteMetrics,
     isLoading: loadingSite,
     error: errorSite
-  } = useQuery({
+  } = useQuery<Array<{
+    code: string;
+    label: string;
+    unit: string | null;
+    lowerIsBetter: boolean;
+    category: string | null;
+    description: string | null;
+    isActive: boolean;
+  }>>({
     queryKey: ['siteMetrics', false],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -99,8 +107,8 @@ export function useAvailableMetrics(): {
     // Fallback to active site metrics (for site admins without org context)
     if (siteMetrics) {
       return siteMetrics
-        .filter((sm: any) => sm.isActive) // Only active metrics
-        .map((sm: any) => ({
+        .filter(sm => sm.isActive) // Only active metrics
+        .map(sm => ({
           code: sm.code,
           label: sm.label,
           unit: sm.unit || '',

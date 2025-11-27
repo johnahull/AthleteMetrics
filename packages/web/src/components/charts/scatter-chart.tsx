@@ -1,17 +1,9 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Info } from "lucide-react";
 import { Scatter } from "react-chartjs-2";
-import {
-  Chart as ChartJS,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Tooltip,
-  Legend,
-} from "chart.js";
 import { formatFly10Dual } from "@/utils/fly10-conversion";
 
-ChartJS.register(LinearScale, PointElement, LineElement, Tooltip, Legend);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 interface ScatterChartProps {
   data: any[];

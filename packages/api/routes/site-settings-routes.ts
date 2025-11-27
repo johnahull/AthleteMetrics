@@ -79,6 +79,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
       // Return default settings if none exist
       return res.json({
         aiModel: "gpt-5-nano",
+        wellnessModuleEnabled: true,
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -105,7 +106,12 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
     // Validate request body
     const validated = updateSiteSettingsSchema.parse(req.body);
 
-    // Validate that the selected model has its API key configured (only if aiModel is being updated)
+    // Prepare update data
+    const updateData: any = {
+      updatedBy: user?.id || null,
+    };
+
+    // Validate AI model if provided
     if (validated.aiModel !== undefined) {
       const modelAvailability = isModelAvailable(validated.aiModel);
       if (!modelAvailability.provider) {
@@ -119,6 +125,13 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
           message: "Selected model is not available. Please contact administrator."
         });
       }
+
+      updateData.aiModel = validated.aiModel;
+    }
+
+    // Add wellness module flag if provided
+    if (validated.wellnessModuleEnabled !== undefined) {
+      updateData.wellnessModuleEnabled = validated.wellnessModuleEnabled;
     }
 
     // Get previous settings for audit log
@@ -127,11 +140,7 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
     const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
 
     // Update or create settings
-    const updatedSettings = await storage.updateSiteSettings({
-      ...(validated.aiModel !== undefined && { aiModel: validated.aiModel }),
-      ...(validated.wellnessModuleEnabled !== undefined && { wellnessModuleEnabled: validated.wellnessModuleEnabled }),
-      updatedBy: user?.id || null,
-    });
+    const updatedSettings = await storage.updateSiteSettings(updateData);
 
     // Audit log for AI model change
     if (user?.id && validated.aiModel !== undefined && previousModel !== validated.aiModel) {

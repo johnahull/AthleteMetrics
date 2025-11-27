@@ -1,94 +1,135 @@
 /**
- * Validation utilities for wellness routes
+ * Validation Utilities for API Input Sanitization
+ * Prevents SQL injection, XSS, and invalid data issues
  */
 
 /**
- * Validates that a string is a valid date in YYYY-MM-DD format
- * @param dateStr - The date string to validate
+ * Validates a date string in YYYY-MM-DD format
+ * @param dateStr - Date string to validate
  * @param fieldName - Name of the field for error messages
- * @returns The validated date string
- * @throws Error if invalid
+ * @returns Validated date string
+ * @throws Error if date is invalid
  */
-export function validateDateString(dateStr: string | undefined | null, fieldName: string): string {
+export function validateDateString(dateStr: string | undefined, fieldName: string = 'date'): string {
   if (!dateStr) {
-    throw new Error(`${fieldName} is required`);
+    return new Date().toISOString().split('T')[0];
   }
-  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-  if (!dateRegex.test(dateStr)) {
-    throw new Error(`${fieldName} must be in YYYY-MM-DD format`);
+
+  // Validate YYYY-MM-DD format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    throw new Error(`Invalid ${fieldName} format. Expected YYYY-MM-DD, got: ${dateStr}`);
   }
+
   const date = new Date(dateStr);
   if (isNaN(date.getTime())) {
-    throw new Error(`${fieldName} is not a valid date`);
+    throw new Error(`Invalid ${fieldName} value: ${dateStr}`);
   }
+
+  // Check if date is reasonable (not in far future or past)
+  const year = date.getFullYear();
+  if (year < 2020 || year > 2100) {
+    throw new Error(`${fieldName} year out of reasonable range: ${year}`);
+  }
+
   return dateStr;
 }
 
 /**
- * Validates that all question IDs in an array are valid UUIDs
- * @param ids - Comma-separated string of IDs or undefined
- * @param maxCount - Maximum number of IDs allowed
+ * Validates and sanitizes question IDs array
+ * Prevents SQL injection via questionIds parameter
+ * @param questionIdsParam - Comma-separated question IDs
+ * @param maxCount - Maximum number of question IDs allowed
  * @returns Array of validated question IDs
  */
-export function validateQuestionIds(ids: string | undefined, maxCount: number): string[] {
-  if (!ids) return [];
+export function validateQuestionIds(
+  questionIdsParam: string | undefined,
+  maxCount: number = 50
+): string[] | undefined {
+  if (!questionIdsParam) {
+    return undefined;
+  }
 
-  const idArray = ids.split(',').map(id => id.trim()).filter(id => id.length > 0);
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const questionIds = (questionIdsParam as string)
+    .split(',')
+    .map(id => id.trim())
+    .filter(id => id.length > 0);
 
-  const validatedIds = idArray
-    .filter(id => uuidRegex.test(id))
-    .slice(0, maxCount);
+  // Validate each question ID format (alphanumeric, underscore, hyphen only)
+  const invalidIds = questionIds.filter(id => !/^[a-zA-Z0-9_-]{1,100}$/.test(id));
+  if (invalidIds.length > 0) {
+    throw new Error(`Invalid question ID format: ${invalidIds.join(', ')}`);
+  }
 
-  return validatedIds;
+  // Limit count to prevent DoS
+  if (questionIds.length > maxCount) {
+    throw new Error(`Too many question IDs. Maximum ${maxCount} allowed, got ${questionIds.length}`);
+  }
+
+  return questionIds.length > 0 ? questionIds : undefined;
 }
 
 /**
- * Validates a date range (start date must be before or equal to end date)
- * @param startDate - Start date in YYYY-MM-DD format
- * @param endDate - End date in YYYY-MM-DD format
- * @param maxDays - Maximum days allowed between start and end
- * @throws Error if invalid range
+ * Validates date range and ensures it's not too large
+ * @param startDate - Start date string
+ * @param endDate - End date string
+ * @param maxDays - Maximum days allowed in range
+ * @returns Validated date range
+ * @throws Error if date range is invalid or too large
  */
-export function validateDateRange(startDate: string, endDate: string, maxDays: number): void {
+export function validateDateRange(
+  startDate: string,
+  endDate: string,
+  maxDays: number = 365
+): { startDate: string; endDate: string } {
   const start = new Date(startDate);
   const end = new Date(endDate);
 
   if (start > end) {
-    throw new Error('Start date must be before or equal to end date');
+    throw new Error('startDate cannot be after endDate');
   }
 
-  const daysDiff = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+  const daysDiff = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
   if (daysDiff > maxDays) {
-    throw new Error(`Date range cannot exceed ${maxDays} days`);
+    throw new Error(`Date range cannot exceed ${maxDays} days. Requested: ${daysDiff} days`);
   }
+
+  return { startDate, endDate };
 }
 
 /**
- * Limits array size to prevent DoS attacks
- * Returns a truncated copy of the array if it exceeds the limit
- * @param arr - The array to limit
- * @param maxSize - Maximum size allowed
- * @param _label - Optional label for logging (unused, but kept for API compatibility)
+ * Validates UUID format
+ * @param uuid - UUID string to validate
+ * @param fieldName - Name of the field for error messages
+ * @returns Validated UUID
+ * @throws Error if UUID is invalid
  */
-export function limitArraySize<T>(arr: T[], maxSize: number, _label?: string): T[] {
-  if (!Array.isArray(arr)) return [];
-  return arr.slice(0, maxSize);
+export function validateUUID(uuid: string, fieldName: string = 'id'): string {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  if (!uuidRegex.test(uuid)) {
+    throw new Error(`Invalid ${fieldName} format. Expected UUID, got: ${uuid}`);
+  }
+
+  return uuid;
 }
 
 /**
- * Validates that a string is a valid UUID
+ * Validates and limits array size
+ * Prevents memory exhaustion from large arrays
+ * @param arr - Array to validate
+ * @param maxSize - Maximum array size allowed
+ * @param fieldName - Name of the field for error messages
+ * @returns Validated array (sliced to maxSize if needed)
  */
-export function isValidUUID(str: string | undefined | null): boolean {
-  if (!str) return false;
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  return uuidRegex.test(str);
-}
-
-/**
- * Sanitizes a string for safe logging (removes potential injection characters)
- */
-export function sanitizeForLogging(str: string): string {
-  if (typeof str !== 'string') return '';
-  return str.replace(/[\r\n\t]/g, ' ').slice(0, 500);
+export function limitArraySize<T>(
+  arr: T[],
+  maxSize: number,
+  fieldName: string = 'array'
+): T[] {
+  if (arr.length > maxSize) {
+    console.warn(`${fieldName} size ${arr.length} exceeds maximum ${maxSize}, limiting results`);
+    return arr.slice(0, maxSize);
+  }
+  return arr;
 }

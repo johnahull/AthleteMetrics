@@ -54,21 +54,21 @@
 -- Performance: Enables fast ordering by submitted_at DESC
 -- Query: ORDER BY submitted_at DESC
 -- Note: Covers all rows (no partial WHERE clause) to avoid NOW() IMMUTABLE constraint
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_responses_recent
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_recent
 ON wellness_responses(submitted_at DESC);
 
 -- Index 2: Composite org + date range + submitted_at (dashboard queries)
 -- Use case: Dashboard queries filtering by org + date range with sorting
 -- Performance: Eliminates sequential scans, enables index-only scans
 -- Query: WHERE organization_id = ? AND date BETWEEN ? AND ? ORDER BY submitted_at DESC
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_responses_org_date_submitted
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_org_date_submitted
 ON wellness_responses(organization_id, date DESC, submitted_at DESC);
 
 -- Index 3: Request completion lookups (duplicate submission checks)
 -- Use case: Fast lookup to check if athlete already submitted response
 -- Performance: Instant lookups instead of full table scans
 -- Query: WHERE request_id = ? AND user_id = ?
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_responses_request_user
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_request_user
 ON wellness_responses(request_id, user_id)
 WHERE request_id IS NOT NULL;
 
@@ -76,7 +76,7 @@ WHERE request_id IS NOT NULL;
 -- Use case: Team-specific analytics and dashboards
 -- Performance: Fast filtering for team dashboards, includes submitted_at ordering
 -- Query: WHERE team_id = ? AND date = ? ORDER BY submitted_at DESC
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_responses_team_date_submitted
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_team_date_submitted
 ON wellness_responses(team_id, date DESC, submitted_at DESC)
 WHERE team_id IS NOT NULL;
 
@@ -84,7 +84,7 @@ WHERE team_id IS NOT NULL;
 -- Use case: Athlete dashboard showing submission history with pagination
 -- Performance: Fast pagination queries with proper ordering
 -- Query: WHERE user_id = ? ORDER BY submitted_at DESC LIMIT 20
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_responses_user_submitted
+CREATE INDEX IF NOT EXISTS idx_wellness_responses_user_submitted
 ON wellness_responses(user_id, submitted_at DESC);
 
 -- ============================================================================
@@ -95,7 +95,7 @@ ON wellness_responses(user_id, submitted_at DESC);
 -- Use case: Template library browsing (global/system templates only)
 -- Performance: Fast filtering of active, system-seeded templates
 -- Query: WHERE organization_id IS NULL AND is_active = true AND is_system_seeded = true
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_templates_system_active
+CREATE INDEX IF NOT EXISTS idx_wellness_templates_system_active
 ON wellness_templates(is_system_seeded, is_active, created_at DESC)
 WHERE organization_id IS NULL AND is_active = true;
 
@@ -103,7 +103,7 @@ WHERE organization_id IS NULL AND is_active = true;
 -- Use case: Organization template management and selection
 -- Performance: Fast org-specific template queries
 -- Query: WHERE organization_id = ? AND is_active = true ORDER BY created_at DESC
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_wellness_templates_org_active
+CREATE INDEX IF NOT EXISTS idx_wellness_templates_org_active
 ON wellness_templates(organization_id, is_active, created_at DESC)
 WHERE organization_id IS NOT NULL;
 
@@ -207,19 +207,5 @@ WHERE organization_id IS NOT NULL;
 -- ============================================================================
 
 -- Migration completed successfully
-DO $$
-BEGIN
-  RAISE NOTICE '================================================================';
-  RAISE NOTICE '✅ Migration 0056 completed successfully!';
-  RAISE NOTICE '================================================================';
-  RAISE NOTICE 'Created 7 strategic indexes for wellness performance optimization:';
-  RAISE NOTICE '  - 5 wellness_responses indexes (dashboard, analytics, pagination)';
-  RAISE NOTICE '  - 2 wellness_templates indexes (library, org management)';
-  RAISE NOTICE '----------------------------------------------------------------';
-  RAISE NOTICE 'Expected performance improvement: 50-80%% faster queries';
-  RAISE NOTICE 'Index overhead: ~50-100MB (for 100k responses)';
-  RAISE NOTICE '----------------------------------------------------------------';
-  RAISE NOTICE 'Run EXPLAIN ANALYZE on your queries to verify index usage.';
-  RAISE NOTICE 'See migration comments for verification queries and rollback instructions.';
-  RAISE NOTICE '================================================================';
-END $$;
+-- Note: 7 strategic indexes created for wellness performance optimization
+-- Expected performance improvement: 50-80%% faster queries

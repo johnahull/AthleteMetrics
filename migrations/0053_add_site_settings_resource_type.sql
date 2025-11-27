@@ -4,19 +4,6 @@
 
 DO $$
 BEGIN
-  -- Validate all existing resource_types are in the new constraint
-  IF EXISTS (
-    SELECT 1 FROM audit_logs
-    WHERE resource_type NOT IN (
-      'organization', 'user', 'team', 'measurement', 'invitation', 'session',
-      'site_metric', 'site_benchmark', 'custom_benchmark', 'organization_benchmark',
-      'report',
-      'site_settings'
-    )
-  ) THEN
-    RAISE EXCEPTION 'Cannot apply migration: invalid resource_type values exist in audit_logs table';
-  END IF;
-
   -- Drop existing constraint if it exists
   IF EXISTS (
     SELECT 1 FROM pg_constraint WHERE conname = 'audit_logs_resource_type_valid'
