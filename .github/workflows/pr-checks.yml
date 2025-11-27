@@ -38,9 +38,11 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -60,17 +62,17 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Seed default metrics
         run: npx tsx scripts/seed-default-metrics.ts
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Apply cascade delete triggers
         run: ./scripts/apply-cascade-triggers.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Run unit tests
         run: npm run test:unit
@@ -78,13 +80,13 @@ jobs:
           NODE_ENV: test
           NODE_OPTIONS: --max-old-space-size=4096
           SESSION_SECRET: test-secret-key-for-ci
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Cleanup test database
         if: always()
         run: ./scripts/ci-test-cleanup.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   integration-tests:
     name: Integration Tests
@@ -94,9 +96,11 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -119,23 +123,23 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Seed default metrics
         run: npx tsx scripts/seed-default-metrics.ts
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Apply cascade delete triggers
         run: ./scripts/apply-cascade-triggers.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           SESSION_SECRET: test-secret-key-for-ci
           # ADMIN_PASSWORD not set - will use default 'TestPassword123!' from test file
 
@@ -143,7 +147,7 @@ jobs:
         if: always()
         run: ./scripts/ci-test-cleanup.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   build:
     name: Build Verification
@@ -260,9 +264,11 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -295,17 +301,17 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Seed default metrics
         run: npx tsx scripts/seed-default-metrics.ts
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Apply cascade delete triggers
         run: ./scripts/apply-cascade-triggers.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -320,7 +326,7 @@ jobs:
         env:
           NODE_ENV: production
           PORT: 5000
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           SESSION_SECRET: ${{ secrets.CI_SESSION_SECRET || '4ecf4b4a5b4a92bf18666fb5484925cd0fa03050a1af61c3ca4e3b5d17b94b23' }}
           # SECURITY NOTE: Fallback SESSION_SECRET is cryptographically secure (generated via openssl rand -hex 32)
           # Hardcoded credentials are acceptable for CI E2E tests because:
@@ -402,7 +408,7 @@ jobs:
         if: always()
         run: ./scripts/ci-test-cleanup.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   workflow-lint:
     name: Workflow Linting
