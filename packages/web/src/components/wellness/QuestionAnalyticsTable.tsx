@@ -1,11 +1,11 @@
-import { useMemo, memo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateTrend } from '@/utils/wellness-analytics';
-import { useSortableTable } from '@/hooks/use-sortable-table';
+import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
 import { TrendIndicator } from './ui/WellnessUIComponents';
 
 interface QuestionStats {
@@ -28,7 +28,7 @@ interface QuestionAnalyticsTableProps {
   scaleOrientation?: 'higher_is_better' | 'lower_is_better';
 }
 
-export const QuestionAnalyticsTable = memo(function QuestionAnalyticsTable({
+export function QuestionAnalyticsTable({
   responses,
   responsesByTemplate,
   scaleOrientation = 'higher_is_better',
@@ -281,4 +281,4 @@ export const QuestionAnalyticsTable = memo(function QuestionAnalyticsTable({
       </CardContent>
     </Card>
   );
-});
+}

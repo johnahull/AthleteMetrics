@@ -39,10 +39,6 @@ export const PAGINATION_DEFAULTS = {
 } as const;
 
 export const WELLNESS_CONSTANTS = {
-  // Anonymous Submission User ID
-  // Well-known UUID constant for magic link submissions without athlete selection
-  ANONYMOUS_SUBMISSION_USER_ID: '00000000-0000-0000-0000-000000000001',
-
   // Date Range
   DEFAULT_DATE_RANGE_DAYS: 30,
 
@@ -72,7 +68,7 @@ export const WELLNESS_CONSTANTS = {
   MAX_ATHLETES_PER_TEAM: 500, // Limit athletes per team in dashboard queries
 
   // Dashboard Polling (for near-real-time updates)
-  DASHBOARD_POLL_INTERVAL_MS: 90 * 1000, // 90 seconds when tab is active (reduced from 30s to avoid rate limits)
+  DASHBOARD_POLL_INTERVAL_MS: 30 * 1000, // 30 seconds when tab is active
   DASHBOARD_STALE_TIME_MS: 60 * 1000, // 1 minute stale time
 
   // Chart Colors (colorblind-friendly palette)

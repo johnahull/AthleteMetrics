@@ -100,12 +100,9 @@ export default function DateQuickPicks({
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
-              key={calendarOpen ? "open" : "closed"}
               mode="single"
               selected={selectedDate ? new Date(selectedDate) : undefined}
               onSelect={handleCalendarSelect}
-              defaultMonth={selectedDate ? new Date(selectedDate) : new Date()}
-              showOutsideDays={false}
               initialFocus
             />
           </PopoverContent>

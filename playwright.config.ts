@@ -49,9 +49,21 @@ export default defineConfig({
 
   // Configure projects for different browsers
   projects: [
+    // Setup project - runs first to establish authentication
+    {
+      name: 'setup',
+      testMatch: /.*\.setup\.ts/,
+    },
+
+    // Test project - depends on setup
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Reuse authentication state for all tests
+        storageState: 'tests/e2e/.auth/user.json',
+      },
+      dependencies: ['setup'],
     },
   ],
 

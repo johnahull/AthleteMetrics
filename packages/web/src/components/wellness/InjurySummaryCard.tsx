@@ -1,4 +1,4 @@
-import { useMemo, memo } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { HeartPulse, CheckCircle } from 'lucide-react';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
@@ -18,7 +18,7 @@ interface InjuryLocation {
 /**
  * Summary card showing athletes with injuries and common injury locations
  */
-export const InjurySummaryCard = memo(function InjurySummaryCard({
+export function InjurySummaryCard({
   responses,
   responsesByTemplate,
   'data-testid': testId,
@@ -111,4 +111,4 @@ export const InjurySummaryCard = memo(function InjurySummaryCard({
       </CardContent>
     </Card>
   );
-});
+}

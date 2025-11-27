@@ -19,14 +19,6 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 
 // Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface DistributionChartProps {
   data: ChartDataPoint[];

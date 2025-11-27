@@ -81,12 +81,12 @@ export function StatusBreakdownBadges({ red, yellow, green }: StatusBreakdownBad
         </Badge>
       )}
       {yellow && yellow > 0 && (
-        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-800 border-yellow-200">
+        <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700 border-yellow-200">
           {yellow} Yellow
         </Badge>
       )}
       {green && green > 0 && (
-        <Badge variant="outline" className="text-xs bg-green-50 text-green-800 border-green-200">
+        <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
           {green} Green
         </Badge>
       )}

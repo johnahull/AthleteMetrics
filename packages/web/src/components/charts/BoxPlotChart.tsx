@@ -32,17 +32,7 @@ import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 interface BoxPlotChartProps {
   data: ChartDataPoint[];

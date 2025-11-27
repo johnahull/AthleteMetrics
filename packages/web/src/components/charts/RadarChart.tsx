@@ -24,15 +24,6 @@ import { useAthleteSelection } from '@/hooks/useAthleteSelection';
 import { getAthleteColor } from '@/utils/chart-constants';
 
 // Register Chart.js components
-ChartJS.register(
-  RadialLinearScale,
-  PointElement,
-  LineElement,
-  Filler,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface RadarChartProps {
   data: MultiMetricData[];

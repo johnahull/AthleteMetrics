@@ -13,14 +13,6 @@ import {
 } from "chart.js";
 import { formatFly10Dual } from "@/utils/fly10-conversion";
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
 
 interface DistributionChartProps {
   data: number[];

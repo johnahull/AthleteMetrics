@@ -14,13 +14,30 @@ import { STALE_TIME } from "@/lib/queryClient";
 
 /**
  * Fetch all site metrics
+ * @param includeInactive - Include inactive metrics
+ * @param organizationId - Optional organization ID to filter metrics by organization type (uses /api/metrics endpoint for org admins)
  */
-export async function fetchSiteMetrics(includeInactive = false): Promise<SiteMetric[]> {
+export async function fetchSiteMetrics(includeInactive = false, organizationId?: string): Promise<SiteMetric[]> {
   const params = new URLSearchParams();
   if (includeInactive) {
     params.append('includeInactive', 'true');
   }
 
+  // If organizationId is provided, use /api/metrics endpoint with org header
+  // This allows org admins to access site metrics for their organization
+  if (organizationId) {
+    const response = await fetch(`/api/metrics?${params.toString()}`, {
+      headers: {
+        'x-organization-id': organizationId,
+      },
+    });
+    if (!response.ok) {
+      throw new Error('Failed to fetch site metrics');
+    }
+    return response.json();
+  }
+
+  // Otherwise use site admin endpoint
   const response = await fetch(`/api/site-metrics?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site metrics');
@@ -192,11 +209,13 @@ export async function updateOrganizationMetric(
 
 /**
  * Hook to fetch all site metrics
+ * @param includeInactive - Include inactive metrics
+ * @param organizationId - Optional organization ID to filter metrics by organization type
  */
-export function useSiteMetrics(includeInactive = false) {
+export function useSiteMetrics(includeInactive = false, organizationId?: string) {
   return useQuery({
-    queryKey: ['siteMetrics', includeInactive],
-    queryFn: () => fetchSiteMetrics(includeInactive),
+    queryKey: ['siteMetrics', includeInactive, organizationId],
+    queryFn: () => fetchSiteMetrics(includeInactive, organizationId),
     staleTime: STALE_TIME.DEFAULT,
   });
 }

@@ -1,11 +1,11 @@
-import { useMemo, memo } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateAthleteStatus } from '@shared/wellness-status-utils';
 import { calculateAverageWellness, calculateTrend } from '@/utils/wellness-analytics';
-import { useSortableTable } from '@/hooks/use-sortable-table';
+import { useSortableTable } from '@/hooks/use-sortable-table.tsx';
 import { TrendIndicator, StatusBreakdownBadges, ScoreDisplay } from './ui/WellnessUIComponents';
 
 interface TeamComparisonData {
@@ -31,7 +31,7 @@ interface TeamComparisonCardProps {
   onTeamClick?: (teamId: string) => void;
 }
 
-export const TeamComparisonCard = memo(function TeamComparisonCard({
+export function TeamComparisonCard({
   responses,
   responsesByTemplate,
   filters,
@@ -205,4 +205,4 @@ export const TeamComparisonCard = memo(function TeamComparisonCard({
       </CardContent>
     </Card>
   );
-});
+}

@@ -234,15 +234,22 @@ export class OrganizationService extends BaseService {
    */
   async getAllOrganizations(requestingUserId: string): Promise<Organization[]> {
     try {
+      console.log("🔍 getAllOrganizations called with userId:", requestingUserId);
+
       // Verify permissions
-      if (!(await this.isSiteAdmin(requestingUserId))) {
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      console.log("🔍 isSiteAdmin check result:", isSiteAdmin);
+
+      if (!isSiteAdmin) {
         throw new Error("Unauthorized: Only site administrators can view all organizations");
       }
 
       // Site admins need to see inactive orgs for reactivation functionality
-      return await this.storage.getOrganizations({ includeInactive: true });
+      const orgs = await this.storage.getOrganizations({ includeInactive: true });
+      console.log("🔍 Found organizations:", orgs.length);
+      return orgs;
     } catch (error) {
-      console.error("OrganizationService.getAllOrganizations:", error);
+      console.error("❌ OrganizationService.getAllOrganizations ERROR:", error);
       return [];
     }
   }

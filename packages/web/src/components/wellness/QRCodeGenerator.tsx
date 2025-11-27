@@ -29,9 +29,9 @@ export default function QRCodeGenerator({ request, isOpen, onClose }: QRCodeGene
           dark: '#000000',
           light: '#FFFFFF',
         },
-      }).then((url: string) => {
+      }).then((url) => {
         setQrCodeDataUrl(url);
-      }).catch((error: Error) => {
+      }).catch((error) => {
         console.error('Failed to generate QR code:', error);
         toast({
           title: 'Error',

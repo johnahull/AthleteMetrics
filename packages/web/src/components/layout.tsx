@@ -38,7 +38,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     '/forgot-password',
     '/reset-password',
     '/verify-email',
-    '/enhanced-login'
+    '/enhanced-login',
+    '/wellness/submit',
+    '/public/reports'
   ];
 
   const isPublicRoute = PUBLIC_ROUTES.some(route =>

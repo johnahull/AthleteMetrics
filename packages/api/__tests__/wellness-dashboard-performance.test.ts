@@ -18,7 +18,7 @@ import {
   wellnessRequests,
   wellnessResponses,
 } from '@shared/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 // Query counter for tracking database operations
 let queryCount = 0;
@@ -53,7 +53,6 @@ describe('Wellness Dashboard Performance', () => {
   let testAthleteIds: string[];
   let testTemplateId: string;
   let testDate: string;
-  const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
   beforeEach(async () => {
     // Set up test data: 1 org, 5 teams, 50 athletes (10 per team), 100 responses
@@ -61,7 +60,7 @@ describe('Wellness Dashboard Performance', () => {
 
     // Create organization (minimal fields to avoid schema issues)
     const [org] = await db.insert(organizations).values({
-      name: `Performance Test Org ${uniqueSuffix}`,
+      name: 'Performance Test Org',
     }).returning();
     testOrgId = org.id;
 
@@ -117,10 +116,8 @@ describe('Wellness Dashboard Performance', () => {
     for (let teamIdx = 0; teamIdx < 5; teamIdx++) {
       for (let athleteIdx = 0; athleteIdx < 10; athleteIdx++) {
         const [user] = await db.insert(users).values({
-          username: `athlete-${teamIdx}-${athleteIdx}-${uniqueSuffix}@test.com`,
+          username: `athlete-${teamIdx}-${athleteIdx}@test.com`,
           password: 'test',
-          firstName: `Athlete${teamIdx}`,
-          lastName: `Test${athleteIdx}`,
           fullName: `Athlete ${teamIdx}-${athleteIdx}`,
         }).returning();
         testAthleteIds.push(user.id);
@@ -179,24 +176,17 @@ describe('Wellness Dashboard Performance', () => {
   });
 
   afterEach(async () => {
-    // Clean up test data in correct foreign key order
-    stopQueryCounting();
+    // Clean up test data
     if (testOrgId) {
       await db.delete(wellnessResponses).where(eq(wellnessResponses.organizationId, testOrgId));
       await db.delete(wellnessRequests).where(eq(wellnessRequests.organizationId, testOrgId));
       await db.delete(wellnessTemplates).where(eq(wellnessTemplates.organizationId, testOrgId));
-      // Delete userTeams for ALL teams, not just the first one
-      if (testTeamIds && testTeamIds.length > 0) {
-        await db.delete(userTeams).where(inArray(userTeams.teamId, testTeamIds));
-      }
+      await db.delete(userTeams).where(eq(userTeams.teamId, testTeamIds[0])); // Will cascade
       await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, testOrgId));
       await db.delete(teams).where(eq(teams.organizationId, testOrgId));
       await db.delete(organizations).where(eq(organizations.id, testOrgId));
     }
-    // Delete test users
-    if (testAthleteIds && testAthleteIds.length > 0) {
-      await db.delete(users).where(inArray(users.id, testAthleteIds));
-    }
+    stopQueryCounting();
   });
 
   describe('Query Count Optimization', () => {
@@ -245,10 +235,15 @@ describe('Wellness Dashboard Performance', () => {
     }, 30000); // 30 second timeout for large dataset
 
     it('should batch fetch all team rosters in a single query', async () => {
-      // Test for batch roster fetch - verifies data structure works for all teams
-      // Note: Query counting via db.execute mock doesn't work with drizzle's select()
+      // Test for new batch method that doesn't exist yet
+      // This will fail until we implement getTeamRostersBatch
 
-      // Use the batch method signature expected from storage
+      startQueryCounting();
+
+      // Expected new method signature:
+      // const rosters = await storage.getTeamRostersBatch(testOrgId, testTeamIds);
+
+      // For now, simulate what we want
       const rosters = await db.select({
         teamId: userTeams.teamId,
         userId: userTeams.userId,
@@ -259,6 +254,10 @@ describe('Wellness Dashboard Performance', () => {
         .innerJoin(users, eq(users.id, userOrganizations.userId))
         .where(eq(userOrganizations.organizationId, testOrgId));
 
+      const totalQueries = getQueryCount();
+      stopQueryCounting();
+
+      expect(totalQueries).toBe(1); // Should be a single query
       expect(rosters.length).toBeGreaterThan(0);
 
       // Verify all teams are represented
@@ -267,14 +266,23 @@ describe('Wellness Dashboard Performance', () => {
     });
 
     it('should batch fetch all templates in a single query', async () => {
-      // Test for batch template fetch - verifies templates can be fetched efficiently
-      // Note: Query counting via db.execute mock doesn't work with drizzle's select()
+      // Test for new batch template fetch method
 
+      startQueryCounting();
+
+      // Expected new method signature:
+      // const templates = await storage.getWellnessTemplatesBatch([testTemplateId]);
+
+      // For now, test what we want
       const templates = await db
         .select()
         .from(wellnessTemplates)
         .where(eq(wellnessTemplates.id, testTemplateId));
 
+      const totalQueries = getQueryCount();
+      stopQueryCounting();
+
+      expect(totalQueries).toBe(1);
       expect(templates).toHaveLength(1);
     });
   });

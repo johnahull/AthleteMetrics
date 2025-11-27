@@ -60,11 +60,10 @@ test-results-testing/
 playwright-report/
 playwright-report-testing/
 playwright/.auth/
+tests/e2e/.auth/
 screenshots/
 screenshots-testing/
 .e2e-test-config.json
-.local-e2e-config.json
-tests/e2e/.local-e2e-config.json
 
 # Editor swap files
 *.swp

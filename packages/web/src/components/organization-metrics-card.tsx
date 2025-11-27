@@ -37,7 +37,8 @@ export default function OrganizationMetricsCard({
   const [customLabel, setCustomLabel] = useState("");
 
   // Fetch all site metrics (active only)
-  const { data: siteMetrics, isLoading: loadingSite } = useSiteMetrics(false);
+  // Pass organizationId to allow org admins to access metrics via /api/metrics endpoint
+  const { data: siteMetrics, isLoading: loadingSite } = useSiteMetrics(false, organizationId);
 
   // Fetch organization metrics
   const { data: orgMetrics, isLoading: loadingOrg } = useOrganizationMetrics(

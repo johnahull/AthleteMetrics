@@ -1,16 +1,5 @@
 import React, { useMemo, useState, useRef } from 'react';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ChartOptions
-} from 'chart.js';
+import type { ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import type {
   TrendData,
@@ -24,17 +13,7 @@ import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 import { getAthleteColor } from '@/utils/chart-constants';
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 interface LineChartProps {
   data: TrendData[];

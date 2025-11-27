@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useRef, useEffect, useCallback, useState } from 'react';
-import { Chart as ChartJS, CategoryScale, LinearScale, Title, Tooltip, Legend } from 'chart.js';
+import { Chart as ChartJS } from 'chart.js';
 import type { ChartDataPoint, ChartConfiguration, StatisticalSummary, GroupDefinition } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { useMetricConfig } from '@/hooks/use-metric-config';
@@ -13,7 +13,7 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { Button } from '@/components/ui/button';
 import { ChevronUpIcon, ChevronDownIcon } from 'lucide-react';
 
-ChartJS.register(CategoryScale, LinearScale, Title, Tooltip, Legend);
+// Chart.js components are registered globally in lib/chart-setup.ts
 
 // Chart configuration constants
 const VIOLIN_CHART_CONFIG = {

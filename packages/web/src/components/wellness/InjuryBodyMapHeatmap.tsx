@@ -1,4 +1,4 @@
-import { useMemo, memo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Slider } from '@/components/ui/slider';
@@ -50,7 +50,7 @@ interface InjuryFrequency {
   coords: { x: number; y: number };
 }
 
-export const InjuryBodyMapHeatmap = memo(function InjuryBodyMapHeatmap({
+export function InjuryBodyMapHeatmap({
   template,
   responses,
   filters,
@@ -301,4 +301,4 @@ export const InjuryBodyMapHeatmap = memo(function InjuryBodyMapHeatmap({
       </CardContent>
     </Card>
   );
-});
+}

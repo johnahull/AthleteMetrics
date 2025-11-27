@@ -1,7 +1,7 @@
-import { useMemo, memo, useRef, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Line } from 'react-chartjs-2';
-import type { Chart as ChartJS, ChartOptions } from 'chart.js';
+import type { ChartOptions } from 'chart.js';
 import type { WellnessResponse, WellnessTemplate } from '@shared/wellness-types';
 import { calculateAthleteStatus } from '@shared/wellness-status-utils';
 
@@ -21,18 +21,7 @@ interface DailyStatusBreakdown {
   total: number;
 }
 
-export const StatusTrendChart = memo(function StatusTrendChart({ template, responses, filters }: StatusTrendChartProps) {
-  // Chart ref for cleanup
-  const chartRef = useRef<ChartJS<'line'>>(null);
-
-  // Cleanup chart on unmount to prevent memory leaks
-  useEffect(() => {
-    return () => {
-      if (chartRef.current) {
-        chartRef.current.destroy();
-      }
-    };
-  }, []);
+export function StatusTrendChart({ template, responses, filters }: StatusTrendChartProps) {
   // Calculate daily status breakdowns
   const dailyBreakdowns = useMemo(() => {
     if (!responses || responses.length === 0) return [];
@@ -121,7 +110,7 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
     };
   }, [dailyBreakdowns]);
 
-  const options: ChartOptions<'line'> = useMemo(() => ({
+  const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
@@ -176,7 +165,7 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
       axis: 'x',
       intersect: false,
     },
-  }), [dailyBreakdowns]);
+  };
 
   // Calculate overall trend
   const overallTrend = useMemo(() => {
@@ -227,4 +216,4 @@ export const StatusTrendChart = memo(function StatusTrendChart({ template, respo
       </CardContent>
     </Card>
   );
-});
+}
