@@ -64,8 +64,21 @@ tests/e2e/.auth/
 screenshots/
 screenshots-testing/
 .e2e-test-config.json
+.local-e2e-config.json
+tests/e2e/.local-e2e-config.json
+.playwright-mcp/
 
 # Editor swap files
 *.swp
 *.swo
 *~
+
+# Development documentation and working files (should not be committed)
+.claude-todo.md
+AGENTS.md
+PHASE_*.md
+WELLNESS_*.md
+E2E_*.md
+*_COMPLETION.md
+*_IMPLEMENTATION*.md
+*_REFACTORING*.md
