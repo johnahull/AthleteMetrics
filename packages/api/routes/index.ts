@@ -16,6 +16,8 @@ import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
+import { registerWellnessRoutes } from "./wellness-routes";
+import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -61,6 +63,10 @@ export function registerAllRoutes(app: Express) {
   // Site settings routes (AI model configuration)
   app.use("/api/site-settings", siteSettingsRoutes);
 
+  // Wellness module routes
+  registerWellnessRoutes(app);
+  registerAdminWellnessRoutes(app);
+
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
 
@@ -83,8 +89,9 @@ export function getRouteStats() {
       metrics: "✅ Registered (new service)",
       benchmarks: "✅ Registered (new service)",
       reports: "✅ Registered (new service)",
+      wellness: "✅ Registered (new module)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 10/11 modules refactored"
+    status: "Migration nearly complete - 11/12 modules refactored"
   };
 }
