@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginWithCredentials } from './helpers/auth';
-import { getUserByRole } from './fixtures/test-users';
+import { getUserByRole, canTestRoleAuthorization } from './fixtures/test-users';
 
 /**
  * TIER 1 CRITICAL: Admin Bulk Verify/Unverify Tests
@@ -804,7 +804,14 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
   });
 
   test.describe('API-Level Authorization', () => {
+    // These tests require distinct users for each role to properly test authorization
+    // In CI with same-user mode (all roles share one account), these tests are skipped
+
     test('should reject bulk verify API calls from org_admin', async ({ page }) => {
+      // Skip if org_admin and site_admin share the same user (can't test RBAC)
+      test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+        'RBAC test skipped: org_admin and site_admin share same credentials in CI');
+
       // Login as org_admin
       const orgAdmin = getUserByRole('org_admin');
       await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
@@ -821,6 +828,10 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
     });
 
     test('should reject bulk verify API calls from coach', async ({ page }) => {
+      // Skip if coach and site_admin share the same user (can't test RBAC)
+      test.skip(!canTestRoleAuthorization('coach', 'site_admin'),
+        'RBAC test skipped: coach and site_admin share same credentials in CI');
+
       // Login as coach
       const coach = getUserByRole('coach');
       await loginWithCredentials(page, coach.username, coach.password);
@@ -837,6 +848,10 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
     });
 
     test('should reject bulk unverify API calls from org_admin', async ({ page }) => {
+      // Skip if org_admin and site_admin share the same user (can't test RBAC)
+      test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+        'RBAC test skipped: org_admin and site_admin share same credentials in CI');
+
       // Login as org_admin
       const orgAdmin = getUserByRole('org_admin');
       await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
@@ -853,6 +868,10 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
     });
 
     test('should reject bulk unverify API calls from coach', async ({ page }) => {
+      // Skip if coach and site_admin share the same user (can't test RBAC)
+      test.skip(!canTestRoleAuthorization('coach', 'site_admin'),
+        'RBAC test skipped: coach and site_admin share same credentials in CI');
+
       // Login as coach
       const coach = getUserByRole('coach');
       await loginWithCredentials(page, coach.username, coach.password);

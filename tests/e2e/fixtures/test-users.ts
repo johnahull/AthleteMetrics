@@ -93,3 +93,41 @@ export function hasUserCredentials(role: UserRole): boolean {
     return false;
   }
 }
+
+/**
+ * Check if roles can be properly differentiated for RBAC testing
+ *
+ * In CI environments, all role credentials may point to the same user,
+ * which makes RBAC authorization testing impossible (all roles are site admin).
+ *
+ * @param roles - Roles to check for differentiation
+ * @returns boolean - True if roles have different usernames (RBAC testable)
+ */
+export function canTestRoleAuthorization(...roles: UserRole[]): boolean {
+  try {
+    const usernames = new Set<string>();
+    for (const role of roles) {
+      const user = getUserByRole(role);
+      usernames.add(user.username);
+    }
+    // If all roles have different usernames, we can test RBAC
+    return usernames.size === roles.length;
+  } catch {
+    // If any role is missing credentials, RBAC testing isn't possible
+    return false;
+  }
+}
+
+/**
+ * Check if same-user mode is active (all roles share same credentials)
+ * This is common in CI environments where only one admin account exists.
+ *
+ * @returns boolean - True if all configured roles share the same username
+ */
+export function isSameUserMode(): boolean {
+  const configuredRoles = getAllTestUsers();
+  if (configuredRoles.length <= 1) return false;
+
+  const usernames = new Set(configuredRoles.map(u => u.username));
+  return usernames.size === 1;
+}
