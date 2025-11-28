@@ -86,6 +86,27 @@ beforeAll(async () => {
   const { registerSportsRoutes } = await import('../../packages/api/routes/sport-routes');
   registerSportsRoutes(app);
 
+  // Ensure SOCCER sport exists (may not exist if migration 0058 didn't run)
+  const existingSoccer = await db.select().from(siteSports).where(eq(siteSports.code, 'SOCCER')).limit(1);
+  if (existingSoccer.length === 0) {
+    // Create SOCCER sport with positions (mimics migration 0058 seeding)
+    const [soccer] = await db.insert(siteSports).values({
+      code: 'SOCCER',
+      name: 'Soccer',
+      description: 'Association football',
+      isSystemDefault: true,
+      isActive: true,
+    }).returning();
+
+    // Create default positions
+    await db.insert(sitePositions).values([
+      { sportId: soccer.id, code: 'F', name: 'Forward', shortName: 'FW', isSystemDefault: true, isActive: true },
+      { sportId: soccer.id, code: 'M', name: 'Midfielder', shortName: 'MF', isSystemDefault: true, isActive: true },
+      { sportId: soccer.id, code: 'D', name: 'Defender', shortName: 'DF', isSystemDefault: true, isActive: true },
+      { sportId: soccer.id, code: 'GK', name: 'Goalkeeper', shortName: 'GK', isSystemDefault: true, isActive: true },
+    ]);
+  }
+
   // Create test organization
   const [org] = await db.insert(organizations).values({
     name: `Sports Test Org ${Date.now()}`,
