@@ -295,15 +295,13 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
 
       // Check if request is active
       if (wellnessRequest.status !== 'active') {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness access denied: inactive request');
+        // SECURITY: Generic error message to prevent information disclosure
         return res.status(403).json({ message: genericError });
       }
 
       // Check if expired
       if (wellnessRequest.expiresAt && new Date() > new Date(wellnessRequest.expiresAt)) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness access denied: expired request');
+        // SECURITY: Generic error message to prevent information disclosure
         return res.status(403).json({ message: genericError });
       }
 
@@ -334,16 +332,14 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       }
 
       if (!isTargetedDirectly && !isTargetedViaTeam) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness access denied: athlete not in target list');
+        // SECURITY: Generic error message to prevent information disclosure
         return res.status(403).json({ message: genericError });
       }
 
       // Get athlete details for user context
       const athlete = await storage.getUser(athleteId);
       if (!athlete) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness access denied: athlete not found');
+        // SECURITY: Generic error message to prevent information disclosure
         return res.status(403).json({ message: genericError });
       }
 

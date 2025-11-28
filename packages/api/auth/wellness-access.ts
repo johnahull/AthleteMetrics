@@ -115,23 +115,20 @@ export class WellnessAccessService {
 
       // Check request status
       if (request.status !== 'active') {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness request validation failed: inactive request');
+        // SECURITY: Generic error message to prevent information disclosure
         return { valid: false, error: genericError };
       }
 
       // Check expiration
       if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness request validation failed: expired request');
+        // SECURITY: Generic error message to prevent information disclosure
         return { valid: false, error: genericError };
       }
 
       // Validate athlete exists
       const athlete = await storage.getUser(athleteId);
       if (!athlete) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness request validation failed: athlete not found');
+        // SECURITY: Generic error message to prevent information disclosure
         return { valid: false, error: genericError };
       }
 
@@ -156,8 +153,7 @@ export class WellnessAccessService {
       }
 
       if (!isTargeted) {
-        // SECURITY: Generic logging to prevent information disclosure
-        console.log('Wellness request validation failed: athlete not in target list');
+        // SECURITY: Generic error message to prevent information disclosure
         return { valid: false, error: genericError };
       }
 
