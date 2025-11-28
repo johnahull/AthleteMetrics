@@ -18,7 +18,8 @@ import {
   ClipboardList,
   Activity,
   Heart,
-  ClipboardCheck
+  ClipboardCheck,
+  Trophy
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -38,6 +39,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
       { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
+      { name: "Sports", href: "/sports", icon: Trophy, testId: "sports-menu-item" },
       { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
       { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
     ],

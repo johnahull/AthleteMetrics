@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
@@ -11,10 +11,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertAthleteSchema, Gender, SoccerPosition, AVAILABLE_SPORTS, type InsertAthlete, type User, type Team } from "@shared/schema";
+import { insertAthleteSchema, Gender, type InsertAthlete, type User, type Team } from "@shared/schema";
 import { Plus, Trash2, Mail, Phone, Trophy, Users, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useSports, usePositionsForSports } from "@/lib/sports-api";
 
 interface AthleteModalProps {
   isOpen: boolean;
@@ -32,6 +33,9 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
   const [showCreateTeam, setShowCreateTeam] = useState(false);
   const [newTeamName, setNewTeamName] = useState("");
   const [newTeamLevel, setNewTeamLevel] = useState<"Club" | "HS" | "College">("Club");
+
+  // Fetch available sports from the API
+  const { data: sports = [], isLoading: sportsLoading } = useSports();
 
   const form = useForm<InsertAthlete>({
     resolver: zodResolver(insertAthleteSchema),
@@ -76,6 +80,16 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
     name: "sports" as never,
   });
 
+  // Watch selected sports to fetch their positions
+  const watchedSports = form.watch("sports") || [];
+  const selectedSportCodes = useMemo(() =>
+    watchedSports.filter((s: string) => s && s.trim() !== ""),
+    [watchedSports]
+  );
+
+  // Fetch positions for all selected sports
+  const { data: positionsByCode = {}, isLoading: positionsLoading } = usePositionsForSports(selectedSportCodes);
+
   // Fetch teams for the user's organization
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams", organizationContext],
@@ -99,10 +113,10 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
         birthDate: athlete.birthDate || "",
         graduationYear: athlete.graduationYear || undefined,
         school: athlete.school || "",
-        sports: (athlete.sports || []).filter((s): s is "Soccer" => s === "Soccer"),
-        positions: (athlete.positions || []).filter((p): p is "F" | "M" | "D" | "GK" =>
-          ["F", "M", "D", "GK"].includes(p)
-        ),
+        // Accept any sport codes - no longer filtering to just "Soccer"
+        sports: (athlete.sports || []).filter((s): s is string => typeof s === "string" && s.trim() !== ""),
+        // Accept any position codes - no longer filtering to just F/M/D/GK
+        positions: (athlete.positions || []).filter((p): p is string => typeof p === "string" && p.trim() !== ""),
         phoneNumbers: athlete.phoneNumbers || [],
         gender: athlete.gender || undefined,
       });
@@ -512,17 +526,17 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                       render={({ field }) => (
                         <FormItem className="flex-1">
                           <FormControl>
-                            <Select 
-                              value={field.value || ""} 
+                            <Select
+                              value={field.value || ""}
                               onValueChange={field.onChange}
-                              disabled={isPending}
+                              disabled={isPending || sportsLoading}
                             >
                               <SelectTrigger data-testid={`select-sport-${index}`}>
-                                <SelectValue placeholder="Select sport" />
+                                <SelectValue placeholder={sportsLoading ? "Loading sports..." : "Select sport"} />
                               </SelectTrigger>
                               <SelectContent>
-                                {AVAILABLE_SPORTS.map((sport) => (
-                                  <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                                {sports.map((sport) => (
+                                  <SelectItem key={sport.code} value={sport.code}>{sport.name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -548,7 +562,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                   variant="outline"
                   size="sm"
                   onClick={() => appendSport("")}
-                  disabled={isPending}
+                  disabled={isPending || sportsLoading}
                   data-testid="button-add-sport"
                 >
                   <Plus className="h-4 w-4 mr-2" />
@@ -557,48 +571,66 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
               </div>
             </FormItem>
 
-            {/* Soccer Positions */}
-            {sportsFields.some((field: any) => field.value === "Soccer") && (
+            {/* Dynamic Positions for Selected Sports */}
+            {selectedSportCodes.length > 0 && Object.keys(positionsByCode).some(code => positionsByCode[code]?.length > 0) && (
               <FormItem>
                 <FormLabel className="flex items-center">
                   <Trophy className="h-4 w-4 mr-2" />
-                  Soccer Positions
+                  Positions
+                  {positionsLoading && <span className="ml-2 text-xs text-muted-foreground">(Loading...)</span>}
                 </FormLabel>
-                <div className="grid grid-cols-2 gap-2">
-                  {Object.entries(SoccerPosition).map(([key, value]) => (
-                    <FormField
-                      key={key}
-                      control={form.control}
-                      name="positions"
-                      render={({ field }) => {
-                        return (
-                          <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                            <FormControl>
-                              <Checkbox
-                                checked={field.value?.includes(value) || false}
-                                onCheckedChange={(checked) => {
-                                  const currentPositions = field.value || [];
-                                  if (checked) {
-                                    field.onChange([...currentPositions, value]);
-                                  } else {
-                                    field.onChange(
-                                      currentPositions.filter((pos: string) => pos !== value)
-                                    );
-                                  }
-                                }}
-                                data-testid={`checkbox-position-${value}`}
-                              />
-                            </FormControl>
-                            <FormLabel className="text-sm font-normal">
-                              {value} - {key === 'FORWARD' ? 'Forward' : 
-                                      key === 'MIDFIELDER' ? 'Midfielder' :
-                                      key === 'DEFENDER' ? 'Defender' : 'Goalkeeper'}
-                            </FormLabel>
-                          </FormItem>
-                        )
-                      }}
-                    />
-                  ))}
+                <div className="space-y-4">
+                  {selectedSportCodes.map((sportCode) => {
+                    const sportPositions = positionsByCode[sportCode] || [];
+                    if (sportPositions.length === 0) return null;
+
+                    // Get sport name from the sports list
+                    const sport = sports.find(s => s.code === sportCode);
+                    const sportName = sport?.name || sportCode;
+
+                    return (
+                      <div key={sportCode} className="space-y-2">
+                        <div className="text-sm font-medium text-muted-foreground">
+                          {sportName}
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          {sportPositions.map((position) => (
+                            <FormField
+                              key={position.id}
+                              control={form.control}
+                              name="positions"
+                              render={({ field }) => {
+                                return (
+                                  <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+                                    <FormControl>
+                                      <Checkbox
+                                        checked={field.value?.includes(position.code) || false}
+                                        onCheckedChange={(checked) => {
+                                          const currentPositions = field.value || [];
+                                          if (checked) {
+                                            field.onChange([...currentPositions, position.code]);
+                                          } else {
+                                            field.onChange(
+                                              currentPositions.filter((pos: string) => pos !== position.code)
+                                            );
+                                          }
+                                        }}
+                                        disabled={isPending}
+                                        data-testid={`checkbox-position-${position.code}`}
+                                      />
+                                    </FormControl>
+                                    <FormLabel className="text-sm font-normal">
+                                      {position.shortName || position.code} - {position.name}
+                                    </FormLabel>
+                                  </FormItem>
+                                )
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
                 <FormMessage />
               </FormItem>
