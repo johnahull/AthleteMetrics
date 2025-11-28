@@ -115,20 +115,23 @@ export class WellnessAccessService {
 
       // Check request status
       if (request.status !== 'active') {
-        console.log(`Wellness request ${request.id} is not active (status: ${request.status})`);
+        // SECURITY: Generic logging to prevent information disclosure
+        console.log('Wellness request validation failed: inactive request');
         return { valid: false, error: genericError };
       }
 
       // Check expiration
       if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
-        console.log(`Wellness request ${request.id} has expired`);
+        // SECURITY: Generic logging to prevent information disclosure
+        console.log('Wellness request validation failed: expired request');
         return { valid: false, error: genericError };
       }
 
       // Validate athlete exists
       const athlete = await storage.getUser(athleteId);
       if (!athlete) {
-        console.log(`Athlete ${athleteId} not found for wellness request ${request.id}`);
+        // SECURITY: Generic logging to prevent information disclosure
+        console.log('Wellness request validation failed: athlete not found');
         return { valid: false, error: genericError };
       }
 
@@ -153,13 +156,14 @@ export class WellnessAccessService {
       }
 
       if (!isTargeted) {
-        console.log(`Athlete ${athleteId} is not targeted by wellness request ${request.id}`);
+        // SECURITY: Generic logging to prevent information disclosure
+        console.log('Wellness request validation failed: athlete not in target list');
         return { valid: false, error: genericError };
       }
 
       // If requiresAuth is true, verify athlete has account
       if (request.requiresAuth) {
-        console.log(`Wellness request ${request.id} requires authentication`);
+        // SECURITY: This is user-facing message, not internal logging
         return { valid: false, error: 'This questionnaire requires authentication. Please log in.' };
       }
 
