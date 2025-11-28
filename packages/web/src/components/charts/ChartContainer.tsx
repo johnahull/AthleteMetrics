@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
-import { AlertTriangle, Download, Maximize2, FileText, Image, Clipboard } from 'lucide-react';
+import { AlertTriangle, Download, Maximize2, FileText, Image, Clipboard, Share2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -25,6 +25,7 @@ import type {
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getChartDataForType } from './chartDataUtils';
+import type { ExportFormat, ShareResult } from '@/lib/chartExport';
 
 // Chart height constants for consistent sizing across chart types
 // Heights are optimized for each chart type's specific display needs
@@ -71,7 +72,38 @@ const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmCha
 const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
 
-export type ExportFormat = 'csv' | 'png' | 'clipboard';
+// Re-export ExportFormat from chartExport for backwards compatibility
+export type { ExportFormat };
+
+// Lazy initialization for Web Share API file support check
+// This avoids creating File objects until first access and handles potential
+// race conditions with module initialization
+let _isShareApiAvailable: boolean | null = null;
+
+const checkShareAvailability = (): boolean => {
+  if (typeof navigator === 'undefined' || !navigator.share) {
+    return false;
+  }
+  // Check if canShare exists and supports file sharing
+  if (typeof navigator.canShare === 'function') {
+    try {
+      // Test if file sharing is supported
+      const testFile = new File(['test'], 'test.png', { type: 'image/png' });
+      return navigator.canShare({ files: [testFile] });
+    } catch {
+      return false;
+    }
+  }
+  return false;
+};
+
+// Lazy getter for share availability - initializes on first access
+const getShareAvailability = (): boolean => {
+  if (_isShareApiAvailable === null) {
+    _isShareApiAvailable = checkShareAvailability();
+  }
+  return _isShareApiAvailable;
+};
 
 interface ChartContainerProps {
   title: string;
@@ -91,7 +123,7 @@ interface ChartContainerProps {
   selectedDates?: string[];
   metric?: string;
   selectedGroups?: GroupDefinition[];
-  onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => void;
+  onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => Promise<ShareResult | void> | void;
   onFullscreen?: () => void;
   className?: string;
 }
@@ -150,19 +182,41 @@ export function ChartContainer({
            window.isSecureContext;
   }, []);
 
+  // Use lazy-initialized Web Share API availability check
+  const isShareAvailable = getShareAvailability();
+
   // Handle export with format selection and user feedback
   const handleExport = async (format: ExportFormat) => {
     if (!onExport) return;
 
     setIsExporting(true);
     try {
-      await onExport(format, undefined, containerRef.current);
+      const result = await onExport(format, undefined, containerRef.current);
 
-      // Show success toast
-      const formatNames = {
+      // Handle share result specially
+      if (format === 'share' && result && typeof result === 'object' && 'action' in result) {
+        const shareResult = result as ShareResult;
+
+        if (shareResult.action === 'cancelled') {
+          // User cancelled - no toast needed
+          return;
+        }
+
+        toast({
+          title: shareResult.action === 'shared' ? 'Shared successfully' : 'Copied to clipboard',
+          description: shareResult.action === 'shared'
+            ? 'Chart shared via your device'
+            : 'Chart copied to clipboard (Web Share not available on this device)'
+        });
+        return;
+      }
+
+      // Show success toast for other formats
+      const formatNames: Record<ExportFormat, string> = {
         csv: 'CSV data',
         png: 'PNG image',
-        clipboard: 'Clipboard'
+        clipboard: 'Clipboard',
+        share: 'Share'
       };
 
       toast({
@@ -371,6 +425,12 @@ export function ChartContainer({
                   <DropdownMenuItem onClick={() => handleExport('clipboard')} disabled={isExporting}>
                     <Clipboard className="mr-2 h-4 w-4" />
                     <span>Copy to Clipboard</span>
+                  </DropdownMenuItem>
+                )}
+                {isShareAvailable && (
+                  <DropdownMenuItem onClick={() => handleExport('share')} disabled={isExporting} aria-label="Share chart">
+                    <Share2 className="mr-2 h-4 w-4" />
+                    <span>Share Chart</span>
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>

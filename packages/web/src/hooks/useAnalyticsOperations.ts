@@ -320,7 +320,7 @@ export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
 
   const handleExport = useCallback(async (
-    format: 'csv' | 'png' | 'clipboard',
+    format: 'csv' | 'png' | 'clipboard' | 'share',
     chartRef?: any,
     containerRef?: HTMLElement | null
   ) => {
@@ -333,14 +333,19 @@ export function useAnalyticsExport() {
       exportAnalyticsDataAsCSV,
       exportChartAsPNG,
       copyChartToClipboard,
+      shareChart,
       generateExportFilename
     } = await import('@/lib/chartExport');
 
     const filename = generateExportFilename(
       state.selectedChartType,
       state.metrics,
-      format
+      format === 'share' ? 'png' : format
     );
+
+    // Generate title for sharing using display label from METRIC_CONFIG
+    const primaryLabel = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
+    const chartTitle = `${primaryLabel} Performance Chart`;
 
     switch (format) {
       case 'csv':
@@ -369,6 +374,22 @@ export function useAnalyticsExport() {
           throw new Error('Container not available for clipboard copy');
         }
         break;
+
+      case 'share':
+        if (containerRef) {
+          const result = await shareChart(containerRef, chartTitle, filename);
+          devLog.log('Chart share completed:', { filename, action: result.action });
+          // Return the result so caller can show appropriate message
+          return result;
+        } else {
+          throw new Error('Container not available for share');
+        }
+
+      default: {
+        // Exhaustive check - this should never happen if all ExportFormat cases are handled
+        const _exhaustiveCheck: never = format;
+        throw new Error(`Unhandled export format: ${_exhaustiveCheck}`);
+      }
     }
   }, [state.analyticsData, state.selectedChartType, state.metrics]);
 

@@ -18,8 +18,10 @@ import { useAuth } from "@/lib/auth";
 import type { Team, ArchiveTeam } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KPICardSkeleton } from "@/components/ui/loading-states";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function Teams() {
+  const labels = useContextualLabels(); // Get contextual labels
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [archivingTeam, setArchivingTeam] = useState<Team | null>(null);
@@ -73,13 +75,13 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
       toast({
         title: "Success",
-        description: "Team deleted successfully",
+        description: `${labels.team} deleted successfully`,
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to delete team",
+        description: `Failed to delete ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -97,14 +99,14 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
       toast({
         title: "Success",
-        description: "Team archived successfully",
+        description: `${labels.team} archived successfully`,
       });
       setArchivingTeam(null);
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to archive team",
+        description: `Failed to archive ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -119,13 +121,13 @@ export default function Teams() {
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
       toast({
         title: "Success",
-        description: "Team unarchived successfully",
+        description: `${labels.team} unarchived successfully`,
       });
     },
     onError: () => {
       toast({
         title: "Error",
-        description: "Failed to unarchive team",
+        description: `Failed to unarchive ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -183,7 +185,7 @@ export default function Teams() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex flex-col space-y-2">
-          <h1 className="text-2xl font-semibold text-gray-900">Teams Management</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">{labels.teams} Management</h1>
           <div className="flex items-center gap-4">
             <div className="flex items-center space-x-2">
               <Checkbox
@@ -192,23 +194,23 @@ export default function Teams() {
                 onCheckedChange={(checked) => setShowArchived(checked === true)}
                 data-testid="checkbox-show-archived"
               />
-              <Label htmlFor="show-archived" className="text-sm">Show archived teams</Label>
+              <Label htmlFor="show-archived" className="text-sm">Show archived {labels.teams.toLowerCase()}</Label>
             </div>
-            
+
             {showArchived && archivedTeamsCount > 0 && (
               <Badge variant="secondary" className="text-xs">
-                {archivedTeamsCount} archived team{archivedTeamsCount !== 1 ? 's' : ''} shown
+                {archivedTeamsCount} archived {labels.team.toLowerCase()}{archivedTeamsCount !== 1 ? 's' : ''} shown
               </Badge>
             )}
           </div>
         </div>
-        <Button 
+        <Button
           onClick={() => setShowAddModal(true)}
           className="bg-primary hover:bg-blue-700"
           data-testid="button-add-team"
         >
           <Plus className="h-4 w-4 mr-2" />
-          Add Team
+          Add {labels.team}
         </Button>
       </div>
 
@@ -247,7 +249,7 @@ export default function Teams() {
                   <DropdownMenuContent align="end">
                     <DropdownMenuItem onClick={() => setEditingTeam(team)} data-testid={`menu-edit-team-${team.id}`}>
                       <Edit className="h-4 w-4 mr-2" />
-                      Edit Team
+                      Edit {labels.team}
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onClick={() => setManagingAthletes({ team, defaultTab: 'current' })}
@@ -255,35 +257,35 @@ export default function Teams() {
                       disabled={isArchived}
                     >
                       <Settings className="h-4 w-4 mr-2" />
-                      Manage Athletes
+                      Manage {labels.athletes}
                     </DropdownMenuItem>
                     {isArchived ? (
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={() => unarchiveTeamMutation.mutate(team.id)}
                         disabled={unarchiveTeamMutation.isPending}
                         data-testid={`menu-unarchive-team-${team.id}`}
                       >
                         <RotateCcw className="h-4 w-4 mr-2" />
-                        {unarchiveTeamMutation.isPending ? "Unarchiving..." : "Unarchive Team"}
+                        {unarchiveTeamMutation.isPending ? "Unarchiving..." : `Unarchive ${labels.team}`}
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={() => setArchivingTeam(team)}
                         disabled={archiveTeamMutation.isPending}
                         data-testid={`menu-archive-team-${team.id}`}
                       >
                         <Archive className="h-4 w-4 mr-2" />
-                        Archive Team
+                        Archive {labels.team}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem 
+                    <DropdownMenuItem
                       onClick={() => handleDeleteTeam(team.id, team.name)}
                       className="text-red-600 focus:text-red-600"
                       data-testid={`menu-delete-team-${team.id}`}
                     >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete Team
+                      Delete {labels.team}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -295,7 +297,7 @@ export default function Teams() {
 
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-600">Athletes</span>
+                    <span className="text-sm text-gray-600">{labels.athletes}</span>
                     <span className="text-sm font-medium">{stats.athleteCount}</span>
                   </div>
                   {stats.latestTest && (
@@ -325,14 +327,14 @@ export default function Teams() {
                 )}
 
                 <div className="mt-4 pt-4 border-t border-gray-100">
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     className="w-full text-primary hover:bg-blue-50"
                     onClick={() => setLocation(`/athletes?teamId=${team.id}`)}
                     data-testid={`button-view-athletes-${team.id}`}
                   >
                     <Users className="h-4 w-4 mr-2" />
-                    View Athletes
+                    View {labels.athletes}
                   </Button>
                 </div>
               </CardContent>
@@ -345,16 +347,16 @@ export default function Teams() {
             <Card className="bg-gray-50 border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Users className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No teams yet</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No {labels.teams.toLowerCase()} yet</h3>
                 <p className="text-gray-600 text-center mb-4">
-                  Get started by adding your first team to track athlete performance.
+                  Get started by adding your first {labels.team.toLowerCase()} to track {labels.athlete.toLowerCase()} performance.
                 </p>
-                <Button 
+                <Button
                   onClick={() => setShowAddModal(true)}
                   data-testid="button-add-first-team"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Team
+                  Add {labels.team}
                 </Button>
               </CardContent>
             </Card>
@@ -366,24 +368,24 @@ export default function Teams() {
             <Card className="bg-gray-50 border-dashed">
               <CardContent className="flex flex-col items-center justify-center py-12">
                 <Archive className="h-12 w-12 text-gray-400 mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">All teams are archived</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">All {labels.teams.toLowerCase()} are archived</h3>
                 <p className="text-gray-600 text-center mb-4">
-                  Enable "Show archived teams" to view them, or add a new team.
+                  Enable "Show archived {labels.teams.toLowerCase()}" to view them, or add a new {labels.team.toLowerCase()}.
                 </p>
                 <div className="flex gap-2">
-                  <Button 
+                  <Button
                     variant="outline"
                     onClick={() => setShowArchived(true)}
                     data-testid="button-show-archived-teams"
                   >
-                    Show Archived Teams
+                    Show Archived {labels.teams}
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => setShowAddModal(true)}
                     data-testid="button-add-new-team"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Add Team
+                    Add {labels.team}
                   </Button>
                 </div>
               </CardContent>

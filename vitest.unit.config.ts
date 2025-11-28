@@ -40,6 +40,9 @@ export default mergeConfig(
         'tests/invitation/**',
         'tests/import/import-flow-integration.test.ts',
         'tests/import/import-security.test.ts',
+
+        // API integration tests that require database
+        'packages/api/__tests__/organization-type-api.test.ts',
       ],
     },
   })

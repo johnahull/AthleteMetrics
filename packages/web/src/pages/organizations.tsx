@@ -19,11 +19,13 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { mutations, type ApiError } from "@/lib/api";
 import DeleteOrganizationModal from "@/components/delete-organization-modal";
+import { OrganizationTypeBadge, OrganizationTypeSelector } from "@/components/organization-type-selector";
 
 type Organization = {
   id: string;
   name: string;
   description?: string;
+  orgType?: string;
   isActive: boolean;
   createdAt: string;
 };
@@ -31,6 +33,7 @@ type Organization = {
 const organizationSchema = z.object({
   name: z.string().min(1, "Organization name is required"),
   description: z.string().optional(),
+  orgType: z.string().min(1, "Organization type is required"),
 });
 
 export default function Organizations() {
@@ -40,6 +43,7 @@ export default function Organizations() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [orgToDelete, setOrgToDelete] = useState<Organization | null>(null);
   const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "all">("active");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [, setLocation] = useLocation();
   const { user, setOrganizationContext } = useAuth();
 
@@ -52,6 +56,7 @@ export default function Organizations() {
     defaultValues: {
       name: "",
       description: "",
+      orgType: "club", // Default to club based on schema
     },
   });
 
@@ -193,12 +198,21 @@ export default function Organizations() {
     }
   }, [user, organizations, setLocation]);
 
-  // Filter organizations based on status filter
+  // Filter organizations based on status and type filters
   // Explicit boolean checks to avoid undefined/null edge cases
   const filteredOrganizations = organizations?.filter(org => {
-    if (statusFilter === "active") return org.isActive === true;
-    if (statusFilter === "inactive") return org.isActive === false;
-    return true; // "all"
+    // Status filter
+    let statusMatch = true;
+    if (statusFilter === "active") statusMatch = org.isActive === true;
+    if (statusFilter === "inactive") statusMatch = org.isActive === false;
+    
+    // Type filter
+    let typeMatch = true;
+    if (typeFilter !== "all") {
+      typeMatch = org.orgType === typeFilter;
+    }
+    
+    return statusMatch && typeMatch;
   }) || [];
 
   return (
@@ -222,16 +236,32 @@ export default function Organizations() {
               </div>
               <div className="flex items-center gap-2">
                 {user?.isSiteAdmin && (
-                  <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "active" | "inactive" | "all")}>
-                    <SelectTrigger className="w-[180px]" data-testid="status-filter">
-                      <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="active">Active Organizations</SelectItem>
-                      <SelectItem value="inactive">Inactive Organizations</SelectItem>
-                      <SelectItem value="all">All Organizations</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <>
+                    <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as "active" | "inactive" | "all")}>
+                      <SelectTrigger className="w-[180px]" data-testid="status-filter">
+                        <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active Organizations</SelectItem>
+                        <SelectItem value="inactive">Inactive Organizations</SelectItem>
+                        <SelectItem value="all">All Organizations</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Select value={typeFilter} onValueChange={setTypeFilter}>
+                      <SelectTrigger className="w-[200px]" data-testid="org-type-filter">
+                        <SelectValue placeholder="Filter by type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Organization Types</SelectItem>
+                        <SelectItem value="youth">Youth/Recreational Only</SelectItem>
+                        <SelectItem value="high_school">High School Only</SelectItem>
+                        <SelectItem value="college">College/University Only</SelectItem>
+                        <SelectItem value="club">Club/Travel Team Only</SelectItem>
+                        <SelectItem value="private_facility">Private Training Facility Only</SelectItem>
+                        <SelectItem value="elite_academy">Elite Academy Only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
                 )}
                 <Dialog open={orgDialogOpen} onOpenChange={setOrgDialogOpen}>
                 <DialogTrigger asChild>
@@ -273,6 +303,15 @@ export default function Organizations() {
                             </FormControl>
                             <FormMessage />
                           </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={orgForm.control}
+                        name="orgType"
+                        render={({ field }) => (
+                          <div data-testid="create-org-type-selector">
+                            <OrganizationTypeSelector field={field} showDescription={false} />
+                          </div>
                         )}
                       />
                       <div className="flex justify-end space-x-2">
@@ -317,6 +356,9 @@ export default function Organizations() {
                         >
                           {org.name}
                         </h3>
+                        <OrganizationTypeBadge 
+                          orgType={org.orgType as any}
+                        />
                         {org.isActive === false && (
                           <Badge variant="secondary" className="bg-gray-200 text-gray-700">
                             Inactive
@@ -411,9 +453,9 @@ export default function Organizations() {
 
               {!filteredOrganizations.length && (
                 <p className="text-gray-500 text-center py-8">
-                  {statusFilter === "active" ? "No active organizations found" :
-                   statusFilter === "inactive" ? "No inactive organizations found" :
-                   "No organizations created yet"}
+                  {(statusFilter !== "all" || typeFilter !== "all") 
+                    ? "No organizations found matching the current filters" 
+                    : "No organizations created yet"}
                 </p>
               )}
             </div>

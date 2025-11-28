@@ -17,6 +17,7 @@ import { getAvailableSeasons, formatSeasonForDisplay } from "@/utils/seasons";
 import { sanitizeSearchTerm } from "@shared/input-sanitization";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import type { Team, User } from "@shared/schema";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 // Extended User type for team management with memberships
 interface UserWithTeamMemberships extends User {
@@ -42,6 +43,7 @@ interface TeamAthletesModalProps {
 }
 
 export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 'current' }: TeamAthletesModalProps) {
+  const labels = useContextualLabels();
   const [activeTab, setActiveTab] = useState(defaultTab);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPlayerIds, setSelectedPlayerIds] = useState<string[]>([]);
@@ -290,7 +292,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       toast({
         title: "Error",
-        description: error.message || "Failed to remove athlete from team",
+        description: error.message || `Failed to remove athlete from ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -530,7 +532,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
 
       toast({
         title: "Error",
-        description: error.message || "Failed to remove athletes from team",
+        description: error.message || `Failed to remove athletes from ${labels.team.toLowerCase()}`,
         variant: "destructive",
       });
     },
@@ -644,10 +646,10 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-red-600">
                 <Users className="h-5 w-5" />
-                Team Management Error
+                {labels.team} Management Error
               </DialogTitle>
               <DialogDescription>
-                Something went wrong while loading the team management interface. Please try again.
+                Something went wrong while loading the {labels.team.toLowerCase()} management interface. Please try again.
               </DialogDescription>
             </DialogHeader>
             <div className="flex justify-end pt-4">
@@ -667,17 +669,17 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
         <DialogHeader>
           <DialogTitle id="team-athletes-title" className="flex items-center gap-2">
             <Users className="h-5 w-5" aria-hidden="true" />
-            Team Athletes - {team.name}
+            {labels.team} Athletes - {team.name}
           </DialogTitle>
           <DialogDescription id="team-athletes-description">
-            Manage current team members and add new athletes to the team.
+            Manage current {labels.team.toLowerCase()} members and add new athletes to the {labels.team.toLowerCase()}.
           </DialogDescription>
         </DialogHeader>
 
         <Tabs
           value={activeTab}
           onValueChange={(value) => setActiveTab(value as 'current' | 'add')}
-          aria-label="Team management tabs"
+          aria-label={`${labels.team} management tabs`}
         >
           <TabsList className="grid w-full grid-cols-2" role="tablist">
             <TabsTrigger
@@ -785,7 +787,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             <div
               className="space-y-2 max-h-96 overflow-y-auto"
               role="list"
-              aria-label="Current team athletes"
+              aria-label={`Current ${labels.team.toLowerCase()} athletes`}
             >
               {isLoadingCurrent ? (
                 <div className="flex items-center justify-center py-8">
@@ -798,9 +800,9 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     {currentAthletes.length === 0 ? (
                       <>
                         <Users className="h-12 w-12 text-gray-400 mb-4" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this team</h3>
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">No athletes on this {labels.team.toLowerCase()}</h3>
                         <p className="text-gray-600 text-center mb-4">
-                          This team doesn't have any athletes yet. Switch to "Add Athletes" to add some.
+                          This {labels.team.toLowerCase()} doesn't have any athletes yet. Switch to "Add Athletes" to add some.
                         </p>
                         <Button onClick={() => setActiveTab('add')} variant="outline">
                           <UserPlus className="h-4 w-4 mr-2" />
@@ -888,7 +890,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                             onClick={() => handleRemoveAthlete(athlete.id, athlete.fullName || `${athlete.firstName} ${athlete.lastName}`)}
                             className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
                             disabled={isPending}
-                            aria-label={`Remove ${athlete.firstName} ${athlete.lastName} from team`}
+                            aria-label={`Remove ${athlete.firstName} ${athlete.lastName} from ${labels.team.toLowerCase()}`}
                           >
                             <UserMinus className="h-4 w-4" aria-hidden="true" />
                             <span className="sr-only">Remove</span>
@@ -1001,7 +1003,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                     Select All Available
                   </Button>
                   <div id="select-all-description" className="sr-only">
-                    Select all {availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to team
+                    Select all {availableAthletes.filter((a: UserWithTeamMemberships) => !isAthleteOnTeam(a)).length} available athletes for adding to {labels.team.toLowerCase()}
                   </div>
                   <Button
                     variant="outline"
@@ -1061,7 +1063,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                             checked={isSelected}
                             onCheckedChange={(checked) => handleAthleteSelection(athlete.id, checked === true)}
                             disabled={isPending || isOnTeam}
-                            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athlete.firstName} ${athlete.lastName}${isOnTeam ? ' (already on team)' : ''}`}
+                            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${athlete.firstName} ${athlete.lastName}${isOnTeam ? ` (already on ${labels.team.toLowerCase()})` : ''}`}
                           />
                           <div
                             className="w-10 h-10 bg-primary rounded-full flex items-center justify-center"
@@ -1080,7 +1082,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
                               {isOnTeam && (
                                 <Badge variant="secondary" className="text-xs flex items-center gap-1">
                                   <UserCheck className="h-3 w-3" />
-                                  On Team
+                                  On {labels.team}
                                 </Badge>
                               )}
                             </div>
@@ -1173,7 +1175,7 @@ export default function TeamAthletesModal({ isOpen, onClose, team, defaultTab = 
             variant="outline"
             onClick={onClose}
             disabled={isPending}
-            aria-label="Close team athletes modal"
+            aria-label={`Close ${labels.team.toLowerCase()} athletes modal`}
           >
             Done
           </Button>

@@ -9,6 +9,7 @@ describe('Benchmark Storage', () => {
   let siteAdminUserId: string;
   let testMetricCode: string;
   let createdBenchmarkIds: string[] = [];
+  let uniqueSuffix: string;
 
   beforeAll(async () => {
     // Safety check: prevent running tests against production database
@@ -24,7 +25,7 @@ describe('Benchmark Storage', () => {
     createdBenchmarkIds = [];
 
     // Create unique suffix to avoid race conditions
-    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     // Create test organization
     const [org] = await db.insert(organizations).values({
@@ -83,7 +84,7 @@ describe('Benchmark Storage', () => {
     it('should create a site benchmark and return it', async () => {
       const benchmarkData = {
         metricCode: testMetricCode,
-        name: 'Elite Speed Test',
+        name: `Elite Speed Test ${uniqueSuffix}`,
         description: 'Test benchmark for elite speed',
         benchmarkValue: 1.00,
         comparisonOperator: 'lte' as const,
@@ -99,7 +100,7 @@ describe('Benchmark Storage', () => {
       expect(created).toBeDefined();
       expect(created.id).toBeDefined();
       expect(created.metricCode).toBe(testMetricCode);
-      expect(created.name).toBe('Elite Speed Test');
+      expect(created.name).toBe(`Elite Speed Test ${uniqueSuffix}`);
       expect(created.benchmarkValue).toBe('1.000'); // Decimal returned as string
       expect(created.comparisonOperator).toBe('lte');
       expect(created.createdBy).toBe(siteAdminUserId);
@@ -112,7 +113,7 @@ describe('Benchmark Storage', () => {
       // Create a benchmark first
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Test Benchmark',
+        name: `Test Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.50,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
@@ -121,7 +122,7 @@ describe('Benchmark Storage', () => {
 
       expect(fetched).toBeDefined();
       expect(fetched?.id).toBe(created.id);
-      expect(fetched?.name).toBe('Test Benchmark');
+      expect(fetched?.name).toBe(`Test Benchmark ${uniqueSuffix}`);
     });
 
     it('should return undefined for non-existent benchmark', async () => {
@@ -134,7 +135,7 @@ describe('Benchmark Storage', () => {
       // Create multiple benchmarks
       const created1 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Benchmark 1',
+        name: `Benchmark 1 ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         isActive: true,
       }, siteAdminUserId);
@@ -142,7 +143,7 @@ describe('Benchmark Storage', () => {
 
       const created2 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Benchmark 2',
+        name: `Benchmark 2 ${uniqueSuffix}`,
         benchmarkValue: 1.50,
         isActive: false, // Inactive
       }, siteAdminUserId);
@@ -161,7 +162,7 @@ describe('Benchmark Storage', () => {
     it('should get all site benchmarks including inactive when requested', async () => {
       const created1 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Active Benchmark',
+        name: `Active Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         isActive: true,
       }, siteAdminUserId);
@@ -169,7 +170,7 @@ describe('Benchmark Storage', () => {
 
       const created2 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Inactive Benchmark',
+        name: `Inactive Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.50,
         isActive: false,
       }, siteAdminUserId);
@@ -188,18 +189,18 @@ describe('Benchmark Storage', () => {
     it('should update a site benchmark', async () => {
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Original Name',
+        name: `Original Name ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
 
       const updated = await storage.updateSiteBenchmark(created.id, {
-        name: 'Updated Name',
+        name: `Updated Name ${uniqueSuffix}`,
         benchmarkValue: 2.00,
         description: 'Updated description',
       });
 
-      expect(updated.name).toBe('Updated Name');
+      expect(updated.name).toBe(`Updated Name ${uniqueSuffix}`);
       expect(updated.benchmarkValue).toBe('2.000');
       expect(updated.description).toBe('Updated description');
       expect(updated.updatedAt).toBeDefined();
@@ -209,7 +210,7 @@ describe('Benchmark Storage', () => {
     it('should delete a site benchmark', async () => {
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'To Be Deleted',
+        name: `To Be Deleted ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         isSystemDefault: false,
       }, siteAdminUserId);
@@ -223,7 +224,7 @@ describe('Benchmark Storage', () => {
     it('should not delete system default benchmarks', async () => {
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'System Default',
+        name: `System Default ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
@@ -241,7 +242,7 @@ describe('Benchmark Storage', () => {
     it('should toggle site benchmark active status', async () => {
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Toggle Test',
+        name: `Toggle Test ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         isActive: true,
       }, siteAdminUserId);
@@ -263,7 +264,7 @@ describe('Benchmark Storage', () => {
       const benchmarkData = {
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Team Custom Benchmark',
+        name: `Team Custom Benchmark ${uniqueSuffix}`,
         description: 'Custom benchmark for our team',
         benchmarkValue: 1.20,
         comparisonOperator: 'lte' as const,
@@ -275,7 +276,7 @@ describe('Benchmark Storage', () => {
       expect(created.id).toBeDefined();
       expect(created.organizationId).toBe(testOrgId);
       expect(created.metricCode).toBe(testMetricCode);
-      expect(created.name).toBe('Team Custom Benchmark');
+      expect(created.name).toBe(`Team Custom Benchmark ${uniqueSuffix}`);
       expect(created.benchmarkValue).toBe('1.200');
 
       createdBenchmarkIds.push(created.id);
@@ -286,7 +287,7 @@ describe('Benchmark Storage', () => {
       const created1 = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Org 1 Benchmark',
+        name: `Org 1 Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created1.id);
@@ -299,7 +300,7 @@ describe('Benchmark Storage', () => {
       const created2 = await storage.createCustomBenchmark({
         organizationId: org2.id,
         metricCode: testMetricCode,
-        name: 'Org 2 Benchmark',
+        name: `Org 2 Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.50,
       }, siteAdminUserId);
 
@@ -321,7 +322,7 @@ describe('Benchmark Storage', () => {
       const created = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Private Benchmark',
+        name: `Private Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
@@ -344,17 +345,17 @@ describe('Benchmark Storage', () => {
       const created = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Original Custom',
+        name: `Original Custom ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
 
       const updated = await storage.updateCustomBenchmark(testOrgId, created.id, {
-        name: 'Updated Custom',
+        name: `Updated Custom ${uniqueSuffix}`,
         benchmarkValue: 2.00,
       });
 
-      expect(updated.name).toBe('Updated Custom');
+      expect(updated.name).toBe(`Updated Custom ${uniqueSuffix}`);
       expect(updated.benchmarkValue).toBe('2.000');
     });
 
@@ -362,7 +363,7 @@ describe('Benchmark Storage', () => {
       const created = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Protected Benchmark',
+        name: `Protected Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
@@ -385,7 +386,7 @@ describe('Benchmark Storage', () => {
       const created = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'To Be Deleted',
+        name: `To Be Deleted ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
 
@@ -498,7 +499,7 @@ describe('Benchmark Storage', () => {
     it('should disable a benchmark for organization', async () => {
       const siteBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'To Be Disabled',
+        name: `To Be Disabled ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(siteBenchmark.id);
@@ -516,14 +517,14 @@ describe('Benchmark Storage', () => {
     it('should only return enabled benchmarks by default', async () => {
       const siteBenchmark1 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Enabled Benchmark',
+        name: `Enabled Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(siteBenchmark1.id);
 
       const siteBenchmark2 = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Disabled Benchmark',
+        name: `Disabled Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.50,
       }, siteAdminUserId);
       createdBenchmarkIds.push(siteBenchmark2.id);
@@ -547,7 +548,7 @@ describe('Benchmark Storage', () => {
     it('should update organization benchmark settings', async () => {
       const siteBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Benchmark for Settings',
+        name: `Benchmark for Settings ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(siteBenchmark.id);
@@ -569,7 +570,7 @@ describe('Benchmark Storage', () => {
     it('should not update benchmark settings for wrong organization', async () => {
       const siteBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Protected Settings',
+        name: `Protected Settings ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(siteBenchmark.id);
@@ -620,7 +621,7 @@ describe('Benchmark Storage', () => {
       // Create benchmarks with different gender filters
       const maleBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Male Only Benchmark',
+        name: `Male Only Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         gender: 'Male',
       }, siteAdminUserId);
@@ -628,7 +629,7 @@ describe('Benchmark Storage', () => {
 
       const femaleBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Female Only Benchmark',
+        name: `Female Only Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.10,
         gender: 'Female',
       }, siteAdminUserId);
@@ -636,7 +637,7 @@ describe('Benchmark Storage', () => {
 
       const anyGenderBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Any Gender Benchmark',
+        name: `Any Gender Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.20,
         // gender: null (not specified)
       }, siteAdminUserId);
@@ -666,7 +667,7 @@ describe('Benchmark Storage', () => {
       // Create benchmarks with different age ranges
       const youngBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Youth Benchmark (14-17)',
+        name: `Youth Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.30,
         ageMin: 14,
         ageMax: 17,
@@ -675,7 +676,7 @@ describe('Benchmark Storage', () => {
 
       const adultBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Adult Benchmark (18-25)',
+        name: `Adult Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         ageMin: 18,
         ageMax: 25,
@@ -684,7 +685,7 @@ describe('Benchmark Storage', () => {
 
       const anyAgeBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'All Ages Benchmark',
+        name: `All Ages Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.40,
         // ageMin/ageMax: null
       }, siteAdminUserId);
@@ -711,7 +712,7 @@ describe('Benchmark Storage', () => {
       // Create benchmarks with different position filters
       const forwardBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Forward Benchmark',
+        name: `Forward Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
         position: 'Forward',
       }, siteAdminUserId);
@@ -719,7 +720,7 @@ describe('Benchmark Storage', () => {
 
       const defenderBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Defender Benchmark',
+        name: `Defender Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.10,
         position: 'Defender',
       }, siteAdminUserId);
@@ -727,7 +728,7 @@ describe('Benchmark Storage', () => {
 
       const anyPositionBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'All Positions Benchmark',
+        name: `All Positions Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.20,
         // position: null
       }, siteAdminUserId);
@@ -791,7 +792,7 @@ describe('Benchmark Storage', () => {
       // Create benchmark with multiple filters
       const specificBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Male Adult Forward Benchmark',
+        name: `Male Adult Forward Benchmark ${uniqueSuffix}`,
         benchmarkValue: 0.95,
         gender: 'Male',
         ageMin: 18,
@@ -803,7 +804,7 @@ describe('Benchmark Storage', () => {
       // Create benchmark that doesn't match
       const mismatchBenchmark = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Female Youth Defender',
+        name: `Female Youth Defender ${uniqueSuffix}`,
         benchmarkValue: 1.20,
         gender: 'Female',
         ageMin: 14,

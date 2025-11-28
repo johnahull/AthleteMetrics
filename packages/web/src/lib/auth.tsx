@@ -67,8 +67,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         setUser(data.user);
         
-        // Auto-set organization context for non-site-admin users with exactly one organization
-        if (data.user && !data.user.isSiteAdmin) {
+        // Auto-set organization context for users with exactly one organization
+        // This applies to both site admins and regular users to improve UX
+        if (data.user) {
           try {
             const orgResponse = await fetch('/api/auth/me/organizations', {
               credentials: 'include'
@@ -76,6 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             if (orgResponse.ok) {
               const organizations = await orgResponse.json();
               console.log('[AuthProvider] Fetched user organizations:', organizations);
+              setUserOrganizations(organizations);
               // Only auto-select if user has exactly one organization to avoid confusion
               if (organizations && organizations.length === 1) {
                 console.log('[AuthProvider] Auto-setting organizationContext to:', organizations[0].organizationId);

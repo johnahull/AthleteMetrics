@@ -23,6 +23,18 @@ vi.mock('@/lib/queryClient', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
 }));
 
+// Mock sports API - useSports hook
+vi.mock('@/lib/sports-api', () => ({
+  useSports: () => ({
+    data: [
+      { id: 'sport-1', code: 'SOCCER', name: 'Soccer', isActive: true },
+      { id: 'sport-2', code: 'BASKETBALL', name: 'Basketball', isActive: true },
+    ],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 describe('TeamModal', () => {
   let queryClient: QueryClient;
 
@@ -30,6 +42,7 @@ describe('TeamModal', () => {
     id: 'team-123',
     name: 'Test Team',
     level: 'Club',
+    sport: 'Soccer',
     notes: 'Test notes',
     season: '2024-Fall',
     organizationId: 'org-123',

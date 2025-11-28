@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 interface InvitationData {
   email: string;
@@ -30,6 +31,7 @@ interface InvitationData {
 }
 
 export default function AcceptInvitation() {
+  const labels = useContextualLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   
@@ -297,7 +299,7 @@ export default function AcceptInvitation() {
               </p>
               {invitation.athleteData?.teams && invitation.athleteData.teams.length > 0 && (
                 <div className="mt-3">
-                  <p className="text-blue-700 text-sm font-medium mb-1">Teams:</p>
+                  <p className="text-blue-700 text-sm font-medium mb-1">{labels.teams}:</p>
                   {invitation.athleteData.teams?.map((team, index) => (
                     <div key={team.id} className="text-blue-600 text-sm">
                       • {team.name} ({team.sport})

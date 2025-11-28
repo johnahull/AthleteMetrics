@@ -126,6 +126,7 @@ export function RecentReportsSection({
           <Card
             key={report.id}
             className="hover:shadow-md transition-shadow cursor-pointer relative"
+            data-testid={`${report.reportType}-report-${report.id}`}
           >
             <button
               onClick={() => handleReportClick(report as any)}

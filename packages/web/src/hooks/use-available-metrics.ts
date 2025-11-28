@@ -4,8 +4,9 @@
  */
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
-import { useOrganizationMetrics, useSiteMetrics } from '@/lib/metrics-api';
+import { useOrganizationMetrics } from '@/lib/metrics-api';
 
 export interface AvailableMetric {
   code: string;
@@ -36,7 +37,7 @@ export function useAvailableMetrics(): {
   isLoading: boolean;
   error: Error | null;
 } {
-  const { organizationContext, userOrganizations } = useAuth();
+  const { organizationContext, userOrganizations, user } = useAuth();
 
   // Determine current organization ID
   // Note: currentOrgId may be undefined during initial load when userOrganizations is still loading
@@ -53,12 +54,34 @@ export function useAvailableMetrics(): {
     true // enabledOnly - only get org-enabled metrics
   );
 
-  // Fallback to site metrics for site admins without org context
+  // Fallback to site metrics ONLY for site admins without org context
+  // Regular users (org admins, coaches) should NOT access site metrics endpoint
   const {
     data: siteMetrics,
     isLoading: loadingSite,
     error: errorSite
-  } = useSiteMetrics(false); // includeInactive=false - only get active site metrics
+  } = useQuery<Array<{
+    code: string;
+    label: string;
+    unit: string | null;
+    lowerIsBetter: boolean;
+    category: string | null;
+    description: string | null;
+    isActive: boolean;
+  }>>({
+    queryKey: ['siteMetrics', false],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('includeInactive', 'false');
+      const response = await fetch(`/api/site-metrics?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch site metrics');
+      }
+      return response.json();
+    },
+    enabled: user?.isSiteAdmin === true && !currentOrgId, // Only fetch if site admin AND no org context
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Build available metrics list
   const metrics = useMemo((): AvailableMetric[] => {

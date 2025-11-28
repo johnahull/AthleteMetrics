@@ -5,10 +5,13 @@
 import type { Express } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
+import { OrganizationTypeService } from "../services/organization-type-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { storage } from "../storage";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
+const organizationTypeService = new OrganizationTypeService();
 
 /**
  * Sanitize error messages for production
@@ -205,6 +208,10 @@ export function registerOrganizationRoutes(app: Express) {
         req.body,
         req.session.user!.id
       );
+
+      // Invalidate organization type caches when new organization is created
+      organizationTypeService.invalidateCache(`orgs:`);
+
       res.status(201).json(organization);
     } catch (error) {
       console.error("Create organization error:", error);
@@ -238,6 +245,10 @@ export function registerOrganizationRoutes(app: Express) {
         context
       );
 
+      // Invalidate organization type caches when organization is updated
+      // This ensures cached metrics/benchmarks reflect any org type changes
+      organizationTypeService.invalidateCache(`orgs:`);
+
       res.json(updatedOrganization);
     } catch (error) {
       console.error("Update organization error:", error);
@@ -245,6 +256,142 @@ export function registerOrganizationRoutes(app: Express) {
       const statusCode = message.includes("Unauthorized") ? 403
         : message.includes("not found") ? 404
         : message.includes("already exists") ? 400
+        : message.includes("Invalid") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Update organization settings (Org Admin only - limited fields)
+   * PATCH /api/organizations/:id/org-settings
+   *
+   * Allows org admins to update only aiEnabled flag (if aiEnabledBySiteAdmin is true)
+   */
+  app.patch("/api/organizations/:id/org-settings", updateLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const organizationId = req.params.id;
+
+      // Validate UUID format
+      if (!isValidUUID(organizationId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+
+      // Get organization
+      const org = await storage.getOrganization(organizationId);
+      if (!org) {
+        return res.status(404).json({ message: "Organization not found" });
+      }
+
+      // Verify user is org admin for this organization
+      const userOrgs = await storage.getUserOrganizations(user.id);
+      const userOrg = userOrgs.find((uo: any) => uo.organizationId === organizationId);
+
+      if (!userOrg || userOrg.role !== 'org_admin') {
+        return res.status(403).json({ message: "Access denied. Org admin role required." });
+      }
+
+      // Only allow updating aiEnabled and wellnessEnabled fields
+      const { aiEnabled, wellnessEnabled } = req.body;
+
+      // Build updates object with only the fields that were provided
+      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean } = {};
+
+      // Validate and handle aiEnabled
+      if (aiEnabled !== undefined) {
+        if (typeof aiEnabled !== 'boolean') {
+          return res.status(400).json({ message: "aiEnabled must be boolean" });
+        }
+
+        // If trying to enable AI, check that site admin has permitted it
+        if (aiEnabled === true && !org.aiEnabledBySiteAdmin) {
+          return res.status(403).json({
+            message: "AI features must be enabled by site administrator first"
+          });
+        }
+
+        updates.aiEnabled = aiEnabled;
+      }
+
+      // Validate and handle wellnessEnabled
+      if (wellnessEnabled !== undefined) {
+        if (typeof wellnessEnabled !== 'boolean') {
+          return res.status(400).json({ message: "wellnessEnabled must be boolean" });
+        }
+
+        // Check if wellness is enabled at site level
+        const siteSettings = await storage.getSiteSettings();
+        if (wellnessEnabled === true && !siteSettings?.wellnessModuleEnabled) {
+          return res.status(403).json({
+            message: "Wellness module must be enabled by site administrator first"
+          });
+        }
+
+        updates.wellnessEnabled = wellnessEnabled;
+      }
+
+      // Require at least one field to update
+      if (Object.keys(updates).length === 0) {
+        return res.status(400).json({ message: "At least one field (aiEnabled or wellnessEnabled) is required" });
+      }
+
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      };
+
+      // Update the allowed fields
+      const updated = await storage.updateOrganization(organizationId, updates);
+
+      // Invalidate organization type caches when organization is updated
+      organizationTypeService.invalidateCache(`orgs:`);
+
+      // Create audit log for AI flag change by org admin
+      if (updates.aiEnabled !== undefined && updates.aiEnabled !== org.aiEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: updates.aiEnabled ? 'org_ai_enabled_by_org_admin' : 'org_ai_disabled_by_org_admin',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.aiEnabled,
+            newValue: updates.aiEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      // Create audit log for wellness flag change by org admin
+      if (updates.wellnessEnabled !== undefined && updates.wellnessEnabled !== org.wellnessEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: updates.wellnessEnabled ? 'org_wellness_enabled' : 'org_wellness_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.wellnessEnabled,
+            newValue: updates.wellnessEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      res.json(updated);
+    } catch (error) {
+      console.error("Update organization settings error:", error);
+      const message = sanitizeError(error, "Failed to update organization settings");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
         : message.includes("Invalid") ? 400
         : 500;
       res.status(statusCode).json({ message });
@@ -314,18 +461,96 @@ export function registerOrganizationRoutes(app: Express) {
       if (!isValidUUID(organizationId)) {
         return res.status(400).json({ message: "Invalid organization ID format" });
       }
-      
+
       const user = await organizationService.addUserToOrganization(
         organizationId,
         req.body,
         req.session.user!.id
       );
-      
+
       res.status(201).json(user);
     } catch (error) {
       console.error("Add user to organization error:", error);
       const message = sanitizeError(error, "Failed to add user to organization");
       const statusCode = message.includes("Unauthorized") ? 403 : 400;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Update user role within organization
+   * Allows org admins to change roles of users within their organization
+   */
+  app.put("/api/organizations/:id/users/:userId/role", updateLimiter, requireAuth, async (req, res) => {
+    try {
+      const { id: organizationId, userId } = req.params;
+      const { role } = req.body;
+      const requestingUser = req.session.user!;
+
+      // Validate UUID formats
+      if (!isValidUUID(organizationId) || !isValidUUID(userId)) {
+        return res.status(400).json({ message: "Invalid ID format" });
+      }
+
+      // Validate role
+      const validRoles = ['org_admin', 'coach', 'athlete'];
+      if (!role || !validRoles.includes(role)) {
+        return res.status(400).json({ message: "Invalid role. Must be org_admin, coach, or athlete" });
+      }
+
+      // Prevent users from changing their own role
+      if (userId === requestingUser.id) {
+        return res.status(403).json({ message: "Cannot change your own role" });
+      }
+
+      // Check requesting user's access to this organization
+      const requestingUserRoles = await storage.getUserRoles(requestingUser.id, organizationId);
+      const isOrgAdmin = requestingUserRoles.includes('org_admin');
+      const isSiteAdmin = requestingUser.isSiteAdmin === true;
+
+      if (!isOrgAdmin && !isSiteAdmin) {
+        return res.status(403).json({ message: "Access denied. Only organization administrators can change user roles." });
+      }
+
+      // Check if target user is in this organization
+      const targetUserRoles = await storage.getUserRoles(userId, organizationId);
+      if (targetUserRoles.length === 0) {
+        return res.status(404).json({ message: "User not found in this organization" });
+      }
+
+      // Additional permission checks for org admins (not site admins)
+      if (!isSiteAdmin) {
+        const targetCurrentRole = targetUserRoles[0];
+
+        // Org admins can't demote other org admins (only site admins can)
+        if (targetCurrentRole === 'org_admin' && role !== 'org_admin') {
+          return res.status(403).json({ message: "Only site administrators can demote organization administrators" });
+        }
+      }
+
+      // Update the user's role in the organization
+      await storage.updateUserOrganizationRole(userId, organizationId, role);
+
+      // Create audit log
+      await storage.createAuditLog({
+        userId: requestingUser.id,
+        action: 'user_role_updated',
+        resourceType: 'user_organization',
+        resourceId: userId,
+        details: JSON.stringify({
+          organizationId,
+          newRole: role,
+          updatedBy: requestingUser.id
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+
+      res.json({ message: "User role updated successfully", role });
+    } catch (error) {
+      console.error("Update user organization role error:", error);
+      const message = sanitizeError(error, "Failed to update user role");
+      const statusCode = message.includes("Unauthorized") || message.includes("Access denied") ? 403 : 500;
       res.status(statusCode).json({ message });
     }
   });

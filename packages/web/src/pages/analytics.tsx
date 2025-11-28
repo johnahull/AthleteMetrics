@@ -21,6 +21,7 @@ import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
 import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -38,6 +39,7 @@ const editMeasurementSchema = z.object({
 });
 
 export default function Analytics() {
+  const labels = useContextualLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -362,13 +364,13 @@ export default function Analytics() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-8 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Teams</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{labels.teams}</label>
               <Select value={filters.teamIds[0] || ""} onValueChange={(value) => setFilters(prev => ({ ...prev, teamIds: value ? [value] : [] }))}>
                 <SelectTrigger>
-                  <SelectValue placeholder="All Teams" />
+                  <SelectValue placeholder={`All ${labels.teams}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="all">All {labels.teams}</SelectItem>
                   {(teams || []).filter((team: Team) => team.isArchived !== true).map((team: Team) => (
                     <SelectItem key={team.id} value={team.id}>{team.name}</SelectItem>
                   ))}
@@ -521,7 +523,7 @@ export default function Analytics() {
               <div className="flex space-x-2">
                 {filters.teamIds.length > 0 && (
                   <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs">
-                    {filters.teamIds.length} Team{filters.teamIds.length > 1 ? 's' : ''}
+                    {filters.teamIds.length} {filters.teamIds.length === 1 ? labels.team : labels.teams}
                   </span>
                 )}
                 {filters.birthYearFrom && (
@@ -729,7 +731,7 @@ export default function Analytics() {
                 <thead className="bg-gray-50">
                   <tr className="text-left text-sm font-medium text-gray-500">
                     <th className="px-4 py-3">Athlete</th>
-                    <th className="px-4 py-3">Team</th>
+                    <th className="px-4 py-3">{labels.team}</th>
                     <th className="px-4 py-3">Sport</th>
                     <th className="px-4 py-3">Metric</th>
                     <th className="px-4 py-3">Value</th>

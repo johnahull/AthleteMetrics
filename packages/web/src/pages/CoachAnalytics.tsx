@@ -12,9 +12,11 @@ import { ChartSkeleton, KPICardSkeleton } from '@/components/ui/loading-states';
 
 import { useAuth } from '@/lib/auth';
 import { devLog } from '@/utils/dev-logger';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 export function CoachAnalytics() {
   // ALL HOOKS MUST BE CALLED FIRST - No early returns before hooks!
+  const labels = useContextualLabels();
   const { user, organizationContext, userOrganizations, isLoading } = useAuth();
 
   // Debug organization context
@@ -37,7 +39,7 @@ export function CoachAnalytics() {
         size="sm"
       >
         <Users className="h-4 w-4 mr-2" />
-        Team Overview
+        {labels.team} Overview
       </Button>
 
       <Button
@@ -143,8 +145,8 @@ export function CoachAnalytics() {
 
   return (
     <BaseAnalyticsView
-      title="Team Analytics Dashboard"
-      description="Analyze team performance, compare athletes across groups, and identify trends and opportunities"
+      title={`${labels.team} Analytics Dashboard`}
+      description={`Analyze ${labels.team.toLowerCase()} performance, compare ${labels.athletes.toLowerCase()} across groups, and identify trends and opportunities`}
       organizationId={effectiveOrganizationId}
       defaultAnalysisType="intra_group"
       allowedAnalysisTypes={['individual', 'intra_group', 'multi_group']}

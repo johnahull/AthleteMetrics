@@ -134,6 +134,12 @@ export class OrganizationService extends BaseService {
         }
       }
 
+      // SECURITY: Auto-disable aiEnabled when aiEnabledBySiteAdmin is set to false
+      // This maintains the hierarchy: aiEnabled can only be true if aiEnabledBySiteAdmin is true
+      if (validatedUpdates.aiEnabledBySiteAdmin === false && org.aiEnabled === true) {
+        validatedUpdates.aiEnabled = false;
+      }
+
       // Update organization in database
       const updatedOrg = await this.storage.updateOrganization(organizationId, validatedUpdates);
 
@@ -171,6 +177,18 @@ export class OrganizationService extends BaseService {
           to: validatedUpdates.allowCustomBenchmarks
         };
       }
+      if (validatedUpdates.aiEnabledBySiteAdmin !== undefined && validatedUpdates.aiEnabledBySiteAdmin !== org.aiEnabledBySiteAdmin) {
+        changesSummary.aiEnabledBySiteAdminChanged = {
+          from: org.aiEnabledBySiteAdmin,
+          to: validatedUpdates.aiEnabledBySiteAdmin
+        };
+      }
+      if (validatedUpdates.aiEnabled !== undefined && validatedUpdates.aiEnabled !== org.aiEnabled) {
+        changesSummary.aiEnabledChanged = {
+          from: org.aiEnabled,
+          to: validatedUpdates.aiEnabled
+        };
+      }
 
       // Create audit log with request context
       await this.storage.createAuditLog({
@@ -186,6 +204,23 @@ export class OrganizationService extends BaseService {
         userAgent: context.userAgent || null,
       });
 
+      // Create specific audit logs for AI flag changes
+      if (validatedUpdates.aiEnabledBySiteAdmin !== undefined && validatedUpdates.aiEnabledBySiteAdmin !== org.aiEnabledBySiteAdmin) {
+        await this.storage.createAuditLog({
+          userId: requestingUserId,
+          action: validatedUpdates.aiEnabledBySiteAdmin ? 'org_ai_enabled_by_site_admin' : 'org_ai_disabled_by_site_admin',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: sanitizedOrgName,
+            previousValue: org.aiEnabledBySiteAdmin,
+            newValue: validatedUpdates.aiEnabledBySiteAdmin
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
       return updatedOrg;
     } catch (error) {
       console.error("OrganizationService.updateOrganization:", error);
@@ -199,15 +234,22 @@ export class OrganizationService extends BaseService {
    */
   async getAllOrganizations(requestingUserId: string): Promise<Organization[]> {
     try {
+      console.log("🔍 getAllOrganizations called with userId:", requestingUserId);
+
       // Verify permissions
-      if (!(await this.isSiteAdmin(requestingUserId))) {
+      const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
+      console.log("🔍 isSiteAdmin check result:", isSiteAdmin);
+
+      if (!isSiteAdmin) {
         throw new Error("Unauthorized: Only site administrators can view all organizations");
       }
 
       // Site admins need to see inactive orgs for reactivation functionality
-      return await this.storage.getOrganizations({ includeInactive: true });
+      const orgs = await this.storage.getOrganizations({ includeInactive: true });
+      console.log("🔍 Found organizations:", orgs.length);
+      return orgs;
     } catch (error) {
-      console.error("OrganizationService.getAllOrganizations:", error);
+      console.error("❌ OrganizationService.getAllOrganizations ERROR:", error);
       return [];
     }
   }

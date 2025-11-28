@@ -4,8 +4,9 @@
  */
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
-import { useOrganizationMetrics, useSiteMetrics } from '@/lib/metrics-api';
+import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { DynamicMetricConfig } from '@shared/analytics-types';
 
@@ -44,7 +45,7 @@ interface MetricConfigLookup {
  * ```
  */
 export function useMetricConfig(): MetricConfigLookup {
-  const { organizationContext, userOrganizations } = useAuth();
+  const { organizationContext, userOrganizations, user } = useAuth();
 
   // Determine which organization to fetch metrics for
   const currentOrgId = organizationContext || userOrganizations?.[0]?.organizationId;
@@ -54,7 +55,31 @@ export function useMetricConfig(): MetricConfigLookup {
     currentOrgId || "",
     true // enabledOnly
   );
-  const { data: siteMetrics, isLoading: loadingSite } = useSiteMetrics(false);
+
+  // Fallback to site metrics ONLY for site admins without org context
+  const { data: siteMetrics, isLoading: loadingSite } = useQuery<Array<{
+    code: string;
+    label: string;
+    unit: string | null;
+    lowerIsBetter: boolean;
+    category: string | null;
+    description: string | null;
+    isActive: boolean;
+    isSystemDefault: boolean;
+  }>>({
+    queryKey: ['siteMetrics', false],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.append('includeInactive', 'false');
+      const response = await fetch(`/api/site-metrics?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch site metrics');
+      }
+      return response.json();
+    },
+    enabled: user?.isSiteAdmin === true && !currentOrgId, // Only fetch if site admin AND no org context
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
 
   // Build dynamic metrics map
   const metricsMap = useMemo((): Record<string, DynamicMetricConfig> => {

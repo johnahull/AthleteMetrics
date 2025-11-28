@@ -92,6 +92,8 @@ export interface TeamReportData {
   athleteCount: number;
   teamIds: string[];
   generatedAt: string;
+  metricLabels?: Record<string, string>;
+  metricUnits?: Record<string, string>;
 }
 
 export type PdfFormat = 'visual' | 'simplified';
@@ -108,4 +110,7 @@ export interface Report {
   isPinned: boolean;
   createdAt: string;
   updatedAt?: string;
+  coachingInsights?: string | null;
+  coachingInsightsGeneratedAt?: string | null;
+  coachingInsightsModel?: string | null;
 }

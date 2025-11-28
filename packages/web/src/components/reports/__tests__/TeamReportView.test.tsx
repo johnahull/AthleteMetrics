@@ -5,11 +5,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TeamReportView } from '../TeamReportView';
 import { useGenerateReport } from '@/hooks/use-reports';
 import { useTeams } from '@/hooks/use-teams';
+import { useAuth } from '@/lib/auth';
 import type { Report } from '@/types/report-types';
 
 // Mock hooks
 vi.mock('@/hooks/use-reports');
 vi.mock('@/hooks/use-teams');
+vi.mock('@/lib/auth');
 
 const mockGenerateReportMutate = vi.fn();
 
@@ -121,6 +123,12 @@ describe('TeamReportView - PDF Export', () => {
       data: mockTeams,
       isLoading: false,
       error: null,
+    });
+
+    // Mock useAuth hook
+    (useAuth as any).mockReturnValue({
+      user: { id: 'user-789', isSiteAdmin: false },
+      isLoading: false,
     });
 
     // Mock createObjectURL
@@ -543,6 +551,12 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
       ],
       isLoading: false,
       error: null,
+    } as any);
+
+    // Mock useAuth hook
+    vi.mocked(useAuth).mockReturnValue({
+      user: { id: 'user-789', isSiteAdmin: false },
+      isLoading: false,
     } as any);
 
     // Default mock - will be overridden in individual tests

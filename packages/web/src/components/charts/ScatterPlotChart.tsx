@@ -60,18 +60,6 @@ interface AthleteData {
 }
 
 // Register Chart.js components
-ChartJS.register(
-  LinearScale,
-  PointElement,
-  LineElement,
-  Title,
-  Tooltip,
-  Legend,
-  ScatterController,
-  LineController,
-  Filler,
-  annotationPlugin
-);
 
 // Regression calculation helper function
 function calculateRegression(points: ScatterPoint[]): RegressionResult | null {

@@ -69,6 +69,7 @@ interface AthletePerformance {
   teams?: string[];
   measurements: Record<string, number>;
   percentiles: Record<string, number>;
+  teamAverages: Record<string, number>;
   compositeIndex?: number;
   benchmarkComparisons: Record<string, BenchmarkComparison[]>;
 }
@@ -109,6 +110,8 @@ interface TeamReportData {
   generatedAt: string;
   teamIds: string[];
   athleteCount: number;
+  metricLabels: Record<string, string>;
+  metricUnits: Record<string, string>;
 }
 
 interface IndividualReportData {
@@ -116,11 +119,51 @@ interface IndividualReportData {
   reportConfig: ReportConfig;
   athlete: AthletePerformance;
   generatedAt: string;
+  metricLabels: Record<string, string>;
+  metricUnits: Record<string, string>;
 }
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
   private metricInfoCache = new Map<string, { lowerIsBetter: boolean; name: string }>();
+
+  /**
+   * Get display labels and units for a list of metric codes
+   */
+  async getMetricLabelsAndUnits(metricCodes: string[]): Promise<{
+    labels: Record<string, string>;
+    units: Record<string, string>;
+  }> {
+    const labels: Record<string, string> = {};
+    const units: Record<string, string> = {};
+
+    // Fetch all metrics in one query
+    const metrics = await db
+      .select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        unit: siteMetrics.unit,
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, metricCodes));
+
+    for (const metric of metrics) {
+      labels[metric.code] = metric.label;
+      units[metric.code] = metric.unit || '';
+    }
+
+    // Fallback to code for any missing labels
+    for (const code of metricCodes) {
+      if (!labels[code]) {
+        labels[code] = code;
+      }
+      if (!units[code]) {
+        units[code] = '';
+      }
+    }
+
+    return { labels, units };
+  }
 
   /**
    * Generate a team report with team-level aggregations and athlete rankings
@@ -189,6 +232,9 @@ export class ReportService extends BaseService {
       benchmarksByMetric
     );
 
+    // Get metric display labels and units
+    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+
     const result = {
       reportType: 'team' as const,
       reportConfig: config,
@@ -197,6 +243,8 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       teamIds: config.filters?.teamIds || [],
       athleteCount: athleteRankings.length,
+      metricLabels,
+      metricUnits,
     };
 
     return result;
@@ -294,8 +342,8 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate percentiles against all athletes in organization
-    const percentiles = await this.calculatePercentiles(
+    // Calculate percentiles and team averages against all athletes in organization
+    const { percentiles, teamAverages } = await this.calculatePercentilesAndAverages(
       athleteId,
       report.organizationId,
       config.metrics,
@@ -325,14 +373,20 @@ export class ReportService extends BaseService {
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
       percentiles,
+      teamAverages,
       benchmarkComparisons,
     };
+
+    // Get metric display labels and units
+    const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
 
     return {
       reportType: 'individual',
       reportConfig: config,
       athlete: athletePerformance,
       generatedAt: new Date().toISOString(),
+      metricLabels,
+      metricUnits,
     };
   }
 
@@ -358,17 +412,18 @@ export class ReportService extends BaseService {
   }
 
   /**
-   * Calculate percentiles for an athlete's performances
+   * Calculate percentiles and team averages for an athlete's performances
    */
-  async calculatePercentiles(
+  async calculatePercentilesAndAverages(
     athleteId: string,
     organizationId: string,
     metrics: string[],
     athletePerformances: Record<string, number>,
     startDate: string,
     endDate: string
-  ): Promise<Record<string, number>> {
+  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number> }> {
     const percentiles: Record<string, number> = {};
+    const teamAverages: Record<string, number> = {};
 
     for (const metric of metrics) {
       if (athletePerformances[metric] === undefined) {
@@ -419,10 +474,13 @@ export class ReportService extends BaseService {
         // For "lower is better" metrics, invert the percentile
         const rank = quantileRank(allValues, athleteValue) * 100;
         percentiles[metric] = metricInfo.lowerIsBetter ? 100 - rank : rank;
+
+        // Calculate team average (using best performance per athlete, same as team reports)
+        teamAverages[metric] = mean(allValues);
       }
     }
 
-    return percentiles;
+    return { percentiles, teamAverages };
   }
 
   /**
@@ -969,6 +1027,7 @@ export class ReportService extends BaseService {
             : undefined,
           measurements: {},
           percentiles: {},
+          teamAverages: {},
           benchmarkComparisons: {},
         });
       }
@@ -996,7 +1055,7 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate percentiles for each athlete
+    // Calculate percentiles and team averages for each athlete
     const athletes = Array.from(athleteMap.values());
 
     for (const metric of metrics) {
@@ -1007,6 +1066,7 @@ export class ReportService extends BaseService {
       if (values.length === 0) continue;
 
       const metricInfo = await this.getMetricInfo(metric);
+      const teamAverage = mean(values);
 
       for (const athlete of athletes) {
         if (athlete.measurements[metric] !== undefined) {
@@ -1014,6 +1074,7 @@ export class ReportService extends BaseService {
           athlete.percentiles[metric] = metricInfo.lowerIsBetter
             ? 100 - rank
             : rank;
+          athlete.teamAverages[metric] = teamAverage;
         }
       }
     }

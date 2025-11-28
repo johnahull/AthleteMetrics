@@ -13,6 +13,7 @@ describe('Benchmark Service', () => {
   let regularUserId: string;
   let testMetricCode: string;
   let createdBenchmarkIds: string[] = [];
+  let uniqueSuffix: string;
 
   beforeAll(async () => {
     // Safety check: prevent running tests against production database
@@ -28,7 +29,7 @@ describe('Benchmark Service', () => {
     benchmarkService = new BenchmarkService();
     createdBenchmarkIds = [];
 
-    const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
     // Create test organization with benchmarks enabled
     const [org] = await db.insert(organizations).values({
@@ -118,7 +119,7 @@ describe('Benchmark Service', () => {
     it('should throw error if non-site-admin tries to create site benchmark', async () => {
       const benchmarkData = {
         metricCode: testMetricCode,
-        name: 'Elite Speed',
+        name: `Elite Speed ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       };
 
@@ -130,14 +131,14 @@ describe('Benchmark Service', () => {
     it('should allow site admin to create site benchmark', async () => {
       const benchmarkData = {
         metricCode: testMetricCode,
-        name: 'Elite Speed',
+        name: `Elite Speed ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       };
 
       const created = await benchmarkService.createSiteBenchmark(benchmarkData, siteAdminUserId);
 
       expect(created).toBeDefined();
-      expect(created.name).toBe('Elite Speed');
+      expect(created.name).toBe(`Elite Speed ${uniqueSuffix}`);
       createdBenchmarkIds.push(created.id);
     });
 
@@ -157,7 +158,7 @@ describe('Benchmark Service', () => {
     it('should create benchmark for valid metric', async () => {
       const benchmarkData = {
         metricCode: testMetricCode,
-        name: 'Valid Metric Benchmark',
+        name: `Valid Metric Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       };
 
@@ -171,7 +172,7 @@ describe('Benchmark Service', () => {
     it('should create audit log when site benchmark is created', async () => {
       const benchmarkData = {
         metricCode: testMetricCode,
-        name: 'Audited Benchmark',
+        name: `Audited Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       };
 
@@ -196,7 +197,7 @@ describe('Benchmark Service', () => {
       // Create benchmark first
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Original Name',
+        name: `Original Name ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
@@ -209,16 +210,16 @@ describe('Benchmark Service', () => {
     it('should allow site admin to update site benchmark', async () => {
       const created = await storage.createSiteBenchmark({
         metricCode: testMetricCode,
-        name: 'Original Name',
+        name: `Original Name ${uniqueSuffix}`,
         benchmarkValue: 1.00,
       }, siteAdminUserId);
       createdBenchmarkIds.push(created.id);
 
       const updated = await benchmarkService.updateSiteBenchmark(created.id, {
-        name: 'Updated Name',
+        name: `Updated Name ${uniqueSuffix}`,
       }, siteAdminUserId);
 
-      expect(updated.name).toBe('Updated Name');
+      expect(updated.name).toBe(`Updated Name ${uniqueSuffix}`);
     });
 
     // Cycle 5: deleteSiteBenchmark() prevents deleting system defaults
@@ -456,7 +457,7 @@ describe('Benchmark Service', () => {
       const created = await storage.createCustomBenchmark({
         organizationId: testOrgId,
         metricCode: testMetricCode,
-        name: 'Original Name',
+        name: `Original Name ${uniqueSuffix}`,
         benchmarkValue: 1.10,
       }, orgAdminUserId);
       createdBenchmarkIds.push(created.id);

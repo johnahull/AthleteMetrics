@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Search, Users, User, X, Filter } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 // Types
 interface Team {
@@ -65,6 +66,7 @@ export function TeamAthleteSelector({
   onSelectionChange,
   className
 }: TeamAthleteSelectorProps) {
+  const labels = useContextualLabels();
   // Local state
   const [searchTerm, setSearchTerm] = useState('');
   const [positionFilter, setPositionFilter] = useState<string>('all');
@@ -280,7 +282,7 @@ export function TeamAthleteSelector({
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Search athletes or teams..."
+                placeholder={`Search ${labels.athletes.toLowerCase()} or ${labels.teams.toLowerCase()}...`}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 h-10"
@@ -542,7 +544,7 @@ export function TeamAthleteSelector({
                   No athletes selected
                 </p>
                 <p className="text-xs text-muted-foreground max-w-[200px]">
-                  Select teams or individual athletes from the left panel
+                  Select {labels.teams.toLowerCase()} or individual {labels.athletes.toLowerCase()} from the left panel
                 </p>
               </div>
             ) : (

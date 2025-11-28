@@ -64,6 +64,9 @@ describe('Server Startup Validation', () => {
     // Clean up module mocks
     vi.doUnmock('../../packages/api/routes');
     vi.doUnmock('../../packages/api/vite.js');
+
+    // CRITICAL: Reset all modules to prevent memory leaks from dynamic imports
+    vi.resetModules();
   });
 
   describe('NODE_ENV validation', () => {

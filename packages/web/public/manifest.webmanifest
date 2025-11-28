@@ -1,0 +1,41 @@
+{
+  "name": "AthleteMetrics",
+  "short_name": "AthleteMetrics",
+  "description": "Athletic performance tracking and analytics platform for coaches and organizations",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["sports", "fitness", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Add Measurement",
+      "short_name": "Add",
+      "description": "Quick add measurement",
+      "url": "/data-entry",
+      "icons": [
+        {
+          "src": "/icon-192.svg",
+          "sizes": "192x192",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
+}

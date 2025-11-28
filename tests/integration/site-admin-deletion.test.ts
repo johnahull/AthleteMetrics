@@ -664,7 +664,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // 7. Audit log
     await db.insert(auditLogs).values({
       userId: siteAdmin.id,
-      action: 'user.login',
+      action: 'site_admin_access',
       resourceType: 'user',
       resourceId: siteAdmin.id
     });
@@ -751,7 +751,7 @@ describe('Site Admin Deletion with Foreign Key Cleanup', () => {
     // Verify audit logs still exist in database but with NULL userId
     const allLogs = await db.select().from(auditLogs);
     const preservedLogs = allLogs.filter(log =>
-      log.action === 'user.login' && log.userId === null
+      log.action === 'site_admin_access' && log.userId === null
     );
     expect(preservedLogs.length).toBeGreaterThan(0); // Audit trail preserved for compliance
 

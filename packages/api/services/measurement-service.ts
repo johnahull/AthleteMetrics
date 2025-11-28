@@ -17,7 +17,8 @@ import {
 } from '@shared/schema';
 import { parseDateFilter } from '@shared/date-utils';
 import { db } from '../db';
-import { eq, and, gte, lte, or, isNull, sql, desc, inArray } from 'drizzle-orm';
+import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 
 export interface MeasurementFilters {
@@ -159,6 +160,8 @@ export class MeasurementService {
         measurement.metric === 'AGILITY_505' ||
         measurement.metric === 'AGILITY_5105'
           ? 's'
+          : measurement.metric === 'TOP_SPEED'
+          ? 'mph'
           : measurement.metric === 'RSI'
           ? 'ratio'
           : 'in';
@@ -477,7 +480,7 @@ export class MeasurementService {
           updateData.metric = measurement.metric;
 
           // CRITICAL: Recalculate units when metric changes
-          // Different metrics use different units (seconds, inches, ratio)
+          // Different metrics use different units (seconds, inches, ratio, mph)
           const newUnits =
             measurement.metric === 'FLY10_TIME' ||
             measurement.metric === 'T_TEST' ||
@@ -485,6 +488,8 @@ export class MeasurementService {
             measurement.metric === 'AGILITY_505' ||
             measurement.metric === 'AGILITY_5105'
               ? 's'
+              : measurement.metric === 'TOP_SPEED'
+              ? 'mph'
               : measurement.metric === 'RSI'
               ? 'ratio'
               : 'in';
@@ -654,6 +659,180 @@ export class MeasurementService {
   }
 
   /**
+   * Bulk verify measurements
+   * IMPORTANT: Uses single transaction with batch update for performance
+   * Validates all measurements before updating to allow partial success on validation failures
+   *
+   * @param measurementIds Array of measurement IDs to verify
+   * @param verifiedByUserId User ID of verifier
+   * @param expectedOrganizationId Optional organization ID for IDOR protection (site admins pass undefined)
+   * @returns Result with success count and errors
+   */
+  async bulkVerify(
+    measurementIds: string[],
+    verifiedByUserId: string,
+    expectedOrganizationId?: string
+  ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+    const errors: Array<{ id: string; message: string }> = [];
+
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock and validate all measurements with FOR UPDATE
+        const existingMeasurements = await tx
+          .select()
+          .from(measurements)
+          .where(inArray(measurements.id, measurementIds))
+          .for('update');
+
+        // Build map of found measurements
+        const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+
+        // Validate each measurement and collect valid IDs
+        const validIds: string[] = [];
+        for (const id of measurementIds) {
+          const measurement = foundMap.get(id);
+
+          if (!measurement) {
+            errors.push({ id, message: 'Measurement not found' });
+            continue;
+          }
+
+          // Defense-in-depth: Verify organization ownership
+          if (expectedOrganizationId && measurement.organizationId !== expectedOrganizationId) {
+            errors.push({ id, message: 'Access denied - measurement belongs to different organization' });
+            continue;
+          }
+
+          validIds.push(id);
+        }
+
+        // Batch update all valid measurements
+        let actualUpdated = 0;
+        if (validIds.length > 0) {
+          const result = await tx
+            .update(measurements)
+            .set({
+              isVerified: true,
+              verifiedBy: verifiedByUserId,
+            })
+            .where(inArray(measurements.id, validIds))
+            .returning({ id: measurements.id });
+
+          actualUpdated = result.length;
+
+          // Verify all expected measurements were updated (race condition check)
+          if (actualUpdated !== validIds.length) {
+            const missingIds = validIds.filter(id => !result.some(r => r.id === id));
+            missingIds.forEach(id => {
+              errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+            });
+          }
+        }
+
+        return {
+          success: actualUpdated,
+          failed: errors.length,
+          errors,
+        };
+      });
+    } catch (error) {
+      // Transaction failed - all measurements failed
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: 0,
+        failed: measurementIds.length,
+        errors: measurementIds.map(id => ({ id, message })),
+      };
+    }
+  }
+
+  /**
+   * Bulk unverify measurements
+   * IMPORTANT: Uses single transaction with batch update for performance
+   * Validates all measurements before updating to allow partial success on validation failures
+   *
+   * @param measurementIds Array of measurement IDs to unverify
+   * @param expectedOrganizationId Optional organization ID for IDOR protection (site admins pass undefined)
+   * @returns Result with success count and errors
+   */
+  async bulkUnverify(
+    measurementIds: string[],
+    expectedOrganizationId?: string
+  ): Promise<{ success: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+    const errors: Array<{ id: string; message: string }> = [];
+
+    try {
+      return await db.transaction(async (tx) => {
+        // Lock and validate all measurements with FOR UPDATE
+        const existingMeasurements = await tx
+          .select()
+          .from(measurements)
+          .where(inArray(measurements.id, measurementIds))
+          .for('update');
+
+        // Build map of found measurements
+        const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+
+        // Validate each measurement and collect valid IDs
+        const validIds: string[] = [];
+        for (const id of measurementIds) {
+          const measurement = foundMap.get(id);
+
+          if (!measurement) {
+            errors.push({ id, message: 'Measurement not found' });
+            continue;
+          }
+
+          // Defense-in-depth: Verify organization ownership
+          if (expectedOrganizationId && measurement.organizationId !== expectedOrganizationId) {
+            errors.push({ id, message: 'Access denied - measurement belongs to different organization' });
+            continue;
+          }
+
+          validIds.push(id);
+        }
+
+        // Batch update all valid measurements
+        let actualUpdated = 0;
+        if (validIds.length > 0) {
+          const result = await tx
+            .update(measurements)
+            .set({
+              isVerified: false,
+              verifiedBy: null,
+            })
+            .where(inArray(measurements.id, validIds))
+            .returning({ id: measurements.id });
+
+          actualUpdated = result.length;
+
+          // Verify all expected measurements were updated (race condition check)
+          if (actualUpdated !== validIds.length) {
+            const missingIds = validIds.filter(id => !result.some(r => r.id === id));
+            missingIds.forEach(id => {
+              errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+            });
+          }
+        }
+
+        return {
+          success: actualUpdated,
+          failed: errors.length,
+          errors,
+        };
+      });
+    } catch (error) {
+      // Transaction failed - all measurements failed
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        success: 0,
+        failed: measurementIds.length,
+        errors: measurementIds.map(id => ({ id, message })),
+      };
+    }
+  }
+
+  /**
    * Get measurements with filters and pagination
    * @param filters Measurement filters including pagination options
    * @param allowCrossOrganization Whether to allow queries without organizationId (site admin only)
@@ -737,20 +916,20 @@ export class MeasurementService {
     }
 
     // Gender filtering (applied to users table)
+    // Note: Gender is validated as enum at route level (Zod schema)
     if (filters?.gender) {
       conditions.push(eq(users.gender, filters.gender as "Male" | "Female" | "Not Specified"));
     }
 
     // Sport filtering (applied to users table with array containment)
     // PostgreSQL array operator @> checks if left array contains right array
-    // SECURITY: Drizzle's sql template tag automatically parameterizes ${filters.sport}
-    // to prevent SQL injection. The value is bound as a parameter, not concatenated.
+    // SECURITY: Using Drizzle's arrayContains() function for proper parameterization
     if (filters?.sport) {
-      // Additional validation: Ensure sport value is reasonable
+      // Validate BEFORE using in query for clarity and safety
       if (filters.sport.length > 100) {
         throw new Error('Sport parameter exceeds maximum length');
       }
-      conditions.push(sql`${users.sports} @> ARRAY[${filters.sport}]::text[]`);
+      conditions.push(arrayContains(users.sports, [filters.sport]));
     }
 
     // Birth year filtering (applied to users table)
@@ -801,12 +980,31 @@ export class MeasurementService {
       }
     }
 
+    // Age filtering (applied to measurements table)
+    // Age is stored in the measurements table, calculated at measurement creation time
+    if (filters?.ageFrom !== undefined && filters?.ageTo !== undefined) {
+      conditions.push(
+        and(
+          gte(measurements.age, filters.ageFrom),
+          lte(measurements.age, filters.ageTo)
+        )!
+      );
+    } else if (filters?.ageFrom !== undefined) {
+      conditions.push(gte(measurements.age, filters.ageFrom));
+    } else if (filters?.ageTo !== undefined) {
+      conditions.push(lte(measurements.age, filters.ageTo));
+    }
+
     // Pagination parameters with safety limits to prevent memory exhaustion
     const limit = Math.min(filters?.limit || PAGINATION.DEFAULT_LIMIT, PAGINATION.MAX_LIMIT);
     const offset = Math.min(filters?.offset || 0, PAGINATION.MAX_OFFSET);
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    // Create aliases for submitter and verifier users
+    const submitterUser = alias(users, 'submitter_user');
+    const verifierUser = alias(users, 'verifier_user');
 
     // Execute query with pagination and count in parallel
     const [results, countResult] = await Promise.all([
@@ -830,7 +1028,7 @@ export class MeasurementService {
         season: measurements.season,
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
-        // User data
+        // User data (athlete)
         user: sql<{
           id: string;
           firstName: string;
@@ -852,9 +1050,35 @@ export class MeasurementService {
           'gender', ${users.gender},
           'positions', ${users.positions}
         )`,
+        // Submitter user data
+        submittedByUser: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+        } | null>`CASE WHEN ${submitterUser.id} IS NOT NULL THEN jsonb_build_object(
+          'id', ${submitterUser.id},
+          'firstName', ${submitterUser.firstName},
+          'lastName', ${submitterUser.lastName},
+          'fullName', ${submitterUser.fullName}
+        ) ELSE NULL END`,
+        // Verifier user data
+        verifiedByUser: sql<{
+          id: string;
+          firstName: string;
+          lastName: string;
+          fullName: string;
+        } | null>`CASE WHEN ${verifierUser.id} IS NOT NULL THEN jsonb_build_object(
+          'id', ${verifierUser.id},
+          'firstName', ${verifierUser.firstName},
+          'lastName', ${verifierUser.lastName},
+          'fullName', ${verifierUser.fullName}
+        ) ELSE NULL END`,
       })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
+        .leftJoin(submitterUser, eq(measurements.submittedBy, submitterUser.id))
+        .leftJoin(verifierUser, eq(measurements.verifiedBy, verifierUser.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)

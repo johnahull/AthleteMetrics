@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertCircle, Check } from 'lucide-react';
 import type { ColumnMapping, CSVParseResult } from '@shared/import-types';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 interface ColumnMappingDialogProps {
   open: boolean;
@@ -26,6 +27,7 @@ export function ColumnMappingDialog({
   importType,
   onConfirm,
 }: ColumnMappingDialogProps) {
+  const labels = useContextualLabels();
   const [mappings, setMappings] = useState<Record<string, string>>({});
 
   const systemFields = importType === 'athletes'
@@ -42,12 +44,12 @@ export function ColumnMappingDialog({
         { value: 'height', label: 'Height (inches)', required: false },
         { value: 'weight', label: 'Weight (lbs)', required: false },
         { value: 'school', label: 'School', required: false },
-        { value: 'teamName', label: 'Team Name', required: false },
+        { value: 'teamName', label: `${labels.team} Name`, required: false },
       ]
     : [
         { value: 'firstName', label: 'First Name', required: true },
         { value: 'lastName', label: 'Last Name', required: true },
-        { value: 'teamName', label: 'Team Name', required: true },
+        { value: 'teamName', label: `${labels.team} Name`, required: true },
         { value: 'date', label: 'Date (YYYY-MM-DD)', required: true },
         { value: 'metric', label: 'Metric', required: true },
         { value: 'value', label: 'Value', required: true },

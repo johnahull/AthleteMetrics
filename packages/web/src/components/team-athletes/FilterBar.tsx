@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UserMinus } from "lucide-react";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface FilterBarProps {
   mode: 'current' | 'available';
@@ -39,6 +40,8 @@ export function FilterBar({
   onBulkAction,
   disabled = false
 }: FilterBarProps) {
+  const labels = useContextualLabels();
+
   if (mode === 'current') {
     // Bulk selection controls for current athletes
     return (
@@ -86,7 +89,7 @@ export function FilterBar({
           </Button>
         )}
         <div id="bulk-remove-description" className="sr-only">
-          Remove {selectedCount} selected athlete{selectedCount !== 1 ? 's' : ''} from team
+          Remove {selectedCount} selected athlete{selectedCount !== 1 ? 's' : ''} from {labels.team.toLowerCase()}
         </div>
       </div>
     );
@@ -153,7 +156,7 @@ export function FilterBar({
             </Button>
           )}
           <div id="select-all-description" className="sr-only">
-            Select all available athletes for adding to team
+            Select all available athletes for adding to {labels.team.toLowerCase()}
           </div>
 
           {onClearSelection && (

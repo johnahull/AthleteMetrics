@@ -3,7 +3,7 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
 // Extended request type with user info
-interface AuthenticatedRequest extends Request {
+export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
@@ -12,6 +12,7 @@ interface AuthenticatedRequest extends Request {
     role: string;
     isSiteAdmin?: boolean;
     primaryOrganizationId?: string;
+    accessMethod?: string; // For wellness access tracking
   };
 }
 
@@ -195,18 +196,193 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
   };
 };
 
+// AI Coaching Insights middleware - checks if AI features are enabled for organization
+export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  const user = req.session?.user || req.user;
+
+  // Ensure user is authenticated before proceeding
+  if (!user?.id) {
+    return res.status(401).json({ message: "User not authenticated" });
+  }
+
+  // Get organizationId from report or direct parameter
+  let organizationId = req.params.organizationId;
+
+  // If not in params, try to get from report ID
+  if (!organizationId && req.params.id) {
+    const report = await storage.getReport(req.params.id);
+    if (!report) {
+      return res.status(404).json({ message: "Report not found" });
+    }
+    organizationId = report.organizationId;
+  }
+
+  if (!organizationId) {
+    return res.status(400).json({ message: "Organization ID required" });
+  }
+
+  // Check organization access before revealing AI status
+  // This prevents information disclosure about AI being enabled for orgs user can't access
+  const hasAccess = await canAccessOrganization(user, organizationId);
+  if (!hasAccess) {
+    return res.status(403).json({ message: "Access denied to this organization" });
+  }
+
+  // Get organization and check AI flags
+  const organization = await storage.getOrganization(organizationId);
+  if (!organization) {
+    return res.status(404).json({ message: "Organization not found" });
+  }
+
+  // Check both AI flags - both must be true
+  if (!organization.aiEnabledBySiteAdmin || !organization.aiEnabled) {
+    return res.status(403).json({
+      message: "AI coaching insights feature is not enabled for this organization",
+    });
+  }
+
+  req.user = user;
+  next();
+};
+
+// Wellness access middleware - supports both authenticated and magic link access
+export const requireWellnessAccess = (requireAuth: boolean = false) => {
+  return async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      // Check 1: Authenticated session (athlete accessing own data or coach)
+      const sessionUser = req.session?.user || req.user;
+
+      if (sessionUser?.id) {
+        // User is authenticated via session
+        const email = (sessionUser as any).emails?.[0] || sessionUser.email || '';
+        req.user = {
+          id: sessionUser.id,
+          email,
+          firstName: sessionUser.firstName,
+          lastName: sessionUser.lastName,
+          role: sessionUser.role || 'athlete',
+          isSiteAdmin: sessionUser.isSiteAdmin,
+          primaryOrganizationId: sessionUser.primaryOrganizationId,
+          accessMethod: 'authenticated',
+        };
+        return next();
+      }
+
+      // Check 2: Magic link token (from body, params, or query)
+      // Priority: body (POST submission) > params (URL path) > query (URL parameters)
+      const token = req.body.token || req.params.token || req.query.token as string;
+
+      if (!token) {
+        if (requireAuth) {
+          return res.status(401).json({
+            message: "Authentication required. Please log in or use a valid magic link."
+          });
+        }
+        return res.status(401).json({
+          message: "Missing authentication credentials"
+        });
+      }
+
+      // Check 3: Validate token and retrieve request details
+      // SECURITY: Use generic error message to prevent information disclosure
+      const genericError = "Invalid or expired link";
+      const { storage } = await import('./storage');
+      const wellnessRequest = await storage.getWellnessRequestByToken(token);
+
+      if (!wellnessRequest) {
+        return res.status(403).json({ message: genericError });
+      }
+
+      // Check if request is active
+      if (wellnessRequest.status !== 'active') {
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
+      }
+
+      // Check if expired
+      if (wellnessRequest.expiresAt && new Date() > new Date(wellnessRequest.expiresAt)) {
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
+      }
+
+      // For magic link access, extract athlete ID from query parameter
+      // Priority: query > body
+      // SECURITY NOTE: This allows anyone with the magic link to submit on behalf of ANY
+      // athlete in the target list (direct or team-based). This is BY DESIGN for the
+      // wellness use case where coaches send one link that works for all team members.
+      // If 1:1 athlete-token binding is needed, use targetAthleteIds (not targetTeamIds)
+      // with individual tokens per athlete.
+      const athleteId = req.query.athlete as string || req.body.athlete as string;
+
+      if (!athleteId) {
+        return res.status(400).json({
+          message: "Missing athlete parameter for magic link submission"
+        });
+      }
+
+      // Verify athlete is targeted by this request
+      const isTargetedDirectly = wellnessRequest.targetAthleteIds?.includes(athleteId);
+
+      // Check team-based targeting if not directly targeted
+      let isTargetedViaTeam = false;
+      if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
+        const athleteTeams = await storage.getUserTeams(athleteId);
+        const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
+        isTargetedViaTeam = wellnessRequest.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+      }
+
+      if (!isTargetedDirectly && !isTargetedViaTeam) {
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
+      }
+
+      // Get athlete details for user context
+      const athlete = await storage.getUser(athleteId);
+      if (!athlete) {
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
+      }
+
+      // For public wellness links (requiresAuth: false), set magic link user context
+      // with the actual athlete's ID and details
+      req.user = {
+        id: athlete.id,
+        email: athlete.emails?.[0] || '',
+        firstName: athlete.firstName || 'Wellness',
+        lastName: athlete.lastName || 'Respondent',
+        role: 'athlete',
+        isSiteAdmin: false,
+        accessMethod: 'magic_link',
+      };
+
+      // Attach request details for downstream use
+      (req as any).wellnessRequest = wellnessRequest;
+
+      next();
+    } catch (error) {
+      console.error('Wellness access middleware error:', error);
+      return res.status(500).json({
+        message: "Failed to validate access"
+      });
+    }
+  };
+};
+
+// Wellness feature flag middleware - checks if wellness module is enabled
+export { requireWellnessEnabled, checkWellnessEnabled } from './middleware/require-wellness-enabled';
+
 // Error handling middleware
 export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
   console.error('API Error:', error);
-  
+
   if (error.name === 'ZodError') {
-    return res.status(400).json({ 
-      message: "Validation error", 
-      errors: error.errors 
+    return res.status(400).json({
+      message: "Validation error",
+      errors: error.errors
     });
   }
-  
-  res.status(500).json({ 
-    message: error.message || "Internal server error" 
+
+  res.status(500).json({
+    message: error.message || "Internal server error"
   });
 };

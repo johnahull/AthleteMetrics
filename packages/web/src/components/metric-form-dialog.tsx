@@ -31,6 +31,8 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
+import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
+import { organizationTypeEnum } from "@shared/schema";
 
 // Zod schema for metric form validation
 const metricFormSchema = z.object({
@@ -47,6 +49,7 @@ const metricFormSchema = z.object({
   unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
   description: z.string().optional(),
   lowerIsBetter: z.boolean().default(true),
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
 });
 
 type MetricFormValues = z.infer<typeof metricFormSchema>;
@@ -77,6 +80,7 @@ export default function MetricFormDialog({
       unit: "",
       description: "",
       lowerIsBetter: true,
+      availableOrgTypes: undefined,
     },
   });
 
@@ -90,6 +94,7 @@ export default function MetricFormDialog({
         unit: metric.unit || "",
         description: metric.description || "",
         lowerIsBetter: metric.lowerIsBetter,
+        availableOrgTypes: metric.availableOrgTypes || undefined,
       });
     } else if (!open) {
       // Reset form when dialog closes
@@ -100,6 +105,7 @@ export default function MetricFormDialog({
         unit: "",
         description: "",
         lowerIsBetter: true,
+        availableOrgTypes: undefined,
       });
     }
   }, [metric, open, form]);
@@ -116,6 +122,7 @@ export default function MetricFormDialog({
             unit: data.unit || undefined,
             description: data.description || undefined,
             lowerIsBetter: data.lowerIsBetter,
+            availableOrgTypes: data.availableOrgTypes || undefined,
           },
         });
         toast({
@@ -131,6 +138,7 @@ export default function MetricFormDialog({
           unit: data.unit || undefined,
           description: data.description || undefined,
           lowerIsBetter: data.lowerIsBetter,
+          availableOrgTypes: data.availableOrgTypes || undefined,
           isActive: true,
           decimalPrecision: 3, // Default precision for measurements
         });
@@ -302,6 +310,29 @@ export default function MetricFormDialog({
                   </FormControl>
                   <FormDescription>
                     Optional detailed description for users
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Available Organization Types field */}
+            <FormField
+              control={form.control}
+              name="availableOrgTypes"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Available to Organization Types</FormLabel>
+                  <FormControl>
+                    <OrganizationTypeMultiSelect
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="All organizations (default)"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Leave empty to make this metric available to all organization types.
+                    Select specific types to restrict availability.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

@@ -20,6 +20,7 @@ import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { FormErrorSummary } from "@/components/ui/form-error-summary";
 import { useFormErrors } from "@/hooks/useFormErrors";
 import { z } from "zod";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
@@ -39,6 +40,7 @@ function hasBirthYearProperty(athlete: any): athlete is Athlete & { birthYear: n
 }
 
 export default function MeasurementForm() {
+  const labels = useContextualLabels();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -108,6 +110,7 @@ export default function MeasurementForm() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
       toast({
         title: "Success",
         description: "Measurement added successfully",
@@ -419,7 +422,7 @@ export default function MeasurementForm() {
         {/* Team Context */}
         {selectedAthlete && activeTeams.length > 0 && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-blue-900 mb-2">Team Context</h3>
+            <h3 className="text-sm font-medium text-blue-900 mb-2">{labels.team} Context</h3>
             
             {activeTeams.length === 1 && activeTeams[0] ? (
               <div className="space-y-2">
@@ -432,13 +435,13 @@ export default function MeasurementForm() {
                   onClick={() => setShowTeamOverride(!showTeamOverride)}
                   className="text-xs text-blue-600 hover:text-blue-800 underline"
                 >
-                  {showTeamOverride ? 'Use auto-assignment' : 'Override team selection'}
+                  {showTeamOverride ? 'Use auto-assignment' : `Override ${labels.team.toLowerCase()} selection`}
                 </button>
               </div>
             ) : (
               <div className="space-y-2">
                 <p className="text-sm text-blue-800">
-                  Athlete is on {activeTeams.length} teams - please select team context:
+                  {labels.athlete} is on {activeTeams.length} {labels.teams.toLowerCase()} - please select {labels.team.toLowerCase()} context:
                 </p>
                 <FormField
                   control={form.control}
@@ -454,7 +457,7 @@ export default function MeasurementForm() {
                       }} value={field.value}>
                         <FormControl>
                           <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="Select team..." />
+                            <SelectValue placeholder={`Select ${labels.team.toLowerCase()}...`} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -479,7 +482,7 @@ export default function MeasurementForm() {
                   name="teamId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="text-xs">Team Override</FormLabel>
+                      <FormLabel className="text-xs">{labels.team} Override</FormLabel>
                       <Select onValueChange={(value) => {
                         field.onChange(value);
                         const selectedTeam = activeTeams?.find(t => t?.teamId === value);
@@ -489,7 +492,7 @@ export default function MeasurementForm() {
                       }} value={field.value}>
                         <FormControl>
                           <SelectTrigger className="bg-white">
-                            <SelectValue placeholder="Select team..." />
+                            <SelectValue placeholder={`Select ${labels.team.toLowerCase()}...`} />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
@@ -512,7 +515,7 @@ export default function MeasurementForm() {
         {selectedAthlete && activeTeams.length === 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <p className="text-sm text-amber-800">
-              This athlete is not currently on any active teams. The measurement will be recorded without team context.
+              This {labels.athlete.toLowerCase()} is not currently on any active {labels.teams.toLowerCase()}. The measurement will be recorded without {labels.team.toLowerCase()} context.
             </p>
           </div>
         )}
@@ -598,15 +601,15 @@ export default function MeasurementForm() {
                       name="teamIds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Team</FormLabel>
-                          <Select 
-                            value={Array.isArray(field.value) ? field.value[0] || "" : field.value || ""} 
+                          <FormLabel>{labels.team}</FormLabel>
+                          <Select
+                            value={Array.isArray(field.value) ? field.value[0] || "" : field.value || ""}
                             onValueChange={(value) => field.onChange([value])}
                             disabled={createAthleteMutation.isPending}
                           >
                             <FormControl>
                               <SelectTrigger data-testid="select-quick-add-team">
-                                <SelectValue placeholder="Select team..." />
+                                <SelectValue placeholder={`Select ${labels.team.toLowerCase()}...`} />
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>

@@ -21,8 +21,10 @@ import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function Publish() {
+  const labels = useContextualLabels();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -400,7 +402,7 @@ export default function Publish() {
     pdf.setFontSize(12);
     pdf.text("Rank", 20, yPos);
     pdf.text("Athlete", 40, yPos);
-    pdf.text("Team(s)", 100, yPos);
+    pdf.text(labels.teams, 100, yPos);
     pdf.text("Value", 140, yPos);
     pdf.text("Date", 170, yPos);
 
@@ -518,19 +520,19 @@ export default function Publish() {
 
             {/* Team */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Team</label>
-              <Select 
-                value={filters.teamIds[0] || "all"} 
-                onValueChange={(value) => setFilters(prev => ({ 
-                  ...prev, 
-                  teamIds: value === "all" ? [] : [value] 
+              <label className="block text-sm font-medium text-gray-700 mb-2">{labels.team}</label>
+              <Select
+                value={filters.teamIds[0] || "all"}
+                onValueChange={(value) => setFilters(prev => ({
+                  ...prev,
+                  teamIds: value === "all" ? [] : [value]
                 }))}
               >
                 <SelectTrigger data-testid="select-team">
-                  <SelectValue placeholder="All Teams" />
+                  <SelectValue placeholder={`All ${labels.teams}`} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Teams</SelectItem>
+                  <SelectItem value="all">All {labels.teams}</SelectItem>
                   {teams?.map((team: any) => (
                     <SelectItem key={team.id} value={team.id}>
                       {team.name}
@@ -794,7 +796,7 @@ export default function Publish() {
                       aria-sort={sortColumn === 'team' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
-                        Team(s)
+                        {labels.teams}
                         {sortColumn === 'team' ? (
                           sortDirection === 'asc' ? (
                             <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />

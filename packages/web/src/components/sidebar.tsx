@@ -1,6 +1,7 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
+import type { SiteSettings, Organization, UserOrganization } from "@shared/schema";
 import {
   BarChart3,
   Building2,
@@ -14,29 +15,40 @@ import {
   TrendingUp,
   Settings,
   Target,
-  ClipboardList
+  ClipboardList,
+  Activity,
+  Heart,
+  ClipboardCheck,
+  Trophy
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
 import { OrganizationDisplay } from "./organization-display";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 
 
 // Navigation configurations for each role
-const NAVIGATION_CONFIGS = {
+// Function to generate navigation config with contextual labels
+const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   site_admin: {
     default: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
+      { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
+      { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
-      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" }
+      { name: "Sports", href: "/sports", icon: Trophy, testId: "sports-menu-item" },
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
+      { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
     ],
     organization_context: [
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Teams", href: "/teams", icon: Users },
-      { name: "Athletes", href: "/athletes", icon: UsersRound },
+      { name: teamLabel, href: "/teams", icon: Users },
+      { name: athletesLabel, href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+      { name: "Wellness", href: "/wellness", icon: Heart },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Reports", href: "/reports", icon: ClipboardList },
       { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -46,21 +58,23 @@ const NAVIGATION_CONFIGS = {
   },
   org_admin: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Teams", href: "/teams", icon: Users },
-    { name: "Athletes", href: "/athletes", icon: UsersRound },
+    { name: teamLabel, href: "/teams", icon: Users },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
-    { name: "Settings", href: "/organizations", icon: Settings }
+    { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings }
   ],
   coach: [
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Teams", href: "/teams", icon: Users },
-    { name: "Athletes", href: "/athletes", icon: UsersRound },
+    { name: teamLabel, href: "/teams", icon: Users },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
     { name: "Measurements", href: "/publish", icon: FileCheck },
@@ -70,13 +84,16 @@ const NAVIGATION_CONFIGS = {
   athlete: [
     { name: "Analytics", href: "/analytics", icon: BarChart3 }
   ]
-};
+});
 
-const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string) => {
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes") => {
+  // Get navigation configs with contextual labels
+  const NAVIGATION_CONFIGS = getNavigationConfigs(teamLabel, athletesLabel);
+
   // Site admin navigation
   if (isSiteAdmin) {
-    const config = isInOrganizationContext 
-      ? NAVIGATION_CONFIGS.site_admin.organization_context 
+    const config = isInOrganizationContext
+      ? NAVIGATION_CONFIGS.site_admin.organization_context
       : NAVIGATION_CONFIGS.site_admin.default;
     
     // Add organization context link if needed
@@ -101,9 +118,10 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   
   // Update org admin organization link with specific ID
   if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
-    const orgIndex = navigation.findIndex(item => item.name === "Settings");
-    if (orgIndex !== -1) {
-      navigation[orgIndex].href = `/organizations/${userOrganizations[0].organizationId}`;
+    const orgId = userOrganizations[0].organizationId;
+    const settingsIndex = navigation.findIndex(item => item.name === "Settings");
+    if (settingsIndex !== -1) {
+      navigation[settingsIndex].href = `/organizations/${orgId}/settings/admin`;
     }
   }
 
@@ -126,9 +144,10 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   return navigation;
 };
 
-export default function Sidebar() {
+export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}) {
   const [location] = useLocation();
   const { user: userData, logout } = useAuth();
+  const labels = useContextualLabels(); // Get contextual labels
 
   // Don't render sidebar if no user data
   if (!userData) {
@@ -136,9 +155,28 @@ export default function Sidebar() {
   }
 
   // Get user's organizations for context
-  const { data: userOrganizations } = useQuery({
+  const { data: userOrganizations } = useQuery<UserOrganization[]>({
     queryKey: ["/api/auth/me/organizations"],
     enabled: !!userData.id && !userData.isSiteAdmin,
+  });
+
+  // Fetch site settings to check wellness module status
+  // Use public endpoint for non-site-admins, full endpoint for site admins
+  const siteSettingsEndpoint = userData?.isSiteAdmin
+    ? "/api/site-settings"
+    : "/api/site-settings/public";
+  const { data: siteSettings } = useQuery<SiteSettings>({
+    queryKey: [siteSettingsEndpoint],
+    enabled: !!userData.id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch organization to check org-level wellness status
+  const organizationId = userOrganizations?.[0]?.organizationId;
+  const { data: organization } = useQuery<Organization>({
+    queryKey: [`/api/organizations/${organizationId}`],
+    enabled: !!organizationId && !userData.isSiteAdmin,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
   // Use the role from user session data
@@ -146,22 +184,19 @@ export default function Sidebar() {
   const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
 
   // Extract organization ID from URL - check both organization profile and context switching
-  const organizationId = location.match(/\/organizations\/([^\/]+)/)?.[1];
-  const isInOrganizationContext = !!organizationId;
+  const orgIdFromUrl = location.match(/\/organizations\/([^\/]+)/)?.[1];
+  const isInOrganizationContext = !!orgIdFromUrl;
 
-  const navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], organizationId);
+  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes);
 
-  // Get current organization data if in context
-  const { data: currentOrganization } = useQuery({
-    queryKey: [`/api/organizations/${organizationId}`],
-    enabled: !!organizationId,
-    queryFn: async () => {
-      const response = await fetch(`/api/organizations/${organizationId}`);
-      if (!response.ok) return null;
-      return response.json();
-    }
-  });
+  // Filter out Wellness link if wellness module is disabled
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
+  const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
 
+  if (!isWellnessEnabled) {
+    navigation = navigation.filter(item => item.name !== "Wellness");
+  }
 
   return (
     <aside className="w-64 bg-white shadow-sm border-r border-gray-200 h-screen flex-shrink-0 flex flex-col">
@@ -185,7 +220,7 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <NavigationMenu navigation={navigation} currentLocation={location} />
+      <NavigationMenu navigation={navigation} currentLocation={location} onNavigate={onNavigate} />
 
       <UserProfileDisplay
         user={userData}

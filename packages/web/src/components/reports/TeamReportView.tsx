@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useTeams } from "@/hooks/use-teams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,30 +24,42 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
+import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { useAuth } from "@/lib/auth";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 interface TeamReportViewProps {
   report: Report;
 }
 
 export function TeamReportView({ report }: TeamReportViewProps) {
+  const labels = useContextualLabels();
   const [showShareDialog, setShowShareDialog] = useState(false);
-  const [pdfFormat, setPdfFormat] = useState<PdfFormat>('simplified');
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
+  const { user } = useAuth();
 
   // Fetch teams for team name display
   const { data: teams } = useTeams({ organizationId: report.organizationId });
+
+  // Determine if AI is enabled for this organization
+  const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
+    queryKey: ['organizations', report.organizationId, 'details'],
+    enabled: !!report.organizationId,
+  });
+
+  const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
   useEffect(() => {
     // Generate report data on mount
     // Team reports don't need athleteId - pass empty object
     generateReport.mutate({}, {
       onSuccess: (response) => {
-        console.log('[TeamReportView] Report generated successfully:', response);
         // Extract the actual report data from the response
         if (response && typeof response === 'object' && 'data' in response) {
           setReportData(response.data as TeamReportData);
@@ -117,18 +130,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt } = reportData;
-
-  console.log('[TeamReportView] Rendering with data:', {
-    teamStatistics,
-    athleteRankings,
-    teamStatsIsArray: Array.isArray(teamStatistics),
-    athleteRankingsIsArray: Array.isArray(athleteRankings),
-    teamStatsLength: teamStatistics?.length,
-    athleteRankingsLength: athleteRankings?.length,
-    generatedAt,
-    fullReportData: reportData
-  });
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits } = reportData;
 
   // Collect all unique benchmark names across all metrics
   const allBenchmarkNames = new Set<string>();
@@ -189,7 +191,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     const teamIds = config.filters?.teamIds;
 
     if (!teamIds || teamIds.length === 0) {
-      return 'All Teams';
+      return `All ${labels.teams}`;
     }
 
     if (!teams || teams.length === 0) {
@@ -200,7 +202,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       .map((id: string) => teams.find(t => t.id === id)?.name)
       .filter(Boolean);
 
-    return teamNames.length > 0 ? teamNames.join(', ') : 'All Teams';
+    return teamNames.length > 0 ? teamNames.join(', ') : `All ${labels.teams}`;
   };
 
   // Helper function: Get user-friendly metric names
@@ -210,7 +212,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     }
 
     return teamStatistics
-      .map(stat => getMetricDisplayName(stat.metric))
+      .map(stat => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
       .join(', ');
   };
 
@@ -225,7 +227,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
     const weightDescriptions = Object.entries(weights)
       .map(([metricCode, weight]) => {
-        const metricName = getMetricDisplayName(metricCode);
+        const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
         const percentage = ((weight as number) * 100).toFixed(0);
         return `${metricName} (${percentage}%)`;
       })
@@ -355,7 +357,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <Users className="h-5 w-5 text-blue-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">Teams</p>
+                <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
                 <p className="text-base font-semibold mt-1 break-words">{getTeamNames()}</p>
               </div>
             </div>
@@ -377,9 +379,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <TrendingUp className="h-5 w-5 text-purple-600" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-muted-foreground">Athletes Tested</p>
+                <p className="text-sm font-medium text-muted-foreground">{labels.athletes} Tested</p>
                 <p className="text-base font-semibold mt-1">
-                  {reportData.athleteCount} {reportData.athleteCount === 1 ? 'athlete' : 'athletes'}
+                  {reportData.athleteCount} {reportData.athleteCount === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()}
                 </p>
               </div>
             </div>
@@ -398,6 +400,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         </CardContent>
       </Card>
 
+      {/* Coaching Insights */}
+      <CoachingInsightsCard
+        reportId={report.id}
+        initialInsights={report.coachingInsights}
+        generatedAt={report.coachingInsightsGeneratedAt}
+        model={report.coachingInsightsModel}
+        aiEnabled={aiEnabled || false}
+      />
+
       {/* Team Statistics */}
       {Array.isArray(teamStatistics) && teamStatistics.length > 0 && (
         <Card>
@@ -409,7 +420,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Test</TableHead>
-                  <TableHead>Team Average</TableHead>
+                  <TableHead>{labels.team} Average</TableHead>
                   {benchmarkColumns.map((benchmarkName) => (
                     <TableHead key={benchmarkName}>{benchmarkName}</TableHead>
                   ))}
@@ -429,10 +440,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
                   return (
                     <TableRow key={stat.metric}>
-                      <TableCell className="font-medium">{stat.metric}</TableCell>
+                      <TableCell className="font-medium">{metricLabels?.[stat.metric] || stat.metric}</TableCell>
                       <TableCell>
                         {stat.average !== null && stat.average !== undefined
-                          ? `${stat.average.toFixed(2)} ${stat.units || ''}`
+                          ? (isFly10Metric(stat.metric)
+                              ? formatFly10Dual(stat.average)
+                              : `${stat.average.toFixed(2)} ${stat.units || ''}`)
                           : "N/A"}
                       </TableCell>
                       {benchmarkColumns.map((benchmarkName) => (
@@ -448,7 +461,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             <div className="font-medium">{stat.topPerformer.userName}</div>
                             <div className="text-sm text-muted-foreground">
                               {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
-                                ? `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`
+                                ? (isFly10Metric(stat.metric)
+                                    ? formatFly10Dual(stat.topPerformer.value)
+                                    : `${stat.topPerformer.value.toFixed(2)} ${stat.units || ''}`)
                                 : "N/A"}
                             </div>
                           </div>
@@ -458,7 +473,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                       </TableCell>
                       <TableCell>
                         {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
-                          ? `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`
+                          ? (isFly10Metric(stat.metric)
+                              ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
+                              : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${stat.units || ''}`)
                           : "N/A"}
                       </TableCell>
                     </TableRow>
@@ -478,7 +495,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             <CardHeader>
               <CardTitle>Benchmark Achievement Summary</CardTitle>
               <CardDescription>
-                Number of athletes meeting each benchmark (athletes may meet multiple benchmarks)
+                Number of {labels.athletes.toLowerCase()} meeting each benchmark ({labels.athletes.toLowerCase()} may meet multiple benchmarks)
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -487,7 +504,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                   <div key={achievement.tier} className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="font-medium">
-                        {achievement.count} athlete{achievement.count !== 1 ? 's' : ''} met{' '}
+                        {achievement.count} {achievement.count === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()} met{' '}
                         <Badge variant={achievement.tier === 'No benchmark met' ? 'outline' : 'secondary'}>
                           {achievement.tier}
                         </Badge>
@@ -556,9 +573,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{getMetricDisplayName(stat.metric)}</CardTitle>
+                  <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
                   <CardDescription>
-                    Team Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
+                    {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}
                   </CardDescription>
                 </CardHeader>
@@ -636,7 +653,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             </TableCell>
                             <TableCell>
                               {value !== null && value !== undefined
-                                ? `${value.toFixed(2)} ${stat.units || ''}`
+                                ? (isFly10Metric(stat.metric)
+                                    ? formatFly10Dual(value)
+                                    : `${value.toFixed(2)} ${stat.units || ''}`)
                                 : "N/A"}
                             </TableCell>
                             <TableCell>

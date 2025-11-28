@@ -338,28 +338,38 @@ async function globalSetup(config: FullConfig) {
 
     const createdUserIds: Record<string, string> = {};
 
-    for (const userConfig of testUsers) {
-      // Hash password
-      const hashedPassword = await bcrypt.hash(userConfig.password, BCRYPT_SALT_ROUNDS);
+    // Track processed usernames to handle same-username scenario in CI
+    // When all role credentials point to the same user, we need to preserve the highest privilege
+    const processedUsernames = new Map<string, { id: string; isSiteAdmin: boolean }>();
 
-      // Use upsert pattern to handle race conditions when multiple test runners start simultaneously
-      // INSERT ... ON CONFLICT ensures atomic operation without check-then-act pattern
-      const [user] = await retryDatabaseOperation(
-        async () => {
-          const result = await db.insert(schema.users)
-            .values({
-              username: userConfig.username,
-              password: hashedPassword,
-              firstName: userConfig.firstName,
-              lastName: userConfig.lastName,
-              fullName: `${userConfig.firstName} ${userConfig.lastName}`,
-              emails: userConfig.emails,
-              isSiteAdmin: userConfig.isSiteAdmin,
-              isActive: true,
-            })
-            .onConflictDoUpdate({
-              target: schema.users.username,
-              set: {
+    for (const userConfig of testUsers) {
+      // Check if this username was already processed
+      const existingUser = processedUsernames.get(userConfig.username);
+
+      if (existingUser) {
+        // Username already processed - only handle org assignment, don't update user
+        console.log(`    ✅ User ready: ${userConfig.username} (${userConfig.role}) [same-user mode]`);
+        createdUserIds[userConfig.role] = existingUser.id;
+
+        // If this config wants site admin and current user isn't, upgrade them
+        if (userConfig.isSiteAdmin && !existingUser.isSiteAdmin) {
+          await db.update(schema.users)
+            .set({ isSiteAdmin: true, updatedAt: new Date() })
+            .where(eq(schema.users.id, existingUser.id));
+          existingUser.isSiteAdmin = true;
+          console.log(`      ⬆️  Upgraded to site admin`);
+        }
+      } else {
+        // Hash password
+        const hashedPassword = await bcrypt.hash(userConfig.password, BCRYPT_SALT_ROUNDS);
+
+        // Use upsert pattern to handle race conditions when multiple test runners start simultaneously
+        // INSERT ... ON CONFLICT ensures atomic operation without check-then-act pattern
+        const [user] = await retryDatabaseOperation(
+          async () => {
+            const result = await db.insert(schema.users)
+              .values({
+                username: userConfig.username,
                 password: hashedPassword,
                 firstName: userConfig.firstName,
                 lastName: userConfig.lastName,
@@ -367,31 +377,48 @@ async function globalSetup(config: FullConfig) {
                 emails: userConfig.emails,
                 isSiteAdmin: userConfig.isSiteAdmin,
                 isActive: true,
-                updatedAt: new Date(),
-              },
-            })
-            .returning();
-          return result;
-        },
-        `Upsert user ${userConfig.username}`
-      );
+              })
+              .onConflictDoUpdate({
+                target: schema.users.username,
+                set: {
+                  password: hashedPassword,
+                  firstName: userConfig.firstName,
+                  lastName: userConfig.lastName,
+                  fullName: `${userConfig.firstName} ${userConfig.lastName}`,
+                  emails: userConfig.emails,
+                  isSiteAdmin: userConfig.isSiteAdmin,
+                  isActive: true,
+                  updatedAt: new Date(),
+                },
+              })
+              .returning();
+            return result;
+          },
+          `Upsert user ${userConfig.username}`
+        );
 
-      console.log(`    ✅ User ready: ${user.username} (${userConfig.role})`);
+        console.log(`    ✅ User ready: ${user.username} (${userConfig.role})`);
 
-      createdUserIds[userConfig.role] = user.id;
+        // Track this username
+        processedUsernames.set(userConfig.username, { id: user.id, isSiteAdmin: userConfig.isSiteAdmin });
+        createdUserIds[userConfig.role] = user.id;
+      }
+
+      // Get the user ID for org assignments (from either branch)
+      const currentUserId = createdUserIds[userConfig.role];
 
       // Assign non-site-admin users to organization with appropriate roles
       if (!userConfig.isSiteAdmin) {
         const existingAssignment = await db.query.userOrganizations.findFirst({
           where: and(
-            eq(schema.userOrganizations.userId, user.id),
+            eq(schema.userOrganizations.userId, currentUserId),
             eq(schema.userOrganizations.organizationId, organization.id)
           ),
         });
 
         if (!existingAssignment) {
           await db.insert(schema.userOrganizations).values({
-            userId: user.id,
+            userId: currentUserId,
             organizationId: organization.id,
             role: userConfig.role,
           });
@@ -404,14 +431,14 @@ async function globalSetup(config: FullConfig) {
         if (userConfig.role === 'coach') {
           const existingSecondAssignment = await db.query.userOrganizations.findFirst({
             where: and(
-              eq(schema.userOrganizations.userId, user.id),
+              eq(schema.userOrganizations.userId, currentUserId),
               eq(schema.userOrganizations.organizationId, secondOrganization.id)
             ),
           });
 
           if (!existingSecondAssignment) {
             await db.insert(schema.userOrganizations).values({
-              userId: user.id,
+              userId: currentUserId,
               organizationId: secondOrganization.id,
               role: 'coach',
             });

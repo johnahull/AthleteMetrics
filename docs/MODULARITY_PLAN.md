@@ -1180,12 +1180,12 @@ export class AIBudgetService {
   private calculateCost(model: string, promptTokens: number, completionTokens: number): number {
     const pricing = {
       "gpt-4o": { prompt: 0.000005, completion: 0.000015 }, // $5/$15 per 1M tokens
-      "gpt-4o-mini": { prompt: 0.00000015, completion: 0.0000006 }, // $0.15/$0.60 per 1M
+      "gpt-5-nano": { prompt: 0.00000015, completion: 0.0000006 }, // $0.05/$0.40 per 1M
       "claude-sonnet-4": { prompt: 0.000003, completion: 0.000015 }, // $3/$15 per 1M
       "claude-haiku-4": { prompt: 0.0000008, completion: 0.000004 }, // $0.80/$4 per 1M
     };
 
-    const rates = pricing[model] || pricing["gpt-4o-mini"];
+    const rates = pricing[model] || pricing["gpt-5-nano"];
     return (promptTokens * rates.prompt) + (completionTokens * rates.completion);
   }
 

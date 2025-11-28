@@ -33,6 +33,9 @@ const mockRecentReports: Report[] = [
     createdAt: new Date('2025-01-20'),
     updatedAt: new Date('2025-01-20'),
     config: { metrics: ['FLY10_TIME'], filters: {} },
+    coachingInsights: null,
+    coachingInsightsGeneratedAt: null,
+    coachingInsightsModel: null,
   },
   {
     id: 'report-2',
@@ -46,6 +49,9 @@ const mockRecentReports: Report[] = [
     createdAt: new Date('2025-01-18'),
     updatedAt: new Date('2025-01-18'),
     config: { metrics: ['VERTICAL_JUMP'], filters: {} },
+    coachingInsights: null,
+    coachingInsightsGeneratedAt: null,
+    coachingInsightsModel: null,
   },
   {
     id: 'report-3',
@@ -59,6 +65,9 @@ const mockRecentReports: Report[] = [
     createdAt: new Date('2025-01-15'),
     updatedAt: new Date('2025-01-15'),
     config: { metrics: ['DASH_40YD'], filters: {} },
+    coachingInsights: null,
+    coachingInsightsGeneratedAt: null,
+    coachingInsightsModel: null,
   },
 ];
 
@@ -229,6 +238,9 @@ describe('RecentReportsSection', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       config: { metrics: [], filters: {} },
+      coachingInsights: null,
+      coachingInsightsGeneratedAt: null,
+      coachingInsightsModel: null,
     }));
 
     (useReportsWithFilters as any).mockReturnValue({

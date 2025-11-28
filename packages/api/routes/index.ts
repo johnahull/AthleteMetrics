@@ -14,6 +14,11 @@ import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
+import { registerSearchRoutes } from "./search-routes";
+import siteSettingsRoutes from "./site-settings-routes";
+import { registerWellnessRoutes } from "./wellness-routes";
+import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
+import { registerSportsRoutes } from "./sport-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -53,6 +58,21 @@ export function registerAllRoutes(app: Express) {
   // Report management routes
   registerReportRoutes(app);
 
+  // Global search routes (command palette)
+  registerSearchRoutes(app);
+
+  // Site settings routes (AI model configuration)
+  app.use("/api/site-settings", siteSettingsRoutes);
+
+  // Wellness questionnaire routes
+  registerWellnessRoutes(app);
+
+  // Admin wellness routes (site admin only)
+  registerAdminWellnessRoutes(app);
+
+  // Sports and positions management routes
+  registerSportsRoutes(app);
+
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
 
@@ -75,8 +95,9 @@ export function getRouteStats() {
       metrics: "✅ Registered (new service)",
       benchmarks: "✅ Registered (new service)",
       reports: "✅ Registered (new service)",
+      sports: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 10/11 modules refactored"
+    status: "Migration nearly complete - 11/12 modules refactored"
   };
 }

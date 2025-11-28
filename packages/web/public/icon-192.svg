@@ -1,0 +1,11 @@
+<svg width="192" height="192" viewBox="0 0 192 192" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="192" height="192" rx="48" fill="#3b82f6"/>
+
+  <!-- AM Letters -->
+  <text x="96" y="130" font-family="system-ui, -apple-system, sans-serif" font-size="84" font-weight="700" fill="white" text-anchor="middle">AM</text>
+
+  <!-- Optional: Athletic symbol (running figure outline) -->
+  <circle cx="96" cy="48" r="12" fill="white" opacity="0.9"/>
+  <path d="M96 60 L88 76 L80 92 M96 60 L104 76 L112 92 M88 76 L104 76" stroke="white" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" fill="none"/>
+</svg>

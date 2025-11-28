@@ -14,6 +14,7 @@ import type {
   OrganizationBenchmark,
   OrganizationBenchmarkWithDetails,
 } from "@shared/schema";
+import { STALE_TIME } from "@/lib/queryClient";
 
 // ============================================================================
 // API Client Functions - Site Benchmarks
@@ -28,7 +29,7 @@ export async function fetchSiteBenchmarks(includeInactive = false): Promise<Site
     params.append('includeInactive', 'true');
   }
 
-  const response = await fetch(`/api/benchmarks?${params.toString()}`);
+  const response = await fetch(`/api/site-benchmarks?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site benchmarks');
   }
@@ -301,7 +302,7 @@ export function useSiteBenchmarks(includeInactive = false) {
   return useQuery({
     queryKey: ['siteBenchmarks', includeInactive],
     queryFn: () => fetchSiteBenchmarks(includeInactive),
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -313,7 +314,7 @@ export function useSiteBenchmark(id: string) {
     queryKey: ['siteBenchmark', id],
     queryFn: () => fetchSiteBenchmark(id),
     enabled: !!id,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -389,7 +390,7 @@ export function useCustomBenchmarks(organizationId: string, includeInactive = fa
     queryKey: ['customBenchmarks', organizationId, includeInactive],
     queryFn: () => fetchCustomBenchmarks(organizationId, includeInactive),
     enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -460,7 +461,7 @@ export function useOrganizationBenchmarks(organizationId: string, includeInactiv
     queryKey: ['organizationBenchmarks', organizationId, includeInactive],
     queryFn: () => fetchOrganizationBenchmarks(organizationId, includeInactive),
     enabled: !!organizationId,
-    staleTime: 5 * 60 * 1000,
+    staleTime: STALE_TIME.DEFAULT,
   });
 }
 
@@ -521,6 +522,6 @@ export function useAthleteBenchmarkStatus(organizationId: string, athleteId: str
     queryKey: ['athleteBenchmarkStatus', organizationId, athleteId],
     queryFn: () => fetchAthleteBenchmarkStatus(organizationId, athleteId),
     enabled: !!organizationId && !!athleteId,
-    staleTime: 1 * 60 * 1000, // 1 minute (more frequent updates for athlete status)
+    staleTime: STALE_TIME.REALTIME, // 1 minute (more frequent updates for athlete status)
   });
 }

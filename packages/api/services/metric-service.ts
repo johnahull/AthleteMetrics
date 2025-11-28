@@ -15,6 +15,7 @@ import type {
 
 export interface SiteMetricFilters {
   includeInactive?: boolean;
+  orgType?: string; // Filter by organization type
 }
 
 export interface OrganizationMetricFilters {
@@ -29,6 +30,7 @@ export class MetricService extends BaseService {
   /**
    * Get all site metrics (master catalog)
    * By default, only returns active metrics unless includeInactive is true
+   * Supports organization type filtering when orgType is specified
    */
   async getSiteMetrics(
     requestingUserId: string,
@@ -39,9 +41,23 @@ export class MetricService extends BaseService {
       // Regular users only see active metrics
       const isSiteAdmin = await this.isSiteAdmin(requestingUserId);
 
-      return await this.storage.getSiteMetrics({
+      const allMetrics = await this.storage.getSiteMetrics({
         includeInactive: isSiteAdmin && filters?.includeInactive,
       });
+
+      // If organization type filtering is requested, filter metrics
+      if (filters?.orgType) {
+        return allMetrics.filter(metric => {
+          // If metric has no availableOrgTypes restriction, it's available to all org types
+          if (!metric.availableOrgTypes || metric.availableOrgTypes.length === 0) {
+            return true;
+          }
+          // Otherwise, check if the requested org type is in the allowed list
+          return metric.availableOrgTypes.includes(filters.orgType as any);
+        });
+      }
+
+      return allMetrics;
     } catch (error) {
       return this.handleError(error, "MetricService.getSiteMetrics");
     }
@@ -55,6 +71,31 @@ export class MetricService extends BaseService {
       return await this.storage.getSiteMetric(code);
     } catch (error) {
       return this.handleError(error, "MetricService.getSiteMetric");
+    }
+  }
+
+  /**
+   * Get site metrics filtered by the requesting organization's type
+   */
+  async getSiteMetricsForOrganization(
+    organizationId: string,
+    requestingUserId: string,
+    filters?: Omit<SiteMetricFilters, 'orgType'>
+  ): Promise<SiteMetric[]> {
+    try {
+      // Get the organization to determine its type
+      const organization = await this.storage.getOrganization(organizationId);
+      if (!organization) {
+        throw new Error("Organization not found");
+      }
+
+      // Get metrics filtered by organization type
+      return await this.getSiteMetrics(requestingUserId, {
+        ...filters,
+        orgType: organization.orgType,
+      });
+    } catch (error) {
+      return this.handleError(error, "MetricService.getSiteMetricsForOrganization");
     }
   }
 

@@ -38,9 +38,11 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -60,17 +62,17 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Seed default metrics
         run: npx tsx scripts/seed-default-metrics.ts
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Apply cascade delete triggers
         run: ./scripts/apply-cascade-triggers.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Run unit tests
         run: npm run test:unit
@@ -78,13 +80,13 @@ jobs:
           NODE_ENV: test
           NODE_OPTIONS: --max-old-space-size=4096
           SESSION_SECRET: test-secret-key-for-ci
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Cleanup test database
         if: always()
         run: ./scripts/ci-test-cleanup.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   integration-tests:
     name: Integration Tests
@@ -94,9 +96,11 @@ jobs:
       postgres:
         image: postgres:15
         env:
-          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
-          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           POSTGRES_MAX_CONNECTIONS: 100
         options: >-
           --health-cmd pg_isready
@@ -119,23 +123,23 @@ jobs:
       - name: Run database migrations
         run: npm run db:push
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Seed default metrics
         run: npx tsx scripts/seed-default-metrics.ts
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Apply cascade delete triggers
         run: ./scripts/apply-cascade-triggers.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
       - name: Run integration tests
         run: npm run test:integration
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           SESSION_SECRET: test-secret-key-for-ci
           # ADMIN_PASSWORD not set - will use default 'TestPassword123!' from test file
 
@@ -143,7 +147,7 @@ jobs:
         if: always()
         run: ./scripts/ci-test-cleanup.sh
         env:
-          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   build:
     name: Build Verification
@@ -179,6 +183,13 @@ jobs:
           echo "   - API: dist/index.js"
           echo "   - Frontend: dist/public/"
 
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+          retention-days: 1
+
   security-audit:
     name: Security Audit
     runs-on: ubuntu-latest
@@ -192,6 +203,213 @@ jobs:
 
       - name: Run security audit
         run: ./scripts/security-audit.sh
+
+  migration-lint:
+    name: Migration Idempotency Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # Need full history for diff
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for modified migrations
+        id: check-migrations
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Get list of added or modified migration files in this PR
+          # shellcheck disable=SC2086
+          CHANGED_MIGRATIONS=$(git diff --name-only --diff-filter=AM "origin/${BASE_REF}...HEAD" -- 'migrations/*.sql' | grep -v '_down\.sql$' || true)
+
+          if [ -z "$CHANGED_MIGRATIONS" ]; then
+            echo "No new or modified migrations found"
+            echo "has_migrations=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Found migrations to lint:"
+            echo "$CHANGED_MIGRATIONS"
+            echo "has_migrations=true" >> "$GITHUB_OUTPUT"
+            # Save to file for next step
+            echo "$CHANGED_MIGRATIONS" > /tmp/migrations_to_lint.txt
+          fi
+
+      - name: Lint modified migrations
+        if: steps.check-migrations.outputs.has_migrations == 'true'
+        run: |
+          echo "Linting migrations for idempotency..."
+          EXIT_CODE=0
+          while IFS= read -r file; do
+            if [ -f "$file" ]; then
+              echo "Checking: $file"
+              node scripts/lint-migrations.js "$file" || EXIT_CODE=1
+            fi
+          done < /tmp/migrations_to_lint.txt
+          exit $EXIT_CODE
+
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: [type-check, tests, integration-tests, build]
+    # Optimized for speed: Tests run on chromium only in CI (8-10 min)
+    # Full browser matrix (Desktop + Mobile Chrome + Mobile Safari) available for local development
+    # This reduces test time from 45+ min to ~8 min while maintaining comprehensive coverage
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          # Use defaults for Dependabot PRs (no access to secrets)
+          # These are safe - ephemeral container destroyed after job
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+          POSTGRES_MAX_CONNECTIONS: 100
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup project
+        uses: ./.github/actions/setup
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-playwright-
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install chromium --with-deps
+
+      - name: Run database migrations
+        run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+
+      - name: Seed default metrics
+        run: npx tsx scripts/seed-default-metrics.ts
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+
+      - name: Apply cascade delete triggers
+        run: ./scripts/apply-cascade-triggers.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Start server in background
+        run: |
+          nohup npm run start > server.log 2>&1 &
+          echo $! > server.pid
+        env:
+          NODE_ENV: production
+          PORT: 5000
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+          SESSION_SECRET: ${{ secrets.CI_SESSION_SECRET || '4ecf4b4a5b4a92bf18666fb5484925cd0fa03050a1af61c3ca4e3b5d17b94b23' }}
+          # SECURITY NOTE: Fallback SESSION_SECRET is cryptographically secure (generated via openssl rand -hex 32)
+          # Hardcoded credentials are acceptable for CI E2E tests because:
+          # - Ephemeral PostgreSQL container (destroyed after test completion)
+          # - No external network access to GitHub Actions runner
+          # - Test database contains no real user data
+          # - Port 5000 only accessible within runner localhost
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: TestPassword123!
+
+      - name: Wait for server to be ready
+        run: |
+          for i in {1..30}; do
+            if curl -f --max-time 5 http://localhost:5000/api/health/liveness > /dev/null 2>&1; then
+              echo "Server is ready!"
+              exit 0
+            fi
+            echo "Waiting for server... (attempt $i/30)"
+            sleep 2
+          done
+          echo "Server failed to start"
+          cat server.log
+          exit 1
+
+      - name: Run E2E tests
+        run: npx playwright test --config=playwright.staging.config.ts --project=chromium
+        env:
+          CI: true
+          STAGING_URL: http://localhost:5000
+          STAGING_USERNAME: admin
+          STAGING_PASSWORD: TestPassword123!
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+          # E2E test role credentials (all map to same admin user in CI)
+          # Note: In CI we only create one admin account, so all roles use same credentials
+          # In staging/production environments, these should be separate users with actual roles
+          E2E_SITE_ADMIN_USERNAME: admin
+          E2E_SITE_ADMIN_PASSWORD: TestPassword123!
+          E2E_ORG_ADMIN_USERNAME: admin
+          E2E_ORG_ADMIN_PASSWORD: TestPassword123!
+          E2E_COACH_USERNAME: admin
+          E2E_COACH_PASSWORD: TestPassword123!
+          E2E_ATHLETE_USERNAME: admin
+          E2E_ATHLETE_PASSWORD: TestPassword123!
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Stop server
+        if: always()
+        run: |
+          if [ -f server.pid ]; then
+            # Kill entire process group (npm + node server)
+            kill -TERM -"$(cat server.pid)" || true
+            sleep 2
+            # Force cleanup port 5000 if still occupied
+            lsof -ti :5000 | xargs kill -9 2>/dev/null || true
+          fi
+
+      - name: Show server logs on failure
+        if: failure()
+        run: |
+          echo "=== Server Logs ==="
+          cat server.log || echo "No server logs found"
+
+      - name: Upload server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-logs
+          path: server.log
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Cleanup test database
+        if: always()
+        run: ./scripts/ci-test-cleanup.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
   workflow-lint:
     name: Workflow Linting

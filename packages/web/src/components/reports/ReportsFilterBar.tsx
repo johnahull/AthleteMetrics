@@ -24,6 +24,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
+import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 interface ReportsFilterBarProps {
   organizationId?: string;
@@ -40,6 +41,7 @@ export function ReportsFilterBar({
   resetFilters,
   activeFilterCount
 }: ReportsFilterBarProps) {
+  const labels = useContextualLabels();
   const { data: teams = [], isLoading: teamsLoading } = useTeams({ organizationId });
   const { data: metrics = [], isLoading: metricsLoading } = useMetrics();
 
@@ -120,7 +122,7 @@ export function ReportsFilterBar({
           <SelectContent>
             <SelectItem value="all">All Reports</SelectItem>
             <SelectItem value="individual">Individual</SelectItem>
-            <SelectItem value="team">Team</SelectItem>
+            <SelectItem value="team">{labels.team}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -187,10 +189,10 @@ export function ReportsFilterBar({
               variant="outline"
               size="sm"
               className="h-8"
-              aria-label="Teams"
+              aria-label={labels.teams}
               disabled={teamsLoading || teams.length === 0}
             >
-              Teams
+              {labels.teams}
               {filters.teamIds && filters.teamIds.length > 0 && (
                 <Badge variant="secondary" className="ml-2 h-5 w-5 p-0 flex items-center justify-center">
                   {filters.teamIds.length}
@@ -200,7 +202,7 @@ export function ReportsFilterBar({
           </PopoverTrigger>
           <PopoverContent className="w-64" align="start">
             <div className="space-y-2">
-              <h4 className="font-medium text-sm mb-3">Filter by Teams</h4>
+              <h4 className="font-medium text-sm mb-3">Filter by {labels.teams}</h4>
               <ScrollArea className="h-64">
                 <div className="space-y-2">
                   {teams.map((team) => (
@@ -219,7 +221,7 @@ export function ReportsFilterBar({
                     </div>
                   ))}
                   {teams.length === 0 && !teamsLoading && (
-                    <p className="text-sm text-muted-foreground">No teams available</p>
+                    <p className="text-sm text-muted-foreground">No {labels.teams.toLowerCase()} available</p>
                   )}
                 </div>
               </ScrollArea>

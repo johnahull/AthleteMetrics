@@ -274,6 +274,68 @@ Each workspace has its own `package.json` and `tsconfig.json` for proper depende
 - `@shared/*` → `packages/shared/*` (database schema, types)
 - `@assets/*` → `attached_assets/*` (static assets)
 
+### Frontend Route Naming Conventions
+
+The application follows a **flat route structure** without `/admin` prefixes for site-admin features. Security is enforced through middleware, not URL structure.
+
+#### Current Route Structure
+
+**Site Admin Features** (protected by `requireSiteAdmin` middleware):
+- `/organizations` - Organization management
+- `/user-management` - User account management
+- `/wellness-templates` - Global wellness template library
+- `/metrics` - Site-wide metric configuration
+- `/benchmarks` - Site-wide benchmark configuration
+- `/admin` - Site settings (AI model, wellness module toggle)
+
+**Rationale:**
+- **Security by Middleware**: The `requireSiteAdmin` middleware in `packages/api/middleware.ts` enforces permissions at the API level, making URL-based security unnecessary
+- **Consistency**: All site-admin features use simple, descriptive names without prefixes
+- **Clean URLs**: Shorter, more readable URLs improve UX and are easier to remember
+- **The Exception**: `/admin` is retained for "Site Settings" specifically because it contains cross-cutting configuration (AI model, wellness module toggle) that affects all other admin features
+
+#### Route Security Model
+
+```typescript
+// Backend: Protection via middleware (packages/api/routes/)
+app.get('/api/site-settings', requireAuth, requireSiteAdmin, handler);
+app.get('/api/organizations', requireAuth, requireSiteAdmin, handler);
+
+// Frontend: Protection via auth context (packages/web/src/lib/auth.tsx)
+if (!user?.isSiteAdmin) {
+  return <Navigate to="/" />;
+}
+```
+
+**Key Principles:**
+1. **Never rely on URL structure for security** - Always use middleware
+2. **Use flat, descriptive routes** - `/organizations` not `/admin/organizations`
+3. **Protect routes at both API and UI levels** - Defense in depth
+4. **Document exceptions** - `/admin` is an exception for historical reasons and site-wide settings
+
+#### Adding New Site Admin Routes
+
+When adding new site-admin features, follow this pattern:
+
+```typescript
+// ✅ CORRECT: Flat route with middleware protection
+// Backend: packages/api/routes/new-feature-routes.ts
+app.get('/api/new-feature', requireAuth, requireSiteAdmin, handler);
+
+// Frontend: packages/web/src/App.tsx
+<Route path="/new-feature" component={NewFeaturePage} />
+
+// Frontend protection: packages/web/src/pages/new-feature.tsx
+export default function NewFeaturePage() {
+  const { user } = useAuth();
+  if (!user?.isSiteAdmin) return <Navigate to="/" />;
+  // ... rest of component
+}
+
+// ❌ INCORRECT: Don't use /admin prefix for new features
+<Route path="/admin/new-feature" component={NewFeaturePage} />
+```
+
 ### Database Schema Architecture
 The application uses Drizzle ORM with PostgreSQL and follows a normalized relational design:
 
@@ -352,6 +414,7 @@ The application runs as a **single-process Node.js server** without clustering:
 - AGILITY_5105 (5-10-5 agility test in seconds)
 - T_TEST (T-test agility in seconds)
 - DASH_40YD (40-yard dash in seconds)
+- TOP_SPEED (top speed in mph)
 - RSI (Reactive Strength Index)
 
 ### Environment Variables Required

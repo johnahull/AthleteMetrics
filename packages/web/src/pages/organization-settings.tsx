@@ -23,6 +23,7 @@ import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
 import { updateOrganizationSchema } from "@shared/schema";
 import type { UpdateOrganization } from "@shared/schema";
+import { OrganizationTypeSelector } from "@/components/organization-type-selector";
 
 // Loading spinner component
 const LoadingSpinner = ({ text }: { text: string }) => (
@@ -54,9 +55,12 @@ export default function OrganizationSettings() {
       name: organization.name,
       description: organization.description || '',
       location: organization.location || '',
+      orgType: organization.orgType || 'club',
       isActive: organization.isActive,
       benchmarksEnabled: organization.benchmarksEnabled || false,
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
+      aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
+      wellnessEnabled: organization.wellnessEnabled ?? true,
     } : undefined,
   });
 
@@ -75,6 +79,9 @@ export default function OrganizationSettings() {
       if (data.location !== organization?.location) {
         changedFields.location = data.location;
       }
+      if (data.orgType !== organization?.orgType) {
+        changedFields.orgType = data.orgType;
+      }
       if (data.isActive !== organization?.isActive) {
         changedFields.isActive = data.isActive;
       }
@@ -83,6 +90,12 @@ export default function OrganizationSettings() {
       }
       if (data.allowCustomBenchmarks !== organization?.allowCustomBenchmarks) {
         changedFields.allowCustomBenchmarks = data.allowCustomBenchmarks;
+      }
+      if (data.aiEnabledBySiteAdmin !== organization?.aiEnabledBySiteAdmin) {
+        changedFields.aiEnabledBySiteAdmin = data.aiEnabledBySiteAdmin;
+      }
+      if (data.wellnessEnabled !== organization?.wellnessEnabled) {
+        changedFields.wellnessEnabled = data.wellnessEnabled;
       }
 
       // If no changes, don't make API call
@@ -253,6 +266,27 @@ export default function OrganizationSettings() {
             </CardContent>
           </Card>
 
+          {/* Organization Type */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Organization Type</CardTitle>
+              <CardDescription>
+                Affects which metrics and benchmarks are available to your organization
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div role="group" aria-label="Organization Type">
+                <FormField
+                  control={form.control}
+                  name="orgType"
+                  render={({ field }) => (
+                    <OrganizationTypeSelector field={field} />
+                  )}
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Feature Flags */}
           <Card>
             <CardHeader>
@@ -299,6 +333,48 @@ export default function OrganizationSettings() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={!form.watch('benchmarksEnabled')}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiEnabledBySiteAdmin"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Coaching Insights</FormLabel>
+                      <FormDescription>
+                        Allow coaches to generate AI insights in reports (Site Admin Only)
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="wellnessEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Wellness Module</FormLabel>
+                      <FormDescription>
+                        Enable wellness questionnaires and health tracking for this organization
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
                       />
                     </FormControl>
                   </FormItem>

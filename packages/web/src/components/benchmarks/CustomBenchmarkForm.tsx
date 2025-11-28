@@ -28,6 +28,7 @@ import {
   FormMessage,
   FormDescription,
 } from "@/components/ui/form";
+import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -56,18 +57,23 @@ export function CustomBenchmarkForm({
   organizationId,
   benchmark,
 }: CustomBenchmarkFormProps) {
+  const labels = useContextualLabels();
   const { toast } = useToast();
   const isEditing = !!benchmark;
 
-  // Fetch available metrics
+  // Fetch available metrics filtered by organization type
   const { data: metrics = [] } = useQuery({
-    queryKey: ["/api/metrics"],
+    queryKey: ["/api/metrics", organizationId],
     queryFn: async () => {
-      const response = await fetch("/api/metrics?includeInactive=false");
+      const response = await fetch("/api/metrics?includeInactive=false", {
+        headers: {
+          'x-organization-id': organizationId,
+        },
+      });
       if (!response.ok) throw new Error("Failed to fetch metrics");
       return response.json();
     },
-    enabled: open,
+    enabled: open && !!organizationId,
   });
 
   const createMutation = useCreateCustomBenchmark();
@@ -248,7 +254,7 @@ export function CustomBenchmarkForm({
                     <FormItem>
                       <FormLabel>Benchmark Name *</FormLabel>
                       <FormControl>
-                        <Input {...field} placeholder="Custom Team Benchmark" />
+                        <Input {...field} placeholder={`Custom ${labels.team} Benchmark`} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
