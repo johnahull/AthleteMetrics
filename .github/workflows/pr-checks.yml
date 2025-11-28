@@ -358,6 +358,7 @@ jobs:
           STAGING_URL: http://localhost:5000
           STAGING_USERNAME: admin
           STAGING_PASSWORD: TestPassword123!
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
           # E2E test role credentials (all map to same admin user in CI)
           # Note: In CI we only create one admin account, so all roles use same credentials
           # In staging/production environments, these should be separate users with actual roles
