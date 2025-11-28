@@ -26,15 +26,8 @@
     {
       "idx": 3,
       "version": "7",
-      "when": 1732680000000,
-      "tag": "0003_add_wellness_library_fields",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1732681000000,
-      "tag": "0004_make_org_id_nullable_for_system_templates",
+      "when": 1764372246603,
+      "tag": "0005_flashy_ulik",
       "breakpoints": true
     }
   ]
