@@ -10,9 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { insertTeamSchema, AVAILABLE_SPORTS, type InsertTeam, type Team } from "@shared/schema";
+import { insertTeamSchema, type InsertTeam, type Team } from "@shared/schema";
 import { normalizeString } from "@/lib/form-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useSports } from "@/lib/sports-api";
 
 interface TeamModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const isEditing = !!team;
+
+  // Fetch available sports from the API
+  const { data: sports = [], isLoading: sportsLoading } = useSports();
 
   const form = useForm<InsertTeam>({
     resolver: zodResolver(insertTeamSchema),
@@ -270,16 +274,16 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
                     <Select
                       onValueChange={field.onChange}
                       value={field.value || ""}
-                      disabled={isPending}
+                      disabled={isPending || sportsLoading}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-team-sport">
-                          <SelectValue placeholder="Select sport" />
+                          <SelectValue placeholder={sportsLoading ? "Loading sports..." : "Select sport"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {AVAILABLE_SPORTS.map((sport) => (
-                          <SelectItem key={sport} value={sport}>{sport}</SelectItem>
+                        {sports.map((sport) => (
+                          <SelectItem key={sport.code} value={sport.code}>{sport.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

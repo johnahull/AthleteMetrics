@@ -161,6 +161,48 @@ export const organizationMetrics = pgTable("organization_metrics", {
   orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
 }));
 
+// Site-level sport definitions (master catalog)
+export const siteSports = pgTable("site_sports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(), // "SOCCER", "BASKETBALL" (immutable identifier)
+  name: varchar("name", { length: 100 }).notNull(), // "Soccer" (display name, can change)
+  description: text("description"),
+  icon: varchar("icon", { length: 50 }), // Icon identifier for UI
+  color: varchar("color", { length: 20 }), // Hex color or Tailwind class
+  displayOrder: integer("display_order"),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot delete seeded sports
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  activeIdx: index("site_sports_active_idx").on(table.isActive),
+  codeIdx: index("site_sports_code_idx").on(table.code),
+  displayOrderIdx: index("site_sports_display_order_idx").on(table.displayOrder),
+}));
+
+// Sport-specific position definitions
+export const sitePositions = pgTable("site_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sportId: varchar("sport_id").notNull().references(() => siteSports.id, { onDelete: 'cascade' }),
+  code: varchar("code", { length: 20 }).notNull(), // "F", "M", "D", "GK"
+  name: varchar("name", { length: 100 }).notNull(), // "Forward", "Midfielder"
+  shortName: varchar("short_name", { length: 10 }), // "FW", "MF" (optional abbreviation)
+  description: text("description"),
+  displayOrder: integer("display_order"),
+  color: varchar("color", { length: 20 }),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  sportIdx: index("site_positions_sport_idx").on(table.sportId),
+  activeIdx: index("site_positions_active_idx").on(table.isActive),
+  sportActiveIdx: index("site_positions_sport_active_idx").on(table.sportId, table.isActive),
+  sportCodeUnique: unique("site_positions_sport_code_unique").on(table.sportId, table.code),
+}));
+
 // Site-level benchmark definitions (master catalog)
 export const siteBenchmarks = pgTable("site_benchmarks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -955,8 +997,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
     return !isNaN(d.getTime()) && d <= new Date();
   }, "Invalid birth date or future date"),
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
-  sports: z.array(z.enum(["Soccer"])).optional(),
-  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
+  // Sports and positions are now dynamic - stored as codes from site_sports and site_positions tables
+  sports: z.array(z.string().min(1, "Sport code required")).optional(),
+  positions: z.array(z.string().min(1, "Position code required")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
@@ -1135,6 +1178,65 @@ export const updateOrganizationMetricSchema = z.object({
   isEnabled: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   customLabel: z.string().max(100).optional(),
+});
+
+// Sports Schemas
+export const insertSiteSportSchema = createInsertSchema(siteSports).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  code: z.string()
+    .min(1, "Sport code is required")
+    .max(50, "Sport code must be 50 characters or less")
+    .regex(/^[A-Z0-9_]+$/, "Sport code must contain only uppercase letters, numbers, and underscores")
+    .refine((code) => !code.startsWith("_"), "Sport code cannot start with underscore"),
+  name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
+  description: z.string().optional(),
+  icon: z.string().max(50).optional(),
+  color: z.string().max(20).optional(),
+  displayOrder: z.number().int().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const updateSiteSportSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  icon: z.string().max(50).optional(),
+  color: z.string().max(20).optional(),
+  displayOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+});
+
+// Positions Schemas
+export const insertSitePositionSchema = createInsertSchema(sitePositions).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  sportId: z.string().min(1, "Sport ID is required"),
+  code: z.string()
+    .min(1, "Position code is required")
+    .max(20, "Position code must be 20 characters or less"),
+  name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
+  shortName: z.string().max(10).optional(),
+  description: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const updateSitePositionSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  shortName: z.string().max(10).optional(),
+  description: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  isActive: z.boolean().optional(),
 });
 
 // Benchmark Schemas
@@ -1460,6 +1562,31 @@ export type InsertOrganizationMetric = z.infer<typeof insertOrganizationMetricSc
 export type OrganizationMetric = typeof organizationMetrics.$inferSelect;
 export type UpdateOrganizationMetric = z.infer<typeof updateOrganizationMetricSchema>;
 
+export type InsertSiteSport = z.infer<typeof insertSiteSportSchema>;
+export type SiteSport = typeof siteSports.$inferSelect;
+export type UpdateSiteSport = z.infer<typeof updateSiteSportSchema>;
+
+export type InsertSitePosition = z.infer<typeof insertSitePositionSchema>;
+export type SitePosition = typeof sitePositions.$inferSelect;
+export type UpdateSitePosition = z.infer<typeof updateSitePositionSchema>;
+
+// Enriched type for sport with its positions
+export type SiteSportWithPositions = SiteSport & {
+  positions: SitePosition[];
+};
+
+// Sport usage count for deletion warning
+export type SiteSportUsage = {
+  athleteCount: number;
+  teamCount: number;
+  metricCount: number;
+};
+
+// Position usage count for deletion warning
+export type SitePositionUsage = {
+  athleteCount: number;
+};
+
 export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
 export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
 export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
@@ -1597,8 +1724,9 @@ export const insertAthleteSchema = z.object({
   graduationYear: z.coerce.number().int().min(2000).max(2040).optional(),
   school: z.string().optional(),
   phoneNumbers: z.array(z.string()).optional(),
-  sports: z.array(z.enum(["Soccer"])).optional(),
-  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
+  // Sports and positions are now dynamic - stored as codes from site_sports and site_positions tables
+  sports: z.array(z.string().min(1, "Sport code required")).optional(),
+  positions: z.array(z.string().min(1, "Position code required")).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),

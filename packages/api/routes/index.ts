@@ -18,6 +18,7 @@ import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
 import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
+import { registerSportsRoutes } from "./sport-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -69,6 +70,9 @@ export function registerAllRoutes(app: Express) {
   // Admin wellness routes (site admin only)
   registerAdminWellnessRoutes(app);
 
+  // Sports and positions management routes
+  registerSportsRoutes(app);
+
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
 
@@ -91,8 +95,9 @@ export function getRouteStats() {
       metrics: "✅ Registered (new service)",
       benchmarks: "✅ Registered (new service)",
       reports: "✅ Registered (new service)",
+      sports: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 10/11 modules refactored"
+    status: "Migration nearly complete - 11/12 modules refactored"
   };
 }
