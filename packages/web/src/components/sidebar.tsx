@@ -83,8 +83,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   ],
   athlete: [
     { name: "My Profile", href: "/my-profile", icon: UsersRound },
-    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
-    { name: "Analytics", href: "/analytics", icon: BarChart3 }
+    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard }
   ]
 });
 
