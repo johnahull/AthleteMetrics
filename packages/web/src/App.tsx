@@ -25,6 +25,10 @@ const Dashboard = React.lazy(() => import("./pages/dashboard"));
 const Teams = React.lazy(() => import("./pages/teams"));
 const Athletes = React.lazy(() => import("./pages/athletes"));
 const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
+
+// Athlete self-view pages (Profile/Dashboard split)
+const MyProfile = React.lazy(() => import("./pages/my-profile"));
+const MyDashboard = React.lazy(() => import("./pages/my-dashboard"));
 const DataEntry = React.lazy(() => import("./pages/data-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
@@ -120,6 +124,31 @@ function Router() {
           <WellnessSubmit />
         </Suspense>
       </Route>
+      {/* Athlete self-view routes (Profile/Dashboard split) */}
+      <Route path="/my-profile">
+        <RouteWrapper loadingText="Loading Profile...">
+          <MyProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-dashboard">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <MyDashboard />
+        </RouteWrapper>
+      </Route>
+
+      {/* Coach view of athlete - more specific routes first */}
+      <Route path="/athletes/:id/profile">
+        <RouteWrapper loadingText="Loading Athlete Profile...">
+          <AthleteProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/athletes/:id/dashboard">
+        <RouteWrapper loadingText="Loading Athlete Dashboard...">
+          <AthleteProfile />
+        </RouteWrapper>
+      </Route>
+
+      {/* Legacy athlete route - redirects to dashboard view */}
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
