@@ -283,7 +283,7 @@ describe('WellnessStatusCard', () => {
       expect(screen.getByRole('heading', { name: /Wellness Status/i })).toBeInTheDocument();
     });
 
-    it('should have accessible link with proper role', () => {
+    it('should have accessible button that navigates', () => {
       render(
         <WellnessStatusCard
           wellnessEnabled={true}
@@ -291,8 +291,10 @@ describe('WellnessStatusCard', () => {
         />
       );
 
-      const link = screen.getByTestId('wellness-link');
-      expect(link).toHaveAttribute('role', 'link');
+      const button = screen.getByTestId('wellness-link');
+      // Button wraps a Link component via asChild, providing both button styling and link navigation
+      expect(button).toBeInTheDocument();
+      expect(button).toHaveAttribute('href', '/wellness/submit');
     });
   });
 });

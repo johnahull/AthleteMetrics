@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMetricDisplayName, getMetricBadgeVariant } from "@/lib/metrics";
+import { getMetricBadgeVariant } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -26,12 +26,14 @@ import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
 import { PersonalRecordsCard } from "@/components/athlete/PersonalRecordsCard";
 import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimeline";
 import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
+import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
 import {
   calculateMonthlyMeasurementCount,
   getLastMeasurementDate,
   calculatePersonalRecords,
   generateActivityTimeline,
 } from "@/utils/athlete-dashboard-utils";
+import { getMetricDisplayName, getMetricUnits } from "@/lib/metrics";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -148,6 +150,49 @@ export default function AthleteProfile() {
   // Check if user can edit measurements (coaches and site admins)
   const canEditMeasurements = user?.role === "coach" || user?.role === "org_admin" || user?.isSiteAdmin;
 
+  // Calculate dashboard data (memoized to avoid recalculation on every render)
+  // IMPORTANT: Must be before any early returns to comply with Rules of Hooks
+  const monthlyMeasurementCount = useMemo(
+    () => calculateMonthlyMeasurementCount(measurements),
+    [measurements]
+  );
+  const lastMeasurementDate = useMemo(
+    () => getLastMeasurementDate(measurements),
+    [measurements]
+  );
+  const personalRecords = useMemo(
+    () => calculatePersonalRecords(measurements),
+    [measurements]
+  );
+  const activityTimeline = useMemo(
+    () => generateActivityTimeline(measurements),
+    [measurements]
+  );
+
+  // Group measurements by metric for progress cards
+  interface GroupedMeasurement {
+    value: string | number;
+    date: string;
+    metric: string;
+  }
+
+  const measurementsByMetric = useMemo(() => {
+    const grouped: Record<string, GroupedMeasurement[]> = {};
+    measurements.forEach((m: GroupedMeasurement) => {
+      if (!grouped[m.metric]) {
+        grouped[m.metric] = [];
+      }
+      grouped[m.metric].push(m);
+    });
+    return grouped;
+  }, [measurements]);
+
+  // Get all unique metrics that have measurements
+  const availableMetrics = useMemo(
+    () => Object.keys(measurementsByMetric).sort(),
+    [measurementsByMetric]
+  );
+
   // Handler functions
   const handleEditMeasurement = (measurement: any) => {
     setEditingMeasurement(measurement);
@@ -255,12 +300,6 @@ export default function AthleteProfile() {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  // Calculate dashboard data
-  const monthlyMeasurementCount = calculateMonthlyMeasurementCount(measurements);
-  const lastMeasurementDate = getLastMeasurementDate(measurements);
-  const personalRecords = calculatePersonalRecords(measurements);
-  const activityTimeline = generateActivityTimeline(measurements);
-
   // Wellness data (placeholder - to be implemented when wellness API is integrated)
   const wellnessEnabled = false; // TODO: Get from organization settings
   const wellnessData = null; // TODO: Fetch from API
@@ -361,6 +400,24 @@ export default function AthleteProfile() {
           />
         </div>
       </div>
+
+      {/* Metric Progress Cards */}
+      {availableMetrics.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance Progress</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {availableMetrics.map((metric) => (
+              <MetricProgressCard
+                key={metric}
+                metric={metric}
+                displayName={getMetricDisplayName(metric)}
+                measurements={measurementsByMetric[metric]}
+                units={getMetricUnits(metric)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Contact Information */}
       {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0)) && (

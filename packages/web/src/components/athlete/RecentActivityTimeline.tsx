@@ -10,7 +10,8 @@
 
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Zap, TrendingUp, Timer, Activity, Clock } from 'lucide-react';
+import { Clock } from 'lucide-react';
+import { getMetricIcon } from '@/utils/athlete-metric-icons';
 
 interface TimelineActivity {
   id: string;
@@ -26,20 +27,6 @@ interface TimelineActivity {
 interface RecentActivityTimelineProps {
   activities: TimelineActivity[];
 }
-
-// Metric icon mapping
-const getMetricIcon = (metric: string) => {
-  switch (metric) {
-    case 'FLY10_TIME':
-      return <Zap className="h-5 w-5 text-blue-600" />;
-    case 'VERTICAL_JUMP':
-      return <TrendingUp className="h-5 w-5 text-green-600" />;
-    case 'DASH_40YD':
-      return <Timer className="h-5 w-5 text-purple-600" />;
-    default:
-      return <Activity className="h-5 w-5 text-gray-600" />;
-  }
-};
 
 // Insight type styling
 const getInsightClass = (insightType: string | null) => {
