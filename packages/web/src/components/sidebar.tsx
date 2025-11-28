@@ -80,6 +80,8 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
   ],
   athlete: [
+    { name: "My Profile", href: "/my-profile", icon: UsersRound },
+    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
     { name: "Analytics", href: "/analytics", icon: BarChart3 }
   ]
 });
@@ -108,11 +110,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
   let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
   
-  // Special handling for athletes with profiles
-  if (role === "athlete" && (user?.athleteId || user?.id)) {
-    const profileId = user?.athleteId || user?.id;
-    navigation.unshift({ name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound });
-  }
+  // Athletes now use the static /my-profile and /my-dashboard routes
+  // No special handling needed - routes are already in the NAVIGATION_CONFIGS
   
   // Update org admin organization link with specific ID
   if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {

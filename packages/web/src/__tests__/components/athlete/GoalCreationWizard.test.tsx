@@ -317,7 +317,7 @@ describe('GoalCreationWizard', () => {
 
   describe('UI States', () => {
     it('should show loading state while creating goal', async () => {
-      const onCreateGoal = vi.fn(() => new Promise(() => {})); // Never resolves
+      const onCreateGoal = vi.fn((): Promise<void> => new Promise(() => {})); // Never resolves
       const user = userEvent.setup();
       render(<GoalCreationWizard {...defaultProps} onCreateGoal={onCreateGoal} />);
 
