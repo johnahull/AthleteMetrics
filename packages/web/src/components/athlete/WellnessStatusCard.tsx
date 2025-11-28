@@ -10,6 +10,7 @@
  */
 
 import React from 'react';
+import { Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -112,12 +113,17 @@ export function WellnessStatusCard({
               No wellness submissions yet. Submit your first wellness check to get
               started!
             </p>
-            <a href="/wellness/submit" data-testid="wellness-link" role="link" className="block">
-              <Button className="w-full">
+            <Button
+              asChild
+              className="w-full"
+              data-testid="wellness-link"
+              aria-label="Submit your first wellness check"
+            >
+              <Link href="/wellness/submit">
                 Submit Wellness
                 <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </a>
+              </Link>
+            </Button>
           </div>
         ) : (
           <div className="space-y-4">
@@ -165,12 +171,18 @@ export function WellnessStatusCard({
               )}
             </div>
 
-            <a href="/wellness/submit" data-testid="wellness-link" role="link" className="block">
-              <Button variant="outline" className="w-full">
+            <Button
+              asChild
+              variant="outline"
+              className="w-full"
+              data-testid="wellness-link"
+              aria-label="View wellness submission history"
+            >
+              <Link href="/wellness/submit">
                 View History
                 <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </a>
+              </Link>
+            </Button>
           </div>
         )}
       </CardContent>

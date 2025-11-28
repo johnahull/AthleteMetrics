@@ -4,6 +4,17 @@
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
 
+/**
+ * Metrics where lower values are better (time/speed metrics)
+ */
+const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+] as const;
+
 interface Measurement {
   id: string;
   metric: string;
@@ -62,7 +73,7 @@ export function calculatePersonalRecords(measurements: Measurement[]) {
     if (metricMeasurements.length === 0) return;
 
     // Sort by value (ascending for time-based metrics, descending for others)
-    const isLowerBetter = metric.includes('TIME') || metric.includes('DASH') || metric.includes('AGILITY');
+    const isLowerBetter = LOWER_IS_BETTER_METRICS.includes(metric as any);
 
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
       const aValue = parseFloat(String(a.value));
@@ -86,10 +97,15 @@ export function calculatePersonalRecords(measurements: Measurement[]) {
       const secondBestValue = parseFloat(String(secondBest.value));
       improvement = Math.abs(bestValue - secondBestValue);
 
+      const units = bestMeasurement.units || '';
+      const formattedImprovement = isLowerBetter
+        ? improvement.toFixed(2)
+        : improvement.toFixed(1);
+
       if (isLowerBetter) {
-        improvementText = `↑ ${improvement.toFixed(2)}s faster than last best`;
+        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
       } else {
-        improvementText = `↑ ${improvement.toFixed(1)}in higher than last best`;
+        improvementText = `↑ ${formattedImprovement}${units} better than last best`;
       }
     }
 

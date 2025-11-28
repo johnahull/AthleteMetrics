@@ -37,9 +37,16 @@ export function AthleteHomeHero({
     }
 
     try {
-      return formatDistanceToNow(new Date(lastMeasurementDate), { addSuffix: true });
+      const date = new Date(lastMeasurementDate);
+
+      // Validate the date is actually valid
+      if (isNaN(date.getTime())) {
+        return 'Invalid date';
+      }
+
+      return formatDistanceToNow(date, { addSuffix: true });
     } catch (error) {
-      return new Date(lastMeasurementDate).toLocaleDateString();
+      return 'Invalid date';
     }
   };
 

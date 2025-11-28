@@ -12,8 +12,9 @@
 import React, { useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Zap, TrendingUp, Timer, Activity } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
+import { getMetricIcon } from '@/utils/athlete-metric-icons';
 
 interface PersonalRecord {
   metric: string;
@@ -31,20 +32,6 @@ interface PersonalRecordsCardProps {
   showConfetti?: boolean;
 }
 
-// Metric icon mapping
-const getMetricIcon = (metric: string) => {
-  switch (metric) {
-    case 'FLY10_TIME':
-      return <Zap className="h-5 w-5 text-blue-600" />;
-    case 'VERTICAL_JUMP':
-      return <TrendingUp className="h-5 w-5 text-green-600" />;
-    case 'DASH_40YD':
-      return <Timer className="h-5 w-5 text-purple-600" />;
-    default:
-      return <Activity className="h-5 w-5 text-gray-600" />;
-  }
-};
-
 export function PersonalRecordsCard({
   personalRecords,
   showConfetti = true,
@@ -58,13 +45,18 @@ export function PersonalRecordsCard({
       if (hasRecentPR) {
         confettiTriggered.current = true;
 
-        // Trigger confetti celebration
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 },
-          colors: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'],
-        });
+        // Trigger confetti celebration with error handling
+        try {
+          confetti({
+            particleCount: 100,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'],
+          });
+        } catch (error) {
+          // Silently fail - confetti is non-critical enhancement
+          console.warn('Failed to trigger confetti animation:', error);
+        }
       }
     }
   }, [personalRecords, showConfetti]);
