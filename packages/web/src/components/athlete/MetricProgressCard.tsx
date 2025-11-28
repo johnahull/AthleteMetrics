@@ -21,6 +21,7 @@ import {
   getBestValue,
   type TrendDirection,
 } from '@/utils/metric-trend-utils';
+import { MetricContextTooltip } from './MetricContextTooltip';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -155,23 +156,35 @@ export function MetricProgressCard({
         <div className="mb-4">
           <div className="flex items-baseline gap-2 mb-1">
             <span className="text-sm text-gray-600">Current:</span>
-            <span
-              data-testid="current-value"
-              className="text-3xl font-bold text-gray-900"
+            <MetricContextTooltip
+              metric={metric}
+              value={currentValue ?? 0}
+              compact
             >
-              {currentValue?.toFixed(2)}
-              {units}
-            </span>
+              <span
+                data-testid="current-value"
+                className="text-3xl font-bold text-gray-900"
+              >
+                {currentValue?.toFixed(2)}
+                {units}
+              </span>
+            </MetricContextTooltip>
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-sm text-gray-600">Best:</span>
-            <span
-              data-testid="best-value"
-              className="text-xl font-semibold text-blue-600"
+            <MetricContextTooltip
+              metric={metric}
+              value={bestValue ?? 0}
+              compact
             >
-              {bestValue?.toFixed(2)}
-              {units}
-            </span>
+              <span
+                data-testid="best-value"
+                className="text-xl font-semibold text-blue-600"
+              >
+                {bestValue?.toFixed(2)}
+                {units}
+              </span>
+            </MetricContextTooltip>
           </div>
         </div>
 
