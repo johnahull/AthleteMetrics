@@ -156,7 +156,8 @@ describe('MetricProgressCard', () => {
 
       const trendBadge = screen.getByTestId('trend-badge');
       expect(trendBadge).toHaveTextContent(/steady/i);
-      expect(trendBadge).toHaveClass('bg-yellow-500');
+      // Using bg-yellow-600 for WCAG AA contrast compliance
+      expect(trendBadge).toHaveClass('bg-yellow-600');
 
       // Should show minus icon
       expect(screen.getByTestId('trend-icon-steady')).toBeInTheDocument();
