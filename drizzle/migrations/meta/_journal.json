@@ -22,13 +22,6 @@
       "when": 1763739432459,
       "tag": "0002_watery_cloak",
       "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1764372246603,
-      "tag": "0005_flashy_ulik",
-      "breakpoints": true
     }
   ]
 }
