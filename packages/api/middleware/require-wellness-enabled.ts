@@ -85,11 +85,19 @@ export async function requireWellnessEnabled(
     next();
   } catch (error) {
     console.error("Error checking wellness feature flags:", error);
-    // Fail open for site admins (defensive coding)
-    if (req.user?.isSiteAdmin) {
+
+    // SECURITY: Only fail open for site admins on specific database connection errors
+    // All other errors (application logic, network issues, etc.) should fail closed
+    const isConnectionError = (error as any).code === 'ECONNREFUSED' ||
+                             (error as any).code === 'ETIMEDOUT' ||
+                             (error as any).message?.includes('connection');
+
+    if (req.user?.isSiteAdmin && isConnectionError) {
+      console.error('CRITICAL: Wellness check failed due to DB connection error but allowing site admin access', error);
       return next();
     }
 
+    // Fail closed for all other cases (including non-admins and non-connection errors)
     res.status(500).json({
       message: "Failed to check wellness feature access"
     });
