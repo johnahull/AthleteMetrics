@@ -26,6 +26,16 @@ import {
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
 
+// Validation regex patterns
+const SPORT_CODE_REGEX = /^[A-Za-z0-9_]+$/;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// PostgreSQL error codes
+const PG_ERROR_CODES = {
+  UNIQUE_VIOLATION: '23505',
+  FOREIGN_KEY_VIOLATION: '23503',
+} as const;
+
 /**
  * Register sports management routes
  */
@@ -147,8 +157,7 @@ export function registerSportsRoutes(app: Express) {
 
         // SECURITY: Validate code format to prevent SQL injection
         // Sport codes should only contain uppercase letters, numbers, and underscores
-        const codeRegex = /^[A-Za-z0-9_]+$/;
-        if (!code || !codeRegex.test(code)) {
+        if (!code || !SPORT_CODE_REGEX.test(code)) {
           return res.status(400).json({ message: "Invalid sport code format" });
         }
 
@@ -220,35 +229,33 @@ export function registerSportsRoutes(app: Express) {
 
         const { code, name, description, icon, color, displayOrder, isActive } = validation.data;
 
-        // Check if code already exists
-        const existing = await db
-          .select({ id: siteSports.id })
-          .from(siteSports)
-          .where(eq(siteSports.code, code));
+        // Create the sport - database constraint handles uniqueness
+        try {
+          const [newSport] = await db
+            .insert(siteSports)
+            .values({
+              code,
+              name,
+              description,
+              icon,
+              color,
+              displayOrder,
+              isActive: isActive ?? true,
+              isSystemDefault: false,
+              createdBy: req.user?.id,
+            })
+            .returning();
 
-        if (existing.length > 0) {
-          return res.status(409).json({
-            message: `Sport with code '${code}' already exists`,
-          });
+          res.status(201).json(newSport);
+        } catch (insertError: any) {
+          // Handle unique constraint violation
+          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+            return res.status(409).json({
+              message: `Sport with code '${code}' already exists`,
+            });
+          }
+          throw insertError;
         }
-
-        // Create the sport
-        const [newSport] = await db
-          .insert(siteSports)
-          .values({
-            code,
-            name,
-            description,
-            icon,
-            color,
-            displayOrder,
-            isActive: isActive ?? true,
-            isSystemDefault: false,
-            createdBy: req.user?.id,
-          })
-          .returning();
-
-        res.status(201).json(newSport);
       } catch (error: any) {
         console.error("❌ Failed to create sport:", error);
         res.status(500).json({
@@ -441,41 +448,34 @@ export function registerSportsRoutes(app: Express) {
 
         const { code, name, shortName, description, displayOrder, color, isActive } = validation.data;
 
-        // Check if position code already exists for this sport
-        const existing = await db
-          .select({ id: sitePositions.id })
-          .from(sitePositions)
-          .where(
-            and(
-              eq(sitePositions.sportId, sport.id),
-              eq(sitePositions.code, code)
-            )
-          );
+        // Create the position - database constraint handles uniqueness
+        try {
+          const [newPosition] = await db
+            .insert(sitePositions)
+            .values({
+              sportId: sport.id,
+              code,
+              name,
+              shortName,
+              description,
+              displayOrder,
+              color,
+              isActive: isActive ?? true,
+              isSystemDefault: false,
+              createdBy: req.user?.id,
+            })
+            .returning();
 
-        if (existing.length > 0) {
-          return res.status(409).json({
-            message: `Position with code '${code}' already exists for this sport`,
-          });
+          res.status(201).json(newPosition);
+        } catch (insertError: any) {
+          // Handle unique constraint violation
+          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+            return res.status(409).json({
+              message: `Position with code '${code}' already exists for this sport`,
+            });
+          }
+          throw insertError;
         }
-
-        // Create the position
-        const [newPosition] = await db
-          .insert(sitePositions)
-          .values({
-            sportId: sport.id,
-            code,
-            name,
-            shortName,
-            description,
-            displayOrder,
-            color,
-            isActive: isActive ?? true,
-            isSystemDefault: false,
-            createdBy: req.user?.id,
-          })
-          .returning();
-
-        res.status(201).json(newPosition);
       } catch (error: any) {
         console.error("❌ Failed to create position:", error);
         res.status(500).json({
@@ -596,8 +596,7 @@ export function registerSportsRoutes(app: Express) {
         const { id } = req.params;
 
         // SECURITY: Validate UUID format for position ID
-        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-        if (!id || !uuidRegex.test(id)) {
+        if (!id || !UUID_REGEX.test(id)) {
           return res.status(400).json({ message: "Invalid position ID format" });
         }
 

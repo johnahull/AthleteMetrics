@@ -60,15 +60,15 @@ test.describe("Sports Management", () => {
     await page.click('[data-testid="add-sport-button"]');
 
     // Fill in sport details
-    await page.fill('[data-testid="input-sport-code"]', "BASKETBALL");
-    await page.fill('[data-testid="input-sport-name"]', "Basketball");
+    await page.fill('[data-testid="sport-code-input"]', "BASKETBALL");
+    await page.fill('[data-testid="sport-name-input"]', "Basketball");
     await page.fill(
-      '[data-testid="input-sport-description"]',
+      '[data-testid="sport-description-input"]',
       "Team sport with a ball and hoops"
     );
 
     // Submit the form
-    await page.click('[data-testid="submit-sport-button"]');
+    await page.click('[data-testid="save-sport-button"]');
 
     // Should see success message or the new sport in the list
     await expect(page.locator("text=Basketball")).toBeVisible({
@@ -81,24 +81,24 @@ test.describe("Sports Management", () => {
     await page.waitForLoadState("networkidle");
 
     // First, expand the sport accordion (assuming Basketball exists from previous test or use Soccer)
-    const sportRow = page.locator('[data-testid="sport-accordion-Soccer"]');
+    const sportRow = page.locator('[data-testid="sport-row-SOCCER"]');
     if (await sportRow.isVisible()) {
       await sportRow.click();
     } else {
       // Fallback to clicking any sport
-      await page.click('[data-testid^="sport-accordion-"]');
+      await page.click('[data-testid^="sport-row-"]');
     }
 
-    // Click Add Position button
-    await page.click('[data-testid="add-position-button"]');
+    // Click Add Position button (need to use sport code for the testid)
+    await page.click('[data-testid="add-position-SOCCER"]');
 
     // Fill in position details
-    await page.fill('[data-testid="input-position-code"]', "TEST_POS");
-    await page.fill('[data-testid="input-position-name"]', "Test Position");
-    await page.fill('[data-testid="input-position-shortname"]', "TP");
+    await page.fill('[data-testid="position-code-input"]', "TEST_POS");
+    await page.fill('[data-testid="position-name-input"]', "Test Position");
+    await page.fill('[data-testid="position-shortname-input"]', "TP");
 
     // Submit
-    await page.click('[data-testid="submit-position-button"]');
+    await page.click('[data-testid="save-position-button"]');
 
     // Should see the new position
     await expect(page.locator("text=Test Position")).toBeVisible({
@@ -111,16 +111,16 @@ test.describe("Sports Management", () => {
     await page.waitForLoadState("networkidle");
 
     // Click edit button for Soccer
-    await page.click('[data-testid="edit-sport-Soccer"]');
+    await page.click('[data-testid="edit-sport-SOCCER"]');
 
     // Modify the description
     await page.fill(
-      '[data-testid="input-sport-description"]',
+      '[data-testid="sport-description-input"]',
       "Updated description for Soccer"
     );
 
     // Save changes
-    await page.click('[data-testid="submit-sport-button"]');
+    await page.click('[data-testid="save-sport-button"]');
 
     // Verify the change was saved (may need to re-open to verify)
     await expect(
@@ -133,7 +133,7 @@ test.describe("Sports Management", () => {
     await page.waitForLoadState("networkidle");
 
     // Try to delete Soccer (system default)
-    const deleteButton = page.locator('[data-testid="delete-sport-Soccer"]');
+    const deleteButton = page.locator('[data-testid="delete-sport-SOCCER"]');
 
     if (await deleteButton.isVisible()) {
       await deleteButton.click();
@@ -156,7 +156,7 @@ test.describe("Sports Management", () => {
     await page.waitForLoadState("networkidle");
 
     // Expand Soccer to see usage stats
-    await page.click('[data-testid="sport-accordion-Soccer"]');
+    await page.click('[data-testid="sport-row-SOCCER"]');
 
     // Should show usage information (athletes, teams, metrics count)
     await expect(page.locator("text=teams")).toBeVisible({ timeout: 5000 });
@@ -224,7 +224,7 @@ test.describe("Sports Management", () => {
     await page.click('[data-testid="add-sport-button"]');
 
     // Try to submit without filling required fields
-    await page.click('[data-testid="submit-sport-button"]');
+    await page.click('[data-testid="save-sport-button"]');
 
     // Should see validation errors
     await expect(page.locator("text=required")).toBeVisible({ timeout: 5000 });
@@ -238,11 +238,11 @@ test.describe("Sports Management", () => {
     await page.click('[data-testid="add-sport-button"]');
 
     // Try to create a sport with existing code
-    await page.fill('[data-testid="input-sport-code"]', "SOCCER");
-    await page.fill('[data-testid="input-sport-name"]', "Duplicate Soccer");
+    await page.fill('[data-testid="sport-code-input"]', "SOCCER");
+    await page.fill('[data-testid="sport-name-input"]', "Duplicate Soccer");
 
     // Submit
-    await page.click('[data-testid="submit-sport-button"]');
+    await page.click('[data-testid="save-sport-button"]');
 
     // Should see error about duplicate code
     await expect(page.locator("text=already exists")).toBeVisible({

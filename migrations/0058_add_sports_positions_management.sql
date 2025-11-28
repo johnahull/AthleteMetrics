@@ -114,15 +114,29 @@ CREATE INDEX IF NOT EXISTS users_positions_gin_idx ON users USING GIN (positions
 -- ============================================================================
 
 -- Migrate users.sports from names ("Soccer") to codes ("SOCCER")
-UPDATE users
-SET sports = ARRAY['SOCCER']
-WHERE sports @> ARRAY['Soccer']
-  AND NOT (sports @> ARRAY['SOCCER']);
+DO $$
+DECLARE
+  updated_users INTEGER;
+BEGIN
+  UPDATE users
+  SET sports = ARRAY['SOCCER']
+  WHERE sports @> ARRAY['Soccer']
+    AND NOT (sports @> ARRAY['SOCCER']);
+  GET DIAGNOSTICS updated_users = ROW_COUNT;
+  RAISE NOTICE 'Migrated % user records from Soccer to SOCCER', updated_users;
+END $$;
 
 -- Migrate teams.sport from name to code
-UPDATE teams
-SET sport = 'SOCCER'
-WHERE sport = 'Soccer';
+DO $$
+DECLARE
+  updated_teams INTEGER;
+BEGIN
+  UPDATE teams
+  SET sport = 'SOCCER'
+  WHERE sport = 'Soccer';
+  GET DIAGNOSTICS updated_teams = ROW_COUNT;
+  RAISE NOTICE 'Migrated % team records from Soccer to SOCCER', updated_teams;
+END $$;
 
 -- ============================================================================
 -- PART 7: LOG MIGRATION COMPLETION
