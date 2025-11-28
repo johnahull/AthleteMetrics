@@ -22,6 +22,16 @@ import { mutations } from "@/lib/api";
 import type { Athlete, Team, Measurement } from "@shared/schema";
 import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
 import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
+import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
+import { PersonalRecordsCard } from "@/components/athlete/PersonalRecordsCard";
+import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimeline";
+import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
+import {
+  calculateMonthlyMeasurementCount,
+  getLastMeasurementDate,
+  calculatePersonalRecords,
+  generateActivityTimeline,
+} from "@/utils/athlete-dashboard-utils";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -245,6 +255,16 @@ export default function AthleteProfile() {
     return new Date(dateStr).toLocaleDateString();
   };
 
+  // Calculate dashboard data
+  const monthlyMeasurementCount = calculateMonthlyMeasurementCount(measurements);
+  const lastMeasurementDate = getLastMeasurementDate(measurements);
+  const personalRecords = calculatePersonalRecords(measurements);
+  const activityTimeline = generateActivityTimeline(measurements);
+
+  // Wellness data (placeholder - to be implemented when wellness API is integrated)
+  const wellnessEnabled = false; // TODO: Get from organization settings
+  const wellnessData = null; // TODO: Fetch from API
+
   return (
     <div className="p-6">
       {/* Breadcrumb Navigation */}
@@ -317,59 +337,29 @@ export default function AthleteProfile() {
         </div>
       </div>
 
-      {/* Performance Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Fly-10 Time</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {bestFly10 ? `${bestFly10.toFixed(2)}s` : 'No data'}
-                </p>
-                {bestFly10Speed && (
-                  <p className="text-sm text-gray-500">{bestFly10Speed.toFixed(1)} mph</p>
-                )}
-              </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <Zap className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Athlete Home Hero */}
+      <AthleteHomeHero
+        athlete={athlete}
+        measurementCount={monthlyMeasurementCount}
+        lastMeasurementDate={lastMeasurementDate}
+      />
 
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Vertical Jump</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {bestVertical ? `${bestVertical.toFixed(1)}in` : 'No data'}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Personal Records */}
+      <div className="mb-8">
+        <PersonalRecordsCard personalRecords={personalRecords} />
+      </div>
 
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Measurements</p>
-                <p className="text-2xl font-bold text-gray-900">{measurements.length}</p>
-                <p className="text-sm text-gray-500">
-                  {fly10Measurements.length} Fly-10, {verticalMeasurements.length} Vertical
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Recent Activity & Wellness Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2">
+          <RecentActivityTimeline activities={activityTimeline} />
+        </div>
+        <div>
+          <WellnessStatusCard
+            wellnessEnabled={wellnessEnabled}
+            wellnessData={wellnessData}
+          />
+        </div>
       </div>
 
       {/* Contact Information */}
