@@ -95,8 +95,8 @@ describe('useContextualLabels', () => {
           teams: 'Groups',
           coach: 'Coach',
           coaches: 'Coaches',
-          athlete: 'Player',
-          athletes: 'Players',
+          athlete: 'Athlete',
+          athletes: 'Athletes',
         },
       },
       {
@@ -128,8 +128,8 @@ describe('useContextualLabels', () => {
           teams: 'Teams',
           coach: 'Coach',
           coaches: 'Coaches',
-          athlete: 'Player',
-          athletes: 'Players',
+          athlete: 'Athlete',
+          athletes: 'Athletes',
         },
       },
       {

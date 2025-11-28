@@ -46,10 +46,10 @@ export interface ContextualLabels {
   /** Plural form: "Coaches" or "Trainers" */
   readonly coaches: string;
 
-  /** Singular form: "Athlete", "Player", or "Client" */
+  /** Singular form: "Athlete" or "Client" */
   readonly athlete: string;
 
-  /** Plural form: "Athletes", "Players", or "Clients" */
+  /** Plural form: "Athletes" or "Clients" */
   readonly athletes: string;
 
   /** Complete terminology set for advanced usage */

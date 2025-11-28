@@ -7,7 +7,7 @@
  * @fileoverview Maps organization types to contextual labels for:
  * - Teams/Groups/Squads
  * - Coaches/Trainers
- * - Athletes/Players/Clients
+ * - Athletes/Clients
  *
  * @author AthleteMetrics System
  * @version 1.0.0
@@ -46,7 +46,7 @@ export const CONTEXTUAL_LABELS: Record<OrganizationType, ContextualTerminology> 
   youth: {
     group: { singular: 'Group', plural: 'Groups' },
     coach: { singular: 'Coach', plural: 'Coaches' },
-    athlete: { singular: 'Player', plural: 'Players' },
+    athlete: { singular: 'Athlete', plural: 'Athletes' },
   },
   high_school: {
     group: { singular: 'Team', plural: 'Teams' },
@@ -61,7 +61,7 @@ export const CONTEXTUAL_LABELS: Record<OrganizationType, ContextualTerminology> 
   club: {
     group: { singular: 'Team', plural: 'Teams' },
     coach: { singular: 'Coach', plural: 'Coaches' },
-    athlete: { singular: 'Player', plural: 'Players' },
+    athlete: { singular: 'Athlete', plural: 'Athletes' },
   },
   private_facility: {
     group: { singular: 'Group', plural: 'Groups' },
@@ -153,7 +153,7 @@ export function getCoachLabel(
  * @example
  * ```typescript
  * getAthleteLabel('private_facility', false) // "Client"
- * getAthleteLabel('club', true)              // "Players"
+ * getAthleteLabel('club', true)              // "Athletes"
  * getAthleteLabel('college', false)          // "Athlete"
  * getAthleteLabel(null, false)               // "Athlete" (fallback)
  * ```
