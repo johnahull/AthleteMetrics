@@ -399,6 +399,7 @@ export default function Teams() {
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
         team={null}
+        organizationId={effectiveOrganizationId || undefined}
       />
 
       <TeamModal

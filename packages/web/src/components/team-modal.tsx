@@ -19,9 +19,10 @@ interface TeamModalProps {
   isOpen: boolean;
   onClose: () => void;
   team: Team | null;
+  organizationId?: string; // Required for creating new teams
 }
 
-export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
+export default function TeamModal({ isOpen, onClose, team, organizationId }: TeamModalProps) {
   const labels = useContextualLabels();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -65,10 +66,10 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         sport: "",
         notes: "",
         season: "",
-        organizationId: undefined,
+        organizationId: organizationId, // Use the prop for new teams
       });
     }
-  }, [team, form]);
+  }, [team, form, organizationId]);
 
   const createTeamMutation = useMutation({
     mutationFn: async (data: InsertTeam) => {
