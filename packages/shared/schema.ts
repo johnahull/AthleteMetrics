@@ -612,6 +612,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   reportSnapshotsCreated: many(reportSnapshots, { relationName: "reportSnapshotsCreated" }),
   wellnessTemplatesCreated: many(wellnessTemplates, { relationName: "wellnessTemplatesCreated" }),
   wellnessRequestsCreated: many(wellnessRequests, { relationName: "wellnessRequestsCreated" }),
+  goals: many(goals),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -866,6 +867,39 @@ export const wellnessResponses = pgTable("wellness_responses", {
     .on(table.userId, table.submittedAt.desc()),
 }));
 
+// Goal Setting System
+export const goalTypeEnum = ['target_value', 'improvement_percentage', 'consistency'] as const;
+export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as const;
+
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  metric: text("metric").notNull(), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
+  goalType: text("goal_type", { enum: goalTypeEnum }).notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 3 }).notNull(),
+  baselineValue: decimal("baseline_value", { precision: 10, scale: 3 }).notNull(),
+  currentValue: decimal("current_value", { precision: 10, scale: 3 }).notNull(),
+  targetDate: date("target_date").notNull(),
+  status: text("status", { enum: goalStatusEnum }).default('active').notNull(),
+  notes: text("notes"),
+  achievedAt: timestamp("achieved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  // Index for user's goals lookup
+  userIdx: index("goals_user_idx").on(table.userId),
+  // Index for active goals queries
+  statusIdx: index("goals_status_idx").on(table.status),
+  // Composite index for user's active goals
+  userStatusIdx: index("goals_user_status_idx").on(table.userId, table.status),
+  // Index for metric-based queries
+  metricIdx: index("goals_metric_idx").on(table.metric),
+  // Index for target date queries (upcoming deadlines)
+  targetDateIdx: index("goals_target_date_idx").on(table.targetDate),
+  // Composite index for user + metric queries
+  userMetricIdx: index("goals_user_metric_idx").on(table.userId, table.metric),
+}));
+
 // Wellness Relations
 export const wellnessTemplatesRelations = relations(wellnessTemplates, ({ one, many }) => ({
   organization: one(organizations, {
@@ -902,10 +936,23 @@ export const wellnessResponsesRelations = relations(wellnessResponses, ({ one })
   }),
 }));
 
+// Goals Relations
+export const goalsRelations = relations(goals, ({ one }) => ({
+  user: one(users, {
+    fields: [goals.userId],
+    references: [users.id],
+  }),
+}));
+
 // Wellness type exports
 export type WellnessTemplate = typeof wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof wellnessRequests.$inferSelect;
 export type WellnessResponse = typeof wellnessResponses.$inferSelect;
+
+// Goals type exports
+export type Goal = typeof goals.$inferSelect;
+export type GoalType = (typeof goalTypeEnum)[number];
+export type GoalStatus = (typeof goalStatusEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
@@ -1771,3 +1818,60 @@ export const updateReportInsightsSchema = z.object({
 export const generateReportInsightsSchema = z.object({
   reportId: z.string().uuid(),
 });
+
+// Goal validation schemas
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  achievedAt: true, // Managed by system when status changes to 'achieved'
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  metric: z.string().min(1, "Metric is required"),
+  goalType: z.enum(goalTypeEnum),
+  targetValue: z.number().positive("Target value must be positive"),
+  baselineValue: z.number().nonnegative("Baseline value must be non-negative"),
+  currentValue: z.number().nonnegative("Current value must be non-negative"),
+  targetDate: z.string().date("Target date must be in YYYY-MM-DD format"),
+  status: z.enum(goalStatusEnum).default('active'),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+}).refine(
+  (data) => {
+    const targetDate = new Date(data.targetDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset to start of day for fair comparison
+    return targetDate >= now;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export const updateGoalSchema = z.object({
+  metric: z.string().min(1).optional(),
+  goalType: z.enum(goalTypeEnum).optional(),
+  targetValue: z.number().positive().optional(),
+  baselineValue: z.number().nonnegative().optional(),
+  currentValue: z.number().nonnegative().optional(),
+  targetDate: z.string().date().optional(),
+  status: z.enum(goalStatusEnum).optional(),
+  notes: z.string().max(1000).optional(),
+}).refine(
+  (data) => {
+    if (data.targetDate) {
+      const targetDate = new Date(data.targetDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return targetDate >= now;
+    }
+    return true;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type UpdateGoal = z.infer<typeof updateGoalSchema>;

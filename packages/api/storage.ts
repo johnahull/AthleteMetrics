@@ -4,6 +4,7 @@ import {
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
+  goals,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -14,6 +15,7 @@ import {
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
   type WellnessTemplate, type WellnessRequest, type WellnessResponse,
+  type Goal, type InsertGoal, type UpdateGoal,
   insertUserSchema,
   type OrganizationType
 } from "@shared/schema";
@@ -317,6 +319,13 @@ export interface IStorage {
   getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
   getRequestCompletionRate(organizationId: string, requestId: string): Promise<{ completed: number; total: number; percentage: number }>;
+
+  // Goals
+  getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
+  getGoal(id: string): Promise<Goal | undefined>;
+  createGoal(goal: InsertGoal): Promise<Goal>;
+  updateGoal(id: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal>;
+  deleteGoal(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4862,6 +4871,82 @@ export class DatabaseStorage implements IStorage {
         percentage,
       };
     });
+  }
+
+  // Goals
+  async getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]> {
+    const conditions: SQL[] = [eq(goals.userId, userId)];
+
+    if (filters?.status) {
+      conditions.push(sql`${goals.status} = ${filters.status}`);
+    }
+
+    return await db
+      .select()
+      .from(goals)
+      .where(and(...conditions))
+      .orderBy(desc(goals.createdAt));
+  }
+
+  async getGoal(id: string): Promise<Goal | undefined> {
+    const [goal] = await db
+      .select()
+      .from(goals)
+      .where(eq(goals.id, id));
+
+    return goal || undefined;
+  }
+
+  async createGoal(goal: InsertGoal): Promise<Goal> {
+    const [newGoal] = await db
+      .insert(goals)
+      .values({
+        userId: goal.userId,
+        metric: goal.metric,
+        goalType: goal.goalType,
+        targetValue: goal.targetValue.toString(),
+        baselineValue: goal.baselineValue.toString(),
+        currentValue: goal.currentValue.toString(),
+        targetDate: goal.targetDate,
+        status: goal.status,
+        notes: goal.notes,
+      })
+      .returning();
+
+    return newGoal;
+  }
+
+  async updateGoal(id: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal> {
+    // Build the update object, converting numbers to strings for decimal columns
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (goal.metric !== undefined) updateData.metric = goal.metric;
+    if (goal.goalType !== undefined) updateData.goalType = goal.goalType;
+    if (goal.targetValue !== undefined) updateData.targetValue = goal.targetValue.toString();
+    if (goal.baselineValue !== undefined) updateData.baselineValue = goal.baselineValue.toString();
+    if (goal.currentValue !== undefined) updateData.currentValue = goal.currentValue.toString();
+    if (goal.targetDate !== undefined) updateData.targetDate = goal.targetDate;
+    if (goal.status !== undefined) updateData.status = goal.status;
+    if (goal.notes !== undefined) updateData.notes = goal.notes;
+    if (goal.achievedAt !== undefined) updateData.achievedAt = goal.achievedAt;
+
+    const [updatedGoal] = await db
+      .update(goals)
+      .set(updateData)
+      .where(eq(goals.id, id))
+      .returning();
+
+    if (!updatedGoal) {
+      throw new Error(`Goal with id ${id} not found`);
+    }
+
+    return updatedGoal;
+  }
+
+  async deleteGoal(id: string): Promise<void> {
+    await db.delete(goals).where(eq(goals.id, id));
   }
 }
 
