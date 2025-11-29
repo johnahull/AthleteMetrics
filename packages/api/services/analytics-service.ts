@@ -203,39 +203,62 @@ export class AnalyticsService {
   }
 
   /**
-   * Get dashboard statistics for an organization
+   * Get dashboard statistics for an organization, optionally filtered by team or athlete
    * @param organizationId Optional organization ID
+   * @param options Optional filter options
+   * @param options.teamId Filter to a specific team
+   * @param options.athleteId Filter to a specific athlete (requires teamId)
    * @returns Dashboard statistics
    */
-  async getDashboardStats(organizationId?: string): Promise<DashboardStats> {
-    // Get all athletes in the organization
+  async getDashboardStats(
+    organizationId?: string,
+    options?: { teamId?: string; athleteId?: string }
+  ): Promise<DashboardStats> {
+    const { teamId, athleteId } = options || {};
+    // Get all athletes in the organization (or filtered by team/athlete)
     // Get athlete counts using database-level filtering (more efficient than application-level)
     let totalAthletes: number;
     let activeAthletes: number;
     let cachedAthleteIds: string[] | undefined; // Cache athlete IDs to avoid duplicate query
 
     if (organizationId) {
-      // Get athlete IDs through team membership
-      const athleteIds = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId))
-        .groupBy(userTeams.userId);
+      // If filtering by specific athlete, short-circuit to just that athlete
+      if (athleteId) {
+        cachedAthleteIds = [athleteId];
+      } else if (teamId) {
+        // Filter to athletes in the specific team
+        const athleteIds = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .where(
+            and(
+              eq(userTeams.teamId, teamId),
+              eq(userTeams.isActive, true)
+            )
+          )
+          .groupBy(userTeams.userId);
+        cachedAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+      } else {
+        // Get all athlete IDs through team membership (organization scope)
+        const athleteIds = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(eq(teams.organizationId, organizationId))
+          .groupBy(userTeams.userId);
+        cachedAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+      }
 
-      const uniqueAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
-      cachedAthleteIds = uniqueAthleteIds; // Cache for reuse in measurement query
-
-      if (uniqueAthleteIds.length > 0) {
+      if (cachedAthleteIds.length > 0) {
         // Execute both counts in parallel using database filtering
         const [totalCount, activeCount] = await Promise.all([
           db.select({ count: sql<number>`count(*)::int` })
             .from(users)
-            .where(inArray(users.id, uniqueAthleteIds)),
+            .where(inArray(users.id, cachedAthleteIds)),
           db.select({ count: sql<number>`count(*)::int` })
             .from(users)
             .where(and(
-              inArray(users.id, uniqueAthleteIds),
+              inArray(users.id, cachedAthleteIds),
               eq(users.isActive, true),
               ne(users.password, INVITATION_PENDING_PASSWORD)
             ))
@@ -263,18 +286,25 @@ export class AnalyticsService {
       activeAthletes = activeCount[0]?.count || 0;
     }
 
-    // Get all non-archived teams
-    const teamConditions = [ne(teams.isArchived, true)];
-    if (organizationId) {
-      teamConditions.push(eq(teams.organizationId, organizationId));
+    // Get team count (respects team/athlete filter)
+    let totalTeams: number;
+    if (teamId) {
+      // If filtering by specific team, count is 1
+      totalTeams = 1;
+    } else {
+      // Get all non-archived teams for the organization
+      const teamConditions = [ne(teams.isArchived, true)];
+      if (organizationId) {
+        teamConditions.push(eq(teams.organizationId, organizationId));
+      }
+
+      const orgTeams = await db
+        .select()
+        .from(teams)
+        .where(and(...teamConditions));
+
+      totalTeams = orgTeams.length;
     }
-
-    const orgTeams = await db
-      .select()
-      .from(teams)
-      .where(and(...teamConditions));
-
-    const totalTeams = orgTeams.length;
 
     // Get measurements from last N days (configurable via DASHBOARD_STATS_WINDOW_DAYS)
     const windowStartDate = new Date();

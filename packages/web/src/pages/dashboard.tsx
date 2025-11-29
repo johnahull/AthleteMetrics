@@ -17,6 +17,9 @@ import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { MeasurementsTimeline } from "@/components/measurements-timeline";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useDashboardScope } from "@/hooks/useDashboardScope";
+import { DashboardScopeSelector } from "@/components/dashboard/DashboardScopeSelector";
+import { DashboardWellnessSection } from "@/components/dashboard/DashboardWellnessSection";
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
@@ -48,18 +51,47 @@ export default function Dashboard() {
 
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
-  // Fetch dashboard trends
-  const { data: trendsData, isLoading: trendsLoading } = useDashboardTrends(effectiveOrganizationId);
+  // Dashboard scope (organization/team/athlete view) with URL state sync
+  const { scope, setTeamScope, setAthleteScope, resetScope, getQueryParams } = useDashboardScope(effectiveOrganizationId);
+
+  // Handle scope change from selector
+  const handleScopeChange = (update: Partial<typeof scope>) => {
+    if (update.view === 'organization') {
+      resetScope();
+    } else if (update.view === 'team' && update.teamId) {
+      setTeamScope(update.teamId);
+    } else if (update.view === 'athlete' && update.teamId && update.athleteId) {
+      setAthleteScope(update.teamId, update.athleteId);
+    }
+  };
+
+  // Build filter query string for API calls
+  const filterParams = getQueryParams();
+  const filterQueryString = Object.entries(filterParams)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('&');
+
+  // Fetch dashboard trends with scope filters
+  const { data: trendsData, isLoading: trendsLoading } = useDashboardTrends(
+    effectiveOrganizationId,
+    filterParams.teamId,
+    filterParams.athleteId
+  );
 
   const { data: dashboardStats, isLoading, error } = useQuery({
-    queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, user?.isSiteAdmin],
+    queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, filterParams.teamId, filterParams.athleteId],
     queryFn: async () => {
       // Organization selection is required for all users
       if (!effectiveOrganizationId) {
         throw new Error("Please select an organization to view dashboard");
       }
 
-      const url = `/api/analytics/dashboard?organizationId=${effectiveOrganizationId}`;
+      // Build URL with optional filter params
+      const params = new URLSearchParams({ organizationId: effectiveOrganizationId });
+      if (filterParams.teamId) params.append('teamId', filterParams.teamId);
+      if (filterParams.athleteId) params.append('athleteId', filterParams.athleteId);
+
+      const url = `/api/analytics/dashboard?${params.toString()}`;
       const response = await fetch(url, {
         credentials: 'include' // Ensure cookies are sent for authentication
       });
@@ -246,7 +278,7 @@ export default function Dashboard() {
       
       {/* Header */}
       <div className="mb-8">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">Dashboard Overview</h1>
             <p className="text-gray-600 mt-1">
@@ -256,11 +288,13 @@ export default function Dashboard() {
               }
             </p>
           </div>
-          {effectiveOrganizationId && currentOrganization && (
-            <div className="bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
-              <p className="text-sm font-medium text-blue-900">Organization View</p>
-              <p className="text-xs text-blue-700">{currentOrganization.name}</p>
-            </div>
+          {effectiveOrganizationId && (
+            <DashboardScopeSelector
+              organizationId={effectiveOrganizationId}
+              organizationName={currentOrganization?.name || null}
+              scope={scope}
+              onScopeChange={handleScopeChange}
+            />
           )}
         </div>
       </div>
@@ -300,6 +334,16 @@ export default function Dashboard() {
           } : undefined}
         />
       </div>
+
+      {/* Wellness Section - Only show when org is selected and wellness is enabled */}
+      {effectiveOrganizationId && (
+        <DashboardWellnessSection
+          organizationId={effectiveOrganizationId}
+          teamId={filterParams.teamId}
+          athleteId={filterParams.athleteId}
+          isSiteAdmin={isSiteAdmin}
+        />
+      )}
 
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
       {effectiveOrganizationId && (

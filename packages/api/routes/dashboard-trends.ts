@@ -133,6 +133,18 @@ export function registerDashboardTrendsRoutes(app: Express) {
         }
       }
 
+      // Parse optional filter parameters
+      const teamId = req.query.teamId as string | undefined;
+      const athleteId = req.query.athleteId as string | undefined;
+
+      // Validate UUID format for filters
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+      if (athleteId && !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid athleteId format" });
+      }
+
       // Calculate date ranges
       const now = new Date();
       const currentMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -140,15 +152,34 @@ export function registerDashboardTrendsRoutes(app: Express) {
       const previousMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const previousMonthEnd = new Date(now.getFullYear(), now.getMonth(), 1);
 
-      // Get athlete IDs for organization (used for filtering)
-      const orgAthleteIds = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId))
-        .groupBy(userTeams.userId);
-
-      const athleteIds = [...new Set(orgAthleteIds.map(a => a.userId))];
+      // Get athlete IDs based on filter scope
+      let athleteIds: string[];
+      if (athleteId) {
+        // Filter to specific athlete
+        athleteIds = [athleteId];
+      } else if (teamId) {
+        // Filter to athletes in specific team
+        const teamAthleteIds = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .where(
+            and(
+              eq(userTeams.teamId, teamId),
+              eq(userTeams.isActive, true)
+            )
+          )
+          .groupBy(userTeams.userId);
+        athleteIds = [...new Set(teamAthleteIds.map(a => a.userId))];
+      } else {
+        // Get all athlete IDs for organization
+        const orgAthleteIds = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(eq(teams.organizationId, organizationId))
+          .groupBy(userTeams.userId);
+        athleteIds = [...new Set(orgAthleteIds.map(a => a.userId))];
+      }
 
       // Athletes Trend (count athletes created in current vs previous month)
       let currentAthletes = 0;
@@ -238,42 +269,46 @@ export function registerDashboardTrendsRoutes(app: Express) {
       }
 
       // Teams Trend (count teams created in current vs previous month)
-      // Single query with GROUP BY to get both current and previous month counts
-      const currentMonthStartStrTeam = currentMonthStart.toISOString();
-      const currentMonthEndStrTeam = currentMonthEnd.toISOString();
-      const previousMonthStartStrTeam = previousMonthStart.toISOString();
-      const previousMonthEndStrTeam = previousMonthEnd.toISOString();
-
-      const teamCountsResult = await db
-        .select({
-          period: sql<string>`
-            CASE
-              WHEN ${teams.createdAt} >= ${sql.raw(`'${currentMonthStartStrTeam}'`)}
-                AND ${teams.createdAt} < ${sql.raw(`'${currentMonthEndStrTeam}'`)} THEN 'current'
-              WHEN ${teams.createdAt} >= ${sql.raw(`'${previousMonthStartStrTeam}'`)}
-                AND ${teams.createdAt} < ${sql.raw(`'${previousMonthEndStrTeam}'`)} THEN 'previous'
-            END
-          `,
-          count: sql<number>`count(*)::int`
-        })
-        .from(teams)
-        .where(
-          and(
-            eq(teams.organizationId, organizationId),
-            gte(teams.createdAt, previousMonthStart),
-            lt(teams.createdAt, currentMonthEnd)
-          )
-        )
-        .groupBy(sql`1`);
-
-      // Extract counts from result
+      // Skip team trends when filtering by specific team (not meaningful)
       let currentTeams = 0;
       let previousTeams = 0;
-      for (const row of teamCountsResult) {
-        if (row.period === 'current') {
-          currentTeams = row.count;
-        } else if (row.period === 'previous') {
-          previousTeams = row.count;
+
+      if (!teamId) {
+        // Single query with GROUP BY to get both current and previous month counts
+        const currentMonthStartStrTeam = currentMonthStart.toISOString();
+        const currentMonthEndStrTeam = currentMonthEnd.toISOString();
+        const previousMonthStartStrTeam = previousMonthStart.toISOString();
+        const previousMonthEndStrTeam = previousMonthEnd.toISOString();
+
+        const teamCountsResult = await db
+          .select({
+            period: sql<string>`
+              CASE
+                WHEN ${teams.createdAt} >= ${sql.raw(`'${currentMonthStartStrTeam}'`)}
+                  AND ${teams.createdAt} < ${sql.raw(`'${currentMonthEndStrTeam}'`)} THEN 'current'
+                WHEN ${teams.createdAt} >= ${sql.raw(`'${previousMonthStartStrTeam}'`)}
+                  AND ${teams.createdAt} < ${sql.raw(`'${previousMonthEndStrTeam}'`)} THEN 'previous'
+              END
+            `,
+            count: sql<number>`count(*)::int`
+          })
+          .from(teams)
+          .where(
+            and(
+              eq(teams.organizationId, organizationId),
+              gte(teams.createdAt, previousMonthStart),
+              lt(teams.createdAt, currentMonthEnd)
+            )
+          )
+          .groupBy(sql`1`);
+
+        // Extract counts from result
+        for (const row of teamCountsResult) {
+          if (row.period === 'current') {
+            currentTeams = row.count;
+          } else if (row.period === 'previous') {
+            previousTeams = row.count;
+          }
         }
       }
 

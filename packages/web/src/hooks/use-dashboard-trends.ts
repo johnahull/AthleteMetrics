@@ -12,15 +12,24 @@ interface DashboardTrendsResponse {
   teams: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
 }
 
-export function useDashboardTrends(organizationId: string | null) {
+export function useDashboardTrends(
+  organizationId: string | null,
+  teamId?: string,
+  athleteId?: string
+) {
   return useQuery({
-    queryKey: ["/api/dashboard/trends", organizationId],
+    queryKey: ["/api/dashboard/trends", organizationId, teamId, athleteId],
     queryFn: async () => {
       if (!organizationId) {
         throw new Error("Organization ID is required");
       }
 
-      const response = await fetch(`/api/dashboard/trends?organizationId=${organizationId}`, {
+      // Build URL with optional filter params
+      const params = new URLSearchParams({ organizationId });
+      if (teamId) params.append('teamId', teamId);
+      if (athleteId) params.append('athleteId', athleteId);
+
+      const response = await fetch(`/api/dashboard/trends?${params.toString()}`, {
         credentials: 'include'
       });
 

@@ -150,7 +150,28 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - organization mismatch" });
       }
 
-      const dashboardStats = await analyticsService.getDashboardStats(organizationId);
+      // Parse optional filter parameters
+      const teamId = req.query.teamId as string | undefined;
+      const athleteId = req.query.athleteId as string | undefined;
+
+      // Validate UUID format for filters
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+      if (athleteId && !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid athleteId format" });
+      }
+
+      // athleteId requires teamId
+      if (athleteId && !teamId) {
+        return res.status(400).json({ message: "athleteId requires teamId to be specified" });
+      }
+
+      const dashboardStats = await analyticsService.getDashboardStats(organizationId, {
+        teamId,
+        athleteId,
+      });
       res.json(dashboardStats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);
