@@ -161,6 +161,48 @@ export const organizationMetrics = pgTable("organization_metrics", {
   orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
 }));
 
+// Site-level sport definitions (master catalog)
+export const siteSports = pgTable("site_sports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(), // "SOCCER", "BASKETBALL" (immutable identifier)
+  name: varchar("name", { length: 100 }).notNull(), // "Soccer" (display name, can change)
+  description: text("description"),
+  icon: varchar("icon", { length: 50 }), // Icon identifier for UI
+  color: varchar("color", { length: 20 }), // Hex color or Tailwind class
+  displayOrder: integer("display_order"),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot delete seeded sports
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  activeIdx: index("site_sports_active_idx").on(table.isActive),
+  codeIdx: index("site_sports_code_idx").on(table.code),
+  displayOrderIdx: index("site_sports_display_order_idx").on(table.displayOrder),
+}));
+
+// Sport-specific position definitions
+export const sitePositions = pgTable("site_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sportId: varchar("sport_id").notNull().references(() => siteSports.id, { onDelete: 'cascade' }),
+  code: varchar("code", { length: 20 }).notNull(), // "F", "M", "D", "GK"
+  name: varchar("name", { length: 100 }).notNull(), // "Forward", "Midfielder"
+  shortName: varchar("short_name", { length: 10 }), // "FW", "MF" (optional abbreviation)
+  description: text("description"),
+  displayOrder: integer("display_order"),
+  color: varchar("color", { length: 20 }),
+  isSystemDefault: boolean("is_system_default").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  sportIdx: index("site_positions_sport_idx").on(table.sportId),
+  activeIdx: index("site_positions_active_idx").on(table.isActive),
+  sportActiveIdx: index("site_positions_sport_active_idx").on(table.sportId, table.isActive),
+  sportCodeUnique: unique("site_positions_sport_code_unique").on(table.sportId, table.code),
+}));
+
 // Site-level benchmark definitions (master catalog)
 export const siteBenchmarks = pgTable("site_benchmarks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -570,6 +612,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   reportSnapshotsCreated: many(reportSnapshots, { relationName: "reportSnapshotsCreated" }),
   wellnessTemplatesCreated: many(wellnessTemplates, { relationName: "wellnessTemplatesCreated" }),
   wellnessRequestsCreated: many(wellnessRequests, { relationName: "wellnessRequestsCreated" }),
+  goals: many(goals),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -824,6 +867,39 @@ export const wellnessResponses = pgTable("wellness_responses", {
     .on(table.userId, table.submittedAt.desc()),
 }));
 
+// Goal Setting System
+export const goalTypeEnum = ['target_value', 'improvement_percentage', 'consistency'] as const;
+export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as const;
+
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  metric: text("metric").notNull(), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
+  goalType: text("goal_type", { enum: goalTypeEnum }).notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 3 }).notNull(),
+  baselineValue: decimal("baseline_value", { precision: 10, scale: 3 }).notNull(),
+  currentValue: decimal("current_value", { precision: 10, scale: 3 }).notNull(),
+  targetDate: date("target_date").notNull(),
+  status: text("status", { enum: goalStatusEnum }).default('active').notNull(),
+  notes: text("notes"),
+  achievedAt: timestamp("achieved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  // Index for user's goals lookup
+  userIdx: index("goals_user_idx").on(table.userId),
+  // Index for active goals queries
+  statusIdx: index("goals_status_idx").on(table.status),
+  // Composite index for user's active goals
+  userStatusIdx: index("goals_user_status_idx").on(table.userId, table.status),
+  // Index for metric-based queries
+  metricIdx: index("goals_metric_idx").on(table.metric),
+  // Index for target date queries (upcoming deadlines)
+  targetDateIdx: index("goals_target_date_idx").on(table.targetDate),
+  // Composite index for user + metric queries
+  userMetricIdx: index("goals_user_metric_idx").on(table.userId, table.metric),
+}));
+
 // Wellness Relations
 export const wellnessTemplatesRelations = relations(wellnessTemplates, ({ one, many }) => ({
   organization: one(organizations, {
@@ -860,10 +936,23 @@ export const wellnessResponsesRelations = relations(wellnessResponses, ({ one })
   }),
 }));
 
+// Goals Relations
+export const goalsRelations = relations(goals, ({ one }) => ({
+  user: one(users, {
+    fields: [goals.userId],
+    references: [users.id],
+  }),
+}));
+
 // Wellness type exports
 export type WellnessTemplate = typeof wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof wellnessRequests.$inferSelect;
 export type WellnessResponse = typeof wellnessResponses.$inferSelect;
+
+// Goals type exports
+export type Goal = typeof goals.$inferSelect;
+export type GoalType = (typeof goalTypeEnum)[number];
+export type GoalStatus = (typeof goalStatusEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
@@ -955,8 +1044,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
     return !isNaN(d.getTime()) && d <= new Date();
   }, "Invalid birth date or future date"),
   teamIds: z.array(z.string().min(1, "Team ID required")).optional(),
-  sports: z.array(z.enum(["Soccer"])).optional(),
-  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
+  // Sports and positions are now dynamic - stored as codes from site_sports and site_positions tables
+  sports: z.array(z.string().min(1, "Sport code required")).optional(),
+  positions: z.array(z.string().min(1, "Position code required")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
@@ -1135,6 +1225,65 @@ export const updateOrganizationMetricSchema = z.object({
   isEnabled: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   customLabel: z.string().max(100).optional(),
+});
+
+// Sports Schemas
+export const insertSiteSportSchema = createInsertSchema(siteSports).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  code: z.string()
+    .min(1, "Sport code is required")
+    .max(50, "Sport code must be 50 characters or less")
+    .regex(/^[A-Z0-9_]+$/, "Sport code must contain only uppercase letters, numbers, and underscores")
+    .refine((code) => !code.startsWith("_"), "Sport code cannot start with underscore"),
+  name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
+  description: z.string().optional(),
+  icon: z.string().max(50).optional(),
+  color: z.string().max(20).optional(),
+  displayOrder: z.number().int().optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const updateSiteSportSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().optional(),
+  icon: z.string().max(50).optional(),
+  color: z.string().max(20).optional(),
+  displayOrder: z.number().int().optional(),
+  isActive: z.boolean().optional(),
+});
+
+// Positions Schemas
+export const insertSitePositionSchema = createInsertSchema(sitePositions).omit({
+  id: true,
+  createdAt: true,
+  createdBy: true, // Set by backend from session
+  updatedAt: true, // Managed by system
+  isSystemDefault: true, // Only set internally
+}).extend({
+  sportId: z.string().min(1, "Sport ID is required"),
+  code: z.string()
+    .min(1, "Position code is required")
+    .max(20, "Position code must be 20 characters or less"),
+  name: z.string().min(1, "Name is required").max(100, "Name must be 100 characters or less"),
+  shortName: z.string().max(10).optional(),
+  description: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  isActive: z.boolean().default(true),
+});
+
+export const updateSitePositionSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  shortName: z.string().max(10).optional(),
+  description: z.string().optional(),
+  displayOrder: z.number().int().optional(),
+  color: z.string().max(20).optional(),
+  isActive: z.boolean().optional(),
 });
 
 // Benchmark Schemas
@@ -1460,6 +1609,31 @@ export type InsertOrganizationMetric = z.infer<typeof insertOrganizationMetricSc
 export type OrganizationMetric = typeof organizationMetrics.$inferSelect;
 export type UpdateOrganizationMetric = z.infer<typeof updateOrganizationMetricSchema>;
 
+export type InsertSiteSport = z.infer<typeof insertSiteSportSchema>;
+export type SiteSport = typeof siteSports.$inferSelect;
+export type UpdateSiteSport = z.infer<typeof updateSiteSportSchema>;
+
+export type InsertSitePosition = z.infer<typeof insertSitePositionSchema>;
+export type SitePosition = typeof sitePositions.$inferSelect;
+export type UpdateSitePosition = z.infer<typeof updateSitePositionSchema>;
+
+// Enriched type for sport with its positions
+export type SiteSportWithPositions = SiteSport & {
+  positions: SitePosition[];
+};
+
+// Sport usage count for deletion warning
+export type SiteSportUsage = {
+  athleteCount: number;
+  teamCount: number;
+  metricCount: number;
+};
+
+// Position usage count for deletion warning
+export type SitePositionUsage = {
+  athleteCount: number;
+};
+
 export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
 export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
 export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
@@ -1597,8 +1771,9 @@ export const insertAthleteSchema = z.object({
   graduationYear: z.coerce.number().int().min(2000).max(2040).optional(),
   school: z.string().optional(),
   phoneNumbers: z.array(z.string()).optional(),
-  sports: z.array(z.enum(["Soccer"])).optional(),
-  positions: z.array(z.enum(["F", "M", "D", "GK"])).optional(),
+  // Sports and positions are now dynamic - stored as codes from site_sports and site_positions tables
+  sports: z.array(z.string().min(1, "Sport code required")).optional(),
+  positions: z.array(z.string().min(1, "Position code required")).optional(),
   height: z.coerce.number().optional(),
   weight: z.coerce.number().optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
@@ -1643,3 +1818,60 @@ export const updateReportInsightsSchema = z.object({
 export const generateReportInsightsSchema = z.object({
   reportId: z.string().uuid(),
 });
+
+// Goal validation schemas
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  achievedAt: true, // Managed by system when status changes to 'achieved'
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  metric: z.string().min(1, "Metric is required"),
+  goalType: z.enum(goalTypeEnum),
+  targetValue: z.number().positive("Target value must be positive"),
+  baselineValue: z.number().nonnegative("Baseline value must be non-negative"),
+  currentValue: z.number().nonnegative("Current value must be non-negative"),
+  targetDate: z.string().date("Target date must be in YYYY-MM-DD format"),
+  status: z.enum(goalStatusEnum).default('active'),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+}).refine(
+  (data) => {
+    const targetDate = new Date(data.targetDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset to start of day for fair comparison
+    return targetDate >= now;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export const updateGoalSchema = z.object({
+  metric: z.string().min(1).optional(),
+  goalType: z.enum(goalTypeEnum).optional(),
+  targetValue: z.number().positive().optional(),
+  baselineValue: z.number().nonnegative().optional(),
+  currentValue: z.number().nonnegative().optional(),
+  targetDate: z.string().date().optional(),
+  status: z.enum(goalStatusEnum).optional(),
+  notes: z.string().max(1000).optional(),
+}).refine(
+  (data) => {
+    if (data.targetDate) {
+      const targetDate = new Date(data.targetDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return targetDate >= now;
+    }
+    return true;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type UpdateGoal = z.infer<typeof updateGoalSchema>;
