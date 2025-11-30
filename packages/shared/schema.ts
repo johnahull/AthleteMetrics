@@ -1894,7 +1894,7 @@ export const insertGoalSchema = createInsertSchema(goals).omit({
   goalType: z.enum(goalTypeEnum),
   targetValue: z.number().positive("Target value must be positive"),
   baselineValue: z.number().nonnegative("Baseline value must be non-negative"),
-  currentValue: z.number().nonnegative("Current value must be non-negative"),
+  currentValue: z.number().nonnegative("Current value must be non-negative").optional(),
   targetDate: z.string().date("Target date must be in YYYY-MM-DD format"),
   status: z.enum(goalStatusEnum).default('active'),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),

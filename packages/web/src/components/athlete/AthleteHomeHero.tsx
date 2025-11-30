@@ -53,18 +53,18 @@ export function AthleteHomeHero({
   return (
     <div
       data-testid="athlete-home-hero"
-      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl p-8 mb-6 shadow-lg"
+      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-xl p-5 sm:p-8 mb-6 shadow-lg"
     >
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 data-testid="welcome-message" className="text-3xl font-bold mb-2">
+          <h1 data-testid="welcome-message" className="text-2xl sm:text-3xl font-bold mb-2">
             Welcome back{welcomeName ? `, ${welcomeName}` : ''}!
           </h1>
-          <p data-testid="streak-tracker" className="text-xl text-blue-50">
+          <p data-testid="streak-tracker" className="text-lg sm:text-xl text-blue-50">
             {measurementCount} {measurementText} this month 🔥
           </p>
         </div>
-        <div className="bg-white/10 backdrop-blur-sm rounded-lg px-6 py-4">
+        <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 sm:px-6 py-3 sm:py-4">
           <p data-testid="last-activity" className="text-sm text-blue-50">
             Last measured: <span className="font-semibold">{formatLastActivity()}</span>
           </p>

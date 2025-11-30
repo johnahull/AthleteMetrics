@@ -46,6 +46,7 @@ import {
 interface AchievementsCardProps {
   userId: string;
   organizationId: string;
+  compact?: boolean;
 }
 
 /**
@@ -181,7 +182,7 @@ function AchievementsSkeleton() {
 /**
  * Main AchievementsCard component
  */
-export function AchievementsCard({ userId, organizationId }: AchievementsCardProps) {
+export function AchievementsCard({ userId, organizationId, compact = false }: AchievementsCardProps) {
   // Fetch data
   const {
     data: userAchievements,
@@ -194,6 +195,9 @@ export function AchievementsCard({ userId, organizationId }: AchievementsCardPro
     isLoading: definitionsLoading,
     error: definitionsError,
   } = useAchievementDefinitions();
+
+  // Category order for display
+  const categoryOrder = ['performance', 'consistency', 'improvement', 'goal'];
 
   // Process achievements by category
   const { byCategory, unlockedCount, totalCount } = useMemo(() => {
@@ -233,6 +237,29 @@ export function AchievementsCard({ userId, organizationId }: AchievementsCardPro
     };
   }, [definitions, userAchievements]);
 
+  // In compact mode: flatten and limit badges (must be called before early returns)
+  const compactBadges = useMemo(() => {
+    if (!compact) return null;
+
+    const allUnlocked: UserAchievement[] = [];
+    const allLocked: AchievementDefinition[] = [];
+
+    for (const category of categoryOrder) {
+      const data = byCategory[category];
+      if (data) {
+        allUnlocked.push(...data.unlocked);
+        allLocked.push(...data.locked);
+      }
+    }
+
+    // In compact: show up to 6 unlocked, then fill to 8 with locked
+    const displayUnlocked = allUnlocked.slice(0, 6);
+    const remainingSlots = Math.max(0, 8 - displayUnlocked.length);
+    const displayLocked = allLocked.slice(0, remainingSlots);
+
+    return { unlocked: displayUnlocked, locked: displayLocked };
+  }, [compact, byCategory]);
+
   // Loading state
   if (achievementsLoading || definitionsLoading) {
     return <AchievementsSkeleton />;
@@ -271,74 +298,104 @@ export function AchievementsCard({ userId, organizationId }: AchievementsCardPro
     );
   }
 
-  // Render categories in order
-  const categoryOrder = ['performance', 'consistency', 'improvement', 'goal'];
-
   return (
     <Card>
-      <CardHeader className="pb-3">
+      <CardHeader className={compact ? 'pb-2' : 'pb-3'}>
         <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Trophy className="h-5 w-5 text-yellow-500" />
+          <CardTitle className={`flex items-center gap-2 ${compact ? 'text-base' : 'text-lg'}`}>
+            <Trophy className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-yellow-500`} />
             <span>Achievements ({unlockedCount}/{totalCount})</span>
           </CardTitle>
-          {unlockedCount > 0 && (
+          {unlockedCount > 0 && !compact && (
             <Badge variant="secondary" className="text-xs">
               {Math.round((unlockedCount / totalCount) * 100)}% complete
             </Badge>
           )}
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className={compact ? 'pt-0' : 'space-y-4'}>
         {unlockedCount === 0 && (
           <p className="text-muted-foreground text-sm text-center pb-2">
             Start training to unlock achievements!
           </p>
         )}
 
-        {categoryOrder.map((category) => {
-          const categoryData = byCategory[category];
-          if (!categoryData) return null;
-
-          const { unlocked, locked } = categoryData;
-          if (unlocked.length === 0 && locked.length === 0) return null;
-
-          const config = CATEGORY_CONFIG[category as keyof typeof CATEGORY_CONFIG];
-          const CategoryIcon = getIconComponent(config?.icon ?? null);
-
-          return (
-            <div key={category}>
-              <h3 className={`text-sm font-medium mb-2 flex items-center gap-1.5 ${config?.color ?? 'text-gray-600'}`}>
-                <CategoryIcon className="h-4 w-4" />
-                {config?.label ?? category}
-              </h3>
-              <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
-                {/* Unlocked first */}
-                {unlocked.map((ua) => (
-                  <AchievementBadgeDisplay
-                    key={ua.id}
-                    achievement={ua.achievement}
-                    isUnlocked={true}
-                    unlockedAt={ua.unlockedAt}
-                  />
-                ))}
-                {/* Then locked */}
-                {locked.map((def) => (
-                  <AchievementBadgeDisplay
-                    key={def.id}
-                    achievement={def}
-                    isUnlocked={false}
-                  />
-                ))}
-              </div>
+        {compact ? (
+          /* Compact mode: flat grid without category headers */
+          <>
+            <div className="grid grid-cols-4 gap-2">
+              {compactBadges?.unlocked.map((ua) => (
+                <AchievementBadgeDisplay
+                  key={ua.id}
+                  achievement={ua.achievement}
+                  isUnlocked={true}
+                  unlockedAt={ua.unlockedAt}
+                />
+              ))}
+              {compactBadges?.locked.map((def) => (
+                <AchievementBadgeDisplay
+                  key={def.id}
+                  achievement={def}
+                  isUnlocked={false}
+                />
+              ))}
             </div>
-          );
-        })}
+            {totalCount > 8 && (
+              <div className="text-center pt-2 border-t border-gray-100 mt-2">
+                <span className="text-xs text-blue-600 cursor-pointer hover:underline">
+                  View all {totalCount} achievements
+                </span>
+              </div>
+            )}
+          </>
+        ) : (
+          /* Full mode: grouped by category */
+          <>
+            {categoryOrder.map((category) => {
+              const categoryData = byCategory[category];
+              if (!categoryData) return null;
 
-        {totalCount - unlockedCount > 0 && (
-          <p className="text-xs text-muted-foreground text-center pt-2">
-            {totalCount - unlockedCount} more to unlock
-          </p>
+              const { unlocked, locked } = categoryData;
+              if (unlocked.length === 0 && locked.length === 0) return null;
+
+              const config = CATEGORY_CONFIG[category as keyof typeof CATEGORY_CONFIG];
+              const CategoryIcon = getIconComponent(config?.icon ?? null);
+
+              return (
+                <div key={category}>
+                  <h3 className={`text-sm font-medium mb-2 flex items-center gap-1.5 ${config?.color ?? 'text-gray-600'}`}>
+                    <CategoryIcon className="h-4 w-4" />
+                    {config?.label ?? category}
+                  </h3>
+                  <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                    {/* Unlocked first */}
+                    {unlocked.map((ua) => (
+                      <AchievementBadgeDisplay
+                        key={ua.id}
+                        achievement={ua.achievement}
+                        isUnlocked={true}
+                        unlockedAt={ua.unlockedAt}
+                      />
+                    ))}
+                    {/* Then locked */}
+                    {locked.map((def) => (
+                      <AchievementBadgeDisplay
+                        key={def.id}
+                        achievement={def}
+                        isUnlocked={false}
+                      />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+
+            {totalCount - unlockedCount > 0 && (
+              <p className="text-xs text-muted-foreground text-center pt-2">
+                {totalCount - unlockedCount} more to unlock
+              </p>
+            )}
+          </>
         )}
       </CardContent>
     </Card>

@@ -4908,7 +4908,7 @@ export class DatabaseStorage implements IStorage {
         goalType: goal.goalType,
         targetValue: goal.targetValue.toString(),
         baselineValue: goal.baselineValue.toString(),
-        currentValue: goal.currentValue.toString(),
+        currentValue: (goal.currentValue ?? goal.baselineValue).toString(),
         targetDate: goal.targetDate,
         status: goal.status,
         notes: goal.notes,

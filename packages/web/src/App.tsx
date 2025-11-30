@@ -29,6 +29,7 @@ const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
 // Athlete self-view pages (Profile/Dashboard split)
 const MyProfile = React.lazy(() => import("./pages/my-profile"));
 const MyDashboard = React.lazy(() => import("./pages/my-dashboard"));
+const MyGoals = React.lazy(() => import("./pages/my-goals"));
 const DataEntry = React.lazy(() => import("./pages/data-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
@@ -133,6 +134,11 @@ function Router() {
       <Route path="/my-dashboard">
         <RouteWrapper loadingText="Loading Dashboard...">
           <MyDashboard />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-goals">
+        <RouteWrapper loadingText="Loading Goals...">
+          <MyGoals />
         </RouteWrapper>
       </Route>
 
