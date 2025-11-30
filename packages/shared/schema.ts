@@ -902,7 +902,7 @@ export const userAchievements = pgTable("user_achievements", {
   orgIdx: index("user_achievements_org_idx").on(table.organizationId),
   achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
   userOrgIdx: index("user_achievements_user_org_idx").on(table.userId, table.organizationId),
-  uniqueUserAchievement: unique().on(table.userId, table.achievementId),
+  uniqueUserAchievement: unique().on(table.userId, table.organizationId, table.achievementId),
 }));
 
 // Goal Setting System
@@ -912,7 +912,7 @@ export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as c
 export const goals = pgTable("goals", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
-  metric: text("metric").notNull(), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
+  metric: text("metric").notNull().references(() => siteMetrics.code, { onDelete: 'restrict', onUpdate: 'cascade' }), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
   goalType: text("goal_type", { enum: goalTypeEnum }).notNull(),
   targetValue: decimal("target_value", { precision: 10, scale: 3 }).notNull(),
   baselineValue: decimal("baseline_value", { precision: 10, scale: 3 }).notNull(),
