@@ -249,6 +249,7 @@ export function MetricProgressCard({
 
         {/* Sparkline Chart */}
         <div
+          data-testid="sparkline-container"
           className="h-24 mb-3"
           role="img"
           aria-label={`Sparkline chart showing last ${sparklineData.length} ${displayName} measurements`}
