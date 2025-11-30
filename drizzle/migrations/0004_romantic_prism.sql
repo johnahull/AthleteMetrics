@@ -56,3 +56,19 @@ CREATE INDEX IF NOT EXISTS "user_achievements_org_idx" ON "user_achievements" US
 CREATE INDEX IF NOT EXISTS "user_achievements_achievement_idx" ON "user_achievements" USING btree ("achievement_id");
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "user_achievements_user_org_idx" ON "user_achievements" USING btree ("user_id","organization_id");
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'achievement_definitions_category_check') THEN
+    ALTER TABLE "achievement_definitions" ADD CONSTRAINT "achievement_definitions_category_check"
+    CHECK (category IN ('performance', 'consistency', 'improvement', 'goal'));
+  END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'achievement_definitions_rarity_check') THEN
+    ALTER TABLE "achievement_definitions" ADD CONSTRAINT "achievement_definitions_rarity_check"
+    CHECK (rarity IN ('common', 'rare', 'epic', 'legendary'));
+  END IF;
+END $$;

@@ -326,8 +326,8 @@ export interface IStorage {
   getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
   getGoal(id: string): Promise<Goal | undefined>;
   createGoal(goal: InsertGoal): Promise<Goal>;
-  updateGoal(id: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal>;
-  deleteGoal(id: string): Promise<void>;
+  updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal>;
+  deleteGoal(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {

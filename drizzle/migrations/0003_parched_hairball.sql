@@ -199,3 +199,19 @@ CREATE INDEX IF NOT EXISTS "wellness_templates_system_seeded_idx" ON "wellness_t
 CREATE INDEX IF NOT EXISTS "idx_wellness_templates_system_active" ON "wellness_templates" USING btree ("is_system_seeded","is_active","created_at" DESC NULLS LAST) WHERE "wellness_templates"."organization_id" IS NULL AND "wellness_templates"."is_active" = true;
 --> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "idx_wellness_templates_org_active" ON "wellness_templates" USING btree ("organization_id","is_active","created_at" DESC NULLS LAST) WHERE "wellness_templates"."organization_id" IS NOT NULL;
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'goals_goal_type_check') THEN
+    ALTER TABLE "goals" ADD CONSTRAINT "goals_goal_type_check"
+    CHECK (goal_type IN ('target_value', 'improvement_percentage', 'consistency'));
+  END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'goals_status_check') THEN
+    ALTER TABLE "goals" ADD CONSTRAINT "goals_status_check"
+    CHECK (status IN ('active', 'achieved', 'missed', 'abandoned'));
+  END IF;
+END $$;

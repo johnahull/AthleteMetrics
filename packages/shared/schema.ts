@@ -169,7 +169,7 @@ export const siteSports = pgTable("site_sports", {
   description: text("description"),
   icon: varchar("icon", { length: 50 }), // Icon identifier for UI
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot delete seeded sports
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -189,7 +189,7 @@ export const sitePositions = pgTable("site_positions", {
   name: varchar("name", { length: 100 }).notNull(), // "Forward", "Midfielder"
   shortName: varchar("short_name", { length: 10 }), // "FW", "MF" (optional abbreviation)
   description: text("description"),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   color: varchar("color", { length: 20 }),
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
