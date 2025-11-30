@@ -867,6 +867,43 @@ export const wellnessResponses = pgTable("wellness_responses", {
     .on(table.userId, table.submittedAt.desc()),
 }));
 
+// Achievement & Badge System
+export const achievementCategoryEnum = ['performance', 'consistency', 'improvement', 'goal'] as const;
+export const achievementRarityEnum = ['common', 'rare', 'epic', 'legendary'] as const;
+
+// Achievement definitions (seeded data)
+export const achievementDefinitions = pgTable("achievement_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  category: text("category", { enum: achievementCategoryEnum }).notNull(),
+  icon: varchar("icon", { length: 50 }), // lucide icon name
+  color: varchar("color", { length: 20 }), // tailwind color class
+  rarity: text("rarity", { enum: achievementRarityEnum }).default('common').notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: index("achievement_definitions_code_idx").on(table.code),
+  categoryIdx: index("achievement_definitions_category_idx").on(table.category),
+  activeIdx: index("achievement_definitions_active_idx").on(table.isActive),
+}));
+
+// User achievements (junction table)
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  achievementId: varchar("achievement_id").notNull().references(() => achievementDefinitions.id),
+  unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"), // { metric, value, improvement, etc. }
+}, (table) => ({
+  userIdx: index("user_achievements_user_idx").on(table.userId),
+  orgIdx: index("user_achievements_org_idx").on(table.organizationId),
+  achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
+  uniqueUserAchievement: unique().on(table.userId, table.achievementId),
+}));
+
 // Goal Setting System
 export const goalTypeEnum = ['target_value', 'improvement_percentage', 'consistency'] as const;
 export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as const;
@@ -944,6 +981,26 @@ export const goalsRelations = relations(goals, ({ one }) => ({
   }),
 }));
 
+// Achievement Relations
+export const achievementDefinitionsRelations = relations(achievementDefinitions, ({ many }) => ({
+  userAchievements: many(userAchievements),
+}));
+
+export const userAchievementsRelations = relations(userAchievements, ({ one }) => ({
+  user: one(users, {
+    fields: [userAchievements.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [userAchievements.organizationId],
+    references: [organizations.id],
+  }),
+  achievement: one(achievementDefinitions, {
+    fields: [userAchievements.achievementId],
+    references: [achievementDefinitions.id],
+  }),
+}));
+
 // Wellness type exports
 export type WellnessTemplate = typeof wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof wellnessRequests.$inferSelect;
@@ -953,6 +1010,12 @@ export type WellnessResponse = typeof wellnessResponses.$inferSelect;
 export type Goal = typeof goals.$inferSelect;
 export type GoalType = (typeof goalTypeEnum)[number];
 export type GoalStatus = (typeof goalStatusEnum)[number];
+
+// Achievement type exports
+export type AchievementDefinition = typeof achievementDefinitions.$inferSelect;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type AchievementCategory = (typeof achievementCategoryEnum)[number];
+export type AchievementRarity = (typeof achievementRarityEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({

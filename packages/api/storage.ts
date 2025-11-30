@@ -5,6 +5,7 @@ import {
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
   goals,
+  achievementDefinitions, userAchievements,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -16,6 +17,7 @@ import {
   type SiteSettings, type Report,
   type WellnessTemplate, type WellnessRequest, type WellnessResponse,
   type Goal, type InsertGoal, type UpdateGoal,
+  type AchievementDefinition, type UserAchievement,
   insertUserSchema,
   type OrganizationType
 } from "@shared/schema";
@@ -4947,6 +4949,93 @@ export class DatabaseStorage implements IStorage {
 
   async deleteGoal(id: string): Promise<void> {
     await db.delete(goals).where(eq(goals.id, id));
+  }
+
+  // Achievement methods
+  async getAchievementDefinitions(filters?: { isActive?: boolean }): Promise<AchievementDefinition[]> {
+    const conditions: SQL[] = [];
+
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(achievementDefinitions.isActive, filters.isActive));
+    }
+
+    return await db
+      .select()
+      .from(achievementDefinitions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(achievementDefinitions.category, achievementDefinitions.createdAt);
+  }
+
+  async getAchievementDefinitionByCode(code: string): Promise<AchievementDefinition | undefined> {
+    const [definition] = await db
+      .select()
+      .from(achievementDefinitions)
+      .where(eq(achievementDefinitions.code, code))
+      .limit(1);
+
+    return definition || undefined;
+  }
+
+  async getUserAchievements(userId: string, organizationId: string): Promise<(UserAchievement & { achievement: AchievementDefinition })[]> {
+    return await db
+      .select({
+        id: userAchievements.id,
+        userId: userAchievements.userId,
+        organizationId: userAchievements.organizationId,
+        achievementId: userAchievements.achievementId,
+        unlockedAt: userAchievements.unlockedAt,
+        metadata: userAchievements.metadata,
+        achievement: achievementDefinitions,
+      })
+      .from(userAchievements)
+      .innerJoin(achievementDefinitions, eq(userAchievements.achievementId, achievementDefinitions.id))
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId)
+      ))
+      .orderBy(desc(userAchievements.unlockedAt));
+  }
+
+  async checkAchievementExists(userId: string, achievementCode: string): Promise<boolean> {
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      return false;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(userAchievements)
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.achievementId, definition.id)
+      ))
+      .limit(1);
+
+    return !!existing;
+  }
+
+  async awardAchievement(
+    userId: string,
+    organizationId: string,
+    achievementCode: string,
+    metadata?: any
+  ): Promise<UserAchievement> {
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      throw new Error(`Achievement definition not found: ${achievementCode}`);
+    }
+
+    const [newAchievement] = await db
+      .insert(userAchievements)
+      .values({
+        userId,
+        organizationId,
+        achievementId: definition.id,
+        metadata: metadata || null,
+      })
+      .returning();
+
+    return newAchievement;
   }
 }
 

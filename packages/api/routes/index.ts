@@ -18,8 +18,9 @@ import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
 import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
-import { registerSportsRoutes } from "./sport-routes";
+// import { registerSportsRoutes } from "./sport-routes"; // TODO: Create sport-routes.ts
 import { registerGoalRoutes } from "./goal-routes";
+import { registerAchievementRoutes } from "./achievement-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -72,10 +73,13 @@ export function registerAllRoutes(app: Express) {
   registerAdminWellnessRoutes(app);
 
   // Sports and positions management routes
-  registerSportsRoutes(app);
+  // registerSportsRoutes(app); // TODO: Create sport-routes.ts
 
   // Goal management routes
   registerGoalRoutes(app);
+
+  // Achievement & badge system routes
+  registerAchievementRoutes(app);
 
   // TODO: Add remaining route modules
   // registerImportRoutes(app);

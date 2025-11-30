@@ -26,6 +26,7 @@ import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
 import { GoalCreationWizard } from '@/components/athlete/GoalCreationWizard';
+import { AchievementsCard } from '@/components/athlete/AchievementsCard';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, BarChart3, Target, Plus } from 'lucide-react';
 import { Redirect } from 'wouter';
@@ -33,7 +34,7 @@ import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 import type { Goal } from '@shared/schema';
 
 export default function MyDashboardPage() {
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, organizationContext } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
   const [showGoalWizard, setShowGoalWizard] = useState(false);
 
@@ -179,6 +180,11 @@ export default function MyDashboardPage() {
         <PersonalRecordsCard personalRecords={dashboardData.personalRecords} />
       </div>
 
+      {/* Achievements */}
+      {user?.id && organizationContext && (
+        <AchievementsCard userId={user.id} organizationId={organizationContext} />
+      )}
+
       {/* Activity & Wellness Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Recent Activity Timeline */}
@@ -237,11 +243,20 @@ export default function MyDashboardPage() {
               <GoalProgressCard
                 key={goal.id}
                 goal={{
-                  ...goal,
+                  id: goal.id,
+                  userId: goal.userId,
+                  metric: goal.metric,
+                  // Cast string literal to enum - they have the same values
+                  goalType: goal.goalType as unknown as GoalType,
+                  status: goal.status as unknown as GoalStatus,
                   // Convert decimal strings from DB to numbers for the component
-                  targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : goal.targetValue,
-                  baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : goal.baselineValue,
-                  currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : goal.currentValue,
+                  targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : Number(goal.targetValue),
+                  baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : Number(goal.baselineValue),
+                  currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : Number(goal.currentValue),
+                  targetDate: goal.targetDate,
+                  createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : goal.createdAt.toISOString(),
+                  achievedAt: goal.achievedAt ? (typeof goal.achievedAt === 'string' ? goal.achievedAt : goal.achievedAt.toISOString()) : undefined,
+                  notes: goal.notes ?? undefined,
                 }}
                 onMarkComplete={handleMarkComplete}
                 onAbandon={handleAbandon}
