@@ -98,7 +98,6 @@ export class MeasurementService {
       .where(
         and(
           eq(userTeams.userId, userId),
-          lte(userTeams.joinedAt, measurementDate),
           or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
           eq(userTeams.isActive, true),
           eq(teams.isArchived, false) // Only include non-archived teams

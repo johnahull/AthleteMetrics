@@ -2523,7 +2523,6 @@ export class DatabaseStorage implements IStorage {
     .innerJoin(organizations, eq(teams.organizationId, organizations.id))
     .where(and(
       eq(userTeams.userId, userId),
-      lte(userTeams.joinedAt, measurementDate),
       or(
         isNull(userTeams.leftAt),
         gte(userTeams.leftAt, measurementDate)
