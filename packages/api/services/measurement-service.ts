@@ -98,6 +98,9 @@ export class MeasurementService {
       .where(
         and(
           eq(userTeams.userId, userId),
+          // Must have joined on or before the measurement date
+          lte(userTeams.joinedAt, measurementDate),
+          // Must not have left before the measurement date
           or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
           eq(userTeams.isActive, true),
           eq(teams.isArchived, false) // Only include non-archived teams

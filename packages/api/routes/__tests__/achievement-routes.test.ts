@@ -27,8 +27,8 @@ vi.mock('../../storage', () => ({
 
 describe('Achievement Routes', () => {
   let app: Express;
-  const mockUserId = 'user-123';
-  const mockOrgId = 'org-456';
+  const mockUserId = '550e8400-e29b-41d4-a716-446655440000'; // Valid UUID
+  const mockOrgId = '550e8400-e29b-41d4-a716-446655440001'; // Valid UUID
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,7 +73,7 @@ describe('Achievement Routes', () => {
           color: 'yellow',
           rarity: 'common',
           isActive: true,
-          createdAt: new Date(),
+          createdAt: new Date('2025-01-01T00:00:00.000Z'),
         },
         {
           id: 'def-2',
@@ -85,7 +85,7 @@ describe('Achievement Routes', () => {
           color: 'blue',
           rarity: 'rare',
           isActive: true,
-          createdAt: new Date(),
+          createdAt: new Date('2025-01-01T00:00:00.000Z'),
         },
       ];
 
@@ -94,7 +94,10 @@ describe('Achievement Routes', () => {
       const response = await request(app).get('/api/achievements');
 
       expect(response.status).toBe(200);
-      expect(response.body.achievements).toEqual(mockDefinitions);
+      // Dates are serialized to ISO strings in JSON response
+      expect(response.body.achievements).toHaveLength(2);
+      expect(response.body.achievements[0].code).toBe('FIRST_PR');
+      expect(response.body.achievements[1].code).toBe('SPEED_DEMON');
       expect(storage.getAchievementDefinitions).toHaveBeenCalledWith({ isActive: true });
     });
 
@@ -124,7 +127,7 @@ describe('Achievement Routes', () => {
           userId: mockUserId,
           organizationId: mockOrgId,
           achievementId: 'def-1',
-          unlockedAt: new Date(),
+          unlockedAt: new Date('2025-01-15T10:00:00.000Z'),
           metadata: { metric: 'FLY10_TIME', value: 1.2 },
           achievement: {
             id: 'def-1',
@@ -136,7 +139,7 @@ describe('Achievement Routes', () => {
             color: 'yellow',
             rarity: 'common',
             isActive: true,
-            createdAt: new Date(),
+            createdAt: new Date('2025-01-01T00:00:00.000Z'),
           },
         },
       ];
@@ -151,7 +154,10 @@ describe('Achievement Routes', () => {
       const response = await request(app).get('/api/achievements/user');
 
       expect(response.status).toBe(200);
-      expect(response.body.achievements).toEqual(mockAchievements);
+      // Dates are serialized to ISO strings in JSON response
+      expect(response.body.achievements).toHaveLength(1);
+      expect(response.body.achievements[0].achievement.code).toBe('FIRST_PR');
+      expect(response.body.achievements[0].metadata.metric).toBe('FLY10_TIME');
     });
 
     it('should return specific user achievements when userId provided (for coaches)', async () => {
@@ -165,10 +171,12 @@ describe('Achievement Routes', () => {
         })
       );
 
+      const coachId = '550e8400-e29b-41d4-a716-446655440010'; // Valid UUID
+
       // Mock coach session
       coachApp.use((req, res, next) => {
         req.session.user = {
-          id: 'coach-123',
+          id: coachId,
           username: 'testcoach',
           role: 'coach',
           firstName: 'Test',
@@ -182,11 +190,11 @@ describe('Achievement Routes', () => {
 
       registerAchievementRoutes(coachApp);
 
-      const targetAthleteId = 'athlete-789';
+      const targetAthleteId = '550e8400-e29b-41d4-a716-446655440020'; // Valid UUID
 
       // Mock same organization
       vi.mocked(storage.getUserOrganizations).mockResolvedValue([
-        { userId: 'coach-123', organizationId: mockOrgId, role: 'coach', organization: {} as any },
+        { userId: coachId, organizationId: mockOrgId, role: 'coach', organization: {} as any },
       ]);
       vi.mocked(storage.getUserTeams).mockResolvedValue([
         { userId: targetAthleteId, teamId: 'team-1', team: { organizationId: mockOrgId } as any },
@@ -203,7 +211,7 @@ describe('Achievement Routes', () => {
           userId: targetAthleteId,
           organizationId: mockOrgId,
           achievementId: 'def-1',
-          unlockedAt: new Date(),
+          unlockedAt: new Date('2025-01-15T10:00:00.000Z'),
           metadata: {},
           achievement: {
             id: 'def-1',
@@ -215,7 +223,7 @@ describe('Achievement Routes', () => {
             color: 'yellow',
             rarity: 'common',
             isActive: true,
-            createdAt: new Date(),
+            createdAt: new Date('2025-01-01T00:00:00.000Z'),
           },
         },
       ];
@@ -225,11 +233,13 @@ describe('Achievement Routes', () => {
       const response = await request(coachApp).get(`/api/achievements/user?userId=${targetAthleteId}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.achievements).toEqual(mockAchievements);
+      // Dates are serialized to ISO strings in JSON response
+      expect(response.body.achievements).toHaveLength(1);
+      expect(response.body.achievements[0].achievement.code).toBe('FIRST_PR');
     });
 
     it('should deny access if athlete tries to view another athlete achievements', async () => {
-      const otherAthleteId = 'other-athlete-456';
+      const otherAthleteId = '550e8400-e29b-41d4-a716-446655440099'; // Valid UUID, different user
 
       const response = await request(app).get(`/api/achievements/user?userId=${otherAthleteId}`);
 

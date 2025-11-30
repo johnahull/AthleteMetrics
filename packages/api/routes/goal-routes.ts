@@ -107,8 +107,8 @@ export function registerGoalRoutes(app: Express) {
 
       // Build filters
       const filters: Parameters<typeof storage.getGoalsByUser>[1] = {};
-      if (status && typeof status === 'string') {
-        filters.status = status;
+      if (status && typeof status === 'string' && (goalStatusEnum as readonly string[]).includes(status)) {
+        filters.status = status as typeof goalStatusEnum[number];
       }
 
       const goals = await storage.getGoalsByUser(targetUserId, filters);
