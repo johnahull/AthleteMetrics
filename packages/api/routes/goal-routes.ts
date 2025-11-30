@@ -213,7 +213,16 @@ export function registerGoalRoutes(app: Express) {
           const sortedMeasurements = recentMeasurements.sort((a, b) =>
             new Date(b.date).getTime() - new Date(a.date).getTime()
           );
-          finalBaselineValue = parseFloat(sortedMeasurements[0].value);
+          const parsedValue = parseFloat(sortedMeasurements[0].value);
+
+          // Validate parsed value
+          if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+            return res.status(400).json({
+              message: "Invalid measurement value found. Please provide a baseline value manually."
+            });
+          }
+
+          finalBaselineValue = parsedValue;
         } else {
           // No measurements found - require baseline value
           return res.status(400).json({
