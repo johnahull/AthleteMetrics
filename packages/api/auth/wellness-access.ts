@@ -100,25 +100,36 @@ export class WellnessAccessService {
       // Validate token format (64 hex characters) after DB lookup
       const formatValid = /^[a-f0-9]{64}$/.test(normalizedToken);
 
+      // SECURITY: Use generic error messages to prevent information disclosure
+      // Attackers shouldn't be able to distinguish between:
+      // - Invalid token format vs non-existent token
+      // - Expired token vs inactive request
+      // - Non-existent athlete vs unauthorized athlete
+      // All failures return the same generic message to prevent enumeration attacks
+      const genericError = 'Invalid or expired link';
+
       // Return combined validation result
       if (!formatValid || !request) {
-        return { valid: false, error: 'Invalid or expired token' };
+        return { valid: false, error: genericError };
       }
 
       // Check request status
       if (request.status !== 'active') {
-        return { valid: false, error: 'This request is no longer active' };
+        // SECURITY: Generic error message to prevent information disclosure
+        return { valid: false, error: genericError };
       }
 
       // Check expiration
       if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
-        return { valid: false, error: 'This link has expired' };
+        // SECURITY: Generic error message to prevent information disclosure
+        return { valid: false, error: genericError };
       }
 
       // Validate athlete exists
       const athlete = await storage.getUser(athleteId);
       if (!athlete) {
-        return { valid: false, error: 'Athlete not found' };
+        // SECURITY: Generic error message to prevent information disclosure
+        return { valid: false, error: genericError };
       }
 
       // Verify athlete is in target list
@@ -142,11 +153,13 @@ export class WellnessAccessService {
       }
 
       if (!isTargeted) {
-        return { valid: false, error: 'You are not authorized to access this questionnaire' };
+        // SECURITY: Generic error message to prevent information disclosure
+        return { valid: false, error: genericError };
       }
 
       // If requiresAuth is true, verify athlete has account
       if (request.requiresAuth) {
+        // SECURITY: This is user-facing message, not internal logging
         return { valid: false, error: 'This questionnaire requires authentication. Please log in.' };
       }
 

@@ -49,17 +49,17 @@ const SECURITY_CONSTANTS = {
   DEFAULT_MAX_PAYLOAD_SIZE: 1024 * 1024,
   /** Default threshold for suspicious activity detection */
   DEFAULT_SUSPICIOUS_ACTIVITY_THRESHOLD: 10,
-  /** Requests per minute threshold for rapid request detection */
+  /** Requests per minute threshold for rapid request detection (based on average human API interaction: 1-2 actions per 6 seconds) */
   RAPID_REQUEST_THRESHOLD: 10,
-  /** High severity threshold for rapid requests */
+  /** High severity threshold for rapid requests (sustained automation patterns) */
   RAPID_REQUEST_HIGH_THRESHOLD: 30,
-  /** Critical severity threshold for rapid requests */
+  /** Critical severity threshold for rapid requests (likely DDoS or brute force attack) */
   RAPID_REQUEST_CRITICAL_THRESHOLD: 50,
-  /** Minimum requests before analyzing failure rate */
+  /** Minimum requests before analyzing failure rate (statistical significance threshold) */
   MIN_REQUESTS_FOR_FAILURE_ANALYSIS: 5,
-  /** Failure rate threshold for suspicious activity */
+  /** Failure rate threshold for suspicious activity (70% indicates systematic errors or probing attacks) */
   HIGH_FAILURE_RATE_THRESHOLD: 0.7,
-  /** Critical failure rate threshold */
+  /** Critical failure rate threshold (90% indicates automated attack or severe misconfiguration) */
   CRITICAL_FAILURE_RATE_THRESHOLD: 0.9,
   /** Time window for analyzing recent requests (1 minute) */
   RECENT_REQUEST_WINDOW_MS: 60 * 1000,
@@ -351,9 +351,9 @@ export function sanitizeOrganizationTypeInput() {
         let cleaned = value
           .trim()
           .replace(/[\x00-\x1F\x7F\x80-\x9F]/g, '') // Remove control characters
-          .replace(/[<>\"'&]/g, '') // Remove HTML/XML special characters
+          .replace(/[<>\"&]/g, '') // Remove HTML/XML special characters (allow apostrophes)
           .replace(/\.\./g, '') // Remove path traversal attempts
-          .replace(/[^\w\s-]/g, '') // Allow only alphanumeric, spaces, hyphens
+          .replace(/[^\w\s\-'.,]/g, '') // Allow alphanumeric, spaces, hyphens, apostrophes, periods, commas
           .substring(0, 100); // Limit length to prevent DoS
 
         // Validate against dangerous URL schemes for SSRF protection

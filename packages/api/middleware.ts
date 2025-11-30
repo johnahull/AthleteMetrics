@@ -64,12 +64,7 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
       organizationId = req.query.organizationId as string || req.body.organizationId;
     }
 
-    // DEBUG logging
-    console.log('[DEBUG requireOrgAccess] User:', JSON.stringify({ id: user?.id, role: user?.role, isSiteAdmin: user?.isSiteAdmin }));
-    console.log('[DEBUG requireOrgAccess] Target orgId:', organizationId);
-
     if (!user?.id) {
-      console.log('[DEBUG requireOrgAccess] FAIL: No user ID');
       return res.status(401).json({ message: "User not authenticated" });
     }
 
@@ -85,11 +80,7 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
 
     // Check organization access
     const hasAccess = await canAccessOrganization(user, organizationId);
-    console.log('[DEBUG requireOrgAccess] hasAccess:', hasAccess);
     if (!hasAccess) {
-      // Get user's orgs for debugging
-      const userOrgs = await storage.getUserOrganizations(user.id);
-      console.log('[DEBUG requireOrgAccess] User orgs:', userOrgs.map(o => o.organizationId));
       return res.status(403).json({ message: "Access denied to this organization" });
     }
 
@@ -293,31 +284,34 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       }
 
       // Check 3: Validate token and retrieve request details
+      // SECURITY: Use generic error message to prevent information disclosure
+      const genericError = "Invalid or expired link";
       const { storage } = await import('./storage');
       const wellnessRequest = await storage.getWellnessRequestByToken(token);
 
       if (!wellnessRequest) {
-        return res.status(403).json({
-          message: "Invalid or expired magic link"
-        });
+        return res.status(403).json({ message: genericError });
       }
 
       // Check if request is active
       if (wellnessRequest.status !== 'active') {
-        return res.status(403).json({
-          message: "This wellness request is no longer active"
-        });
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
       }
 
       // Check if expired
       if (wellnessRequest.expiresAt && new Date() > new Date(wellnessRequest.expiresAt)) {
-        return res.status(403).json({
-          message: "This wellness request has expired"
-        });
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
       }
 
       // For magic link access, extract athlete ID from query parameter
       // Priority: query > body
+      // SECURITY NOTE: This allows anyone with the magic link to submit on behalf of ANY
+      // athlete in the target list (direct or team-based). This is BY DESIGN for the
+      // wellness use case where coaches send one link that works for all team members.
+      // If 1:1 athlete-token binding is needed, use targetAthleteIds (not targetTeamIds)
+      // with individual tokens per athlete.
       const athleteId = req.query.athlete as string || req.body.athlete as string;
 
       if (!athleteId) {
@@ -338,17 +332,15 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       }
 
       if (!isTargetedDirectly && !isTargetedViaTeam) {
-        return res.status(403).json({
-          message: "Athlete is not authorized for this wellness request"
-        });
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
       }
 
       // Get athlete details for user context
       const athlete = await storage.getUser(athleteId);
       if (!athlete) {
-        return res.status(404).json({
-          message: "Athlete not found"
-        });
+        // SECURITY: Generic error message to prevent information disclosure
+        return res.status(403).json({ message: genericError });
       }
 
       // For public wellness links (requiresAuth: false), set magic link user context

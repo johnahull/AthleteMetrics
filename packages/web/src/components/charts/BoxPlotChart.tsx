@@ -399,7 +399,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const regularPoints = groupPoints.filter(p => !p.isOutlier);
             if (regularPoints.length > 0) {
               datasets.push({
-                label: `${groupName} Players`,
+                label: `${groupName} Athletes`,
                 data: regularPoints,
                 type: 'scatter',
                 backgroundColor: groupColorLight,
@@ -634,7 +634,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             const regularPoints = groupPoints.filter(p => !p.isOutlier);
             if (regularPoints.length > 0) {
               datasets.push({
-                label: `${group.name} Players`,
+                label: `${group.name} Athletes`,
                 data: regularPoints,
                 type: 'scatter',
                 backgroundColor: groupColorLight,

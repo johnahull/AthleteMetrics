@@ -135,7 +135,7 @@ export class BackgroundSyncService {
         // Send to server using apiClient for CSRF protection
         const result = await apiClient.post('/measurements', {
           userId: measurement.athleteId,
-          metricType: measurement.metricType,
+          metric: measurement.metricType, // Map offline DB 'metricType' to API 'metric' field
           value: measurement.value,
           date: measurement.date,
           notes: measurement.notes

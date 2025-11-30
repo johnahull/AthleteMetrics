@@ -135,7 +135,7 @@ export function useAddMeasurementOffline() {
       try {
         const result = await apiClient.post('/measurements', {
           userId: measurement.athleteId,
-          metricType: measurement.metricType,
+          metric: measurement.metricType, // API expects 'metric' field
           value: measurement.value,
           date: measurement.date,
           notes: measurement.notes

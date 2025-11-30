@@ -44,18 +44,24 @@ test.describe('Invitation Email Status Tests', () => {
     // Navigate to organizations page to get the org ID
     await navigateTo(page, '/organizations');
 
-    // Get the first organization link (org admins should have at least one org)
-    const orgLink = page.locator('[href^="/organizations/"]').first();
-    const orgHref = await orgLink.getAttribute('href');
+    // Get the first organization card using data-testid attribute
+    // The data-testid format is "organization-{uuid}" (not "organization-link-{uuid}")
+    // Exclude organization-link-* elements that contain the clickable names
+    const orgCard = page.locator('[data-testid^="organization-"]:not([data-testid^="organization-link-"])').first();
+    const orgTestId = await orgCard.getAttribute('data-testid');
 
-    if (!orgHref) {
-      throw new Error('Could not find organization link for org admin');
+    if (!orgTestId) {
+      throw new Error('Could not find organization card for org admin');
     }
 
-    organizationId = orgHref.split('/').pop()!;
+    // Extract org ID from data-testid (format: "organization-{uuid}")
+    organizationId = orgTestId.replace('organization-', '');
 
-    // Navigate to organization profile
-    await navigateTo(page, `/organizations/${organizationId}`);
+    // Click the organization name to navigate (uses onClick handler, not href)
+    await page.locator(`[data-testid="organization-link-${organizationId}"]`).click();
+
+    // Wait for navigation to complete
+    await page.waitForURL(`**/organizations/${organizationId}`, { timeout: 10000 });
 
     // Reset cleanup tracker
     createdInvitationIds = [];

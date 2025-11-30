@@ -18,7 +18,7 @@ import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
 import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
-// import { registerSportsRoutes } from "./sport-routes"; // TODO: Create sport-routes.ts
+import { registerSportsRoutes } from "./sport-routes";
 import { registerGoalRoutes } from "./goal-routes";
 import { registerAchievementRoutes } from "./achievement-routes";
 // import { registerImportRoutes } from "./import-routes";
@@ -73,7 +73,7 @@ export function registerAllRoutes(app: Express) {
   registerAdminWellnessRoutes(app);
 
   // Sports and positions management routes
-  // registerSportsRoutes(app); // TODO: Create sport-routes.ts
+  registerSportsRoutes(app);
 
   // Goal management routes
   registerGoalRoutes(app);
@@ -105,8 +105,9 @@ export function getRouteStats() {
       reports: "✅ Registered (new service)",
       sports: "✅ Registered (new service)",
       goals: "✅ Registered (new service)",
+      achievements: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 12/13 modules refactored"
+    status: "Migration nearly complete - 13/14 modules refactored"
   };
 }
