@@ -244,7 +244,7 @@ describe('Achievement Routes', () => {
       const response = await request(app).get(`/api/achievements/user?userId=${otherAthleteId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only view their own');
+      expect(response.body.message).toBe('Access denied');
     });
   });
 
