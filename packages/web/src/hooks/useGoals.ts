@@ -11,6 +11,9 @@ import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack
 import type { Goal } from '@shared/schema';
 import { GoalStatus, GoalType } from '@/utils/goal-utils';
 
+// Re-export for convenience
+export { GoalStatus, GoalType };
+
 interface UseGoalsOptions {
   /** Whether to fetch the data */
   enabled?: boolean;
