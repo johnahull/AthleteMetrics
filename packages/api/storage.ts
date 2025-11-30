@@ -4,7 +4,7 @@ import {
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
-  goals,
+  goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
@@ -4875,7 +4875,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Goals
-  async getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]> {
+  async getGoalsByUser(userId: string, filters?: { status?: typeof goalStatusEnum[number] }): Promise<Goal[]> {
     const conditions: SQL[] = [eq(goals.userId, userId)];
 
     if (filters?.status) {
