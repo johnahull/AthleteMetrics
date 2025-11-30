@@ -5020,11 +5020,19 @@ export class DatabaseStorage implements IStorage {
     achievementCode: string,
     metadata?: any
   ): Promise<UserAchievement> {
+    // Validate user belongs to organization
+    const userOrgs = await this.getUserOrganizations(userId);
+    const belongsToOrg = userOrgs.some(uo => uo.organizationId === organizationId);
+    if (!belongsToOrg) {
+      throw new Error(`User ${userId} does not belong to organization ${organizationId}`);
+    }
+
     const definition = await this.getAchievementDefinitionByCode(achievementCode);
     if (!definition) {
       throw new Error(`Achievement definition not found: ${achievementCode}`);
     }
 
+    // Use onConflictDoNothing to handle race conditions gracefully
     const [newAchievement] = await db
       .insert(userAchievements)
       .values({
@@ -5033,7 +5041,23 @@ export class DatabaseStorage implements IStorage {
         achievementId: definition.id,
         metadata: metadata || null,
       })
+      .onConflictDoNothing({
+        target: [userAchievements.userId, userAchievements.achievementId],
+      })
       .returning();
+
+    // If insert was skipped due to conflict, fetch existing achievement
+    if (!newAchievement) {
+      const [existing] = await db
+        .select()
+        .from(userAchievements)
+        .where(and(
+          eq(userAchievements.userId, userId),
+          eq(userAchievements.achievementId, definition.id)
+        ))
+        .limit(1);
+      return existing;
+    }
 
     return newAchievement;
   }

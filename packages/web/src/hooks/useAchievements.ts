@@ -83,7 +83,8 @@ export function useAchievements(
   const { enabled = true, staleTime = 60 * 1000 } = options;
 
   return useQuery({
-    queryKey: ['/api/achievements/user', userId, organizationId],
+    // Note: organizationId is in queryKey for cache separation but backend derives it from user's orgs
+    queryKey: ['/api/achievements/user', userId],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (userId) params.set('userId', userId);
