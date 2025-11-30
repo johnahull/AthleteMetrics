@@ -12,9 +12,16 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireAuth } from "../middleware";
-import { insertGoalSchema, updateGoalSchema } from "@shared/schema";
+import { insertGoalSchema, updateGoalSchema, goalStatusEnum } from "@shared/schema";
 import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidUUID(id: string): boolean {
+  return UUID_REGEX.test(id);
+}
 
 // Rate limiting for goal endpoints
 const goalLimiter = rateLimit({
@@ -54,6 +61,11 @@ export function registerGoalRoutes(app: Express) {
       let targetUserId: string;
 
       if (userId && typeof userId === 'string') {
+        // Validate UUID format
+        if (!isValidUUID(userId)) {
+          return res.status(400).json({ message: "Invalid user ID format" });
+        }
+
         // Requesting another user's goals - check permissions
         if (currentUser.role === "athlete") {
           // Athletes can only view their own goals
@@ -104,8 +116,7 @@ export function registerGoalRoutes(app: Express) {
       res.json({ goals });
     } catch (error) {
       console.error("Get goals error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch goals";
-      res.status(500).json({ message });
+      res.status(500).json({ message: "An error occurred while fetching goals" });
     }
   });
 
@@ -121,6 +132,10 @@ export function registerGoalRoutes(app: Express) {
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (!isValidUUID(goalId)) {
+        return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
       const goal = await storage.getGoal(goalId);
@@ -155,8 +170,7 @@ export function registerGoalRoutes(app: Express) {
       res.json(goal);
     } catch (error) {
       console.error("Get goal error:", error);
-      const message = error instanceof Error ? error.message : "Failed to fetch goal";
-      res.status(500).json({ message });
+      res.status(500).json({ message: "An error occurred while fetching the goal" });
     }
   });
 
@@ -227,8 +241,7 @@ export function registerGoalRoutes(app: Express) {
           errors: error.errors
         });
       }
-      const message = error instanceof Error ? error.message : "Failed to create goal";
-      res.status(400).json({ message });
+      res.status(400).json({ message: "An error occurred while creating the goal" });
     }
   });
 
@@ -243,6 +256,10 @@ export function registerGoalRoutes(app: Express) {
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (!isValidUUID(goalId)) {
+        return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
       // Get the goal to check ownership
@@ -278,8 +295,7 @@ export function registerGoalRoutes(app: Express) {
           errors: error.errors
         });
       }
-      const message = error instanceof Error ? error.message : "Failed to update goal";
-      res.status(400).json({ message });
+      res.status(400).json({ message: "An error occurred while updating the goal" });
     }
   });
 
@@ -298,6 +314,10 @@ export function registerGoalRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
+      if (!isValidUUID(goalId)) {
+        return res.status(400).json({ message: "Invalid goal ID format" });
+      }
+
       // Get the goal to check ownership
       const existingGoal = await storage.getGoal(goalId);
       if (!existingGoal) {
@@ -312,10 +332,9 @@ export function registerGoalRoutes(app: Express) {
       }
 
       // Validate status value
-      const validStatuses = ['active', 'achieved', 'missed', 'abandoned'];
-      if (!status || !validStatuses.includes(status)) {
+      if (!status || !goalStatusEnum.includes(status as any)) {
         return res.status(400).json({
-          message: `Status must be one of: ${validStatuses.join(', ')}`
+          message: `Status must be one of: ${goalStatusEnum.join(', ')}`
         });
       }
 
@@ -335,8 +354,7 @@ export function registerGoalRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Update goal status error:", error);
-      const message = error instanceof Error ? error.message : "Failed to update goal status";
-      res.status(500).json({ message });
+      res.status(500).json({ message: "An error occurred while updating goal status" });
     }
   });
 
@@ -351,6 +369,10 @@ export function registerGoalRoutes(app: Express) {
 
       if (!currentUser?.id) {
         return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (!isValidUUID(goalId)) {
+        return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
       // Get the goal to check ownership
@@ -371,8 +393,7 @@ export function registerGoalRoutes(app: Express) {
       res.json({ message: "Goal deleted successfully" });
     } catch (error) {
       console.error("Delete goal error:", error);
-      const message = error instanceof Error ? error.message : "Failed to delete goal";
-      res.status(500).json({ message });
+      res.status(500).json({ message: "An error occurred while deleting the goal" });
     }
   });
 }

@@ -105,9 +105,10 @@ function AchievementBadgeDisplay({
               ${isUnlocked ? 'hover:scale-105' : ''}
               cursor-pointer min-w-[80px]
             `}
+            aria-label={isUnlocked ? `${achievement.name} achievement unlocked` : `${achievement.name} achievement locked`}
           >
             {!isUnlocked && (
-              <div className="absolute top-1 right-1">
+              <div className="absolute top-1 right-1" aria-hidden="true">
                 <Lock className="h-3 w-3 text-gray-400" />
               </div>
             )}

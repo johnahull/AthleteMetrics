@@ -76,7 +76,7 @@ export function MetricProgressCard({
         console.warn('Failed to trigger confetti:', error);
       }
     }
-  }, [personalRecord?.isRecent, showConfetti]);
+  }, [personalRecord?.isRecent, showConfetti, personalRecord]);
   // Calculate trend data
   const trendData = useMemo(
     () => calculateMetricTrend(measurements, metric),

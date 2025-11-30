@@ -23,6 +23,26 @@ import { Loader2, AlertCircle, Target, Plus, Trophy, Archive } from 'lucide-reac
 import { Redirect, Link } from 'wouter';
 import type { Goal } from '@shared/schema';
 
+/**
+ * Adapt Goal from API response to GoalProgressCard expected type
+ */
+function adaptGoalForDisplay(goal: Goal) {
+  return {
+    id: goal.id,
+    userId: goal.userId,
+    metric: goal.metric,
+    goalType: goal.goalType as unknown as GoalType,
+    status: goal.status as unknown as GoalStatus,
+    targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : Number(goal.targetValue),
+    baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : Number(goal.baselineValue),
+    currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : Number(goal.currentValue),
+    targetDate: goal.targetDate,
+    createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : goal.createdAt.toISOString(),
+    achievedAt: goal.achievedAt ? (typeof goal.achievedAt === 'string' ? goal.achievedAt : goal.achievedAt.toISOString()) : undefined,
+    notes: goal.notes ?? undefined,
+  };
+}
+
 export default function MyGoalsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
@@ -130,20 +150,7 @@ export default function MyGoalsPage() {
               {activeGoals.map((goal: Goal) => (
                 <GoalProgressCard
                   key={goal.id}
-                  goal={{
-                    id: goal.id,
-                    userId: goal.userId,
-                    metric: goal.metric,
-                    goalType: goal.goalType as unknown as GoalType,
-                    status: goal.status as unknown as GoalStatus,
-                    targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : Number(goal.targetValue),
-                    baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : Number(goal.baselineValue),
-                    currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : Number(goal.currentValue),
-                    targetDate: goal.targetDate,
-                    createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : goal.createdAt.toISOString(),
-                    achievedAt: goal.achievedAt ? (typeof goal.achievedAt === 'string' ? goal.achievedAt : goal.achievedAt.toISOString()) : undefined,
-                    notes: goal.notes ?? undefined,
-                  }}
+                  goal={adaptGoalForDisplay(goal)}
                   onMarkComplete={handleMarkComplete}
                   onAbandon={handleAbandon}
                 />
@@ -174,20 +181,7 @@ export default function MyGoalsPage() {
               {completedGoals.map((goal: Goal) => (
                 <GoalProgressCard
                   key={goal.id}
-                  goal={{
-                    id: goal.id,
-                    userId: goal.userId,
-                    metric: goal.metric,
-                    goalType: goal.goalType as unknown as GoalType,
-                    status: goal.status as unknown as GoalStatus,
-                    targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : Number(goal.targetValue),
-                    baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : Number(goal.baselineValue),
-                    currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : Number(goal.currentValue),
-                    targetDate: goal.targetDate,
-                    createdAt: typeof goal.createdAt === 'string' ? goal.createdAt : goal.createdAt.toISOString(),
-                    achievedAt: goal.achievedAt ? (typeof goal.achievedAt === 'string' ? goal.achievedAt : goal.achievedAt.toISOString()) : undefined,
-                    notes: goal.notes ?? undefined,
-                  }}
+                  goal={adaptGoalForDisplay(goal)}
                 />
               ))}
             </div>

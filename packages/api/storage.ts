@@ -4995,7 +4995,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(userAchievements.unlockedAt));
   }
 
-  async checkAchievementExists(userId: string, achievementCode: string): Promise<boolean> {
+  async checkAchievementExists(userId: string, organizationId: string, achievementCode: string): Promise<boolean> {
     const definition = await this.getAchievementDefinitionByCode(achievementCode);
     if (!definition) {
       return false;
@@ -5006,6 +5006,7 @@ export class DatabaseStorage implements IStorage {
       .from(userAchievements)
       .where(and(
         eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId),
         eq(userAchievements.achievementId, definition.id)
       ))
       .limit(1);

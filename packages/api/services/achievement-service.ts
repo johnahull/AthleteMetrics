@@ -41,7 +41,7 @@ export class AchievementService {
     achievementCode: string,
     metadata?: any
   ): Promise<UserAchievement | null> {
-    const alreadyUnlocked = await storage.checkAchievementExists(userId, achievementCode);
+    const alreadyUnlocked = await storage.checkAchievementExists(userId, organizationId, achievementCode);
     if (alreadyUnlocked) {
       return null;
     }
