@@ -3,40 +3,38 @@
  *
  * Displays the athlete's dynamic performance data:
  * - Welcome hero with streak tracking
- * - Personal records with celebrations
- * - Recent activity timeline with insights
- * - Wellness status (if enabled)
- * - Metric progress charts
- * - Goal tracking
+ * - Metric progress cards with PRs integrated
+ * - Goal tracking in main area
+ * - Recent activity timeline (compact sidebar)
+ * - Achievements (compact sidebar)
+ * - Wellness status (compact sidebar)
  *
  * This page is for athletes viewing their own performance data.
  * Static info (name, contact) is on /my-profile.
  */
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteDashboardData, type DashboardData } from '@/hooks/useAthleteDashboardData';
 import { useAthleteProfile } from '@/hooks/useAthleteProfile';
-import { useActiveGoals, useUpdateGoalStatus, useCreateGoal, GoalStatus, GoalType } from '@/hooks/useGoals';
+import { useActiveGoals, GoalStatus, GoalType } from '@/hooks/useGoals';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
-import { PersonalRecordsCard } from '@/components/athlete/PersonalRecordsCard';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
 import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
-import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
-import { GoalCreationWizard } from '@/components/athlete/GoalCreationWizard';
 import { AchievementsCard } from '@/components/athlete/AchievementsCard';
+import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Loader2, AlertCircle, BarChart3, Target, Plus } from 'lucide-react';
-import { Redirect } from 'wouter';
+import { Loader2, AlertCircle, BarChart3, Target, ArrowRight } from 'lucide-react';
+import { Redirect, Link } from 'wouter';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 import type { Goal } from '@shared/schema';
 
 export default function MyDashboardPage() {
   const { user, isLoading: authLoading, organizationContext } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
-  const [showGoalWizard, setShowGoalWizard] = useState(false);
 
   // Fetch dashboard data
   const { data: dashboardData, isLoading, isError, error } = useAthleteDashboardData(athleteId);
@@ -44,38 +42,8 @@ export default function MyDashboardPage() {
   // Fetch athlete profile for hero component
   const { data: athlete } = useAthleteProfile(athleteId);
 
-  // Fetch active goals
-  const { data: activeGoals = [], isLoading: goalsLoading } = useActiveGoals();
-  const updateGoalStatus = useUpdateGoalStatus();
-  const createGoal = useCreateGoal();
-
-  // Handle marking a goal as complete
-  const handleMarkComplete = (goalId: string) => {
-    updateGoalStatus.mutate({ goalId, status: GoalStatus.ACHIEVED });
-  };
-
-  // Handle abandoning a goal
-  const handleAbandon = (goalId: string) => {
-    updateGoalStatus.mutate({ goalId, status: GoalStatus.ABANDONED });
-  };
-
-  // Handle creating a new goal
-  const handleCreateGoal = async (goalData: {
-    metric: string;
-    goalType: string;
-    targetValue: number;
-    targetDate: string;
-    baselineValue: number;
-  }) => {
-    await createGoal.mutateAsync({
-      metric: goalData.metric,
-      goalType: goalData.goalType as typeof GoalType[keyof typeof GoalType],
-      targetValue: goalData.targetValue,
-      baselineValue: goalData.baselineValue,
-      targetDate: goalData.targetDate,
-    });
-    setShowGoalWizard(false);
-  };
+  // Fetch active goals count for summary card
+  const { data: activeGoals = [] } = useActiveGoals();
 
   // Note: Measurements are already grouped by useAthleteDashboardData hook internally
   // This local grouping is kept for the MetricProgressCard component which expects grouped data
@@ -145,7 +113,7 @@ export default function MyDashboardPage() {
   // Empty state
   if (!dashboardData || dashboardData.measurements.length === 0) {
     return (
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6">
         {/* Hero */}
         <AthleteHomeHero
           athlete={heroAthlete}
@@ -167,7 +135,7 @@ export default function MyDashboardPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 space-y-6">
       {/* Athlete Home Hero */}
       <AthleteHomeHero
         athlete={heroAthlete}
@@ -175,81 +143,48 @@ export default function MyDashboardPage() {
         lastMeasurementDate={dashboardData.lastMeasurementDate}
       />
 
-      {/* Personal Records */}
-      <div>
-        <PersonalRecordsCard personalRecords={dashboardData.personalRecords} />
-      </div>
-
-      {/* Achievements */}
-      {user?.id && organizationContext && (
-        <AchievementsCard userId={user.id} organizationId={organizationContext} />
-      )}
-
-      {/* Activity & Wellness Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Recent Activity Timeline */}
-        <div className="lg:col-span-2">
-          <RecentActivityTimeline activities={dashboardData.activityTimeline} />
-        </div>
-
-        {/* Wellness Status */}
-        <div>
-          <WellnessStatusCard
-            wellnessEnabled={false} // TODO: Get from organization settings
-            wellnessData={null}
-          />
-        </div>
-      </div>
-
-      {/* Metric Progress Cards */}
+      {/* Performance Metrics Grid (includes PRs) */}
       {dashboardData.availableMetrics.length > 0 && (
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance Progress</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {dashboardData.availableMetrics.map((metric) => (
-              <MetricProgressCard
-                key={metric}
-                metric={metric}
-                displayName={getMetricDisplayName(metric)}
-                measurements={measurementsByMetric[metric] || []}
-                units={getMetricUnits(metric)}
-              />
-            ))}
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {dashboardData.availableMetrics.map((metric) => (
+            <MetricProgressCard
+              key={metric}
+              metric={metric}
+              displayName={getMetricDisplayName(metric)}
+              measurements={measurementsByMetric[metric] || []}
+              units={getMetricUnits(metric)}
+              personalRecord={dashboardData.personalRecords.find(pr => pr.metric === metric)}
+            />
+          ))}
         </div>
       )}
+
+      {/* Recent Activity (full size) */}
+      <RecentActivityTimeline activities={dashboardData.activityTimeline} />
 
       {/* Goals Section */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900">My Goals</h2>
-          <Button
-            onClick={() => setShowGoalWizard(true)}
-            size="sm"
-            className="bg-blue-600 hover:bg-blue-700"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            Set New Goal
-          </Button>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+            <Target className="h-5 w-5 text-blue-600" />
+            My Goals
+          </h2>
+          <Link href="/my-goals" className="text-sm text-blue-600 hover:underline flex items-center gap-1">
+            View all <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
 
-        {goalsLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
-          </div>
-        ) : activeGoals.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {activeGoals.map((goal: Goal) => (
+        {activeGoals.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {activeGoals.slice(0, 3).map((goal: Goal) => (
               <GoalProgressCard
                 key={goal.id}
                 goal={{
                   id: goal.id,
                   userId: goal.userId,
                   metric: goal.metric,
-                  // Cast string literal to enum - they have the same values
                   goalType: goal.goalType as unknown as GoalType,
                   status: goal.status as unknown as GoalStatus,
-                  // Convert decimal strings from DB to numbers for the component
                   targetValue: typeof goal.targetValue === 'string' ? parseFloat(goal.targetValue) : Number(goal.targetValue),
                   baselineValue: typeof goal.baselineValue === 'string' ? parseFloat(goal.baselineValue) : Number(goal.baselineValue),
                   currentValue: typeof goal.currentValue === 'string' ? parseFloat(goal.currentValue) : Number(goal.currentValue),
@@ -258,38 +193,39 @@ export default function MyDashboardPage() {
                   achievedAt: goal.achievedAt ? (typeof goal.achievedAt === 'string' ? goal.achievedAt : goal.achievedAt.toISOString()) : undefined,
                   notes: goal.notes ?? undefined,
                 }}
-                onMarkComplete={handleMarkComplete}
-                onAbandon={handleAbandon}
+                compact
               />
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 bg-white rounded-lg shadow-sm border border-gray-200">
-            <Target className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-            <h3 className="text-lg font-medium text-gray-900 mb-1">No Active Goals</h3>
-            <p className="text-gray-500 mb-4 max-w-md mx-auto">
-              Set personal performance goals to track your progress and stay motivated.
-            </p>
-            <Button
-              onClick={() => setShowGoalWizard(true)}
-              className="bg-blue-600 hover:bg-blue-700"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Set Your First Goal
-            </Button>
-          </div>
+          <Card className="hover:shadow-md transition-shadow">
+            <CardContent className="p-6 text-center">
+              <Target className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+              <h3 className="font-medium text-gray-900 mb-1">No Active Goals</h3>
+              <p className="text-sm text-gray-500 mb-4">Set your first goal to track progress</p>
+              <Link href="/my-goals">
+                <Button variant="outline" size="sm">
+                  Set a Goal
+                </Button>
+              </Link>
+            </CardContent>
+          </Card>
         )}
       </div>
 
-      {/* Goal Creation Wizard Modal */}
-      {showGoalWizard && (
-        <GoalCreationWizard
-          measurements={dashboardData?.measurements || []}
-          availableMetrics={dashboardData?.availableMetrics || []}
-          onCreateGoal={handleCreateGoal}
-          onCancel={() => setShowGoalWizard(false)}
+      {/* Compact Cards Row */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Achievements (compact) */}
+        {user?.id && organizationContext && (
+          <AchievementsCard userId={user.id} organizationId={organizationContext} compact />
+        )}
+
+        {/* Wellness Status */}
+        <WellnessStatusCard
+          wellnessEnabled={false} // TODO: Get from organization settings
+          wellnessData={null}
         />
-      )}
+      </div>
     </div>
   );
 }

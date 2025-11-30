@@ -23,7 +23,6 @@ import type { Athlete, Team, Measurement } from "@shared/schema";
 import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
 import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
 import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
-import { PersonalRecordsCard } from "@/components/athlete/PersonalRecordsCard";
 import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimeline";
 import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
@@ -383,11 +382,6 @@ export default function AthleteProfile() {
         lastMeasurementDate={lastMeasurementDate}
       />
 
-      {/* Personal Records */}
-      <div className="mb-8">
-        <PersonalRecordsCard personalRecords={personalRecords} />
-      </div>
-
       {/* Recent Activity & Wellness Status */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
         <div className="lg:col-span-2">
@@ -401,7 +395,7 @@ export default function AthleteProfile() {
         </div>
       </div>
 
-      {/* Metric Progress Cards */}
+      {/* Performance Metrics Grid (includes PRs) */}
       {availableMetrics.length > 0 && (
         <div className="mb-8">
           <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance Progress</h2>
@@ -413,6 +407,7 @@ export default function AthleteProfile() {
                 displayName={getMetricDisplayName(metric)}
                 measurements={measurementsByMetric[metric]}
                 units={getMetricUnits(metric)}
+                personalRecord={personalRecords.find(pr => pr.metric === metric)}
               />
             ))}
           </div>

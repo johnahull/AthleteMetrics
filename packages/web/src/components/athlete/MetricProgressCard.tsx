@@ -9,10 +9,11 @@
  * - Current value and best value prominently displayed
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { Line } from 'react-chartjs-2';
 import type { TooltipItem } from 'chart.js';
 import {
@@ -30,11 +31,24 @@ interface Measurement {
   date: string;
 }
 
+interface PersonalRecord {
+  metric: string;
+  displayName: string;
+  value: number;
+  units: string;
+  date: string;
+  isRecent: boolean; // Within 7 days
+  improvement: number | null;
+  improvementText: string | null;
+}
+
 interface MetricProgressCardProps {
   metric: string;
   displayName: string;
   measurements: Measurement[];
   units: string;
+  personalRecord?: PersonalRecord | null;
+  showConfetti?: boolean;
 }
 
 export function MetricProgressCard({
@@ -42,7 +56,27 @@ export function MetricProgressCard({
   displayName,
   measurements,
   units,
+  personalRecord,
+  showConfetti = true,
 }: MetricProgressCardProps) {
+  const confettiTriggered = useRef(false);
+
+  // Trigger confetti for recent PRs
+  useEffect(() => {
+    if (showConfetti && !confettiTriggered.current && personalRecord?.isRecent) {
+      confettiTriggered.current = true;
+      try {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 },
+          colors: ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b'],
+        });
+      } catch (error) {
+        console.warn('Failed to trigger confetti:', error);
+      }
+    }
+  }, [personalRecord?.isRecent, showConfetti]);
   // Calculate trend data
   const trendData = useMemo(
     () => calculateMetricTrend(measurements, metric),
@@ -152,9 +186,9 @@ export function MetricProgressCard({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        {/* Current and Best Values */}
+        {/* Current and PR Values */}
         <div className="mb-4">
-          <div className="flex items-baseline gap-2 mb-1">
+          <div className="flex items-baseline gap-2 mb-2">
             <span className="text-sm text-gray-600">Current:</span>
             <MetricContextTooltip
               metric={metric}
@@ -163,29 +197,54 @@ export function MetricProgressCard({
             >
               <span
                 data-testid="current-value"
-                className="text-3xl font-bold text-gray-900"
+                className="text-2xl sm:text-3xl font-bold text-gray-900"
               >
                 {currentValue?.toFixed(2)}
                 {units}
               </span>
             </MetricContextTooltip>
           </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-sm text-gray-600">Best:</span>
+
+          {/* PR Display - uses personalRecord if available, otherwise bestValue */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Trophy className="h-4 w-4 text-yellow-600" />
+              <span className="text-sm text-gray-600">PR:</span>
+            </div>
             <MetricContextTooltip
               metric={metric}
-              value={bestValue ?? 0}
+              value={personalRecord?.value ?? bestValue ?? 0}
               compact
             >
               <span
-                data-testid="best-value"
-                className="text-xl font-semibold text-blue-600"
+                data-testid="pr-value"
+                className="text-xl font-semibold text-yellow-700"
               >
-                {bestValue?.toFixed(2)}
+                {personalRecord?.value?.toFixed(2) ?? bestValue?.toFixed(2)}
                 {units}
               </span>
             </MetricContextTooltip>
+            {personalRecord && (
+              <span className="text-xs text-gray-500">
+                ({new Date(personalRecord.date).toLocaleDateString()})
+              </span>
+            )}
+            {personalRecord?.isRecent && (
+              <Badge
+                data-testid="new-pr-badge"
+                className="bg-green-500 text-white text-xs"
+              >
+                New PR!
+              </Badge>
+            )}
           </div>
+
+          {/* Improvement text */}
+          {personalRecord?.improvementText && (
+            <p className="text-sm text-green-600 font-medium mt-1 ml-6">
+              {personalRecord.improvementText}
+            </p>
+          )}
         </div>
 
         {/* Sparkline Chart */}

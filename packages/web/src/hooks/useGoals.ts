@@ -67,7 +67,9 @@ export function useGoals(
         const error = await response.json().catch(() => ({ message: 'Failed to fetch goals' }));
         throw new Error(error.message || 'Failed to fetch goals');
       }
-      return response.json();
+      const data = await response.json();
+      // API returns { goals: [...] }, extract the array
+      return data.goals || [];
     },
     enabled,
     staleTime,
