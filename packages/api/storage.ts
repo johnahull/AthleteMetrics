@@ -4879,7 +4879,7 @@ export class DatabaseStorage implements IStorage {
     const conditions: SQL[] = [eq(goals.userId, userId)];
 
     if (filters?.status) {
-      conditions.push(sql`${goals.status} = ${filters.status}`);
+      conditions.push(eq(goals.status, filters.status));
     }
 
     return await db

@@ -1921,7 +1921,7 @@ export const updateGoalSchema = z.object({
   targetDate: z.string().date().optional(),
   status: z.enum(goalStatusEnum).optional(),
   notes: z.string().max(1000).optional(),
-}).refine(
+}).strict().refine(
   (data) => {
     if (data.targetDate) {
       const targetDate = new Date(data.targetDate);
