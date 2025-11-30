@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS "user_achievements" (
 	"achievement_id" varchar NOT NULL,
 	"unlocked_at" timestamp DEFAULT now() NOT NULL,
 	"metadata" jsonb,
-	CONSTRAINT "user_achievements_user_id_achievement_id_unique" UNIQUE("user_id","achievement_id")
+	CONSTRAINT "user_achievements_user_org_achievement_unique" UNIQUE("user_id","organization_id","achievement_id")
 );
 --> statement-breakpoint
 DO $$
@@ -72,3 +72,7 @@ BEGIN
     CHECK (rarity IN ('common', 'rare', 'epic', 'legendary'));
   END IF;
 END $$;
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "user_achievements_unlocked_at_idx" ON "user_achievements" USING btree ("unlocked_at" DESC);
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "user_achievements_org_unlocked_idx" ON "user_achievements" USING btree ("organization_id","unlocked_at" DESC);

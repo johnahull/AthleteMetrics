@@ -149,7 +149,7 @@ export function registerGoalRoutes(app: Express) {
       if (currentUser.role === "athlete") {
         if (currentUser.id !== goal.userId) {
           return res.status(403).json({
-            message: "Athletes can only view their own goals"
+            message: "Access denied"
           });
         }
       } else if (!userIsSiteAdmin) {
@@ -162,7 +162,7 @@ export function registerGoalRoutes(app: Express) {
         const hasSharedOrg = athleteOrgIds.some(orgId => coachOrgIds.includes(orgId));
         if (!hasSharedOrg) {
           return res.status(403).json({
-            message: "Access denied - athlete belongs to a different organization"
+            message: "Access denied"
           });
         }
       }
@@ -189,7 +189,7 @@ export function registerGoalRoutes(app: Express) {
       // Only athletes can create goals for themselves
       if (currentUser.role !== "athlete") {
         return res.status(403).json({
-          message: "Only athletes can create goals. Coaches cannot create goals on behalf of athletes."
+          message: "Access denied"
         });
       }
 
