@@ -367,7 +367,7 @@ describe('AchievementService', () => {
   });
 
   describe('checkImprovementBadges', () => {
-    it.skip('should award RISING_STAR for 10% improvement over 3 months', async () => {
+    it('should award RISING_STAR for 10% improvement over 3 months', async () => {
       const now = Date.now();
       const oldDate = new Date(now - 100 * 24 * 60 * 60 * 1000); // 100 days ago (>3 months)
       const newDate = new Date(now - 1 * 24 * 60 * 60 * 1000); // 1 day ago

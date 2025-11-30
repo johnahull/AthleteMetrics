@@ -139,6 +139,13 @@ END $$;
 --> statement-breakpoint
 DO $$
 BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'goals_metric_site_metrics_code_fk') THEN
+    ALTER TABLE "goals" ADD CONSTRAINT "goals_metric_site_metrics_code_fk" FOREIGN KEY ("metric") REFERENCES "public"."site_metrics"("code") ON DELETE restrict ON UPDATE cascade;
+  END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'site_positions_sport_id_site_sports_id_fk') THEN
     ALTER TABLE "site_positions" ADD CONSTRAINT "site_positions_sport_id_site_sports_id_fk" FOREIGN KEY ("sport_id") REFERENCES "public"."site_sports"("id") ON DELETE cascade ON UPDATE no action;
   END IF;
