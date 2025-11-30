@@ -280,7 +280,7 @@ describe('Goal Routes', () => {
       const response = await request(athleteApp).get(`/api/goals/${mockGoalId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toBe('Athletes can only view their own goals');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should allow coach to view athlete goal in same org', async () => {
@@ -312,7 +312,7 @@ describe('Goal Routes', () => {
       const response = await request(coachApp).get(`/api/goals/${mockGoalId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toBe('Access denied - athlete belongs to a different organization');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should allow site admin to view any goal', async () => {
@@ -440,7 +440,7 @@ describe('Goal Routes', () => {
         .send(validGoalData);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Only athletes can create goals');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should reject site admin creating goal', async () => {
@@ -450,7 +450,7 @@ describe('Goal Routes', () => {
         .send(validGoalData);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('Only athletes can create goals');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should return 400 for invalid input data', async () => {
