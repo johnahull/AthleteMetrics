@@ -10,10 +10,14 @@
 
 import type { Express } from 'express';
 import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
 import { storage } from '../storage';
 import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { differenceInDays } from 'date-fns';
+
+// UUID validation schema
+const userIdSchema = z.string().uuid().optional();
 
 // Rate limiting for achievement endpoints
 const achievementLimiter = rateLimit({
@@ -56,6 +60,14 @@ export function registerAchievementRoutes(app: Express) {
       const { userId } = req.query;
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
+      // Validate userId format if provided
+      if (userId) {
+        const parseResult = userIdSchema.safeParse(userId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: 'Invalid userId format - must be a valid UUID' });
+        }
+      }
+
       // Determine which user's achievements to fetch
       let targetUserId: string;
       let organizationId: string;
@@ -76,8 +88,8 @@ export function registerAchievementRoutes(app: Express) {
             return res.status(404).json({ message: 'User has no organization' });
           }
           organizationId = athleteOrgs[0].organizationId;
-        } else if (!userIsSiteAdmin) {
-          // Coaches/org admins can view achievements for athletes in their organization
+        } else if (currentUser.role === 'coach' || currentUser.role === 'org_admin') {
+          // Coaches and org admins can view achievements for athletes in their organization
           const targetAthlete = await storage.getUser(userId);
           if (!targetAthlete) {
             return res.status(404).json({ message: 'Athlete not found' });
@@ -98,7 +110,7 @@ export function registerAchievementRoutes(app: Express) {
 
           targetUserId = userId;
           organizationId = sharedOrgIds[0]; // Use first shared org
-        } else {
+        } else if (userIsSiteAdmin) {
           // Site admin can view any user's achievements
           targetUserId = userId;
           // Get user's first organization
@@ -107,6 +119,11 @@ export function registerAchievementRoutes(app: Express) {
             return res.status(404).json({ message: 'User has no organization' });
           }
           organizationId = userOrgs[0].organizationId;
+        } else {
+          // Unknown role - deny access
+          return res.status(403).json({
+            message: 'Access denied - insufficient permissions',
+          });
         }
       } else {
         // No userId specified - return current user's achievements
