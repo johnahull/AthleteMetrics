@@ -14,6 +14,7 @@
  */
 
 import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteDashboardData, type DashboardData } from '@/hooks/useAthleteDashboardData';
@@ -30,7 +31,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, BarChart3, Target, ArrowRight } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
-import type { Goal } from '@shared/schema';
+import type { Goal, SiteSettings, Organization } from '@shared/schema';
 
 export default function MyDashboardPage() {
   const { user, isLoading: authLoading, organizationContext } = useAuth();
@@ -44,6 +45,25 @@ export default function MyDashboardPage() {
 
   // Fetch active goals count for summary card
   const { data: activeGoals = [] } = useActiveGoals();
+
+  // Fetch site settings to check wellness module status (public endpoint for athletes)
+  const { data: siteSettings } = useQuery<SiteSettings>({
+    queryKey: ['/api/site-settings/public'],
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch organization to check org-level wellness status
+  const { data: organization } = useQuery<Organization>({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Calculate wellness enabled status based on site and org settings
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
+  const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
 
   // Note: Measurements are already grouped by useAthleteDashboardData hook internally
   // This local grouping is kept for the MetricProgressCard component which expects grouped data
@@ -222,7 +242,7 @@ export default function MyDashboardPage() {
 
         {/* Wellness Status */}
         <WellnessStatusCard
-          wellnessEnabled={false} // TODO: Get from organization settings
+          wellnessEnabled={isWellnessEnabled}
           wellnessData={null}
         />
       </div>

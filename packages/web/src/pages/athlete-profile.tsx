@@ -19,7 +19,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { mutations } from "@/lib/api";
-import type { Athlete, Team, Measurement } from "@shared/schema";
+import type { Athlete, Team, Measurement, SiteSettings, Organization } from "@shared/schema";
 import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
 import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
 import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
@@ -52,7 +52,7 @@ const editMeasurementSchema = z.object({
 export default function AthleteProfile() {
   const { id: athleteId } = useParams();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -101,6 +101,28 @@ export default function AthleteProfile() {
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
   }) as { data: any[] };
+
+  // Fetch site settings to check wellness module status (use public endpoint for non-admins)
+  const siteSettingsEndpoint = user?.isSiteAdmin
+    ? "/api/site-settings"
+    : "/api/site-settings/public";
+  const { data: siteSettings } = useQuery<SiteSettings>({
+    queryKey: [siteSettingsEndpoint],
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch organization to check org-level wellness status
+  const { data: organization } = useQuery<Organization>({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Calculate wellness enabled status based on site and org settings
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
+  const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
 
   // Generate breadcrumbs
   const breadcrumbs = useBreadcrumbs('athlete', {
@@ -299,9 +321,9 @@ export default function AthleteProfile() {
     return new Date(dateStr).toLocaleDateString();
   };
 
-  // Wellness data (placeholder - to be implemented when wellness API is integrated)
-  const wellnessEnabled = false; // TODO: Get from organization settings
-  const wellnessData = null; // TODO: Fetch from API
+  // Wellness data - wellnessEnabled is calculated from site + org settings above
+  // wellnessData will be fetched when the wellness API is integrated for athlete profiles
+  const wellnessData = null;
 
   return (
     <div className="p-6">
@@ -389,7 +411,7 @@ export default function AthleteProfile() {
         </div>
         <div>
           <WellnessStatusCard
-            wellnessEnabled={wellnessEnabled}
+            wellnessEnabled={isWellnessEnabled}
             wellnessData={wellnessData}
           />
         </div>
