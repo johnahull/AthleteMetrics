@@ -347,11 +347,3 @@ test.describe('Athlete Dashboard - Week 1 UX Improvements', () => {
     });
   });
 });
-
-// Helper function to login as athlete (to be implemented in helpers/auth.ts)
-async function loginAsAthlete(page: any) {
-  // This is a placeholder - implement actual athlete login
-  // For now, use loginAsDefaultUser or create a specific athlete account
-  const { loginAsDefaultUser } = await import('./helpers/auth');
-  await loginAsDefaultUser(page);
-}
