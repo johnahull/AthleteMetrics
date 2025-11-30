@@ -71,7 +71,7 @@ export function registerGoalRoutes(app: Express) {
           // Athletes can only view their own goals
           if (currentUser.id !== userId) {
             return res.status(403).json({
-              message: "Athletes can only view their own goals"
+              message: "Access denied"
             });
           }
           targetUserId = currentUser.id;
@@ -79,7 +79,7 @@ export function registerGoalRoutes(app: Express) {
           // Coaches/org admins can view goals for athletes in their organization
           const targetAthlete = await storage.getUser(userId);
           if (!targetAthlete) {
-            return res.status(404).json({ message: "Athlete not found" });
+            return res.status(403).json({ message: "Access denied" });
           }
 
           // Check if target athlete is in coach's organization
@@ -91,7 +91,7 @@ export function registerGoalRoutes(app: Express) {
           const hasSharedOrg = athleteOrgIds.some(orgId => coachOrgIds.includes(orgId));
           if (!hasSharedOrg) {
             return res.status(403).json({
-              message: "Access denied - athlete belongs to a different organization"
+              message: "Access denied"
             });
           }
 
@@ -262,21 +262,21 @@ export function registerGoalRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
-      // Get the goal to check ownership
+      // Validate request body
+      const validatedData = updateGoalSchema.parse(req.body);
+
+      // Get existing goal to check if we need to set achievedAt
       const existingGoal = await storage.getGoal(goalId);
       if (!existingGoal) {
         return res.status(404).json({ message: "Goal not found" });
       }
 
-      // Only the goal owner can update
+      // Only the goal owner can update (enforced in storage layer)
       if (currentUser.id !== existingGoal.userId) {
         return res.status(403).json({
-          message: "You can only update your own goals"
+          message: "Access denied"
         });
       }
-
-      // Validate request body
-      const validatedData = updateGoalSchema.parse(req.body);
 
       // If status is being changed to 'achieved', set achievedAt timestamp
       const updateData: any = { ...validatedData };
@@ -284,7 +284,7 @@ export function registerGoalRoutes(app: Express) {
         updateData.achievedAt = new Date();
       }
 
-      const updatedGoal = await storage.updateGoal(goalId, updateData);
+      const updatedGoal = await storage.updateGoal(goalId, currentUser.id, updateData);
 
       res.json(updatedGoal);
     } catch (error) {
@@ -318,23 +318,23 @@ export function registerGoalRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
-      // Get the goal to check ownership
+      // Validate status value
+      if (!status || !goalStatusEnum.includes(status as any)) {
+        return res.status(400).json({
+          message: `Status must be one of: ${goalStatusEnum.join(', ')}`
+        });
+      }
+
+      // Get existing goal to check if we need to set achievedAt
       const existingGoal = await storage.getGoal(goalId);
       if (!existingGoal) {
         return res.status(404).json({ message: "Goal not found" });
       }
 
-      // Only the goal owner can update
+      // Only the goal owner can update (enforced in storage layer)
       if (currentUser.id !== existingGoal.userId) {
         return res.status(403).json({
-          message: "You can only update your own goals"
-        });
-      }
-
-      // Validate status value
-      if (!status || !goalStatusEnum.includes(status as any)) {
-        return res.status(400).json({
-          message: `Status must be one of: ${goalStatusEnum.join(', ')}`
+          message: "Access denied"
         });
       }
 
@@ -344,7 +344,7 @@ export function registerGoalRoutes(app: Express) {
         updateData.achievedAt = new Date();
       }
 
-      const updatedGoal = await storage.updateGoal(goalId, updateData);
+      const updatedGoal = await storage.updateGoal(goalId, currentUser.id, updateData);
 
       res.json({
         id: updatedGoal.id,
@@ -375,20 +375,8 @@ export function registerGoalRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid goal ID format" });
       }
 
-      // Get the goal to check ownership
-      const existingGoal = await storage.getGoal(goalId);
-      if (!existingGoal) {
-        return res.status(404).json({ message: "Goal not found" });
-      }
-
-      // Only the goal owner can delete
-      if (currentUser.id !== existingGoal.userId) {
-        return res.status(403).json({
-          message: "You can only delete your own goals"
-        });
-      }
-
-      await storage.deleteGoal(goalId);
+      // Delete the goal (ownership enforced in storage layer)
+      await storage.deleteGoal(goalId, currentUser.id);
 
       res.json({ message: "Goal deleted successfully" });
     } catch (error) {

@@ -40,8 +40,7 @@ export function registerAchievementRoutes(app: Express) {
       res.json({ achievements });
     } catch (error) {
       console.error('Get achievements error:', error);
-      const message = error instanceof Error ? error.message : 'Failed to fetch achievements';
-      res.status(500).json({ message });
+      res.status(500).json({ message: 'Failed to fetch achievements' });
     }
   });
 
@@ -78,21 +77,21 @@ export function registerAchievementRoutes(app: Express) {
           // Athletes can only view their own achievements
           if (currentUser.id !== userId) {
             return res.status(403).json({
-              message: 'Athletes can only view their own achievements',
+              message: 'Access denied',
             });
           }
           targetUserId = currentUser.id;
           // Get athlete's organization
           const athleteOrgs = await storage.getUserOrganizations(currentUser.id);
           if (athleteOrgs.length === 0) {
-            return res.status(404).json({ message: 'User has no organization' });
+            return res.status(403).json({ message: 'Access denied' });
           }
           organizationId = athleteOrgs[0].organizationId;
         } else if (currentUser.role === 'coach' || currentUser.role === 'org_admin') {
           // Coaches and org admins can view achievements for athletes in their organization
           const targetAthlete = await storage.getUser(userId);
           if (!targetAthlete) {
-            return res.status(404).json({ message: 'Athlete not found' });
+            return res.status(403).json({ message: 'Access denied' });
           }
 
           // Check if target athlete is in coach's organization
@@ -104,7 +103,7 @@ export function registerAchievementRoutes(app: Express) {
           const sharedOrgIds = athleteOrgIds.filter(orgId => coachOrgIds.includes(orgId));
           if (sharedOrgIds.length === 0) {
             return res.status(403).json({
-              message: 'Access denied - athlete belongs to a different organization',
+              message: 'Access denied',
             });
           }
 
@@ -116,13 +115,13 @@ export function registerAchievementRoutes(app: Express) {
           // Get user's first organization
           const userOrgs = await storage.getUserOrganizations(userId);
           if (userOrgs.length === 0) {
-            return res.status(404).json({ message: 'User has no organization' });
+            return res.status(403).json({ message: 'Access denied' });
           }
           organizationId = userOrgs[0].organizationId;
         } else {
           // Unknown role - deny access
           return res.status(403).json({
-            message: 'Access denied - insufficient permissions',
+            message: 'Access denied',
           });
         }
       } else {
@@ -131,7 +130,7 @@ export function registerAchievementRoutes(app: Express) {
         // Get current user's first organization
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         if (userOrgs.length === 0) {
-          return res.status(404).json({ message: 'User has no organization' });
+          return res.status(403).json({ message: 'Access denied' });
         }
         organizationId = userOrgs[0].organizationId;
       }
@@ -141,8 +140,7 @@ export function registerAchievementRoutes(app: Express) {
       res.json({ achievements });
     } catch (error) {
       console.error('Get user achievements error:', error);
-      const message = error instanceof Error ? error.message : 'Failed to fetch user achievements';
-      res.status(500).json({ message });
+      res.status(500).json({ message: 'Failed to fetch user achievements' });
     }
   });
 
@@ -178,8 +176,7 @@ export function registerAchievementRoutes(app: Express) {
       res.json({ achievements: recentAchievements });
     } catch (error) {
       console.error('Get recent achievements error:', error);
-      const message = error instanceof Error ? error.message : 'Failed to fetch recent achievements';
-      res.status(500).json({ message });
+      res.status(500).json({ message: 'Failed to fetch recent achievements' });
     }
   });
 }
