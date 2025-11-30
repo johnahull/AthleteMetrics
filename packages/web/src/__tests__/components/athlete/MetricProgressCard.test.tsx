@@ -72,7 +72,7 @@ describe('MetricProgressCard', () => {
         />
       );
 
-      expect(screen.getByTestId('best-value')).toHaveTextContent('1.38s');
+      expect(screen.getByTestId('pr-value')).toHaveTextContent('1.38s');
     });
   });
 
@@ -407,7 +407,7 @@ describe('MetricProgressCard', () => {
 
       expect(screen.getByTestId('metric-progress-card')).toBeInTheDocument();
       expect(screen.getByTestId('current-value')).toBeInTheDocument();
-      expect(screen.getByTestId('best-value')).toBeInTheDocument();
+      expect(screen.getByTestId('pr-value')).toBeInTheDocument();
       expect(screen.getByTestId('trend-badge')).toBeInTheDocument();
       expect(screen.getByTestId('comparison-text')).toBeInTheDocument();
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();

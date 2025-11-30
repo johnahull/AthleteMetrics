@@ -77,9 +77,9 @@ export function RecentActivityTimeline({
   return (
     <Card>
       <CardHeader className={compact ? 'pb-2' : ''}>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className={`flex items-center gap-2 ${compact ? 'text-base' : ''}`}>
           <Clock className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-gray-600`} />
-          <span className={compact ? 'text-base' : ''}>Recent Activity</span>
+          <h3 className="font-semibold leading-none tracking-tight">Recent Activity</h3>
         </CardTitle>
       </CardHeader>
       <CardContent className={compact ? 'pt-0' : ''}>
