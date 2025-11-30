@@ -892,15 +892,16 @@ export const achievementDefinitions = pgTable("achievement_definitions", {
 // User achievements (junction table)
 export const userAchievements = pgTable("user_achievements", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  organizationId: varchar("organization_id").notNull().references(() => organizations.id),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  achievementId: varchar("achievement_id").notNull().references(() => achievementDefinitions.id),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  achievementId: varchar("achievement_id").notNull().references(() => achievementDefinitions.id, { onDelete: 'restrict' }),
   unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
   metadata: jsonb("metadata"), // { metric, value, improvement, etc. }
 }, (table) => ({
   userIdx: index("user_achievements_user_idx").on(table.userId),
   orgIdx: index("user_achievements_org_idx").on(table.organizationId),
   achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
+  userOrgIdx: index("user_achievements_user_org_idx").on(table.userId, table.organizationId),
   uniqueUserAchievement: unique().on(table.userId, table.achievementId),
 }));
 
