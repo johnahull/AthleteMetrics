@@ -160,7 +160,7 @@ describe('Goal Routes', () => {
       const response = await request(athleteApp).get(`/api/goals?userId=${mockOtherAthleteId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only view their own');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should allow coach to view athlete goals in same org', async () => {
@@ -199,7 +199,7 @@ describe('Goal Routes', () => {
       const response = await request(coachApp).get(`/api/goals?userId=${mockOtherAthleteId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('different organization');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should allow site admin to view any user goals', async () => {
@@ -218,13 +218,13 @@ describe('Goal Routes', () => {
       expect(response.body.message).toContain('Invalid user ID format');
     });
 
-    it('should return 404 if athlete not found', async () => {
+    it('should return 403 if athlete not found (security: no user enumeration)', async () => {
       vi.mocked(storage.getUser).mockResolvedValue(undefined);
 
       const response = await request(coachApp).get(`/api/goals?userId=${mockOtherAthleteId}`);
 
-      expect(response.status).toBe(404);
-      expect(response.body.message).toContain('Athlete not found');
+      expect(response.status).toBe(403);
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should require authentication', async () => {
@@ -280,7 +280,7 @@ describe('Goal Routes', () => {
       const response = await request(athleteApp).get(`/api/goals/${mockGoalId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only view their own');
+      expect(response.body.message).toBe('Athletes can only view their own goals');
     });
 
     it('should allow coach to view athlete goal in same org', async () => {
@@ -312,7 +312,7 @@ describe('Goal Routes', () => {
       const response = await request(coachApp).get(`/api/goals/${mockGoalId}`);
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('different organization');
+      expect(response.body.message).toBe('Access denied - athlete belongs to a different organization');
     });
 
     it('should allow site admin to view any goal', async () => {
@@ -526,6 +526,7 @@ describe('Goal Routes', () => {
       expect(response.status).toBe(200);
       expect(storage.updateGoal).toHaveBeenCalledWith(
         mockGoalId,
+        mockAthleteId,
         expect.objectContaining({ targetValue: 0.95 })
       );
     });
@@ -545,6 +546,7 @@ describe('Goal Routes', () => {
       expect(response.status).toBe(200);
       expect(storage.updateGoal).toHaveBeenCalledWith(
         mockGoalId,
+        mockAthleteId,
         expect.objectContaining({
           status: 'achieved',
           achievedAt: expect.any(Date),
@@ -569,6 +571,7 @@ describe('Goal Routes', () => {
       // achievedAt should not be in update data since already achieved
       expect(storage.updateGoal).toHaveBeenCalledWith(
         mockGoalId,
+        mockAthleteId,
         expect.not.objectContaining({
           achievedAt: expect.any(Date),
         })
@@ -586,7 +589,7 @@ describe('Goal Routes', () => {
         .send({ targetValue: 0.95 });
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only update your own');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should reject coach updating athlete goal', async () => {
@@ -597,7 +600,7 @@ describe('Goal Routes', () => {
         .send({ targetValue: 0.95 });
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only update your own');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should reject site admin updating goal', async () => {
@@ -608,7 +611,7 @@ describe('Goal Routes', () => {
         .send({ targetValue: 0.95 });
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only update your own');
+      expect(response.body.message).toBe('Access denied');
     });
 
     it('should return 404 for non-existent goal', async () => {
@@ -761,50 +764,45 @@ describe('Goal Routes', () => {
     };
 
     it('should delete own goal', async () => {
-      vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
       vi.mocked(storage.deleteGoal).mockResolvedValue(undefined);
 
       const response = await request(athleteApp).delete(`/api/goals/${mockGoalId}`);
 
       expect(response.status).toBe(200);
       expect(response.body.message).toContain('deleted successfully');
-      expect(storage.deleteGoal).toHaveBeenCalledWith(mockGoalId);
+      expect(storage.deleteGoal).toHaveBeenCalledWith(mockGoalId, mockAthleteId);
     });
 
-    it('should reject deleting another user goal', async () => {
-      vi.mocked(storage.getGoal).mockResolvedValue({
-        ...existingGoal,
-        userId: mockOtherAthleteId,
-      });
+    it('should silently succeed when deleting non-existent or non-owned goal (security: no enumeration)', async () => {
+      // Storage layer enforces ownership by using WHERE userId = currentUserId
+      // If goal doesn't exist or belongs to someone else, delete affects 0 rows
+      // This is intentional to prevent user enumeration attacks
+      vi.mocked(storage.deleteGoal).mockResolvedValue(undefined);
 
       const response = await request(athleteApp).delete(`/api/goals/${mockGoalId}`);
 
-      expect(response.status).toBe(403);
-      expect(response.body.message).toContain('only delete your own');
+      expect(response.status).toBe(200);
+      expect(storage.deleteGoal).toHaveBeenCalledWith(mockGoalId, mockAthleteId);
     });
 
-    it('should reject coach deleting athlete goal', async () => {
-      vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
+    it('should use different userId for coach attempting delete (ownership enforced in storage)', async () => {
+      vi.mocked(storage.deleteGoal).mockResolvedValue(undefined);
 
       const response = await request(coachApp).delete(`/api/goals/${mockGoalId}`);
 
-      expect(response.status).toBe(403);
+      expect(response.status).toBe(200);
+      // Ownership is enforced in storage layer - coach's userId won't match goal's userId
+      expect(storage.deleteGoal).toHaveBeenCalledWith(mockGoalId, mockCoachId);
     });
 
-    it('should reject site admin deleting goal', async () => {
-      vi.mocked(storage.getGoal).mockResolvedValue(existingGoal);
+    it('should use different userId for site admin attempting delete (ownership enforced in storage)', async () => {
+      vi.mocked(storage.deleteGoal).mockResolvedValue(undefined);
 
       const response = await request(siteAdminApp).delete(`/api/goals/${mockGoalId}`);
 
-      expect(response.status).toBe(403);
-    });
-
-    it('should return 404 for non-existent goal', async () => {
-      vi.mocked(storage.getGoal).mockResolvedValue(undefined);
-
-      const response = await request(athleteApp).delete(`/api/goals/${mockGoalId}`);
-
-      expect(response.status).toBe(404);
+      expect(response.status).toBe(200);
+      // Ownership is enforced in storage layer - admin's userId won't match goal's userId
+      expect(storage.deleteGoal).toHaveBeenCalledWith(mockGoalId, mockSiteAdminId);
     });
 
     it('should return 400 for invalid UUID format', async () => {
