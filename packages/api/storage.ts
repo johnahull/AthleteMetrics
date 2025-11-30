@@ -4917,7 +4917,7 @@ export class DatabaseStorage implements IStorage {
     return newGoal;
   }
 
-  async updateGoal(id: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal> {
+  async updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal> {
     // Build the update object, converting numbers to strings for decimal columns
     const updateData: any = {
       updatedAt: new Date(),
@@ -4936,18 +4936,21 @@ export class DatabaseStorage implements IStorage {
     const [updatedGoal] = await db
       .update(goals)
       .set(updateData)
-      .where(eq(goals.id, id))
+      .where(and(eq(goals.id, id), eq(goals.userId, userId)))
       .returning();
 
     if (!updatedGoal) {
-      throw new Error(`Goal with id ${id} not found`);
+      throw new Error(`Goal with id ${id} not found or access denied`);
     }
 
     return updatedGoal;
   }
 
-  async deleteGoal(id: string): Promise<void> {
-    await db.delete(goals).where(eq(goals.id, id));
+  async deleteGoal(id: string, userId: string): Promise<void> {
+    const result = await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId))).returning();
+    if (result.length === 0) {
+      throw new Error(`Goal with id ${id} not found or access denied`);
+    }
   }
 
   // Achievement methods

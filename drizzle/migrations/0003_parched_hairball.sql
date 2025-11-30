@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS "site_positions" (
 	"name" varchar(100) NOT NULL,
 	"short_name" varchar(10),
 	"description" text,
-	"display_order" integer,
+	"display_order" integer DEFAULT 999 NOT NULL,
 	"color" varchar(20),
 	"is_system_default" boolean DEFAULT false NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS "site_sports" (
 	"description" text,
 	"icon" varchar(50),
 	"color" varchar(20),
-	"display_order" integer,
+	"display_order" integer DEFAULT 999 NOT NULL,
 	"is_system_default" boolean DEFAULT false NOT NULL,
 	"is_active" boolean DEFAULT true NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -105,6 +105,19 @@ BEGIN
   ) THEN
     ALTER TABLE "wellness_templates" ADD COLUMN "is_system_seeded" boolean DEFAULT false NOT NULL;
   END IF;
+END $$;
+--> statement-breakpoint
+DO $$
+BEGIN
+  -- Backfill category for existing wellness templates
+  UPDATE wellness_templates
+  SET category = 'general'
+  WHERE category IS NULL;
+
+  -- Backfill tags for existing wellness templates
+  UPDATE wellness_templates
+  SET tags = ARRAY[]::text[]
+  WHERE tags IS NULL;
 END $$;
 --> statement-breakpoint
 DO $$
