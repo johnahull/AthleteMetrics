@@ -83,6 +83,10 @@ const PublicReport = React.lazy(() => import("./pages/public-report"));
 // Lazy load component test pages (development only)
 const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-team-selector"));
 
+// Lazy load global athletes admin pages
+const GlobalAthletes = React.lazy(() => import("./pages/global-athletes"));
+const GlobalAthleteDetail = React.lazy(() => import("./pages/global-athlete-detail"));
+
 function Router() {
   return (
     <Switch>
@@ -205,6 +209,16 @@ function Router() {
       <Route path="/user-management">
         <RouteWrapper loadingText="Loading User Management...">
           <UserManagement />
+        </RouteWrapper>
+      </Route>
+      <Route path="/global-athletes/:id">
+        <RouteWrapper loadingText="Loading Global Athlete...">
+          <GlobalAthleteDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/global-athletes">
+        <RouteWrapper loadingText="Loading Global Athletes...">
+          <GlobalAthletes />
         </RouteWrapper>
       </Route>
       <Route path="/data-entry">

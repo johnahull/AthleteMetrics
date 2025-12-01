@@ -19,7 +19,8 @@ import {
   Activity,
   Heart,
   ClipboardCheck,
-  Trophy
+  Trophy,
+  Link
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -36,6 +37,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
+      { name: "Global Athletes", href: "/global-athletes", icon: Link, testId: "global-athletes-menu-item" },
       { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
       { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
