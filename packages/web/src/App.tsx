@@ -30,6 +30,8 @@ const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
 const MyProfile = React.lazy(() => import("./pages/my-profile"));
 const MyDashboard = React.lazy(() => import("./pages/my-dashboard"));
 const MyGoals = React.lazy(() => import("./pages/my-goals"));
+const MyGlobalProfile = React.lazy(() => import("./pages/my-global-profile"));
+const UnifiedDashboard = React.lazy(() => import("./pages/unified-dashboard"));
 const DataEntry = React.lazy(() => import("./pages/data-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
@@ -139,6 +141,16 @@ function Router() {
       <Route path="/my-goals">
         <RouteWrapper loadingText="Loading Goals...">
           <MyGoals />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-global-profile">
+        <RouteWrapper loadingText="Loading Global Profile...">
+          <MyGlobalProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/unified-dashboard">
+        <RouteWrapper loadingText="Loading Unified Dashboard...">
+          <UnifiedDashboard />
         </RouteWrapper>
       </Route>
 

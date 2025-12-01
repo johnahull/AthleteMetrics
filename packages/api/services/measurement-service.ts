@@ -1030,6 +1030,7 @@ export class MeasurementService {
         season: measurements.season,
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
+        globalAthleteId: measurements.globalAthleteId,
         // User data (athlete)
         user: sql<{
           id: string;
