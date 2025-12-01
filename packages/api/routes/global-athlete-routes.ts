@@ -2,13 +2,26 @@
  * Global Athlete Routes
  * API endpoints for cross-organization athlete identity management
  *
- * Routes:
- * - GET    /api/my/global-athlete         - Get current user's global athlete profile
- * - PATCH  /api/my/global-athlete/privacy - Update privacy settings (allowCrossOrgLinking)
- * - PATCH  /api/my/global-athlete/sharing - Update sharing settings (shareMeasurements)
- * - GET    /api/my/unified-measurements   - Get unified measurements across all linked accounts
- * - GET    /api/my/unified-dashboard      - Get aggregated dashboard data
- * - GET    /api/my/global-athlete/audit-log - Get audit log for global athlete
+ * User Routes:
+ * - GET    /api/my/global-athlete              - Get current user's global athlete profile
+ * - PATCH  /api/my/global-athlete/privacy      - Update privacy settings (allowCrossOrgLinking)
+ * - PATCH  /api/my/global-athlete/sharing      - Update sharing settings (shareMeasurements)
+ * - GET    /api/my/unified-measurements        - Get unified measurements across all linked accounts
+ * - GET    /api/my/unified-dashboard           - Get aggregated dashboard data
+ * - GET    /api/my/global-athlete/audit-log    - Get audit log for global athlete
+ * - GET    /api/my/global-athlete/notifications - Get pending link notifications
+ * - POST   /api/my/global-athlete/notifications/:linkId/acknowledge - Acknowledge notification
+ * - POST   /api/my/global-athlete/claims       - Initiate a claim request
+ * - GET    /api/my/global-athlete/claims       - Get pending claims
+ * - DELETE /api/my/global-athlete/claims/:id   - Cancel a claim
+ * - GET    /api/verify-claim                   - Verify a claim token (public)
+ *
+ * Admin Routes:
+ * - GET    /api/admin/global-athletes          - List all global athletes
+ * - GET    /api/admin/global-athletes/stats    - Get aggregate statistics
+ * - GET    /api/admin/global-athletes/:id      - Get global athlete details
+ * - POST   /api/admin/global-athletes/:id/unlink/:userId - Force unlink a user
+ * - PATCH  /api/admin/global-athletes/:id/privacy - Update privacy settings
  */
 
 import type { Express } from "express";
@@ -19,7 +32,7 @@ import {
   organizations, userOrganizations
 } from "@shared/schema";
 import { eq, desc, and, inArray } from "drizzle-orm";
-import { requireAuth } from "../middleware";
+import { requireAuth, requireSiteAdmin } from "../middleware";
 import { globalAthleteService } from "../services/global-athlete-service";
 
 // Rate limiting for global athlete endpoints
@@ -366,6 +379,247 @@ export function registerGlobalAthleteRoutes(app: Express) {
       console.error("Get audit log error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch audit log";
       res.status(500).json({ message });
+    }
+  });
+
+  // ========== NOTIFICATION ROUTES ==========
+
+  /**
+   * Get pending link notifications
+   */
+  app.get("/api/my/global-athlete/notifications", globalAthleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const notifications = await globalAthleteService.getPendingLinkNotifications(currentUser.id);
+      res.json({ notifications });
+    } catch (error) {
+      console.error("Get notifications error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch notifications";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Acknowledge a link notification
+   */
+  app.post("/api/my/global-athlete/notifications/:linkId/acknowledge", globalAthleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { linkId } = req.params;
+      await globalAthleteService.acknowledgeNotification(currentUser.id, linkId);
+      res.json({ message: "Notification acknowledged" });
+    } catch (error) {
+      console.error("Acknowledge notification error:", error);
+      const message = error instanceof Error ? error.message : "Failed to acknowledge notification";
+      res.status(500).json({ message });
+    }
+  });
+
+  // ========== CLAIM ROUTES ==========
+
+  /**
+   * Initiate a claim request
+   */
+  app.post("/api/my/global-athlete/claims", globalAthleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { email } = req.body;
+      if (!email || typeof email !== "string") {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      const result = await globalAthleteService.initiateClaimRequest(currentUser.id, email);
+      res.json({
+        message: "Claim request initiated. Please check the email for verification.",
+        success: result.success,
+      });
+    } catch (error) {
+      console.error("Initiate claim error:", error);
+      const message = error instanceof Error ? error.message : "Failed to initiate claim";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Get pending claims
+   */
+  app.get("/api/my/global-athlete/claims", globalAthleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const claims = await globalAthleteService.getPendingClaims(currentUser.id);
+      res.json({ claims });
+    } catch (error) {
+      console.error("Get pending claims error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch pending claims";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Cancel a claim
+   */
+  app.delete("/api/my/global-athlete/claims/:claimId", globalAthleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { claimId } = req.params;
+      await globalAthleteService.cancelClaim(currentUser.id, claimId);
+      res.json({ message: "Claim cancelled" });
+    } catch (error) {
+      console.error("Cancel claim error:", error);
+      const message = error instanceof Error ? error.message : "Failed to cancel claim";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Verify a claim token (public route)
+   */
+  app.get("/api/verify-claim", async (req, res) => {
+    try {
+      const { token } = req.query;
+      if (!token || typeof token !== "string") {
+        return res.status(400).json({ message: "Token is required" });
+      }
+
+      const result = await globalAthleteService.verifyClaim(token);
+      if (result.success) {
+        res.json(result);
+      } else {
+        res.status(400).json(result);
+      }
+    } catch (error) {
+      console.error("Verify claim error:", error);
+      const message = error instanceof Error ? error.message : "Failed to verify claim";
+      res.status(500).json({ message });
+    }
+  });
+
+  // ========== ADMIN ROUTES ==========
+
+  /**
+   * Get all global athletes (admin only)
+   */
+  app.get("/api/admin/global-athletes", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { limit, offset, search } = req.query;
+
+      const athletes = await globalAthleteService.getAllGlobalAthletes({
+        limit: limit ? parseInt(limit as string, 10) : undefined,
+        offset: offset ? parseInt(offset as string, 10) : undefined,
+        search: search as string | undefined,
+      });
+
+      res.json({ athletes, count: athletes.length });
+    } catch (error) {
+      console.error("Get all global athletes error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch global athletes";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get global athlete statistics (admin only)
+   */
+  app.get("/api/admin/global-athletes/stats", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const stats = await globalAthleteService.getGlobalAthleteStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Get global athlete stats error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch stats";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get global athlete details (admin only)
+   */
+  app.get("/api/admin/global-athletes/:id", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const details = await globalAthleteService.getGlobalAthleteDetails(id);
+
+      if (!details) {
+        return res.status(404).json({ message: "Global athlete not found" });
+      }
+
+      res.json(details);
+    } catch (error) {
+      console.error("Get global athlete details error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch details";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Force unlink a user from global athlete (admin only)
+   */
+  app.post("/api/admin/global-athletes/:id/unlink/:userId", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { id, userId } = req.params;
+      await globalAthleteService.adminForceUnlink(id, userId, currentUser.id);
+      res.json({ message: "User unlinked successfully" });
+    } catch (error) {
+      console.error("Admin force unlink error:", error);
+      const message = error instanceof Error ? error.message : "Failed to unlink user";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Update global athlete privacy settings (admin only)
+   */
+  app.patch("/api/admin/global-athletes/:id/privacy", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { id } = req.params;
+      const { allowCrossOrgLinking } = req.body;
+
+      if (typeof allowCrossOrgLinking !== "boolean") {
+        return res.status(400).json({ message: "allowCrossOrgLinking must be a boolean" });
+      }
+
+      await globalAthleteService.adminUpdatePrivacySettings(id, currentUser.id, {
+        allowCrossOrgLinking,
+      });
+
+      res.json({
+        message: "Privacy settings updated",
+        allowCrossOrgLinking,
+      });
+    } catch (error) {
+      console.error("Admin update privacy error:", error);
+      const message = error instanceof Error ? error.message : "Failed to update privacy settings";
+      res.status(400).json({ message });
     }
   });
 }
