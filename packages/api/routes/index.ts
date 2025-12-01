@@ -21,6 +21,7 @@ import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
 import { registerSportsRoutes } from "./sport-routes";
 import { registerGoalRoutes } from "./goal-routes";
 import { registerAchievementRoutes } from "./achievement-routes";
+import { registerGlobalAthleteRoutes } from "./global-athlete-routes";
 // import { registerImportRoutes } from "./import-routes";
 
 /**
@@ -81,6 +82,9 @@ export function registerAllRoutes(app: Express) {
   // Achievement & badge system routes
   registerAchievementRoutes(app);
 
+  // Global athlete cross-organization identity routes
+  registerGlobalAthleteRoutes(app);
+
   // TODO: Add remaining route modules
   // registerImportRoutes(app);
 
@@ -106,8 +110,9 @@ export function getRouteStats() {
       sports: "✅ Registered (new service)",
       goals: "✅ Registered (new service)",
       achievements: "✅ Registered (new service)",
+      globalAthletes: "✅ Registered (new service)",
       imports: "🚧 Pending migration"
     },
-    status: "Migration nearly complete - 13/14 modules refactored"
+    status: "Migration nearly complete - 14/15 modules refactored"
   };
 }
