@@ -275,11 +275,13 @@ export function registerDashboardTrendsRoutes(app: Express) {
         return res.json({
           athletes: emptyTrend,
           teams: emptyTrend,
-          measurements: emptyTrend
+          measurements: { ...emptyTrend, total: 0 },
+          periodLabel: comparisonPeriods.label,
+          comparisonLabel: comparisonPeriods.comparisonLabel
         });
       }
 
-      // Athletes Trend (count athletes created in current vs previous month)
+      // Athletes Trend (count athletes created in current vs previous period)
       let currentAthletes = 0;
       let previousAthletes = 0;
 
