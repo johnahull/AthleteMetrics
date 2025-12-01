@@ -66,6 +66,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: null,
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -87,6 +90,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: null,
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -113,6 +119,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: null,
             teamId: null,
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -136,6 +145,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: 'team-1',
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -159,6 +171,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: 'team-1',
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -196,6 +211,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: 'unknown-team',
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -221,6 +239,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: 'team-1',
             athleteId: 'athlete-1',
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -261,6 +282,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: 'team-1',
             athleteId: 'unknown-athlete',
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -286,6 +310,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-123',
             teamId: null,
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />,
@@ -304,6 +331,9 @@ describe('DashboardScopeSelector', () => {
             organizationId: 'org-456',
             teamId: null,
             athleteId: null,
+            timeframe: '30d',
+            startDate: null,
+            endDate: null,
           }}
           onScopeChange={mockOnScopeChange}
         />

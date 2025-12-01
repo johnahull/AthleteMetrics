@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation } from 'wouter';
+import type { TimeframePreset } from '@shared/dashboard-timeframe';
 
 export type DashboardView = 'organization' | 'team' | 'athlete';
 
@@ -8,14 +9,30 @@ export interface DashboardScope {
   organizationId: string | null;
   teamId: string | null;
   athleteId: string | null;
+  timeframe: TimeframePreset | 'custom';
+  startDate: string | null; // ISO format: YYYY-MM-DD
+  endDate: string | null;   // ISO format: YYYY-MM-DD
+}
+
+export interface DashboardQueryParams {
+  teamId?: string;
+  athleteId?: string;
+  timeframe?: TimeframePreset | 'custom';
+  dateFrom?: string;
+  dateTo?: string;
 }
 
 export interface DashboardScopeActions {
   scope: DashboardScope;
   setTeamScope: (teamId: string) => void;
   setAthleteScope: (teamId: string, athleteId: string) => void;
+  setTimeframe: (
+    timeframe: TimeframePreset | 'custom',
+    startDate?: string,
+    endDate?: string
+  ) => void;
   resetScope: () => void;
-  getQueryParams: () => Record<string, string>;
+  getQueryParams: () => DashboardQueryParams;
 }
 
 /**
@@ -37,6 +54,16 @@ export function useDashboardScope(
     const teamId = params.get('teamId');
     const athleteId = params.get('athleteId');
 
+    // Parse timeframe parameters
+    const timeframe = (params.get('timeframe') as TimeframePreset | 'custom') || '30d';
+    const startDate = params.get('startDate');
+    const endDate = params.get('endDate');
+
+    // Validate custom timeframe has dates
+    const validTimeframe = timeframe === 'custom' && (!startDate || !endDate) ? '30d' : timeframe;
+    const validStartDate = validTimeframe === 'custom' ? startDate : null;
+    const validEndDate = validTimeframe === 'custom' ? endDate : null;
+
     // Validate scope combinations
     if (view === 'team' && teamId) {
       return {
@@ -44,6 +71,9 @@ export function useDashboardScope(
         organizationId,
         teamId,
         athleteId: null,
+        timeframe: validTimeframe,
+        startDate: validStartDate,
+        endDate: validEndDate,
       };
     }
 
@@ -53,6 +83,9 @@ export function useDashboardScope(
         organizationId,
         teamId,
         athleteId,
+        timeframe: validTimeframe,
+        startDate: validStartDate,
+        endDate: validEndDate,
       };
     }
 
@@ -62,6 +95,9 @@ export function useDashboardScope(
       organizationId,
       teamId: null,
       athleteId: null,
+      timeframe: validTimeframe,
+      startDate: validStartDate,
+      endDate: validEndDate,
     };
   }, [organizationId]);
 
@@ -85,6 +121,9 @@ export function useDashboardScope(
         organizationId,
         teamId: null,
         athleteId: null,
+        timeframe: '30d',
+        startDate: null,
+        endDate: null,
       });
       setLocation('/dashboard', { replace: true });
     }
@@ -95,6 +134,7 @@ export function useDashboardScope(
     (newScope: DashboardScope) => {
       const params = new URLSearchParams();
 
+      // Add scope params
       if (newScope.view === 'team' && newScope.teamId) {
         params.set('view', 'team');
         params.set('teamId', newScope.teamId);
@@ -102,6 +142,16 @@ export function useDashboardScope(
         params.set('view', 'athlete');
         params.set('teamId', newScope.teamId);
         params.set('athleteId', newScope.athleteId);
+      }
+
+      // Add timeframe params (only if not default)
+      if (newScope.timeframe && newScope.timeframe !== '30d') {
+        params.set('timeframe', newScope.timeframe);
+      }
+
+      if (newScope.timeframe === 'custom' && newScope.startDate && newScope.endDate) {
+        params.set('startDate', newScope.startDate);
+        params.set('endDate', newScope.endDate);
       }
 
       const queryString = params.toString();
@@ -120,11 +170,14 @@ export function useDashboardScope(
         organizationId,
         teamId,
         athleteId: null,
+        timeframe: scope.timeframe,
+        startDate: scope.startDate,
+        endDate: scope.endDate,
       };
       setScope(newScope);
       updateUrl(newScope);
     },
-    [organizationId, updateUrl]
+    [organizationId, scope.timeframe, scope.startDate, scope.endDate, updateUrl]
   );
 
   // Set athlete scope
@@ -135,11 +188,33 @@ export function useDashboardScope(
         organizationId,
         teamId,
         athleteId,
+        timeframe: scope.timeframe,
+        startDate: scope.startDate,
+        endDate: scope.endDate,
       };
       setScope(newScope);
       updateUrl(newScope);
     },
-    [organizationId, updateUrl]
+    [organizationId, scope.timeframe, scope.startDate, scope.endDate, updateUrl]
+  );
+
+  // Set timeframe
+  const setTimeframe = useCallback(
+    (
+      timeframe: TimeframePreset | 'custom',
+      startDate?: string,
+      endDate?: string
+    ) => {
+      const newScope: DashboardScope = {
+        ...scope,
+        timeframe,
+        startDate: timeframe === 'custom' ? (startDate || null) : null,
+        endDate: timeframe === 'custom' ? (endDate || null) : null,
+      };
+      setScope(newScope);
+      updateUrl(newScope);
+    },
+    [scope, updateUrl]
   );
 
   // Reset to organization scope
@@ -149,14 +224,17 @@ export function useDashboardScope(
       organizationId,
       teamId: null,
       athleteId: null,
+      timeframe: '30d',
+      startDate: null,
+      endDate: null,
     };
     setScope(newScope);
     updateUrl(newScope);
   }, [organizationId, updateUrl]);
 
   // Get query params for API requests
-  const getQueryParams = useCallback((): Record<string, string> => {
-    const params: Record<string, string> = {};
+  const getQueryParams = useCallback((): DashboardQueryParams => {
+    const params: DashboardQueryParams = {};
 
     if (scope.teamId) {
       params.teamId = scope.teamId;
@@ -166,6 +244,16 @@ export function useDashboardScope(
       params.athleteId = scope.athleteId;
     }
 
+    // Add timeframe params
+    if (scope.timeframe) {
+      params.timeframe = scope.timeframe;
+    }
+
+    if (scope.timeframe === 'custom' && scope.startDate && scope.endDate) {
+      params.dateFrom = scope.startDate;
+      params.dateTo = scope.endDate;
+    }
+
     return params;
   }, [scope]);
 
@@ -173,6 +261,7 @@ export function useDashboardScope(
     scope,
     setTeamScope,
     setAthleteScope,
+    setTimeframe,
     resetScope,
     getQueryParams,
   };

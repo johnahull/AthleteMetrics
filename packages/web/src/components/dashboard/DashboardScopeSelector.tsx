@@ -14,7 +14,7 @@ import { Building2, Users, User } from 'lucide-react';
 import type { DashboardScope } from '@/hooks/useDashboardScope';
 import type { Team } from '@shared/schema';
 
-interface User {
+interface TeamMember {
   id: string;
   firstName: string;
   lastName: string;
@@ -54,14 +54,14 @@ export function DashboardScopeSelector({
   });
 
   // Fetch athletes for selected team
-  const { data: athletes = [], isLoading: athletesLoading } = useQuery<User[]>({
-    queryKey: ['/api/users', scope.teamId, 'athletes'],
+  const { data: athletes = [], isLoading: athletesLoading } = useQuery<TeamMember[]>({
+    queryKey: ['/api/teams', scope.teamId, 'members'],
     queryFn: async () => {
-      const response = await fetch(`/api/users?teamId=${scope.teamId}`, {
+      const response = await fetch(`/api/teams/${scope.teamId}/members`, {
         credentials: 'include',
       });
       if (!response.ok) {
-        throw new Error('Failed to fetch athletes');
+        throw new Error('Failed to fetch team members');
       }
       return response.json();
     },
@@ -89,9 +89,10 @@ export function DashboardScopeSelector({
     } else if (value.startsWith('team-')) {
       const teamId = value.replace('team-', '');
       onScopeChange({ view: 'team', teamId });
-    } else if (value.startsWith('athlete-')) {
+    } else if (value.startsWith('athlete-') && scope.teamId) {
+      // Guard clause: only allow athlete selection when teamId is present
       const athleteId = value.replace('athlete-', '');
-      onScopeChange({ view: 'athlete', teamId: scope.teamId!, athleteId });
+      onScopeChange({ view: 'athlete', teamId: scope.teamId, athleteId });
     }
   };
 

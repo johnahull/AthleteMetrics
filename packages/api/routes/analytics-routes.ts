@@ -12,6 +12,10 @@ import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import {
+  getPresetDateRange,
+  type TimeframePreset
+} from "@shared/dashboard-timeframe";
 
 // Rate limiting for analytics endpoints
 // Analytics queries can be expensive, so we use stricter limits
@@ -168,9 +172,44 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(400).json({ message: "athleteId requires teamId to be specified" });
       }
 
+      // Parse timeframe parameters (optional)
+      const timeframe = req.query.timeframe as string | undefined;
+      const dateFromStr = req.query.dateFrom as string | undefined;
+      const dateToStr = req.query.dateTo as string | undefined;
+
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+
+      if (timeframe || dateFromStr || dateToStr) {
+        // If any timeframe params provided, calculate date range
+        if (timeframe && timeframe !== 'custom') {
+          // Preset timeframe
+          const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd', 'all'];
+          if (!validTimeframes.includes(timeframe as TimeframePreset)) {
+            return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, custom` });
+          }
+          const dateRange = getPresetDateRange(timeframe as TimeframePreset);
+          startDate = dateRange.start;
+          endDate = dateRange.end;
+        } else if (timeframe === 'custom') {
+          // Custom date range
+          if (!dateFromStr || !dateToStr) {
+            return res.status(400).json({ message: "dateFrom and dateTo are required when timeframe=custom" });
+          }
+          startDate = new Date(dateFromStr);
+          endDate = new Date(dateToStr);
+
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Use ISO 8601 date format (YYYY-MM-DD)" });
+          }
+        }
+      }
+
       const dashboardStats = await analyticsService.getDashboardStats(organizationId, {
         teamId,
         athleteId,
+        startDate,
+        endDate,
       });
       res.json(dashboardStats);
     } catch (error) {

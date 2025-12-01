@@ -208,13 +208,20 @@ export class AnalyticsService {
    * @param options Optional filter options
    * @param options.teamId Filter to a specific team
    * @param options.athleteId Filter to a specific athlete (requires teamId)
+   * @param options.startDate Optional start date for measurement filtering (defaults to 30 days ago)
+   * @param options.endDate Optional end date for measurement filtering (defaults to today)
    * @returns Dashboard statistics
    */
   async getDashboardStats(
     organizationId?: string,
-    options?: { teamId?: string; athleteId?: string }
+    options?: {
+      teamId?: string;
+      athleteId?: string;
+      startDate?: Date;
+      endDate?: Date;
+    }
   ): Promise<DashboardStats> {
-    const { teamId, athleteId } = options || {};
+    const { teamId, athleteId, startDate, endDate } = options || {};
     // Get all athletes in the organization (or filtered by team/athlete)
     // Get athlete counts using database-level filtering (more efficient than application-level)
     let totalAthletes: number;
@@ -306,14 +313,18 @@ export class AnalyticsService {
       totalTeams = orgTeams.length;
     }
 
-    // Get measurements from last N days (configurable via DASHBOARD_STATS_WINDOW_DAYS)
-    const windowStartDate = new Date();
-    windowStartDate.setDate(windowStartDate.getDate() - DASHBOARD_STATS_WINDOW_DAYS);
-    const today = new Date();
+    // Get measurements from specified date range or default to last N days
+    // If custom dates provided, use them; otherwise default to last 30 days
+    const windowStartDate = startDate || (() => {
+      const date = new Date();
+      date.setDate(date.getDate() - DASHBOARD_STATS_WINDOW_DAYS);
+      return date;
+    })();
+    const windowEndDate = endDate || new Date();
 
     const measurementConditions = [
       gte(measurements.date, windowStartDate.toISOString()),
-      lte(measurements.date, today.toISOString()),
+      lte(measurements.date, windowEndDate.toISOString()),
       eq(measurements.isVerified, true),
     ];
 

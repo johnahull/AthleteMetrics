@@ -19,6 +19,7 @@ import { MeasurementsTimeline } from "@/components/measurements-timeline";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useDashboardScope } from "@/hooks/useDashboardScope";
 import { DashboardScopeSelector } from "@/components/dashboard/DashboardScopeSelector";
+import { DashboardTimeframeFilter } from "@/components/dashboard/DashboardTimeframeFilter";
 import { DashboardWellnessSection } from "@/components/dashboard/DashboardWellnessSection";
 
 export default function Dashboard() {
@@ -52,7 +53,7 @@ export default function Dashboard() {
   const effectiveOrganizationId = getEffectiveOrganizationId();
 
   // Dashboard scope (organization/team/athlete view) with URL state sync
-  const { scope, setTeamScope, setAthleteScope, resetScope, getQueryParams } = useDashboardScope(effectiveOrganizationId);
+  const { scope, setTeamScope, setAthleteScope, setTimeframe, resetScope, getQueryParams } = useDashboardScope(effectiveOrganizationId);
 
   // Handle scope change from selector
   const handleScopeChange = (update: Partial<typeof scope>) => {
@@ -71,15 +72,18 @@ export default function Dashboard() {
     .map(([key, value]) => `${key}=${value}`)
     .join('&');
 
-  // Fetch dashboard trends with scope filters
+  // Fetch dashboard trends with scope and timeframe filters
   const { data: trendsData, isLoading: trendsLoading } = useDashboardTrends(
     effectiveOrganizationId,
     filterParams.teamId,
-    filterParams.athleteId
+    filterParams.athleteId,
+    filterParams.timeframe,
+    filterParams.dateFrom,
+    filterParams.dateTo
   );
 
   const { data: dashboardStats, isLoading, error } = useQuery({
-    queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, filterParams.teamId, filterParams.athleteId],
+    queryKey: ["/api/analytics/dashboard", effectiveOrganizationId, filterParams.teamId, filterParams.athleteId, filterParams.timeframe, filterParams.dateFrom, filterParams.dateTo],
     queryFn: async () => {
       // Organization selection is required for all users
       if (!effectiveOrganizationId) {
@@ -90,6 +94,11 @@ export default function Dashboard() {
       const params = new URLSearchParams({ organizationId: effectiveOrganizationId });
       if (filterParams.teamId) params.append('teamId', filterParams.teamId);
       if (filterParams.athleteId) params.append('athleteId', filterParams.athleteId);
+
+      // Add timeframe params
+      if (filterParams.timeframe) params.append('timeframe', filterParams.timeframe);
+      if (filterParams.dateFrom) params.append('dateFrom', filterParams.dateFrom);
+      if (filterParams.dateTo) params.append('dateTo', filterParams.dateTo);
 
       const url = `/api/analytics/dashboard?${params.toString()}`;
       const response = await fetch(url, {
@@ -289,12 +298,22 @@ export default function Dashboard() {
             </p>
           </div>
           {effectiveOrganizationId && (
-            <DashboardScopeSelector
-              organizationId={effectiveOrganizationId}
-              organizationName={currentOrganization?.name || null}
-              scope={scope}
-              onScopeChange={handleScopeChange}
-            />
+            <div className="flex items-center gap-3 flex-wrap">
+              <DashboardScopeSelector
+                organizationId={effectiveOrganizationId}
+                organizationName={currentOrganization?.name || null}
+                scope={scope}
+                onScopeChange={handleScopeChange}
+              />
+              <DashboardTimeframeFilter
+                timeframe={scope.timeframe}
+                startDate={scope.startDate}
+                endDate={scope.endDate}
+                onTimeframeChange={(update) => {
+                  setTimeframe(update.timeframe, update.startDate, update.endDate);
+                }}
+              />
+            </div>
           )}
         </div>
       </div>
@@ -361,7 +380,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-gray-600">
-                      Best {metric.label} (30d)
+                      Best {metric.label} ({scope.timeframe})
                     </p>
                     <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
                       {bestResult ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
