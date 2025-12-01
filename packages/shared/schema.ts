@@ -944,7 +944,7 @@ export const goals = pgTable("goals", {
 
 // Global Athlete Registry for Cross-Organization Linking
 export const linkStatusEnum = ['pending', 'confirmed', 'rejected', 'revoked'] as const;
-export const linkTypeEnum = ['auto_email', 'athlete_claimed', 'org_proposed', 'admin_forced'] as const;
+export const linkTypeEnum = ['auto_email', 'auto_import', 'athlete_claimed', 'org_proposed', 'admin_forced'] as const;
 export const actorTypeEnum = ['athlete', 'org_admin', 'site_admin', 'system'] as const;
 
 export const globalAthletes = pgTable("global_athletes", {

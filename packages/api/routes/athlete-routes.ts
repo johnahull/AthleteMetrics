@@ -23,6 +23,7 @@ import {
 import { athleteQuerySchema } from "../validation/athlete-validation";
 import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
+import { globalAthleteService } from "../services/global-athlete-service";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -306,6 +307,16 @@ export function registerAthleteRoutes(app: Express) {
         } catch (error) {
           console.error(`[CREATE ATHLETE] Failed to assign athlete to organization:`, error);
           // Don't fail the request, but log the error
+        }
+      }
+
+      // Auto-link athlete to global athlete identity if they have a real email
+      if (athlete.emails?.[0]) {
+        try {
+          await globalAthleteService.linkAthleteByEmail(athlete.id, athlete.emails[0]);
+        } catch (error) {
+          // Don't fail the request - linking is a non-critical enhancement
+          console.error(`[CREATE ATHLETE] Failed to auto-link athlete to global identity:`, error);
         }
       }
 
