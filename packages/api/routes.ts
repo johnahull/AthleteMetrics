@@ -715,7 +715,7 @@ export async function registerRoutes(app: Express) {
     //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
     // - /invitations/:token/accept: New user registration endpoint (no session yet)
     //   SECURITY: Protected by: (1) single-use token, (2) SameSite cookies, (3) Referer header check, (4) rate limiting
-    const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv', '/api/wellness/responses'];
+    const skipCsrfPaths = ['/auth/login', '/auth/register', '/import/photo', '/import/parse-csv', '/api/wellness/responses'];
     const skipCsrfPatterns = [
       /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,  // Invitation acceptance for new users
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
