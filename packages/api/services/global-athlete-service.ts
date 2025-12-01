@@ -25,10 +25,43 @@ export interface LinkedUserOptions {
 
 export class GlobalAthleteService extends BaseService {
   /**
+   * Link an athlete by email without requiring email verification.
+   * Called automatically when athletes are created or imported.
+   * Skips placeholder emails (@temp.local, @ocr-import.local).
+   */
+  async linkAthleteByEmail(userId: string, email: string): Promise<void> {
+    // Skip placeholder/temp emails - these are not real emails
+    if (!email ||
+        email.endsWith('@temp.local') ||
+        email.endsWith('@ocr-import.local') ||
+        email.includes('@placeholder.')) {
+      return;
+    }
+
+    // Normalize email to lowercase for consistent matching
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Delegate to the core linking logic
+    await this.linkAthleteToGlobalAthlete(userId, normalizedEmail, 'auto_import');
+  }
+
+  /**
    * Called when a user verifies their email address.
    * Creates or links to existing global athlete identity.
    */
   async onEmailVerified(userId: string, verifiedEmail: string): Promise<void> {
+    await this.linkAthleteToGlobalAthlete(userId, verifiedEmail.toLowerCase().trim(), 'auto_email');
+  }
+
+  /**
+   * Core linking logic - finds or creates global athlete and links user.
+   * Used by both linkAthleteByEmail (import) and onEmailVerified (verification).
+   */
+  private async linkAthleteToGlobalAthlete(
+    userId: string,
+    email: string,
+    linkType: 'auto_email' | 'auto_import'
+  ): Promise<void> {
     // Check if user already has a global athlete link
     const existingLink = await this.getUserGlobalAthleteLink(userId);
     if (existingLink) {
@@ -39,20 +72,22 @@ export class GlobalAthleteService extends BaseService {
     // Get user details for canonical profile
     const user = await this.storage.getUser(userId);
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      // Silently skip if user not found (e.g., during import race conditions)
+      console.warn(`linkAthleteToGlobalAthlete: User not found: ${userId}`);
+      return;
     }
 
-    // Check if a global athlete exists with this verified email
-    const existingGlobalAthlete = await this.findByVerifiedEmail(verifiedEmail);
+    // Check if a global athlete exists with this email
+    const existingGlobalAthlete = await this.findByVerifiedEmail(email);
 
     if (existingGlobalAthlete && existingGlobalAthlete.allowCrossOrgLinking) {
       // Auto-link to existing global athlete - user is joining an existing identity
-      await this.createAutoLink(userId, existingGlobalAthlete.id, verifiedEmail, user, existingGlobalAthlete);
+      await this.createAutoLink(userId, existingGlobalAthlete.id, email, user, existingGlobalAthlete, linkType);
     } else if (!existingGlobalAthlete) {
       // Create new global athlete
       const [newGlobalAthlete] = await db.insert(globalAthletes).values({
-        verifiedEmails: [verifiedEmail],
-        primaryEmail: verifiedEmail,
+        verifiedEmails: [email],
+        primaryEmail: email,
         canonicalFirstName: user.firstName,
         canonicalLastName: user.lastName,
         canonicalFullName: user.fullName,
@@ -63,17 +98,18 @@ export class GlobalAthleteService extends BaseService {
 
       // Create audit log
       await this.auditLog(newGlobalAthlete.id, "created", userId, "system", {
-        email: verifiedEmail,
+        email,
+        linkType,
       });
 
       // Create auto-link - no notification needed as user is creating their own identity
-      await this.createAutoLink(userId, newGlobalAthlete.id, verifiedEmail, user, null);
+      await this.createAutoLink(userId, newGlobalAthlete.id, email, user, null, linkType);
     } else {
       // Global athlete exists but has disabled cross-org linking
       // Create a new separate global athlete for this user
       const [newGlobalAthlete] = await db.insert(globalAthletes).values({
-        verifiedEmails: [verifiedEmail],
-        primaryEmail: verifiedEmail,
+        verifiedEmails: [email],
+        primaryEmail: email,
         canonicalFirstName: user.firstName,
         canonicalLastName: user.lastName,
         canonicalFullName: user.fullName,
@@ -83,11 +119,12 @@ export class GlobalAthleteService extends BaseService {
       }).returning();
 
       await this.auditLog(newGlobalAthlete.id, "created", userId, "system", {
-        email: verifiedEmail,
+        email,
+        linkType,
         reason: "existing_global_athlete_disabled_linking",
       });
 
-      await this.createAutoLink(userId, newGlobalAthlete.id, verifiedEmail, user, null);
+      await this.createAutoLink(userId, newGlobalAthlete.id, email, user, null, linkType);
     }
   }
 
@@ -105,13 +142,15 @@ export class GlobalAthleteService extends BaseService {
   /**
    * Create an auto-link between user and global athlete
    * @param existingGlobalAthlete - If set, user is joining an existing identity (send notification)
+   * @param linkType - The type of link: 'auto_email' for email verification, 'auto_import' for import
    */
   private async createAutoLink(
     userId: string,
     globalAthleteId: string,
     email: string,
     user: { fullName: string; emails: string[] },
-    existingGlobalAthlete: GlobalAthlete | null
+    existingGlobalAthlete: GlobalAthlete | null,
+    linkType: 'auto_email' | 'auto_import' = 'auto_email'
   ): Promise<void> {
     const shouldNotify = existingGlobalAthlete !== null;
 
@@ -119,7 +158,7 @@ export class GlobalAthleteService extends BaseService {
       userId,
       globalAthleteId,
       linkStatus: "confirmed",
-      linkType: "auto_email",
+      linkType,
       proposedBy: userId,
       confirmedBy: userId,
       confirmedAt: new Date(),
@@ -652,6 +691,115 @@ export class GlobalAthleteService extends BaseService {
       athletesWithMultipleLinks,
       recentLinkCount: Number(recentResult.count),
     };
+  }
+
+  /**
+   * Backfill global athlete links for all existing athletes with real emails.
+   * Groups athletes by email and links them to shared global athlete identities.
+   * Returns statistics about the backfill operation.
+   */
+  async backfillAllAthleteLinks(): Promise<{
+    processed: number;
+    linked: number;
+    created: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const stats = { processed: 0, linked: 0, created: 0, skipped: 0, errors: [] as string[] };
+
+    // Get all athletes (users who have role='athlete' in any organization)
+    // Use a subquery to find distinct user IDs with athlete role
+    const athleteUserIds = db
+      .selectDistinct({ userId: userOrganizations.userId })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.role, 'athlete'));
+
+    const athletes = await db.select({
+      id: users.id,
+      emails: users.emails,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      fullName: users.fullName,
+      birthDate: users.birthDate,
+    })
+      .from(users)
+      .where(inArray(users.id, athleteUserIds));
+
+    for (const athlete of athletes) {
+      stats.processed++;
+
+      // Get primary email
+      const email = athlete.emails?.[0];
+      if (!email ||
+          email.endsWith('@temp.local') ||
+          email.endsWith('@ocr-import.local') ||
+          email.includes('@placeholder.')) {
+        stats.skipped++;
+        continue;
+      }
+
+      // Check if already linked
+      const existingLink = await this.getUserGlobalAthleteLink(athlete.id);
+      if (existingLink) {
+        stats.skipped++;
+        continue;
+      }
+
+      try {
+        const normalizedEmail = email.toLowerCase().trim();
+
+        // Check if global athlete exists for this email
+        const existingGlobalAthlete = await this.findByVerifiedEmail(normalizedEmail);
+
+        if (existingGlobalAthlete) {
+          // Link to existing global athlete
+          await this.createAutoLink(
+            athlete.id,
+            existingGlobalAthlete.id,
+            normalizedEmail,
+            { fullName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`, emails: athlete.emails || [] },
+            existingGlobalAthlete,
+            'auto_import'
+          );
+          stats.linked++;
+        } else {
+          // Create new global athlete
+          const [newGlobalAthlete] = await db.insert(globalAthletes).values({
+            verifiedEmails: [normalizedEmail],
+            primaryEmail: normalizedEmail,
+            canonicalFirstName: athlete.firstName,
+            canonicalLastName: athlete.lastName,
+            canonicalFullName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+            birthDate: athlete.birthDate,
+            allowCrossOrgLinking: true,
+            createdBy: athlete.id,
+          }).returning();
+
+          await this.auditLog(newGlobalAthlete.id, "created", athlete.id, "system", {
+            email: normalizedEmail,
+            linkType: 'auto_import',
+            source: 'backfill',
+          });
+
+          await this.createAutoLink(
+            athlete.id,
+            newGlobalAthlete.id,
+            normalizedEmail,
+            { fullName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`, emails: athlete.emails || [] },
+            null,
+            'auto_import'
+          );
+          stats.created++;
+        }
+      } catch (error) {
+        const errorMsg = `Failed to link athlete ${athlete.id}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        console.error(errorMsg);
+        stats.errors.push(errorMsg);
+      }
+    }
+
+    console.log(`Backfill complete: ${stats.processed} processed, ${stats.created} created, ${stats.linked} linked, ${stats.skipped} skipped, ${stats.errors.length} errors`);
+    return stats;
   }
 
   // ========== CLAIM METHODS ==========
