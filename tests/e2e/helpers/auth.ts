@@ -283,3 +283,25 @@ export async function clearAuthState(page: Page): Promise<void> {
     sessionStorage.clear();
   });
 }
+
+/**
+ * Login as athlete user
+ * Convenience function for athlete-specific E2E tests
+ *
+ * @param page - Playwright Page object
+ * @returns Promise<void>
+ */
+export async function loginAsAthlete(page: Page): Promise<void> {
+  return loginAs(page, 'athlete');
+}
+
+/**
+ * Login as coach user
+ * Convenience function for coach-specific E2E tests
+ *
+ * @param page - Playwright Page object
+ * @returns Promise<void>
+ */
+export async function loginAsCoach(page: Page): Promise<void> {
+  return loginAs(page, 'coach');
+}

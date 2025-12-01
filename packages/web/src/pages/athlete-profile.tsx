@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getMetricDisplayName, getMetricBadgeVariant } from "@/lib/metrics";
+import { getMetricBadgeVariant } from "@/lib/metrics";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -19,9 +19,20 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { mutations } from "@/lib/api";
-import type { Athlete, Team, Measurement } from "@shared/schema";
+import type { Athlete, Team, Measurement, SiteSettings, Organization } from "@shared/schema";
 import { BreadcrumbNavigation } from "@/components/ui/breadcrumb-navigation";
 import { useBreadcrumbs } from "@/hooks/useBreadcrumbs";
+import { AthleteHomeHero } from "@/components/athlete/AthleteHomeHero";
+import { RecentActivityTimeline } from "@/components/athlete/RecentActivityTimeline";
+import { WellnessStatusCard } from "@/components/athlete/WellnessStatusCard";
+import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
+import {
+  calculateMonthlyMeasurementCount,
+  getLastMeasurementDate,
+  calculatePersonalRecords,
+  generateActivityTimeline,
+} from "@/utils/athlete-dashboard-utils";
+import { getMetricDisplayName, getMetricUnits } from "@/lib/metrics";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -41,7 +52,7 @@ const editMeasurementSchema = z.object({
 export default function AthleteProfile() {
   const { id: athleteId } = useParams();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -91,6 +102,28 @@ export default function AthleteProfile() {
     queryKey: ["/api/teams"],
   }) as { data: any[] };
 
+  // Fetch site settings to check wellness module status (use public endpoint for non-admins)
+  const siteSettingsEndpoint = user?.isSiteAdmin
+    ? "/api/site-settings"
+    : "/api/site-settings/public";
+  const { data: siteSettings } = useQuery<SiteSettings>({
+    queryKey: [siteSettingsEndpoint],
+    enabled: !!user?.id,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Fetch organization to check org-level wellness status
+  const { data: organization } = useQuery<Organization>({
+    queryKey: [`/api/organizations/${organizationContext}`],
+    enabled: !!organizationContext,
+    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+  });
+
+  // Calculate wellness enabled status based on site and org settings
+  const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
+  const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
+
   // Generate breadcrumbs
   const breadcrumbs = useBreadcrumbs('athlete', {
     firstName: athlete?.firstName,
@@ -137,6 +170,49 @@ export default function AthleteProfile() {
 
   // Check if user can edit measurements (coaches and site admins)
   const canEditMeasurements = user?.role === "coach" || user?.role === "org_admin" || user?.isSiteAdmin;
+
+  // Calculate dashboard data (memoized to avoid recalculation on every render)
+  // IMPORTANT: Must be before any early returns to comply with Rules of Hooks
+  const monthlyMeasurementCount = useMemo(
+    () => calculateMonthlyMeasurementCount(measurements),
+    [measurements]
+  );
+  const lastMeasurementDate = useMemo(
+    () => getLastMeasurementDate(measurements),
+    [measurements]
+  );
+  const personalRecords = useMemo(
+    () => calculatePersonalRecords(measurements),
+    [measurements]
+  );
+  const activityTimeline = useMemo(
+    () => generateActivityTimeline(measurements),
+    [measurements]
+  );
+
+  // Group measurements by metric for progress cards
+  interface GroupedMeasurement {
+    value: string | number;
+    date: string;
+    metric: string;
+  }
+
+  const measurementsByMetric = useMemo(() => {
+    const grouped: Record<string, GroupedMeasurement[]> = {};
+    measurements.forEach((m: GroupedMeasurement) => {
+      if (!grouped[m.metric]) {
+        grouped[m.metric] = [];
+      }
+      grouped[m.metric].push(m);
+    });
+    return grouped;
+  }, [measurements]);
+
+  // Get all unique metrics that have measurements
+  const availableMetrics = useMemo(
+    () => Object.keys(measurementsByMetric).sort(),
+    [measurementsByMetric]
+  );
 
   // Handler functions
   const handleEditMeasurement = (measurement: any) => {
@@ -245,6 +321,10 @@ export default function AthleteProfile() {
     return new Date(dateStr).toLocaleDateString();
   };
 
+  // Wellness data - wellnessEnabled is calculated from site + org settings above
+  // wellnessData will be fetched when the wellness API is integrated for athlete profiles
+  const wellnessData = null;
+
   return (
     <div className="p-6">
       {/* Breadcrumb Navigation */}
@@ -317,60 +397,44 @@ export default function AthleteProfile() {
         </div>
       </div>
 
-      {/* Performance Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Fly-10 Time</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {bestFly10 ? `${bestFly10.toFixed(2)}s` : 'No data'}
-                </p>
-                {bestFly10Speed && (
-                  <p className="text-sm text-gray-500">{bestFly10Speed.toFixed(1)} mph</p>
-                )}
-              </div>
-              <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
-                <Zap className="h-6 w-6 text-blue-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Athlete Home Hero */}
+      <AthleteHomeHero
+        athlete={athlete}
+        measurementCount={monthlyMeasurementCount}
+        lastMeasurementDate={lastMeasurementDate}
+      />
 
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Best Vertical Jump</p>
-                <p className="text-2xl font-bold text-gray-900">
-                  {bestVertical ? `${bestVertical.toFixed(1)}in` : 'No data'}
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-green-100 rounded-full flex items-center justify-center">
-                <TrendingUp className="h-6 w-6 text-green-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total Measurements</p>
-                <p className="text-2xl font-bold text-gray-900">{measurements.length}</p>
-                <p className="text-sm text-gray-500">
-                  {fly10Measurements.length} Fly-10, {verticalMeasurements.length} Vertical
-                </p>
-              </div>
-              <div className="h-12 w-12 bg-purple-100 rounded-full flex items-center justify-center">
-                <Calendar className="h-6 w-6 text-purple-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      {/* Recent Activity & Wellness Status */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2">
+          <RecentActivityTimeline activities={activityTimeline} />
+        </div>
+        <div>
+          <WellnessStatusCard
+            wellnessEnabled={isWellnessEnabled}
+            wellnessData={wellnessData}
+          />
+        </div>
       </div>
+
+      {/* Performance Metrics Grid (includes PRs) */}
+      {availableMetrics.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Performance Progress</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {availableMetrics.map((metric) => (
+              <MetricProgressCard
+                key={metric}
+                metric={metric}
+                displayName={getMetricDisplayName(metric)}
+                measurements={measurementsByMetric[metric]}
+                units={getMetricUnits(metric)}
+                personalRecord={personalRecords.find(pr => pr.metric === metric)}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Contact Information */}
       {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0)) && (

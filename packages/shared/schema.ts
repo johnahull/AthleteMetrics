@@ -169,7 +169,7 @@ export const siteSports = pgTable("site_sports", {
   description: text("description"),
   icon: varchar("icon", { length: 50 }), // Icon identifier for UI
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot delete seeded sports
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -189,7 +189,7 @@ export const sitePositions = pgTable("site_positions", {
   name: varchar("name", { length: 100 }).notNull(), // "Forward", "Midfielder"
   shortName: varchar("short_name", { length: 10 }), // "FW", "MF" (optional abbreviation)
   description: text("description"),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   color: varchar("color", { length: 20 }),
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -612,6 +612,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   reportSnapshotsCreated: many(reportSnapshots, { relationName: "reportSnapshotsCreated" }),
   wellnessTemplatesCreated: many(wellnessTemplates, { relationName: "wellnessTemplatesCreated" }),
   wellnessRequestsCreated: many(wellnessRequests, { relationName: "wellnessRequestsCreated" }),
+  goals: many(goals),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -866,6 +867,77 @@ export const wellnessResponses = pgTable("wellness_responses", {
     .on(table.userId, table.submittedAt.desc()),
 }));
 
+// Achievement & Badge System
+export const achievementCategoryEnum = ['performance', 'consistency', 'improvement', 'goal'] as const;
+export const achievementRarityEnum = ['common', 'rare', 'epic', 'legendary'] as const;
+
+// Achievement definitions (seeded data)
+export const achievementDefinitions = pgTable("achievement_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  category: text("category", { enum: achievementCategoryEnum }).notNull(),
+  icon: varchar("icon", { length: 50 }), // lucide icon name
+  color: varchar("color", { length: 20 }), // tailwind color class
+  rarity: text("rarity", { enum: achievementRarityEnum }).default('common').notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: index("achievement_definitions_code_idx").on(table.code),
+  categoryIdx: index("achievement_definitions_category_idx").on(table.category),
+  activeIdx: index("achievement_definitions_active_idx").on(table.isActive),
+}));
+
+// User achievements (junction table)
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  achievementId: varchar("achievement_id").notNull().references(() => achievementDefinitions.id, { onDelete: 'restrict' }),
+  unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"), // { metric, value, improvement, etc. }
+}, (table) => ({
+  userIdx: index("user_achievements_user_idx").on(table.userId),
+  orgIdx: index("user_achievements_org_idx").on(table.organizationId),
+  achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
+  userOrgIdx: index("user_achievements_user_org_idx").on(table.userId, table.organizationId),
+  uniqueUserAchievement: unique().on(table.userId, table.organizationId, table.achievementId),
+}));
+
+// Goal Setting System
+export const goalTypeEnum = ['target_value', 'improvement_percentage', 'consistency'] as const;
+export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as const;
+
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  metric: text("metric").notNull().references(() => siteMetrics.code, { onDelete: 'restrict', onUpdate: 'cascade' }), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
+  goalType: text("goal_type", { enum: goalTypeEnum }).notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 3 }).notNull(),
+  baselineValue: decimal("baseline_value", { precision: 10, scale: 3 }).notNull(),
+  currentValue: decimal("current_value", { precision: 10, scale: 3 }).notNull(),
+  targetDate: date("target_date").notNull(),
+  status: text("status", { enum: goalStatusEnum }).default('active').notNull(),
+  notes: text("notes"),
+  achievedAt: timestamp("achieved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  // Index for user's goals lookup
+  userIdx: index("goals_user_idx").on(table.userId),
+  // Index for active goals queries
+  statusIdx: index("goals_status_idx").on(table.status),
+  // Composite index for user's active goals
+  userStatusIdx: index("goals_user_status_idx").on(table.userId, table.status),
+  // Index for metric-based queries
+  metricIdx: index("goals_metric_idx").on(table.metric),
+  // Index for target date queries (upcoming deadlines)
+  targetDateIdx: index("goals_target_date_idx").on(table.targetDate),
+  // Composite index for user + metric queries
+  userMetricIdx: index("goals_user_metric_idx").on(table.userId, table.metric),
+}));
+
 // Wellness Relations
 export const wellnessTemplatesRelations = relations(wellnessTemplates, ({ one, many }) => ({
   organization: one(organizations, {
@@ -902,10 +974,49 @@ export const wellnessResponsesRelations = relations(wellnessResponses, ({ one })
   }),
 }));
 
+// Goals Relations
+export const goalsRelations = relations(goals, ({ one }) => ({
+  user: one(users, {
+    fields: [goals.userId],
+    references: [users.id],
+  }),
+}));
+
+// Achievement Relations
+export const achievementDefinitionsRelations = relations(achievementDefinitions, ({ many }) => ({
+  userAchievements: many(userAchievements),
+}));
+
+export const userAchievementsRelations = relations(userAchievements, ({ one }) => ({
+  user: one(users, {
+    fields: [userAchievements.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [userAchievements.organizationId],
+    references: [organizations.id],
+  }),
+  achievement: one(achievementDefinitions, {
+    fields: [userAchievements.achievementId],
+    references: [achievementDefinitions.id],
+  }),
+}));
+
 // Wellness type exports
 export type WellnessTemplate = typeof wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof wellnessRequests.$inferSelect;
 export type WellnessResponse = typeof wellnessResponses.$inferSelect;
+
+// Goals type exports
+export type Goal = typeof goals.$inferSelect;
+export type GoalType = (typeof goalTypeEnum)[number];
+export type GoalStatus = (typeof goalStatusEnum)[number];
+
+// Achievement type exports
+export type AchievementDefinition = typeof achievementDefinitions.$inferSelect;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type AchievementCategory = (typeof achievementCategoryEnum)[number];
+export type AchievementRarity = (typeof achievementRarityEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
@@ -1771,3 +1882,60 @@ export const updateReportInsightsSchema = z.object({
 export const generateReportInsightsSchema = z.object({
   reportId: z.string().uuid(),
 });
+
+// Goal validation schemas
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  achievedAt: true, // Managed by system when status changes to 'achieved'
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  metric: z.string().min(1, "Metric is required"),
+  goalType: z.enum(goalTypeEnum),
+  targetValue: z.number().positive("Target value must be positive"),
+  baselineValue: z.number().nonnegative("Baseline value must be non-negative"),
+  currentValue: z.number().nonnegative("Current value must be non-negative").optional(),
+  targetDate: z.string().date("Target date must be in YYYY-MM-DD format"),
+  status: z.enum(goalStatusEnum).default('active'),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+}).refine(
+  (data) => {
+    const targetDate = new Date(data.targetDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset to start of day for fair comparison
+    return targetDate >= now;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export const updateGoalSchema = z.object({
+  metric: z.string().min(1).optional(),
+  goalType: z.enum(goalTypeEnum).optional(),
+  targetValue: z.number().positive().optional(),
+  baselineValue: z.number().nonnegative().optional(),
+  currentValue: z.number().nonnegative().optional(),
+  targetDate: z.string().date().optional(),
+  status: z.enum(goalStatusEnum).optional(),
+  notes: z.string().max(1000).optional(),
+}).strict().refine(
+  (data) => {
+    if (data.targetDate) {
+      const targetDate = new Date(data.targetDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return targetDate >= now;
+    }
+    return true;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type UpdateGoal = z.infer<typeof updateGoalSchema>;

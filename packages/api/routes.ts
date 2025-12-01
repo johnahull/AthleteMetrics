@@ -1011,7 +1011,7 @@ export async function registerRoutes(app: Express) {
 
             // Set redirect based on role
             if (userRole === "athlete") {
-              redirectUrl = `/athletes/${user.id}`;
+              redirectUrl = "/my-dashboard";
             } else {
               redirectUrl = "/";
             }
