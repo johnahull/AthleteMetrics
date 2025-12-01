@@ -39,7 +39,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
       sport: "",
       notes: "",
       season: "",
-      organizationId: undefined,
+      organizationId: organizationId || undefined,
     },
   });
 
@@ -66,7 +66,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
         sport: "",
         notes: "",
         season: "",
-        organizationId: organizationId, // Use the prop for new teams
+        organizationId: organizationId || undefined, // Use the prop for new teams
       });
     }
   }, [team, form, organizationId]);
