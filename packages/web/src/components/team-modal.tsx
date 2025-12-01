@@ -19,9 +19,10 @@ interface TeamModalProps {
   isOpen: boolean;
   onClose: () => void;
   team: Team | null;
+  organizationId?: string;
 }
 
-export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
+export default function TeamModal({ isOpen, onClose, team, organizationId }: TeamModalProps) {
   const labels = useContextualLabels();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -38,7 +39,7 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
       sport: "",
       notes: "",
       season: "",
-      organizationId: undefined,
+      organizationId: organizationId || undefined,
     },
   });
 
@@ -65,10 +66,10 @@ export default function TeamModal({ isOpen, onClose, team }: TeamModalProps) {
         sport: "",
         notes: "",
         season: "",
-        organizationId: undefined,
+        organizationId: organizationId || undefined,
       });
     }
-  }, [team, form]);
+  }, [team, form, organizationId]);
 
   const createTeamMutation = useMutation({
     mutationFn: async (data: InsertTeam) => {
