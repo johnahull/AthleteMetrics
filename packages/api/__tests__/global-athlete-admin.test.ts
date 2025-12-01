@@ -163,6 +163,32 @@ describe("Global Athlete Admin Features", () => {
       const searchByName = await service.getAllGlobalAthletes({ search: "AdminTest User1" });
       expect(searchByName.length).toBeGreaterThanOrEqual(1);
     });
+
+    it("should escape SQL LIKE wildcards in search to prevent injection", async () => {
+      await service.onEmailVerified(testUser1Id, TEST_EMAIL_1);
+      await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
+
+      // Search with SQL LIKE wildcards - should NOT match everything
+      // If wildcards weren't escaped, "%" would match all records
+      const searchWithPercent = await service.getAllGlobalAthletes({ search: "%" });
+      // Should return 0 results since no email/name literally contains just "%"
+      // or at most match records that happen to contain "%" in their name/email
+      expect(searchWithPercent.every(a =>
+        a.primaryEmail?.includes("%") || a.canonicalFullName?.includes("%")
+      )).toBe(true);
+
+      // Search with underscore wildcard
+      const searchWithUnderscore = await service.getAllGlobalAthletes({ search: "_" });
+      expect(searchWithUnderscore.every(a =>
+        a.primaryEmail?.includes("_") || a.canonicalFullName?.includes("_")
+      )).toBe(true);
+
+      // Search with backslash
+      const searchWithBackslash = await service.getAllGlobalAthletes({ search: "\\" });
+      expect(searchWithBackslash.every(a =>
+        a.primaryEmail?.includes("\\") || a.canonicalFullName?.includes("\\")
+      )).toBe(true);
+    });
   });
 
   describe("Get Global Athlete Details (Admin)", () => {

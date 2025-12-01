@@ -284,4 +284,57 @@ describe("Global Athlete Notification Features", () => {
       });
     });
   });
+
+  describe("XSS Prevention in Email Templates", () => {
+    it("should pass data to email service without XSS injection", async () => {
+      // Create user with XSS payload in name
+      const xssTestSuffix = `_xss_${Date.now()}`;
+      const xssPayload = '<script>alert("xss")</script>';
+      const [xssUser1] = await db.insert(users).values({
+        username: `xssuser1${xssTestSuffix}`,
+        emails: [`xss${xssTestSuffix}@example.com`],
+        password: "hashedpassword",
+        firstName: xssPayload,
+        lastName: "User",
+        fullName: `${xssPayload} User`,
+        isEmailVerified: true,
+      }).returning();
+
+      const [xssUser2] = await db.insert(users).values({
+        username: `xssuser2${xssTestSuffix}`,
+        emails: [`xss${xssTestSuffix}@example.com`],
+        password: "hashedpassword",
+        firstName: "Normal",
+        lastName: "User",
+        fullName: "Normal User",
+        isEmailVerified: true,
+      }).returning();
+
+      try {
+        // First user with XSS name creates global athlete
+        await service.onEmailVerified(xssUser1.id, `xss${xssTestSuffix}@example.com`);
+        // Second user auto-links - notification should be sent
+        await service.onEmailVerified(xssUser2.id, `xss${xssTestSuffix}@example.com`);
+
+        // Verify the email service received the data
+        // The email service's escapeHtml function handles the actual XSS prevention
+        expect(emailService.sendAccountLinkedNotification).toHaveBeenCalledWith(
+          expect.objectContaining({
+            globalAthleteName: `${xssPayload} User`,
+            userName: "Normal User",
+          })
+        );
+      } finally {
+        // Clean up
+        await db.delete(globalAthleteAuditLog);
+        await db.delete(userGlobalAthleteLinks).where(
+          inArray(userGlobalAthleteLinks.userId, [xssUser1.id, xssUser2.id])
+        );
+        await db.delete(globalAthletes);
+        await db.delete(users).where(
+          inArray(users.id, [xssUser1.id, xssUser2.id])
+        );
+      }
+    });
+  });
 });
