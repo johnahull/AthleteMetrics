@@ -25,6 +25,7 @@ vi.mock("../services/email-service", () => ({
 describe("Global Athlete Claim Features", () => {
   const testSuffix = `_claim_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   let service: GlobalAthleteService;
+  let originalBaseUrl: string | undefined;
 
   let testOrg1Id: string;
   let testOrg2Id: string;
@@ -40,6 +41,10 @@ describe("Global Athlete Claim Features", () => {
 
   beforeAll(async () => {
     service = new GlobalAthleteService();
+
+    // Set BASE_URL for tests (required for claim verification emails)
+    originalBaseUrl = process.env.BASE_URL;
+    process.env.BASE_URL = "https://test.athletemetrics.com";
 
     // Create test organizations
     const [org1] = await db.insert(organizations).values({
@@ -87,6 +92,13 @@ describe("Global Athlete Claim Features", () => {
   });
 
   afterAll(async () => {
+    // Restore BASE_URL
+    if (originalBaseUrl !== undefined) {
+      process.env.BASE_URL = originalBaseUrl;
+    } else {
+      delete process.env.BASE_URL;
+    }
+
     // Clean up in reverse order
     await db.delete(globalAthleteClaims);
     await db.delete(globalAthleteAuditLog);
@@ -241,14 +253,16 @@ describe("Global Athlete Claim Features", () => {
       const result = await service.verifyClaim(token);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("expired");
+      // Standardized error message to prevent token enumeration
+      expect(result.message).toBe("Invalid or expired verification link");
     });
 
     it("should reject invalid token", async () => {
       const result = await service.verifyClaim("invalid-token-123");
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("not found");
+      // Standardized error message to prevent token enumeration
+      expect(result.message).toBe("Invalid or expired verification link");
     });
 
     it("should prevent double verification", async () => {
@@ -259,7 +273,8 @@ describe("Global Athlete Claim Features", () => {
       const result = await service.verifyClaim(token);
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("already");
+      // Standardized error message to prevent token enumeration
+      expect(result.message).toBe("Invalid or expired verification link");
     });
 
     it("should update claim status to verified", async () => {

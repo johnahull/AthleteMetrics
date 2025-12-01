@@ -157,7 +157,11 @@ export class GlobalAthleteService extends BaseService {
         });
       } catch (error) {
         console.error("Failed to send account linked notification:", error);
-        // Don't fail the link creation if notification fails
+        // Audit log for notification failure (but don't fail the link creation)
+        await this.auditLog(globalAthleteId, "link_notification_failed", userId, "system", {
+          email,
+          error: error instanceof Error ? error.message : "Unknown error",
+        }).catch(e => console.error("Failed to log notification failure:", e));
       }
     }
   }
@@ -442,10 +446,16 @@ export class GlobalAthleteService extends BaseService {
 
     // Add search filter if provided
     if (search) {
+      // Escape SQL LIKE wildcards to prevent injection
+      const escapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/%/g, '\\%')    // Escape percent signs
+        .replace(/_/g, '\\_');   // Escape underscores
+
       query = query.where(
         or(
-          ilike(globalAthletes.primaryEmail, `%${search}%`),
-          ilike(globalAthletes.canonicalFullName, `%${search}%`)
+          ilike(globalAthletes.primaryEmail, `%${escapedSearch}%`),
+          ilike(globalAthletes.canonicalFullName, `%${escapedSearch}%`)
         )
       ) as typeof query;
     }
@@ -703,7 +713,11 @@ export class GlobalAthleteService extends BaseService {
     });
 
     // Send verification email
-    const baseUrl = process.env.BASE_URL || "https://athletemetrics.com";
+    const baseUrl = process.env.BASE_URL;
+    if (!baseUrl) {
+      console.error("BASE_URL environment variable is not configured");
+      throw new Error("Email service is not properly configured");
+    }
     const verificationLink = `${baseUrl}/verify-claim?token=${token}`;
 
     await emailService.sendClaimVerificationEmail({
@@ -719,18 +733,21 @@ export class GlobalAthleteService extends BaseService {
    * Verify a claim token and add the email to the global athlete
    */
   async verifyClaim(token: string): Promise<{ success: boolean; message: string }> {
+    // Generic error message to prevent token enumeration
+    const invalidTokenMessage = "Invalid or expired verification link";
+
     // Find the claim by token
     const [claim] = await db.select()
       .from(globalAthleteClaims)
       .where(eq(globalAthleteClaims.token, token));
 
     if (!claim) {
-      return { success: false, message: "Claim token not found" };
+      return { success: false, message: invalidTokenMessage };
     }
 
     // Check if already verified
     if (claim.status === "verified") {
-      return { success: false, message: "This claim has already been verified" };
+      return { success: false, message: invalidTokenMessage };
     }
 
     // Check if expired
@@ -740,18 +757,18 @@ export class GlobalAthleteService extends BaseService {
         .set({ status: "expired" })
         .where(eq(globalAthleteClaims.id, claim.id));
 
-      return { success: false, message: "This claim token has expired" };
+      return { success: false, message: invalidTokenMessage };
     }
 
     // Check if cancelled
     if (claim.status === "cancelled") {
-      return { success: false, message: "This claim was cancelled" };
+      return { success: false, message: invalidTokenMessage };
     }
 
     // Get the global athlete
     const globalAthlete = await this.getGlobalAthlete(claim.globalAthleteId);
     if (!globalAthlete) {
-      return { success: false, message: "Global athlete not found" };
+      return { success: false, message: invalidTokenMessage };
     }
 
     // Add the email to the global athlete's verified emails
