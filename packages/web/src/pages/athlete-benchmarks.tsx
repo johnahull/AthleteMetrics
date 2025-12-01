@@ -3,9 +3,11 @@ import { useQuery } from "@tanstack/react-query";
 import { AthleteBenchmarkStatus } from "@/components/benchmarks";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth } from "@/lib/auth";
 
 export default function AthleteBenchmarksPage() {
   const { id: athleteId } = useParams();
+  const { organizationContext } = useAuth();
 
   // Fetch athlete data to get organization ID and name
   const { data: athlete, isLoading, error } = useQuery({
@@ -56,9 +58,11 @@ export default function AthleteBenchmarksPage() {
     );
   }
 
-  // TODO: Get organizationId from athlete data when schema supports it
-  // For now, use a placeholder or derive from user's current organization
-  const organizationId = athlete.organizationId || "placeholder-org-id";
+  // Derive organizationId from:
+  // 1. The athlete's team organization (if they have teams with organization info)
+  // 2. Fall back to the current user's organization context
+  const athleteTeamOrgId = athlete.teams?.[0]?.organization?.id;
+  const organizationId = athleteTeamOrgId || organizationContext || "unknown-org";
 
   return (
     <AthleteBenchmarkStatus

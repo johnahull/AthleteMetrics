@@ -4,6 +4,8 @@ import {
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
+  goals, goalStatusEnum,
+  achievementDefinitions, userAchievements,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -14,6 +16,8 @@ import {
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
   type WellnessTemplate, type WellnessRequest, type WellnessResponse,
+  type Goal, type InsertGoal, type UpdateGoal,
+  type AchievementDefinition, type UserAchievement,
   insertUserSchema,
   type OrganizationType
 } from "@shared/schema";
@@ -317,6 +321,13 @@ export interface IStorage {
   getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
   getRequestCompletionRate(organizationId: string, requestId: string): Promise<{ completed: number; total: number; percentage: number }>;
+
+  // Goals
+  getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
+  getGoal(id: string): Promise<Goal | undefined>;
+  createGoal(goal: InsertGoal): Promise<Goal>;
+  updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal>;
+  deleteGoal(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4861,6 +4872,197 @@ export class DatabaseStorage implements IStorage {
         percentage,
       };
     });
+  }
+
+  // Goals
+  async getGoalsByUser(userId: string, filters?: { status?: typeof goalStatusEnum[number] }): Promise<Goal[]> {
+    const conditions: SQL[] = [eq(goals.userId, userId)];
+
+    if (filters?.status) {
+      conditions.push(eq(goals.status, filters.status));
+    }
+
+    return await db
+      .select()
+      .from(goals)
+      .where(and(...conditions))
+      .orderBy(desc(goals.createdAt));
+  }
+
+  async getGoal(id: string): Promise<Goal | undefined> {
+    const [goal] = await db
+      .select()
+      .from(goals)
+      .where(eq(goals.id, id));
+
+    return goal || undefined;
+  }
+
+  async createGoal(goal: InsertGoal): Promise<Goal> {
+    const [newGoal] = await db
+      .insert(goals)
+      .values({
+        userId: goal.userId,
+        metric: goal.metric,
+        goalType: goal.goalType,
+        targetValue: goal.targetValue.toString(),
+        baselineValue: goal.baselineValue.toString(),
+        currentValue: (goal.currentValue ?? goal.baselineValue).toString(),
+        targetDate: goal.targetDate,
+        status: goal.status,
+        notes: goal.notes,
+      })
+      .returning();
+
+    return newGoal;
+  }
+
+  async updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal> {
+    // Build the update object, converting numbers to strings for decimal columns
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
+
+    if (goal.metric !== undefined) updateData.metric = goal.metric;
+    if (goal.goalType !== undefined) updateData.goalType = goal.goalType;
+    if (goal.targetValue !== undefined) updateData.targetValue = goal.targetValue.toString();
+    if (goal.baselineValue !== undefined) updateData.baselineValue = goal.baselineValue.toString();
+    if (goal.currentValue !== undefined) updateData.currentValue = goal.currentValue.toString();
+    if (goal.targetDate !== undefined) updateData.targetDate = goal.targetDate;
+    if (goal.status !== undefined) updateData.status = goal.status;
+    if (goal.notes !== undefined) updateData.notes = goal.notes;
+    if (goal.achievedAt !== undefined) updateData.achievedAt = goal.achievedAt;
+
+    const [updatedGoal] = await db
+      .update(goals)
+      .set(updateData)
+      .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+      .returning();
+
+    if (!updatedGoal) {
+      throw new Error(`Goal with id ${id} not found or access denied`);
+    }
+
+    return updatedGoal;
+  }
+
+  async deleteGoal(id: string, userId: string): Promise<void> {
+    const result = await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId))).returning();
+    if (result.length === 0) {
+      throw new Error(`Goal with id ${id} not found or access denied`);
+    }
+  }
+
+  // Achievement methods
+  async getAchievementDefinitions(filters?: { isActive?: boolean }): Promise<AchievementDefinition[]> {
+    const conditions: SQL[] = [];
+
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(achievementDefinitions.isActive, filters.isActive));
+    }
+
+    return await db
+      .select()
+      .from(achievementDefinitions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(achievementDefinitions.category, achievementDefinitions.createdAt);
+  }
+
+  async getAchievementDefinitionByCode(code: string): Promise<AchievementDefinition | undefined> {
+    const [definition] = await db
+      .select()
+      .from(achievementDefinitions)
+      .where(eq(achievementDefinitions.code, code))
+      .limit(1);
+
+    return definition || undefined;
+  }
+
+  async getUserAchievements(userId: string, organizationId: string): Promise<(UserAchievement & { achievement: AchievementDefinition })[]> {
+    return await db
+      .select({
+        id: userAchievements.id,
+        userId: userAchievements.userId,
+        organizationId: userAchievements.organizationId,
+        achievementId: userAchievements.achievementId,
+        unlockedAt: userAchievements.unlockedAt,
+        metadata: userAchievements.metadata,
+        achievement: achievementDefinitions,
+      })
+      .from(userAchievements)
+      .innerJoin(achievementDefinitions, eq(userAchievements.achievementId, achievementDefinitions.id))
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId)
+      ))
+      .orderBy(desc(userAchievements.unlockedAt));
+  }
+
+  async checkAchievementExists(userId: string, organizationId: string, achievementCode: string): Promise<boolean> {
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      return false;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(userAchievements)
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId),
+        eq(userAchievements.achievementId, definition.id)
+      ))
+      .limit(1);
+
+    return !!existing;
+  }
+
+  async awardAchievement(
+    userId: string,
+    organizationId: string,
+    achievementCode: string,
+    metadata?: any
+  ): Promise<UserAchievement> {
+    // Validate user belongs to organization
+    const userOrgs = await this.getUserOrganizations(userId);
+    const belongsToOrg = userOrgs.some(uo => uo.organizationId === organizationId);
+    if (!belongsToOrg) {
+      throw new Error(`User ${userId} does not belong to organization ${organizationId}`);
+    }
+
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      throw new Error(`Achievement definition not found: ${achievementCode}`);
+    }
+
+    // Use onConflictDoNothing to handle race conditions gracefully
+    const [newAchievement] = await db
+      .insert(userAchievements)
+      .values({
+        userId,
+        organizationId,
+        achievementId: definition.id,
+        metadata: metadata || null,
+      })
+      .onConflictDoNothing({
+        target: [userAchievements.userId, userAchievements.achievementId],
+      })
+      .returning();
+
+    // If insert was skipped due to conflict, fetch existing achievement
+    if (!newAchievement) {
+      const [existing] = await db
+        .select()
+        .from(userAchievements)
+        .where(and(
+          eq(userAchievements.userId, userId),
+          eq(userAchievements.achievementId, definition.id)
+        ))
+        .limit(1);
+      return existing;
+    }
+
+    return newAchievement;
   }
 }
 

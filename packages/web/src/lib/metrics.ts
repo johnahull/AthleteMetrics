@@ -2,6 +2,20 @@
 import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp, Gauge } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 
+/**
+ * Metrics where lower values indicate better performance (time-based metrics)
+ * Used for trend calculations and comparison logic
+ */
+export const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+] as const;
+
+export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+
 export function getMetricDisplayName(metric: string): string {
   switch (metric) {
     case "FLY10_TIME":
