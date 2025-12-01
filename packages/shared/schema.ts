@@ -984,6 +984,9 @@ export const userGlobalAthleteLinks = pgTable("user_global_athlete_links", {
   // Data sharing (per-link control)
   shareMeasurements: boolean("share_measurements").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Notification tracking
+  notifiedAt: timestamp("notified_at"),
+  notificationAcknowledgedAt: timestamp("notification_acknowledged_at"),
 }, (table) => ({
   // One user links to at most one global athlete
   uniqueUserId: unique("user_global_athlete_links_user_id_unique").on(table.userId),
@@ -1004,6 +1007,26 @@ export const globalAthleteAuditLog = pgTable("global_athlete_audit_log", {
 }, (table) => ({
   globalAthleteIdx: index("gaal_global_athlete_idx").on(table.globalAthleteId, table.createdAt),
   actionIdx: index("gaal_action_idx").on(table.action, table.createdAt),
+}));
+
+// Claim status enum
+const claimStatusEnum = ["pending", "verified", "expired", "cancelled"] as const;
+
+// Global Athlete Claims - for manually claiming additional email addresses
+export const globalAthleteClaims = pgTable("global_athlete_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  globalAthleteId: varchar("global_athlete_id").notNull().references(() => globalAthletes.id, { onDelete: 'cascade' }),
+  claimedEmail: text("claimed_email").notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: text("status", { enum: claimStatusEnum }).default('pending').notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verifiedAt: timestamp("verified_at"),
+}, (table) => ({
+  globalAthleteIdx: index("gac_global_athlete_idx").on(table.globalAthleteId),
+  tokenIdx: index("gac_token_idx").on(table.token),
+  emailIdx: index("gac_email_idx").on(table.claimedEmail),
+  statusIdx: index("gac_status_idx").on(table.status),
 }));
 
 // Global Athlete Relations
@@ -1132,9 +1155,11 @@ export type AchievementRarity = (typeof achievementRarityEnum)[number];
 export type GlobalAthlete = typeof globalAthletes.$inferSelect;
 export type UserGlobalAthleteLink = typeof userGlobalAthleteLinks.$inferSelect;
 export type GlobalAthleteAuditLog = typeof globalAthleteAuditLog.$inferSelect;
+export type GlobalAthleteClaim = typeof globalAthleteClaims.$inferSelect;
 export type LinkStatus = (typeof linkStatusEnum)[number];
 export type LinkType = (typeof linkTypeEnum)[number];
 export type ActorType = (typeof actorTypeEnum)[number];
+export type ClaimStatus = (typeof claimStatusEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
