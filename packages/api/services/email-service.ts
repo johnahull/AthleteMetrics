@@ -328,7 +328,8 @@ export class EmailService {
   private generateInvitationTemplate(data: InvitationEmailData): string {
     try {
       // Generate the invitation URL once to ensure consistency between button and display text
-      const invitationUrl = data.invitationLink;
+      // Sanitize URL to prevent XSS and injection attacks
+      const invitationUrl = sanitizeUrl(data.invitationLink, 'invitation');
 
       return `
 <!DOCTYPE html>

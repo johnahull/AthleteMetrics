@@ -440,6 +440,12 @@ export function registerGlobalAthleteRoutes(app: Express) {
         return res.status(400).json({ message: "Email is required" });
       }
 
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email) || email.length > 254) {
+        return res.status(400).json({ message: "Invalid email format" });
+      }
+
       const result = await globalAthleteService.initiateClaimRequest(currentUser.id, email);
       res.json({
         message: "Claim request initiated. Please check the email for verification.",
@@ -493,8 +499,9 @@ export function registerGlobalAthleteRoutes(app: Express) {
 
   /**
    * Verify a claim token (public route)
+   * Rate limited to prevent brute-force token guessing
    */
-  app.get("/api/verify-claim", async (req, res) => {
+  app.get("/api/verify-claim", globalAthleteLimiter, async (req, res) => {
     try {
       const { token } = req.query;
       if (!token || typeof token !== "string") {
