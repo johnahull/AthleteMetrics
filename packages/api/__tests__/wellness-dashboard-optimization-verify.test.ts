@@ -7,6 +7,12 @@
 import { describe, it, expect } from 'vitest';
 import { storage } from '../storage';
 
+// Valid UUID format test values (these don't need to exist in the database)
+const TEST_ORG_ID = '00000000-0000-0000-0000-000000000001';
+const TEST_ORG_ID_2 = '00000000-0000-0000-0000-000000000002';
+const NON_EXISTENT_ORG_ID = '00000000-0000-0000-0000-000000000999';
+const TEST_TEMPLATE_ID = '00000000-0000-0000-0000-000000000003';
+
 describe('Wellness Dashboard Optimization Verification', () => {
   describe('Batch Method Availability', () => {
     it('should have getTeamRostersBatch method', () => {
@@ -23,7 +29,7 @@ describe('Wellness Dashboard Optimization Verification', () => {
   describe('Batch Method Signatures', () => {
     it('getTeamRostersBatch should accept organizationId', async () => {
       // Test with non-existent org (should return empty array)
-      const result = await storage.getTeamRostersBatch('non-existent-org');
+      const result = await storage.getTeamRostersBatch(NON_EXISTENT_ORG_ID);
       expect(Array.isArray(result)).toBe(true);
       expect(result).toEqual([]);
     });
@@ -46,7 +52,7 @@ describe('Wellness Dashboard Optimization Verification', () => {
 
   describe('Data Structure Verification', () => {
     it('getTeamRostersBatch should return correct structure', async () => {
-      const result = await storage.getTeamRostersBatch('test-org');
+      const result = await storage.getTeamRostersBatch(TEST_ORG_ID);
 
       // Verify structure even if empty
       expect(Array.isArray(result)).toBe(true);
@@ -64,7 +70,7 @@ describe('Wellness Dashboard Optimization Verification', () => {
     });
 
     it('getWellnessTemplatesBatch should return correct structure', async () => {
-      const result = await storage.getWellnessTemplatesBatch(['test-id']);
+      const result = await storage.getWellnessTemplatesBatch([TEST_TEMPLATE_ID]);
 
       // Verify structure even if empty
       expect(Array.isArray(result)).toBe(true);
@@ -84,7 +90,7 @@ describe('Wellness Dashboard Optimization Verification', () => {
   describe('Performance Characteristics', () => {
     it('getTeamRostersBatch should execute in under 100ms', async () => {
       const start = performance.now();
-      await storage.getTeamRostersBatch('test-org-id');
+      await storage.getTeamRostersBatch(TEST_ORG_ID_2);
       const duration = performance.now() - start;
 
       console.log(`getTeamRostersBatch executed in ${duration.toFixed(2)}ms`);
@@ -119,7 +125,7 @@ describe('Wellness Dashboard Optimization Verification', () => {
   describe('Integration Verification', () => {
     it('should successfully batch fetch rosters and templates together', async () => {
       // Simulate dashboard workflow
-      const orgId = 'test-org';
+      const orgId = TEST_ORG_ID;
 
       const start = performance.now();
 
