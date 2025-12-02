@@ -183,7 +183,8 @@ export function registerImportExportRoutes(app: Express) {
           teamHandling: 'auto_create_confirm',
           organizationId: undefined
         };
-      } catch {
+      } catch (error) {
+        console.error('JSON parse error for import options:', error);
         return res.status(400).json({ message: "Invalid options JSON format" });
       }
 

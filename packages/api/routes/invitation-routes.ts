@@ -14,6 +14,9 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import { emailService } from "../services/email-service";
 import type { Invitation } from "@shared/schema";
 
+// Configuration constants
+const MAX_INVITATION_ATTEMPTS = 10;
+
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -49,7 +52,8 @@ async function sendInvitationEmailWithTracking(
   req: Request
 ): Promise<boolean> {
   try {
-    const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+    // Validate and clamp expiry days between 1 and 90 days
+    const expiryDays = Math.max(1, Math.min(90, parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10)));
     const inviter = await storage.getUser(invitedById);
     const organization = await storage.getOrganization(invitation.organizationId);
 
@@ -198,8 +202,8 @@ export function registerInvitationRoutes(app: Express) {
           return res.status(400).json({ message: "Athlete has no email addresses on file" });
         }
 
-        // Fetch all invitations once before the loop to avoid N+1 query
-        const existingInvitations = await storage.getInvitations();
+        // Fetch invitations for this organization to avoid N+1 query
+        const existingInvitations = await storage.getInvitationsByOrganization(organizationId);
 
         for (const athleteEmail of athleteEmails) {
           try {
@@ -309,7 +313,8 @@ export function registerInvitationRoutes(app: Express) {
         }
       }
 
-      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+      // Validate and clamp expiry days between 1 and 90 days
+      const expiryDays = Math.max(1, Math.min(90, parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10)));
       const invitation = await storage.createInvitation({
         email,
         firstName: firstName || null,
@@ -411,7 +416,8 @@ export function registerInvitationRoutes(app: Express) {
       }
 
       // Extend expiration regardless of current state (atomic update)
-      const expiryDays = parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10);
+      // Validate and clamp expiry days between 1 and 90 days
+      const expiryDays = Math.max(1, Math.min(90, parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10)));
       const newExpiration = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
       await storage.updateInvitation(invitationId, {
         expiresAt: newExpiration,
@@ -670,13 +676,6 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(404).json({ message: "Invitation not found" });
       }
 
-      console.log('[INVITATION DETAILS] Invitation found:', {
-        id: invitation.id,
-        email: invitation.email,
-        playerId: invitation.playerId,
-        role: invitation.role
-      });
-
       if (invitation.isUsed === true) {
         return res.status(400).json({ message: "Invitation already used" });
       }
@@ -694,8 +693,6 @@ export function registerInvitationRoutes(app: Express) {
         teamIds: invitation.teamIds,
         playerId: invitation.playerId // Include player/user ID if this is for an existing athlete
       };
-
-      console.log('[INVITATION DETAILS] Sending response:', responseData);
 
       res.json(responseData);
     } catch (error) {
@@ -829,8 +826,8 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(400).json({ message: "This invitation has expired" });
       }
 
-      // Check attempt count (max 10 attempts)
-      if ((invitation.attemptCount || 0) >= 10) {
+      // Check attempt count (prevent brute force)
+      if ((invitation.attemptCount || 0) >= MAX_INVITATION_ATTEMPTS) {
         await storage.updateInvitation(invitation.id, {
           status: 'cancelled',
           cancelledAt: new Date()
