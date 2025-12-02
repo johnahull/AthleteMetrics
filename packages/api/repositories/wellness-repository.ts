@@ -32,13 +32,52 @@ export interface WellnessTrend {
   trendPercentage: number;
 }
 
+// Wellness summary interfaces
+export interface TeamWellnessSummary {
+  teamId: string;
+  teamName: string;
+  totalResponses: number;
+  uniqueAthletes: number;
+  completionRate: number;
+  averageScores: Record<string, number>;
+  lastUpdated: Date;
+}
+
+export interface AthleteWellnessSummary {
+  userId: string;
+  userFullName: string;
+  totalResponses: number;
+  latestResponse: Date | null;
+  averageScores: Record<string, number>;
+  trends: Record<string, any>;
+}
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function validateUUID(id: string, fieldName: string): void {
+  if (!UUID_REGEX.test(id)) {
+    throw new Error(`Invalid UUID format for ${fieldName}: ${id}`);
+  }
+}
+
 export class WellnessRepository {
   // ==================== Wellness Templates ====================
 
   async createWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    // Validate required fields
+    if (!template.name) {
+      throw new Error('Template name is required');
+    }
+    if (!template.config) {
+      throw new Error('Template config is required');
+    }
+
     // Prepare insert data with proper types
     const insertData: typeof wellnessTemplates.$inferInsert = {
       ...template,
+      name: template.name,
+      config: template.config,
       isDefault: template.isDefault ?? false,
       isActive: template.isActive ?? true,
     };
@@ -137,9 +176,19 @@ export class WellnessRepository {
   }
 
   async createSystemWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    // Validate required fields
+    if (!template.name) {
+      throw new Error('Template name is required');
+    }
+    if (!template.config) {
+      throw new Error('Template config is required');
+    }
+
     // Prepare insert data with proper types
     const insertData: typeof wellnessTemplates.$inferInsert = {
       ...template,
+      name: template.name,
+      config: template.config,
       organizationId: null, // System templates have NULL org_id
       isSystemSeeded: true,
       isDefault: template.isDefault ?? false,
@@ -194,9 +243,23 @@ export class WellnessRepository {
   // ==================== Wellness Requests ====================
 
   async createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest> {
+    // Validate required fields
+    if (!request.organizationId) {
+      throw new Error('Organization ID is required');
+    }
+    if (!request.templateId) {
+      throw new Error('Template ID is required');
+    }
+    if (!request.distributionMethod) {
+      throw new Error('Distribution method is required');
+    }
+
     // Prepare insert data with proper types
     const insertData: typeof wellnessRequests.$inferInsert = {
       ...request,
+      organizationId: request.organizationId,
+      templateId: request.templateId,
+      distributionMethod: request.distributionMethod,
       status: request.status ?? 'active',
       requiresAuth: request.requiresAuth ?? false,
       targetAthleteIds: request.targetAthleteIds ?? null,
@@ -291,9 +354,35 @@ export class WellnessRepository {
   // ==================== Wellness Responses ====================
 
   async createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse> {
+    // Validate required fields
+    if (!response.date) {
+      throw new Error('Response date is required');
+    }
+    if (!response.userId) {
+      throw new Error('User ID is required');
+    }
+    if (!response.organizationId) {
+      throw new Error('Organization ID is required');
+    }
+    if (!response.templateId) {
+      throw new Error('Template ID is required');
+    }
+    if (!response.userFullName) {
+      throw new Error('User full name is required');
+    }
+    if (!response.responses) {
+      throw new Error('Response data is required');
+    }
+
     // Prepare insert data with proper types
     const insertData: typeof wellnessResponses.$inferInsert = {
       ...response,
+      date: response.date,
+      userId: response.userId,
+      organizationId: response.organizationId,
+      templateId: response.templateId,
+      userFullName: response.userFullName,
+      responses: response.responses,
       submittedAt: response.submittedAt ?? new Date(),
     };
 
@@ -400,7 +489,9 @@ export class WellnessRepository {
 
   // ==================== Wellness Analytics ====================
 
-  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+  async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<TeamWellnessSummary> {
+    // Validate UUID
+    validateUUID(teamId, 'teamId');
     const responses = await db
       .select()
       .from(wellnessResponses)
@@ -443,7 +534,9 @@ export class WellnessRepository {
     };
   }
 
-  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any> {
+  async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<AthleteWellnessSummary> {
+    // Validate UUID
+    validateUUID(userId, 'userId');
     const responses = await this.getWellnessResponsesByAthlete(userId, filters);
 
     const totalResponses = responses.length;
@@ -489,6 +582,15 @@ export class WellnessRepository {
    * @returns Array of trends grouped by question with aggregated data points by date
    */
   async getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]> {
+    // Validate UUIDs
+    validateUUID(organizationId, 'organizationId');
+
+    if (filters.questionIds) {
+      filters.questionIds.forEach((id, index) => {
+        validateUUID(id, `questionIds[${index}]`);
+      });
+    }
+
     // Build WHERE conditions
     const conditions: SQL[] = [
       eq(wellnessResponses.organizationId, organizationId),
