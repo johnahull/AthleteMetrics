@@ -72,6 +72,9 @@ async function sendInvitationEmailWithTracking(
 
     // Update invitation with email sent status
     // Retry up to 3 times with exponential backoff if database update fails
+    // Note: Email delivery is already complete at this point, so we use retry logic
+    // rather than a transaction. If all retries fail, a warning is logged for manual verification.
+    // This is acceptable since the invitation token remains valid and functional.
     if (emailSent) {
       let updateSuccess = false;
       for (let attempt = 0; attempt < 3; attempt++) {
@@ -235,7 +238,7 @@ export function registerInvitationRoutes(app: Express) {
             });
             invitations.push(invitation);
           } catch (error) {
-            console.error('Failed to create athlete invitation');
+            console.warn('Failed to create athlete invitation:', error);
             throw error; // Re-throw to catch in outer handler
           }
         }

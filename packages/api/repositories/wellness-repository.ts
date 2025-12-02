@@ -56,6 +56,10 @@ export interface AthleteWellnessSummary {
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Data point limits for wellness trends to prevent memory exhaustion
+const MAX_TOTAL_DATA_POINTS = 1000; // With 365-day max range, provides ~3x safety margin
+const MAX_DATA_POINTS_PER_QUESTION = 365; // Ensures balanced data distribution
+
 function validateUUID(id: string, fieldName: string): void {
   if (!UUID_REGEX.test(id)) {
     throw new Error(`Invalid UUID format for ${fieldName}: ${id}`);
@@ -213,6 +217,7 @@ export class WellnessRepository {
   }
 
   async updateSystemWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    validateUUID(id, 'id');
     const [updated] = await db
       .update(wellnessTemplates)
       .set({
@@ -235,6 +240,7 @@ export class WellnessRepository {
   }
 
   async deleteSystemWellnessTemplate(id: string): Promise<void> {
+    validateUUID(id, 'id');
     await db
       .delete(wellnessTemplates)
       .where(
@@ -653,8 +659,6 @@ export class WellnessRepository {
     const results = await db.execute(query);
 
     // Limit total data points to prevent memory exhaustion
-    // With 365-day max range and daily data, this allows ~3x safety margin
-    const MAX_TOTAL_DATA_POINTS = 1000;
     const limitedResults = (results as any[]).slice(0, MAX_TOTAL_DATA_POINTS);
 
     // Group results by question
@@ -673,7 +677,6 @@ export class WellnessRepository {
       }
 
       // Additional per-question limit to ensure balanced data distribution
-      const MAX_DATA_POINTS_PER_QUESTION = 365;
       if (trendsByQuestion[row.question_id].dataPoints.length < MAX_DATA_POINTS_PER_QUESTION) {
         trendsByQuestion[row.question_id].dataPoints.push({
           date: row.date,
