@@ -614,11 +614,9 @@ export class WellnessRepository {
     // Validate UUIDs
     validateUUID(organizationId, 'organizationId');
 
-    if (filters.questionIds) {
-      filters.questionIds.forEach((id, index) => {
-        validateUUID(id, `questionIds[${index}]`);
-      });
-    }
+    // Note: questionIds are JSON object keys (e.g., 'q1', 'q2'), NOT database UUIDs
+    // They come from the wellness template config and are stored in the responses JSONB column
+    // No UUID validation needed for questionIds
 
     // Build WHERE conditions
     const conditions: SQL[] = [
