@@ -130,13 +130,24 @@ export class GlobalAthleteService extends BaseService {
 
   /**
    * Find a global athlete by verified email
+   * Searches both primaryEmail and verifiedEmails array
    */
   private async findByVerifiedEmail(email: string): Promise<GlobalAthlete | null> {
-    const [found] = await db.select()
+    // First try to find by primary email for performance
+    const [foundByPrimary] = await db.select()
       .from(globalAthletes)
       .where(eq(globalAthletes.primaryEmail, email));
 
-    return found || null;
+    if (foundByPrimary) {
+      return foundByPrimary;
+    }
+
+    // If not found by primary, search the verifiedEmails array
+    const [foundByArray] = await db.select()
+      .from(globalAthletes)
+      .where(sql`${email} = ANY(${globalAthletes.verifiedEmails})`);
+
+    return foundByArray || null;
   }
 
   /**
@@ -469,7 +480,7 @@ export class GlobalAthleteService extends BaseService {
     search?: string;
     hasMultipleLinks?: boolean;
     allowCrossOrgLinking?: boolean;
-  } = {}): Promise<{ athletes: Array<GlobalAthlete & { linkedUserCount: number }>; totalCount: number }> {
+  } = {}): Promise<{ athletes: Array<GlobalAthlete & { linkedUserCount: number }>; totalCount: number; warning?: string }> {
     // Validate and sanitize inputs
     const limit = Math.min(Math.max(options.limit || 50, 1), 200);
     const offset = Math.max(options.offset || 0, 0);
@@ -533,6 +544,12 @@ export class GlobalAthleteService extends BaseService {
         return { athletes: [], totalCount: 0 };
       }
 
+      // Check if we hit the limit and warn the user
+      const hitLimit = allAthletes.length === MAX_ATHLETES_FOR_LINK_FILTER;
+      const warning = hitLimit
+        ? `Results limited to ${MAX_ATHLETES_FOR_LINK_FILTER} athletes. Use additional filters to narrow results.`
+        : undefined;
+
       // Get linked user counts for all athletes
       const allAthleteIds = allAthletes.map(a => a.id);
       const linkCounts = await db.select({
@@ -569,6 +586,7 @@ export class GlobalAthleteService extends BaseService {
           linkedUserCount: countMap.get(a.id) || 0,
         })),
         totalCount,
+        ...(warning && { warning }),
       };
     }
 
@@ -640,39 +658,50 @@ export class GlobalAthleteService extends BaseService {
     // Get linked users
     const linkedUsers = await this.getLinkedUsers(globalAthleteId, { confirmedOnly: false });
 
-    // Get organization details for each linked user
-    const linkedUsersWithOrgs = await Promise.all(
-      linkedUsers.map(async (link) => {
-        const userOrgs = await db.select({
+    // Batch query: Get organization details for all linked users at once
+    const userIds = linkedUsers.map(link => link.userId);
+    const allUserOrgs = userIds.length > 0
+      ? await db.select({
+          userId: userOrganizations.userId,
           organizationId: userOrganizations.organizationId,
           role: userOrganizations.role,
           orgName: organizations.name,
         })
           .from(userOrganizations)
           .leftJoin(organizations, eq(organizations.id, userOrganizations.organizationId))
-          .where(eq(userOrganizations.userId, link.userId));
+          .where(inArray(userOrganizations.userId, userIds))
+      : [];
 
-        return {
-          userId: link.userId,
-          linkStatus: link.linkStatus,
-          linkType: link.linkType,
-          shareMeasurements: link.shareMeasurements,
-          confirmedAt: link.confirmedAt,
-          organizations: userOrgs.map(org => ({
-            id: org.organizationId,
-            name: org.orgName || "Unknown",
-            role: org.role,
-          })),
-        };
-      })
-    );
+    // Group organizations by userId
+    const orgsByUserId = new Map<string, Array<{ id: string; name: string; role: string }>>();
+    for (const userOrg of allUserOrgs) {
+      if (!orgsByUserId.has(userOrg.userId)) {
+        orgsByUserId.set(userOrg.userId, []);
+      }
+      orgsByUserId.get(userOrg.userId)!.push({
+        id: userOrg.organizationId,
+        name: userOrg.orgName || "Unknown",
+        role: userOrg.role,
+      });
+    }
 
-    // Get audit log
+    // Map linked users with their organizations
+    const linkedUsersWithOrgs = linkedUsers.map(link => ({
+      userId: link.userId,
+      linkStatus: link.linkStatus,
+      linkType: link.linkType,
+      shareMeasurements: link.shareMeasurements,
+      confirmedAt: link.confirmedAt,
+      organizations: orgsByUserId.get(link.userId) || [],
+    }));
+
+    // Get audit log (limited to most recent entries)
+    const MAX_AUDIT_LOG_ENTRIES = 100;
     const auditLog = await db.select()
       .from(globalAthleteAuditLog)
       .where(eq(globalAthleteAuditLog.globalAthleteId, globalAthleteId))
       .orderBy(desc(globalAthleteAuditLog.createdAt))
-      .limit(100);
+      .limit(MAX_AUDIT_LOG_ENTRIES);
 
     return {
       globalAthlete,
