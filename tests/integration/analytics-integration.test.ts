@@ -357,10 +357,10 @@ describe('Analytics Endpoints Integration Tests', () => {
     });
   });
 
-  describe('GET /api/analytics/teams', () => {
+  describe('GET /api/analytics/teams/stats', () => {
     it('should require authentication', async () => {
       const response = await request(app)
-        .get('/api/analytics/teams')
+        .get('/api/analytics/teams/stats')
         .query({ organizationId: testOrgId });
 
       expect([401, 403]).toContain(response.status);
@@ -370,7 +370,7 @@ describe('Analytics Endpoints Integration Tests', () => {
       const agent = await createAuthenticatedSession('admin');
 
       const response = await agent
-        .get('/api/analytics/teams')
+        .get('/api/analytics/teams/stats')
         .query({ organizationId: testOrgId });
 
       expect([200, 404, 403]).toContain(response.status);
@@ -393,7 +393,7 @@ describe('Analytics Endpoints Integration Tests', () => {
       const agent = await createAuthenticatedSession('admin');
 
       const response = await agent
-        .get('/api/analytics/teams')
+        .get('/api/analytics/teams/stats')
         .query({ organizationId: '' });
 
       // May return 400 (validation) or 403 (access denied)
@@ -493,7 +493,7 @@ describe('Analytics Endpoints Integration Tests', () => {
           expectedStatuses: [200, 404, 403] // 403 if user doesn't have access to test org
         },
         {
-          path: '/api/analytics/teams',
+          path: '/api/analytics/teams/stats',
           query: { organizationId: testOrgId },
           expectedStatuses: [200, 404, 403] // 403 if user doesn't have access to test org
         }
