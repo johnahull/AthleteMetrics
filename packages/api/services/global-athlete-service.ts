@@ -461,8 +461,34 @@ export class GlobalAthleteService extends BaseService {
     limit?: number;
     offset?: number;
     search?: string;
+    hasMultipleLinks?: boolean;
+    allowCrossOrgLinking?: boolean;
   } = {}): Promise<Array<GlobalAthlete & { linkedUserCount: number }>> {
-    const { limit = 50, offset = 0, search } = options;
+    const { limit = 50, offset = 0, search, hasMultipleLinks, allowCrossOrgLinking } = options;
+
+    // Build conditions array
+    const conditions: ReturnType<typeof eq>[] = [];
+
+    // Add search filter if provided
+    if (search) {
+      // Escape SQL LIKE wildcards to prevent injection
+      const escapedSearch = search
+        .replace(/\\/g, '\\\\')  // Escape backslashes first
+        .replace(/%/g, '\\%')    // Escape percent signs
+        .replace(/_/g, '\\_');   // Escape underscores
+
+      conditions.push(
+        or(
+          ilike(globalAthletes.primaryEmail, `%${escapedSearch}%`),
+          ilike(globalAthletes.canonicalFullName, `%${escapedSearch}%`)
+        ) as ReturnType<typeof eq>
+      );
+    }
+
+    // Add allowCrossOrgLinking filter if provided
+    if (allowCrossOrgLinking !== undefined) {
+      conditions.push(eq(globalAthletes.allowCrossOrgLinking, allowCrossOrgLinking));
+    }
 
     // Build query
     let query = db.select({
@@ -479,27 +505,57 @@ export class GlobalAthleteService extends BaseService {
       updatedAt: globalAthletes.updatedAt,
     })
       .from(globalAthletes)
-      .limit(limit)
-      .offset(offset)
       .orderBy(desc(globalAthletes.createdAt));
 
-    // Add search filter if provided
-    if (search) {
-      // Escape SQL LIKE wildcards to prevent injection
-      const escapedSearch = search
-        .replace(/\\/g, '\\\\')  // Escape backslashes first
-        .replace(/%/g, '\\%')    // Escape percent signs
-        .replace(/_/g, '\\_');   // Escape underscores
-
-      query = query.where(
-        or(
-          ilike(globalAthletes.primaryEmail, `%${escapedSearch}%`),
-          ilike(globalAthletes.canonicalFullName, `%${escapedSearch}%`)
-        )
-      ) as typeof query;
+    // Apply conditions if any
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions)) as typeof query;
     }
 
-    const athletes = await query;
+    // For hasMultipleLinks filter, we need to get all athletes first and filter after
+    // because we need to count links to determine which have multiple
+    if (hasMultipleLinks !== undefined) {
+      // Get all matching athletes without pagination for count filtering
+      const allAthletes = await query;
+
+      if (allAthletes.length === 0) return [];
+
+      // Get linked user counts for all athletes
+      const allAthleteIds = allAthletes.map(a => a.id);
+      const linkCounts = await db.select({
+        globalAthleteId: userGlobalAthleteLinks.globalAthleteId,
+        count: count(),
+      })
+        .from(userGlobalAthleteLinks)
+        .where(and(
+          inArray(userGlobalAthleteLinks.globalAthleteId, allAthleteIds),
+          eq(userGlobalAthleteLinks.linkStatus, "confirmed")
+        ))
+        .groupBy(userGlobalAthleteLinks.globalAthleteId);
+
+      const countMap = new Map(linkCounts.map(c => [c.globalAthleteId, Number(c.count)]));
+
+      // Filter by link count
+      const filteredAthletes = allAthletes.filter(a => {
+        const linkCount = countMap.get(a.id) || 0;
+        if (hasMultipleLinks) {
+          return linkCount >= 2;
+        } else {
+          return linkCount < 2;
+        }
+      });
+
+      // Apply pagination
+      const paginatedAthletes = filteredAthletes.slice(offset, offset + limit);
+
+      return paginatedAthletes.map(a => ({
+        ...a,
+        linkedUserCount: countMap.get(a.id) || 0,
+      }));
+    }
+
+    // Standard pagination when not filtering by link count
+    const athletes = await query.limit(limit).offset(offset);
 
     // Get linked user counts for each athlete
     const athleteIds = athletes.map(a => a.id);

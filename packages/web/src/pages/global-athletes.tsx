@@ -5,8 +5,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useGlobalAthletes, useGlobalAthleteStats } from "@/hooks/useAdminGlobalAthletes";
-import { Search, ChevronLeft, ChevronRight, Users, Link as LinkIcon, TrendingUp, Activity } from "lucide-react";
+import { Search, ChevronLeft, ChevronRight, Users, Link as LinkIcon, TrendingUp, Activity, Filter } from "lucide-react";
 import { format } from "date-fns";
 
 export default function GlobalAthletes() {
@@ -15,6 +22,8 @@ export default function GlobalAthletes() {
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
+  const [hasMultipleLinks, setHasMultipleLinks] = useState<boolean | undefined>(undefined);
+  const [allowCrossOrgLinking, setAllowCrossOrgLinking] = useState<boolean | undefined>(undefined);
   const pageSize = 50;
 
   // Redirect non-site-admins
@@ -39,6 +48,8 @@ export default function GlobalAthletes() {
     limit: pageSize,
     offset: currentPage * pageSize,
     search: debouncedSearch || undefined,
+    hasMultipleLinks,
+    allowCrossOrgLinking,
   });
 
   const athletes = athletesData?.athletes || [];
@@ -122,17 +133,72 @@ export default function GlobalAthletes() {
       {/* Search and Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>All Global Athletes</CardTitle>
-            <div className="relative w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search by name or email..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-                data-testid="search-input"
-              />
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between">
+              <CardTitle>All Global Athletes</CardTitle>
+              <div className="relative w-64">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Search by name or email..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="pl-10"
+                  data-testid="search-input"
+                />
+              </div>
+            </div>
+            {/* Filters */}
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <Filter className="h-4 w-4 text-gray-500" />
+                <span className="text-sm text-gray-600">Filters:</span>
+              </div>
+              <Select
+                value={hasMultipleLinks === undefined ? "all" : hasMultipleLinks ? "multiple" : "single"}
+                onValueChange={(value) => {
+                  setHasMultipleLinks(value === "all" ? undefined : value === "multiple");
+                  setCurrentPage(0);
+                }}
+              >
+                <SelectTrigger className="w-[160px]" data-testid="filter-links">
+                  <SelectValue placeholder="Linked Users" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Links</SelectItem>
+                  <SelectItem value="multiple">2+ Links Only</SelectItem>
+                  <SelectItem value="single">Single Link</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select
+                value={allowCrossOrgLinking === undefined ? "all" : allowCrossOrgLinking ? "enabled" : "disabled"}
+                onValueChange={(value) => {
+                  setAllowCrossOrgLinking(value === "all" ? undefined : value === "enabled");
+                  setCurrentPage(0);
+                }}
+              >
+                <SelectTrigger className="w-[180px]" data-testid="filter-cross-org">
+                  <SelectValue placeholder="Cross-Org Linking" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Linking Status</SelectItem>
+                  <SelectItem value="enabled">Linking Enabled</SelectItem>
+                  <SelectItem value="disabled">Linking Disabled</SelectItem>
+                </SelectContent>
+              </Select>
+              {(hasMultipleLinks !== undefined || allowCrossOrgLinking !== undefined) && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setHasMultipleLinks(undefined);
+                    setAllowCrossOrgLinking(undefined);
+                    setCurrentPage(0);
+                  }}
+                  className="text-gray-500 hover:text-gray-700"
+                >
+                  Clear filters
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>

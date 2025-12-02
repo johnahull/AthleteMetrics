@@ -528,12 +528,14 @@ export function registerGlobalAthleteRoutes(app: Express) {
    */
   app.get("/api/admin/global-athletes", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
     try {
-      const { limit, offset, search } = req.query;
+      const { limit, offset, search, hasMultipleLinks, allowCrossOrgLinking } = req.query;
 
       const athletes = await globalAthleteService.getAllGlobalAthletes({
         limit: limit ? parseInt(limit as string, 10) : undefined,
         offset: offset ? parseInt(offset as string, 10) : undefined,
         search: search as string | undefined,
+        hasMultipleLinks: hasMultipleLinks === 'true' ? true : hasMultipleLinks === 'false' ? false : undefined,
+        allowCrossOrgLinking: allowCrossOrgLinking === 'true' ? true : allowCrossOrgLinking === 'false' ? false : undefined,
       });
 
       res.json({ athletes, count: athletes.length });

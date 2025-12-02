@@ -52,17 +52,21 @@ export interface GlobalAthleteDetails {
 }
 
 /**
- * Fetch all global athletes with pagination and search
+ * Fetch all global athletes with pagination, search, and filters
  */
 export function useGlobalAthletes(params?: {
   limit?: number;
   offset?: number;
   search?: string;
+  hasMultipleLinks?: boolean;
+  allowCrossOrgLinking?: boolean;
 }) {
   const queryParams = new URLSearchParams();
   if (params?.limit) queryParams.append('limit', params.limit.toString());
   if (params?.offset) queryParams.append('offset', params.offset.toString());
   if (params?.search) queryParams.append('search', params.search);
+  if (params?.hasMultipleLinks !== undefined) queryParams.append('hasMultipleLinks', params.hasMultipleLinks.toString());
+  if (params?.allowCrossOrgLinking !== undefined) queryParams.append('allowCrossOrgLinking', params.allowCrossOrgLinking.toString());
 
   const queryString = queryParams.toString();
   const url = `/api/admin/global-athletes${queryString ? `?${queryString}` : ''}`;
