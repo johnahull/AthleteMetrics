@@ -53,8 +53,8 @@ export default function GlobalAthletes() {
   });
 
   const athletes = athletesData?.athletes || [];
-  const totalCount = athletesData?.count || 0;
-  const hasNextPage = totalCount === pageSize; // If we got a full page, there might be more
+  const totalCount = athletesData?.totalCount || 0;
+  const hasNextPage = (currentPage + 1) * pageSize < totalCount;
 
   if (!user?.isSiteAdmin) {
     return null;
@@ -267,7 +267,7 @@ export default function GlobalAthletes() {
               {/* Pagination */}
               <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
                 <div className="text-sm text-gray-600">
-                  Showing {currentPage * pageSize + 1} - {currentPage * pageSize + athletes.length}
+                  Showing {currentPage * pageSize + 1} - {currentPage * pageSize + athletes.length} of {totalCount}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

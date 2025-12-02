@@ -525,20 +525,55 @@ export function registerGlobalAthleteRoutes(app: Express) {
 
   /**
    * Get all global athletes (admin only)
+   * Query params:
+   * - limit: number (1-200, default 50)
+   * - offset: number (default 0)
+   * - search: string (min 2 chars)
+   * - hasMultipleLinks: "true" | "false"
+   * - allowCrossOrgLinking: "true" | "false"
    */
   app.get("/api/admin/global-athletes", globalAthleteLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
     try {
       const { limit, offset, search, hasMultipleLinks, allowCrossOrgLinking } = req.query;
 
-      const athletes = await globalAthleteService.getAllGlobalAthletes({
-        limit: limit ? parseInt(limit as string, 10) : undefined,
-        offset: offset ? parseInt(offset as string, 10) : undefined,
+      // Parse and validate limit
+      let parsedLimit: number | undefined;
+      if (limit) {
+        parsedLimit = parseInt(limit as string, 10);
+        if (isNaN(parsedLimit) || parsedLimit < 1) {
+          return res.status(400).json({ message: "Limit must be a positive integer" });
+        }
+      }
+
+      // Parse and validate offset
+      let parsedOffset: number | undefined;
+      if (offset) {
+        parsedOffset = parseInt(offset as string, 10);
+        if (isNaN(parsedOffset) || parsedOffset < 0) {
+          return res.status(400).json({ message: "Offset must be a non-negative integer" });
+        }
+      }
+
+      // Parse boolean filters
+      const parseBooleanParam = (value: string | undefined): boolean | undefined => {
+        if (value === 'true') return true;
+        if (value === 'false') return false;
+        return undefined;
+      };
+
+      const result = await globalAthleteService.getAllGlobalAthletes({
+        limit: parsedLimit,
+        offset: parsedOffset,
         search: search as string | undefined,
-        hasMultipleLinks: hasMultipleLinks === 'true' ? true : hasMultipleLinks === 'false' ? false : undefined,
-        allowCrossOrgLinking: allowCrossOrgLinking === 'true' ? true : allowCrossOrgLinking === 'false' ? false : undefined,
+        hasMultipleLinks: parseBooleanParam(hasMultipleLinks as string),
+        allowCrossOrgLinking: parseBooleanParam(allowCrossOrgLinking as string),
       });
 
-      res.json({ athletes, count: athletes.length });
+      res.json({
+        athletes: result.athletes,
+        count: result.athletes.length,
+        totalCount: result.totalCount,
+      });
     } catch (error) {
       console.error("Get all global athletes error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch global athletes";
