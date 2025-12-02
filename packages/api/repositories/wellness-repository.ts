@@ -18,6 +18,7 @@ import {
   type WellnessRequest,
   type WellnessResponse,
 } from "@shared/schema";
+import type { WellnessResponseData } from "@shared/wellness-types";
 
 // Wellness trend data structure
 export interface WellnessTrend {
@@ -95,6 +96,7 @@ export class WellnessRepository {
   }
 
   async getWellnessTemplates(organizationId: string, filters?: { activeOnly?: boolean }): Promise<WellnessTemplate[]> {
+    validateUUID(organizationId, 'organizationId');
     const conditions: SQL[] = [eq(wellnessTemplates.organizationId, organizationId)];
 
     if (filters?.activeOnly) {
@@ -109,6 +111,7 @@ export class WellnessRepository {
   }
 
   async getWellnessTemplate(id: string): Promise<WellnessTemplate | undefined> {
+    validateUUID(id, 'id');
     const [template] = await db
       .select()
       .from(wellnessTemplates)
@@ -118,6 +121,7 @@ export class WellnessRepository {
   }
 
   async updateWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    validateUUID(id, 'id');
     const [updated] = await db
       .update(wellnessTemplates)
       .set({
@@ -135,6 +139,7 @@ export class WellnessRepository {
   }
 
   async deleteWellnessTemplate(id: string): Promise<void> {
+    validateUUID(id, 'id');
     await db
       .delete(wellnessTemplates)
       .where(eq(wellnessTemplates.id, id));
@@ -279,6 +284,7 @@ export class WellnessRepository {
   }
 
   async getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]> {
+    validateUUID(organizationId, 'organizationId');
     const conditions: SQL[] = [eq(wellnessRequests.organizationId, organizationId)];
 
     if (filters?.status) {
@@ -314,6 +320,7 @@ export class WellnessRepository {
   }
 
   async getWellnessRequest(id: string): Promise<WellnessRequest | undefined> {
+    validateUUID(id, 'id');
     const [request] = await db
       .select()
       .from(wellnessRequests)
@@ -332,6 +339,7 @@ export class WellnessRepository {
   }
 
   async updateWellnessRequest(id: string, request: Partial<WellnessRequest>): Promise<WellnessRequest> {
+    validateUUID(id, 'id');
     const [updated] = await db
       .update(wellnessRequests)
       .set(request)
@@ -346,6 +354,7 @@ export class WellnessRepository {
   }
 
   async deleteWellnessRequest(id: string): Promise<void> {
+    validateUUID(id, 'id');
     await db
       .delete(wellnessRequests)
       .where(eq(wellnessRequests.id, id));
@@ -399,6 +408,7 @@ export class WellnessRepository {
   }
 
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
+    validateUUID(id, 'id');
     const [response] = await db
       .select()
       .from(wellnessResponses)
@@ -408,6 +418,7 @@ export class WellnessRepository {
   }
 
   async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+    validateUUID(userId, 'userId');
     const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
 
     if (filters?.startDate) {
@@ -426,6 +437,7 @@ export class WellnessRepository {
   }
 
   async getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
+    validateUUID(organizationId, 'organizationId');
     const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId)];
 
     if (filters?.startDate) {
@@ -450,6 +462,7 @@ export class WellnessRepository {
    * Optimizes dashboard performance by avoiding N+1 queries
    */
   async getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>> {
+    validateUUID(organizationId, 'organizationId');
     const rosters = await db
       .select({
         teamId: userTeams.teamId,
@@ -511,7 +524,8 @@ export class WellnessRepository {
     const questionCounts: Record<string, number> = {};
 
     responses.forEach(response => {
-      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
+      const responseData = response.responses as WellnessResponseData;
+      Object.entries(responseData).forEach(([questionId, data]) => {
         if (typeof data.value === 'number') {
           averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
           questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
@@ -519,16 +533,20 @@ export class WellnessRepository {
       });
     });
 
+    // Calculate averages with division-by-zero protection
     Object.keys(averageScores).forEach(questionId => {
-      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
+      const count = questionCounts[questionId];
+      if (count > 0) {
+        averageScores[questionId] = averageScores[questionId] / count;
+      }
     });
 
     return {
       teamId,
-      teamName: responses[0]?.teamNameSnapshot || 'Unknown',
+      teamName: responses.length > 0 ? responses[0].teamNameSnapshot || 'Unknown' : 'Unknown',
       totalResponses,
       uniqueAthletes,
-      completionRate: 0, // TODO: Calculate based on request targets
+      completionRate: 0, // Requires target data from associated request
       averageScores,
       lastUpdated: new Date(),
     };
@@ -546,7 +564,8 @@ export class WellnessRepository {
     const questionCounts: Record<string, number> = {};
 
     responses.forEach(response => {
-      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
+      const responseData = response.responses as WellnessResponseData;
+      Object.entries(responseData).forEach(([questionId, data]) => {
         if (typeof data.value === 'number') {
           averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
           questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
@@ -554,17 +573,21 @@ export class WellnessRepository {
       });
     });
 
+    // Calculate averages with division-by-zero protection
     Object.keys(averageScores).forEach(questionId => {
-      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
+      const count = questionCounts[questionId];
+      if (count > 0) {
+        averageScores[questionId] = averageScores[questionId] / count;
+      }
     });
 
     return {
       userId,
-      userFullName: responses[0]?.userFullName || 'Unknown',
+      userFullName: responses.length > 0 ? responses[0].userFullName || 'Unknown' : 'Unknown',
       totalResponses,
-      latestResponse: responses[0]?.submittedAt || null,
+      latestResponse: responses.length > 0 ? responses[0].submittedAt : null,
       averageScores,
-      trends: {}, // TODO: Calculate trends
+      trends: {}, // Trend calculation requires historical comparison (future enhancement)
     };
   }
 
