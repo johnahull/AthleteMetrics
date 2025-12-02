@@ -151,26 +151,24 @@ async function backfillAthleteLinks(): Promise<BackfillStats> {
 
       // Link all athletes to this global athlete
       for (const athlete of athletesWithEmail) {
-        // Double-check not already linked (in case of race conditions)
-        const [existingLink] = await db.select()
-          .from(userGlobalAthleteLinks)
-          .where(eq(userGlobalAthleteLinks.userId, athlete.id));
-
-        if (existingLink) {
+        // Use INSERT ... ON CONFLICT to handle race conditions safely
+        // The unique index on (user_id, global_athlete_id) will prevent duplicates
+        try {
+          await db.insert(userGlobalAthleteLinks).values({
+            userId: athlete.id,
+            globalAthleteId,
+            linkStatus: 'confirmed',
+            linkType: 'auto_import',
+            proposedBy: athlete.id,
+            confirmedBy: athlete.id,
+            confirmedAt: new Date(),
+            shareMeasurements: true,
+          }).onConflictDoNothing(); // Silently skip if link already exists
+        } catch (error) {
+          // If constraint violation despite onConflict, log and continue
+          console.warn(`  ⚠️  Failed to link athlete ${athlete.id}:`, error);
           continue;
         }
-
-        // Create link
-        await db.insert(userGlobalAthleteLinks).values({
-          userId: athlete.id,
-          globalAthleteId,
-          linkStatus: 'confirmed',
-          linkType: 'auto_import',
-          proposedBy: athlete.id,
-          confirmedBy: athlete.id,
-          confirmedAt: new Date(),
-          shareMeasurements: true,
-        });
 
         // Audit log
         await db.insert(globalAthleteAuditLog).values({

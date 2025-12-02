@@ -26,6 +26,7 @@
 
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
+import { z } from "zod";
 import { db } from "../db";
 import {
   globalAthletes, userGlobalAthleteLinks, globalAthleteAuditLog,
@@ -34,6 +35,14 @@ import {
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { globalAthleteService } from "../services/global-athlete-service";
+
+// Email validation schema using Zod for robust validation
+const emailSchema = z.string()
+  .email("Invalid email format")
+  .min(6, "Email must be at least 6 characters")
+  .max(320, "Email must not exceed 320 characters") // RFC 5321 max length
+  .toLowerCase()
+  .trim();
 
 // Rate limiting for global athlete endpoints
 const globalAthleteLimiter = rateLimit({
@@ -462,13 +471,14 @@ export function registerGlobalAthleteRoutes(app: Express) {
         return res.status(400).json({ message: "Email is required" });
       }
 
-      // Validate email format
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email) || email.length > 254) {
-        return res.status(400).json({ message: "Invalid email format" });
+      // Validate email format using Zod
+      const validationResult = emailSchema.safeParse(email);
+      if (!validationResult.success) {
+        const errorMessage = validationResult.error.errors[0]?.message || "Invalid email format";
+        return res.status(400).json({ message: errorMessage });
       }
 
-      const result = await globalAthleteService.initiateClaimRequest(currentUser.id, email);
+      const result = await globalAthleteService.initiateClaimRequest(currentUser.id, validationResult.data);
       res.json({
         message: "Claim request initiated. Please check the email for verification.",
         success: result.success,
