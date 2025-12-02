@@ -156,19 +156,20 @@ export function registerDashboardTrendsRoutes(app: Express) {
 
       if (athleteIds.length > 0) {
         // Single query with GROUP BY to get both current and previous month counts
-        const currentMonthStartStr = currentMonthStart.toISOString();
-        const currentMonthEndStr = currentMonthEnd.toISOString();
-        const previousMonthStartStr = previousMonthStart.toISOString();
-        const previousMonthEndStr = previousMonthEnd.toISOString();
+        // Use ISO strings for timestamp comparison (safe - derived from Date objects, not user input)
+        const currentMonthStartTs = currentMonthStart.toISOString();
+        const currentMonthEndTs = currentMonthEnd.toISOString();
+        const previousMonthStartTs = previousMonthStart.toISOString();
+        const previousMonthEndTs = previousMonthEnd.toISOString();
 
         const athleteCountsResult = await db
           .select({
             period: sql<string>`
               CASE
-                WHEN ${users.createdAt} >= ${sql.raw(`'${currentMonthStartStr}'`)}
-                  AND ${users.createdAt} < ${sql.raw(`'${currentMonthEndStr}'`)} THEN 'current'
-                WHEN ${users.createdAt} >= ${sql.raw(`'${previousMonthStartStr}'`)}
-                  AND ${users.createdAt} < ${sql.raw(`'${previousMonthEndStr}'`)} THEN 'previous'
+                WHEN ${users.createdAt} >= ${currentMonthStartTs}::timestamp
+                  AND ${users.createdAt} < ${currentMonthEndTs}::timestamp THEN 'current'
+                WHEN ${users.createdAt} >= ${previousMonthStartTs}::timestamp
+                  AND ${users.createdAt} < ${previousMonthEndTs}::timestamp THEN 'previous'
               END
             `,
             count: sql<number>`count(*)::int`
@@ -239,19 +240,20 @@ export function registerDashboardTrendsRoutes(app: Express) {
 
       // Teams Trend (count teams created in current vs previous month)
       // Single query with GROUP BY to get both current and previous month counts
-      const currentMonthStartStrTeam = currentMonthStart.toISOString();
-      const currentMonthEndStrTeam = currentMonthEnd.toISOString();
-      const previousMonthStartStrTeam = previousMonthStart.toISOString();
-      const previousMonthEndStrTeam = previousMonthEnd.toISOString();
+      // Use ISO strings for timestamp comparison (safe - derived from Date objects, not user input)
+      const currentMonthStartTeam = currentMonthStart.toISOString();
+      const currentMonthEndTeam = currentMonthEnd.toISOString();
+      const previousMonthStartTeam = previousMonthStart.toISOString();
+      const previousMonthEndTeam = previousMonthEnd.toISOString();
 
       const teamCountsResult = await db
         .select({
           period: sql<string>`
             CASE
-              WHEN ${teams.createdAt} >= ${sql.raw(`'${currentMonthStartStrTeam}'`)}
-                AND ${teams.createdAt} < ${sql.raw(`'${currentMonthEndStrTeam}'`)} THEN 'current'
-              WHEN ${teams.createdAt} >= ${sql.raw(`'${previousMonthStartStrTeam}'`)}
-                AND ${teams.createdAt} < ${sql.raw(`'${previousMonthEndStrTeam}'`)} THEN 'previous'
+              WHEN ${teams.createdAt} >= ${currentMonthStartTeam}::timestamp
+                AND ${teams.createdAt} < ${currentMonthEndTeam}::timestamp THEN 'current'
+              WHEN ${teams.createdAt} >= ${previousMonthStartTeam}::timestamp
+                AND ${teams.createdAt} < ${previousMonthEndTeam}::timestamp THEN 'previous'
             END
           `,
           count: sql<number>`count(*)::int`

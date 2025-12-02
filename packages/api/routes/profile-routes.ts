@@ -6,12 +6,24 @@
 import type { Express } from "express";
 import { z } from "zod";
 import bcrypt from "bcrypt";
+import rateLimit from "express-rate-limit";
 import { eq } from "drizzle-orm";
 import { storage } from "../storage";
 import { db } from "../db";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin } from "@shared/auth-utils";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
+
+// Rate limiting for username check endpoint to prevent enumeration attacks
+const usernameCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 20, // 20 requests per 15 minutes
+  message: { message: "Too many username checks, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
 
 export function registerProfileRoutes(app: Express) {
   /**
@@ -136,8 +148,9 @@ export function registerProfileRoutes(app: Express) {
 
   /**
    * Check if username is available
+   * Rate limited to prevent username enumeration attacks
    */
-  app.get("/api/users/check-username", async (req, res) => {
+  app.get("/api/users/check-username", usernameCheckLimiter, async (req, res) => {
     try {
       const { username } = req.query;
 

@@ -724,7 +724,6 @@ export class DatabaseStorage implements IStorage {
         .limit(1); // Enforce single role
 
       const roles = result.length > 0 ? [result[0].role] : [];
-      console.log(`User roles query: found ${result.length} records`);
       return roles;
     } else {
       // Get all organization roles for the user (one per organization maximum)
@@ -758,10 +757,6 @@ export class DatabaseStorage implements IStorage {
       ...user_teams,
       team: { ...team, organization: organizations }
     }));
-
-    if (result.length > 0) {
-      console.log(`User teams query: found ${result.length} team(s)`);
-    }
 
     return mappedResult;
   }
