@@ -2,7 +2,7 @@
 -- Description: Creates tables for canonical athlete identity and cross-org linking
 
 -- Create global_athletes table (canonical athlete identity)
-CREATE TABLE global_athletes (
+CREATE TABLE IF NOT EXISTS global_athletes (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
   -- Verified identity information
   verified_emails TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
@@ -21,12 +21,12 @@ CREATE TABLE global_athletes (
 );
 
 -- Create indexes for global_athletes
-CREATE INDEX global_athletes_verified_emails_gin ON global_athletes USING GIN (verified_emails);
-CREATE INDEX global_athletes_primary_email_idx ON global_athletes (primary_email);
-CREATE INDEX global_athletes_canonical_name_idx ON global_athletes (canonical_first_name, canonical_last_name);
+CREATE INDEX IF NOT EXISTS global_athletes_verified_emails_gin ON global_athletes USING GIN (verified_emails);
+CREATE INDEX IF NOT EXISTS global_athletes_primary_email_idx ON global_athletes (primary_email);
+CREATE INDEX IF NOT EXISTS global_athletes_canonical_name_idx ON global_athletes (canonical_first_name, canonical_last_name);
 
 -- Create user_global_athlete_links table (links user accounts to global athletes)
-CREATE TABLE user_global_athlete_links (
+CREATE TABLE IF NOT EXISTS user_global_athlete_links (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   global_athlete_id VARCHAR NOT NULL REFERENCES global_athletes(id) ON DELETE CASCADE,
@@ -46,12 +46,12 @@ CREATE TABLE user_global_athlete_links (
 );
 
 -- Create indexes for user_global_athlete_links
-CREATE INDEX ugal_global_athlete_id_idx ON user_global_athlete_links (global_athlete_id);
-CREATE INDEX ugal_status_idx ON user_global_athlete_links (link_status);
-CREATE INDEX ugal_global_confirmed_idx ON user_global_athlete_links (global_athlete_id, link_status);
+CREATE INDEX IF NOT EXISTS ugal_global_athlete_id_idx ON user_global_athlete_links (global_athlete_id);
+CREATE INDEX IF NOT EXISTS ugal_status_idx ON user_global_athlete_links (link_status);
+CREATE INDEX IF NOT EXISTS ugal_global_confirmed_idx ON user_global_athlete_links (global_athlete_id, link_status);
 
 -- Create global_athlete_audit_log table (audit trail)
-CREATE TABLE global_athlete_audit_log (
+CREATE TABLE IF NOT EXISTS global_athlete_audit_log (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
   global_athlete_id VARCHAR NOT NULL REFERENCES global_athletes(id) ON DELETE CASCADE,
   action TEXT NOT NULL,
@@ -62,12 +62,13 @@ CREATE TABLE global_athlete_audit_log (
 );
 
 -- Create indexes for global_athlete_audit_log
-CREATE INDEX gaal_global_athlete_idx ON global_athlete_audit_log (global_athlete_id, created_at DESC);
-CREATE INDEX gaal_action_idx ON global_athlete_audit_log (action, created_at DESC);
+CREATE INDEX IF NOT EXISTS gaal_global_athlete_idx ON global_athlete_audit_log (global_athlete_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS gaal_action_idx ON global_athlete_audit_log (action, created_at DESC);
 
 -- Add global_athlete_id column to measurements table for cross-org aggregation
-ALTER TABLE measurements ADD COLUMN global_athlete_id VARCHAR;
-CREATE INDEX measurements_global_athlete_idx ON measurements (global_athlete_id, date DESC) WHERE global_athlete_id IS NOT NULL;
+ALTER TABLE measurements ADD COLUMN IF NOT EXISTS global_athlete_id VARCHAR;
+
+CREATE INDEX IF NOT EXISTS measurements_global_athlete_idx ON measurements (global_athlete_id, date DESC) WHERE global_athlete_id IS NOT NULL;
 
 -- Add comment for documentation
 COMMENT ON TABLE global_athletes IS 'Canonical athlete identity for cross-organization linking';

@@ -124,12 +124,14 @@ describe("Global Athlete Admin Features", () => {
       const result = await service.getAllGlobalAthletes();
 
       expect(result).toBeDefined();
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBeGreaterThanOrEqual(2);
+      expect(result.athletes).toBeDefined();
+      expect(Array.isArray(result.athletes)).toBe(true);
+      expect(result.athletes.length).toBeGreaterThanOrEqual(2);
+      expect(result.totalCount).toBeGreaterThanOrEqual(2);
 
       // Find our test athletes
-      const athlete1 = result.find(a => a.primaryEmail === TEST_EMAIL_1);
-      const athlete2 = result.find(a => a.primaryEmail === TEST_EMAIL_2);
+      const athlete1 = result.athletes.find(a => a.primaryEmail === TEST_EMAIL_1);
+      const athlete2 = result.athletes.find(a => a.primaryEmail === TEST_EMAIL_2);
 
       expect(athlete1).toBeDefined();
       expect(athlete2).toBeDefined();
@@ -144,10 +146,13 @@ describe("Global Athlete Admin Features", () => {
       const page1 = await service.getAllGlobalAthletes({ limit: 1, offset: 0 });
       const page2 = await service.getAllGlobalAthletes({ limit: 1, offset: 1 });
 
-      expect(page1.length).toBe(1);
-      expect(page2.length).toBe(1);
+      expect(page1.athletes.length).toBe(1);
+      expect(page2.athletes.length).toBe(1);
+      // totalCount should reflect all athletes, not just the page
+      expect(page1.totalCount).toBeGreaterThanOrEqual(2);
+      expect(page2.totalCount).toBeGreaterThanOrEqual(2);
       // IDs should be different
-      expect(page1[0].id).not.toBe(page2[0].id);
+      expect(page1.athletes[0].id).not.toBe(page2.athletes[0].id);
     });
 
     it("should support search by name or email", async () => {
@@ -156,12 +161,12 @@ describe("Global Athlete Admin Features", () => {
 
       // Search by email
       const searchByEmail = await service.getAllGlobalAthletes({ search: TEST_EMAIL_1 });
-      expect(searchByEmail.length).toBeGreaterThanOrEqual(1);
-      expect(searchByEmail.some(a => a.primaryEmail === TEST_EMAIL_1)).toBe(true);
+      expect(searchByEmail.athletes.length).toBeGreaterThanOrEqual(1);
+      expect(searchByEmail.athletes.some(a => a.primaryEmail === TEST_EMAIL_1)).toBe(true);
 
       // Search by name
       const searchByName = await service.getAllGlobalAthletes({ search: "AdminTest User1" });
-      expect(searchByName.length).toBeGreaterThanOrEqual(1);
+      expect(searchByName.athletes.length).toBeGreaterThanOrEqual(1);
     });
 
     it("should escape SQL LIKE wildcards in search to prevent injection", async () => {
@@ -173,19 +178,19 @@ describe("Global Athlete Admin Features", () => {
       const searchWithPercent = await service.getAllGlobalAthletes({ search: "%" });
       // Should return 0 results since no email/name literally contains just "%"
       // or at most match records that happen to contain "%" in their name/email
-      expect(searchWithPercent.every(a =>
+      expect(searchWithPercent.athletes.every(a =>
         a.primaryEmail?.includes("%") || a.canonicalFullName?.includes("%")
       )).toBe(true);
 
       // Search with underscore wildcard
       const searchWithUnderscore = await service.getAllGlobalAthletes({ search: "_" });
-      expect(searchWithUnderscore.every(a =>
+      expect(searchWithUnderscore.athletes.every(a =>
         a.primaryEmail?.includes("_") || a.canonicalFullName?.includes("_")
       )).toBe(true);
 
       // Search with backslash
       const searchWithBackslash = await service.getAllGlobalAthletes({ search: "\\" });
-      expect(searchWithBackslash.every(a =>
+      expect(searchWithBackslash.athletes.every(a =>
         a.primaryEmail?.includes("\\") || a.canonicalFullName?.includes("\\")
       )).toBe(true);
     });
