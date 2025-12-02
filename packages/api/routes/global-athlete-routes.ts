@@ -294,14 +294,16 @@ export function registerGlobalAthleteRoutes(app: Express) {
       // Get unified measurements
       const unifiedMeasurements = await globalAthleteService.getUnifiedMeasurements(currentUser.id);
 
-      // Get organization details
+      // Batch query: Get organization details for all linked users at once
+      const userIds = linkedUsers.map(u => u.userId);
+      const allUserOrgs = userIds.length > 0
+        ? await db.select({ organizationId: userOrganizations.organizationId })
+            .from(userOrganizations)
+            .where(inArray(userOrganizations.userId, userIds))
+        : [];
+
       const userOrgIds = new Set<string>();
-      for (const userLink of linkedUsers) {
-        const userOrgs = await db.select({ organizationId: userOrganizations.organizationId })
-          .from(userOrganizations)
-          .where(eq(userOrganizations.userId, userLink.userId));
-        userOrgs.forEach(o => userOrgIds.add(o.organizationId));
-      }
+      allUserOrgs.forEach(o => userOrgIds.add(o.organizationId));
 
       const orgs = userOrgIds.size > 0
         ? await db.select({ id: organizations.id, name: organizations.name })
@@ -358,12 +360,13 @@ export function registerGlobalAthleteRoutes(app: Express) {
         return res.status(404).json({ message: "No global athlete profile found" });
       }
 
-      // Get audit logs
+      // Get audit logs (limited to most recent entries)
+      const MAX_AUDIT_LOG_ENTRIES = 100;
       const logs = await db.select()
         .from(globalAthleteAuditLog)
         .where(eq(globalAthleteAuditLog.globalAthleteId, link.globalAthleteId))
         .orderBy(desc(globalAthleteAuditLog.createdAt))
-        .limit(100);
+        .limit(MAX_AUDIT_LOG_ENTRIES);
 
       res.json({
         auditLog: logs.map(log => ({
