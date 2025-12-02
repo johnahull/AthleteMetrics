@@ -174,24 +174,25 @@ describe("Global Athlete Admin Features", () => {
       await service.onEmailVerified(testUser2Id, TEST_EMAIL_2);
 
       // Search with SQL LIKE wildcards - should NOT match everything
-      // If wildcards weren't escaped, "%" would match all records
-      const searchWithPercent = await service.getAllGlobalAthletes({ search: "%" });
-      // Should return 0 results since no email/name literally contains just "%"
-      // or at most match records that happen to contain "%" in their name/email
+      // If wildcards weren't escaped, "%%" would match all records
+      // Note: Search requires min 2 characters, so we use "%%" instead of "%"
+      const searchWithPercent = await service.getAllGlobalAthletes({ search: "%%" });
+      // Should return 0 results since no email/name literally contains "%%"
+      // or at most match records that happen to contain "%%" in their name/email
       expect(searchWithPercent.athletes.every(a =>
-        a.primaryEmail?.includes("%") || a.canonicalFullName?.includes("%")
+        a.primaryEmail?.includes("%%") || a.canonicalFullName?.includes("%%")
       )).toBe(true);
 
-      // Search with underscore wildcard
-      const searchWithUnderscore = await service.getAllGlobalAthletes({ search: "_" });
+      // Search with underscore wildcard (min 2 chars)
+      const searchWithUnderscore = await service.getAllGlobalAthletes({ search: "__" });
       expect(searchWithUnderscore.athletes.every(a =>
-        a.primaryEmail?.includes("_") || a.canonicalFullName?.includes("_")
+        a.primaryEmail?.includes("__") || a.canonicalFullName?.includes("__")
       )).toBe(true);
 
-      // Search with backslash
-      const searchWithBackslash = await service.getAllGlobalAthletes({ search: "\\" });
+      // Search with backslash (min 2 chars)
+      const searchWithBackslash = await service.getAllGlobalAthletes({ search: "\\\\" });
       expect(searchWithBackslash.athletes.every(a =>
-        a.primaryEmail?.includes("\\") || a.canonicalFullName?.includes("\\")
+        a.primaryEmail?.includes("\\\\") || a.canonicalFullName?.includes("\\\\")
       )).toBe(true);
     });
   });
