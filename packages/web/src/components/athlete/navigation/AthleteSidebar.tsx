@@ -15,6 +15,7 @@ import { Link, useLocation } from 'wouter';
 import { Button } from '@/components/ui/button';
 import {
   User,
+  Users,
   LayoutDashboard,
   Plus,
   TrendingUp,
@@ -68,6 +69,17 @@ export function AthleteSidebar({
         icon: LayoutDashboard,
         description: 'Measurements & progress',
       },
+      // Peer comparison only available for athlete self-view
+      ...(isOwnProfile
+        ? [
+            {
+              name: 'Peer Comparison',
+              href: '/my-peer-comparison',
+              icon: Users,
+              description: 'Compare to similar athletes',
+            },
+          ]
+        : []),
     ],
     [isOwnProfile, profilePath, dashboardPath]
   );

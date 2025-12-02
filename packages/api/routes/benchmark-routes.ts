@@ -7,6 +7,7 @@
 import type { Express, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
+import { peerComparisonService, type PeerFilterCriteria } from "../services/peer-comparison-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
 import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
 import {
@@ -535,6 +536,164 @@ export function registerBenchmarkRoutes(app: Express) {
       } catch (error) {
         console.error("GET /api/organizations/:id/athletes/:id/benchmark-status error:", error);
         handleBenchmarkError(res, error, "fetch athlete benchmark status");
+      }
+    }
+  );
+
+  // ========================================================================
+  // PEER COMPARISON (Phase 2.3)
+  // ========================================================================
+
+  /**
+   * Get athlete's peer percentile rankings
+   * Requires athlete to have opted into peer comparisons
+   *
+   * Query params:
+   * - metrics: comma-separated list of metric codes (e.g., "FLY10_TIME,VERTICAL_JUMP")
+   * - filters: JSON string of filter criteria (optional)
+   */
+  app.get("/api/athletes/:athleteId/peer-percentiles",
+    benchmarkReadLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { athleteId } = req.params;
+        const userId = req.session.user!.id;
+
+        // Security: Athletes can only view their own percentiles (or site admin can view any)
+        const isSiteAdmin = await benchmarkService.isSiteAdmin(userId);
+        if (athleteId !== userId && !isSiteAdmin) {
+          return res.status(403).json({ message: "Can only view your own peer percentiles" });
+        }
+
+        // Parse metrics from query param
+        const metricsParam = req.query.metrics as string;
+        if (!metricsParam) {
+          return res.status(400).json({ message: "metrics query parameter is required" });
+        }
+        const metrics = metricsParam.split(',').map(m => m.trim()).filter(m => m);
+
+        // Parse optional filters
+        let filters: PeerFilterCriteria = {};
+        if (req.query.filters) {
+          try {
+            filters = JSON.parse(req.query.filters as string);
+          } catch {
+            return res.status(400).json({ message: "Invalid filters JSON" });
+          }
+        }
+
+        const percentiles = await peerComparisonService.getAthletePercentiles(
+          athleteId,
+          metrics,
+          filters
+        );
+
+        res.json({
+          athleteId,
+          percentiles,
+        });
+      } catch (error) {
+        console.error("GET /api/athletes/:athleteId/peer-percentiles error:", error);
+        handleBenchmarkError(res, error, "fetch peer percentiles");
+      }
+    }
+  );
+
+  /**
+   * Get anonymous peer distribution for a metric
+   * Returns aggregate statistics without individual data
+   *
+   * Query params:
+   * - filters: JSON string of filter criteria (optional)
+   */
+  app.get("/api/peer-distributions/:metric",
+    benchmarkReadLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { metric } = req.params;
+
+        // Parse optional filters
+        let filters: PeerFilterCriteria = {};
+        if (req.query.filters) {
+          try {
+            filters = JSON.parse(req.query.filters as string);
+          } catch {
+            return res.status(400).json({ message: "Invalid filters JSON" });
+          }
+        }
+
+        const distribution = await peerComparisonService.getDistribution(metric, filters);
+
+        res.json({
+          metric,
+          sampleSize: distribution.sampleSize,
+          p10: distribution.p10,
+          p25: distribution.p25,
+          p50: distribution.p50,
+          p75: distribution.p75,
+          p90: distribution.p90,
+          mean: distribution.mean,
+        });
+      } catch (error) {
+        console.error("GET /api/peer-distributions/:metric error:", error);
+        handleBenchmarkError(res, error, "fetch peer distribution");
+      }
+    }
+  );
+
+  /**
+   * Get user's peer comparison opt-in status
+   */
+  app.get("/api/users/:userId/peer-comparison-status",
+    benchmarkReadLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { userId } = req.params;
+        const requestingUserId = req.session.user!.id;
+
+        // Security: Users can only view their own status (or site admin can view any)
+        const isSiteAdmin = await benchmarkService.isSiteAdmin(requestingUserId);
+        if (userId !== requestingUserId && !isSiteAdmin) {
+          return res.status(403).json({ message: "Can only view your own peer comparison status" });
+        }
+
+        const status = await peerComparisonService.getPeerComparisonOptInStatus(userId);
+
+        res.json(status);
+      } catch (error) {
+        console.error("GET /api/users/:userId/peer-comparison-status error:", error);
+        handleBenchmarkError(res, error, "fetch peer comparison status");
+      }
+    }
+  );
+
+  /**
+   * Update user's peer comparison opt-in preference
+   */
+  app.patch("/api/users/:userId/peer-comparison-status",
+    benchmarkModifyLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const { userId } = req.params;
+        const { optIn } = req.body;
+        const requestingUserId = req.session.user!.id;
+
+        if (typeof optIn !== 'boolean') {
+          return res.status(400).json({ message: "optIn must be a boolean" });
+        }
+
+        await peerComparisonService.updatePeerComparisonOptIn(userId, optIn, requestingUserId);
+
+        const status = await peerComparisonService.getPeerComparisonOptInStatus(userId);
+
+        res.json(status);
+      } catch (error) {
+        console.error("PATCH /api/users/:userId/peer-comparison-status error:", error);
+        handleBenchmarkError(res, error, "update peer comparison status");
       }
     }
   );

@@ -95,6 +95,9 @@ export const users = pgTable("users", {
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   deletedAt: timestamp("deleted_at"), // Soft delete - user marked as deleted but data preserved
+  // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
+  showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
+  peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -231,6 +234,15 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   displayOrder: integer("display_order").default(999).notNull(),
+  // Peer comparison benchmark settings (Phase 2.3)
+  benchmarkSource: varchar("benchmark_source", { length: 20 }).default('static').notNull(), // 'static' or 'peer_percentile'
+  peerPercentileTarget: integer("peer_percentile_target"), // e.g., 75 means "top 25%" (75th percentile)
+  peerFilterCriteria: jsonb("peer_filter_criteria").$type<{
+    ageRange?: [number, number];
+    gender?: 'Male' | 'Female';
+    orgTypes?: string[];
+    sports?: string[];
+  }>(), // Filter criteria for peer pool
   // Display settings
   color: varchar("color", { length: 20 }),
   icon: varchar("icon", { length: 50 }),
@@ -247,6 +259,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   uniqueMetricName: unique("site_benchmarks_metric_name_unique").on(table.metricCode, table.name),
   // Index for organization type filtering
   orgTypesIdx: index("site_benchmarks_org_types_idx").on(table.applicableOrgTypes),
+  // Index for peer benchmark filtering
+  peerBenchmarkIdx: index("site_benchmarks_peer_idx").on(table.benchmarkSource),
 }));
 
 // Organization-specific custom benchmarks
@@ -1037,6 +1051,34 @@ export const globalAthleteClaims = pgTable("global_athlete_claims", {
   statusIdx: index("gac_status_idx").on(table.status),
 }));
 
+// Peer Percentile Cache - pre-computed distributions for cross-org peer comparison (Phase 2.3)
+export const peerPercentileCache = pgTable("peer_percentile_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  filterCriteria: jsonb("filter_criteria").$type<{
+    ageRange?: [number, number];
+    gender?: 'Male' | 'Female';
+    orgTypes?: string[];
+    sports?: string[];
+  }>().notNull().default({}),
+  // Distribution data
+  sampleSize: integer("sample_size").notNull(),
+  p10: decimal("p10", { precision: 10, scale: 4 }),
+  p25: decimal("p25", { precision: 10, scale: 4 }),
+  p50: decimal("p50", { precision: 10, scale: 4 }),
+  p75: decimal("p75", { precision: 10, scale: 4 }),
+  p90: decimal("p90", { precision: 10, scale: 4 }),
+  mean: decimal("mean", { precision: 10, scale: 4 }),
+  // Cache metadata
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => ({
+  metricIdx: index("peer_percentile_cache_metric_idx").on(table.metricCode),
+  expiresIdx: index("peer_percentile_cache_expires_idx").on(table.expiresAt),
+  // Unique constraint on metric + filter criteria for upsert operations
+  uniqueMetricFilters: unique("peer_percentile_cache_metric_filters_unique").on(table.metricCode, table.filterCriteria),
+}));
+
 // Global Athlete Relations
 export const globalAthletesRelations = relations(globalAthletes, ({ one, many }) => ({
   createdBy: one(users, {
@@ -1164,6 +1206,7 @@ export type GlobalAthlete = typeof globalAthletes.$inferSelect;
 export type UserGlobalAthleteLink = typeof userGlobalAthleteLinks.$inferSelect;
 export type GlobalAthleteAuditLog = typeof globalAthleteAuditLog.$inferSelect;
 export type GlobalAthleteClaim = typeof globalAthleteClaims.$inferSelect;
+export type PeerPercentileCache = typeof peerPercentileCache.$inferSelect;
 export type LinkStatus = (typeof linkStatusEnum)[number];
 export type LinkType = (typeof linkTypeEnum)[number];
 export type ActorType = (typeof actorTypeEnum)[number];

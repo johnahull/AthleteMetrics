@@ -56,9 +56,19 @@ export function registerAuthRoutes(app: Express) {
       // Get user organizations for context
       const organizations = await authService.getUserOrganizations(user.id);
 
+      // Determine redirect URL based on role
+      let redirectUrl = '/dashboard';
+      if (user.isSiteAdmin) {
+        redirectUrl = '/admin';
+      } else if (roleContext.role === 'athlete') {
+        redirectUrl = '/my-dashboard';
+      }
+      // org_admin, coach, and others default to /dashboard
+
       res.json({
         user: req.session.user,
-        organizations
+        organizations,
+        redirectUrl
       });
     } catch (error) {
       console.error("Login error:", error);
