@@ -71,7 +71,7 @@ export function useGlobalAthletes(params?: {
   const queryString = queryParams.toString();
   const url = `/api/admin/global-athletes${queryString ? `?${queryString}` : ''}`;
 
-  return useQuery<{ athletes: GlobalAthlete[]; count: number }>({
+  return useQuery<{ athletes: GlobalAthlete[]; count: number; totalCount: number }>({
     queryKey: ['/api/admin/global-athletes', params],
     queryFn: async () => {
       const res = await apiRequest('GET', url);

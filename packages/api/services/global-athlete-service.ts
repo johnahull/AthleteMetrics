@@ -456,6 +456,12 @@ export class GlobalAthleteService extends BaseService {
 
   /**
    * Get all global athletes with linked user counts (admin only)
+   * @param options.limit - Max results to return (default: 50, max: 200)
+   * @param options.offset - Number of results to skip for pagination
+   * @param options.search - Filter by email or name (case-insensitive, min 2 chars)
+   * @param options.hasMultipleLinks - Filter by link count: true = 2+ links, false = <2 links
+   * @param options.allowCrossOrgLinking - Filter by cross-org linking setting
+   * @returns athletes array and totalCount for pagination
    */
   async getAllGlobalAthletes(options: {
     limit?: number;
@@ -463,16 +469,20 @@ export class GlobalAthleteService extends BaseService {
     search?: string;
     hasMultipleLinks?: boolean;
     allowCrossOrgLinking?: boolean;
-  } = {}): Promise<Array<GlobalAthlete & { linkedUserCount: number }>> {
-    const { limit = 50, offset = 0, search, hasMultipleLinks, allowCrossOrgLinking } = options;
+  } = {}): Promise<{ athletes: Array<GlobalAthlete & { linkedUserCount: number }>; totalCount: number }> {
+    // Validate and sanitize inputs
+    const limit = Math.min(Math.max(options.limit || 50, 1), 200);
+    const offset = Math.max(options.offset || 0, 0);
+    const { search, hasMultipleLinks, allowCrossOrgLinking } = options;
 
     // Build conditions array
     const conditions: ReturnType<typeof eq>[] = [];
 
-    // Add search filter if provided
-    if (search) {
+    // Add search filter if provided (min 2 chars to prevent trivial searches)
+    if (search && search.length >= 2) {
       // Escape SQL LIKE wildcards to prevent injection
       const escapedSearch = search
+        .substring(0, 100) // Limit search length
         .replace(/\\/g, '\\\\')  // Escape backslashes first
         .replace(/%/g, '\\%')    // Escape percent signs
         .replace(/_/g, '\\_');   // Escape underscores
@@ -515,10 +525,13 @@ export class GlobalAthleteService extends BaseService {
     // For hasMultipleLinks filter, we need to get all athletes first and filter after
     // because we need to count links to determine which have multiple
     if (hasMultipleLinks !== undefined) {
-      // Get all matching athletes without pagination for count filtering
-      const allAthletes = await query;
+      // Safeguard: limit query to prevent memory issues at scale
+      const MAX_ATHLETES_FOR_LINK_FILTER = 10000;
+      const allAthletes = await query.limit(MAX_ATHLETES_FOR_LINK_FILTER);
 
-      if (allAthletes.length === 0) return [];
+      if (allAthletes.length === 0) {
+        return { athletes: [], totalCount: 0 };
+      }
 
       // Get linked user counts for all athletes
       const allAthleteIds = allAthletes.map(a => a.id);
@@ -545,21 +558,36 @@ export class GlobalAthleteService extends BaseService {
         }
       });
 
+      const totalCount = filteredAthletes.length;
+
       // Apply pagination
       const paginatedAthletes = filteredAthletes.slice(offset, offset + limit);
 
-      return paginatedAthletes.map(a => ({
-        ...a,
-        linkedUserCount: countMap.get(a.id) || 0,
-      }));
+      return {
+        athletes: paginatedAthletes.map(a => ({
+          ...a,
+          linkedUserCount: countMap.get(a.id) || 0,
+        })),
+        totalCount,
+      };
     }
 
     // Standard pagination when not filtering by link count
+    // First get total count for pagination
+    let countQuery = db.select({ count: count() }).from(globalAthletes);
+    if (conditions.length > 0) {
+      countQuery = countQuery.where(and(...conditions)) as typeof countQuery;
+    }
+    const [countResult] = await countQuery;
+    const totalCount = Number(countResult.count);
+
     const athletes = await query.limit(limit).offset(offset);
 
     // Get linked user counts for each athlete
     const athleteIds = athletes.map(a => a.id);
-    if (athleteIds.length === 0) return [];
+    if (athleteIds.length === 0) {
+      return { athletes: [], totalCount };
+    }
 
     const linkCounts = await db.select({
       globalAthleteId: userGlobalAthleteLinks.globalAthleteId,
@@ -574,10 +602,13 @@ export class GlobalAthleteService extends BaseService {
 
     const countMap = new Map(linkCounts.map(c => [c.globalAthleteId, Number(c.count)]));
 
-    return athletes.map(a => ({
-      ...a,
-      linkedUserCount: countMap.get(a.id) || 0,
-    }));
+    return {
+      athletes: athletes.map(a => ({
+        ...a,
+        linkedUserCount: countMap.get(a.id) || 0,
+      })),
+      totalCount,
+    };
   }
 
   /**
