@@ -1,5 +1,16 @@
 -- Migration: Add Global Athlete System for Cross-Organization Linking
 -- Description: Creates tables for canonical athlete identity and cross-org linking
+--
+-- MIGRATION RELATIONSHIP NOTE:
+-- This migration (0060) is the idempotent, production-safe version of the global athlete schema.
+-- Drizzle migration 0005_melodic_violations.sql also creates these tables but is NOT idempotent.
+--
+-- Scenario handling:
+-- - Fresh install: 0005 runs first (via db:migrate), then 0060 safely no-ops (IF NOT EXISTS)
+-- - Existing prod: 0060 runs as manual migration, 0005 already tracked in __drizzle_migrations
+--
+-- Both migrations create the same schema, but 0060 is safe to re-run.
+-- See also: 0061 (notification columns), 0062 (claims table), 0063 (enum fix)
 
 -- Create global_athletes table (canonical athlete identity)
 CREATE TABLE IF NOT EXISTS global_athletes (
@@ -32,7 +43,7 @@ CREATE TABLE IF NOT EXISTS user_global_athlete_links (
   global_athlete_id VARCHAR NOT NULL REFERENCES global_athletes(id) ON DELETE CASCADE,
   -- Link status
   link_status TEXT NOT NULL DEFAULT 'pending' CHECK (link_status IN ('pending', 'confirmed', 'rejected', 'revoked')),
-  link_type TEXT NOT NULL CHECK (link_type IN ('auto_email', 'athlete_claimed', 'org_proposed', 'admin_forced')),
+  link_type TEXT NOT NULL CHECK (link_type IN ('auto_email', 'auto_import', 'athlete_claimed', 'org_proposed', 'admin_forced')),
   -- Approval workflow
   proposed_by VARCHAR REFERENCES users(id) ON DELETE SET NULL,
   proposed_at TIMESTAMP NOT NULL DEFAULT NOW(),
