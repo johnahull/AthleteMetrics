@@ -374,7 +374,7 @@ describe("Global Athlete Claim Features", () => {
   describe("Security: Rate Limiting", () => {
     it("should have rate limiting applied to verify-claim endpoint (static verification)", async () => {
       // This test verifies that the route configuration includes rate limiting
-      // by checking the route file for the globalAthleteLimiter middleware
+      // by checking the route file for the appropriate rate limiter middleware
       const fs = await import("fs");
       const path = await import("path");
 
@@ -384,11 +384,12 @@ describe("Global Athlete Claim Features", () => {
       // Verify rate limiter is imported
       expect(routesContent).toContain('import rateLimit from "express-rate-limit"');
 
-      // Verify rate limiter is defined
-      expect(routesContent).toContain("globalAthleteLimiter = rateLimit");
+      // Verify token verification rate limiter is defined (stricter than general limiter)
+      expect(routesContent).toContain("tokenVerificationLimiter = rateLimit");
 
-      // Verify rate limiter is applied to verify-claim endpoint
-      expect(routesContent).toMatch(/app\.get\s*\(\s*["']\/api\/verify-claim["']\s*,\s*globalAthleteLimiter/);
+      // Verify stricter rate limiter is applied to verify-claim endpoint
+      // (tokenVerificationLimiter has 10 requests/15min vs globalAthleteLimiter's 100)
+      expect(routesContent).toMatch(/app\.get\s*\(\s*["']\/api\/verify-claim["']\s*,\s*tokenVerificationLimiter/);
     });
   });
 });
