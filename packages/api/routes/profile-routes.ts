@@ -225,10 +225,18 @@ export function registerProfileRoutes(app: Express) {
 
   /**
    * Delete user
+   * Only site admins can delete users (except themselves)
    */
-  app.delete("/api/users/:id", requireAuth, async (req, res) => {
+  app.delete("/api/users/:id", requireSiteAdmin, async (req, res) => {
     try {
       const { id } = req.params;
+      const currentUser = req.session.user;
+
+      // Prevent site admins from deleting themselves
+      if (currentUser?.id === id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+
       await storage.deleteUser(id);
       res.json({ message: "User deleted successfully" });
     } catch (error) {

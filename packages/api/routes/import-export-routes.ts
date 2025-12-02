@@ -17,6 +17,7 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import { METRIC_CONFIG } from "@shared/analytics-types";
 import type { ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
+import { isValidEmail } from "@shared/email-validation";
 
 // MeasurementFilters interface
 interface MeasurementFilters {
@@ -44,12 +45,6 @@ const getDefaultUnit = (metric: string): string => {
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
   // Use nullish coalescing to allow empty string units (e.g., RSI)
   return config?.unit ?? 's'; // Default to seconds if metric not found
-};
-
-// Email validation function
-const isValidEmail = (value: string): boolean => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(value.trim());
 };
 
 // Phone number validation function

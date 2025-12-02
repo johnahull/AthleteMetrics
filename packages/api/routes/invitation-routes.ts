@@ -198,10 +198,12 @@ export function registerInvitationRoutes(app: Express) {
           return res.status(400).json({ message: "Athlete has no email addresses on file" });
         }
 
+        // Fetch all invitations once before the loop to avoid N+1 query
+        const existingInvitations = await storage.getInvitations();
+
         for (const athleteEmail of athleteEmails) {
           try {
             // Check for existing pending invitations to prevent duplicates
-            const existingInvitations = await storage.getInvitations();
             const existingInvitation = existingInvitations.find(inv =>
               inv.email === athleteEmail &&
               inv.organizationId === organizationId &&
@@ -350,8 +352,8 @@ export function registerInvitationRoutes(app: Express) {
       });
     } catch (error) {
       console.error("Error creating invitation:", error);
-      const errorMessage = error instanceof Error ? error.message : "Failed to create invitation";
-      res.status(500).json({ message: errorMessage, error: String(error) });
+      // Don't expose internal error details to client
+      res.status(500).json({ message: "Failed to create invitation" });
     }
   });
 
