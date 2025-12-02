@@ -36,13 +36,16 @@ export class WellnessRepository {
   // ==================== Wellness Templates ====================
 
   async createWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    // Prepare insert data with proper types
+    const insertData: typeof wellnessTemplates.$inferInsert = {
+      ...template,
+      isDefault: template.isDefault ?? false,
+      isActive: template.isActive ?? true,
+    };
+
     const [created] = await db
       .insert(wellnessTemplates)
-      .values({
-        ...template,
-        isDefault: template.isDefault ?? false,
-        isActive: template.isActive ?? true,
-      } as any)
+      .values(insertData)
       .returning();
 
     if (!created) {
@@ -134,15 +137,18 @@ export class WellnessRepository {
   }
 
   async createSystemWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
+    // Prepare insert data with proper types
+    const insertData: typeof wellnessTemplates.$inferInsert = {
+      ...template,
+      organizationId: null, // System templates have NULL org_id
+      isSystemSeeded: true,
+      isDefault: template.isDefault ?? false,
+      isActive: template.isActive ?? true,
+    };
+
     const [created] = await db
       .insert(wellnessTemplates)
-      .values({
-        ...template,
-        organizationId: null, // System templates have NULL org_id
-        isSystemSeeded: true,
-        isDefault: template.isDefault ?? false,
-        isActive: template.isActive ?? true,
-      } as any)
+      .values(insertData)
       .returning();
 
     if (!created) {
@@ -188,15 +194,18 @@ export class WellnessRepository {
   // ==================== Wellness Requests ====================
 
   async createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest> {
+    // Prepare insert data with proper types
+    const insertData: typeof wellnessRequests.$inferInsert = {
+      ...request,
+      status: request.status ?? 'active',
+      requiresAuth: request.requiresAuth ?? false,
+      targetAthleteIds: request.targetAthleteIds ?? null,
+      targetTeamIds: request.targetTeamIds ?? null,
+    };
+
     const [created] = await db
       .insert(wellnessRequests)
-      .values({
-        ...request,
-        status: request.status ?? 'active',
-        requiresAuth: request.requiresAuth ?? false,
-        targetAthleteIds: request.targetAthleteIds ?? null,
-        targetTeamIds: request.targetTeamIds ?? null,
-      } as any)
+      .values(insertData)
       .returning();
 
     if (!created) {
@@ -282,12 +291,15 @@ export class WellnessRepository {
   // ==================== Wellness Responses ====================
 
   async createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse> {
+    // Prepare insert data with proper types
+    const insertData: typeof wellnessResponses.$inferInsert = {
+      ...response,
+      submittedAt: response.submittedAt ?? new Date(),
+    };
+
     const [created] = await db
       .insert(wellnessResponses)
-      .values({
-        ...response,
-        submittedAt: response.submittedAt ?? new Date(),
-      } as any)
+      .values(insertData)
       .returning();
 
     if (!created) {
@@ -519,13 +531,6 @@ export class WellnessRepository {
     // With 365-day max range and daily data, this allows ~3x safety margin
     const MAX_TOTAL_DATA_POINTS = 1000;
     const limitedResults = (results as any[]).slice(0, MAX_TOTAL_DATA_POINTS);
-
-    if ((results as any[]).length > MAX_TOTAL_DATA_POINTS) {
-      console.warn(
-        `Wellness trends query returned ${(results as any[]).length} data points, ` +
-        `limiting to ${MAX_TOTAL_DATA_POINTS} for performance`
-      );
-    }
 
     // Group results by question
     const trendsByQuestion: Record<string, WellnessTrend> = {};
