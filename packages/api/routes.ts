@@ -46,6 +46,7 @@ import { OCRProcessingResult } from '@shared/ocr-types';
 import enhancedAuthRoutes from './routes/enhanced-auth';
 import { registerAllRoutes } from "./routes/index";
 import { emailService } from "./services/email-service";
+import { globalAthleteService } from "./services/global-athlete-service";
 
 // Session configuration
 declare module 'express-session' {
@@ -715,7 +716,7 @@ export async function registerRoutes(app: Express) {
     //   SECURITY: Only specific multipart endpoints bypass CSRF, not all /import/* routes
     // - /invitations/:token/accept: New user registration endpoint (no session yet)
     //   SECURITY: Protected by: (1) single-use token, (2) SameSite cookies, (3) Referer header check, (4) rate limiting
-    const skipCsrfPaths = ['/login', '/register', '/import/photo', '/import/parse-csv', '/api/wellness/responses'];
+    const skipCsrfPaths = ['/auth/login', '/auth/register', '/import/photo', '/import/parse-csv', '/api/wellness/responses'];
     const skipCsrfPatterns = [
       /^\/invitations\/[a-zA-Z0-9_-]+\/accept$/,  // Invitation acceptance for new users
       /^\/import\/(athletes|measurements)$/  // Dynamic import type endpoints (multipart only)
@@ -5107,6 +5108,16 @@ export async function registerRoutes(app: Express) {
               } catch (error) {
                 // Organization membership might already exist, that's okay
                 console.warn(`Could not add athlete ${athlete.id} to organization ${organizationId}:`, error);
+              }
+
+              // Auto-link athlete to global athlete identity if they have a real email
+              if (athlete.emails?.[0]) {
+                try {
+                  await globalAthleteService.linkAthleteByEmail(athlete.id, athlete.emails[0]);
+                } catch (error) {
+                  // Don't fail the import - linking is a non-critical enhancement
+                  console.warn(`[CSV IMPORT] Failed to auto-link athlete ${athlete.id} to global identity:`, error);
+                }
               }
             }
 

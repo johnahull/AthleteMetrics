@@ -445,19 +445,19 @@ export default function Dashboard() {
                       <div className="flex items-center space-x-3">
                         <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
                           <span className="text-xs font-medium">
-                            {measurement.user.firstName.charAt(0)}{measurement.user.lastName.charAt(0)}
+                            {measurement.user?.firstName?.charAt(0) || ''}{measurement.user?.lastName?.charAt(0) || ''}
                           </span>
                         </div>
                         <button
-                          onClick={() => setLocation(`/athletes/${measurement.user.id}`)}
+                          onClick={() => measurement.user?.id && setLocation(`/athletes/${measurement.user.id}`)}
                           className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
                         >
-                          {measurement.user.fullName}
+                          {measurement.user?.fullName || 'Unknown'}
                         </button>
                       </div>
                     </td>
                     <td className="py-3 text-gray-600">
-                      {measurement.user.teams && measurement.user.teams.length > 0
+                      {measurement.user?.teams && measurement.user.teams.length > 0
                         ? measurement.user.teams.length > 1
                           ? `${measurement.user.teams[0].name} (+${measurement.user.teams.length - 1})`
                           : measurement.user.teams[0].name

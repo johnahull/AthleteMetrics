@@ -39,7 +39,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
       sport: "",
       notes: "",
       season: "",
-      organizationId: undefined,
+      organizationId: organizationId || undefined,
     },
   });
 
