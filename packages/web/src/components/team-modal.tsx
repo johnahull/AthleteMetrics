@@ -19,7 +19,7 @@ interface TeamModalProps {
   isOpen: boolean;
   onClose: () => void;
   team: Team | null;
-  organizationId?: string;
+  organizationId?: string; // Required for creating new teams
 }
 
 export default function TeamModal({ isOpen, onClose, team, organizationId }: TeamModalProps) {
@@ -66,7 +66,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
         sport: "",
         notes: "",
         season: "",
-        organizationId: organizationId || undefined,
+        organizationId: organizationId, // Use the prop for new teams
       });
     }
   }, [team, form, organizationId]);
