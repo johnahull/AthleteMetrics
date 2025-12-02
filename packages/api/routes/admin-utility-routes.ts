@@ -4,6 +4,7 @@
  */
 
 import type { Express } from "express";
+import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
 import { requireSiteAdmin } from "../middleware";
@@ -22,10 +23,23 @@ const testEmailLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
-// Test email request interface
-interface TestEmailRequest {
-  emailType: 'invitation' | 'welcome' | 'verification' | 'password-reset';
-  recipientEmail: string;
+// Zod schema for test email request validation
+const testEmailSchema = z.object({
+  emailType: z.enum(['invitation', 'welcome', 'verification', 'password-reset']),
+  recipientEmail: z.string().email('Please provide a valid email address')
+});
+
+// Type-safe interfaces for contact data results
+interface ContactDataResult {
+  userId: string;
+  name: string;
+  action: string;
+}
+
+interface ContactDataError {
+  userId: string;
+  name: string;
+  error: string;
 }
 
 export function registerAdminUtilityRoutes(app: Express) {
@@ -35,8 +49,8 @@ export function registerAdminUtilityRoutes(app: Express) {
    */
   app.post("/api/admin/fix-contact-data", requireSiteAdmin, async (req, res) => {
     try {
-      const results: any[] = [];
-      const errors: any[] = [];
+      const results: ContactDataResult[] = [];
+      const errors: ContactDataError[] = [];
 
       // Get all users (athletes)
       const allUsers = await storage.getAthletes();
@@ -112,41 +126,18 @@ export function registerAdminUtilityRoutes(app: Express) {
         });
       }
 
-      const { emailType, recipientEmail } = req.body as TestEmailRequest;
-
-      // Validate required parameters
-      if (!emailType) {
+      // Validate request body using Zod schema
+      const parseResult = testEmailSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = parseResult.error.errors[0]?.message ||
+          'Invalid request. emailType must be one of: invitation, welcome, verification, password-reset';
         return res.status(400).json({
           success: false,
-          error: 'emailType is required. Valid types: invitation, welcome, verification, password-reset'
+          error: errorMessage
         });
       }
 
-      if (!recipientEmail) {
-        return res.status(400).json({
-          success: false,
-          error: 'recipientEmail is required'
-        });
-      }
-
-      // Validate email format
-      const { isValidEmail: validateEmail } = await import('@shared/email-validation.js');
-      if (!validateEmail(recipientEmail)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Please provide a valid email address'
-        });
-      }
-
-      // Validate email type
-      const validEmailTypes = ['invitation', 'welcome', 'verification', 'password-reset'];
-      if (!validEmailTypes.includes(emailType)) {
-        return res.status(400).json({
-          success: false,
-          error: `Invalid emailType. Must be one of: ${validEmailTypes.join(', ')}`
-        });
-      }
-
+      const { emailType, recipientEmail } = parseResult.data;
       let emailSent = false;
 
       // Send appropriate test email based on type

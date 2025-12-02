@@ -176,11 +176,16 @@ export function registerImportExportRoutes(app: Express) {
 
       // Parse import options
       const optionsJson = req.body.options;
-      const options = optionsJson ? JSON.parse(optionsJson) : {
-        measurementMode: 'match_only',
-        teamHandling: 'auto_create_confirm',
-        organizationId: undefined
-      };
+      let options;
+      try {
+        options = optionsJson ? JSON.parse(optionsJson) : {
+          measurementMode: 'match_only',
+          teamHandling: 'auto_create_confirm',
+          organizationId: undefined
+        };
+      } catch {
+        return res.status(400).json({ message: "Invalid options JSON format" });
+      }
 
       const measurementMode = options.measurementMode || 'match_only';
       const teamHandling = options.teamHandling || 'auto_create_confirm';
@@ -443,13 +448,18 @@ export function registerImportExportRoutes(app: Express) {
       }
 
       // Parse import options
-      const options = optionsJson ? JSON.parse(optionsJson) : {
-        athleteMode: 'smart_import',
-        measurementMode: 'match_only',
-        teamHandling: 'auto_create_confirm',
-        updateExisting: true,
-        skipDuplicates: false
-      };
+      let options;
+      try {
+        options = optionsJson ? JSON.parse(optionsJson) : {
+          athleteMode: 'smart_import',
+          measurementMode: 'match_only',
+          teamHandling: 'auto_create_confirm',
+          updateExisting: true,
+          skipDuplicates: false
+        };
+      } catch {
+        return res.status(400).json({ message: "Invalid options JSON format" });
+      }
 
       const results: any[] = [];
       const errors: any[] = [];
