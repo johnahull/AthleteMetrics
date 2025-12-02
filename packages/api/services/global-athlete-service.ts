@@ -23,6 +23,11 @@ export interface LinkedUserOptions {
   confirmedOnly?: boolean;
 }
 
+// Constants for configuration
+const MAX_AUDIT_LOG_ENTRIES = 100;
+const MAX_ATHLETES_FOR_LINK_FILTER = 10000;
+const CLAIM_TOKEN_EXPIRY_HOURS = 24;
+
 export class GlobalAthleteService extends BaseService {
   /**
    * Link an athlete by email without requiring email verification.
@@ -85,25 +90,44 @@ export class GlobalAthleteService extends BaseService {
       await this.createAutoLink(userId, existingGlobalAthlete.id, email, user, existingGlobalAthlete, linkType);
     } else if (!existingGlobalAthlete) {
       // Create new global athlete
-      const [newGlobalAthlete] = await db.insert(globalAthletes).values({
-        verifiedEmails: [email],
-        primaryEmail: email,
-        canonicalFirstName: user.firstName,
-        canonicalLastName: user.lastName,
-        canonicalFullName: user.fullName,
-        birthDate: user.birthDate,
-        allowCrossOrgLinking: true,
-        createdBy: userId,
-      }).returning();
+      try {
+        const [newGlobalAthlete] = await db.insert(globalAthletes).values({
+          verifiedEmails: [email],
+          primaryEmail: email,
+          canonicalFirstName: user.firstName,
+          canonicalLastName: user.lastName,
+          canonicalFullName: user.fullName,
+          birthDate: user.birthDate,
+          allowCrossOrgLinking: true,
+          createdBy: userId,
+        }).returning();
 
-      // Create audit log
-      await this.auditLog(newGlobalAthlete.id, "created", userId, "system", {
-        email,
-        linkType,
-      });
+        // Create audit log
+        await this.auditLog(newGlobalAthlete.id, "created", userId, "system", {
+          email,
+          linkType,
+        });
 
-      // Create auto-link - no notification needed as user is creating their own identity
-      await this.createAutoLink(userId, newGlobalAthlete.id, email, user, null, linkType);
+        // Create auto-link - no notification needed as user is creating their own identity
+        await this.createAutoLink(userId, newGlobalAthlete.id, email, user, null, linkType);
+      } catch (error: any) {
+        // Handle race condition: another process created the global athlete
+        if (error.code === '23505' && error.constraint?.includes('primary_email')) {
+          // Unique violation on primary_email - fetch the newly created global athlete
+          const existing = await this.findByVerifiedEmail(email);
+          if (existing && existing.allowCrossOrgLinking) {
+            // Link to the global athlete that was just created by another process
+            await this.createAutoLink(userId, existing.id, email, user, existing, linkType);
+          } else if (existing) {
+            // The global athlete created by another process has disabled linking
+            // This is a rare edge case - log and skip
+            console.warn(`Race condition: global athlete created with linking disabled for ${email}`);
+          }
+        } else {
+          // Not a race condition - rethrow
+          throw error;
+        }
+      }
     } else {
       // Global athlete exists but has disabled cross-org linking
       // Create a new separate global athlete for this user
@@ -143,9 +167,11 @@ export class GlobalAthleteService extends BaseService {
     }
 
     // If not found by primary, search the verifiedEmails array
+    // Use SQL placeholder to properly parameterize the email value
     const [foundByArray] = await db.select()
       .from(globalAthletes)
-      .where(sql`${email} = ANY(${globalAthletes.verifiedEmails})`);
+      .where(sql`${sql.placeholder('email')}::text = ANY(${globalAthletes.verifiedEmails})`)
+      .execute({ email });
 
     return foundByArray || null;
   }
@@ -537,7 +563,6 @@ export class GlobalAthleteService extends BaseService {
     // because we need to count links to determine which have multiple
     if (hasMultipleLinks !== undefined) {
       // Safeguard: limit query to prevent memory issues at scale
-      const MAX_ATHLETES_FOR_LINK_FILTER = 10000;
       const allAthletes = await query.limit(MAX_ATHLETES_FOR_LINK_FILTER);
 
       if (allAthletes.length === 0) {
@@ -696,7 +721,6 @@ export class GlobalAthleteService extends BaseService {
     }));
 
     // Get audit log (limited to most recent entries)
-    const MAX_AUDIT_LOG_ENTRIES = 100;
     const auditLog = await db.select()
       .from(globalAthleteAuditLog)
       .where(eq(globalAthleteAuditLog.globalAthleteId, globalAthleteId))
@@ -959,8 +983,8 @@ export class GlobalAthleteService extends BaseService {
     // Generate a secure token
     const token = crypto.randomBytes(32).toString("hex");
 
-    // Set expiry to 24 hours from now
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    // Set expiry based on configured hours
+    const expiresAt = new Date(Date.now() + CLAIM_TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
 
     // Create the claim record
     await db.insert(globalAthleteClaims).values({

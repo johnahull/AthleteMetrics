@@ -44,6 +44,15 @@ const globalAthleteLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Stricter rate limiting for token verification endpoint (public, security-sensitive)
+const tokenVerificationLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 10, // Stricter limit to prevent brute-force token guessing
+  message: { message: "Too many verification attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerGlobalAthleteRoutes(app: Express) {
   /**
    * Get current user's global athlete profile
@@ -79,32 +88,42 @@ export function registerGlobalAthleteRoutes(app: Express) {
         confirmedOnly: true
       });
 
-      // Get organization details for each linked user
-      const linkedAccountsWithOrgs = await Promise.all(
-        linkedUsers.map(async (userLink) => {
-          const userOrgs = await db.select({
+      // Batch query: Get organization details for all linked users at once
+      const userIds = linkedUsers.map(userLink => userLink.userId);
+      const allUserOrgs = userIds.length > 0
+        ? await db.select({
+            userId: userOrganizations.userId,
             organizationId: userOrganizations.organizationId,
             role: userOrganizations.role,
             orgName: organizations.name,
           })
             .from(userOrganizations)
             .leftJoin(organizations, eq(organizations.id, userOrganizations.organizationId))
-            .where(eq(userOrganizations.userId, userLink.userId));
+            .where(inArray(userOrganizations.userId, userIds))
+        : [];
 
-          return {
-            userId: userLink.userId,
-            linkStatus: userLink.linkStatus,
-            linkType: userLink.linkType,
-            shareMeasurements: userLink.shareMeasurements,
-            confirmedAt: userLink.confirmedAt,
-            organizations: userOrgs.map(org => ({
-              id: org.organizationId,
-              name: org.orgName,
-              role: org.role
-            }))
-          };
-        })
-      );
+      // Group organizations by userId
+      const orgsByUserId = new Map<string, Array<{ id: string; name: string | null; role: string }>>();
+      for (const userOrg of allUserOrgs) {
+        if (!orgsByUserId.has(userOrg.userId)) {
+          orgsByUserId.set(userOrg.userId, []);
+        }
+        orgsByUserId.get(userOrg.userId)!.push({
+          id: userOrg.organizationId,
+          name: userOrg.orgName,
+          role: userOrg.role
+        });
+      }
+
+      // Map linked users with their organizations
+      const linkedAccountsWithOrgs = linkedUsers.map(userLink => ({
+        userId: userLink.userId,
+        linkStatus: userLink.linkStatus,
+        linkType: userLink.linkType,
+        shareMeasurements: userLink.shareMeasurements,
+        confirmedAt: userLink.confirmedAt,
+        organizations: orgsByUserId.get(userLink.userId) || []
+      }));
 
       res.json({
         hasGlobalAthlete: true,
@@ -504,7 +523,7 @@ export function registerGlobalAthleteRoutes(app: Express) {
    * Verify a claim token (public route)
    * Rate limited to prevent brute-force token guessing
    */
-  app.get("/api/verify-claim", globalAthleteLimiter, async (req, res) => {
+  app.get("/api/verify-claim", tokenVerificationLimiter, async (req, res) => {
     try {
       const { token } = req.query;
       if (!token || typeof token !== "string") {
