@@ -6,10 +6,11 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
-import { requireAuth, requireSiteAdmin } from "../middleware";
+import { requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { generateInvitationLink, getBaseUrl } from "../utils/url-utils";
 import { emailService } from "../services/email-service";
+import { isValidEmail } from "@shared/email-validation";
 
 // Rate limiting for test email endpoint
 const testEmailLimiter = rateLimit({
@@ -20,12 +21,6 @@ const testEmailLimiter = rateLimit({
   legacyHeaders: false,
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
-
-// Helper function for email validation
-function isValidEmail(value: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(value);
-}
 
 // Test email request interface
 interface TestEmailRequest {
@@ -38,13 +33,8 @@ export function registerAdminUtilityRoutes(app: Express) {
    * Fix contact data for all athletes
    * Moves emails found in phone number fields to the emails array
    */
-  app.post("/api/admin/fix-contact-data", requireAuth, async (req, res) => {
+  app.post("/api/admin/fix-contact-data", requireSiteAdmin, async (req, res) => {
     try {
-      // Check if user is site admin
-      if (req.session.user!.role !== 'site_admin') {
-        return res.status(403).json({ message: "Only site administrators can perform this action" });
-      }
-
       const results: any[] = [];
       const errors: any[] = [];
 
