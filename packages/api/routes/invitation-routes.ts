@@ -13,9 +13,7 @@ import { generateInvitationLink } from "../utils/url-utils";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { emailService } from "../services/email-service";
 import type { Invitation } from "@shared/schema";
-
-// Configuration constants
-const MAX_INVITATION_ATTEMPTS = 10;
+import { MAX_INVITATION_ATTEMPTS } from "../constants/invitations";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({

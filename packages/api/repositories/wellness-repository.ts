@@ -165,6 +165,8 @@ export class WellnessRepository {
   }
 
   async getSystemTemplateUsage(templateId: string): Promise<{ templateId: string; organizationCount: number; cloneCount: number }> {
+    validateUUID(templateId, 'templateId');
+
     // Count how many orgs have cloned this template
     const clones = await db
       .select()
