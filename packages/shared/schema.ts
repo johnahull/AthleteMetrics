@@ -15,6 +15,14 @@ export const MAX_INSIGHTS_LENGTH = 10000;
  */
 export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 'private_facility', 'elite_academy'] as const;
 
+/**
+ * Metric type enum for determining if metrics are better when higher/lower or just tracked
+ * - lower_is_better: Decreasing values = improvement (e.g., FLY10_TIME, DASH_40YD)
+ * - higher_is_better: Increasing values = improvement (e.g., VERTICAL_JUMP, TOP_SPEED)
+ * - tracking: No better/worse direction, just informational (e.g., HEIGHT, WEIGHT)
+ */
+export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'] as const;
+
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
@@ -119,7 +127,7 @@ export const siteMetrics = pgTable("site_metrics", {
   label: varchar("label", { length: 100 }).notNull(), // "10-Yard Fly Time"
   category: varchar("category", { length: 50 }), // "speed", "agility", "strength", "power"
   unit: varchar("unit", { length: 20 }), // "s", "in", "mph", "m"
-  lowerIsBetter: boolean("lower_is_better").default(true).notNull(),
+  metricType: text("metric_type", { enum: metricTypeEnum }).default('lower_is_better').notNull(),
   isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot be deleted
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
@@ -1386,7 +1394,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   label: z.string().min(1, "Label is required").max(100, "Label must be 100 characters or less"),
   category: z.string().max(50, "Category must be 50 characters or less").optional(),
   unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
-  lowerIsBetter: z.boolean().default(true),
+  metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
@@ -1403,7 +1411,7 @@ export const updateSiteMetricSchema = z.object({
   label: z.string().min(1).max(100).optional(),
   category: z.string().max(50).optional(),
   unit: z.string().max(20).optional(),
-  lowerIsBetter: z.boolean().optional(),
+  metricType: z.enum(metricTypeEnum).optional(),
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
@@ -1896,15 +1904,18 @@ export const MetricType = {
 } as const;
 
 // Valid metrics for analytics with optimization hints
-// Defines which metrics should be minimized (lower is better) vs maximized (higher is better)
+// Defines metric types: lower_is_better, higher_is_better, tracking
 export const VALID_METRICS = [
-  { key: 'FLY10_TIME', lowerIsBetter: true },
-  { key: 'VERTICAL_JUMP', lowerIsBetter: false },
-  { key: 'AGILITY_505', lowerIsBetter: true },
-  { key: 'AGILITY_5105', lowerIsBetter: true },
-  { key: 'T_TEST', lowerIsBetter: true },
-  { key: 'DASH_40YD', lowerIsBetter: true },
-  { key: 'RSI', lowerIsBetter: false },
+  { key: 'FLY10_TIME', metricType: 'lower_is_better' },
+  { key: 'VERTICAL_JUMP', metricType: 'higher_is_better' },
+  { key: 'AGILITY_505', metricType: 'lower_is_better' },
+  { key: 'AGILITY_5105', metricType: 'lower_is_better' },
+  { key: 'T_TEST', metricType: 'lower_is_better' },
+  { key: 'DASH_40YD', metricType: 'lower_is_better' },
+  { key: 'RSI', metricType: 'higher_is_better' },
+  { key: 'TOP_SPEED', metricType: 'higher_is_better' },
+  { key: 'HEIGHT', metricType: 'tracking' },
+  { key: 'WEIGHT', metricType: 'tracking' },
 ] as const;
 
 export const TeamLevel = {

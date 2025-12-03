@@ -403,8 +403,8 @@ export class AnalyticsService {
       .groupBy(measurements.metric, users.id, users.fullName);
 
     // Post-process: find best for each metric
-    const metricMap = new Map<string, { lowerIsBetter: boolean }>();
-    VALID_METRICS.forEach(m => metricMap.set(m.key, { lowerIsBetter: m.lowerIsBetter }));
+    const metricMap = new Map<string, { metricType: string }>();
+    VALID_METRICS.forEach(m => metricMap.set(m.key, { metricType: m.metricType }));
 
     const bestByMetric = new Map<string, { value: number; userName: string }>();
 
@@ -413,8 +413,9 @@ export class AnalyticsService {
       if (!metricInfo) return;
 
       const existing = bestByMetric.get(result.metric);
+      const lowerIsBetter = metricInfo.metricType === 'lower_is_better';
       const isBetter = !existing ||
-        (metricInfo.lowerIsBetter ? result.bestValue < existing.value : result.bestValue > existing.value);
+        (lowerIsBetter ? result.bestValue < existing.value : result.bestValue > existing.value);
 
       if (isBetter) {
         bestByMetric.set(result.metric, {

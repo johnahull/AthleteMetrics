@@ -32,7 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
-import { organizationTypeEnum } from "@shared/schema";
+import { organizationTypeEnum, metricTypeEnum } from "@shared/schema";
 
 // Zod schema for metric form validation
 const metricFormSchema = z.object({
@@ -48,7 +48,7 @@ const metricFormSchema = z.object({
   category: z.string().max(50, "Category must be 50 characters or less").optional(),
   unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
   description: z.string().optional(),
-  lowerIsBetter: z.boolean().default(true),
+  metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
 });
 
@@ -79,7 +79,7 @@ export default function MetricFormDialog({
       category: "",
       unit: "",
       description: "",
-      lowerIsBetter: true,
+      metricType: 'lower_is_better',
       availableOrgTypes: undefined,
     },
   });
@@ -93,7 +93,7 @@ export default function MetricFormDialog({
         category: metric.category || "",
         unit: metric.unit || "",
         description: metric.description || "",
-        lowerIsBetter: metric.lowerIsBetter,
+        metricType: metric.metricType,
         availableOrgTypes: metric.availableOrgTypes || undefined,
       });
     } else if (!open) {
@@ -104,7 +104,7 @@ export default function MetricFormDialog({
         category: "",
         unit: "",
         description: "",
-        lowerIsBetter: true,
+        metricType: 'lower_is_better',
         availableOrgTypes: undefined,
       });
     }
@@ -121,7 +121,7 @@ export default function MetricFormDialog({
             category: data.category || undefined,
             unit: data.unit || undefined,
             description: data.description || undefined,
-            lowerIsBetter: data.lowerIsBetter,
+            metricType: data.metricType,
             availableOrgTypes: data.availableOrgTypes || undefined,
           },
         });
@@ -137,7 +137,7 @@ export default function MetricFormDialog({
           category: data.category || undefined,
           unit: data.unit || undefined,
           description: data.description || undefined,
-          lowerIsBetter: data.lowerIsBetter,
+          metricType: data.metricType,
           availableOrgTypes: data.availableOrgTypes || undefined,
           isActive: true,
           decimalPrecision: 3, // Default precision for measurements
@@ -264,16 +264,16 @@ export default function MetricFormDialog({
               )}
             />
 
-            {/* Lower is Better field */}
+            {/* Metric Type field */}
             <FormField
               control={form.control}
-              name="lowerIsBetter"
+              name="metricType"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Performance Direction *</FormLabel>
                   <Select
-                    onValueChange={(value) => field.onChange(value === "true")}
-                    value={field.value ? "true" : "false"}
+                    onValueChange={field.onChange}
+                    value={field.value}
                   >
                     <FormControl>
                       <SelectTrigger data-testid="metric-direction-select">
@@ -281,12 +281,13 @@ export default function MetricFormDialog({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="false">Higher is better</SelectItem>
-                      <SelectItem value="true">Lower is better</SelectItem>
+                      <SelectItem value="higher_is_better">Higher is better</SelectItem>
+                      <SelectItem value="lower_is_better">Lower is better</SelectItem>
+                      <SelectItem value="tracking">Tracking only (no direction)</SelectItem>
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Direction of improvement for this metric
+                    Direction of improvement for this metric. Use &quot;Tracking&quot; for metrics like height/weight where neither direction is inherently better.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

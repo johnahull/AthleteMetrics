@@ -208,7 +208,7 @@ export class AnalyticsService {
       // Track personal bests for this athlete
       let personalBest = sortedPoints[0].value;
       const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-      const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+      const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
 
       const trendDataPoints: TrendDataPoint[] = sortedPoints.map((point, index) => {
         // First point is always a personal best, then check subsequent points
@@ -292,7 +292,7 @@ export class AnalyticsService {
         // Store the best value for each metric per athlete
         const currentBest = groups[point.athleteId].measurements[point.metric];
         const metricConfig = METRIC_CONFIG[point.metric as keyof typeof METRIC_CONFIG];
-        const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+        const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
 
         if (!currentBest ||
             (lowerIsBetter && point.value < currentBest) ||

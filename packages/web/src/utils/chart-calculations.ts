@@ -35,12 +35,24 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
   const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
   const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-  const xLowerIsBetter = xConfig?.lowerIsBetter || false;
-  const yLowerIsBetter = yConfig?.lowerIsBetter || false;
+  const xIsTracking = xConfig?.metricType === 'tracking';
+  const yIsTracking = yConfig?.metricType === 'tracking';
+  const xLowerIsBetter = xConfig?.metricType === 'lower_is_better';
+  const yLowerIsBetter = yConfig?.metricType === 'lower_is_better';
 
   // Get clean metric names (remove common suffixes)
   const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
   const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+
+  // If either metric is a tracking metric (no better/worse direction), use neutral labels
+  if (xIsTracking || yIsTracking) {
+    return {
+      topRight: { label: `High ${xName}, High ${yName}`, color: 'yellow' as const },
+      topLeft: { label: `Low ${xName}, High ${yName}`, color: 'yellow' as const },
+      bottomRight: { label: `High ${xName}, Low ${yName}`, color: 'yellow' as const },
+      bottomLeft: { label: `Low ${xName}, Low ${yName}`, color: 'yellow' as const }
+    };
+  }
 
   // Generate contextual descriptions based on metric combination
   const getDescriptions = () => {

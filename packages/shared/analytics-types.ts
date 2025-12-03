@@ -403,6 +403,9 @@ export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string
   }
 };
 
+// Metric type definition
+export type MetricType = 'lower_is_better' | 'higher_is_better' | 'tracking';
+
 // Dynamic metric configuration interface
 // This replaces the hardcoded METRIC_CONFIG with API-fetched data
 export interface DynamicMetricConfig {
@@ -410,7 +413,7 @@ export interface DynamicMetricConfig {
   label: string;
   category?: string;
   unit: string;
-  lowerIsBetter: boolean;
+  metricType: MetricType;
   color?: string;
   icon?: string;
   description?: string;
@@ -429,14 +432,16 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
 // Kept for backward compatibility during migration
 // TODO: Remove after all components updated to use dynamic metrics
 export const METRIC_CONFIG = {
-  FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', lowerIsBetter: true },
-  VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', lowerIsBetter: false },
-  AGILITY_505: { label: '5-0-5 Agility', unit: 's', lowerIsBetter: true },
-  AGILITY_5105: { label: '5-10-5 Agility', unit: 's', lowerIsBetter: true },
-  T_TEST: { label: 'T-Test Agility', unit: 's', lowerIsBetter: true },
-  DASH_40YD: { label: '40-Yard Dash', unit: 's', lowerIsBetter: true },
-  RSI: { label: 'Reactive Strength Index', unit: '', lowerIsBetter: false },
-  TOP_SPEED: { label: 'Top Speed', unit: 'mph', lowerIsBetter: false }
+  FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', metricType: 'lower_is_better' as MetricType },
+  VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better' as MetricType },
+  AGILITY_505: { label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
+  AGILITY_5105: { label: '5-10-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
+  T_TEST: { label: 'T-Test Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
+  DASH_40YD: { label: '40-Yard Dash', unit: 's', metricType: 'lower_is_better' as MetricType },
+  RSI: { label: 'Reactive Strength Index', unit: '', metricType: 'higher_is_better' as MetricType },
+  TOP_SPEED: { label: 'Top Speed', unit: 'mph', metricType: 'higher_is_better' as MetricType },
+  HEIGHT: { label: 'Height', unit: 'in', metricType: 'tracking' as MetricType },
+  WEIGHT: { label: 'Weight', unit: 'lbs', metricType: 'tracking' as MetricType }
 } as const;
 
 // Color schemes for charts

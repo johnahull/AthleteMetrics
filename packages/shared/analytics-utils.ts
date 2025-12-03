@@ -114,12 +114,17 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
 
 /**
  * Gets the best performance value based on metric configuration
+ * For tracking metrics (e.g., HEIGHT, WEIGHT), returns max as a proxy for "latest"
  */
 export function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
   if (stats.count === 0) return 0;
 
   const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  return metricConfig?.lowerIsBetter ? stats.min : stats.max;
+  const metricType = metricConfig?.metricType ?? 'lower_is_better';
+
+  // For tracking metrics, use max as proxy for latest value
+  // For lower_is_better, use min; for higher_is_better, use max
+  return metricType === 'lower_is_better' ? stats.min : stats.max;
 }
 
 /**
@@ -141,14 +146,15 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
 
     const metric = athleteMetricData[0].metric;
     const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricType = metricConfig?.metricType ?? 'lower_is_better';
 
-    if (metricConfig?.lowerIsBetter) {
+    if (metricType === 'lower_is_better') {
       // Find minimum value (best time)
       return athleteMetricData.reduce((best, current) =>
         current.value < best.value ? current : best
       );
     } else {
-      // Find maximum value (best performance)
+      // Find maximum value (best performance or latest for tracking)
       return athleteMetricData.reduce((best, current) =>
         current.value > best.value ? current : best
       );
@@ -176,14 +182,15 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
 
     const metric = athleteMetricDateData[0].metric;
     const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+    const metricType = metricConfig?.metricType ?? 'lower_is_better';
 
-    if (metricConfig?.lowerIsBetter) {
+    if (metricType === 'lower_is_better') {
       // Find minimum value (best time) for this date
       return athleteMetricDateData.reduce((best, current) =>
         current.value < best.value ? current : best
       );
     } else {
-      // Find maximum value (best performance) for this date
+      // Find maximum value (best performance or latest for tracking) for this date
       return athleteMetricDateData.reduce((best, current) =>
         current.value > best.value ? current : best
       );

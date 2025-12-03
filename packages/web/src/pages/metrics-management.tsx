@@ -160,8 +160,14 @@ export default function MetricsManagementPage() {
                     </TableCell>
                     <TableCell>{metric.unit || '-'}</TableCell>
                     <TableCell>
-                      <Badge variant={metric.lowerIsBetter ? "default" : "secondary"}>
-                        {metric.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                      <Badge variant={
+                        metric.metricType === 'lower_is_better' ? "default" :
+                        metric.metricType === 'higher_is_better' ? "secondary" :
+                        "outline"
+                      }>
+                        {metric.metricType === 'lower_is_better' ? 'Lower is better' :
+                         metric.metricType === 'higher_is_better' ? 'Higher is better' :
+                         'Tracking'}
                       </Badge>
                     </TableCell>
                     <TableCell>
