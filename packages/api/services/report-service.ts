@@ -125,7 +125,7 @@ interface IndividualReportData {
 
 export class ReportService extends BaseService {
   // Cache for metric info to prevent N+1 queries
-  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; name: string }>();
+  private metricInfoCache = new Map<string, { lowerIsBetter: boolean; metricType: string; name: string }>();
 
   /**
    * Get display labels and units for a list of metric codes
@@ -1295,9 +1295,10 @@ export class ReportService extends BaseService {
       .limit(1)
       .then((rows) => rows[0]);
 
+    const lowerIsBetter = metric?.metricType === 'lower_is_better';
     const result = metric
-      ? { lowerIsBetter: metric.lowerIsBetter, name: metric.label }
-      : { lowerIsBetter: true, name: metricCode };
+      ? { lowerIsBetter, metricType: metric.metricType, name: metric.label }
+      : { lowerIsBetter: true, metricType: 'lower_is_better' as const, name: metricCode };
 
     // Cache the result
     this.metricInfoCache.set(metricCode, result);

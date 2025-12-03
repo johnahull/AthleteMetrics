@@ -26,7 +26,7 @@ function generateTestMetric() {
     label: `Test Metric ${uniqueId}`,
     category: 'speed',
     unit: 'm/s',
-    lowerIsBetter: false,
+    metricType: 'higher_is_better' as const,
     description: 'Test metric for E2E testing',
     decimalPrecision: 2,
   };
@@ -99,10 +99,8 @@ test.describe('Metric Management - Site Admin', () => {
     await page.fill('[name="description"]', testMetric.description);
     await page.selectOption('[name="decimalPrecision"]', testMetric.decimalPrecision.toString());
 
-    // Toggle lowerIsBetter
-    if (!testMetric.lowerIsBetter) {
-      await page.click('[name="lowerIsBetter"]');
-    }
+    // Select metric type (metricType dropdown)
+    await page.selectOption('[name="metricType"]', testMetric.metricType);
 
     // Submit form
     await page.click('[data-testid="submit-metric-button"]');

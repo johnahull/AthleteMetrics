@@ -27,14 +27,18 @@ export function usePerformanceAthleteSelector({
   // Process athlete data with performance metrics
   const athleteOptions = useMemo(() => {
     const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const lowerIsBetter = metricConfig?.lowerIsBetter || false;
+    const lowerIsBetter = metricConfig?.metricType === 'lower_is_better';
+    const isTracking = metricConfig?.metricType === 'tracking';
 
     return data.map(trend => {
       // Calculate best value for this athlete using safe conversion
       const values = trend.data.map(point => safeNumber(point.value));
-      const bestValue = lowerIsBetter
-        ? Math.min(...values)
-        : Math.max(...values);
+      // For tracking metrics, use the most recent value; otherwise use best performance
+      const bestValue = isTracking
+        ? values[values.length - 1] || 0
+        : lowerIsBetter
+          ? Math.min(...values)
+          : Math.max(...values);
 
       return {
         id: trend.athleteId,
@@ -44,6 +48,10 @@ export function usePerformanceAthleteSelector({
         teamName: trend.teamName || 'No Team'
       };
     }).sort((a, b) => {
+      // For tracking metrics, sort alphabetically by name
+      if (isTracking) {
+        return a.name.localeCompare(b.name);
+      }
       // Sort by performance (best first)
       return lowerIsBetter
         ? a.bestValue - b.bestValue

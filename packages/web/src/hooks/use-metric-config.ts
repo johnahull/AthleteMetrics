@@ -8,7 +8,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
 import { METRIC_CONFIG } from '@shared/analytics-types';
-import type { DynamicMetricConfig } from '@shared/analytics-types';
+import type { DynamicMetricConfig, MetricType } from '@shared/analytics-types';
 
 interface MetricConfigLookup {
   /**
@@ -18,7 +18,8 @@ interface MetricConfigLookup {
   getMetricConfig: (code: string) => {
     label: string;
     unit: string;
-    lowerIsBetter: boolean;
+    metricType: MetricType;
+    lowerIsBetter: boolean; // Derived from metricType for backward compatibility
     category?: string;
   } | null;
 
@@ -61,7 +62,7 @@ export function useMetricConfig(): MetricConfigLookup {
     code: string;
     label: string;
     unit: string | null;
-    lowerIsBetter: boolean;
+    metricType: MetricType;
     category: string | null;
     description: string | null;
     isActive: boolean;
@@ -94,7 +95,7 @@ export function useMetricConfig(): MetricConfigLookup {
               label: om.customLabel || om.siteMetric.label,
               category: om.siteMetric.category || undefined,
               unit: om.siteMetric.unit || '',
-              lowerIsBetter: om.siteMetric.lowerIsBetter,
+              metricType: om.siteMetric.metricType,
               isActive: om.siteMetric.isActive,
               isSystemDefault: om.siteMetric.isSystemDefault,
             }
@@ -109,7 +110,7 @@ export function useMetricConfig(): MetricConfigLookup {
             label: sm.label,
             category: sm.category || undefined,
             unit: sm.unit || '',
-            lowerIsBetter: sm.lowerIsBetter,
+            metricType: sm.metricType,
             isActive: sm.isActive,
             isSystemDefault: sm.isSystemDefault,
           }
@@ -129,7 +130,8 @@ export function useMetricConfig(): MetricConfigLookup {
         return {
           label: dynamicConfig.label,
           unit: dynamicConfig.unit,
-          lowerIsBetter: dynamicConfig.lowerIsBetter,
+          metricType: dynamicConfig.metricType,
+          lowerIsBetter: dynamicConfig.metricType === 'lower_is_better',
           category: dynamicConfig.category,
         };
       }
@@ -140,7 +142,8 @@ export function useMetricConfig(): MetricConfigLookup {
         return {
           label: staticConfig.label,
           unit: staticConfig.unit,
-          lowerIsBetter: staticConfig.lowerIsBetter,
+          metricType: staticConfig.metricType,
+          lowerIsBetter: staticConfig.metricType === 'lower_is_better',
         };
       }
 
