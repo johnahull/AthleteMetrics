@@ -269,6 +269,15 @@ export function registerDashboardTrendsRoutes(app: Express) {
         athleteIds = [...new Set(orgAthleteIds.map(a => a.userId))];
       }
 
+      // Defensive check: if no athletes found, return early with empty data
+      if (athleteIds.length === 0) {
+        return res.json({
+          athletes: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const },
+          teams: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const },
+          measurements: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const }
+        });
+      }
+
       // Athletes Trend (count athletes created in current vs previous month)
       let currentAthletes = 0;
       let previousAthletes = 0;

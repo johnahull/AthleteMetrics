@@ -458,7 +458,8 @@ export function registerImportExportRoutes(app: Express) {
           updateExisting: true,
           skipDuplicates: false
         };
-      } catch {
+      } catch (error) {
+        console.error('JSON parse error for CSV import options:', error);
         return res.status(400).json({ message: "Invalid options JSON format" });
       }
 

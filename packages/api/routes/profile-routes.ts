@@ -172,13 +172,33 @@ export function registerProfileRoutes(app: Express) {
   });
 
   /**
+   * Interface for role violation reporting
+   */
+  interface RoleViolation {
+    userId: string;
+    userName: string;
+    email: string;
+    violations: string[];
+  }
+
+  /**
+   * Interface for role fix reporting
+   */
+  interface RoleFix {
+    userId: string;
+    organizationId: string;
+    keptRole: string;
+    removedRoles: string[];
+  }
+
+  /**
    * Verify single role constraint (Site Admin only)
    */
   app.get("/api/admin/verify-roles", requireSiteAdmin, async (req, res) => {
     try {
       const users = await storage.getUsers();
-      const violations: any[] = [];
-      const fixes: any[] = [];
+      const violations: RoleViolation[] = [];
+      const fixes: RoleFix[] = [];
 
       for (const user of users) {
         if (user.isSiteAdmin === true) continue; // Skip site admins
