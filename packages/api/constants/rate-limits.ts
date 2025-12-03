@@ -82,6 +82,19 @@ export const RATE_LIMITS = {
    * @default 10 requests per 15-minute window
    */
   TOKEN_VALIDATION: 10,
+
+  /**
+   * Username availability check (security-sensitive)
+   * Prevents username enumeration attacks
+   * @default 20 requests per 15-minute window
+   */
+  USERNAME_CHECK: 20,
+
+  /**
+   * Test email sending (administrative testing)
+   * @default 10 requests per 1-hour window
+   */
+  TEST_EMAIL: 10,
 } as const;
 
 /**
@@ -97,3 +110,9 @@ export const RATE_LIMIT_WINDOW_MS = (() => {
   }
   return parsed > 0 ? parsed : 900000;
 })();
+
+/**
+ * Extended window for test email endpoint (1 hour)
+ * Test emails are administrative and less frequent
+ */
+export const TEST_EMAIL_WINDOW_MS = 60 * 60 * 1000; // 1 hour

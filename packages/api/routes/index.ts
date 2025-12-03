@@ -22,7 +22,10 @@ import { registerSportsRoutes } from "./sport-routes";
 import { registerGoalRoutes } from "./goal-routes";
 import { registerAchievementRoutes } from "./achievement-routes";
 import { registerGlobalAthleteRoutes } from "./global-athlete-routes";
-// import { registerImportRoutes } from "./import-routes";
+import { registerInvitationRoutes } from "./invitation-routes";
+import { registerImportExportRoutes } from "./import-export-routes";
+import { registerProfileRoutes } from "./profile-routes";
+import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 
 /**
  * Register all application routes
@@ -85,8 +88,17 @@ export function registerAllRoutes(app: Express) {
   // Global athlete cross-organization identity routes
   registerGlobalAthleteRoutes(app);
 
-  // TODO: Add remaining route modules
-  // registerImportRoutes(app);
+  // Invitation management routes
+  registerInvitationRoutes(app);
+
+  // Import/Export routes (CSV/photo import and data export)
+  registerImportExportRoutes(app);
+
+  // Profile and user management routes
+  registerProfileRoutes(app);
+
+  // Admin utility routes (data cleanup, testing)
+  registerAdminUtilityRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
@@ -111,8 +123,9 @@ export function getRouteStats() {
       goals: "✅ Registered (new service)",
       achievements: "✅ Registered (new service)",
       globalAthletes: "✅ Registered (new service)",
-      imports: "🚧 Pending migration"
+      invitations: "✅ Registered (new service)",
+      importExport: "✅ Registered (new service)"
     },
-    status: "Migration nearly complete - 14/15 modules refactored"
+    status: "Migration complete - 16/16 modules refactored"
   };
 }
