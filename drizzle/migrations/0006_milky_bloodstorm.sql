@@ -12,9 +12,16 @@ CREATE TABLE IF NOT EXISTS "peer_percentile_cache" (
 	"p90" numeric(10, 4),
 	"mean" numeric(10, 4),
 	"computed_at" timestamp DEFAULT now() NOT NULL,
-	"expires_at" timestamp NOT NULL,
-	CONSTRAINT "peer_percentile_cache_metric_filters_unique" UNIQUE("metric_code","filter_criteria")
+	"expires_at" timestamp NOT NULL
 );
+--> statement-breakpoint
+-- Add filter_hash column for deterministic JSONB lookups (avoids key ordering issues)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='peer_percentile_cache' AND column_name='filter_hash') THEN
+    ALTER TABLE "peer_percentile_cache" ADD COLUMN "filter_hash" varchar(64) GENERATED ALWAYS AS (md5(filter_criteria::text)) STORED;
+  END IF;
+END $$;
 --> statement-breakpoint
 -- Add columns to site_benchmarks if they don't exist
 DO $$
@@ -38,8 +45,14 @@ BEGIN
   END IF;
 END $$;
 --> statement-breakpoint
--- Note: Migration 0065 renames peer_comparison_opt_in to show_peer_comparisons
--- This migration is superseded by migration 0065, so we skip adding the column
+-- Add show_peer_comparisons column (display preference, not consent)
+-- Note: Migration 0065 handles renaming if old column peer_comparison_opt_in exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='show_peer_comparisons') THEN
+    ALTER TABLE "users" ADD COLUMN "show_peer_comparisons" boolean DEFAULT true NOT NULL;
+  END IF;
+END $$;
 --> statement-breakpoint
 DO $$
 BEGIN
@@ -64,4 +77,5 @@ END $$;
 -- Create indexes if they don't exist
 CREATE INDEX IF NOT EXISTS "peer_percentile_cache_metric_idx" ON "peer_percentile_cache" USING btree ("metric_code");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "peer_percentile_cache_expires_idx" ON "peer_percentile_cache" USING btree ("expires_at");--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "peer_percentile_cache_metric_hash_unique" ON "peer_percentile_cache" ("metric_code", "filter_hash");--> statement-breakpoint
 CREATE INDEX IF NOT EXISTS "site_benchmarks_peer_idx" ON "site_benchmarks" USING btree ("benchmark_source");

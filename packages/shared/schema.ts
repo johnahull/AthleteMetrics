@@ -345,6 +345,9 @@ export const measurements = pgTable("measurements", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
+  // Performance indexes for peer comparison queries
+  metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
+  userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
 }));
 
 export const userOrganizations = pgTable("user_organizations", {
@@ -1061,6 +1064,8 @@ export const peerPercentileCache = pgTable("peer_percentile_cache", {
     orgTypes?: string[];
     sports?: string[];
   }>().notNull().default({}),
+  // Hash of filterCriteria for deterministic lookups (avoids JSONB key ordering issues)
+  filterHash: varchar("filter_hash", { length: 64 }).generatedAlwaysAs(sql`md5(filter_criteria::text)`),
   // Distribution data
   sampleSize: integer("sample_size").notNull(),
   p10: decimal("p10", { precision: 10, scale: 4 }),
@@ -1075,8 +1080,8 @@ export const peerPercentileCache = pgTable("peer_percentile_cache", {
 }, (table) => ({
   metricIdx: index("peer_percentile_cache_metric_idx").on(table.metricCode),
   expiresIdx: index("peer_percentile_cache_expires_idx").on(table.expiresAt),
-  // Unique constraint on metric + filter criteria for upsert operations
-  uniqueMetricFilters: unique("peer_percentile_cache_metric_filters_unique").on(table.metricCode, table.filterCriteria),
+  // Unique constraint on metric + filter hash for upsert operations (more reliable than JSONB)
+  uniqueMetricFilterHash: unique("peer_percentile_cache_metric_hash_unique").on(table.metricCode, table.filterHash),
 }));
 
 // Global Athlete Relations

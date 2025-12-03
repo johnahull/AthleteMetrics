@@ -118,8 +118,8 @@ export function MeasurementProgressChart({
   // Track the displayed measurements for tooltip lookup
   const displayedMeasurementsRef = useRef<Measurement[]>([]);
 
-  // Sort measurements by date (oldest first) and prepare chart data
-  const chartData = useMemo(() => {
+  // Prepare sorted and filtered measurements (separate from chart rendering)
+  const processedData = useMemo(() => {
     if (measurements.length === 0) {
       return null;
     }
@@ -155,6 +155,29 @@ export function MeasurementProgressChart({
       );
     }
 
+    const data = sorted.map(m => safeParseFloat(m.value));
+    const metric = sorted[0]?.metric || '';
+    const units = sorted[0]?.units || '';
+
+    return { sorted, data, metric, units };
+  }, [measurements, showBestOnly]);
+
+  // Calculate trend line data (only when data changes, not when toggle changes)
+  const trendData = useMemo(() => {
+    if (!processedData || processedData.data.length < 2) {
+      return null;
+    }
+    return generateTrendLine(processedData.data);
+  }, [processedData]);
+
+  // Build chart data (recompute when trend line visibility changes)
+  const chartData = useMemo(() => {
+    if (!processedData) {
+      return null;
+    }
+
+    const { sorted, data, metric, units } = processedData;
+
     // Store displayed measurements for tooltip lookup
     displayedMeasurementsRef.current = sorted;
 
@@ -162,10 +185,6 @@ export function MeasurementProgressChart({
       const date = new Date(m.date);
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
-
-    const data = sorted.map(m => safeParseFloat(m.value));
-    const metric = sorted[0]?.metric || '';
-    const units = sorted[0]?.units || '';
 
     // Build datasets array with proper typing
     const datasets: ChartDataset<'line', number[]>[] = [
@@ -187,8 +206,7 @@ export function MeasurementProgressChart({
     ];
 
     // Add trend line dataset if enabled and we have enough data points
-    if (showTrendLine && data.length >= 2) {
-      const trendData = generateTrendLine(data);
+    if (showTrendLine && trendData) {
       datasets.push({
         label: TREND_LINE_LABEL,
         data: trendData,
@@ -206,7 +224,7 @@ export function MeasurementProgressChart({
       labels,
       datasets,
     };
-  }, [measurements, showBestOnly, showTrendLine]);
+  }, [processedData, showTrendLine, trendData]);
 
   const chartOptions: ChartOptions<'line'> = useMemo(
     () => ({

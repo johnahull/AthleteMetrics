@@ -142,7 +142,7 @@ export function usePeerPercentiles(
   filters?: PeerFilterCriteria,
   options: UsePercentileOptions = {}
 ): UseQueryResult<PeerPercentilesResponse> {
-  const { enabled = true, staleTime = 5 * 60 * 1000 } = options; // 5 min cache
+  const { enabled = true, staleTime = 15 * 60 * 1000 } = options; // 15 min cache (matches backend TTL)
 
   const metricsParam = metrics.join(',');
   const filtersParam = filters && Object.keys(filters).length > 0
