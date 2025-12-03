@@ -335,13 +335,22 @@ export class PeerComparisonService extends BaseService {
     // Sports filter - check if user's sports array contains any of the filter sports
     // users.sports is a text[] column - we check for overlap with the filter (case-insensitive)
     if (filters.sports && filters.sports.length > 0) {
-      // Use EXISTS with ILIKE for case-insensitive matching
-      userConditions.push(
-        sql`EXISTS (
-          SELECT 1 FROM unnest(${users.sports}) AS user_sport
-          WHERE user_sport ILIKE ANY(ARRAY[${sql.join(filters.sports.map(s => sql`${s}`), sql`, `)}])
-        )`
-      );
+      // Sanitize sports input to prevent SQL wildcard injection
+      // Remove SQL wildcards (% and _) and limit length to prevent abuse
+      const sanitizedSports = filters.sports.map(sport => {
+        const sanitized = sport.replace(/[%_]/g, '').substring(0, 100);
+        return sanitized;
+      }).filter(s => s.length > 0);
+
+      if (sanitizedSports.length > 0) {
+        // Use EXISTS with ILIKE for case-insensitive matching
+        userConditions.push(
+          sql`EXISTS (
+            SELECT 1 FROM unnest(${users.sports}) AS user_sport
+            WHERE user_sport ILIKE ANY(ARRAY[${sql.join(sanitizedSports.map(s => sql`${s}`), sql`, `)}])
+          )`
+        );
+      }
     }
 
     // Get users matching filters
@@ -412,6 +421,13 @@ export class PeerComparisonService extends BaseService {
 
     for (const m of allMeasurements) {
       const value = typeof m.value === 'string' ? parseFloat(m.value) : Number(m.value);
+
+      // SECURITY: Validate that value is a finite number (not NaN or Infinity)
+      if (!Number.isFinite(value)) {
+        // Skip invalid measurements - don't include in peer pool
+        continue;
+      }
+
       const current = bestByUser.get(m.userId);
 
       if (current === undefined) {

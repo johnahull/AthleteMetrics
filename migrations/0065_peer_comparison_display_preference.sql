@@ -1,16 +1,26 @@
--- Migration 0065: Rename peer_comparison_opt_in to show_peer_comparisons
+-- Migration 0065: Add show_peer_comparisons column (replaces peer_comparison_opt_in from migration 0006)
 -- Privacy model change: All athlete data contributes to anonymous peer pool.
 -- The toggle now controls whether an athlete SEES peer comparisons (display preference),
 -- not whether they contribute data.
 
--- Step 1: Rename the column
-ALTER TABLE "users" RENAME COLUMN "peer_comparison_opt_in" TO "show_peer_comparisons";
+-- Step 1: Add show_peer_comparisons column if it doesn't exist
+-- (Migration 0006 originally added peer_comparison_opt_in, but this migration supersedes that)
+DO $$
+BEGIN
+  -- If the old column exists, rename it
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='peer_comparison_opt_in') THEN
+    ALTER TABLE "users" RENAME COLUMN "peer_comparison_opt_in" TO "show_peer_comparisons";
+  -- If neither column exists, create show_peer_comparisons
+  ELSIF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='show_peer_comparisons') THEN
+    ALTER TABLE "users" ADD COLUMN "show_peer_comparisons" boolean DEFAULT true NOT NULL;
+  END IF;
+END $$;
 
--- Step 2: Change the default from false to true (show comparisons by default)
+-- Step 2: Ensure the default is true (show comparisons by default)
 ALTER TABLE "users" ALTER COLUMN "show_peer_comparisons" SET DEFAULT true;
 
 -- Step 3: Update all existing users to show peer comparisons (backfill)
-UPDATE "users" SET "show_peer_comparisons" = true;
+UPDATE "users" SET "show_peer_comparisons" = true WHERE "show_peer_comparisons" = false;
 
 -- Note: peer_comparison_consented_at is kept for historical records but is no longer used
 -- since there's no data sharing consent needed (data is always anonymized in the pool)

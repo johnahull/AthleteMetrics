@@ -53,17 +53,18 @@ export function measurementsToCSVString(measurements: Measurement[]): string {
     const status = measurement.isVerified ? 'Verified' : 'Unverified';
     const season = measurement.season || '';
     const team = measurement.teamNameSnapshot || '';
-    const notes = escapeCSVField(measurement.notes);
 
+    // SECURITY: Escape ALL fields to prevent CSV injection and column shifting
+    // Even fields that seem safe (date, status) could contain malicious content
     return [
-      measurement.date,
-      metricName,
-      measurement.value,
-      measurement.units,
-      status,
-      season,
-      team,
-      notes,
+      escapeCSVField(measurement.date),
+      escapeCSVField(metricName),
+      escapeCSVField(String(measurement.value)),
+      escapeCSVField(measurement.units),
+      escapeCSVField(status),
+      escapeCSVField(season),
+      escapeCSVField(team),
+      escapeCSVField(measurement.notes),
     ].join(',');
   });
 
