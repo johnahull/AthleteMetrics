@@ -49,8 +49,10 @@ export default function MyPeerComparisonPage() {
   const [scope, setScope] = useState<ComparisonScope>('global');
   const [filters, setFilters] = useState<PeerFilterCriteria>({});
 
-  // Fetch dashboard data for available metrics
-  const { data: dashboardData, isLoading: dashboardLoading } = useAthleteDashboardData(athleteId);
+  // Fetch dashboard data for available metrics - include unverified for athlete's own view
+  const { data: dashboardData, isLoading: dashboardLoading } = useAthleteDashboardData(athleteId, {
+    includeUnverified: true,
+  });
 
   // Fetch athlete profile for age/gender defaults
   const { data: athlete } = useAthleteProfile(athleteId);

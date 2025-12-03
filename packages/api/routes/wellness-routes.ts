@@ -656,6 +656,52 @@ export function registerWellnessRoutes(app: Express) {
   );
 
   /**
+   * GET /api/wellness/requests/by-token/:token/template
+   * Get wellness template for a valid request token
+   * Access: Public (token acts as authentication)
+   */
+  app.get(
+    "/api/wellness/requests/by-token/:token/template",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        // Validate token and get request
+        const request = await storage.getWellnessRequestByToken(token);
+        if (!request) {
+          return res.status(404).json({ message: "Wellness request not found" });
+        }
+
+        // Check if expired
+        if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+          return res.status(410).json({ message: "This wellness request has expired" });
+        }
+
+        // Get template - token proves legitimate access
+        const template = await storage.getWellnessTemplate(request.templateId);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Return public-safe template fields
+        const publicTemplate = {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          config: template.config,
+          isActive: template.isActive,
+        };
+
+        res.json(publicTemplate);
+      } catch (error: any) {
+        console.error("Failed to fetch template by token:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch template", error));
+      }
+    }
+  );
+
+  /**
    * GET /api/wellness/requests/by-token/:token/targeted-athletes
    * Get list of targeted athletes for a wellness request (for athlete dropdown)
    * Access: Public (no authentication required)

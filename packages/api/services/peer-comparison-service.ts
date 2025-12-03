@@ -333,11 +333,14 @@ export class PeerComparisonService extends BaseService {
     }
 
     // Sports filter - check if user's sports array contains any of the filter sports
-    // users.sports is a text[] column - we check for overlap with the filter
+    // users.sports is a text[] column - we check for overlap with the filter (case-insensitive)
     if (filters.sports && filters.sports.length > 0) {
-      // Use array overlap operator: user's sports && filter sports
+      // Use EXISTS with ILIKE for case-insensitive matching
       userConditions.push(
-        sql`${users.sports} && ARRAY[${sql.join(filters.sports.map(s => sql`${s}`), sql`, `)}]::text[]`
+        sql`EXISTS (
+          SELECT 1 FROM unnest(${users.sports}) AS user_sport
+          WHERE user_sport ILIKE ANY(ARRAY[${sql.join(filters.sports.map(s => sql`${s}`), sql`, `)}])
+        )`
       );
     }
 
@@ -387,7 +390,9 @@ export class PeerComparisonService extends BaseService {
       return [];
     }
 
-    // Get all measurements for eligible users for this metric
+    // Get all VERIFIED measurements for eligible users for this metric
+    // Only verified (coach-entered) measurements are included in the peer pool
+    // Self-entered (unverified) measurements are for personal tracking only
     const allMeasurements = await db
       .select({
         userId: measurements.userId,
@@ -397,7 +402,8 @@ export class PeerComparisonService extends BaseService {
       .where(
         and(
           eq(measurements.metric, metric),
-          inArray(measurements.userId, eligibleUserIds)
+          inArray(measurements.userId, eligibleUserIds),
+          eq(measurements.isVerified, true)
         )
       );
 
@@ -620,7 +626,8 @@ export class PeerComparisonService extends BaseService {
       normalized.orgTypes = [...filters.orgTypes].sort();
     }
     if (filters.sports && filters.sports.length > 0) {
-      normalized.sports = [...filters.sports].sort();
+      // Normalize sports to uppercase for consistent cache keys
+      normalized.sports = [...filters.sports].map(s => s.toUpperCase()).sort();
     }
     if (filters.teamIds && filters.teamIds.length > 0) {
       normalized.teamIds = [...filters.teamIds].sort();

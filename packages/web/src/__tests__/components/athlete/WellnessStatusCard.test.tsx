@@ -230,7 +230,7 @@ describe('WellnessStatusCard', () => {
 
       const link = screen.getByTestId('wellness-link');
       expect(link).toBeInTheDocument();
-      expect(link).toHaveAttribute('href', '/wellness/submit');
+      expect(link).toHaveAttribute('href', '/wellness/my-requests');
     });
 
     it('should display "View History" link when data exists', () => {
@@ -294,7 +294,7 @@ describe('WellnessStatusCard', () => {
       const button = screen.getByTestId('wellness-link');
       // Button wraps a Link component via asChild, providing both button styling and link navigation
       expect(button).toBeInTheDocument();
-      expect(button).toHaveAttribute('href', '/wellness/submit');
+      expect(button).toHaveAttribute('href', '/wellness/my-requests');
     });
   });
 });

@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Target,
   BarChart3,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -69,6 +70,17 @@ export function AthleteSidebar({
         icon: LayoutDashboard,
         description: 'Measurements & progress',
       },
+      // My Measurements only available for athlete self-view
+      ...(isOwnProfile
+        ? [
+            {
+              name: 'My Measurements',
+              href: '/my-measurements',
+              icon: ClipboardList,
+              description: 'View history & add entries',
+            },
+          ]
+        : []),
       // Peer comparison only available for athlete self-view
       ...(isOwnProfile
         ? [
@@ -150,7 +162,24 @@ export function AthleteSidebar({
             Quick Actions
           </p>
 
-          {canAddMeasurement && onAddMeasurement && (
+          {/* For athletes viewing their own data, link to self-entry page */}
+          {isOwnProfile && (
+            <Link href="/my-measurements/add">
+              <Button
+                variant="outline"
+                className="w-full justify-start gap-2"
+                asChild
+              >
+                <a>
+                  <Plus className="h-4 w-4" />
+                  Log Measurement
+                </a>
+              </Button>
+            </Link>
+          )}
+
+          {/* For coaches/admins, use the callback for batch entry modal */}
+          {!isOwnProfile && canAddMeasurement && onAddMeasurement && (
             <Button
               variant="outline"
               className="w-full justify-start gap-2"

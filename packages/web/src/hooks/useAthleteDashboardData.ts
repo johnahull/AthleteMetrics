@@ -78,19 +78,22 @@ export interface DashboardData {
 
 interface UseAthleteDashboardDataOptions {
   enabled?: boolean;
+  /** Include unverified (self-entered) measurements. Use true for athlete's own view. */
+  includeUnverified?: boolean;
 }
 
 export function useAthleteDashboardData(
   athleteId: string | undefined,
   options: UseAthleteDashboardDataOptions = {}
 ) {
-  const { enabled = true } = options;
+  const { enabled = true, includeUnverified = false } = options;
 
   // Fetch athlete profile
   const athleteQuery = useAthleteProfile(athleteId, { enabled });
 
   // Fetch measurements (single query - no duplicate calls)
-  const measurementsQuery = useAthleteMeasurements(athleteId, { enabled });
+  // For athlete's own view, include unverified self-entered measurements
+  const measurementsQuery = useAthleteMeasurements(athleteId, { enabled, includeUnverified });
 
   // Calculate dashboard data from measurements
   // Group measurements by metric inline to avoid duplicate API calls
