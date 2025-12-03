@@ -659,7 +659,14 @@ export class WellnessRepository {
     const results = await db.execute(query);
 
     // Limit total data points to prevent memory exhaustion
-    const limitedResults = (results as any[]).slice(0, MAX_TOTAL_DATA_POINTS);
+    type TrendQueryResult = {
+      date: string;
+      question_id: string;
+      question_label: string;
+      avg_value: number;
+      response_count: number;
+    };
+    const limitedResults = (results as TrendQueryResult[]).slice(0, MAX_TOTAL_DATA_POINTS);
 
     // Group results by question
     const trendsByQuestion: Record<string, WellnessTrend> = {};

@@ -218,7 +218,16 @@ export function registerProfileRoutes(app: Express) {
             .where(eq(userOrganizations.userId, user.id));
 
           const orgRoleMap = new Map<string, string>();
+          const orgAllRolesMap = new Map<string, string[]>();
+
           for (const relation of userOrgRelations) {
+            // Track all roles for each org
+            if (!orgAllRolesMap.has(relation.organizationId)) {
+              orgAllRolesMap.set(relation.organizationId, []);
+            }
+            orgAllRolesMap.get(relation.organizationId)!.push(relation.role);
+
+            // Keep first role encountered
             if (!orgRoleMap.has(relation.organizationId)) {
               orgRoleMap.set(relation.organizationId, relation.role);
             }
@@ -234,10 +243,16 @@ export function registerProfileRoutes(app: Express) {
               organizationId: orgId,
               role
             });
+
+            // Track which roles were removed (all except the kept one)
+            const allRoles = orgAllRolesMap.get(orgId) || [];
+            const removedRoles = allRoles.filter(r => r !== role);
+
             fixes.push({
               userId: user.id,
               organizationId: orgId,
-              keptRole: role
+              keptRole: role,
+              removedRoles
             });
           }
         }
