@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, siteMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
 
 /**
@@ -331,10 +331,13 @@ export class AnalyticsService {
       totalTeams,
     };
 
-    // Optimized: Single query for all metrics using CASE WHEN
+    // Optimized: Single query for all metrics using CASE WHEN with dynamic metric_type lookup
     // This eliminates N+1 query pattern (7 queries -> 1 query)
     // Database Index: idx_measurements_org_date_metric_verified (organization_id, date DESC, metric, is_verified)
     // See: migrations/0020_add_measurements_org_metric_analytics_index.sql
+    //
+    // Note: Tracking metrics (HEIGHT, WEIGHT) are excluded from dashboard best stats (filtered in post-processing)
+    // The query uses JOIN with site_metrics to dynamically determine MIN/MAX based on metric_type column
     const metricBests = await db
       .select({
         metric: measurements.metric,
@@ -342,7 +345,7 @@ export class AnalyticsService {
         userName: users.fullName,
         bestValue: sql<number>`
           CASE
-            WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            WHEN ${siteMetrics.metricType} = 'lower_is_better'
             THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
             ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
           END
@@ -350,6 +353,7 @@ export class AnalyticsService {
       })
       .from(measurements)
       .innerJoin(users, eq(measurements.userId, users.id))
+      .innerJoin(siteMetrics, eq(measurements.metric, siteMetrics.code))
       .where(
         and(
           ...measurementConditions,
@@ -359,11 +363,11 @@ export class AnalyticsService {
             : [])
         )
       )
-      .groupBy(measurements.metric, users.id, users.fullName);
+      .groupBy(measurements.metric, users.id, users.fullName, siteMetrics.metricType);
 
     // Post-process: find best for each metric
-    const metricMap = new Map<string, { lowerIsBetter: boolean }>();
-    VALID_METRICS.forEach(m => metricMap.set(m.key, { lowerIsBetter: m.lowerIsBetter }));
+    const metricMap = new Map<string, { metricType: string }>();
+    VALID_METRICS.forEach(m => metricMap.set(m.key, { metricType: m.metricType }));
 
     const bestByMetric = new Map<string, { value: number; userName: string }>();
 
@@ -371,9 +375,14 @@ export class AnalyticsService {
       const metricInfo = metricMap.get(result.metric);
       if (!metricInfo) return;
 
+      // Exclude tracking metrics from "best athlete" comparisons
+      // Tracking metrics (HEIGHT, WEIGHT) have no performance direction
+      if (metricInfo.metricType === 'tracking') return;
+
       const existing = bestByMetric.get(result.metric);
+      const lowerIsBetter = metricInfo.metricType === 'lower_is_better';
       const isBetter = !existing ||
-        (metricInfo.lowerIsBetter ? result.bestValue < existing.value : result.bestValue > existing.value);
+        (lowerIsBetter ? result.bestValue < existing.value : result.bestValue > existing.value);
 
       if (isBetter) {
         bestByMetric.set(result.metric, {
@@ -421,19 +430,22 @@ export class AnalyticsService {
 
     // Query measurements grouped by week with best values per metric
     // Uses PostgreSQL's date_trunc to group by week (starting Monday)
+    // Dynamic metric_type lookup via JOIN ensures correct aggregation (MIN for lower_is_better, MAX for others)
+    // For tracking metrics, MAX approximates "latest" within the week (acceptable since frontend filters by date)
     const weeklyData = await db
       .select({
         weekStart: sql<string>`date_trunc('week', ${measurements.date}::date)::date::text`,
         metric: measurements.metric,
         bestValue: sql<number>`
           CASE
-            WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            WHEN ${siteMetrics.metricType} = 'lower_is_better'
             THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
             ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
           END
         `,
       })
       .from(measurements)
+      .innerJoin(siteMetrics, eq(measurements.metric, siteMetrics.code))
       .where(
         and(
           gte(measurements.date, dateFrom.toISOString()),
@@ -444,7 +456,8 @@ export class AnalyticsService {
       )
       .groupBy(
         sql`date_trunc('week', ${measurements.date}::date)`,
-        measurements.metric
+        measurements.metric,
+        siteMetrics.metricType
       )
       .orderBy(sql`date_trunc('week', ${measurements.date}::date)`);
 

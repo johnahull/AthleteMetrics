@@ -1,10 +1,12 @@
 // Utility functions for measurement metrics
 import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp, Gauge } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
+import { METRIC_CONFIG, type MetricType } from "@shared/analytics-types";
 
 /**
  * Metrics where lower values indicate better performance (time-based metrics)
  * Used for trend calculations and comparison logic
+ * @deprecated Use getMetricType() instead
  */
 export const LOWER_IS_BETTER_METRICS = [
   'FLY10_TIME',
@@ -15,6 +17,35 @@ export const LOWER_IS_BETTER_METRICS = [
 ] as const;
 
 export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+
+/**
+ * Get the metric type for a given metric code
+ * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT')
+ * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
+ */
+export function getMetricType(metric: string): MetricType {
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  return config?.metricType ?? 'lower_is_better'; // Default to lower_is_better for unknown metrics
+}
+
+/**
+ * Check if a metric is a tracking metric (no better/worse direction)
+ * @param metric - Metric code (e.g., 'HEIGHT', 'WEIGHT')
+ * @returns boolean - true if tracking metric, false otherwise
+ */
+export function isTrackingMetric(metric: string): boolean {
+  return getMetricType(metric) === 'tracking';
+}
+
+/**
+ * Check if lower values are better for this metric
+ * @param metric - Metric code
+ * @returns boolean - true if lower is better, false otherwise
+ * @deprecated Use getMetricType() instead for more granular control
+ */
+export function isLowerIsBetter(metric: string): boolean {
+  return getMetricType(metric) === 'lower_is_better';
+}
 
 export function getMetricDisplayName(metric: string): string {
   switch (metric) {

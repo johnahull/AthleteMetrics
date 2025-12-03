@@ -12,12 +12,23 @@ import { METRIC_CONFIG } from '@shared/analytics-types';
 export function isLowerBetter(metricCode: string): boolean {
   // Check if metric exists in config
   if (metricCode in METRIC_CONFIG) {
-    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].lowerIsBetter;
+    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].metricType === 'lower_is_better';
   }
 
   // Fallback: Assume time-based metrics have lower-is-better
   // This handles any custom metrics not yet in METRIC_CONFIG
   return metricCode.includes('TIME') || metricCode.includes('TEST');
+}
+
+/**
+ * Determine if a metric is a tracking-only metric (no better/worse direction)
+ * Uses METRIC_CONFIG as source of truth
+ */
+export function isTrackingMetric(metricCode: string): boolean {
+  if (metricCode in METRIC_CONFIG) {
+    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].metricType === 'tracking';
+  }
+  return false;
 }
 
 /**
