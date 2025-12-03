@@ -96,12 +96,17 @@ COMMENT ON COLUMN organization_metrics.custom_label IS 'Organization-specific cu
 
 -- Insert default metrics as system defaults (cannot be deleted)
 -- Use ON CONFLICT DO NOTHING for idempotency (safe to re-run)
--- Handle both old schema (lower_is_better) and new schema (metric_type) for compatibility
+--
+-- COMPATIBILITY NOTE: This migration handles both schema versions for two scenarios:
+-- 1. Sequential migration execution: Migration 0022 runs BEFORE 0065, so metric_type doesn't exist yet
+-- 2. db:push compatibility: Users running `npm run db:push` skip migrations and apply schema directly,
+--    which includes metric_type from packages/shared/schema.ts
+-- The conditional logic detects which schema version exists and seeds data accordingly.
 DO $$
 DECLARE
   has_metric_type BOOLEAN;
 BEGIN
-  -- Check if metric_type column exists (post-migration 0065)
+  -- Check if metric_type column exists (post-migration 0065 OR db:push)
   SELECT EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_name = 'site_metrics' AND column_name = 'metric_type'
