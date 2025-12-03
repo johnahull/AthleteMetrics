@@ -38,8 +38,10 @@ export default function MyDashboardPage() {
   const { user, isLoading: authLoading, organizationContext } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
 
-  // Fetch dashboard data
-  const { data: dashboardData, isLoading, isError, error } = useAthleteDashboardData(athleteId);
+  // Fetch dashboard data - include unverified for athlete's own view
+  const { data: dashboardData, isLoading, isError, error } = useAthleteDashboardData(athleteId, {
+    includeUnverified: true,
+  });
 
   // Fetch athlete profile for hero component
   const { data: athlete } = useAthleteProfile(athleteId);

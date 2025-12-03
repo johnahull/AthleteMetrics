@@ -30,6 +30,8 @@ const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
 const MyProfile = React.lazy(() => import("./pages/my-profile"));
 const MyDashboard = React.lazy(() => import("./pages/my-dashboard"));
 const MyGoals = React.lazy(() => import("./pages/my-goals"));
+const MyMeasurements = React.lazy(() => import("./pages/my-measurements"));
+const MyMeasurementsAdd = React.lazy(() => import("./pages/my-measurements-add"));
 const MyPeerComparison = React.lazy(() => import("./pages/my-peer-comparison"));
 const MyGlobalProfile = React.lazy(() => import("./pages/my-global-profile"));
 const UnifiedDashboard = React.lazy(() => import("./pages/unified-dashboard"));
@@ -146,6 +148,16 @@ function Router() {
       <Route path="/my-goals">
         <RouteWrapper loadingText="Loading Goals...">
           <MyGoals />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-measurements/add">
+        <RouteWrapper loadingText="Loading Add Measurement...">
+          <MyMeasurementsAdd />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-measurements">
+        <RouteWrapper loadingText="Loading Measurements...">
+          <MyMeasurements />
         </RouteWrapper>
       </Route>
       <Route path="/my-peer-comparison">

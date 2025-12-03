@@ -119,7 +119,7 @@ export function WellnessStatusCard({
               data-testid="wellness-link"
               aria-label="Submit your first wellness check"
             >
-              <Link href="/wellness/submit">
+              <Link href="/wellness/my-requests">
                 Submit Wellness
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>
@@ -178,7 +178,7 @@ export function WellnessStatusCard({
               data-testid="wellness-link"
               aria-label="View wellness submission history"
             >
-              <Link href="/wellness/submit">
+              <Link href="/wellness/my-requests">
                 View History
                 <ArrowRight className="h-4 w-4 ml-2" />
               </Link>

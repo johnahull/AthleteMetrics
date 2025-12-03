@@ -23,6 +23,7 @@ import {
   type TrendDirection,
 } from '@/utils/metric-trend-utils';
 import { MetricContextTooltip } from './MetricContextTooltip';
+import { isLowerBetter } from '@/constants/metrics';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -51,6 +52,33 @@ interface MetricProgressCardProps {
   showConfetti?: boolean;
 }
 
+/**
+ * Filter measurements to keep only the best value per date.
+ * Uses isLowerBetter to determine what "best" means for the metric.
+ */
+function filterBestPerDate(measurements: Measurement[], metric: string): Measurement[] {
+  const bestByDate = new Map<string, Measurement>();
+  const lowerIsBetter = isLowerBetter(metric);
+
+  for (const m of measurements) {
+    const existing = bestByDate.get(m.date);
+    if (!existing) {
+      bestByDate.set(m.date, m);
+    } else {
+      const existingValue = parseFloat(String(existing.value));
+      const currentValue = parseFloat(String(m.value));
+      const isBetter = lowerIsBetter
+        ? currentValue < existingValue
+        : currentValue > existingValue;
+      if (isBetter) {
+        bestByDate.set(m.date, m);
+      }
+    }
+  }
+
+  return Array.from(bestByDate.values());
+}
+
 export function MetricProgressCard({
   metric,
   displayName,
@@ -77,26 +105,33 @@ export function MetricProgressCard({
       }
     }
   }, [personalRecord?.isRecent, showConfetti, personalRecord]);
-  // Calculate trend data
-  const trendData = useMemo(
-    () => calculateMetricTrend(measurements, metric),
+
+  // Filter to best measurement per date for sparkline and trend
+  const filteredMeasurements = useMemo(
+    () => filterBestPerDate(measurements, metric),
     [measurements, metric]
   );
 
-  // Get sparkline data (last 10 measurements)
-  const sparklineData = useMemo(
-    () => getSparklineData(measurements, 10),
-    [measurements]
+  // Calculate trend data using filtered measurements
+  const trendData = useMemo(
+    () => calculateMetricTrend(filteredMeasurements, metric),
+    [filteredMeasurements, metric]
   );
 
-  // Get current and best values
+  // Get sparkline data (last 10 measurements, filtered to best per date)
+  const sparklineData = useMemo(
+    () => getSparklineData(filteredMeasurements, 10),
+    [filteredMeasurements]
+  );
+
+  // Get current value from filtered measurements (most recent best)
   const currentValue = useMemo(() => {
-    if (measurements.length === 0) return null;
-    const sorted = [...measurements].sort(
+    if (filteredMeasurements.length === 0) return null;
+    const sorted = [...filteredMeasurements].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
     );
     return parseFloat(String(sorted[0].value));
-  }, [measurements]);
+  }, [filteredMeasurements]);
 
   const bestValue = useMemo(
     () => getBestValue(measurements, metric),

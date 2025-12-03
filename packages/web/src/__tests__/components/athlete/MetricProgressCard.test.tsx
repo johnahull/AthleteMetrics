@@ -413,4 +413,111 @@ describe('MetricProgressCard', () => {
       expect(screen.getByTestId('sparkline-chart')).toBeInTheDocument();
     });
   });
+
+  describe('Best Per Date Filtering', () => {
+    it('should show only best value per date for time metrics (lower is better)', () => {
+      // Two measurements on same date - should show only the better (lower) one
+      const measurementsWithDuplicateDates = [
+        { value: 1.55, date: '2024-01-01' },
+        { value: 1.50, date: '2024-01-01' }, // Better time (lower)
+        { value: 1.48, date: '2024-01-05' },
+        { value: 1.52, date: '2024-01-05' }, // Worse time (higher)
+      ];
+
+      render(
+        <MetricProgressCard
+          metric="FLY10_TIME"
+          displayName="10-Yard Fly Time"
+          measurements={measurementsWithDuplicateDates}
+          units="s"
+        />
+      );
+
+      const chart = screen.getByTestId('sparkline-chart');
+      const chartData = JSON.parse(chart.getAttribute('data-chart-values') || '[]');
+
+      // Should have only 2 data points (one per date, best only)
+      expect(chartData.length).toBe(2);
+      // First date should show 1.50 (the lower/better time)
+      expect(chartData[0]).toBe(1.50);
+      // Second date should show 1.48 (the lower/better time)
+      expect(chartData[1]).toBe(1.48);
+    });
+
+    it('should show only best value per date for distance metrics (higher is better)', () => {
+      // Two measurements on same date - should show only the better (higher) one
+      const measurementsWithDuplicateDates = [
+        { value: 30.0, date: '2024-01-01' },
+        { value: 32.0, date: '2024-01-01' }, // Better jump (higher)
+        { value: 31.0, date: '2024-01-05' }, // Worse jump (lower)
+        { value: 34.0, date: '2024-01-05' }, // Better jump (higher)
+      ];
+
+      render(
+        <MetricProgressCard
+          metric="VERTICAL_JUMP"
+          displayName="Vertical Jump"
+          measurements={measurementsWithDuplicateDates}
+          units="in"
+        />
+      );
+
+      const chart = screen.getByTestId('sparkline-chart');
+      const chartData = JSON.parse(chart.getAttribute('data-chart-values') || '[]');
+
+      // Should have only 2 data points (one per date, best only)
+      expect(chartData.length).toBe(2);
+      // First date should show 32.0 (the higher/better jump)
+      expect(chartData[0]).toBe(32.0);
+      // Second date should show 34.0 (the higher/better jump)
+      expect(chartData[1]).toBe(34.0);
+    });
+
+    it('should show current value from best per date data', () => {
+      // Multiple measurements on most recent date
+      const measurementsWithDuplicates = [
+        { value: 1.55, date: '2024-01-01' },
+        { value: 1.48, date: '2024-01-10' }, // Better time on recent date
+        { value: 1.52, date: '2024-01-10' }, // Worse time on recent date
+      ];
+
+      render(
+        <MetricProgressCard
+          metric="FLY10_TIME"
+          displayName="10-Yard Fly Time"
+          measurements={measurementsWithDuplicates}
+          units="s"
+        />
+      );
+
+      // Current value should be the best from the most recent date (1.48)
+      expect(screen.getByTestId('current-value')).toHaveTextContent('1.48s');
+    });
+
+    it('should calculate trend using filtered best-per-date data', () => {
+      // Measurements that look declining when including all, but improving when filtered
+      // Using larger differences to ensure trend detection threshold is met
+      const mixedMeasurements = [
+        { value: 1.80, date: '2024-01-01' }, // Day 1: 1.80 is the only measurement
+        { value: 1.90, date: '2024-01-05' }, // Day 2: worse attempt
+        { value: 1.60, date: '2024-01-05' }, // Day 2: better attempt - this is the best
+        { value: 1.85, date: '2024-01-10' }, // Day 3: worse attempt
+        { value: 1.45, date: '2024-01-10' }, // Day 3: better attempt - this is the best
+      ];
+
+      render(
+        <MetricProgressCard
+          metric="FLY10_TIME"
+          displayName="10-Yard Fly Time"
+          measurements={mixedMeasurements}
+          units="s"
+        />
+      );
+
+      // Trend should be "improving" because best values go 1.80 -> 1.60 -> 1.45
+      // This is a ~15% improvement from average of first two (1.70) to 1.45
+      const trendBadge = screen.getByTestId('trend-badge');
+      expect(trendBadge).toHaveTextContent(/improving/i);
+    });
+  });
 });
