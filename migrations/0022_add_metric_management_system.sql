@@ -96,40 +96,77 @@ COMMENT ON COLUMN organization_metrics.custom_label IS 'Organization-specific cu
 
 -- Insert default metrics as system defaults (cannot be deleted)
 -- Use ON CONFLICT DO NOTHING for idempotency (safe to re-run)
-INSERT INTO site_metrics (code, label, category, unit, lower_is_better, is_system_default, is_active, display_order, description, sport_associations, decimal_precision, color, icon)
-VALUES
-  ('FLY10_TIME', '10-Yard Fly Time', 'speed', 's', true, true, true, 1,
-   'Time to cover 10 yards after a flying start, measuring maximum velocity.',
-   ARRAY['Soccer'], 3, 'blue', 'Clock'),
+-- Handle both old schema (lower_is_better) and new schema (metric_type) for compatibility
+DO $$
+DECLARE
+  has_metric_type BOOLEAN;
+BEGIN
+  -- Check if metric_type column exists (post-migration 0065)
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'site_metrics' AND column_name = 'metric_type'
+  ) INTO has_metric_type;
 
-  ('VERTICAL_JUMP', 'Vertical Jump', 'power', 'in', false, true, true, 2,
-   'Maximum vertical jump height in inches, measuring explosive leg power.',
-   ARRAY['Soccer'], 1, 'purple', 'ArrowUp'),
-
-  ('AGILITY_505', '5-0-5 Agility', 'agility', 's', true, true, true, 3,
-   '5-0-5 agility test: sprint 5 yards, turn 180 degrees, sprint 5 yards back.',
-   ARRAY['Soccer'], 3, 'green', 'Zap'),
-
-  ('AGILITY_5105', '5-10-5 Agility', 'agility', 's', true, true, true, 4,
-   '5-10-5 agility test (Pro Agility): sprint 5 yards, turn 180, sprint 10 yards, turn 180, sprint 5 yards.',
-   ARRAY['Soccer'], 3, 'yellow', 'Zap'),
-
-  ('T_TEST', 'T-Test Agility', 'agility', 's', true, true, true, 5,
-   'T-test agility drill: forward sprint, lateral shuffles, and backward sprint in T-pattern.',
-   ARRAY['Soccer'], 3, 'red', 'Move'),
-
-  ('DASH_40YD', '40-Yard Dash', 'speed', 's', true, true, true, 6,
-   'Time to sprint 40 yards from a stationary start, measuring acceleration and top-end speed.',
-   ARRAY['Soccer'], 3, 'indigo', 'Timer'),
-
-  ('RSI', 'Reactive Strength Index', 'power', '', false, true, true, 7,
-   'Ratio of jump height to ground contact time, measuring elastic leg power and explosiveness.',
-   ARRAY['Soccer'], 2, 'orange', 'TrendingUp'),
-
-  ('TOP_SPEED', 'Top Speed', 'speed', 'mph', false, true, true, 8,
-   'Maximum running velocity in miles per hour.',
-   ARRAY['Soccer'], 2, 'teal', 'Gauge')
-ON CONFLICT (code) DO NOTHING;
+  IF has_metric_type THEN
+    -- New schema with metric_type column
+    INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order, description, sport_associations, decimal_precision, color, icon)
+    VALUES
+      ('FLY10_TIME', '10-Yard Fly Time', 'speed', 's', 'lower_is_better', true, true, 1,
+       'Time to cover 10 yards after a flying start, measuring maximum velocity.',
+       ARRAY['Soccer'], 3, 'blue', 'Clock'),
+      ('VERTICAL_JUMP', 'Vertical Jump', 'power', 'in', 'higher_is_better', true, true, 2,
+       'Maximum vertical jump height in inches, measuring explosive leg power.',
+       ARRAY['Soccer'], 1, 'purple', 'ArrowUp'),
+      ('AGILITY_505', '5-0-5 Agility', 'agility', 's', 'lower_is_better', true, true, 3,
+       '5-0-5 agility test: sprint 5 yards, turn 180 degrees, sprint 5 yards back.',
+       ARRAY['Soccer'], 3, 'green', 'Zap'),
+      ('AGILITY_5105', '5-10-5 Agility', 'agility', 's', 'lower_is_better', true, true, 4,
+       '5-10-5 agility test (Pro Agility): sprint 5 yards, turn 180, sprint 10 yards, turn 180, sprint 5 yards.',
+       ARRAY['Soccer'], 3, 'yellow', 'Zap'),
+      ('T_TEST', 'T-Test Agility', 'agility', 's', 'lower_is_better', true, true, 5,
+       'T-test agility drill: forward sprint, lateral shuffles, and backward sprint in T-pattern.',
+       ARRAY['Soccer'], 3, 'red', 'Move'),
+      ('DASH_40YD', '40-Yard Dash', 'speed', 's', 'lower_is_better', true, true, 6,
+       'Time to sprint 40 yards from a stationary start, measuring acceleration and top-end speed.',
+       ARRAY['Soccer'], 3, 'indigo', 'Timer'),
+      ('RSI', 'Reactive Strength Index', 'power', '', 'higher_is_better', true, true, 7,
+       'Ratio of jump height to ground contact time, measuring elastic leg power and explosiveness.',
+       ARRAY['Soccer'], 2, 'orange', 'TrendingUp'),
+      ('TOP_SPEED', 'Top Speed', 'speed', 'mph', 'higher_is_better', true, true, 8,
+       'Maximum running velocity in miles per hour.',
+       ARRAY['Soccer'], 2, 'teal', 'Gauge')
+    ON CONFLICT (code) DO NOTHING;
+  ELSE
+    -- Old schema with lower_is_better column
+    INSERT INTO site_metrics (code, label, category, unit, lower_is_better, is_system_default, is_active, display_order, description, sport_associations, decimal_precision, color, icon)
+    VALUES
+      ('FLY10_TIME', '10-Yard Fly Time', 'speed', 's', true, true, true, 1,
+       'Time to cover 10 yards after a flying start, measuring maximum velocity.',
+       ARRAY['Soccer'], 3, 'blue', 'Clock'),
+      ('VERTICAL_JUMP', 'Vertical Jump', 'power', 'in', false, true, true, 2,
+       'Maximum vertical jump height in inches, measuring explosive leg power.',
+       ARRAY['Soccer'], 1, 'purple', 'ArrowUp'),
+      ('AGILITY_505', '5-0-5 Agility', 'agility', 's', true, true, true, 3,
+       '5-0-5 agility test: sprint 5 yards, turn 180 degrees, sprint 5 yards back.',
+       ARRAY['Soccer'], 3, 'green', 'Zap'),
+      ('AGILITY_5105', '5-10-5 Agility', 'agility', 's', true, true, true, 4,
+       '5-10-5 agility test (Pro Agility): sprint 5 yards, turn 180, sprint 10 yards, turn 180, sprint 5 yards.',
+       ARRAY['Soccer'], 3, 'yellow', 'Zap'),
+      ('T_TEST', 'T-Test Agility', 'agility', 's', true, true, true, 5,
+       'T-test agility drill: forward sprint, lateral shuffles, and backward sprint in T-pattern.',
+       ARRAY['Soccer'], 3, 'red', 'Move'),
+      ('DASH_40YD', '40-Yard Dash', 'speed', 's', true, true, true, 6,
+       'Time to sprint 40 yards from a stationary start, measuring acceleration and top-end speed.',
+       ARRAY['Soccer'], 3, 'indigo', 'Timer'),
+      ('RSI', 'Reactive Strength Index', 'power', '', false, true, true, 7,
+       'Ratio of jump height to ground contact time, measuring elastic leg power and explosiveness.',
+       ARRAY['Soccer'], 2, 'orange', 'TrendingUp'),
+      ('TOP_SPEED', 'Top Speed', 'speed', 'mph', false, true, true, 8,
+       'Maximum running velocity in miles per hour.',
+       ARRAY['Soccer'], 2, 'teal', 'Gauge')
+    ON CONFLICT (code) DO NOTHING;
+  END IF;
+END $$;
 
 -- Log seed completion
 DO $$
