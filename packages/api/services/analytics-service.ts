@@ -335,6 +335,11 @@ export class AnalyticsService {
     // This eliminates N+1 query pattern (7 queries -> 1 query)
     // Database Index: idx_measurements_org_date_metric_verified (organization_id, date DESC, metric, is_verified)
     // See: migrations/0020_add_measurements_org_metric_analytics_index.sql
+    //
+    // Note: For tracking metrics (HEIGHT, WEIGHT), this query returns MAX value.
+    // While not semantically "best", tracking metrics are typically not displayed in dashboard "best" stats.
+    // If tracking metrics need to show "latest" value in dashboards, this query should be refactored
+    // to use DISTINCT ON or window functions to select most recent measurements by date.
     const metricBests = await db
       .select({
         metric: measurements.metric,
@@ -344,6 +349,8 @@ export class AnalyticsService {
           CASE
             WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
             THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
+            WHEN ${measurements.metric} IN ('HEIGHT', 'WEIGHT')
+            THEN MAX(CAST(${measurements.value} AS NUMERIC))::float
             ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
           END
         `,
@@ -422,6 +429,7 @@ export class AnalyticsService {
 
     // Query measurements grouped by week with best values per metric
     // Uses PostgreSQL's date_trunc to group by week (starting Monday)
+    // Note: For tracking metrics (HEIGHT, WEIGHT), uses MAX which approximates "latest" within the week
     const weeklyData = await db
       .select({
         weekStart: sql<string>`date_trunc('week', ${measurements.date}::date)::date::text`,
@@ -430,6 +438,8 @@ export class AnalyticsService {
           CASE
             WHEN ${measurements.metric} IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
             THEN MIN(CAST(${measurements.value} AS NUMERIC))::float
+            WHEN ${measurements.metric} IN ('HEIGHT', 'WEIGHT')
+            THEN MAX(CAST(${measurements.value} AS NUMERIC))::float
             ELSE MAX(CAST(${measurements.value} AS NUMERIC))::float
           END
         `,

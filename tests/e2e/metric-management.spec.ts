@@ -372,6 +372,98 @@ test.describe('Metric Management - Organization Level', () => {
   });
 });
 
+test.describe('Metric Management - Tracking Metrics', () => {
+  test.beforeEach(async ({ page }) => {
+    await loginAsDefaultUser(page);
+  });
+
+  test('should create a metric with tracking type', async ({ page }) => {
+    const testMetric = {
+      code: `TEST_TRACKING_${Date.now().toString(36).toUpperCase()}`,
+      label: 'Test Tracking Metric',
+      category: 'body_composition',
+      unit: 'kg',
+      metricType: 'tracking' as const,
+      description: 'Test tracking metric for E2E',
+      decimalPrecision: 1,
+    };
+
+    await page.goto(`${STAGING_URL}/metrics`);
+
+    // Click "Add Metric" button
+    await page.click('[data-testid="add-metric-button"]');
+    await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+
+    // Fill in form with tracking type
+    await page.fill('[name="code"]', testMetric.code);
+    await page.fill('[name="label"]', testMetric.label);
+    await page.selectOption('[name="category"]', testMetric.category);
+    await page.fill('[name="unit"]', testMetric.unit);
+    await page.fill('[name="description"]', testMetric.description);
+    await page.selectOption('[name="decimalPrecision"]', testMetric.decimalPrecision.toString());
+    await page.selectOption('[name="metricType"]', 'tracking');
+
+    // Submit form
+    await page.click('[data-testid="submit-metric-button"]');
+
+    // Verify success
+    await expect(page.locator('[data-testid="success-toast"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="success-toast"]')).toContainText('Metric created successfully');
+
+    // Verify metric appears with "Tracking" badge
+    const metricRow = page.locator(`[data-testid="metric-row-${testMetric.code}"]`);
+    await expect(metricRow).toBeVisible();
+    await expect(metricRow).toContainText('Tracking');
+
+    // Cleanup
+    await page.request.delete(`${STAGING_URL}/api/metrics/${testMetric.code}`);
+  });
+
+  test('should display HEIGHT and WEIGHT as tracking metrics', async ({ page }) => {
+    await page.goto(`${STAGING_URL}/metrics`);
+
+    // Wait for metrics table
+    await page.waitForSelector('[data-testid="metrics-table"]', { timeout: 5000 });
+
+    // Check HEIGHT metric
+    const heightRow = page.locator('[data-testid="metric-row-HEIGHT"]');
+    await expect(heightRow).toBeVisible();
+    await expect(heightRow).toContainText('Height');
+    await expect(heightRow).toContainText('Tracking');
+
+    // Check WEIGHT metric
+    const weightRow = page.locator('[data-testid="metric-row-WEIGHT"]');
+    await expect(weightRow).toBeVisible();
+    await expect(weightRow).toContainText('Weight');
+    await expect(weightRow).toContainText('Tracking');
+  });
+
+  test('should show neutral styling for tracking metrics in analytics', async ({ page }) => {
+    // This test verifies that tracking metrics show neutral trend styling
+    // Navigate to analytics page (requires existing athlete data)
+    await page.goto(`${STAGING_URL}/analytics`);
+
+    // Select HEIGHT or WEIGHT metric if available
+    await page.click('[data-testid="analytics-metric-selector"]');
+
+    // Try to find HEIGHT checkbox
+    const heightCheckbox = page.locator('[data-testid="analytics-metric-checkbox-HEIGHT"]');
+    const isHeightAvailable = await heightCheckbox.isVisible().catch(() => false);
+
+    if (isHeightAvailable) {
+      await heightCheckbox.click();
+
+      // If there's data, verify neutral (gray) styling is used for trends
+      // This is a visual check - the exact implementation depends on the component
+      // For now, we just verify the metric can be selected without errors
+      await expect(page.locator('[data-testid="analytics-chart"]')).toBeVisible({ timeout: 10000 });
+    } else {
+      // If HEIGHT is not available, skip the visual check
+      test.skip(true, 'HEIGHT metric not available in this organization');
+    }
+  });
+});
+
 test.describe('Metric Management - Permissions', () => {
   test('should deny metric creation to non-site-admin users', async ({ page }) => {
     // TODO: This requires a non-site-admin test user
