@@ -48,6 +48,7 @@ export interface IStorage {
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
+  getUsersBatch(ids: string[]): Promise<Map<string, User>>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
@@ -57,6 +58,7 @@ export interface IStorage {
   // Organizations
   getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>>;
   getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
@@ -468,6 +470,14 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getUsersBatch(ids: string[]): Promise<Map<string, User>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const users = await this.getUsersByIds(ids);
+    return new Map(users.map(user => [user.id, user]));
+  }
+
   async getUsersByIds(userIds: string[]): Promise<User[]> {
     if (userIds.length === 0) {
       return [];
@@ -799,6 +809,17 @@ export class DatabaseStorage implements IStorage {
   async getOrganization(id: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
     return org || undefined;
+  }
+
+  async getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const orgs = await db
+      .select()
+      .from(organizations)
+      .where(inArray(organizations.id, ids));
+    return new Map(orgs.map(org => [org.id, org]));
   }
 
   async getOrganizationByName(name: string): Promise<Organization | undefined> {
