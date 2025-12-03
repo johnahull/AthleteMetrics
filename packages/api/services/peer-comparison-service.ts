@@ -116,7 +116,13 @@ export class PeerComparisonService extends BaseService {
       // Get athlete's latest measurements for requested metrics
       const athleteMeasurements = await this.getLatestMeasurements(athleteId, metrics);
 
+      // Batch fetch metric info for all metrics to avoid N+1 queries
+      const metricInfoMap = await this.getMetricInfoBatch(metrics);
+
       const results: PercentileResult[] = [];
+
+      // Cache for peer pool data to avoid duplicate fetches in calculatePercentile
+      const peerPoolCache = new Map<string, { userId: string; value: number }[]>();
 
       for (const metric of metrics) {
         const athleteValue = athleteMeasurements.get(metric);
@@ -125,7 +131,12 @@ export class PeerComparisonService extends BaseService {
         }
 
         // Get or compute distribution for this metric + filter combination
-        const distribution = await this.getOrComputeDistribution(metric, filters || {});
+        // This will also populate the peer pool data
+        const peerPool = await this.getGlobalPeerPool(metric, filters || {});
+        peerPoolCache.set(metric, peerPool);
+
+        // Compute distribution from peer pool (avoid redundant DB query)
+        const distribution = await this.computeDistributionFromPool(metric, peerPool, filters || {});
 
         if (distribution.sampleSize < MIN_SAMPLE_SIZE) {
           // Not enough data for meaningful comparison
@@ -146,15 +157,11 @@ export class PeerComparisonService extends BaseService {
         }
 
         // Get metric info to determine if lower is better
-        const metricInfo = await this.getMetricInfo(metric);
+        const metricInfo = metricInfoMap.get(metric) || { lowerIsBetter: false };
 
-        // Calculate percentile from peer pool
-        const percentile = await this.calculatePercentile(
-          athleteValue,
-          metric,
-          filters || {},
-          metricInfo.lowerIsBetter
-        );
+        // Calculate percentile from cached peer pool
+        const values = peerPool.map(p => p.value);
+        const percentile = this.calculatePercentileFromValues(athleteValue, values, metricInfo.lowerIsBetter);
 
         // Get label and message for the percentile
         const labelInfo = PeerComparisonService.getPercentileLabel(percentile);
@@ -553,12 +560,79 @@ export class PeerComparisonService extends BaseService {
       return -1;
     }
 
+    return this.calculatePercentileFromValues(athleteValue, values, lowerIsBetter);
+  }
+
+  /**
+   * Calculate percentile from array of values (avoids redundant DB queries)
+   */
+  private calculatePercentileFromValues(
+    athleteValue: number,
+    values: number[],
+    lowerIsBetter: boolean
+  ): number {
+    if (values.length < MIN_SAMPLE_SIZE) {
+      return -1;
+    }
+
     // quantileRank returns a value from 0 to 1
     const rank = quantileRank(values, athleteValue) * 100;
 
     // For "lower is better" metrics, invert the percentile
     // So a faster time (lower value) gets a higher percentile
     return lowerIsBetter ? 100 - rank : rank;
+  }
+
+  /**
+   * Compute distribution from peer pool values (avoids redundant DB query)
+   */
+  private async computeDistributionFromPool(
+    metric: string,
+    peerPool: { userId: string; value: number }[],
+    filters: PeerFilterCriteria
+  ): Promise<DistributionData> {
+    // Check cache first
+    const cached = await this.getCachedDistribution(metric, filters);
+    if (cached && new Date(cached.expiresAt) > new Date()) {
+      return {
+        metricCode: cached.metricCode,
+        filterCriteria: cached.filterCriteria as PeerFilterCriteria,
+        sampleSize: cached.sampleSize,
+        p10: cached.p10 ? parseFloat(String(cached.p10)) : null,
+        p25: cached.p25 ? parseFloat(String(cached.p25)) : null,
+        p50: cached.p50 ? parseFloat(String(cached.p50)) : null,
+        p75: cached.p75 ? parseFloat(String(cached.p75)) : null,
+        p90: cached.p90 ? parseFloat(String(cached.p90)) : null,
+        mean: cached.mean ? parseFloat(String(cached.mean)) : null,
+        computedAt: new Date(cached.computedAt),
+        expiresAt: new Date(cached.expiresAt),
+      };
+    }
+
+    // Compute from peer pool
+    const values = peerPool.map(p => p.value).sort((a, b) => a - b);
+
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + CACHE_TTL_MS);
+
+    const distribution: DistributionData = {
+      metricCode: metric,
+      filterCriteria: filters,
+      sampleSize: values.length,
+      p10: values.length >= MIN_SAMPLE_SIZE ? quantile(values, 0.1) : null,
+      p25: values.length >= MIN_SAMPLE_SIZE ? quantile(values, 0.25) : null,
+      p50: values.length >= MIN_SAMPLE_SIZE ? quantile(values, 0.5) : null,
+      p75: values.length >= MIN_SAMPLE_SIZE ? quantile(values, 0.75) : null,
+      p90: values.length >= MIN_SAMPLE_SIZE ? quantile(values, 0.9) : null,
+      mean: values.length >= MIN_SAMPLE_SIZE ? mean(values) : null,
+      computedAt: now,
+      expiresAt,
+    };
+
+    // Cache the result
+    await this.cacheDistribution(distribution);
+
+    return distribution;
   }
 
   // ========================================================================
@@ -682,6 +756,32 @@ export class PeerComparisonService extends BaseService {
       // Default to lower_is_better for time-based metrics
       lowerIsBetter: metric[0]?.metricType === 'lower_is_better',
     };
+  }
+
+  /**
+   * Batch fetch metric info for multiple metrics (avoids N+1 queries)
+   */
+  private async getMetricInfoBatch(metricCodes: string[]): Promise<Map<string, { lowerIsBetter: boolean }>> {
+    if (metricCodes.length === 0) {
+      return new Map();
+    }
+
+    const metrics = await db
+      .select({
+        code: siteMetrics.code,
+        metricType: siteMetrics.metricType
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, metricCodes));
+
+    const result = new Map<string, { lowerIsBetter: boolean }>();
+    for (const metric of metrics) {
+      result.set(metric.code, {
+        lowerIsBetter: metric.metricType === 'lower_is_better',
+      });
+    }
+
+    return result;
   }
 
   /**
