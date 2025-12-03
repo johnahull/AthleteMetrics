@@ -380,6 +380,65 @@ describe('AnalyticsService', () => {
 
       expect(result.bestFLY10_TIMELast30Days).toBeUndefined();
     });
+
+    it('should exclude tracking metrics from bestByMetric stats', async () => {
+      // Add HEIGHT and WEIGHT measurements for both athletes
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 5); // 5 days ago
+
+      await db.insert(measurements).values([
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'HEIGHT',
+          value: '72.0', // 6 feet
+          units: 'in',
+          age: 24,
+          isVerified: true,
+        },
+        {
+          userId: testUserId2,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'HEIGHT',
+          value: '68.0', // 5'8"
+          units: 'in',
+          age: 25,
+          isVerified: true,
+        },
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'WEIGHT',
+          value: '180.0',
+          units: 'lbs',
+          age: 24,
+          isVerified: true,
+        },
+        {
+          userId: testUserId2,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'WEIGHT',
+          value: '175.0',
+          units: 'lbs',
+          age: 25,
+          isVerified: true,
+        },
+      ]);
+
+      const result = await analyticsService.getDashboardStats(testOrgId);
+
+      // Tracking metrics should not appear in dashboard best stats
+      expect(result.bestHEIGHTLast30Days).toBeUndefined();
+      expect(result.bestWEIGHTLast30Days).toBeUndefined();
+
+      // Performance metrics should still work
+      expect(result.bestFLY10_TIMELast30Days).toBeDefined();
+      expect(result.bestVERTICAL_JUMPLast30Days).toBeDefined();
+    });
   });
 
   describe('getUserStats (alias)', () => {

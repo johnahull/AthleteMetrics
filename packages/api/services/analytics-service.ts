@@ -419,6 +419,10 @@ export class AnalyticsService {
       const metricInfo = metricMap.get(result.metric);
       if (!metricInfo) return;
 
+      // Exclude tracking metrics from "best athlete" comparisons
+      // Tracking metrics (HEIGHT, WEIGHT) have no performance direction
+      if (metricInfo.metricType === 'tracking') return;
+
       const existing = bestByMetric.get(result.metric);
       const lowerIsBetter = metricInfo.metricType === 'lower_is_better';
       const isBetter = !existing ||
