@@ -273,7 +273,7 @@ describe('ReportService', () => {
           label: 'Vertical Jump',
           category: 'power',
           unit: 'inches',
-          lowerIsBetter: false,
+          metricType: 'higher_is_better',
           isSystemDefault: true,
           isActive: true,
         });
@@ -411,11 +411,10 @@ describe('ReportService', () => {
         code: 'FLY10_TIME',
         label: '10-Yard Fly Time',
         unit: 's',
-        lowerIsBetter: true,
-        sportType: 'soccer',
+        metricType: 'lower_is_better',
       }).onConflictDoUpdate({
         target: siteMetrics.code,
-        set: { lowerIsBetter: true },
+        set: { metricType: 'lower_is_better' },
       }).returning();
       fly10MetricId = fly10.id;
 
@@ -423,11 +422,10 @@ describe('ReportService', () => {
         code: 'VERTICAL_JUMP',
         label: 'Vertical Jump',
         unit: 'in',
-        lowerIsBetter: false,
-        sportType: 'soccer',
+        metricType: 'higher_is_better',
       }).onConflictDoUpdate({
         target: siteMetrics.code,
-        set: { lowerIsBetter: false },
+        set: { metricType: 'higher_is_better' },
       }).returning();
       verticalMetricId = vertical.id;
 
