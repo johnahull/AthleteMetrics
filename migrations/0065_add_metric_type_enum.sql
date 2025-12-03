@@ -27,12 +27,36 @@ END $$;
 
 -- Step 3: Migrate existing data based on lower_is_better boolean
 -- Only update rows where metric_type is NULL (idempotent)
-UPDATE site_metrics
-SET metric_type = CASE
-  WHEN lower_is_better = true THEN 'lower_is_better'
-  ELSE 'higher_is_better'
-END
-WHERE metric_type IS NULL;
+-- Use conditional logic to handle cases where lower_is_better doesn't exist
+-- (e.g., when db:push creates schema with metric_type directly)
+DO $$
+DECLARE
+  has_lower_is_better BOOLEAN;
+BEGIN
+  -- Check if lower_is_better column exists
+  SELECT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'site_metrics' AND column_name = 'lower_is_better'
+  ) INTO has_lower_is_better;
+
+  IF has_lower_is_better THEN
+    -- Migrate from lower_is_better to metric_type
+    EXECUTE '
+      UPDATE site_metrics
+      SET metric_type = CASE
+        WHEN lower_is_better = true THEN ''lower_is_better''
+        ELSE ''higher_is_better''
+      END
+      WHERE metric_type IS NULL
+    ';
+  ELSE
+    -- lower_is_better doesn't exist (db:push created schema directly)
+    -- Set default for any NULL values
+    UPDATE site_metrics
+    SET metric_type = 'lower_is_better'
+    WHERE metric_type IS NULL;
+  END IF;
+END $$;
 
 -- Step 4: Set metric_type as NOT NULL with default
 ALTER TABLE site_metrics
