@@ -44,13 +44,37 @@ export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): 
   const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
   const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
 
-  // If either metric is a tracking metric (no better/worse direction), use neutral labels
-  if (xIsTracking || yIsTracking) {
+  // If both metrics are tracking, use neutral labels
+  if (xIsTracking && yIsTracking) {
     return {
       topRight: { label: `High ${xName}, High ${yName}`, color: 'yellow' as const },
       topLeft: { label: `Low ${xName}, High ${yName}`, color: 'yellow' as const },
       bottomRight: { label: `High ${xName}, Low ${yName}`, color: 'yellow' as const },
       bottomLeft: { label: `Low ${xName}, Low ${yName}`, color: 'yellow' as const }
+    };
+  }
+
+  // If only X-axis is tracking, preserve Y-axis performance labels
+  if (xIsTracking && !yIsTracking) {
+    const yGood = yLowerIsBetter ? 'Low' : 'High';
+    const yBad = yLowerIsBetter ? 'High' : 'Low';
+    return {
+      topRight: { label: `High ${xName}, ${yGood} ${yName}`, color: 'green' as const },
+      topLeft: { label: `Low ${xName}, ${yGood} ${yName}`, color: 'green' as const },
+      bottomRight: { label: `High ${xName}, ${yBad} ${yName}`, color: 'red' as const },
+      bottomLeft: { label: `Low ${xName}, ${yBad} ${yName}`, color: 'red' as const }
+    };
+  }
+
+  // If only Y-axis is tracking, preserve X-axis performance labels
+  if (!xIsTracking && yIsTracking) {
+    const xGood = xLowerIsBetter ? 'Low' : 'High';
+    const xBad = xLowerIsBetter ? 'High' : 'Low';
+    return {
+      topRight: { label: `${xGood} ${xName}, High ${yName}`, color: 'green' as const },
+      topLeft: { label: `${xBad} ${xName}, High ${yName}`, color: 'red' as const },
+      bottomRight: { label: `${xGood} ${xName}, Low ${yName}`, color: 'green' as const },
+      bottomLeft: { label: `${xBad} ${xName}, Low ${yName}`, color: 'red' as const }
     };
   }
 
