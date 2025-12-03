@@ -12,11 +12,12 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { generateInvitationLink, getBaseUrl } from "../utils/url-utils";
 import { emailService } from "../services/email-service";
 import { isValidEmail } from "@shared/email-validation";
+import { RATE_LIMITS, TEST_EMAIL_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for test email endpoint
 const testEmailLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  limit: 10,
+  windowMs: TEST_EMAIL_WINDOW_MS,
+  limit: RATE_LIMITS.TEST_EMAIL,
   message: { message: "Too many test email requests, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,

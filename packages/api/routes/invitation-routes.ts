@@ -587,19 +587,26 @@ export function registerInvitationRoutes(app: Express) {
         return false;
       });
 
-      // Enrich with additional data
-      const enrichedInvitations = await Promise.all(
-        filteredInvitations.map(async (invitation) => {
-          const inviter = invitation.invitedBy ? await storage.getUser(invitation.invitedBy) : null;
-          const organization = await storage.getOrganization(invitation.organizationId);
+      // Batch fetch users and organizations to avoid N+1 queries
+      const inviterIds = [...new Set(filteredInvitations.map(i => i.invitedBy).filter(Boolean))] as string[];
+      const orgIds = [...new Set(filteredInvitations.map(i => i.organizationId))];
 
-          return {
-            ...invitation,
-            inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'Unknown',
-            organizationName: organization?.name || 'Unknown'
-          };
-        })
-      );
+      const [usersMap, orgsMap] = await Promise.all([
+        storage.getUsersBatch(inviterIds),
+        storage.getOrganizationsBatch(orgIds)
+      ]);
+
+      // Enrich with additional data
+      const enrichedInvitations = filteredInvitations.map((invitation) => {
+        const inviter = invitation.invitedBy ? usersMap.get(invitation.invitedBy) : null;
+        const organization = orgsMap.get(invitation.organizationId);
+
+        return {
+          ...invitation,
+          inviterName: inviter ? `${inviter.firstName} ${inviter.lastName}` : 'Unknown',
+          organizationName: organization?.name || 'Unknown'
+        };
+      });
 
       // Sort by creation date (newest first)
       enrichedInvitations.sort((a, b) =>

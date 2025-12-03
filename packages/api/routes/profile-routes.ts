@@ -14,11 +14,12 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for username check endpoint to prevent enumeration attacks
 const usernameCheckLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  limit: 20, // 20 requests per 15 minutes
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.USERNAME_CHECK,
   message: { message: "Too many username checks, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
