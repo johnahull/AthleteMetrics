@@ -152,10 +152,11 @@ export function registerDashboardTrendsRoutes(app: Express) {
 
       // Defensive check: if no athletes found, return early with empty data
       if (athleteIds.length === 0) {
+        const emptyTrend: TrendData = { current: 0, previous: 0, change: 0, changePercent: 0, trend: 'flat' };
         return res.json({
-          athletes: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const },
-          teams: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const },
-          measurements: { current: 0, previous: 0, percentChange: 0, trend: 'stable' as const }
+          athletes: emptyTrend,
+          teams: emptyTrend,
+          measurements: emptyTrend
         });
       }
 
