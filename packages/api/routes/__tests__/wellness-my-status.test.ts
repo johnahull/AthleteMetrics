@@ -5,7 +5,7 @@
  * athlete wellness status information for the dashboard.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from '@jest/globals';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
