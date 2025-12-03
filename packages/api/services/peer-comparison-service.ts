@@ -657,13 +657,14 @@ export class PeerComparisonService extends BaseService {
    */
   private async getMetricInfo(metricCode: string): Promise<{ lowerIsBetter: boolean }> {
     const metric = await db
-      .select({ lowerIsBetter: siteMetrics.lowerIsBetter })
+      .select({ metricType: siteMetrics.metricType })
       .from(siteMetrics)
       .where(eq(siteMetrics.code, metricCode))
       .limit(1);
 
     return {
-      lowerIsBetter: metric[0]?.lowerIsBetter ?? true,
+      // Default to lower_is_better for time-based metrics
+      lowerIsBetter: metric[0]?.metricType === 'lower_is_better',
     };
   }
 
