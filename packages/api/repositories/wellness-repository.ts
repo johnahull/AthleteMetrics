@@ -666,7 +666,7 @@ export class WellnessRepository {
       avg_value: number;
       response_count: number;
     };
-    const limitedResults = (results as TrendQueryResult[]).slice(0, MAX_TOTAL_DATA_POINTS);
+    const limitedResults = (results as unknown as TrendQueryResult[]).slice(0, MAX_TOTAL_DATA_POINTS);
 
     // Group results by question
     const trendsByQuestion: Record<string, WellnessTrend> = {};
