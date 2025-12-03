@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteDashboardData, type DashboardData } from '@/hooks/useAthleteDashboardData';
 import { useAthleteProfile } from '@/hooks/useAthleteProfile';
+import { useAthleteWellnessStatus } from '@/hooks/useAthleteWellnessStatus';
 import { useActiveGoals, GoalStatus, GoalType } from '@/hooks/useGoals';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
@@ -67,6 +68,9 @@ export default function MyDashboardPage() {
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
   const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
   const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
+
+  // Fetch athlete's wellness status for dashboard card
+  const { data: wellnessData } = useAthleteWellnessStatus(isWellnessEnabled && !!user?.id);
 
   // Note: Measurements are already grouped by useAthleteDashboardData hook internally
   // This local grouping is kept for the MetricProgressCard component which expects grouped data
@@ -256,7 +260,7 @@ export default function MyDashboardPage() {
         {/* Wellness Status */}
         <WellnessStatusCard
           wellnessEnabled={isWellnessEnabled}
-          wellnessData={null}
+          wellnessData={wellnessData ?? null}
         />
       </div>
     </div>
