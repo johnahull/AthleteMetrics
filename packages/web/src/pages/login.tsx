@@ -65,6 +65,7 @@ export default function Login() {
                 placeholder="Enter your username"
                 disabled={isLoading}
                 data-testid="input-username"
+                autoComplete="username"
               />
             </div>
             <div>
@@ -80,6 +81,7 @@ export default function Login() {
                   disabled={isLoading}
                   data-testid="input-password"
                   className="pr-10"
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
