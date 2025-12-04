@@ -5,6 +5,11 @@
 
 -- Constraint: Enforce minimum sample size of 10 for peer percentile cache
 -- This prevents displaying unreliable percentiles from small sample sizes
+
+-- First, clean up any existing cache entries with sample_size < 10
+-- These represent unreliable data that will be regenerated on demand
+DELETE FROM peer_percentile_cache WHERE sample_size < 10;
+
 DO $$
 BEGIN
   IF NOT EXISTS (
