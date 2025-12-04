@@ -343,13 +343,12 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
         return res.status(403).json({ message: genericError });
       }
 
-      // SECURITY: Verify athlete is in the same organization as the request creator
+      // SECURITY: Verify athlete belongs to the same organization as the wellness request
       // This prevents cross-org data leakage via magic links
-      if (wellnessRequest.createdBy) {
-        const requestCreator = await storage.getUser(wellnessRequest.createdBy);
-        if (requestCreator?.organizationId && athlete.organizationId !== requestCreator.organizationId) {
-          return res.status(403).json({ message: genericError });
-        }
+      const athleteOrgs = await storage.getUserOrganizations(athleteId);
+      const belongsToRequestOrg = athleteOrgs.some(uo => uo.organizationId === wellnessRequest.organizationId);
+      if (!belongsToRequestOrg) {
+        return res.status(403).json({ message: genericError });
       }
 
       // For public wellness links (requiresAuth: false), set magic link user context
