@@ -6,6 +6,8 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AnalyticsService } from "../services/analytics-service";
+import { AnalyticsService as AdvancedAnalyticsService } from "../analytics-simple";
+import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { db } from "../db";
@@ -40,6 +42,7 @@ const analyticsLimiter = rateLimit({
 
 export function registerAnalyticsRoutes(app: Express) {
   const analyticsService = new AnalyticsService();
+  const advancedAnalyticsService = new AdvancedAnalyticsService();
 
   /**
    * Get athlete statistics (best performances, measurement count)
@@ -155,6 +158,43 @@ export function registerAnalyticsRoutes(app: Express) {
     } catch (error) {
       console.error("Get dashboard stats error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch dashboard statistics";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * POST analytics dashboard data with complex filters
+   * Used by CoachAnalytics page for detailed measurement analysis
+   */
+  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate request body
+      const validation = validateAnalyticsRequest(req.body);
+      if (!validation.success || !validation.data) {
+        return res.status(400).json({
+          message: "Invalid analytics request",
+          errors: validation.errors
+        });
+      }
+
+      const request = validation.data;
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && request.filters.organizationId !== user.primaryOrganizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Call the advanced analytics service
+      const analyticsData = await advancedAnalyticsService.getAnalyticsData(request);
+      res.json(analyticsData);
+    } catch (error) {
+      console.error("POST analytics dashboard error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch analytics data";
       res.status(500).json({ message });
     }
   });

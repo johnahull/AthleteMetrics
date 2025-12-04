@@ -20,6 +20,7 @@ import {
 import { eq, and, inArray, gte, lte, isNotNull, desc, sql } from "drizzle-orm";
 import { BaseService } from "./base-service";
 import { quantileRank, mean, quantile } from "simple-statistics";
+import crypto from "crypto";
 
 /**
  * Filter criteria for peer pool selection
@@ -668,7 +669,6 @@ export class PeerComparisonService extends BaseService {
   ): Promise<PeerPercentileCache | null> {
     const filterJson = JSON.stringify(this.normalizeFilters(filters));
     // Compute MD5 in JavaScript for direct index lookup (100x faster than SQL computation)
-    const crypto = require('crypto');
     const filterHashValue = crypto.createHash('md5').update(filterJson).digest('hex');
 
     const cached = await db
