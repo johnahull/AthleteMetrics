@@ -336,7 +336,7 @@ export default function Dashboard() {
           value={trendsData?.measurements.total || 0}
           icon={Activity}
           trend={trendsData?.measurements ? {
-            value: trendsData.measurements.change,
+            value: trendsData.measurements.current,
             percent: trendsData.measurements.changePercent,
             direction: trendsData.measurements.trend
           } : undefined}
