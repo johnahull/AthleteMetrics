@@ -6,7 +6,7 @@
  * Supports edit/delete actions for unverified (self-entered) measurements.
  */
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import type { Measurement } from '@shared/schema';
 import {
   Table,
@@ -84,7 +84,7 @@ export function MeasurementHistoryTable({
     return sorted;
   }, [measurements, sortField, sortDirection]);
 
-  const handleSort = (field: SortField) => {
+  const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
       // Toggle direction
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -93,11 +93,11 @@ export function MeasurementHistoryTable({
       setSortField(field);
       setSortDirection('asc');
     }
-  };
+  }, [sortField, sortDirection]);
 
-  const handleRowClick = (measurementId: string) => {
+  const handleRowClick = useCallback((measurementId: string) => {
     setExpandedRowId(expandedRowId === measurementId ? null : measurementId);
-  };
+  }, [expandedRowId]);
 
   const SortIcon = ({ field }: { field: SortField }) => {
     if (sortField !== field) return null;
