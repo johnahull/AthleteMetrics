@@ -51,7 +51,7 @@ interface TrendData {
 
 interface DashboardTrendsResponse {
   athletes: TrendData;
-  measurements: TrendData;
+  measurements: TrendData & { total: number };
   teams: TrendData;
   periodLabel?: string;
   comparisonLabel?: string;
@@ -361,6 +361,24 @@ export function registerDashboardTrendsRoutes(app: Express) {
         previousMeasurements = previousMeasurementsResult[0]?.count || 0;
       }
 
+      // Total Measurements (all-time count for the organization)
+      let totalMeasurements = 0;
+      if (athleteIds.length > 0) {
+        const totalMeasurementsResult = await db
+          .select({
+            count: sql<number>`count(*)::int`
+          })
+          .from(measurements)
+          .where(
+            and(
+              inArray(measurements.userId, athleteIds),
+              eq(measurements.isVerified, true)
+            )
+          );
+
+        totalMeasurements = totalMeasurementsResult[0]?.count || 0;
+      }
+
       // Teams Trend (count teams created in current vs previous period)
       // Skip team trends when filtering by specific team (not meaningful)
       let currentTeams = 0;
@@ -402,7 +420,7 @@ export function registerDashboardTrendsRoutes(app: Express) {
       // Build response
       const response: DashboardTrendsResponse = {
         athletes: calculateTrendData(currentAthletes, previousAthletes),
-        measurements: calculateTrendData(currentMeasurements, previousMeasurements),
+        measurements: { ...calculateTrendData(currentMeasurements, previousMeasurements), total: totalMeasurements },
         teams: calculateTrendData(currentTeams, previousTeams),
         periodLabel: comparisonPeriods.label,
         comparisonLabel: comparisonPeriods.comparisonLabel

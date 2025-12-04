@@ -10,7 +10,7 @@ import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 interface DashboardTrendsResponse {
   athletes: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
-  measurements: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
+  measurements: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat'; total: number };
   teams: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
   periodLabel?: string;       // Human-readable current period label
   comparisonLabel?: string;   // Human-readable comparison period label
