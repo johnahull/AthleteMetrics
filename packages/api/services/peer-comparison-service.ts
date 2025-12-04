@@ -157,10 +157,7 @@ export class PeerComparisonService extends BaseService {
           continue;
         }
 
-        // Get metric info to determine if lower is better
-        const metricInfo = metricInfoMap.get(metric) || { lowerIsBetter: false };
-
-        // Calculate percentile from cached peer pool
+        // Calculate percentile from cached peer pool (metricInfo already retrieved above)
         const values = peerPool.map(p => p.value);
         const percentile = this.calculatePercentileFromValues(athleteValue, values, metricInfo.lowerIsBetter);
 
