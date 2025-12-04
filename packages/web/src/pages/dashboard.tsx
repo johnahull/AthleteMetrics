@@ -4,9 +4,11 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
-import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
+import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue, getMetricUnits } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useAthleteDashboardData } from "@/hooks/useAthleteDashboardData";
+import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
 import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
 import { KPICardWithTrend } from "@/components/kpi-card-with-trend";
 import { KPICardSkeleton, ChartSkeleton } from "@/components/ui/loading-states";
@@ -155,14 +157,34 @@ export default function Dashboard() {
     enabled: !!effectiveOrganizationId && !!user,
   });
 
-  // Compute scope label for widgets (shows org name or team name)
+  // Fetch athlete-specific data when in athlete view
+  const { data: athleteDashboardData } = useAthleteDashboardData(
+    scope.athleteId || '',
+    { enabled: scope.view === 'athlete' && !!scope.athleteId }
+  );
+
+  // Compute scope label for widgets (shows org name, team name, or athlete name)
   const scopeLabel = useMemo(() => {
+    if (scope.view === 'athlete' && athleteDashboardData?.athleteName) {
+      return athleteDashboardData.athleteName;
+    }
     if (scope.view === 'team' && scope.teamId) {
       const team = teams.find(t => t.id === scope.teamId);
       return team?.name || 'Team';
     }
     return currentOrganization?.name || 'Organization';
-  }, [scope.view, scope.teamId, teams, currentOrganization?.name]);
+  }, [scope.view, scope.teamId, scope.athleteId, teams, currentOrganization?.name, athleteDashboardData?.athleteName]);
+
+  // Group measurements by metric for MetricProgressCard
+  const athleteMeasurementsByMetric = useMemo(() => {
+    if (!athleteDashboardData?.measurements) return {};
+    const grouped: Record<string, typeof athleteDashboardData.measurements> = {};
+    athleteDashboardData.measurements.forEach((m) => {
+      if (!grouped[m.metric]) grouped[m.metric] = [];
+      grouped[m.metric].push(m);
+    });
+    return grouped;
+  }, [athleteDashboardData?.measurements]);
 
   // Debug logging (MUST be before any early returns)
   useEffect(() => {
@@ -363,16 +385,16 @@ export default function Dashboard() {
         />
       )}
 
-      {/* At-Risk Athletes Alert - Only show when org is selected */}
-      {effectiveOrganizationId && (
+      {/* At-Risk Athletes Alert - Only show for org/team view, not athlete view */}
+      {effectiveOrganizationId && scope.view !== 'athlete' && (
         <AtRiskAthletesAlert
           organizationId={effectiveOrganizationId}
           teamId={filterParams.teamId}
         />
       )}
 
-      {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
-      {effectiveOrganizationId && (
+      {/* Performance Metrics Cards - Best from Last 30 Days - Only show for org/team view */}
+      {effectiveOrganizationId && scope.view !== 'athlete' && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
         {/* Dynamic metric cards for organization-enabled metrics only */}
         {!metricsLoading && availableMetrics.map((metric) => {
@@ -424,8 +446,8 @@ export default function Dashboard() {
       </div>
       )}
 
-      {/* Leaderboard Section - Only show when org is selected */}
-      {effectiveOrganizationId && (
+      {/* Leaderboard Section - Only show for org/team view, not athlete view */}
+      {effectiveOrganizationId && scope.view !== 'athlete' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <LeaderboardWidget
           organizationId={effectiveOrganizationId}
@@ -444,6 +466,23 @@ export default function Dashboard() {
           scopeLabel={scopeLabel}
         />
       </div>
+      )}
+
+      {/* Athlete Metric Progress Cards - Only show in athlete view */}
+      {effectiveOrganizationId && scope.view === 'athlete' && athleteDashboardData && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+          {athleteDashboardData.availableMetrics.map((metric) => (
+            <MetricProgressCard
+              key={metric}
+              metric={metric}
+              displayName={getMetricDisplayName(metric)}
+              measurements={athleteMeasurementsByMetric[metric] || []}
+              units={getMetricUnits(metric)}
+              personalRecord={athleteDashboardData.personalRecords.find(pr => pr.metric === metric)}
+              showConfetti={false}
+            />
+          ))}
+        </div>
       )}
 
       {/* Charts Section - Only show when org is selected */}

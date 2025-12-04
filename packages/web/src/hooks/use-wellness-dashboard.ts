@@ -11,6 +11,15 @@ interface AthleteData {
   lastSubmission: Date;
 }
 
+interface TemplateAggregate {
+  templateId: string;
+  templateName: string;
+  averageScore: number | null;
+  scaleMax: number;
+  responseCount: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
 interface TeamDashboardData {
   teamId: string;
   teamName: string;
@@ -25,6 +34,7 @@ interface TeamDashboardData {
   trend: 'up' | 'down' | 'stable';
   commonInjuries: { label: string; count: number }[];
   athletes: AthleteData[];
+  templateAggregates: TemplateAggregate[];
 }
 
 interface UseWellnessDashboardOptions {

@@ -97,12 +97,6 @@ export function DashboardWellnessSection({
     let totalGreen = 0;
     let totalAthletes = 0;
     let totalResponses = 0;
-    let scoreSum = 0;
-    let scoreCount = 0;
-    let scaleMax = 10; // Default scale
-
-    // Trends tracking
-    const trends: ('up' | 'down' | 'stable')[] = [];
 
     wellnessData.forEach((team) => {
       totalRed += team.redCount;
@@ -110,36 +104,83 @@ export function DashboardWellnessSection({
       totalGreen += team.greenCount;
       totalAthletes += team.totalAthletes;
       totalResponses += Math.round(team.totalAthletes * (team.completionRate / 100));
-      scaleMax = team.scaleMax || scaleMax;
-
-      if (team.teamAverageScore !== null) {
-        scoreSum += team.teamAverageScore * team.totalAthletes;
-        scoreCount += team.totalAthletes;
-      }
-
-      trends.push(team.trend);
     });
 
-    // Calculate overall trend (majority vote)
-    const trendCounts = { up: 0, down: 0, stable: 0 };
-    trends.forEach((t) => trendCounts[t]++);
-    let overallTrend: 'up' | 'down' | 'stable' = 'stable';
-    if (trendCounts.up > trendCounts.down && trendCounts.up > trendCounts.stable) {
-      overallTrend = 'up';
-    } else if (trendCounts.down > trendCounts.up && trendCounts.down > trendCounts.stable) {
-      overallTrend = 'down';
-    }
-
     return {
-      averageWellness: scoreCount > 0 ? scoreSum / scoreCount : null,
-      scaleMax,
-      trend: overallTrend,
       totalResponses,
       redCount: totalRed,
       yellowCount: totalYellow,
       greenCount: totalGreen,
       totalAthletes,
     };
+  }, [wellnessData]);
+
+  // Aggregate template data across all teams
+  const aggregatedTemplates = useMemo(() => {
+    if (!wellnessData || wellnessData.length === 0) {
+      return [];
+    }
+
+    // Group template aggregates by templateId
+    const templateMap = new Map<string, {
+      templateId: string;
+      templateName: string;
+      totalScore: number;
+      totalCount: number;
+      scaleMax: number;
+      responseCount: number;
+      trends: ('up' | 'down' | 'stable')[];
+    }>();
+
+    wellnessData.forEach((team) => {
+      team.templateAggregates.forEach((aggregate) => {
+        const existing = templateMap.get(aggregate.templateId);
+        if (existing) {
+          // Aggregate across teams
+          existing.totalScore += (aggregate.averageScore || 0) * aggregate.responseCount;
+          existing.totalCount += aggregate.responseCount;
+          existing.responseCount += aggregate.responseCount;
+          existing.trends.push(aggregate.trend);
+        } else {
+          // First time seeing this template
+          templateMap.set(aggregate.templateId, {
+            templateId: aggregate.templateId,
+            templateName: aggregate.templateName,
+            totalScore: (aggregate.averageScore || 0) * aggregate.responseCount,
+            totalCount: aggregate.responseCount,
+            scaleMax: aggregate.scaleMax,
+            responseCount: aggregate.responseCount,
+            trends: [aggregate.trend],
+          });
+        }
+      });
+    });
+
+    // Convert map to array and calculate final averages and trends
+    return Array.from(templateMap.values()).map((template) => {
+      const averageScore = template.totalCount > 0
+        ? template.totalScore / template.totalCount
+        : null;
+
+      // Calculate overall trend (majority vote)
+      const trendCounts = { up: 0, down: 0, stable: 0 };
+      template.trends.forEach((t) => trendCounts[t]++);
+      let trend: 'up' | 'down' | 'stable' = 'stable';
+      if (trendCounts.up > trendCounts.down && trendCounts.up > trendCounts.stable) {
+        trend = 'up';
+      } else if (trendCounts.down > trendCounts.up && trendCounts.down > trendCounts.stable) {
+        trend = 'down';
+      }
+
+      return {
+        templateId: template.templateId,
+        templateName: template.templateName,
+        averageScore,
+        scaleMax: template.scaleMax,
+        responseCount: template.responseCount,
+        trend,
+      };
+    });
   }, [wellnessData]);
 
   // Collect at-risk athletes from all teams
@@ -225,19 +266,6 @@ export function DashboardWellnessSection({
     );
   }
 
-  const TrendIcon =
-    aggregatedData?.trend === 'up'
-      ? TrendingUp
-      : aggregatedData?.trend === 'down'
-        ? TrendingDown
-        : Minus;
-  const trendColor =
-    aggregatedData?.trend === 'up'
-      ? 'text-green-600'
-      : aggregatedData?.trend === 'down'
-        ? 'text-red-600'
-        : 'text-gray-500';
-
   return (
     <div className="mb-8">
       <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -246,31 +274,50 @@ export function DashboardWellnessSection({
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Average Wellness Card */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-gray-600">Average Wellness</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-baseline justify-between">
-              <div className="text-3xl font-bold text-gray-900">
-                {aggregatedData && aggregatedData.averageWellness != null
-                  ? aggregatedData.averageWellness.toFixed(1)
-                  : '-'}
-                <span className="text-lg text-gray-500 font-normal">
-                  /{aggregatedData?.scaleMax ?? 10}
-                </span>
-              </div>
-              <div className={`flex items-center gap-1 ${trendColor}`}>
-                <TrendIcon className="h-4 w-4" />
-                <span className="text-sm capitalize">{aggregatedData?.trend}</span>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mt-2">
-              Based on {aggregatedData?.totalResponses || 0} responses
-            </p>
-          </CardContent>
-        </Card>
+        {/* Per-Template Wellness Cards */}
+        {aggregatedTemplates.map((template) => {
+          const TrendIcon =
+            template.trend === 'up'
+              ? TrendingUp
+              : template.trend === 'down'
+                ? TrendingDown
+                : Minus;
+          const trendColor =
+            template.trend === 'up'
+              ? 'text-green-600'
+              : template.trend === 'down'
+                ? 'text-red-600'
+                : 'text-gray-500';
+
+          return (
+            <Card key={template.templateId}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-gray-600">
+                  {template.templateName}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-baseline justify-between">
+                  <div className="text-3xl font-bold text-gray-900">
+                    {template.averageScore != null
+                      ? template.averageScore.toFixed(1)
+                      : '-'}
+                    <span className="text-lg text-gray-500 font-normal">
+                      /{template.scaleMax}
+                    </span>
+                  </div>
+                  <div className={`flex items-center gap-1 ${trendColor}`}>
+                    <TrendIcon className="h-4 w-4" />
+                    <span className="text-sm capitalize">{template.trend}</span>
+                  </div>
+                </div>
+                <p className="text-xs text-gray-500 mt-2">
+                  Based on {template.responseCount} response{template.responseCount !== 1 ? 's' : ''}
+                </p>
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {/* At-Risk Athletes Card */}
         <Card>

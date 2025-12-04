@@ -3,7 +3,7 @@
  *
  * Features:
  * - Metric selector dropdown
- * - Display limit toggle (Top 5 / Top 10)
+ * - Display limit toggle (Top 5 / Top 10 / All)
  * - Rankings with gold/silver/bronze badges for top 3
  * - Personal best indicator
  * - Percentile bar visualization
@@ -51,7 +51,7 @@ export function LeaderboardWidget({
 
   // State for selected metric and limit
   const [selectedMetric, setSelectedMetric] = useState<string>("");
-  const [limit, setLimit] = useState<5 | 10>(5);
+  const [limit, setLimit] = useState<5 | 10 | 100>(5);
 
   // Set default metric when metrics load
   const effectiveMetric = selectedMetric || metrics[0]?.code || "";
@@ -192,6 +192,14 @@ export function LeaderboardWidget({
               >
                 Top 10
               </Button>
+              <Button
+                variant={limit === 100 ? "default" : "outline"}
+                size="sm"
+                className={limit === 100 ? "bg-blue-600" : ""}
+                onClick={() => setLimit(100)}
+              >
+                All
+              </Button>
             </div>
           </div>
 
@@ -249,6 +257,14 @@ export function LeaderboardWidget({
               onClick={() => setLimit(10)}
             >
               Top 10
+            </Button>
+            <Button
+              variant={limit === 100 ? "default" : "outline"}
+              size="sm"
+              className={limit === 100 ? "bg-blue-600" : ""}
+              onClick={() => setLimit(100)}
+            >
+              All
             </Button>
           </div>
         </div>
