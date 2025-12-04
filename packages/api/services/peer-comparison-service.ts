@@ -417,6 +417,15 @@ export class PeerComparisonService extends BaseService {
       return [];
     }
 
+    // PERFORMANCE: Limit peer pool size to prevent PostgreSQL inArray() issues
+    // and excessive memory usage. Max 10,000 athletes provides statistically valid
+    // sample sizes while staying within PostgreSQL's practical limits (~5000 items in IN clause).
+    const MAX_ELIGIBLE_USERS = 10000;
+    if (eligibleUserIds.length > MAX_ELIGIBLE_USERS) {
+      console.warn(`Peer pool size ${eligibleUserIds.length} exceeds max ${MAX_ELIGIBLE_USERS}, limiting for performance`);
+      eligibleUserIds = eligibleUserIds.slice(0, MAX_ELIGIBLE_USERS);
+    }
+
     // Get all VERIFIED measurements for eligible users for this metric
     // Only verified (coach-entered) measurements are included in the peer pool
     // Self-entered (unverified) measurements are for personal tracking only
