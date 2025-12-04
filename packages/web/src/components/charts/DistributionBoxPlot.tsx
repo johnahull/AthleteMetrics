@@ -93,7 +93,7 @@ export function DistributionBoxPlot({
 
   // Get icon for athlete marker (accessibility - not color-only)
   const getAthleteIcon = () => {
-    const iconProps = { className: "h-2.5 w-2.5 text-white", strokeWidth: 2.5, "aria-hidden": "true" };
+    const iconProps = { className: "h-2.5 w-2.5 text-white", strokeWidth: 2.5, "aria-hidden": true as const };
     if (lowerIsBetter) {
       if (athleteValue <= p10) return <Star {...iconProps} />;
       if (athleteValue <= p25) return <Diamond {...iconProps} />;
