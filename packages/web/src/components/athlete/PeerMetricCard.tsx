@@ -69,7 +69,7 @@ function getBadgeClass(percentile: number): string {
  * Get icon component based on percentile (for accessibility - not color-only)
  */
 function getPercentileIcon(percentile: number): JSX.Element {
-  const iconProps = { className: "h-3 w-3 mr-1", "aria-hidden": "true" };
+  const iconProps = { className: "h-3 w-3 mr-1", "aria-hidden": true as const };
   if (percentile >= 90) return <Star {...iconProps} />;
   if (percentile >= 75) return <Diamond {...iconProps} />;
   if (percentile >= 50) return <CheckCircle {...iconProps} />;
