@@ -272,10 +272,12 @@ export function LeaderboardWidget({
         {/* Rankings list */}
         <div className="space-y-2">
           {rankings.map((entry) => (
-            <div
+            <button
               key={entry.athleteId}
-              className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer"
+              type="button"
+              className="w-full flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer text-left"
               onClick={() => handleAthleteClick(entry.athleteId)}
+              aria-label={`View profile for ${entry.athleteName}, ranked ${entry.rank}${entry.isPersonalBest ? ', personal best' : ''}`}
             >
               {/* Rank badge */}
               <div
@@ -304,7 +306,7 @@ export function LeaderboardWidget({
                   {entry.teamName && <span>{entry.teamName}</span>}
                   <span>•</span>
                   <span className="font-medium">
-                    {formatMetricValue(leaderboardData?.metric || "", entry.value)}
+                    {formatMetricValue(leaderboardData?.metric || effectiveMetric, entry.value)}
                   </span>
                 </div>
 
@@ -321,7 +323,7 @@ export function LeaderboardWidget({
                   </span>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
 

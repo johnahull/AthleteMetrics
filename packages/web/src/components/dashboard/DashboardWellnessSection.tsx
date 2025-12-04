@@ -392,6 +392,7 @@ export function DashboardWellnessSection({
                       key={athlete.id}
                       onClick={() => setLocation(`/athletes/${athlete.id}`)}
                       className="w-full text-left p-2 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-between"
+                      aria-label={`View ${athlete.name} from ${athlete.teamName}, status: ${athlete.status === 'red' ? 'critical' : 'moderate'}${athlete.hasInjury ? ', has reported injury' : ''}`}
                     >
                       <div className="flex items-center gap-2">
                         <span
