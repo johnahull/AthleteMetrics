@@ -12,6 +12,7 @@
  */
 
 import { useMemo } from 'react';
+import { Star, Diamond, CheckCircle, ArrowRight, Circle } from 'lucide-react';
 import type { DistributionData } from '@/hooks/usePeerComparison';
 
 export interface DistributionBoxPlotProps {
@@ -90,8 +91,31 @@ export function DistributionBoxPlot({
     }
   };
 
+  // Get icon for athlete marker (accessibility - not color-only)
+  const getAthleteIcon = () => {
+    const iconProps = { className: "h-2.5 w-2.5 text-white", strokeWidth: 2.5, "aria-hidden": "true" };
+    if (lowerIsBetter) {
+      if (athleteValue <= p10) return <Star {...iconProps} />;
+      if (athleteValue <= p25) return <Diamond {...iconProps} />;
+      if (athleteValue <= p50) return <CheckCircle {...iconProps} />;
+      if (athleteValue <= p75) return <ArrowRight {...iconProps} />;
+      return <Circle {...iconProps} />;
+    } else {
+      if (athleteValue >= p90) return <Star {...iconProps} />;
+      if (athleteValue >= p75) return <Diamond {...iconProps} />;
+      if (athleteValue >= p50) return <CheckCircle {...iconProps} />;
+      if (athleteValue >= p25) return <ArrowRight {...iconProps} />;
+      return <Circle {...iconProps} />;
+    }
+  };
+
   return (
-    <div className="relative w-full" style={{ height }}>
+    <div
+      className="relative w-full"
+      style={{ height }}
+      role="img"
+      aria-label={`Box plot showing percentile ranges for ${metricName}. Your value is ${athleteValue.toFixed(2)} at the ${Math.round(getPositionPercent(athleteValue, plotRange.min, plotRange.max))}th percentile. The distribution ranges from ${p10.toFixed(1)} (10th percentile) to ${p90.toFixed(1)} (90th percentile) with a median of ${p50.toFixed(1)}.`}
+    >
       {/* Container with padding for labels */}
       <div className="absolute inset-0 px-4 py-2">
         {/* Box plot visualization */}
@@ -141,12 +165,14 @@ export function DistributionBoxPlot({
             />
           )}
 
-          {/* Athlete value marker (circle) */}
+          {/* Athlete value marker (circle with icon) */}
           <div
-            className={`absolute w-4 h-4 rounded-full border-2 shadow-md z-10 ${getAthleteColor()}`}
+            className={`absolute w-4 h-4 rounded-full border-2 shadow-md z-10 flex items-center justify-center ${getAthleteColor()}`}
             style={{ left: `${athletePos}%`, transform: 'translateX(-50%)' }}
             title={`Your value: ${athleteValue.toFixed(2)}`}
-          />
+          >
+            {getAthleteIcon()}
+          </div>
         </div>
 
         {/* Labels row */}

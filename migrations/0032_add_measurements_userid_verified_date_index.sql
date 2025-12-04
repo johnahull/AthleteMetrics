@@ -14,11 +14,9 @@
 -- This complements the existing idx_measurements_org_date_verified (organization-scoped)
 -- by providing an optimized path for user-scoped trend queries
 
--- Note: DROP INDEX IF EXISTS is safe with CONCURRENTLY, then CREATE without IF NOT EXISTS
--- This pattern works around PostgreSQL limitations with CONCURRENTLY + IF NOT EXISTS in some versions
-DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_userid_verified_date;
-
-CREATE INDEX CONCURRENTLY idx_measurements_userid_verified_date
+-- Note: PostgreSQL 9.5+ supports CREATE INDEX CONCURRENTLY IF NOT EXISTS
+-- This ensures idempotent migration that is safe to re-run
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_userid_verified_date
   ON measurements(user_id, is_verified, date DESC)
   WHERE is_verified = true;
 

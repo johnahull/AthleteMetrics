@@ -16,7 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronUp, Target, Check, X, Users } from 'lucide-react';
+import { ChevronDown, ChevronUp, Target, Check, X, Users, Star, Diamond, CheckCircle, ArrowRight, Circle } from 'lucide-react';
 import {
   getPercentileLabel,
   usePeerDistribution,
@@ -63,6 +63,18 @@ function getBadgeClass(percentile: number): string {
   if (percentile >= 50) return 'bg-green-100 text-green-700 border-green-200';
   if (percentile >= 25) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
   return 'bg-orange-100 text-orange-700 border-orange-200';
+}
+
+/**
+ * Get icon component based on percentile (for accessibility - not color-only)
+ */
+function getPercentileIcon(percentile: number): JSX.Element {
+  const iconProps = { className: "h-3 w-3 mr-1", "aria-hidden": "true" };
+  if (percentile >= 90) return <Star {...iconProps} />;
+  if (percentile >= 75) return <Diamond {...iconProps} />;
+  if (percentile >= 50) return <CheckCircle {...iconProps} />;
+  if (percentile >= 25) return <ArrowRight {...iconProps} />;
+  return <Circle {...iconProps} />;
 }
 
 export function PeerMetricCard({
@@ -143,8 +155,9 @@ export function PeerMetricCard({
         <div className="flex items-center justify-between mb-3">
           <Badge
             variant="outline"
-            className={`text-xs font-medium ${getBadgeClass(result.percentile)}`}
+            className={`text-xs font-medium flex items-center ${getBadgeClass(result.percentile)}`}
           >
+            {getPercentileIcon(result.percentile)}
             {percentileLabel.label}
           </Badge>
           <span className="text-xs text-gray-500">
