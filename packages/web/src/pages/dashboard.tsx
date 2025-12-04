@@ -280,7 +280,7 @@ export default function Dashboard() {
 
         <KPICardWithTrend
           title="Total Measurements"
-          value={trendsData?.measurements.current || 0}
+          value={trendsData?.measurements.total || 0}
           icon={Activity}
           trend={trendsData?.measurements ? {
             value: trendsData.measurements.change,

@@ -8,7 +8,7 @@ import type { TrendData } from "@/components/kpi-card-with-trend";
 
 interface DashboardTrendsResponse {
   athletes: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
-  measurements: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
+  measurements: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat'; total: number };
   teams: TrendData & { current: number; previous: number; change: number; changePercent: number; trend: 'up' | 'down' | 'flat' };
 }
 

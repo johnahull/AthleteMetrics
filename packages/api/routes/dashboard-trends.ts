@@ -44,7 +44,7 @@ interface TrendData {
 
 interface DashboardTrendsResponse {
   athletes: TrendData;
-  measurements: TrendData;
+  measurements: TrendData & { total: number };
   teams: TrendData;
 }
 
@@ -248,6 +248,24 @@ export function registerDashboardTrendsRoutes(app: Express) {
         }
       }
 
+      // Total Measurements (all-time count for the organization)
+      let totalMeasurements = 0;
+      if (athleteIds.length > 0) {
+        const totalMeasurementsResult = await db
+          .select({
+            count: sql<number>`count(*)::int`
+          })
+          .from(measurements)
+          .where(
+            and(
+              inArray(measurements.userId, athleteIds),
+              eq(measurements.isVerified, true)
+            )
+          );
+
+        totalMeasurements = totalMeasurementsResult[0]?.count || 0;
+      }
+
       // Teams Trend (count teams created in current vs previous month)
       // Single query with GROUP BY to get both current and previous month counts
       // Use ISO strings for timestamp comparison (safe - derived from Date objects, not user input)
@@ -292,7 +310,7 @@ export function registerDashboardTrendsRoutes(app: Express) {
       // Build response
       const response: DashboardTrendsResponse = {
         athletes: calculateTrendData(currentAthletes, previousAthletes),
-        measurements: calculateTrendData(currentMeasurements, previousMeasurements),
+        measurements: { ...calculateTrendData(currentMeasurements, previousMeasurements), total: totalMeasurements },
         teams: calculateTrendData(currentTeams, previousTeams)
       };
 
