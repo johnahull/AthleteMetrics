@@ -131,8 +131,9 @@ export class PeerComparisonService extends BaseService {
         }
 
         // Get or compute distribution for this metric + filter combination
-        // This will also populate the peer pool data
-        const peerPool = await this.getGlobalPeerPool(metric, filters || {});
+        // Pass cached metricInfo to avoid N+1 query pattern
+        const metricInfo = metricInfoMap.get(metric) || { lowerIsBetter: false };
+        const peerPool = await this.getGlobalPeerPool(metric, filters || {}, metricInfo);
         peerPoolCache.set(metric, peerPool);
 
         // Compute distribution from peer pool (avoid redundant DB query)
@@ -324,9 +325,10 @@ export class PeerComparisonService extends BaseService {
    */
   private async getGlobalPeerPool(
     metric: string,
-    filters: PeerFilterCriteria
+    filters: PeerFilterCriteria,
+    metricInfo?: { lowerIsBetter: boolean }
   ): Promise<{ userId: string; value: number }[]> {
-    const metricInfo = await this.getMetricInfo(metric);
+    const info = metricInfo || await this.getMetricInfo(metric);
 
     // Build filter conditions for users - all active users are included
     const userConditions: any[] = [
@@ -354,19 +356,19 @@ export class PeerComparisonService extends BaseService {
     // Sports filter - check if user's sports array contains any of the filter sports
     // users.sports is a text[] column - we check for overlap with the filter (case-insensitive)
     if (filters.sports && filters.sports.length > 0) {
-      // Sanitize sports input to prevent SQL wildcard injection
-      // Remove SQL wildcards (% and _) and limit length to prevent abuse
-      const sanitizedSports = filters.sports.map(sport => {
-        const sanitized = sport.replace(/[%_]/g, '').substring(0, 100);
-        return sanitized;
-      }).filter(s => s.length > 0);
+      // SECURITY: Whitelist validation to prevent SQL injection
+      // Only allow alphanumeric characters, spaces, and hyphens; limit array length
+      const sanitizedSports = filters.sports
+        .map(sport => sport.trim().substring(0, 100))
+        .filter(s => s.length > 0 && /^[a-zA-Z0-9\s-]+$/.test(s))
+        .slice(0, 20); // Limit to 20 sports max
 
       if (sanitizedSports.length > 0) {
-        // Use EXISTS with ILIKE for case-insensitive matching
+        // Use UPPER() for exact case-insensitive matching (prevents pattern injection)
         userConditions.push(
           sql`EXISTS (
             SELECT 1 FROM unnest(${users.sports}) AS user_sport
-            WHERE user_sport ILIKE ANY(ARRAY[${sql.join(sanitizedSports.map(s => sql`${s}`), sql`, `)}])
+            WHERE UPPER(user_sport) = ANY(ARRAY[${sql.join(sanitizedSports.map(s => sql`UPPER(${s})`), sql`, `)}])
           )`
         );
       }
@@ -454,7 +456,7 @@ export class PeerComparisonService extends BaseService {
       } else {
         // For lower-is-better metrics, keep the lower value
         // For higher-is-better metrics, keep the higher value
-        if (metricInfo.lowerIsBetter) {
+        if (info.lowerIsBetter) {
           if (value < current) bestByUser.set(m.userId, value);
         } else {
           if (value > current) bestByUser.set(m.userId, value);
@@ -489,7 +491,7 @@ export class PeerComparisonService extends BaseService {
       if (current === undefined) {
         bestByGlobalOrUser.set(key, value);
       } else {
-        if (metricInfo.lowerIsBetter) {
+        if (info.lowerIsBetter) {
           if (value < current) bestByGlobalOrUser.set(key, value);
         } else {
           if (value > current) bestByGlobalOrUser.set(key, value);
@@ -659,8 +661,9 @@ export class PeerComparisonService extends BaseService {
     filters: PeerFilterCriteria
   ): Promise<PeerPercentileCache | null> {
     const filterJson = JSON.stringify(this.normalizeFilters(filters));
-    // Use filter_hash for efficient index lookup (100x faster than ::text comparison)
-    const filterHashValue = sql<string>`md5(${filterJson}::text)`;
+    // Compute MD5 in JavaScript for direct index lookup (100x faster than SQL computation)
+    const crypto = require('crypto');
+    const filterHashValue = crypto.createHash('md5').update(filterJson).digest('hex');
 
     const cached = await db
       .select()

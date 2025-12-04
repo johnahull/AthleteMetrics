@@ -40,6 +40,35 @@ export function DistributionBoxPlot({
 }: DistributionBoxPlotProps) {
   const { p10, p25, p50, p75, p90, mean, sampleSize } = distribution;
 
+  // Calculate actual statistical percentile rank for accessibility
+  const actualPercentile = useMemo(() => {
+    if (p10 === null || p25 === null || p50 === null || p75 === null || p90 === null) return 0;
+
+    // Estimate percentile based on which quartile the value falls in
+    // For lower-is-better metrics, invert the percentile
+    let percentile: number;
+
+    if (lowerIsBetter) {
+      // Invert for lower-is-better
+      if (athleteValue <= p10) percentile = 95; // Top 5%
+      else if (athleteValue <= p25) percentile = Math.round(92.5 - ((athleteValue - p10) / (p25 - p10)) * 7.5);
+      else if (athleteValue <= p50) percentile = Math.round(75 - ((athleteValue - p25) / (p50 - p25)) * 17.5);
+      else if (athleteValue <= p75) percentile = Math.round(50 - ((athleteValue - p50) / (p75 - p50)) * 25);
+      else if (athleteValue <= p90) percentile = Math.round(25 - ((athleteValue - p75) / (p90 - p75)) * 15);
+      else percentile = Math.round(10 - ((athleteValue - p90) / (p90 * 0.1)) * 10); // Below 10th
+    } else {
+      // Normal percentile for higher-is-better
+      if (athleteValue >= p90) percentile = 95; // Top 5%
+      else if (athleteValue >= p75) percentile = Math.round(75 + ((athleteValue - p75) / (p90 - p75)) * 15);
+      else if (athleteValue >= p50) percentile = Math.round(50 + ((athleteValue - p50) / (p75 - p50)) * 25);
+      else if (athleteValue >= p25) percentile = Math.round(25 + ((athleteValue - p25) / (p50 - p25)) * 25);
+      else if (athleteValue >= p10) percentile = Math.round(10 + ((athleteValue - p10) / (p25 - p10)) * 15);
+      else percentile = Math.round(((athleteValue / p10)) * 10); // Below 10th
+    }
+
+    return Math.max(0, Math.min(100, percentile));
+  }, [athleteValue, p10, p25, p50, p75, p90, lowerIsBetter]);
+
   // Calculate min/max for scaling (use p10/p90 as boundaries, extend slightly)
   const plotRange = useMemo(() => {
     if (p10 === null || p90 === null) return { min: 0, max: 100 };
@@ -114,7 +143,7 @@ export function DistributionBoxPlot({
       className="relative w-full"
       style={{ height }}
       role="img"
-      aria-label={`Box plot showing percentile ranges for ${metricName}. Your value is ${athleteValue.toFixed(2)} at the ${Math.round(getPositionPercent(athleteValue, plotRange.min, plotRange.max))}th percentile. The distribution ranges from ${p10.toFixed(1)} (10th percentile) to ${p90.toFixed(1)} (90th percentile) with a median of ${p50.toFixed(1)}.`}
+      aria-label={`Box plot showing percentile ranges for ${metricName}. Your value is ${athleteValue.toFixed(2)} at the ${actualPercentile}th percentile. The distribution ranges from ${p10.toFixed(1)} (10th percentile) to ${p90.toFixed(1)} (90th percentile) with a median of ${p50.toFixed(1)}.`}
     >
       {/* Container with padding for labels */}
       <div className="absolute inset-0 px-4 py-2">

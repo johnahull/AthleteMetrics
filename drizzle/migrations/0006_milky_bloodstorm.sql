@@ -19,6 +19,8 @@
 -- stored in filter_criteria JSONB field, NOT via foreign key constraints.
 --
 -- Create peer percentile cache table
+-- Note: filter_hash must be added via ALTER TABLE after CREATE TABLE because
+-- PostgreSQL doesn't support IF NOT EXISTS within CREATE TABLE for generated columns
 CREATE TABLE IF NOT EXISTS "peer_percentile_cache" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"metric_code" varchar(50) NOT NULL,
@@ -35,6 +37,7 @@ CREATE TABLE IF NOT EXISTS "peer_percentile_cache" (
 );
 --> statement-breakpoint
 -- Add filter_hash column for deterministic JSONB lookups (avoids key ordering issues)
+-- Using DO block for idempotency since generated columns require explicit syntax
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='peer_percentile_cache' AND column_name='filter_hash') THEN

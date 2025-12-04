@@ -169,6 +169,8 @@ export function usePeerPercentiles(
     enabled: !!athleteId && metrics.length > 0 && enabled,
     staleTime,
     gcTime: 15 * 60 * 1000,
+    refetchOnMount: false, // Prevent cache stampede on navigation
+    refetchOnWindowFocus: false, // Prevent unnecessary refetches (data changes infrequently)
   });
 }
 
