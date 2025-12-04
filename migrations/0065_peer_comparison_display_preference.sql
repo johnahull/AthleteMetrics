@@ -19,8 +19,9 @@ END $$;
 -- Step 2: Ensure the default is true (show comparisons by default)
 ALTER TABLE "users" ALTER COLUMN "show_peer_comparisons" SET DEFAULT true;
 
--- Step 3: Update all existing users to show peer comparisons (backfill)
-UPDATE "users" SET "show_peer_comparisons" = true WHERE "show_peer_comparisons" = false;
+-- Note: No backfill UPDATE needed - PostgreSQL automatically applies DEFAULT values when
+-- adding NOT NULL columns, so existing users already have show_peer_comparisons = true.
+-- We intentionally preserve any user preferences if this migration runs multiple times.
 
 -- Note: peer_comparison_consented_at is kept for historical records but is no longer used
 -- since there's no data sharing consent needed (data is always anonymized in the pool)
