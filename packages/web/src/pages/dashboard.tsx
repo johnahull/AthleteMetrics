@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
-import PerformanceChart from "@/components/charts/performance-chart";
 import RecentAthletesWidget from "@/components/recent-athletes-widget";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -21,6 +20,10 @@ import { useDashboardScope } from "@/hooks/useDashboardScope";
 import { DashboardScopeSelector } from "@/components/dashboard/DashboardScopeSelector";
 import { DashboardTimeframeFilter } from "@/components/dashboard/DashboardTimeframeFilter";
 import { DashboardWellnessSection } from "@/components/dashboard/DashboardWellnessSection";
+import { LeaderboardWidget } from "@/components/dashboard/LeaderboardWidget";
+import { MostImprovedCard } from "@/components/dashboard/MostImprovedCard";
+import { AtRiskAthletesAlert } from "@/components/dashboard/AtRiskAthletesAlert";
+import { DashboardTrendsChart } from "@/components/dashboard/DashboardTrendsChart";
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
@@ -364,6 +367,14 @@ export default function Dashboard() {
         />
       )}
 
+      {/* At-Risk Athletes Alert - Only show when org is selected */}
+      {effectiveOrganizationId && (
+        <AtRiskAthletesAlert
+          organizationId={effectiveOrganizationId}
+          teamId={filterParams.teamId}
+        />
+      )}
+
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show when org is selected */}
       {effectiveOrganizationId && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
@@ -417,10 +428,37 @@ export default function Dashboard() {
       </div>
       )}
 
+      {/* Leaderboard Section - Only show when org is selected */}
+      {effectiveOrganizationId && (
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <LeaderboardWidget
+          organizationId={effectiveOrganizationId}
+          teamId={filterParams.teamId}
+          timeframe={filterParams.timeframe as any}
+          dateFrom={filterParams.dateFrom}
+          dateTo={filterParams.dateTo}
+        />
+        <MostImprovedCard
+          organizationId={effectiveOrganizationId}
+          teamId={filterParams.teamId}
+          timeframe={filterParams.timeframe as any}
+          dateFrom={filterParams.dateFrom}
+          dateTo={filterParams.dateTo}
+        />
+      </div>
+      )}
+
       {/* Charts Section - Only show when org is selected */}
       {effectiveOrganizationId && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <PerformanceChart organizationId={effectiveOrganizationId} />
+        <DashboardTrendsChart
+          organizationId={effectiveOrganizationId}
+          teamId={filterParams.teamId}
+          athleteId={filterParams.athleteId}
+          timeframe={filterParams.timeframe as any}
+          dateFrom={filterParams.dateFrom}
+          dateTo={filterParams.dateTo}
+        />
 
         <Card className="bg-white">
           <CardContent className="p-6">

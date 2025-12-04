@@ -5,7 +5,7 @@
 
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
-import { eq, and, gte, lte, ne, desc, inArray, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 
 /**
  * Dashboard statistics time window
@@ -47,6 +47,45 @@ interface WeeklyTrendDataPoint {
   weekStart: string;
   metric: string;
   bestValue: number;
+}
+
+interface LeaderboardEntry {
+  rank: number;
+  athleteId: string;
+  athleteName: string;
+  teamId: string | null;
+  teamName: string | null;
+  value: number;
+  percentile: number;
+  isPersonalBest: boolean;
+}
+
+interface LeaderboardResponse {
+  rankings: LeaderboardEntry[];
+  totalAthletes: number;
+  metric: string;
+  metricLabel: string;
+  metricType: 'lower_is_better' | 'higher_is_better' | 'tracking';
+}
+
+interface MostImprovedEntry {
+  athleteId: string;
+  athleteName: string;
+  teamId: string | null;
+  teamName: string | null;
+  previousValue: number;
+  currentValue: number;
+  improvementPercent: number;
+  measurementCount: number;
+  hasPersonalBest: boolean;
+}
+
+interface MostImprovedResponse {
+  improvements: MostImprovedEntry[];
+  totalAthletes: number;
+  metric: string;
+  metricLabel: string;
+  metricType: 'lower_is_better' | 'higher_is_better' | 'tracking';
 }
 
 interface PerformanceTrendsData {
@@ -527,6 +566,762 @@ export class AnalyticsService {
     return {
       weeks,
       metrics: metricsOutput,
+    };
+  }
+
+  /**
+   * Get leaderboard rankings for a specific metric
+   * Returns top performers with percentile rankings
+   * @param organizationId Organization to filter by
+   * @param metric Metric code (e.g., FLY10_TIME, VERTICAL_JUMP)
+   * @param options Filter options
+   * @returns Leaderboard data with rankings and percentiles
+   */
+  async getLeaderboard(
+    organizationId: string,
+    metric: string,
+    options?: {
+      teamId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+    }
+  ): Promise<LeaderboardResponse> {
+    const { teamId, startDate, endDate, limit = 10 } = options || {};
+
+    // Get metric info for display and sorting direction
+    const metricInfo = await db
+      .select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, metric))
+      .limit(1);
+
+    if (metricInfo.length === 0) {
+      throw new Error(`Invalid metric: ${metric}`);
+    }
+
+    const { label: metricLabel, metricType } = metricInfo[0];
+    const lowerIsBetter = metricType === 'lower_is_better';
+
+    // Get athlete IDs based on scope
+    let athleteIds: string[];
+    if (teamId) {
+      const teamAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, true)
+          )
+        )
+        .groupBy(userTeams.userId);
+      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
+    } else {
+      const orgAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(eq(teams.organizationId, organizationId))
+        .groupBy(userTeams.userId);
+      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
+    }
+
+    if (athleteIds.length === 0) {
+      return {
+        rankings: [],
+        totalAthletes: 0,
+        metric,
+        metricLabel,
+        metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
+      };
+    }
+
+    // Build date filter conditions
+    const dateConditions = [];
+    if (startDate) {
+      dateConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
+    }
+    if (endDate) {
+      dateConditions.push(lte(measurements.date, endDate.toISOString().split('T')[0]));
+    }
+
+    // Get best measurement per athlete for the metric
+    const bestPerAthlete = await db
+      .select({
+        athleteId: measurements.userId,
+        athleteName: users.fullName,
+        bestValue: lowerIsBetter
+          ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))::float`
+          : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))::float`,
+      })
+      .from(measurements)
+      .innerJoin(users, eq(measurements.userId, users.id))
+      .where(
+        and(
+          inArray(measurements.userId, athleteIds),
+          eq(measurements.metric, metric),
+          eq(measurements.isVerified, true),
+          ...dateConditions
+        )
+      )
+      .groupBy(measurements.userId, users.fullName);
+
+    // Sort by best value (ascending for lower_is_better, descending otherwise)
+    const sorted = bestPerAthlete.sort((a, b) => {
+      return lowerIsBetter
+        ? a.bestValue - b.bestValue
+        : b.bestValue - a.bestValue;
+    });
+
+    const totalAthletes = sorted.length;
+
+    // Get team info for each athlete
+    const athleteTeamInfo = await db
+      .select({
+        userId: userTeams.userId,
+        teamId: teams.id,
+        teamName: teams.name,
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          inArray(userTeams.userId, sorted.slice(0, limit).map(s => s.athleteId)),
+          eq(userTeams.isActive, true),
+          ...(teamId ? [eq(userTeams.teamId, teamId)] : [eq(teams.organizationId, organizationId)])
+        )
+      );
+
+    // Create a map of athlete -> team info (use first team if multiple)
+    const teamMap = new Map<string, { teamId: string; teamName: string }>();
+    athleteTeamInfo.forEach(info => {
+      if (!teamMap.has(info.userId)) {
+        teamMap.set(info.userId, { teamId: info.teamId, teamName: info.teamName });
+      }
+    });
+
+    // Get all-time personal bests to check if current best is a PR
+    const allTimeBests = await db
+      .select({
+        athleteId: measurements.userId,
+        allTimeBest: lowerIsBetter
+          ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))::float`
+          : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))::float`,
+      })
+      .from(measurements)
+      .where(
+        and(
+          inArray(measurements.userId, sorted.slice(0, limit).map(s => s.athleteId)),
+          eq(measurements.metric, metric),
+          eq(measurements.isVerified, true)
+        )
+      )
+      .groupBy(measurements.userId);
+
+    const allTimeBestMap = new Map<string, number>();
+    allTimeBests.forEach(b => allTimeBestMap.set(b.athleteId, b.allTimeBest));
+
+    // Build rankings with percentile
+    const rankings: LeaderboardEntry[] = sorted.slice(0, limit).map((entry, index) => {
+      const rank = index + 1;
+      // Percentile: rank 1 of 100 = 99th percentile (top 1%)
+      const percentile = totalAthletes > 1
+        ? Math.round((1 - (rank - 1) / (totalAthletes - 1)) * 100)
+        : 100;
+
+      const teamInfo = teamMap.get(entry.athleteId);
+      const allTimeBest = allTimeBestMap.get(entry.athleteId);
+
+      // Check if current best equals all-time best (is a personal record)
+      const isPersonalBest = allTimeBest !== undefined &&
+        Math.abs(entry.bestValue - allTimeBest) < 0.001;
+
+      return {
+        rank,
+        athleteId: entry.athleteId,
+        athleteName: entry.athleteName,
+        teamId: teamInfo?.teamId || null,
+        teamName: teamInfo?.teamName || null,
+        value: entry.bestValue,
+        percentile,
+        isPersonalBest,
+      };
+    });
+
+    return {
+      rankings,
+      totalAthletes,
+      metric,
+      metricLabel,
+      metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
+    };
+  }
+
+  /**
+   * Get most improved athletes for a specific metric
+   * Compares first measurement in period to best measurement in period
+   * Requires minimum 2 measurements to qualify
+   */
+  async getMostImproved(
+    organizationId: string,
+    metric: string,
+    options?: {
+      teamId?: string;
+      startDate?: Date;
+      endDate?: Date;
+      limit?: number;
+    }
+  ): Promise<MostImprovedResponse> {
+    const { teamId, startDate, endDate, limit = 5 } = options || {};
+
+    // Get metric info for display and sorting direction
+    const metricInfo = await db
+      .select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.code, metric))
+      .limit(1);
+
+    if (metricInfo.length === 0) {
+      throw new Error(`Invalid metric: ${metric}`);
+    }
+
+    const { label: metricLabel, metricType } = metricInfo[0];
+    const lowerIsBetter = metricType === 'lower_is_better';
+
+    // Get athlete IDs based on scope
+    let athleteIds: string[];
+    if (teamId) {
+      const teamAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, true)
+          )
+        );
+      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
+    } else {
+      const orgAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(eq(teams.organizationId, organizationId));
+      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
+    }
+
+    if (athleteIds.length === 0) {
+      return {
+        improvements: [],
+        totalAthletes: 0,
+        metric,
+        metricLabel,
+        metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
+      };
+    }
+
+    // Build date filter conditions for period measurements
+    const dateConditions = [];
+    if (startDate) {
+      dateConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
+    }
+    if (endDate) {
+      dateConditions.push(lt(measurements.date, endDate.toISOString().split('T')[0]));
+    }
+
+    // Get all measurements for athletes in the period
+    const periodMeasurements = await db
+      .select({
+        athleteId: measurements.userId,
+        value: sql<number>`CAST(${measurements.value} AS NUMERIC)::float`,
+        date: measurements.date,
+      })
+      .from(measurements)
+      .where(
+        and(
+          inArray(measurements.userId, athleteIds),
+          eq(measurements.metric, metric),
+          eq(measurements.isVerified, true),
+          ...dateConditions
+        )
+      )
+      .orderBy(measurements.date);
+
+    // Group measurements by athlete and calculate improvement
+    const athleteMeasurements = new Map<string, { values: number[]; dates: string[] }>();
+    periodMeasurements.forEach(m => {
+      const existing = athleteMeasurements.get(m.athleteId) || { values: [], dates: [] };
+      existing.values.push(m.value);
+      existing.dates.push(m.date);
+      athleteMeasurements.set(m.athleteId, existing);
+    });
+
+    // Calculate improvement for athletes with at least 2 measurements
+    const improvements: Array<{
+      athleteId: string;
+      previousValue: number;
+      currentValue: number;
+      improvementPercent: number;
+      measurementCount: number;
+    }> = [];
+
+    athleteMeasurements.forEach((data, athleteId) => {
+      if (data.values.length >= 2) {
+        const firstValue = data.values[0]; // First measurement in period
+        const bestValue = lowerIsBetter
+          ? Math.min(...data.values)
+          : Math.max(...data.values);
+
+        // Calculate improvement percentage
+        // For lower_is_better: improvement = (first - best) / first * 100
+        // For higher_is_better: improvement = (best - first) / first * 100
+        let improvementPercent: number;
+        if (firstValue === 0) {
+          improvementPercent = 0;
+        } else if (lowerIsBetter) {
+          improvementPercent = ((firstValue - bestValue) / firstValue) * 100;
+        } else {
+          improvementPercent = ((bestValue - firstValue) / firstValue) * 100;
+        }
+
+        // Only include positive improvements
+        if (improvementPercent > 0) {
+          improvements.push({
+            athleteId,
+            previousValue: firstValue,
+            currentValue: bestValue,
+            improvementPercent,
+            measurementCount: data.values.length,
+          });
+        }
+      }
+    });
+
+    // Sort by improvement percentage (highest first) and take limit
+    improvements.sort((a, b) => b.improvementPercent - a.improvementPercent);
+    const topImprovements = improvements.slice(0, limit);
+
+    if (topImprovements.length === 0) {
+      return {
+        improvements: [],
+        totalAthletes: 0,
+        metric,
+        metricLabel,
+        metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
+      };
+    }
+
+    // Get athlete info
+    const topAthleteIds = topImprovements.map(i => i.athleteId);
+    const athleteInfo = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(inArray(users.id, topAthleteIds));
+
+    const athleteMap = new Map<string, string>();
+    athleteInfo.forEach(a => athleteMap.set(a.id, `${a.firstName} ${a.lastName}`));
+
+    // Get team info for athletes
+    const athleteTeamInfo = await db
+      .select({
+        userId: userTeams.userId,
+        teamId: teams.id,
+        teamName: teams.name,
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          inArray(userTeams.userId, topAthleteIds),
+          eq(userTeams.isActive, true)
+        )
+      );
+
+    const teamMap = new Map<string, { teamId: string; teamName: string }>();
+    athleteTeamInfo.forEach(info => {
+      if (!teamMap.has(info.userId)) {
+        teamMap.set(info.userId, { teamId: info.teamId, teamName: info.teamName });
+      }
+    });
+
+    // Get all-time personal bests to check if current best is a PR
+    const allTimeBests = await db
+      .select({
+        athleteId: measurements.userId,
+        allTimeBest: lowerIsBetter
+          ? sql<number>`MIN(CAST(${measurements.value} AS NUMERIC))::float`
+          : sql<number>`MAX(CAST(${measurements.value} AS NUMERIC))::float`,
+      })
+      .from(measurements)
+      .where(
+        and(
+          inArray(measurements.userId, topAthleteIds),
+          eq(measurements.metric, metric),
+          eq(measurements.isVerified, true)
+        )
+      )
+      .groupBy(measurements.userId);
+
+    const allTimeBestMap = new Map<string, number>();
+    allTimeBests.forEach(b => allTimeBestMap.set(b.athleteId, b.allTimeBest));
+
+    // Build response
+    const result: MostImprovedEntry[] = topImprovements.map(entry => {
+      const teamInfo = teamMap.get(entry.athleteId);
+      const allTimeBest = allTimeBestMap.get(entry.athleteId);
+      const hasPersonalBest = allTimeBest !== undefined &&
+        Math.abs(entry.currentValue - allTimeBest) < 0.001;
+
+      return {
+        athleteId: entry.athleteId,
+        athleteName: athleteMap.get(entry.athleteId) || 'Unknown',
+        teamId: teamInfo?.teamId || null,
+        teamName: teamInfo?.teamName || null,
+        previousValue: entry.previousValue,
+        currentValue: entry.currentValue,
+        improvementPercent: Math.round(entry.improvementPercent * 100) / 100,
+        measurementCount: entry.measurementCount,
+        hasPersonalBest,
+      };
+    });
+
+    return {
+      improvements: result,
+      totalAthletes: improvements.length, // Total athletes with improvement
+      metric,
+      metricLabel,
+      metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
+    };
+  }
+
+  /**
+   * Get at-risk athletes (declining performance or inactive)
+   * Returns athletes with performance decline > 5% or no measurements in N days
+   *
+   * Decline Detection:
+   * - Compare average of last 3 measurements to average of previous 3 measurements
+   * - Requires minimum 6 measurements total
+   * - Flag if decline > 5%
+   * - Handle lower_is_better metrics (improvement = DOWN, decline = UP)
+   * - Handle higher_is_better metrics (improvement = UP, decline = DOWN)
+   *
+   * Inactivity Detection:
+   * - Athletes with no measurements in the last N days
+   */
+  async getAtRiskAthletes(
+    organizationId: string,
+    options?: {
+      teamId?: string;
+      inactivityThreshold?: number;
+    }
+  ): Promise<{
+    declining: Array<{
+      athleteId: string;
+      athleteName: string;
+      teamId: string | null;
+      teamName: string | null;
+      metric: string;
+      metricLabel: string;
+      declinePercent: number;
+      previousValue: number;
+      currentValue: number;
+    }>;
+    inactive: Array<{
+      athleteId: string;
+      athleteName: string;
+      teamId: string | null;
+      teamName: string | null;
+      lastMeasurementDate: string;
+      daysSinceLastMeasurement: number;
+    }>;
+    atRiskCount: number;
+  }> {
+    const { teamId, inactivityThreshold = 14 } = options || {};
+
+    // Get athlete IDs based on scope
+    let athleteIds: string[];
+    if (teamId) {
+      const teamAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.teamId, teamId),
+            eq(userTeams.isActive, true)
+          )
+        );
+      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
+    } else {
+      const orgAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(eq(teams.organizationId, organizationId));
+      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
+    }
+
+    if (athleteIds.length === 0) {
+      return {
+        declining: [],
+        inactive: [],
+        atRiskCount: 0,
+      };
+    }
+
+    // PART 1: Detect declining performance
+    // Get all measurements for athletes, ordered by date DESC
+    const allMeasurements = await db
+      .select({
+        athleteId: measurements.userId,
+        metric: measurements.metric,
+        value: sql<number>`CAST(${measurements.value} AS NUMERIC)::float`,
+        date: measurements.date,
+      })
+      .from(measurements)
+      .where(
+        and(
+          inArray(measurements.userId, athleteIds),
+          eq(measurements.isVerified, true)
+        )
+      )
+      .orderBy(desc(measurements.date));
+
+    // Get metric metadata for determining decline direction
+    const metricsMetadata = await db
+      .select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(inArray(siteMetrics.code, VALID_METRICS.map(m => m.key)));
+
+    const metricMap = new Map<string, { label: string; metricType: string }>();
+    metricsMetadata.forEach(m => metricMap.set(m.code, { label: m.label, metricType: m.metricType }));
+
+    // Group measurements by athlete and metric
+    const athleteMetricData = new Map<string, Map<string, { values: number[]; dates: string[] }>>();
+    allMeasurements.forEach(m => {
+      if (!athleteMetricData.has(m.athleteId)) {
+        athleteMetricData.set(m.athleteId, new Map());
+      }
+      const athleteData = athleteMetricData.get(m.athleteId)!;
+      if (!athleteData.has(m.metric)) {
+        athleteData.set(m.metric, { values: [], dates: [] });
+      }
+      const metricData = athleteData.get(m.metric)!;
+      metricData.values.push(m.value);
+      metricData.dates.push(m.date);
+    });
+
+    // Analyze decline for each athlete-metric combination
+    const decliningPerformances: Array<{
+      athleteId: string;
+      metric: string;
+      declinePercent: number;
+      previousValue: number;
+      currentValue: number;
+    }> = [];
+
+    athleteMetricData.forEach((metrics, athleteId) => {
+      metrics.forEach((data, metric) => {
+        if (data.values.length >= 6) {
+          // Get last 3 and previous 3 measurements
+          const last3 = data.values.slice(0, 3);
+          const previous3 = data.values.slice(3, 6);
+
+          const currentAvg = last3.reduce((a, b) => a + b, 0) / 3;
+          const previousAvg = previous3.reduce((a, b) => a + b, 0) / 3;
+
+          const metricInfo = metricMap.get(metric);
+          if (!metricInfo || metricInfo.metricType === 'tracking') return;
+
+          const lowerIsBetter = metricInfo.metricType === 'lower_is_better';
+
+          // Calculate decline percentage
+          // For lower_is_better: decline = (current - previous) / previous * 100 (values going UP is bad)
+          // For higher_is_better: decline = (previous - current) / previous * 100 (values going DOWN is bad)
+          let declinePercent: number;
+          if (previousAvg === 0) return;
+
+          if (lowerIsBetter) {
+            // For times (lower is better), increase means decline
+            declinePercent = ((currentAvg - previousAvg) / previousAvg) * 100;
+          } else {
+            // For distances (higher is better), decrease means decline
+            declinePercent = ((previousAvg - currentAvg) / previousAvg) * 100;
+          }
+
+          // Flag if decline > 5%
+          if (declinePercent > 5) {
+            decliningPerformances.push({
+              athleteId,
+              metric,
+              declinePercent,
+              previousValue: previousAvg,
+              currentValue: currentAvg,
+            });
+          }
+        }
+      });
+    });
+
+    // PART 2: Detect inactive athletes
+    const inactivityDate = new Date();
+    inactivityDate.setDate(inactivityDate.getDate() - inactivityThreshold);
+
+    // Get last measurement date for each athlete
+    const lastMeasurements = await db
+      .select({
+        athleteId: measurements.userId,
+        lastDate: sql<string>`MAX(${measurements.date})::text`,
+      })
+      .from(measurements)
+      .where(
+        and(
+          inArray(measurements.userId, athleteIds),
+          eq(measurements.isVerified, true)
+        )
+      )
+      .groupBy(measurements.userId);
+
+    const inactiveAthletes: Array<{
+      athleteId: string;
+      lastMeasurementDate: string;
+      daysSinceLastMeasurement: number;
+    }> = [];
+
+    lastMeasurements.forEach(m => {
+      const lastDate = new Date(m.lastDate);
+      const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSince >= inactivityThreshold) {
+        inactiveAthletes.push({
+          athleteId: m.athleteId,
+          lastMeasurementDate: m.lastDate,
+          daysSinceLastMeasurement: daysSince,
+        });
+      }
+    });
+
+    // Athletes with no measurements at all
+    const athletesWithMeasurements = new Set(lastMeasurements.map(m => m.athleteId));
+    athleteIds.forEach(athleteId => {
+      if (!athletesWithMeasurements.has(athleteId)) {
+        inactiveAthletes.push({
+          athleteId,
+          lastMeasurementDate: '',
+          daysSinceLastMeasurement: 999, // Arbitrary large number for never measured
+        });
+      }
+    });
+
+    // Get athlete info
+    const allAtRiskAthleteIds = [
+      ...new Set([
+        ...decliningPerformances.map(d => d.athleteId),
+        ...inactiveAthletes.map(i => i.athleteId),
+      ])
+    ];
+
+    if (allAtRiskAthleteIds.length === 0) {
+      return {
+        declining: [],
+        inactive: [],
+        atRiskCount: 0,
+      };
+    }
+
+    const athleteInfo = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(inArray(users.id, allAtRiskAthleteIds));
+
+    const athleteNameMap = new Map<string, string>();
+    athleteInfo.forEach(a => athleteNameMap.set(a.id, `${a.firstName} ${a.lastName}`));
+
+    // Get team info for athletes
+    const athleteTeamInfo = await db
+      .select({
+        userId: userTeams.userId,
+        teamId: teams.id,
+        teamName: teams.name,
+      })
+      .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
+      .where(
+        and(
+          inArray(userTeams.userId, allAtRiskAthleteIds),
+          eq(userTeams.isActive, true)
+        )
+      );
+
+    const teamInfoMap = new Map<string, { teamId: string; teamName: string }>();
+    athleteTeamInfo.forEach(info => {
+      if (!teamInfoMap.has(info.userId)) {
+        teamInfoMap.set(info.userId, { teamId: info.teamId, teamName: info.teamName });
+      }
+    });
+
+    // Build declining results
+    const decliningResults = decliningPerformances.map(entry => {
+      const teamInfo = teamInfoMap.get(entry.athleteId);
+      const metricInfo = metricMap.get(entry.metric);
+
+      return {
+        athleteId: entry.athleteId,
+        athleteName: athleteNameMap.get(entry.athleteId) || 'Unknown',
+        teamId: teamInfo?.teamId || null,
+        teamName: teamInfo?.teamName || null,
+        metric: entry.metric,
+        metricLabel: metricInfo?.label || entry.metric,
+        declinePercent: Math.round(entry.declinePercent * 100) / 100,
+        previousValue: entry.previousValue,
+        currentValue: entry.currentValue,
+      };
+    });
+
+    // Build inactive results
+    const inactiveResults = inactiveAthletes.map(entry => {
+      const teamInfo = teamInfoMap.get(entry.athleteId);
+
+      return {
+        athleteId: entry.athleteId,
+        athleteName: athleteNameMap.get(entry.athleteId) || 'Unknown',
+        teamId: teamInfo?.teamId || null,
+        teamName: teamInfo?.teamName || null,
+        lastMeasurementDate: entry.lastMeasurementDate,
+        daysSinceLastMeasurement: entry.daysSinceLastMeasurement,
+      };
+    });
+
+    // Calculate unique at-risk count (athlete can be both declining and inactive)
+    const uniqueAtRiskAthletes = new Set([
+      ...decliningPerformances.map(d => d.athleteId),
+      ...inactiveAthletes.map(i => i.athleteId),
+    ]);
+
+    return {
+      declining: decliningResults,
+      inactive: inactiveResults,
+      atRiskCount: uniqueAtRiskAthletes.size,
     };
   }
 }
