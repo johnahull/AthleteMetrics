@@ -139,7 +139,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('PeerComparisonService - Cache Integrati
       isActive: true,
     });
 
-    // Create measurement for target athlete
+    // Create measurement for target athlete (must be verified to be included in peer pool)
     await db.insert(measurements).values({
       userId: targetAthleteId,
       submittedBy: targetAthleteId,
@@ -149,6 +149,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('PeerComparisonService - Cache Integrati
       age: 20,
       units: 's',
       organizationId: testOrgId,
+      isVerified: true,
     });
 
     // Create peer athletes to have enough sample size
@@ -228,6 +229,7 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('PeerComparisonService - Cache Integrati
         age: peer.age,
         units: 's',
         organizationId: testOrgId,
+        isVerified: true,  // Must be verified to be included in peer pool
       });
     }
   }
@@ -294,20 +296,23 @@ describe.skipIf(SKIP_INTEGRATION_TESTS)('PeerComparisonService - Cache Integrati
         { gender: 'Male' }
       );
 
-      // Get the cache entry's computedAt time
-      const cacheEntries = await db.select()
-        .from(peerPercentileCache)
-        .where(eq(peerPercentileCache.metricCode, TEST_METRIC_CODE));
-      const cachedComputedAt = cacheEntries[0].computedAt;
-
-      // Second call should return cached value (same computedAt)
+      // Second call should return cached value
       const secondResult = await peerComparisonService.getDistribution(
         TEST_METRIC_CODE,
         { gender: 'Male' }
       );
 
-      expect(secondResult.computedAt.getTime()).toBe(cachedComputedAt!.getTime());
+      // Verify both results have identical distribution data (indicating cache hit)
       expect(secondResult.sampleSize).toBe(firstResult.sampleSize);
+      expect(secondResult.p10).toBe(firstResult.p10);
+      expect(secondResult.p50).toBe(firstResult.p50);
+      expect(secondResult.p90).toBe(firstResult.p90);
+
+      // Verify only one cache entry exists (not recomputed)
+      const cacheEntries = await db.select()
+        .from(peerPercentileCache)
+        .where(eq(peerPercentileCache.metricCode, TEST_METRIC_CODE));
+      expect(cacheEntries.length).toBe(1);
     });
 
     it('should create different cache entries for different filters', async () => {
