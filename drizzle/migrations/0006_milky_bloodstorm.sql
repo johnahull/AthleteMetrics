@@ -1,4 +1,23 @@
 -- Migration 0006: Peer Comparison Infrastructure (Idempotent)
+--
+-- ARCHITECTURAL DECISION: Cross-Organization Peer Comparisons
+-- ============================================================
+-- The peer_percentile_cache table intentionally does NOT include an organization_id column.
+-- Peer comparisons are CROSS-ORGANIZATION by design for the following reasons:
+--
+-- 1. Larger Sample Sizes: Cross-org comparisons provide statistically valid benchmarks
+--    with sufficient sample sizes (minimum 10 athletes required for any percentile)
+-- 2. Fair Comparisons: Athletes can compare against peers across all organizations,
+--    not just within their own org (which may be small)
+-- 3. Privacy Protection: Only verified (coach-entered) measurements are included in
+--    peer pools, and all data is anonymized through aggregate statistics
+-- 4. Optional Display: Athletes can opt out of VIEWING peer comparisons via the
+--    show_peer_comparisons preference, but verified measurements still contribute
+--    to the anonymous peer pool (covered by Terms of Service)
+--
+-- Filters (age, gender, sport, team, org type) are applied at query time and
+-- stored in filter_criteria JSONB field, NOT via foreign key constraints.
+--
 -- Create peer percentile cache table
 CREATE TABLE IF NOT EXISTS "peer_percentile_cache" (
 	"id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
