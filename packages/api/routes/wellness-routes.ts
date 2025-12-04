@@ -1793,6 +1793,7 @@ export function registerWellnessRoutes(app: Express) {
             scaleMax: number;
             responseCount: number;
             trend: 'up' | 'down' | 'stable';
+            status: 'red' | 'yellow' | 'green';
           }[] = [];
 
           for (const [templateId, responses] of responsesByTemplate.entries()) {
@@ -1849,6 +1850,34 @@ export function registerWellnessRoutes(app: Express) {
 
             const templateTrend = calculateTrend(scores, previousTemplateScores);
 
+            // Calculate status based on template thresholds
+            let templateStatus: 'red' | 'yellow' | 'green' = 'green';
+            if (averageScore !== null && hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config) {
+                const scaleOrientation = config.scaleOrientation;
+                if (scaleOrientation === 'higher_is_better') {
+                  // Higher scores are better
+                  if (averageScore <= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore <= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                } else {
+                  // Lower scores are better (e.g., fatigue/stress scales)
+                  if (averageScore >= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore >= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                }
+              }
+            }
+
             templateAggregates.push({
               templateId,
               templateName: template.name,
@@ -1856,6 +1885,7 @@ export function registerWellnessRoutes(app: Express) {
               scaleMax: templateScaleMax,
               responseCount: responses.length,
               trend: templateTrend,
+              status: templateStatus,
             });
           }
 

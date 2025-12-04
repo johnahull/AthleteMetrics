@@ -382,6 +382,7 @@ export default function Dashboard() {
           teamId={filterParams.teamId}
           athleteId={filterParams.athleteId}
           isSiteAdmin={isSiteAdmin}
+          scopeLabel={scopeLabel}
         />
       )}
 

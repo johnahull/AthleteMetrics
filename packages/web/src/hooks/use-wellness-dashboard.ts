@@ -18,6 +18,7 @@ interface TemplateAggregate {
   scaleMax: number;
   responseCount: number;
   trend: 'up' | 'down' | 'stable';
+  status: 'red' | 'yellow' | 'green';
 }
 
 interface TeamDashboardData {

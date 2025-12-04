@@ -24,6 +24,7 @@ interface DashboardWellnessSectionProps {
   teamId?: string;
   athleteId?: string;
   isSiteAdmin?: boolean;
+  scopeLabel?: string;
 }
 
 interface AtRiskAthlete {
@@ -44,6 +45,7 @@ export function DashboardWellnessSection({
   teamId,
   athleteId,
   isSiteAdmin = false,
+  scopeLabel,
 }: DashboardWellnessSectionProps) {
   const [, setLocation] = useLocation();
 
@@ -130,6 +132,7 @@ export function DashboardWellnessSection({
       scaleMax: number;
       responseCount: number;
       trends: ('up' | 'down' | 'stable')[];
+      statuses: ('red' | 'yellow' | 'green')[];
     }>();
 
     wellnessData.forEach((team) => {
@@ -141,6 +144,7 @@ export function DashboardWellnessSection({
           existing.totalCount += aggregate.responseCount;
           existing.responseCount += aggregate.responseCount;
           existing.trends.push(aggregate.trend);
+          existing.statuses.push(aggregate.status);
         } else {
           // First time seeing this template
           templateMap.set(aggregate.templateId, {
@@ -151,6 +155,7 @@ export function DashboardWellnessSection({
             scaleMax: aggregate.scaleMax,
             responseCount: aggregate.responseCount,
             trends: [aggregate.trend],
+            statuses: [aggregate.status],
           });
         }
       });
@@ -172,6 +177,14 @@ export function DashboardWellnessSection({
         trend = 'down';
       }
 
+      // Calculate overall status (worst status wins: red > yellow > green)
+      let status: 'red' | 'yellow' | 'green' = 'green';
+      if (template.statuses.includes('red')) {
+        status = 'red';
+      } else if (template.statuses.includes('yellow')) {
+        status = 'yellow';
+      }
+
       return {
         templateId: template.templateId,
         templateName: template.templateName,
@@ -179,6 +192,7 @@ export function DashboardWellnessSection({
         scaleMax: template.scaleMax,
         responseCount: template.responseCount,
         trend,
+        status,
       };
     });
   }, [wellnessData]);
@@ -268,10 +282,15 @@ export function DashboardWellnessSection({
 
   return (
     <div className="mb-8">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-        <Heart className="h-5 w-5 text-red-500" />
-        Wellness Overview
-      </h2>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+          <Heart className="h-5 w-5 text-red-500" />
+          Wellness Overview
+        </h2>
+        {scopeLabel && (
+          <p className="text-sm text-gray-500 ml-7">{scopeLabel}</p>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {/* Per-Template Wellness Cards */}
@@ -289,8 +308,16 @@ export function DashboardWellnessSection({
                 ? 'text-red-600'
                 : 'text-gray-500';
 
+          // Status-based card styling
+          const statusCardStyle =
+            template.status === 'red'
+              ? 'bg-red-50 border-red-200'
+              : template.status === 'yellow'
+                ? 'bg-yellow-50 border-yellow-200'
+                : 'bg-green-50 border-green-200';
+
           return (
-            <Card key={template.templateId}>
+            <Card key={template.templateId} className={statusCardStyle}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-gray-600">
                   {template.templateName}
