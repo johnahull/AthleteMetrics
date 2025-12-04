@@ -33,6 +33,7 @@ interface LeaderboardWidgetProps {
   timeframe?: TimeframePreset | 'custom' | 'all';
   dateFrom?: string;
   dateTo?: string;
+  scopeLabel?: string;
 }
 
 export function LeaderboardWidget({
@@ -41,6 +42,7 @@ export function LeaderboardWidget({
   timeframe = "30d",
   dateFrom,
   dateTo,
+  scopeLabel,
 }: LeaderboardWidgetProps) {
   const [, setLocation] = useLocation();
 
@@ -153,6 +155,9 @@ export function LeaderboardWidget({
       <Card data-testid="leaderboard-empty">
         <CardHeader className="pb-3">
           <h3 className="text-lg font-semibold text-gray-900">Leaderboard</h3>
+          {scopeLabel && (
+            <p className="text-sm text-gray-500">{scopeLabel}</p>
+          )}
         </CardHeader>
         <CardContent>
           {/* Metric selector and limit toggle */}
@@ -208,6 +213,9 @@ export function LeaderboardWidget({
     <Card>
       <CardHeader className="pb-3">
         <h3 className="text-lg font-semibold text-gray-900">Leaderboard</h3>
+        {scopeLabel && (
+          <p className="text-sm text-gray-500">{scopeLabel}</p>
+        )}
       </CardHeader>
       <CardContent>
         {/* Metric selector and limit toggle */}

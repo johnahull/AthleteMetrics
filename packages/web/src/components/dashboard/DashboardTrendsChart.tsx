@@ -47,6 +47,7 @@ interface DashboardTrendsChartProps {
   timeframe?: TimeframePreset | "custom" | "all";
   dateFrom?: string;
   dateTo?: string;
+  scopeLabel?: string;
 }
 
 // Chart colors for different metrics
@@ -63,6 +64,7 @@ export function DashboardTrendsChart({
   timeframe = "30d",
   dateFrom,
   dateTo,
+  scopeLabel,
 }: DashboardTrendsChartProps) {
   // Get available metrics
   const { metrics, isLoading: metricsLoading } = useAvailableMetrics();
@@ -235,35 +237,68 @@ export function DashboardTrendsChart({
         spanGaps: true,
         pointRadius: 4,
         pointHoverRadius: 6,
+        yAxisID: `y${index}`, // Each metric gets its own y-axis
       };
     });
 
     return { labels, datasets };
   }, [trendsData, effectiveMetrics, metrics]);
 
-  const chartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "top" as const,
+  // Build dynamic chart options with multiple y-axes for proper scaling
+  const chartOptions = useMemo(() => {
+    // Create a y-axis configuration for each selected metric
+    const scales: Record<string, object> = {
+      x: {
+        grid: {
+          display: true,
+        },
       },
-      tooltip: {
-        mode: "index" as const,
+    };
+
+    // Add a y-axis for each metric with independent scaling
+    effectiveMetrics.forEach((metricCode, index) => {
+      const metricInfo = metrics.find((m) => m.code === metricCode);
+      const color = METRIC_COLORS[index % METRIC_COLORS.length];
+
+      scales[`y${index}`] = {
+        type: "linear" as const,
+        display: true,
+        position: index === 0 ? "left" : "right",
+        beginAtZero: false,
+        grid: {
+          drawOnChartArea: index === 0, // Only show grid lines for first axis
+        },
+        ticks: {
+          color: color.border,
+        },
+        title: {
+          display: effectiveMetrics.length > 1,
+          text: metricInfo?.label || metricCode,
+          color: color.border,
+        },
+      };
+    });
+
+    return {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "top" as const,
+        },
+        tooltip: {
+          mode: "index" as const,
+          intersect: false,
+        },
+      },
+      scales,
+      interaction: {
+        mode: "nearest" as const,
+        axis: "x" as const,
         intersect: false,
       },
-    },
-    scales: {
-      y: {
-        beginAtZero: false,
-      },
-    },
-    interaction: {
-      mode: "nearest" as const,
-      axis: "x" as const,
-      intersect: false,
-    },
-  };
+    };
+  }, [effectiveMetrics, metrics]);
 
   // Loading state
   if (isLoading) {
@@ -322,6 +357,9 @@ export function DashboardTrendsChart({
           <h3 className="text-lg font-semibold text-gray-900">
             Performance Trends
           </h3>
+          {scopeLabel && (
+            <p className="text-sm text-gray-500">{scopeLabel}</p>
+          )}
         </CardHeader>
         <CardContent>
           {/* Metric selector */}
@@ -376,6 +414,9 @@ export function DashboardTrendsChart({
         <h3 className="text-lg font-semibold text-gray-900">
           Performance Trends
         </h3>
+        {scopeLabel && (
+          <p className="text-sm text-gray-500">{scopeLabel}</p>
+        )}
       </CardHeader>
       <CardContent>
         {/* Metric selector */}

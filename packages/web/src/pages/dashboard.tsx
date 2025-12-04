@@ -1,11 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
-import RecentAthletesWidget from "@/components/recent-athletes-widget";
-import AthleteMeasurementForm from "@/components/athlete-measurement-form";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
@@ -30,11 +27,6 @@ export default function Dashboard() {
   const labels = useContextualLabels();
   const { user, organizationContext, userOrganizations } = useAuth();
   const [, setLocation] = useLocation();
-  const [measurementModalOpen, setMeasurementModalOpen] = useState(false);
-  const [selectedAthlete, setSelectedAthlete] = useState<{
-    athleteId: string;
-    athleteName: string;
-  } | null>(null);
 
   // Get available metrics for the organization
   const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
@@ -150,23 +142,27 @@ export default function Dashboard() {
     }
   });
 
-  const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams", effectiveOrganizationId],
+  // Fetch teams for scope label
+  const { data: teams = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ['/api/teams', effectiveOrganizationId],
     queryFn: async () => {
-      const url = effectiveOrganizationId
-        ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`
-        : `/api/analytics/teams`;
-      const response = await fetch(url, {
-        credentials: 'include'
+      const response = await fetch(`/api/teams?organizationId=${effectiveOrganizationId}`, {
+        credentials: 'include',
       });
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || `HTTP ${response.status}: ${response.statusText}`);
-      }
+      if (!response.ok) throw new Error('Failed to fetch teams');
       return response.json();
     },
-    enabled: !!user && !!effectiveOrganizationId // Only fetch team stats when org is selected
+    enabled: !!effectiveOrganizationId && !!user,
   });
+
+  // Compute scope label for widgets (shows org name or team name)
+  const scopeLabel = useMemo(() => {
+    if (scope.view === 'team' && scope.teamId) {
+      const team = teams.find(t => t.id === scope.teamId);
+      return team?.name || 'Team';
+    }
+    return currentOrganization?.name || 'Organization';
+  }, [scope.view, scope.teamId, teams, currentOrganization?.name]);
 
   // Debug logging (MUST be before any early returns)
   useEffect(() => {
@@ -437,6 +433,7 @@ export default function Dashboard() {
           timeframe={filterParams.timeframe as any}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
+          scopeLabel={scopeLabel}
         />
         <MostImprovedCard
           organizationId={effectiveOrganizationId}
@@ -444,13 +441,14 @@ export default function Dashboard() {
           timeframe={filterParams.timeframe as any}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
+          scopeLabel={scopeLabel}
         />
       </div>
       )}
 
       {/* Charts Section - Only show when org is selected */}
       {effectiveOrganizationId && (
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="mb-8">
         <DashboardTrendsChart
           organizationId={effectiveOrganizationId}
           teamId={filterParams.teamId}
@@ -458,51 +456,11 @@ export default function Dashboard() {
           timeframe={filterParams.timeframe as any}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
-        />
-
-        <Card className="bg-white">
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-lg font-semibold text-gray-900">{labels.team} Distribution</h3>
-            </div>
-            <div className="space-y-4">
-              {Array.isArray(teamStats) && teamStats.map((team: any, index: number) => (
-                <div key={team.teamId} className="flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-3 h-3 rounded-full ${
-                      index === 0 ? 'bg-blue-500' :
-                      index === 1 ? 'bg-green-500' :
-                      index === 2 ? 'bg-yellow-500' :
-                      index === 3 ? 'bg-purple-500' :
-                      index === 4 ? 'bg-red-500' :
-                      index === 5 ? 'bg-indigo-500' : 'bg-gray-500'
-                    }`}></div>
-                    <span className="text-sm font-medium text-gray-900">{team.teamName}</span>
-                  </div>
-                  <span className="text-sm text-gray-600">{team.athleteCount} {team.athleteCount === 1 ? labels.athlete.toLowerCase() : labels.athletes.toLowerCase()}</span>
-                </div>
-              ))}
-              {(!teamStats || teamStats.length === 0) && (
-                <p className="text-sm text-gray-500 text-center py-4">No {labels.teams.toLowerCase()} found</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      )}
-
-      {/* Recent Athletes Widget - Only show when org is selected */}
-      {effectiveOrganizationId && (
-      <div className="mb-8">
-        <RecentAthletesWidget
-          organizationId={effectiveOrganizationId}
-          onAddMeasurement={(data) => {
-            setSelectedAthlete(data);
-            setMeasurementModalOpen(true);
-          }}
+          scopeLabel={scopeLabel}
         />
       </div>
       )}
+
 
       {/* Recent Activity - Only show when org is selected */}
       {effectiveOrganizationId && (
@@ -594,24 +552,6 @@ export default function Dashboard() {
       </Card>
       )}
 
-      {/* Add Measurement Modal */}
-      <Dialog open={measurementModalOpen} onOpenChange={setMeasurementModalOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add Measurement</DialogTitle>
-          </DialogHeader>
-          {selectedAthlete && (
-            <AthleteMeasurementForm
-              athleteId={selectedAthlete.athleteId}
-              athleteName={selectedAthlete.athleteName}
-              onSuccess={() => {
-                setMeasurementModalOpen(false);
-                setSelectedAthlete(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

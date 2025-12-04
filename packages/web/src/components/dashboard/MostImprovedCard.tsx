@@ -33,6 +33,7 @@ interface MostImprovedCardProps {
   timeframe?: TimeframePreset | 'custom' | 'all';
   dateFrom?: string;
   dateTo?: string;
+  scopeLabel?: string;
 }
 
 export function MostImprovedCard({
@@ -41,6 +42,7 @@ export function MostImprovedCard({
   timeframe = "30d",
   dateFrom,
   dateTo,
+  scopeLabel,
 }: MostImprovedCardProps) {
   const [, setLocation] = useLocation();
 
@@ -135,6 +137,9 @@ export function MostImprovedCard({
       <Card data-testid="most-improved-empty">
         <CardHeader className="pb-3">
           <h3 className="text-lg font-semibold text-gray-900">Most Improved</h3>
+          {scopeLabel && (
+            <p className="text-sm text-gray-500">{scopeLabel}</p>
+          )}
         </CardHeader>
         <CardContent>
           {/* Metric selector */}
@@ -171,6 +176,9 @@ export function MostImprovedCard({
     <Card>
       <CardHeader className="pb-3">
         <h3 className="text-lg font-semibold text-gray-900">Most Improved</h3>
+        {scopeLabel && (
+          <p className="text-sm text-gray-500">{scopeLabel}</p>
+        )}
       </CardHeader>
       <CardContent>
         {/* Metric selector */}
