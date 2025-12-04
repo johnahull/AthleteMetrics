@@ -57,7 +57,7 @@ export const teams = pgTable("teams", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Unique constraint: team names must be unique within an organization
-  uniqueTeamPerOrg: unique().on(table.organizationId, table.name),
+  uniqueTeamPerOrg: unique("teams_organization_id_name_unique").on(table.organizationId, table.name),
   // Performance index for common queries
   orgNameIndex: index("teams_org_name_idx").on(table.organizationId, table.name),
 }));
@@ -167,7 +167,7 @@ export const organizationMetrics = pgTable("organization_metrics", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
-  uniqueOrgMetric: unique().on(table.organizationId, table.metricCode),
+  uniqueOrgMetric: unique("organization_metrics_unique_org_metric").on(table.organizationId, table.metricCode),
   orgIdx: index("org_metrics_org_idx").on(table.organizationId),
   orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
 }));
@@ -305,9 +305,10 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
-  uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
-  // Partial unique index for display_order (migration 0024)
-  displayOrderUnique: unique("org_benchmarks_display_order_unique").on(table.organizationId, table.displayOrder),
+  uniqueOrgBenchmark: unique("organization_benchmarks_unique_org_benchmark").on(table.organizationId, table.benchmarkId, table.benchmarkType),
+  // Note: displayOrderUnique is a PARTIAL unique index (WHERE display_order IS NOT NULL)
+  // created in migration 0024. It cannot be defined in Drizzle schema as Drizzle doesn't
+  // support partial constraints. The index name is: org_benchmarks_display_order_unique
   // Note: orgIdx removed as redundant (org_benchmarks_org_enabled_idx covers single-column queries via leftmost prefix rule)
   orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
   benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
@@ -931,7 +932,7 @@ export const userAchievements = pgTable("user_achievements", {
   orgIdx: index("user_achievements_org_idx").on(table.organizationId),
   achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
   userOrgIdx: index("user_achievements_user_org_idx").on(table.userId, table.organizationId),
-  uniqueUserAchievement: unique().on(table.userId, table.organizationId, table.achievementId),
+  uniqueUserAchievement: unique("user_achievements_user_org_achievement_unique").on(table.userId, table.organizationId, table.achievementId),
 }));
 
 // Goal Setting System
