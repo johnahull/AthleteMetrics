@@ -1065,6 +1065,9 @@ export const peerPercentileCache = pgTable("peer_percentile_cache", {
     sports?: string[];
   }>().notNull().default({}),
   // Hash of filterCriteria for deterministic lookups (avoids JSONB key ordering issues)
+  // NOTE: MD5 is used for cache key generation (performance), NOT cryptographic security
+  // JSONB objects {"age": 18, "gender": "M"} and {"gender": "M", "age": 18} have different ::text representations
+  // Using MD5 hash ensures consistent lookups regardless of key ordering
   filterHash: varchar("filter_hash", { length: 64 }).generatedAlwaysAs(sql`md5(filter_criteria::text)`),
   // Distribution data
   sampleSize: integer("sample_size").notNull(),

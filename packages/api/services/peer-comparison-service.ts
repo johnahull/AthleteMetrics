@@ -307,8 +307,20 @@ export class PeerComparisonService extends BaseService {
 
   /**
    * Get global peer pool filtered by criteria
-   * All active users' BEST measurements per metric are included (privacy-respecting via anonymization)
-   * Note: No opt-in required - all active athletes contribute to the anonymous peer pool
+   *
+   * PRIVACY MODEL:
+   * - All active athletes' VERIFIED measurements contribute to anonymous peer pool
+   * - Self-entered (unverified) measurements are excluded for data quality
+   * - Display preference (showPeerComparisons) controls UI visibility, not data contribution
+   * - No explicit opt-in required for data contribution (covered by Terms of Service)
+   * - Only aggregate statistics are computed (percentiles, mean) - individual values never exposed
+   * - Minimum sample size (10) prevents small-group identification
+   * - Organization boundaries are NOT enforced for cross-org comparison
+   *
+   * RATIONALE:
+   * - All verified measurements are coach-entered and considered trustworthy performance data
+   * - Anonymous aggregation protects individual privacy while enabling meaningful comparisons
+   * - Cross-organization comparison provides larger sample sizes and better statistical validity
    */
   private async getGlobalPeerPool(
     metric: string,
@@ -685,7 +697,7 @@ export class PeerComparisonService extends BaseService {
         expiresAt: distribution.expiresAt,
       })
       .onConflictDoUpdate({
-        target: [peerPercentileCache.metricCode, peerPercentileCache.filterCriteria],
+        target: [peerPercentileCache.metricCode, peerPercentileCache.filterHash],
         set: {
           sampleSize: distribution.sampleSize,
           p10: distribution.p10?.toString(),
