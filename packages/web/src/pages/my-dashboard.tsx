@@ -19,6 +19,7 @@ import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteDashboardData, type DashboardData } from '@/hooks/useAthleteDashboardData';
 import { useAthleteProfile } from '@/hooks/useAthleteProfile';
+import { useAthleteWellnessStatus } from '@/hooks/useAthleteWellnessStatus';
 import { useActiveGoals, GoalStatus, GoalType } from '@/hooks/useGoals';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
@@ -26,6 +27,7 @@ import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
 import { AchievementsCard } from '@/components/athlete/AchievementsCard';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
+import { PeerComparisonCard } from '@/components/athlete/PeerComparisonCard';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, AlertCircle, BarChart3, Target, ArrowRight } from 'lucide-react';
@@ -37,8 +39,10 @@ export default function MyDashboardPage() {
   const { user, isLoading: authLoading, organizationContext } = useAuth();
   const { athleteId, isLoading: contextLoading } = useAthleteContext();
 
-  // Fetch dashboard data
-  const { data: dashboardData, isLoading, isError, error } = useAthleteDashboardData(athleteId);
+  // Fetch dashboard data - include unverified for athlete's own view
+  const { data: dashboardData, isLoading, isError, error } = useAthleteDashboardData(athleteId, {
+    includeUnverified: true,
+  });
 
   // Fetch athlete profile for hero component
   const { data: athlete } = useAthleteProfile(athleteId);
@@ -64,6 +68,9 @@ export default function MyDashboardPage() {
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
   const orgWellnessEnabled = organization?.wellnessEnabled ?? true;
   const isWellnessEnabled = wellnessModuleEnabled && orgWellnessEnabled;
+
+  // Fetch athlete's wellness status for dashboard card
+  const { data: wellnessData } = useAthleteWellnessStatus(isWellnessEnabled && !!user?.id);
 
   // Note: Measurements are already grouped by useAthleteDashboardData hook internally
   // This local grouping is kept for the MetricProgressCard component which expects grouped data
@@ -234,7 +241,17 @@ export default function MyDashboardPage() {
       </div>
 
       {/* Compact Cards Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {/* Peer Comparison (How You Compare) */}
+        {user?.id && athleteId && (
+          <PeerComparisonCard
+            userId={user.id}
+            athleteId={athleteId}
+            availableMetrics={dashboardData.availableMetrics}
+            compact
+          />
+        )}
+
         {/* Achievements (compact) */}
         {user?.id && organizationContext && (
           <AchievementsCard userId={user.id} organizationId={organizationContext} compact />
@@ -243,7 +260,7 @@ export default function MyDashboardPage() {
         {/* Wellness Status */}
         <WellnessStatusCard
           wellnessEnabled={isWellnessEnabled}
-          wellnessData={null}
+          wellnessData={wellnessData ?? null}
         />
       </div>
     </div>

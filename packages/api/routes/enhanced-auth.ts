@@ -124,7 +124,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (userRole === 'site_admin') redirectUrl = '/admin';
     else if (userRole === 'org_admin') redirectUrl = '/organization';
     else if (userRole === 'coach') redirectUrl = '/coaching';
-    else if (userRole === 'athlete') redirectUrl = '/athlete';
+    else if (userRole === 'athlete') redirectUrl = '/my-dashboard';
 
     return res.status(200).json({
       success: true,

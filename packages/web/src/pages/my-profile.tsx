@@ -12,11 +12,15 @@
 import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteProfileComplete } from '@/hooks/useAthleteProfile';
+import { usePeerComparisonStatus, useUpdatePeerComparisonStatus } from '@/hooks/usePeerComparison';
 import { AthleteHeader } from '@/components/athlete/profile/AthleteHeader';
 import { ContactInfoCard } from '@/components/athlete/profile/ContactInfoCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertCircle, User } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Loader2, AlertCircle, User, Shield, Users } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 
 export default function MyProfilePage() {
@@ -25,6 +29,17 @@ export default function MyProfilePage() {
 
   // Fetch athlete profile data
   const { athlete, teams, isLoading, isError, error } = useAthleteProfileComplete(athleteId);
+
+  // Fetch peer comparison status
+  const { data: peerStatus, isLoading: peerStatusLoading } = usePeerComparisonStatus(user?.id);
+  const updatePeerStatus = useUpdatePeerComparisonStatus();
+
+  // Handle peer comparison toggle
+  const handlePeerComparisonToggle = (optIn: boolean) => {
+    if (user?.id) {
+      updatePeerStatus.mutate({ userId: user.id, optIn });
+    }
+  };
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -79,7 +94,7 @@ export default function MyProfilePage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 space-y-6">
       {/* Page Title */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">My Profile</h1>
@@ -129,6 +144,58 @@ export default function MyProfilePage() {
               Athlete
             </Badge>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Peer Comparisons Display Preference */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Users className="h-5 w-5 text-blue-600" />
+            Peer Comparisons
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="peer-comparison-toggle" className="font-medium">
+                Show peer comparisons
+              </Label>
+              <p className="text-sm text-muted-foreground">
+                See how your performance ranks among similar athletes
+              </p>
+            </div>
+            <Switch
+              id="peer-comparison-toggle"
+              checked={peerStatus?.optedIn ?? true}
+              onCheckedChange={handlePeerComparisonToggle}
+              disabled={peerStatusLoading || updatePeerStatus.isPending}
+              aria-label="Toggle peer comparisons visibility"
+            />
+          </div>
+
+          <Alert className="bg-blue-50 border-blue-200">
+            <Shield className="h-4 w-4 text-blue-600" />
+            <AlertDescription className="text-blue-800">
+              All measurements contribute to anonymous peer statistics.
+              This toggle only controls whether you see comparison results.
+            </AlertDescription>
+          </Alert>
+
+          {peerStatus?.optedIn && (
+            <p className="text-sm text-green-600">
+              ✓ Comparisons visible on your dashboard and{' '}
+              <Link href="/my-peer-comparison" className="underline hover:text-green-700">
+                Peer Comparison page
+              </Link>
+            </p>
+          )}
+
+          {!peerStatus?.optedIn && (
+            <p className="text-sm text-gray-500">
+              Peer comparison charts are hidden from your dashboard
+            </p>
+          )}
         </CardContent>
       </Card>
 

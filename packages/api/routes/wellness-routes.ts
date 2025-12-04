@@ -656,6 +656,52 @@ export function registerWellnessRoutes(app: Express) {
   );
 
   /**
+   * GET /api/wellness/requests/by-token/:token/template
+   * Get wellness template for a valid request token
+   * Access: Public (token acts as authentication)
+   */
+  app.get(
+    "/api/wellness/requests/by-token/:token/template",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        // Validate token and get request
+        const request = await storage.getWellnessRequestByToken(token);
+        if (!request) {
+          return res.status(404).json({ message: "Wellness request not found" });
+        }
+
+        // Check if expired
+        if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+          return res.status(410).json({ message: "This wellness request has expired" });
+        }
+
+        // Get template - token proves legitimate access
+        const template = await storage.getWellnessTemplate(request.templateId);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Return public-safe template fields
+        const publicTemplate = {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          config: template.config,
+          isActive: template.isActive,
+        };
+
+        res.json(publicTemplate);
+      } catch (error: any) {
+        console.error("Failed to fetch template by token:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch template", error));
+      }
+    }
+  );
+
+  /**
    * GET /api/wellness/requests/by-token/:token/targeted-athletes
    * Get list of targeted athletes for a wellness request (for athlete dropdown)
    * Access: Public (no authentication required)
@@ -1162,6 +1208,113 @@ export function registerWellnessRoutes(app: Express) {
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness responses:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness responses", error));
+      }
+    }
+  );
+
+  /**
+   * GET /api/wellness/my-status
+   * Get computed wellness status for authenticated athlete's dashboard
+   * Access: Authenticated user (athlete)
+   * Returns: { lastSubmissionDate, flaggedConcerns, overallStatus }
+   */
+  app.get(
+    "/api/wellness/my-status",
+    highVolumeLimiter,
+    requireAuth,
+    async (req: AuthenticatedRequest, res: Response) => {
+      try {
+        const userId = req.user!.id;
+
+        // Get the latest response for this athlete
+        const allResponses = await storage.getWellnessResponsesByAthlete(userId);
+
+        if (!allResponses || allResponses.length === 0) {
+          return res.json(null);
+        }
+
+        // Sort by submission date and get the most recent
+        allResponses.sort((a, b) =>
+          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+        const latestResponse = allResponses[0];
+
+        // Get the template for this response
+        const template = await storage.getWellnessTemplate(latestResponse.templateId);
+        if (!template) {
+          // Template was deleted, return null
+          return res.json(null);
+        }
+
+        // Validate template config using type guard
+        const validatedTemplate = validateTemplate(template);
+        if (!validatedTemplate) {
+          console.error(`Invalid template config for wellness status, template ${template.id}`);
+          return res.json(null);
+        }
+
+        // Calculate status using shared utility
+        // Type assertion: Database schema type is compatible with WellnessResponse interface
+        // Both define the same structure for responses field (Record<string, { value: any }>)
+        const { status } = calculateAthleteStatus(
+          latestResponse as unknown as WellnessResponse,
+          validatedTemplate
+        );
+
+        // Build flagged concerns from low scores and injuries
+        const flaggedConcerns: { question: string; answer: string }[] = [];
+        const responses = latestResponse.responses as Record<string, { value: any }>;
+
+        // Check scale questions for concerning values
+        for (const question of validatedTemplate.config.questions) {
+          const answer = responses[question.id];
+          if (!answer) continue;
+
+          if (question.type === 'scale' && typeof answer.value === 'number') {
+            // Get scale range
+            const scaleMin = question.scaleMin;
+            const scaleMax = question.scaleMax;
+            const range = scaleMax - scaleMin;
+
+            // Check orientation
+            const orientation = validatedTemplate.config.statusConfig?.scaleOrientation || 'higher_is_better';
+
+            if (orientation === 'higher_is_better') {
+              // Low values are concerning
+              if (answer.value <= scaleMin + Math.round(range * 0.3)) {
+                flaggedConcerns.push({
+                  question: question.label,
+                  answer: `${answer.value}/${scaleMax}`,
+                });
+              }
+            } else {
+              // High values are concerning (lower_is_better)
+              if (answer.value >= scaleMax - Math.round(range * 0.3)) {
+                flaggedConcerns.push({
+                  question: question.label,
+                  answer: `${answer.value}/${scaleMax}`,
+                });
+              }
+            }
+          }
+
+          // Check body_map for injuries
+          if (question.type === 'body_map' && Array.isArray(answer.value) && answer.value.length > 0) {
+            flaggedConcerns.push({
+              question: question.label,
+              answer: `${answer.value.length} area(s) marked`,
+            });
+          }
+        }
+
+        res.json({
+          lastSubmissionDate: latestResponse.submittedAt,
+          flaggedConcerns,
+          overallStatus: status,
+        });
+      } catch (error: any) {
+        console.error("Failed to fetch athlete wellness status:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch wellness status", error));
       }
     }
   );

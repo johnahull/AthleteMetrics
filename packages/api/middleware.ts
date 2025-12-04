@@ -343,6 +343,14 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
         return res.status(403).json({ message: genericError });
       }
 
+      // SECURITY: Verify athlete belongs to the same organization as the wellness request
+      // This prevents cross-org data leakage via magic links
+      const athleteOrgs = await storage.getUserOrganizations(athleteId);
+      const belongsToRequestOrg = athleteOrgs.some(uo => uo.organizationId === wellnessRequest.organizationId);
+      if (!belongsToRequestOrg) {
+        return res.status(403).json({ message: genericError });
+      }
+
       // For public wellness links (requiresAuth: false), set magic link user context
       // with the actual athlete's ID and details
       req.user = {
