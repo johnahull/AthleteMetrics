@@ -111,11 +111,15 @@ export default function Dashboard() {
   });
 
   const { data: recentMeasurements } = useQuery({
-    queryKey: ["/api/measurements", effectiveOrganizationId],
+    queryKey: ["/api/measurements", effectiveOrganizationId, filterParams.teamId, filterParams.athleteId],
     queryFn: async () => {
-      const url = effectiveOrganizationId
-        ? `/api/measurements?organizationId=${effectiveOrganizationId}`
-        : `/api/measurements`;
+      // Build URL with scope filters (org, team, or athlete)
+      const params = new URLSearchParams();
+      if (effectiveOrganizationId) params.append('organizationId', effectiveOrganizationId);
+      if (filterParams.teamId) params.append('teamIds', filterParams.teamId);
+      if (filterParams.athleteId) params.append('userId', filterParams.athleteId);
+
+      const url = `/api/measurements?${params.toString()}`;
       const response = await fetch(url, {
         credentials: 'include'
       });
@@ -507,7 +511,12 @@ export default function Dashboard() {
       <Card className="bg-white">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold text-gray-900">Recent Measurements</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">Recent Measurements</h3>
+              {scopeLabel && (
+                <p className="text-sm text-gray-500">{scopeLabel}</p>
+              )}
+            </div>
           </div>
           {isMobile ? (
             /* Mobile Timeline View */
