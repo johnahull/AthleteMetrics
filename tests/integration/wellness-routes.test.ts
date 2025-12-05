@@ -1125,17 +1125,20 @@ describe('Wellness Dashboard Routes', () => {
       .query({ date: testDate })
       .set('Cookie', coachCookie);
 
-    console.log(`📥 API response body:`, JSON.stringify(res.body, null, 2));
+    console.log(`📥 API returned ${res.body.length} teams`);
+
     expect(res.status).toBe(200);
 
     // Team1 - Daily Wellness Template
     const team1Data = res.body.find((t: any) => t.teamId === team1.id);
 
-    // If team1 not found, it might be because no athletes had responses today
-    // This could happen if test data wasn't properly set up
     if (!team1Data) {
-      throw new Error(`Team1 (${team1.id}) not found in dashboard response. This likely means the athlete-team relationship or wellness responses weren't properly created.`);
+      console.error(`❌ Team1 (${team1.id}) not found in response`);
+      console.error(`Available teams:`, res.body.map((t: any) => ({ teamId: t.teamId, name: t.teamName })));
+      throw new Error(`Team1 not found in dashboard response`);
     }
+
+    console.log(`✅ Team1 found: ${team1Data.teamName}, athletes: ${team1Data.totalAthletes}, aggregates: ${team1Data.templateAggregates.length}`);
 
     expect(team1Data.templateAggregates).toBeDefined();
     expect(Array.isArray(team1Data.templateAggregates)).toBe(true);
