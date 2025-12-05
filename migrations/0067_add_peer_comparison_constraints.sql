@@ -8,14 +8,21 @@
 
 -- First, clean up any existing cache entries with sample_size < 10
 -- These represent unreliable data that will be regenerated on demand
-DELETE FROM peer_percentile_cache WHERE sample_size < 10;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'peer_percentile_cache'
+  ) THEN
+    DELETE FROM peer_percentile_cache WHERE sample_size < 10;
+  END IF;
+END $$;
 
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'peer_percentile_cache_sample_size_min'
-    AND table_name = 'peer_percentile_cache'
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'peer_percentile_cache_sample_size_min'
   ) THEN
     ALTER TABLE peer_percentile_cache
       ADD CONSTRAINT peer_percentile_cache_sample_size_min
@@ -28,9 +35,8 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'site_benchmarks_peer_percentile_range'
-    AND table_name = 'site_benchmarks'
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'site_benchmarks_peer_percentile_range'
   ) THEN
     ALTER TABLE site_benchmarks
       ADD CONSTRAINT site_benchmarks_peer_percentile_range
@@ -44,9 +50,8 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'site_benchmarks_source_valid'
-    AND table_name = 'site_benchmarks'
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'site_benchmarks_source_valid'
   ) THEN
     ALTER TABLE site_benchmarks
       ADD CONSTRAINT site_benchmarks_source_valid
@@ -59,15 +64,31 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM information_schema.constraint_column_usage
-    WHERE constraint_name = 'site_benchmarks_peer_fields_required'
-    AND table_name = 'site_benchmarks'
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'site_benchmarks_peer_fields_required'
   ) THEN
     ALTER TABLE site_benchmarks
       ADD CONSTRAINT site_benchmarks_peer_fields_required
       CHECK (
         benchmark_source != 'peer_percentile' OR
         (peer_percentile_target IS NOT NULL AND peer_filter_criteria IS NOT NULL)
+      );
+  END IF;
+END $$;
+
+-- Constraint: Mutual exclusivity for static vs peer-percentile benchmarks
+-- If benchmark_source is 'static', peer fields should be NULL
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'site_benchmarks_static_fields_null'
+  ) THEN
+    ALTER TABLE site_benchmarks
+      ADD CONSTRAINT site_benchmarks_static_fields_null
+      CHECK (
+        benchmark_source != 'static' OR
+        (peer_percentile_target IS NULL AND peer_filter_criteria IS NULL)
       );
   END IF;
 END $$;

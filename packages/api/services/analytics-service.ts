@@ -6,6 +6,7 @@
 import { db } from '../db';
 import { measurements, teams, organizations, users, userTeams, siteMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
+import { getAthleteIdsForScope } from '../utils/athlete-filters';
 
 /**
  * Dashboard statistics time window
@@ -271,28 +272,9 @@ export class AnalyticsService {
       // If filtering by specific athlete, short-circuit to just that athlete
       if (athleteId) {
         cachedAthleteIds = [athleteId];
-      } else if (teamId) {
-        // Filter to athletes in the specific team
-        const athleteIds = await db
-          .select({ userId: userTeams.userId })
-          .from(userTeams)
-          .where(
-            and(
-              eq(userTeams.teamId, teamId),
-              eq(userTeams.isActive, true)
-            )
-          )
-          .groupBy(userTeams.userId);
-        cachedAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
       } else {
-        // Get all athlete IDs through team membership (organization scope)
-        const athleteIds = await db
-          .select({ userId: userTeams.userId })
-          .from(userTeams)
-          .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .where(eq(teams.organizationId, organizationId))
-          .groupBy(userTeams.userId);
-        cachedAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+        // Use helper to get athlete IDs for scope (org or team)
+        cachedAthleteIds = await getAthleteIdsForScope(organizationId, teamId);
       }
 
       if (cachedAthleteIds.length > 0) {
@@ -500,28 +482,9 @@ export class AnalyticsService {
     if (options?.athleteId) {
       // Filter to specific athlete
       uniqueAthleteIds = [options.athleteId];
-    } else if (options?.teamId) {
-      // Filter to athletes in specific team
-      const teamAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.teamId, options.teamId),
-            eq(userTeams.isActive, true)
-          )
-        )
-        .groupBy(userTeams.userId);
-      uniqueAthleteIds = [...new Set(teamAthletes.map((a) => a.userId))];
     } else {
-      // Get all athletes in organization
-      const orgAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId))
-        .groupBy(userTeams.userId);
-      uniqueAthleteIds = [...new Set(orgAthletes.map((a) => a.userId))];
+      // Use helper to get athlete IDs for scope (org or team)
+      uniqueAthleteIds = await getAthleteIdsForScope(organizationId, options?.teamId);
     }
 
     if (uniqueAthleteIds.length === 0) {
@@ -629,28 +592,7 @@ export class AnalyticsService {
     const lowerIsBetter = metricType === 'lower_is_better';
 
     // Get athlete IDs based on scope
-    let athleteIds: string[];
-    if (teamId) {
-      const teamAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, true)
-          )
-        )
-        .groupBy(userTeams.userId);
-      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
-    } else {
-      const orgAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId))
-        .groupBy(userTeams.userId);
-      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
-    }
+    const athleteIds = await getAthleteIdsForScope(organizationId, teamId);
 
     if (athleteIds.length === 0) {
       return {
@@ -819,26 +761,7 @@ export class AnalyticsService {
     const lowerIsBetter = metricType === 'lower_is_better';
 
     // Get athlete IDs based on scope
-    let athleteIds: string[];
-    if (teamId) {
-      const teamAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, true)
-          )
-        );
-      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
-    } else {
-      const orgAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId));
-      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
-    }
+    const athleteIds = await getAthleteIdsForScope(organizationId, teamId);
 
     if (athleteIds.length === 0) {
       return {
@@ -850,86 +773,65 @@ export class AnalyticsService {
       };
     }
 
-    // Build date filter conditions for period measurements
-    const dateConditions = [];
-    if (startDate) {
-      dateConditions.push(gte(measurements.date, startDate.toISOString().split('T')[0]));
-    }
-    if (endDate) {
-      dateConditions.push(lt(measurements.date, endDate.toISOString().split('T')[0]));
-    }
+    // Use SQL window functions to calculate improvement in database
+    // Build date filter conditions for SQL
+    const startDateStr = startDate ? startDate.toISOString().split('T')[0] : null;
+    const endDateStr = endDate ? endDate.toISOString().split('T')[0] : null;
 
-    // Get all measurements for athletes in the period
-    const periodMeasurements = await db
-      .select({
-        athleteId: measurements.userId,
-        value: sql<number>`CAST(${measurements.value} AS NUMERIC)::float`,
-        date: measurements.date,
-      })
-      .from(measurements)
-      .where(
-        and(
-          inArray(measurements.userId, athleteIds),
-          eq(measurements.metric, metric),
-          eq(measurements.isVerified, true),
-          ...dateConditions
-        )
-      )
-      .orderBy(measurements.date);
-
-    // Group measurements by athlete and calculate improvement
-    const athleteMeasurements = new Map<string, { values: number[]; dates: string[] }>();
-    periodMeasurements.forEach(m => {
-      const existing = athleteMeasurements.get(m.athleteId) || { values: [], dates: [] };
-      existing.values.push(m.value);
-      existing.dates.push(m.date);
-      athleteMeasurements.set(m.athleteId, existing);
-    });
-
-    // Calculate improvement for athletes with at least 2 measurements
-    const improvements: Array<{
+    const improvementQuery = sql<{
       athleteId: string;
       previousValue: number;
       currentValue: number;
       improvementPercent: number;
       measurementCount: number;
-    }> = [];
+    }>`
+      WITH ordered_measurements AS (
+        SELECT
+          user_id as athlete_id,
+          CAST(value AS NUMERIC) as value,
+          date,
+          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC) as first_row,
+          ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date DESC) as last_row
+        FROM measurements
+        WHERE user_id = ANY(${athleteIds})
+          AND metric = ${metric}
+          AND is_verified = true
+          ${startDateStr ? sql`AND date >= ${startDateStr}` : sql``}
+          ${endDateStr ? sql`AND date < ${endDateStr}` : sql``}
+      ),
+      athlete_stats AS (
+        SELECT
+          athlete_id,
+          MIN(CASE WHEN first_row = 1 THEN value END) as first_value,
+          ${lowerIsBetter
+            ? sql`MIN(value)`
+            : sql`MAX(value)`
+          } as best_value,
+          COUNT(*) as measurement_count
+        FROM ordered_measurements
+        GROUP BY athlete_id
+        HAVING COUNT(*) >= 2
+      )
+      SELECT
+        athlete_id::text as "athleteId",
+        first_value::float as "previousValue",
+        best_value::float as "currentValue",
+        ${lowerIsBetter
+          ? sql`((first_value - best_value) / NULLIF(first_value, 0)) * 100`
+          : sql`((best_value - first_value) / NULLIF(first_value, 0)) * 100`
+        }::float as "improvementPercent",
+        measurement_count::int as "measurementCount"
+      FROM athlete_stats
+      WHERE first_value > 0
+        AND ${lowerIsBetter
+          ? sql`((first_value - best_value) / first_value) * 100`
+          : sql`((best_value - first_value) / first_value) * 100`
+        } > 0
+      ORDER BY "improvementPercent" DESC
+      LIMIT ${limit}
+    `;
 
-    athleteMeasurements.forEach((data, athleteId) => {
-      if (data.values.length >= 2) {
-        const firstValue = data.values[0]; // First measurement in period
-        const bestValue = lowerIsBetter
-          ? Math.min(...data.values)
-          : Math.max(...data.values);
-
-        // Calculate improvement percentage
-        // For lower_is_better: improvement = (first - best) / first * 100
-        // For higher_is_better: improvement = (best - first) / first * 100
-        let improvementPercent: number;
-        if (firstValue === 0) {
-          improvementPercent = 0;
-        } else if (lowerIsBetter) {
-          improvementPercent = ((firstValue - bestValue) / firstValue) * 100;
-        } else {
-          improvementPercent = ((bestValue - firstValue) / firstValue) * 100;
-        }
-
-        // Only include positive improvements
-        if (improvementPercent > 0) {
-          improvements.push({
-            athleteId,
-            previousValue: firstValue,
-            currentValue: bestValue,
-            improvementPercent,
-            measurementCount: data.values.length,
-          });
-        }
-      }
-    });
-
-    // Sort by improvement percentage (highest first) and take limit
-    improvements.sort((a, b) => b.improvementPercent - a.improvementPercent);
-    const topImprovements = improvements.slice(0, limit);
+    const topImprovements = await db.execute(improvementQuery) as any[];
 
     if (topImprovements.length === 0) {
       return {
@@ -942,7 +844,7 @@ export class AnalyticsService {
     }
 
     // Get athlete info
-    const topAthleteIds = topImprovements.map(i => i.athleteId);
+    const topAthleteIds = topImprovements.map((i: any) => i.athleteId);
     const athleteInfo = await db
       .select({
         id: users.id,
@@ -1000,7 +902,7 @@ export class AnalyticsService {
     allTimeBests.forEach(b => allTimeBestMap.set(b.athleteId, b.allTimeBest));
 
     // Build response
-    const result: MostImprovedEntry[] = topImprovements.map(entry => {
+    const result: MostImprovedEntry[] = topImprovements.map((entry: any) => {
       const teamInfo = teamMap.get(entry.athleteId);
       const allTimeBest = allTimeBestMap.get(entry.athleteId);
       const hasPersonalBest = allTimeBest !== undefined &&
@@ -1021,7 +923,7 @@ export class AnalyticsService {
 
     return {
       improvements: result,
-      totalAthletes: improvements.length, // Total athletes with improvement
+      totalAthletes: topImprovements.length, // Total athletes with improvement
       metric,
       metricLabel,
       metricType: metricType as 'lower_is_better' | 'higher_is_better' | 'tracking',
@@ -1047,6 +949,8 @@ export class AnalyticsService {
     options?: {
       teamId?: string;
       inactivityThreshold?: number;
+      limit?: number;
+      offset?: number;
     }
   ): Promise<{
     declining: Array<{
@@ -1069,57 +973,23 @@ export class AnalyticsService {
       daysSinceLastMeasurement: number;
     }>;
     atRiskCount: number;
+    totalCount: number;
   }> {
-    const { teamId, inactivityThreshold = 14 } = options || {};
+    const { teamId, inactivityThreshold = 14, limit = 20, offset = 0 } = options || {};
 
     // Get athlete IDs based on scope
-    let athleteIds: string[];
-    if (teamId) {
-      const teamAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .where(
-          and(
-            eq(userTeams.teamId, teamId),
-            eq(userTeams.isActive, true)
-          )
-        );
-      athleteIds = [...new Set(teamAthletes.map(a => a.userId))];
-    } else {
-      const orgAthletes = await db
-        .select({ userId: userTeams.userId })
-        .from(userTeams)
-        .innerJoin(teams, eq(userTeams.teamId, teams.id))
-        .where(eq(teams.organizationId, organizationId));
-      athleteIds = [...new Set(orgAthletes.map(a => a.userId))];
-    }
+    const athleteIds = await getAthleteIdsForScope(organizationId, teamId);
 
     if (athleteIds.length === 0) {
       return {
         declining: [],
         inactive: [],
         atRiskCount: 0,
+        totalCount: 0,
       };
     }
 
-    // PART 1: Detect declining performance
-    // Get all measurements for athletes, ordered by date DESC
-    const allMeasurements = await db
-      .select({
-        athleteId: measurements.userId,
-        metric: measurements.metric,
-        value: sql<number>`CAST(${measurements.value} AS NUMERIC)::float`,
-        date: measurements.date,
-      })
-      .from(measurements)
-      .where(
-        and(
-          inArray(measurements.userId, athleteIds),
-          eq(measurements.isVerified, true)
-        )
-      )
-      .orderBy(desc(measurements.date));
-
+    // PART 1: Detect declining performance using SQL window functions
     // Get metric metadata for determining decline direction
     const metricsMetadata = await db
       .select({
@@ -1133,72 +1003,68 @@ export class AnalyticsService {
     const metricMap = new Map<string, { label: string; metricType: string }>();
     metricsMetadata.forEach(m => metricMap.set(m.code, { label: m.label, metricType: m.metricType }));
 
-    // Group measurements by athlete and metric
-    const athleteMetricData = new Map<string, Map<string, { values: number[]; dates: string[] }>>();
-    allMeasurements.forEach(m => {
-      if (!athleteMetricData.has(m.athleteId)) {
-        athleteMetricData.set(m.athleteId, new Map());
-      }
-      const athleteData = athleteMetricData.get(m.athleteId)!;
-      if (!athleteData.has(m.metric)) {
-        athleteData.set(m.metric, { values: [], dates: [] });
-      }
-      const metricData = athleteData.get(m.metric)!;
-      metricData.values.push(m.value);
-      metricData.dates.push(m.date);
-    });
-
-    // Analyze decline for each athlete-metric combination
-    const decliningPerformances: Array<{
+    // Use SQL window functions to calculate decline in database
+    const decliningQuery = sql<{
       athleteId: string;
       metric: string;
       declinePercent: number;
       previousValue: number;
       currentValue: number;
-    }> = [];
+    }>`
+      WITH ranked_measurements AS (
+        SELECT
+          user_id as athlete_id,
+          metric,
+          CAST(value AS NUMERIC) as value,
+          date,
+          ROW_NUMBER() OVER (PARTITION BY user_id, metric ORDER BY date DESC) as row_num
+        FROM measurements
+        WHERE user_id = ANY(${athleteIds})
+          AND is_verified = true
+      ),
+      recent_measurements AS (
+        SELECT
+          athlete_id,
+          metric,
+          value,
+          row_num
+        FROM ranked_measurements
+        WHERE row_num <= 6
+      ),
+      averaged_measurements AS (
+        SELECT
+          athlete_id,
+          metric,
+          AVG(CASE WHEN row_num <= 3 THEN value END) as current_avg,
+          AVG(CASE WHEN row_num BETWEEN 4 AND 6 THEN value END) as previous_avg,
+          COUNT(DISTINCT row_num) as total_measurements
+        FROM recent_measurements
+        GROUP BY athlete_id, metric
+        HAVING COUNT(DISTINCT row_num) >= 6
+      )
+      SELECT
+        athlete_id::text as "athleteId",
+        metric,
+        CASE
+          WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+            THEN ((current_avg - previous_avg) / NULLIF(previous_avg, 0)) * 100
+          ELSE ((previous_avg - current_avg) / NULLIF(previous_avg, 0)) * 100
+        END as "declinePercent",
+        previous_avg::float as "previousValue",
+        current_avg::float as "currentValue"
+      FROM averaged_measurements
+      WHERE
+        previous_avg > 0
+        AND (
+          CASE
+            WHEN metric IN ('FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD')
+              THEN ((current_avg - previous_avg) / previous_avg) * 100
+            ELSE ((previous_avg - current_avg) / previous_avg) * 100
+          END
+        ) > 5
+    `;
 
-    athleteMetricData.forEach((metrics, athleteId) => {
-      metrics.forEach((data, metric) => {
-        if (data.values.length >= 6) {
-          // Get last 3 and previous 3 measurements
-          const last3 = data.values.slice(0, 3);
-          const previous3 = data.values.slice(3, 6);
-
-          const currentAvg = last3.reduce((a, b) => a + b, 0) / 3;
-          const previousAvg = previous3.reduce((a, b) => a + b, 0) / 3;
-
-          const metricInfo = metricMap.get(metric);
-          if (!metricInfo || metricInfo.metricType === 'tracking') return;
-
-          const lowerIsBetter = metricInfo.metricType === 'lower_is_better';
-
-          // Calculate decline percentage
-          // For lower_is_better: decline = (current - previous) / previous * 100 (values going UP is bad)
-          // For higher_is_better: decline = (previous - current) / previous * 100 (values going DOWN is bad)
-          let declinePercent: number;
-          if (previousAvg === 0) return;
-
-          if (lowerIsBetter) {
-            // For times (lower is better), increase means decline
-            declinePercent = ((currentAvg - previousAvg) / previousAvg) * 100;
-          } else {
-            // For distances (higher is better), decrease means decline
-            declinePercent = ((previousAvg - currentAvg) / previousAvg) * 100;
-          }
-
-          // Flag if decline > 5%
-          if (declinePercent > 5) {
-            decliningPerformances.push({
-              athleteId,
-              metric,
-              declinePercent,
-              previousValue: previousAvg,
-              currentValue: currentAvg,
-            });
-          }
-        }
-      });
-    });
+    const decliningPerformances = await db.execute(decliningQuery) as any[];
 
     // PART 2: Detect inactive athletes
     const inactivityDate = new Date();
@@ -1253,7 +1119,7 @@ export class AnalyticsService {
     // Get athlete info
     const allAtRiskAthleteIds = [
       ...new Set([
-        ...decliningPerformances.map(d => d.athleteId),
+        ...decliningPerformances.map((d: any) => d.athleteId),
         ...inactiveAthletes.map(i => i.athleteId),
       ])
     ];
@@ -1263,6 +1129,7 @@ export class AnalyticsService {
         declining: [],
         inactive: [],
         atRiskCount: 0,
+        totalCount: 0,
       };
     }
 
@@ -1302,7 +1169,7 @@ export class AnalyticsService {
     });
 
     // Build declining results
-    const decliningResults = decliningPerformances.map(entry => {
+    const decliningResults = decliningPerformances.map((entry: any) => {
       const teamInfo = teamInfoMap.get(entry.athleteId);
       const metricInfo = metricMap.get(entry.metric);
 
@@ -1335,14 +1202,40 @@ export class AnalyticsService {
 
     // Calculate unique at-risk count (athlete can be both declining and inactive)
     const uniqueAtRiskAthletes = new Set([
-      ...decliningPerformances.map(d => d.athleteId),
+      ...decliningPerformances.map((d: any) => d.athleteId),
       ...inactiveAthletes.map(i => i.athleteId),
     ]);
 
+    // Store total count before pagination
+    const totalDeclining = decliningResults.length;
+    const totalInactive = inactiveResults.length;
+    const totalCount = uniqueAtRiskAthletes.size;
+
+    // Apply pagination by combining and sorting all at-risk entries
+    const allAtRisk = [
+      ...decliningResults.map(d => ({ ...d, type: 'declining' as const })),
+      ...inactiveResults.map(i => ({ ...i, type: 'inactive' as const })),
+    ];
+
+    // Sort by athlete name for consistent pagination
+    allAtRisk.sort((a, b) => a.athleteName.localeCompare(b.athleteName));
+
+    // Apply offset and limit
+    const paginatedResults = allAtRisk.slice(offset, offset + limit);
+
+    // Separate back into declining and inactive
+    const paginatedDeclining = paginatedResults
+      .filter(r => r.type === 'declining')
+      .map(({ type, ...rest }) => rest);
+    const paginatedInactive = paginatedResults
+      .filter(r => r.type === 'inactive')
+      .map(({ type, ...rest }) => rest);
+
     return {
-      declining: decliningResults,
-      inactive: inactiveResults,
+      declining: paginatedDeclining,
+      inactive: paginatedInactive,
       atRiskCount: uniqueAtRiskAthletes.size,
+      totalCount,
     };
   }
 }

@@ -612,8 +612,22 @@ export function registerAnalyticsRoutes(app: Express) {
       const inactivityThresholdStr = req.query.inactivityThreshold as string | undefined;
       const inactivityThreshold = inactivityThresholdStr ? parseInt(inactivityThresholdStr, 10) : 14;
 
+      // Validate pagination parameters
+      const limitStr = req.query.limit as string | undefined;
+      const offsetStr = req.query.offset as string | undefined;
+      const limit = limitStr ? parseInt(limitStr, 10) : 20;
+      const offset = offsetStr ? parseInt(offsetStr, 10) : 0;
+
       if (isNaN(inactivityThreshold) || inactivityThreshold < 1 || inactivityThreshold > 365) {
         return res.status(400).json({ message: "inactivityThreshold must be a number between 1 and 365" });
+      }
+
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "limit must be a number between 1 and 100" });
+      }
+
+      if (isNaN(offset) || offset < 0) {
+        return res.status(400).json({ message: "offset must be a non-negative number" });
       }
 
       // Validate UUID format for teamId filter
@@ -625,6 +639,8 @@ export function registerAnalyticsRoutes(app: Express) {
       const atRiskData = await analyticsService.getAtRiskAthletes(organizationId, {
         teamId,
         inactivityThreshold,
+        limit,
+        offset,
       });
 
       res.json(atRiskData);
