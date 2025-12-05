@@ -9,7 +9,7 @@
  */
 
 import type { Express, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
@@ -123,10 +123,7 @@ const tokenValidationLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: () => shouldBypassRateLimit(),
-  keyGenerator: (req) => {
-    // Rate limit by IP address for unauthenticated requests
-    return req.ip || 'unknown';
-  },
+  keyGenerator: ipKeyGenerator, // Use IPv6-aware key generator for rate limiting by IP
 });
 
 /**
