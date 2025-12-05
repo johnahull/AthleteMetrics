@@ -120,7 +120,13 @@ export function DashboardTrendsChart({
       if (timeframe === "custom" && dateFrom && dateTo) {
         calculatedDateFrom = new Date(dateFrom).toISOString();
         calculatedDateTo = new Date(dateTo).toISOString();
-      } else if (timeframe !== "all") {
+      } else if (timeframe === "all") {
+        // For "All Time", use a date far in the past (10 years ago)
+        calculatedDateFrom = new Date(
+          now.getFullYear() - 10, 0, 1
+        ).toISOString();
+        calculatedDateTo = now.toISOString();
+      } else {
         calculatedDateTo = now.toISOString();
         switch (timeframe) {
           case "7d":
