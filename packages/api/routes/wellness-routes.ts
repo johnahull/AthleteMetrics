@@ -1845,7 +1845,17 @@ export function registerWellnessRoutes(app: Express) {
               return status.score;
             }).filter((s): s is number => s !== null);
 
-            const templateTrend = calculateTrend(scores, previousTemplateScores);
+            let templateTrend = calculateTrend(scores, previousTemplateScores);
+
+            // Invert trend for lower_is_better scales (increase in score = worse performance = 'down' trend)
+            if (hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config && config.scaleOrientation === 'lower_is_better') {
+                if (templateTrend === 'up') templateTrend = 'down';
+                else if (templateTrend === 'down') templateTrend = 'up';
+                // 'stable' remains 'stable'
+              }
+            }
 
             // Calculate status based on template thresholds
             let templateStatus: 'red' | 'yellow' | 'green' = 'green';

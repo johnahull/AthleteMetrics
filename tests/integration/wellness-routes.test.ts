@@ -846,11 +846,11 @@ describe('Wellness Dashboard Routes', () => {
   let athlete1: any;
   let athlete2: any;
   let testDate: string; // Store date to avoid timezone issues between test setup and execution
+  const dashboardResponseIds: string[] = []; // Local cleanup array - not affected by global afterEach
 
   beforeAll(async () => {
     // Calculate test date once at the start to avoid midnight UTC boundary issues
     testDate = new Date().toISOString().split('T')[0];
-    console.log(`📅 Test date set to: ${testDate} (UTC)`);
     // Create two teams
     const [t1] = await db.insert(teams).values({
       organizationId: testOrg.id,
@@ -1004,7 +1004,7 @@ describe('Wellness Dashboard Routes', () => {
         energy: { value: 4, label: 'Energy Level' },
       },
     });
-    createdResponseIds.push(resp1.id);
+    dashboardResponseIds.push(resp1.id); // Local cleanup - don't use global array
 
     // Athlete2 (Team2) - Modified Hooper Index: moderate score (8)
     const resp2 = await storage.createWellnessResponse({
@@ -1023,9 +1023,7 @@ describe('Wellness Dashboard Routes', () => {
         soreness: { value: 2, label: 'Soreness' },
       },
     });
-    createdResponseIds.push(resp2.id);
-
-    console.log(`📊 Created ${createdResponseIds.length} responses with date: ${testDate}`);
+    dashboardResponseIds.push(resp2.id); // Local cleanup - don't use global array
 
     // Create responses for yesterday for trend calculation
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
@@ -1045,7 +1043,7 @@ describe('Wellness Dashboard Routes', () => {
         energy: { value: 4, label: 'Energy Level' },
       },
     });
-    createdResponseIds.push(resp3.id);
+    dashboardResponseIds.push(resp3.id); // Local cleanup - don't use global array
 
     // Athlete2 (Team2) - Modified Hooper Index: better yesterday (6)
     const resp4 = await storage.createWellnessResponse({
@@ -1064,11 +1062,20 @@ describe('Wellness Dashboard Routes', () => {
         soreness: { value: 1, label: 'Soreness' },
       },
     });
-    createdResponseIds.push(resp4.id);
+    dashboardResponseIds.push(resp4.id); // Local cleanup - don't use global array
   });
 
   afterAll(async () => {
-    // Clean up
+    // Clean up responses created in this suite
+    for (const id of [...dashboardResponseIds].reverse()) {
+      try {
+        await db.delete(wellnessResponses).where(eq(wellnessResponses.id, id));
+      } catch (e) {
+        // Ignore if already deleted
+      }
+    }
+
+    // Clean up other resources
     if (athlete1) {
       try {
         if (team1) await storage.removeUserFromTeam(athlete1.id, team1.id);
@@ -1119,13 +1126,10 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - calculates correct averageScore per template', async () => {
-    console.log(`🔍 Test requesting date: ${testDate}`);
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
       .query({ date: testDate })
       .set('Cookie', coachCookie);
-
-    console.log(`📥 API returned ${res.body.length} teams`);
 
     expect(res.status).toBe(200);
 
@@ -1137,8 +1141,6 @@ describe('Wellness Dashboard Routes', () => {
       console.error(`Available teams:`, res.body.map((t: any) => ({ teamId: t.teamId, name: t.teamName })));
       throw new Error(`Team1 not found in dashboard response`);
     }
-
-    console.log(`✅ Team1 found: ${team1Data.teamName}, athletes: ${team1Data.totalAthletes}, aggregates: ${team1Data.templateAggregates.length}`);
 
     expect(team1Data.templateAggregates).toBeDefined();
     expect(Array.isArray(team1Data.templateAggregates)).toBe(true);
