@@ -58,6 +58,20 @@ async function generateVariants() {
   console.log(`  ✅ logo-64.png (64x64) - Small icon (sidebar)`);
 
   console.log('');
+  console.log('🔧 Generating favicon (with white background for visibility):');
+  console.log(`   Source: am-logo-nobrand-transparent-gimp.png`);
+
+  // Generate favicon with white background for browser tab visibility
+  await sharp(sourceNoBrandTransparent)
+    .resize(32, 32, {
+      fit: 'contain',
+      background: { r: 255, g: 255, b: 255, alpha: 1 }  // Solid white background
+    })
+    .png({ compressionLevel: 9 })
+    .toFile(join(outputDir, 'favicon.png'));
+  console.log(`  ✅ favicon.png (32x32) - Browser tab icon (white background)`);
+
+  console.log('');
   console.log('🔧 Generating platform mockup icons (for showcase only):');
   console.log(`   iOS Source: am-logo-iphone.png`);
   console.log(`   Android Source: am-logo-android.png`);
@@ -102,9 +116,11 @@ async function generateVariants() {
   console.log('');
   console.log('📋 Summary:');
   console.log('  Web icons (transparent): icon-192.png, icon-512.png, logo-64.png');
+  console.log('  Favicon (white bg): favicon.png');
   console.log('  Full logo (with text): logo-128.png, logo-256.png');
   console.log('');
   console.log('ℹ️  Note: Web icons use transparent background for better web integration');
+  console.log('   Favicon uses white background for visibility on dark browser tabs');
   console.log('   Platform-specific icons (with white containers) are available separately:');
   console.log('   - am-logo-iphone.png: iOS rounded square style');
   console.log('   - am-logo-android.png: Android circular style');
