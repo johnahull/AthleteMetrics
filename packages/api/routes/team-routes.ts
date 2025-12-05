@@ -104,6 +104,44 @@ export function registerTeamRoutes(app: Express) {
   });
 
   /**
+   * Get team members (active athletes/users on the team)
+   * Returns array of { id, firstName, lastName, fullName }
+   */
+  app.get("/api/teams/:id/members", teamLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const teamId = req.params.id;
+      const team = await teamService.getTeam(teamId);
+
+      if (!team) {
+        return res.status(404).json({ message: "Team not found" });
+      }
+
+      // Permission check: non-admin users can only access their organization's team members
+      if (!isSiteAdmin(user) && user.primaryOrganizationId !== team.organization.id) {
+        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+      }
+
+      // Get team members with IDOR protection at service layer
+      const members = await teamService.getTeamMembers(
+        teamId,
+        isSiteAdmin(user) ? undefined : team.organization.id
+      );
+
+      res.json(members);
+    } catch (error) {
+      console.error("Get team members error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch team members";
+      const statusCode = error instanceof Error && error.message.includes("not found") ? 404 : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
    * Create team (org admins and coaches)
    */
   app.post("/api/teams", teamMutationLimiter, requireAuth, RoleManager.requirePermission('CREATE_TEAM'), async (req, res) => {

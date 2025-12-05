@@ -838,6 +838,417 @@ describe('Wellness Analytics Routes', () => {
   });
 });
 
+describe('Wellness Dashboard Routes', () => {
+  let dailyTemplate: any;
+  let hooperTemplate: any;
+  let team1: any;
+  let team2: any;
+  let athlete1: any;
+  let athlete2: any;
+  let testDate: string; // Store date to avoid timezone issues between test setup and execution
+  const dashboardResponseIds: string[] = []; // Local cleanup array - not affected by global afterEach
+
+  beforeAll(async () => {
+    // Calculate test date once at the start to avoid midnight UTC boundary issues
+    testDate = new Date().toISOString().split('T')[0];
+    // Create two teams
+    const [t1] = await db.insert(teams).values({
+      organizationId: testOrg.id,
+      name: `Dashboard Team 1 ${Date.now()}`,
+      isArchived: false,
+    }).returning();
+    team1 = t1;
+
+    const [t2] = await db.insert(teams).values({
+      organizationId: testOrg.id,
+      name: `Dashboard Team 2 ${Date.now()}`,
+      isArchived: false,
+    }).returning();
+    team2 = t2;
+
+    // Create athletes
+    const [ath1] = await db.insert(users).values({
+      username: `dashboard_athlete1_${Date.now()}`,
+      emails: ['dash.athlete1@test.com'],
+      password: 'hashed',
+      firstName: 'Dashboard',
+      lastName: 'Athlete1',
+      fullName: 'Dashboard Athlete1',
+      isSiteAdmin: false,
+    }).returning();
+    athlete1 = ath1;
+
+    const [ath2] = await db.insert(users).values({
+      username: `dashboard_athlete2_${Date.now()}`,
+      emails: ['dash.athlete2@test.com'],
+      password: 'hashed',
+      firstName: 'Dashboard',
+      lastName: 'Athlete2',
+      fullName: 'Dashboard Athlete2',
+      isSiteAdmin: false,
+    }).returning();
+    athlete2 = ath2;
+
+    // Add athletes to teams
+    await storage.addUserToOrganization(athlete1.id, testOrg.id, 'athlete');
+    await storage.addUserToTeam(athlete1.id, team1.id);
+
+    await storage.addUserToOrganization(athlete2.id, testOrg.id, 'athlete');
+    await storage.addUserToTeam(athlete2.id, team2.id);
+
+    // Create Daily Wellness Template (average method, 1-5 scale)
+    const dailyConfig: WellnessTemplateConfig = {
+      questions: [
+        {
+          id: 'sleep',
+          type: 'scale',
+          label: 'Sleep Quality',
+          scaleMin: 1,
+          scaleMax: 5,
+          required: true,
+        },
+        {
+          id: 'energy',
+          type: 'scale',
+          label: 'Energy Level',
+          scaleMin: 1,
+          scaleMax: 5,
+          required: true,
+        },
+      ],
+      statusConfig: {
+        scaleOrientation: 'higher_is_better',
+        calculationMethod: 'average',
+        redThreshold: 2,
+        yellowThreshold: 3,
+        injuryQuestionIds: [],
+        injuryOverride: false,
+      },
+    };
+
+    dailyTemplate = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Daily Wellness',
+      config: dailyConfig,
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(dailyTemplate.id);
+
+    // Create Modified Hooper Index Template (sum method, 1-4 scale, 4 questions = max 16)
+    const hooperConfig: WellnessTemplateConfig = {
+      questions: [
+        {
+          id: 'sleep_hooper',
+          type: 'scale',
+          label: 'Sleep',
+          scaleMin: 1,
+          scaleMax: 4,
+          required: true,
+        },
+        {
+          id: 'stress',
+          type: 'scale',
+          label: 'Stress',
+          scaleMin: 1,
+          scaleMax: 4,
+          required: true,
+        },
+        {
+          id: 'fatigue',
+          type: 'scale',
+          label: 'Fatigue',
+          scaleMin: 1,
+          scaleMax: 4,
+          required: true,
+        },
+        {
+          id: 'soreness',
+          type: 'scale',
+          label: 'Soreness',
+          scaleMin: 1,
+          scaleMax: 4,
+          required: true,
+        },
+      ],
+      statusConfig: {
+        scaleOrientation: 'lower_is_better',
+        calculationMethod: 'sum',
+        redThreshold: 12,
+        yellowThreshold: 9,
+        injuryQuestionIds: [],
+        injuryOverride: false,
+      },
+    };
+
+    hooperTemplate = await storage.createWellnessTemplate({
+      organizationId: testOrg.id,
+      name: 'Modified Hooper Index',
+      config: hooperConfig,
+      createdBy: testUser.id,
+    });
+    createdTemplateIds.push(hooperTemplate.id);
+
+    // Create responses for today (using testDate to avoid timezone issues)
+    // Athlete1 (Team1) - Daily Wellness: good score (4.5)
+    const resp1 = await storage.createWellnessResponse({
+      organizationId: testOrg.id,
+      templateId: dailyTemplate.id,
+      userId: athlete1.id,
+      userFullName: athlete1.fullName,
+      teamId: team1.id,
+      teamNameSnapshot: team1.name,
+      submittedAt: new Date(),
+      date: testDate,
+      responses: {
+        sleep: { value: 5, label: 'Sleep Quality' },
+        energy: { value: 4, label: 'Energy Level' },
+      },
+    });
+    dashboardResponseIds.push(resp1.id); // Local cleanup - don't use global array
+
+    // Athlete2 (Team2) - Modified Hooper Index: moderate score (8)
+    const resp2 = await storage.createWellnessResponse({
+      organizationId: testOrg.id,
+      templateId: hooperTemplate.id,
+      userId: athlete2.id,
+      userFullName: athlete2.fullName,
+      teamId: team2.id,
+      teamNameSnapshot: team2.name,
+      submittedAt: new Date(),
+      date: testDate,
+      responses: {
+        sleep_hooper: { value: 2, label: 'Sleep' },
+        stress: { value: 2, label: 'Stress' },
+        fatigue: { value: 2, label: 'Fatigue' },
+        soreness: { value: 2, label: 'Soreness' },
+      },
+    });
+    dashboardResponseIds.push(resp2.id); // Local cleanup - don't use global array
+
+    // Create responses for yesterday for trend calculation
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    // Athlete1 (Team1) - Daily Wellness: worse yesterday (3.5)
+    const resp3 = await storage.createWellnessResponse({
+      organizationId: testOrg.id,
+      templateId: dailyTemplate.id,
+      userId: athlete1.id,
+      userFullName: athlete1.fullName,
+      teamId: team1.id,
+      teamNameSnapshot: team1.name,
+      submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      date: yesterday,
+      responses: {
+        sleep: { value: 3, label: 'Sleep Quality' },
+        energy: { value: 4, label: 'Energy Level' },
+      },
+    });
+    dashboardResponseIds.push(resp3.id); // Local cleanup - don't use global array
+
+    // Athlete2 (Team2) - Modified Hooper Index: better yesterday (6)
+    const resp4 = await storage.createWellnessResponse({
+      organizationId: testOrg.id,
+      templateId: hooperTemplate.id,
+      userId: athlete2.id,
+      userFullName: athlete2.fullName,
+      teamId: team2.id,
+      teamNameSnapshot: team2.name,
+      submittedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+      date: yesterday,
+      responses: {
+        sleep_hooper: { value: 1, label: 'Sleep' },
+        stress: { value: 2, label: 'Stress' },
+        fatigue: { value: 2, label: 'Fatigue' },
+        soreness: { value: 1, label: 'Soreness' },
+      },
+    });
+    dashboardResponseIds.push(resp4.id); // Local cleanup - don't use global array
+  });
+
+  afterAll(async () => {
+    // Clean up responses created in this suite
+    for (const id of [...dashboardResponseIds].reverse()) {
+      try {
+        await db.delete(wellnessResponses).where(eq(wellnessResponses.id, id));
+      } catch (e) {
+        // Ignore if already deleted
+      }
+    }
+
+    // Clean up other resources
+    if (athlete1) {
+      try {
+        if (team1) await storage.removeUserFromTeam(athlete1.id, team1.id);
+        await storage.removeUserFromOrganization(athlete1.id, testOrg.id);
+        await db.delete(users).where(eq(users.id, athlete1.id));
+      } catch (e) {}
+    }
+    if (athlete2) {
+      try {
+        if (team2) await storage.removeUserFromTeam(athlete2.id, team2.id);
+        await storage.removeUserFromOrganization(athlete2.id, testOrg.id);
+        await db.delete(users).where(eq(users.id, athlete2.id));
+      } catch (e) {}
+    }
+    if (team1) {
+      try {
+        await db.delete(teams).where(eq(teams.id, team1.id));
+      } catch (e) {}
+    }
+    if (team2) {
+      try {
+        await db.delete(teams).where(eq(teams.id, team2.id));
+      } catch (e) {}
+    }
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - returns templateAggregates array', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: testDate })
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body)).toBe(true);
+    expect(res.body.length).toBeGreaterThan(0);
+
+    // Check that each team has templateAggregates
+    const team1Data = res.body.find((t: any) => t.teamId === team1.id);
+    const team2Data = res.body.find((t: any) => t.teamId === team2.id);
+
+    expect(team1Data).toBeDefined();
+    expect(team1Data.templateAggregates).toBeDefined();
+    expect(Array.isArray(team1Data.templateAggregates)).toBe(true);
+
+    expect(team2Data).toBeDefined();
+    expect(team2Data.templateAggregates).toBeDefined();
+    expect(Array.isArray(team2Data.templateAggregates)).toBe(true);
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - calculates correct averageScore per template', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: testDate })
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+
+    // Team1 - Daily Wellness Template
+    const team1Data = res.body.find((t: any) => t.teamId === team1.id);
+
+    if (!team1Data) {
+      console.error(`❌ Team1 (${team1.id}) not found in response`);
+      console.error(`Available teams:`, res.body.map((t: any) => ({ teamId: t.teamId, name: t.teamName })));
+      throw new Error(`Team1 not found in dashboard response`);
+    }
+
+    expect(team1Data.templateAggregates).toBeDefined();
+    expect(Array.isArray(team1Data.templateAggregates)).toBe(true);
+
+    // If no template aggregates, log useful debug info
+    if (team1Data.templateAggregates.length === 0) {
+      throw new Error(`Team1 has 0 templateAggregates. Team data: ${JSON.stringify({ teamId: team1Data.teamId, completionRate: team1Data.completionRate, totalAthletes: team1Data.totalAthletes })}`);
+    }
+
+    const dailyAggregate = team1Data.templateAggregates.find(
+      (agg: any) => agg.templateId === dailyTemplate.id
+    );
+
+    if (!dailyAggregate) {
+      throw new Error(`Daily template aggregate not found. Available templates: ${team1Data.templateAggregates.map((a: any) => ({ id: a.templateId, name: a.templateName })).map(JSON.stringify).join(', ')}`);
+    }
+    expect(dailyAggregate.templateName).toBe('Daily Wellness');
+    // Athlete1 scored 5 (sleep) + 4 (energy) = 9/2 = 4.5
+    expect(dailyAggregate.averageScore).toBeCloseTo(4.5, 1);
+    expect(dailyAggregate.responseCount).toBe(1);
+
+    // Team2 - Modified Hooper Index Template
+    const team2Data = res.body.find((t: any) => t.teamId === team2.id);
+    expect(team2Data).toBeDefined();
+    const hooperAggregate = team2Data?.templateAggregates?.find(
+      (agg: any) => agg.templateId === hooperTemplate.id
+    );
+
+    expect(hooperAggregate).toBeDefined();
+    expect(hooperAggregate.templateName).toBe('Modified Hooper Index');
+    // Athlete2 scored 2+2+2+2 = 8 (sum method)
+    expect(hooperAggregate.averageScore).toBe(8);
+    expect(hooperAggregate.responseCount).toBe(1);
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - sets correct scaleMax based on calculation method', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: testDate })
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+
+    // Team1 - Daily Wellness (average method, scaleMax = 5)
+    const team1Data = res.body.find((t: any) => t.teamId === team1.id);
+    const dailyAggregate = team1Data.templateAggregates.find(
+      (agg: any) => agg.templateId === dailyTemplate.id
+    );
+
+    expect(dailyAggregate.scaleMax).toBe(5);
+
+    // Team2 - Modified Hooper Index (sum method, 4 questions * 4 max = 16)
+    const team2Data = res.body.find((t: any) => t.teamId === team2.id);
+    const hooperAggregate = team2Data.templateAggregates.find(
+      (agg: any) => agg.templateId === hooperTemplate.id
+    );
+
+    expect(hooperAggregate.scaleMax).toBe(16);
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - calculates trends per template', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: testDate })
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+
+    // Team1 - Daily Wellness: today 4.5, yesterday 3.5 -> up (higher_is_better)
+    const team1Data = res.body.find((t: any) => t.teamId === team1.id);
+    const dailyAggregate = team1Data.templateAggregates.find(
+      (agg: any) => agg.templateId === dailyTemplate.id
+    );
+
+    expect(dailyAggregate.trend).toBe('up');
+
+    // Team2 - Modified Hooper Index: today 8, yesterday 6 -> down (lower_is_better, so higher score = worse)
+    const team2Data = res.body.find((t: any) => t.teamId === team2.id);
+    const hooperAggregate = team2Data.templateAggregates.find(
+      (agg: any) => agg.templateId === hooperTemplate.id
+    );
+
+    expect(hooperAggregate.trend).toBe('down');
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - returns empty templateAggregates when no responses', async () => {
+    // Query for a date far in the future with no responses
+    const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: futureDate })
+      .set('Cookie', coachCookie);
+
+    expect(res.status).toBe(200);
+    // Should return empty array (no teams with responses)
+    expect(Array.isArray(res.body)).toBe(true);
+  });
+
+  it('GET /api/organizations/:organizationId/wellness/dashboard - rejects unauthenticated requests', async () => {
+    const res = await request(app)
+      .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
+      .query({ date: testDate });
+
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('Authorization & Cross-Organization Access', () => {
   let org2: any;
   let org2Coach: any;

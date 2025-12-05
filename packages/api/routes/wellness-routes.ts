@@ -9,7 +9,7 @@
  */
 
 import type { Express, Response } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
@@ -123,10 +123,7 @@ const tokenValidationLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: () => shouldBypassRateLimit(),
-  keyGenerator: (req) => {
-    // Rate limit by IP address for unauthenticated requests
-    return req.ip || 'unknown';
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip || 'unknown'), // IPv6-aware IP normalization
 });
 
 /**
@@ -1766,6 +1763,139 @@ export function registerWellnessRoutes(app: Express) {
 
           const trend = calculateTrend(currentScores, previousScores);
 
+          // Calculate template aggregates (per-template wellness averages)
+          // Group current responses by templateId
+          const responsesByTemplate = new Map<string, typeof teamResponses>();
+          for (const response of teamResponses) {
+            if (!responsesByTemplate.has(response.templateId)) {
+              responsesByTemplate.set(response.templateId, []);
+            }
+            responsesByTemplate.get(response.templateId)!.push(response);
+          }
+
+          // Group previous responses by templateId for trend calculation
+          const previousResponsesByTemplate = new Map<string, typeof teamPreviousResponses>();
+          for (const response of teamPreviousResponses) {
+            if (!previousResponsesByTemplate.has(response.templateId)) {
+              previousResponsesByTemplate.set(response.templateId, []);
+            }
+            previousResponsesByTemplate.get(response.templateId)!.push(response);
+          }
+
+          // Build template aggregates
+          const templateAggregates: {
+            templateId: string;
+            templateName: string;
+            averageScore: number | null;
+            scaleMax: number;
+            responseCount: number;
+            trend: 'up' | 'down' | 'stable';
+            status: 'red' | 'yellow' | 'green';
+          }[] = [];
+
+          for (const [templateId, responses] of responsesByTemplate.entries()) {
+            const template = templateMap.get(templateId);
+            if (!template) continue;
+
+            const validatedTemplate = validateTemplate(template);
+            if (!validatedTemplate) continue;
+
+            // Calculate average score for this template
+            const scores = responses.map(r => {
+              const typedResponse = r as WellnessResponse;
+              const status = calculateAthleteStatus(typedResponse, validatedTemplate);
+              return status.score;
+            }).filter((s): s is number => s !== null);
+
+            const averageScore = scores.length > 0
+              ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+              : null;
+
+            // Determine scaleMax from template config
+            let templateScaleMax = 10; // Default
+            if (hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config) {
+                const scaleQuestions = validatedTemplate.config.questions.filter(q => q.type === 'scale');
+                if (scaleQuestions.length > 0) {
+                  const firstScale = scaleQuestions[0];
+                  if ('scaleMax' in firstScale) {
+                    const calculationMethod = config.calculationMethod || 'average';
+                    if (calculationMethod === 'sum') {
+                      // For sum method, max is scaleMax * number of questions
+                      templateScaleMax = firstScale.scaleMax * scaleQuestions.length;
+                    } else {
+                      // For average method, use single question's scaleMax
+                      templateScaleMax = firstScale.scaleMax;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Calculate trend for this template
+            const previousTemplateResponses = previousResponsesByTemplate.get(templateId) || [];
+            const previousTemplateScores = previousTemplateResponses.map(r => {
+              const template = templateMap.get(r.templateId);
+              if (!template) return null;
+              const validatedTemplate = validateTemplate(template);
+              if (!validatedTemplate) return null;
+              const typedResponse = r as WellnessResponse;
+              const status = calculateAthleteStatus(typedResponse, validatedTemplate);
+              return status.score;
+            }).filter((s): s is number => s !== null);
+
+            let templateTrend = calculateTrend(scores, previousTemplateScores);
+
+            // Invert trend for lower_is_better scales (increase in score = worse performance = 'down' trend)
+            if (hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config && config.scaleOrientation === 'lower_is_better') {
+                if (templateTrend === 'up') templateTrend = 'down';
+                else if (templateTrend === 'down') templateTrend = 'up';
+                // 'stable' remains 'stable'
+              }
+            }
+
+            // Calculate status based on template thresholds
+            let templateStatus: 'red' | 'yellow' | 'green' = 'green';
+            if (averageScore !== null && hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config) {
+                const scaleOrientation = config.scaleOrientation;
+                if (scaleOrientation === 'higher_is_better') {
+                  // Higher scores are better
+                  if (averageScore <= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore <= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                } else {
+                  // Lower scores are better (e.g., fatigue/stress scales)
+                  if (averageScore >= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore >= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                }
+              }
+            }
+
+            templateAggregates.push({
+              templateId,
+              templateName: template.name,
+              averageScore,
+              scaleMax: templateScaleMax,
+              responseCount: responses.length,
+              trend: templateTrend,
+              status: templateStatus,
+            });
+          }
+
           dashboardData.push({
             teamId: team.id,
             teamName: team.name,
@@ -1780,6 +1910,7 @@ export function registerWellnessRoutes(app: Express) {
             trend,
             commonInjuries,
             athletes: athleteStatuses,
+            templateAggregates,
           });
         }
 

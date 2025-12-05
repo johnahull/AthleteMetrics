@@ -8,16 +8,7 @@
  * - Edge case handling (< 10 measurements, missing data)
  */
 
-/**
- * Metrics where lower values are better (time/speed metrics)
- */
-const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-] as const;
+import { isLowerBetter } from '@/constants/metrics';
 
 export type TrendDirection = 'improving' | 'steady' | 'declining';
 
@@ -32,13 +23,6 @@ export interface MetricTrendData {
 interface Measurement {
   value: string | number;
   date: string;
-}
-
-/**
- * Check if a metric is "lower is better"
- */
-export function isLowerIsBetter(metric: string): boolean {
-  return LOWER_IS_BETTER_METRICS.includes(metric as any);
 }
 
 /**
@@ -146,7 +130,7 @@ function determineTrend(percentChange: number, metric: string): TrendDirection {
     return 'steady';
   }
 
-  const lowerIsBetter = isLowerIsBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric);
 
   if (lowerIsBetter) {
     // For time-based metrics, negative change is improving
@@ -201,7 +185,7 @@ export function getBestValue(
 ): number | null {
   if (measurements.length === 0) return null;
 
-  const lowerIsBetter = isLowerIsBetter(metric);
+  const lowerIsBetter = isLowerBetter(metric);
 
   const values = measurements.map((m) => parseFloat(String(m.value)));
 
