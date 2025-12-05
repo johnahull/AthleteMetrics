@@ -1,5 +1,5 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
@@ -45,6 +45,8 @@ export interface IStorage {
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getUserByGoogleId(googleId: string): Promise<User | null>;
+  getUserByAppleId(appleId: string): Promise<User | null>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
@@ -120,6 +122,11 @@ export interface IStorage {
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
   getEmailVerificationToken(token: string): Promise<any>;
+
+  // Account Linking (OAuth)
+  createAccountLinkingToken(data: any): Promise<void>;
+  getAccountLinkingToken(token: string): Promise<any>;
+  markAccountLinkingTokenUsed(token: string): Promise<void>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -380,6 +387,54 @@ export class DatabaseStorage implements IStorage {
       )
     );
     return user || undefined;
+  }
+
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.googleId, googleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async getUserByAppleId(appleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.appleId, appleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async createAccountLinkingToken(data: any): Promise<void> {
+    await db.insert(accountLinkingTokens).values(data);
+  }
+
+  async getAccountLinkingToken(token: string): Promise<any | null> {
+    const [linkingToken] = await db
+      .select()
+      .from(accountLinkingTokens)
+      .where(eq(accountLinkingTokens.token, token))
+      .limit(1);
+    return linkingToken || null;
+  }
+
+  async markAccountLinkingTokenUsed(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(accountLinkingTokens.token, token));
   }
 
   async createUser(user: InsertUser): Promise<User> {

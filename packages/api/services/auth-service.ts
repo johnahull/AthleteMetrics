@@ -51,6 +51,15 @@ export class AuthService extends BaseService {
         return { success: false, error: "Please complete your registration first" };
       }
 
+      // Handle OAuth-only users (password is null)
+      if (user.password === null) {
+        const provider = user.oauthProvider || "social login";
+        return {
+          success: false,
+          error: `This account was created with ${provider === "google" ? "Google" : provider === "apple" ? "Apple" : "social login"}. Please use the ${provider === "google" ? "Continue with Google" : provider === "apple" ? "Continue with Apple" : "social login"} button below.`
+        };
+      }
+
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {

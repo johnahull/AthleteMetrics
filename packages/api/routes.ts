@@ -13,6 +13,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import session from "express-session";
+import passport from "passport";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import csrf from "csrf";
@@ -28,6 +29,8 @@ import { METRIC_CONFIG } from "@shared/analytics-types";
 import { AuthSecurity } from "./auth/security";
 import { validateAIProviderConfiguration } from "./services/ai-insights-service";
 import { registerAllRoutes } from "./routes/index";
+import { configurePassport } from "./auth/passport-config";
+import { registerOAuthRoutes } from "./routes/oauth-routes";
 
 // Session configuration
 declare module 'express-session' {
@@ -566,6 +569,11 @@ export async function registerRoutes(app: Express) {
 
   app.use(session(sessionConfig));
 
+  // Initialize Passport for OAuth authentication
+  configurePassport();
+  app.use(passport.initialize());
+  app.use(passport.session());
+
   // CRITICAL: Sync req.session.user.id to database userId column for session revocation
   // connect-pg-simple does NOT automatically sync custom columns - we must do this manually
   // This middleware ensures that when password changes trigger revokeAllUserSessions(),
@@ -656,6 +664,9 @@ export async function registerRoutes(app: Express) {
     }
     next();
   });
+
+  // Register OAuth routes - BEFORE other routes
+  registerOAuthRoutes(app);
 
   // Register new refactored routes - AFTER session middleware
   registerAllRoutes(app);

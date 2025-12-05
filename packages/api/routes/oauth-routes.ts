@@ -1,0 +1,183 @@
+/**
+ * OAuth authentication routes for Google and Apple sign-in
+ */
+
+import type { Express } from 'express';
+import passport from 'passport';
+import rateLimit from 'express-rate-limit';
+import { OAuthService } from '../services/oauth-service';
+import { AuthService } from '../services/auth-service';
+import { shouldSkipRateLimiting } from '../utils/rate-limit-utils';
+import { isOAuthEnabled } from '../auth/passport-config';
+
+const oauthService = new OAuthService();
+const authService = new AuthService();
+
+// Rate limiting for OAuth endpoints
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  limit: 10,  // 10 OAuth attempts per window
+  message: { message: "Too many OAuth attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'oauth'),
+});
+
+export function registerOAuthRoutes(app: Express) {
+  const { googleEnabled, appleEnabled, anyEnabled } = isOAuthEnabled();
+
+  // Always register the OAuth status endpoint (even if OAuth is disabled)
+  app.get('/api/auth/oauth-status', (req, res) => {
+    res.json({ googleEnabled, appleEnabled });
+  });
+
+  // Skip OAuth routes if no credentials are configured
+  if (!anyEnabled) {
+    console.log('[OAuth] Skipping OAuth route registration (OAuth is disabled)');
+    return;
+  }
+  // Google OAuth routes (only if Google is enabled)
+  if (googleEnabled) {
+    /**
+     * Google OAuth - Initiate
+     */
+    app.get('/api/auth/google',
+      oauthLimiter,
+      passport.authenticate('google', {
+        scope: ['profile', 'email'],
+        accessType: 'offline',
+        prompt: 'select_account',  // Always show account picker
+      })
+    );
+
+    /**
+     * Google OAuth - Callback
+     */
+    app.get('/api/auth/google/callback',
+      passport.authenticate('google', { failureRedirect: '/login?error=oauth_failed' }),
+      async (req, res) => {
+        try {
+          const oauthResult = req.user as any;
+
+          if (!oauthResult.success) {
+            if (oauthResult.requiresLinking) {
+              return res.redirect('/login?message=linking_email_sent');
+            }
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          // Get full user data
+          const user = await oauthService.getUserById(oauthResult.userId);
+          if (!user) {
+            return res.redirect('/login?error=user_not_found');
+          }
+
+          // Determine user role and context
+          const roleContext = await authService.determineUserRoleAndContext(user);
+
+          // Set session
+          req.session.user = {
+            id: user.id,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.emails?.[0] || user.oauthEmail!,
+            role: roleContext.role,
+            isSiteAdmin: user.isSiteAdmin === true,
+            primaryOrganizationId: roleContext.primaryOrganizationId,
+            athleteId: roleContext.role === 'athlete' ? user.id : undefined,
+          };
+
+          // Redirect based on role
+          const redirectUrl = user.isSiteAdmin ? '/admin' :
+                             roleContext.role === 'athlete' ? '/my-dashboard' :
+                             '/dashboard';
+
+          res.redirect(redirectUrl);
+        } catch (error) {
+          console.error('Google OAuth callback error:', error);
+          res.redirect('/login?error=oauth_failed');
+        }
+      }
+    );
+  }
+
+  // Apple OAuth routes (only if Apple is enabled)
+  if (appleEnabled) {
+    /**
+     * Apple Sign In - Initiate
+     */
+    app.get('/api/auth/apple',
+      oauthLimiter,
+      passport.authenticate('apple', {
+        scope: ['name', 'email'],
+      })
+    );
+
+    /**
+     * Apple Sign In - Callback
+     */
+    app.post('/api/auth/apple/callback',
+      passport.authenticate('apple', { failureRedirect: '/login?error=oauth_failed' }),
+      async (req, res) => {
+        try {
+          const oauthResult = req.user as any;
+
+          if (!oauthResult.success) {
+            if (oauthResult.requiresLinking) {
+              return res.redirect('/login?message=linking_email_sent');
+            }
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          const user = await oauthService.getUserById(oauthResult.userId);
+          if (!user) {
+            return res.redirect('/login?error=user_not_found');
+          }
+
+          const roleContext = await authService.determineUserRoleAndContext(user);
+
+          req.session.user = {
+            id: user.id,
+            username: user.username,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.emails?.[0] || user.oauthEmail!,
+            role: roleContext.role,
+            isSiteAdmin: user.isSiteAdmin === true,
+            primaryOrganizationId: roleContext.primaryOrganizationId,
+            athleteId: roleContext.role === 'athlete' ? user.id : undefined,
+          };
+
+          const redirectUrl = user.isSiteAdmin ? '/admin' :
+                             roleContext.role === 'athlete' ? '/my-dashboard' :
+                             '/dashboard';
+
+          res.redirect(redirectUrl);
+        } catch (error) {
+          console.error('Apple OAuth callback error:', error);
+          res.redirect('/login?error=oauth_failed');
+        }
+      }
+    );
+  }
+
+  /**
+   * Confirm account linking
+   */
+  app.get('/api/auth/link-account/:token', async (req, res) => {
+    try {
+      const { token } = req.params;
+      const result = await oauthService.confirmAccountLinking(token);
+
+      if (!result.success) {
+        return res.redirect(`/login?error=${encodeURIComponent(result.error || 'linking_failed')}`);
+      }
+
+      res.redirect('/login?message=account_linked');
+    } catch (error) {
+      console.error('Account linking error:', error);
+      res.redirect('/login?error=linking_failed');
+    }
+  });
+}

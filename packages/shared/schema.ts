@@ -66,7 +66,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   emails: text("emails").array().notNull().default(sql`ARRAY[]::text[]`),
-  password: text("password").notNull(),
+  password: text("password"), // Nullable for OAuth-only accounts
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   fullName: text("full_name").notNull(),
@@ -91,6 +91,14 @@ export const users = pgTable("users", {
   isEmailVerified: boolean("is_email_verified").default(false).notNull(),
   requiresPasswordChange: boolean("requires_password_change").default(false).notNull(),
   passwordChangedAt: timestamp("password_changed_at"),
+  // OAuth provider fields
+  googleId: text("google_id").unique(),
+  appleId: text("apple_id").unique(),
+  oauthProvider: text("oauth_provider").$type<"google" | "apple" | "password">(),
+  oauthEmail: text("oauth_email"),
+  oauthEmailVerified: boolean("oauth_email_verified").default(false).notNull(),
+  lastAuthMethod: text("last_auth_method").$type<"password" | "google" | "apple">(),
+  accountLinkedAt: timestamp("account_linked_at"),
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -445,6 +453,24 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 }, (table) => ({
   // Index for efficient token lookup
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
+}));
+
+// Account Linking Tokens - OAuth account linking verification
+export const accountLinkingTokens = pgTable("account_linking_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: text("token").notNull().unique(),
+  provider: text("provider").notNull().$type<"google" | "apple">(),
+  providerId: text("provider_id").notNull(), // googleId or appleId from OAuth provider
+  providerEmail: text("provider_email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Index for efficient token lookup
+  tokenIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_token_idx ON ${table} (${table.token})`,
+  // Index for user_id lookups
+  userIdIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_user_id_idx ON ${table} (${table.userId})`,
 }));
 
 // Site Settings - Global site configuration (singleton table)

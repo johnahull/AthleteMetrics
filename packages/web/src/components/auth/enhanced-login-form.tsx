@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { OAuthButtons } from "./oauth-buttons";
 
 interface LoginFormData {
   email: string;
@@ -32,8 +33,43 @@ export function EnhancedLoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [emailSuggestions, setEmailSuggestions] = useState<string[]>([]);
   const [lockTimeRemaining, setLockTimeRemaining] = useState<number>(0);
-  
+  const [oauthMessage, setOauthMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null);
+
   const { login } = useAuth();
+
+  // Handle OAuth redirect messages from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get('error');
+    const messageParam = params.get('message');
+
+    if (errorParam) {
+      const errorMessages: Record<string, string> = {
+        'oauth_failed': 'OAuth authentication failed. Please try again.',
+        'user_not_found': 'User account not found. Please contact support.',
+        'linking_failed': 'Account linking failed. Please try again.',
+      };
+      setOauthMessage({
+        type: 'error',
+        text: errorMessages[errorParam] || 'Authentication failed. Please try again.'
+      });
+    } else if (messageParam) {
+      const successMessages: Record<string, string> = {
+        'account_linked': 'Your account has been successfully linked!',
+        'linking_email_sent': 'Please check your email to confirm account linking.',
+      };
+      setOauthMessage({
+        type: 'success',
+        text: successMessages[messageParam] || 'Success!'
+      });
+    }
+
+    // Clean up URL params after displaying message
+    if (errorParam || messageParam) {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
 
   // Countdown timer for account lockout
   useEffect(() => {
@@ -219,11 +255,25 @@ export function EnhancedLoginForm() {
       </CardHeader>
       
       <CardContent>
+        {/* OAuth redirect messages */}
+        {oauthMessage && (
+          <Alert variant={oauthMessage.type === 'error' ? 'destructive' : 'default'} className="mb-4">
+            <div className="flex items-start gap-2">
+              {oauthMessage.type === 'error' ? (
+                <AlertCircle className="h-4 w-4 mt-0.5" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mt-0.5" />
+              )}
+              <AlertDescription>{oauthMessage.text}</AlertDescription>
+            </div>
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {step === 'credentials' && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="email">Email or Username</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
@@ -236,10 +286,11 @@ export function EnhancedLoginForm() {
                       if (error?.type === 'email') setError(null);
                     }}
                     className={`pl-10 ${error?.type === 'email' ? 'border-red-500' : ''}`}
-                    placeholder="Enter your email"
+                    placeholder="Enter your email or username"
                     disabled={isLoading}
                     autoComplete="email"
                     required
+                    data-testid="input-email"
                   />
                 </div>
                 {error?.type === 'email' && (
@@ -284,6 +335,7 @@ export function EnhancedLoginForm() {
                     disabled={isLoading}
                     autoComplete="current-password"
                     required
+                    data-testid="input-password"
                   />
                   <button
                     type="button"
@@ -397,10 +449,11 @@ export function EnhancedLoginForm() {
             </Alert>
           )}
 
-          <Button 
-            type="submit" 
-            className="w-full" 
+          <Button
+            type="submit"
+            className="w-full"
             disabled={isLoading || (error?.type === 'locked' && lockTimeRemaining > 0)}
+            data-testid="button-login"
           >
             {isLoading ? (
               <>
@@ -413,14 +466,19 @@ export function EnhancedLoginForm() {
               'Sign In'
             )}
           </Button>
-          
+
           {step === 'credentials' && (
-            <div className="text-center text-sm text-gray-600">
-              Don't have an account?{' '}
-              <a href="/register" className="text-blue-600 hover:underline">
-                Sign up
-              </a>
-            </div>
+            <>
+              <div className="text-center text-sm text-gray-600">
+                Don't have an account?{' '}
+                <a href="/register" className="text-blue-600 hover:underline">
+                  Sign up
+                </a>
+              </div>
+
+              {/* OAuth section (includes divider and buttons if enabled) */}
+              <OAuthButtons isLoading={isLoading} />
+            </>
           )}
         </form>
       </CardContent>

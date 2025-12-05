@@ -358,6 +358,47 @@ Key schema features:
 - Protected routes on frontend with automatic login redirects
 - Credentials: `ADMIN_USER` and `ADMIN_PASS` environment variables
 
+### OAuth Authentication
+AthleteMetrics supports Google and Apple OAuth authentication via Passport.js as an **alternative login method** for athletes. Username/password remains the **primary authentication method**, with OAuth buttons offered as a convenience option.
+
+**Architecture:**
+- Passport.js strategies: `passport-google-oauth20`, `passport-apple`
+- Session-based authentication (integrates with existing Express sessions)
+- Email-based account linking with confirmation flow for security
+- Password field is nullable to support OAuth-only users
+- OAuth users can add password backup later in Account Settings
+
+**Key Files:**
+- `packages/api/auth/passport-config.ts` - Passport strategy configuration
+- `packages/api/services/oauth-service.ts` - OAuth authentication logic and account linking
+- `packages/api/routes/oauth-routes.ts` - OAuth route handlers (initiate, callback, linking)
+- `packages/web/src/components/auth/oauth-buttons.tsx` - OAuth UI components
+- `packages/shared/schema.ts` - OAuth fields: `googleId`, `appleId`, `oauthProvider`, etc.
+- `packages/shared/migrations/0022_add_oauth_support.sql` - Database migration
+
+**Environment Variables:**
+- `GOOGLE_OAUTH_CLIENT_ID` - Google OAuth client ID from Google Cloud Console
+- `GOOGLE_OAUTH_CLIENT_SECRET` - Google OAuth client secret
+- `APPLE_OAUTH_CLIENT_ID` - Apple Sign In service ID
+- `APPLE_OAUTH_TEAM_ID` - Apple Developer Team ID
+- `APPLE_OAUTH_KEY_ID` - Apple Sign In key ID
+- `APPLE_OAUTH_PRIVATE_KEY_PATH` - Path to Apple .p8 private key file
+
+**Security Features:**
+- CSRF protection via Passport state parameters (automatic)
+- Email verification for account linking (prevents account takeover)
+- Rate limiting: 10 OAuth attempts per 15 minutes per IP
+- One-time use linking tokens with 1-hour expiry
+- Trust OAuth provider's MFA/2FA (no duplicate MFA required)
+
+**User Flows:**
+1. **New OAuth user** → Creates account as "independent athlete" → Can join org via invitation
+2. **Existing email account** → Sends confirmation email → User clicks link → Accounts linked
+3. **Returning OAuth user** → Fast login via provider (3-5 seconds)
+4. **Hybrid account** → Can login with either OAuth or password
+
+**Documentation:** See `docs/OAUTH_AUTHENTICATION.md` for comprehensive setup guide, user flows, and future enhancements.
+
 ### Data Import/Export
 - CSV import with comprehensive validation and preview
 - Support for matching existing players or creating new ones
