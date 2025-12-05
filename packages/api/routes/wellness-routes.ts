@@ -123,7 +123,7 @@ const tokenValidationLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: () => shouldBypassRateLimit(),
-  keyGenerator: ipKeyGenerator, // Use IPv6-aware key generator for rate limiting by IP
+  keyGenerator: (req) => ipKeyGenerator(req.ip || 'unknown'), // IPv6-aware IP normalization
 });
 
 /**
