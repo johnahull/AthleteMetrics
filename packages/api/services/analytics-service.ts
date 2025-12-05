@@ -491,20 +491,41 @@ export class AnalyticsService {
   async getPerformanceTrends(
     organizationId: string,
     dateFrom: Date,
-    metrics: string[] = ['FLY10_TIME', 'VERTICAL_JUMP']
+    metrics: string[] = ['FLY10_TIME', 'VERTICAL_JUMP'],
+    options?: { teamId?: string; athleteId?: string }
   ): Promise<PerformanceTrendsData> {
-    // Get athlete IDs for the organization
-    const athleteIds = await db
-      .select({ userId: userTeams.userId })
-      .from(userTeams)
-      .innerJoin(teams, eq(userTeams.teamId, teams.id))
-      .where(eq(teams.organizationId, organizationId))
-      .groupBy(userTeams.userId);
+    // Get athlete IDs based on filter scope
+    let uniqueAthleteIds: string[];
 
-    const uniqueAthleteIds = [...new Set(athleteIds.map((a) => a.userId))];
+    if (options?.athleteId) {
+      // Filter to specific athlete
+      uniqueAthleteIds = [options.athleteId];
+    } else if (options?.teamId) {
+      // Filter to athletes in specific team
+      const teamAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .where(
+          and(
+            eq(userTeams.teamId, options.teamId),
+            eq(userTeams.isActive, true)
+          )
+        )
+        .groupBy(userTeams.userId);
+      uniqueAthleteIds = [...new Set(teamAthletes.map((a) => a.userId))];
+    } else {
+      // Get all athletes in organization
+      const orgAthletes = await db
+        .select({ userId: userTeams.userId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(eq(teams.organizationId, organizationId))
+        .groupBy(userTeams.userId);
+      uniqueAthleteIds = [...new Set(orgAthletes.map((a) => a.userId))];
+    }
 
     if (uniqueAthleteIds.length === 0) {
-      // No athletes in organization, return empty data
+      // No athletes found, return empty data
       return { weeks: [], metrics: {} };
     }
 

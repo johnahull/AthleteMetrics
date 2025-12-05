@@ -349,7 +349,30 @@ export function registerAnalyticsRoutes(app: Express) {
         ? metricsParam.split(',').map(m => m.trim())
         : ['FLY10_TIME', 'VERTICAL_JUMP'];
 
-      const trendsData = await analyticsService.getPerformanceTrends(organizationId, dateFrom, metrics);
+      // Parse optional team/athlete filters
+      const teamId = req.query.teamId as string | undefined;
+      const athleteId = req.query.athleteId as string | undefined;
+
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+      if (athleteId && !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid athleteId format" });
+      }
+
+      // athleteId requires teamId
+      if (athleteId && !teamId) {
+        return res.status(400).json({ message: "athleteId requires teamId to be specified" });
+      }
+
+      const trendsData = await analyticsService.getPerformanceTrends(
+        organizationId,
+        dateFrom,
+        metrics,
+        { teamId, athleteId }
+      );
       res.json(trendsData);
     } catch (error) {
       console.error("Get performance trends error:", error);
