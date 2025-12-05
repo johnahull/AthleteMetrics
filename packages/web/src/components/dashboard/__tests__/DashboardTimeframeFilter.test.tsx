@@ -323,24 +323,27 @@ describe('DashboardTimeframeFilter', () => {
       });
 
       // Simulate selecting dates by finding calendar cells
-      // Note: This is a simplified test - actual calendar interaction would be more complex
       const fromCalendar = screen.getAllByRole('grid')[0];
       const toCalendar = screen.getAllByRole('grid')[1];
 
       expect(fromCalendar).toBeInTheDocument();
       expect(toCalendar).toBeInTheDocument();
 
-      // Click a date in "From" calendar (e.g., 15th of current month)
-      const fromDates = fromCalendar.querySelectorAll('button[name="day"]');
-      if (fromDates.length > 14) {
-        await user.click(fromDates[14]); // Click 15th
-      }
+      // Click a date in "From" calendar - click first available non-disabled date
+      const fromDates = fromCalendar.querySelectorAll('button[name="day"]:not([disabled])');
+      expect(fromDates.length).toBeGreaterThan(0);
+      await user.click(fromDates[Math.min(5, fromDates.length - 1)]); // Click 6th day or last available
 
-      // Click a date in "To" calendar (e.g., 25th of current month)
-      const toDates = toCalendar.querySelectorAll('button[name="day"]');
-      if (toDates.length > 24) {
-        await user.click(toDates[24]); // Click 25th
-      }
+      // Click a date in "To" calendar - click a later date
+      const toDates = toCalendar.querySelectorAll('button[name="day"]:not([disabled])');
+      expect(toDates.length).toBeGreaterThan(0);
+      await user.click(toDates[Math.min(15, toDates.length - 1)]); // Click 16th day or last available
+
+      // Wait for Apply button to become enabled
+      await waitFor(() => {
+        const applyButton = screen.getByText('Apply').closest('button');
+        expect(applyButton).not.toBeDisabled();
+      });
 
       // Click Apply
       await user.click(screen.getByText('Apply'));
