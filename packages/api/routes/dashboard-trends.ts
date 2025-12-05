@@ -2,7 +2,7 @@
  * Dashboard Trends Routes
  * Provides trend data with flexible timeframe filtering for KPI cards
  * Default: last 30 days vs prior 30 days (rolling comparison)
- * Supports: 7d, 30d, 90d, mtd, lm, qtd, ytd, all, custom
+ * Supports: 7d, 30d, 90d, 180d, 1y, ytd, all, custom
  */
 
 import type { Express } from "express";
