@@ -443,9 +443,37 @@ export function DashboardTrendsChart({
         </div>
 
         {/* Chart */}
-        <div className="h-64">
+        <div
+          className="h-64"
+          role="img"
+          aria-label={`Performance trends chart showing ${effectiveMetrics.length} metric${effectiveMetrics.length > 1 ? 's' : ''} over time for ${scopeLabel || 'organization'}`}
+        >
           <Line data={chartData} options={chartOptions} />
         </div>
+
+        {/* Hidden data table for screen readers */}
+        <table className="sr-only" aria-label="Performance trends data">
+          <caption>Weekly performance data for selected metrics</caption>
+          <thead>
+            <tr>
+              <th scope="col">Week</th>
+              {effectiveMetrics.map((metricCode) => {
+                const metricInfo = metrics.find((m) => m.code === metricCode);
+                return <th key={metricCode} scope="col">{metricInfo?.label || metricCode}</th>;
+              })}
+            </tr>
+          </thead>
+          <tbody>
+            {chartData.labels.map((week: string, i: number) => (
+              <tr key={i}>
+                <td>{week}</td>
+                {chartData.datasets.map((ds, j) => (
+                  <td key={j}>{ds.data[i] !== null && ds.data[i] !== undefined ? ds.data[i] : 'N/A'}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </CardContent>
     </Card>
   );

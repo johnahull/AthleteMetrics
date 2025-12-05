@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { CalendarDays, Check, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
+import { useToast } from '@/hooks/use-toast';
 import {
   Popover,
   PopoverContent,
@@ -25,12 +26,16 @@ interface DashboardTimeframeFilterProps {
   }) => void;
 }
 
+// Maximum date range allowed (2 years)
+const MAX_DATE_RANGE_DAYS = 730;
+
 export function DashboardTimeframeFilter({
   timeframe,
   startDate,
   endDate,
   onTimeframeChange,
 }: DashboardTimeframeFilterProps) {
+  const { toast } = useToast();
   const [isCustomExpanded, setIsCustomExpanded] = useState(false);
   const [customStartDate, setCustomStartDate] = useState<Date | undefined>(
     startDate ? new Date(startDate) : undefined
@@ -74,24 +79,45 @@ export function DashboardTimeframeFilter({
   // Handle apply custom range
   const handleApplyCustomRange = () => {
     if (customStartDate && customEndDate) {
-      // Validate dates
-      if (customStartDate > customEndDate) {
-        // Swap if needed
-        const temp = customStartDate;
-        setCustomStartDate(customEndDate);
-        setCustomEndDate(temp);
-        onTimeframeChange({
-          timeframe: 'custom',
-          startDate: customEndDate.toISOString().split('T')[0],
-          endDate: temp.toISOString().split('T')[0],
+      // Ensure correct date order
+      const start = customStartDate > customEndDate ? customEndDate : customStartDate;
+      const end = customStartDate > customEndDate ? customStartDate : customEndDate;
+
+      // Validate maximum range (2 years)
+      const rangeDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (rangeDays > MAX_DATE_RANGE_DAYS) {
+        toast({
+          variant: "destructive",
+          title: "Date range too large",
+          description: `Date range cannot exceed ${MAX_DATE_RANGE_DAYS} days (${Math.floor(MAX_DATE_RANGE_DAYS / 365)} years). Please select a shorter range.`,
         });
-      } else {
-        onTimeframeChange({
-          timeframe: 'custom',
-          startDate: customStartDate.toISOString().split('T')[0],
-          endDate: customEndDate.toISOString().split('T')[0],
-        });
+        return;
       }
+
+      // Validate not in future
+      const today = new Date();
+      today.setHours(23, 59, 59, 999); // End of today
+      if (end > today) {
+        toast({
+          variant: "destructive",
+          title: "Invalid date range",
+          description: "End date cannot be in the future.",
+        });
+        return;
+      }
+
+      // Update state if dates were swapped
+      if (customStartDate > customEndDate) {
+        setCustomStartDate(start);
+        setCustomEndDate(end);
+      }
+
+      onTimeframeChange({
+        timeframe: 'custom',
+        startDate: start.toISOString().split('T')[0],
+        endDate: end.toISOString().split('T')[0],
+      });
       setIsOpen(false);
       setIsCustomExpanded(false);
     }

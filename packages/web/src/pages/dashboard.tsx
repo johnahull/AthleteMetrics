@@ -23,6 +23,56 @@ import { LeaderboardWidget } from "@/components/dashboard/LeaderboardWidget";
 import { MostImprovedCard } from "@/components/dashboard/MostImprovedCard";
 import { AtRiskAthletesAlert } from "@/components/dashboard/AtRiskAthletesAlert";
 import { DashboardTrendsChart } from "@/components/dashboard/DashboardTrendsChart";
+import type { TimeframePreset } from "@shared/dashboard-timeframe";
+
+// Type definitions for dashboard data
+interface BestMetricResult {
+  value: string;
+  userName: string;
+}
+
+interface DashboardStats {
+  totalAthletes: number;
+  activeAthletes: number;
+  totalTeams: number;
+  bestFly10Today: BestMetricResult | null;
+  bestVerticalToday: BestMetricResult | null;
+  bestAgility505Today: BestMetricResult | null;
+  bestAgility5105Today: BestMetricResult | null;
+  bestTTestToday: BestMetricResult | null;
+  bestDash40YdToday: BestMetricResult | null;
+  bestTopSpeedToday: BestMetricResult | null;
+  bestRSIToday: BestMetricResult | null;
+  bestFly10Last30Days: BestMetricResult | null;
+  bestVerticalLast30Days: BestMetricResult | null;
+  bestAgility505Last30Days: BestMetricResult | null;
+  bestAgility5105Last30Days: BestMetricResult | null;
+  bestTTestLast30Days: BestMetricResult | null;
+  bestDash40YdLast30Days: BestMetricResult | null;
+  bestTopSpeedLast30Days: BestMetricResult | null;
+  bestRSILast30Days: BestMetricResult | null;
+  // Allow indexing for dynamic metric access
+  [key: string]: number | BestMetricResult | null;
+}
+
+interface RecentMeasurement {
+  id: string;
+  userId: string;
+  user?: {
+    id: string;
+    firstName?: string;
+    lastName?: string;
+    fullName?: string;
+    teams?: { name: string }[];
+  };
+  metric: string;
+  metricType?: string;
+  value: string;
+  units: string;
+  date: string;
+  notes?: string;
+  team?: { name: string };
+}
 
 export default function Dashboard() {
   const isMobile = useIsMobile();
@@ -259,12 +309,26 @@ export default function Dashboard() {
     console.error('Dashboard stats error:', error);
   }
 
-  const stats = (dashboardStats as any) || {
+  const stats: DashboardStats = dashboardStats || {
     totalAthletes: 0,
     activeAthletes: 0,
     totalTeams: 0,
     bestFly10Today: null,
     bestVerticalToday: null,
+    bestAgility505Today: null,
+    bestAgility5105Today: null,
+    bestTTestToday: null,
+    bestDash40YdToday: null,
+    bestTopSpeedToday: null,
+    bestRSIToday: null,
+    bestFly10Last30Days: null,
+    bestVerticalLast30Days: null,
+    bestAgility505Last30Days: null,
+    bestAgility5105Last30Days: null,
+    bestTTestLast30Days: null,
+    bestDash40YdLast30Days: null,
+    bestTopSpeedLast30Days: null,
+    bestRSILast30Days: null,
   };
 
   return (
@@ -404,7 +468,12 @@ export default function Dashboard() {
           const bestResult = stats[`best${metricCode}Last30Days`];
           const MetricIcon = getMetricIcon(metricCode);
           const metricColor = getMetricColor(metricCode);
-          
+
+          // Type guard to check if bestResult is a BestMetricResult object
+          const isBestMetricResult = (value: number | BestMetricResult | null): value is BestMetricResult => {
+            return value !== null && typeof value === 'object' && 'value' in value && 'userName' in value;
+          };
+
           return (
             <Card key={metricCode} className="bg-white">
               <CardContent className="p-6">
@@ -414,10 +483,10 @@ export default function Dashboard() {
                       Best {metric.label} ({scope.timeframe})
                     </p>
                     <p className="text-2xl font-bold text-gray-900" data-testid={`stat-best-${metricCode.toLowerCase()}`}>
-                      {bestResult ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
+                      {isBestMetricResult(bestResult) ? formatMetricValue(metricCode, parseFloat(bestResult.value)) : "N/A"}
                     </p>
                     <p className="text-sm text-gray-500 mt-1" data-testid={`stat-best-${metricCode.toLowerCase()}-athlete`}>
-                      {bestResult?.userName || "No data"}
+                      {isBestMetricResult(bestResult) ? bestResult.userName : "No data"}
                     </p>
                   </div>
                   <div className={`w-12 h-12 ${metricColor.replace('text-', 'bg-').replace('800', '100')} rounded-lg flex items-center justify-center`}>
@@ -454,7 +523,7 @@ export default function Dashboard() {
         <LeaderboardWidget
           organizationId={effectiveOrganizationId}
           teamId={filterParams.teamId}
-          timeframe={filterParams.timeframe as any}
+          timeframe={filterParams.timeframe as TimeframePreset | "custom" | undefined}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
           scopeLabel={scopeLabel}
@@ -462,7 +531,7 @@ export default function Dashboard() {
         <MostImprovedCard
           organizationId={effectiveOrganizationId}
           teamId={filterParams.teamId}
-          timeframe={filterParams.timeframe as any}
+          timeframe={filterParams.timeframe as TimeframePreset | "custom" | undefined}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
           scopeLabel={scopeLabel}
@@ -494,7 +563,7 @@ export default function Dashboard() {
           organizationId={effectiveOrganizationId}
           teamId={filterParams.teamId}
           athleteId={filterParams.athleteId}
-          timeframe={filterParams.timeframe as any}
+          timeframe={filterParams.timeframe as TimeframePreset | "custom" | undefined}
           dateFrom={filterParams.dateFrom}
           dateTo={filterParams.dateTo}
           scopeLabel={scopeLabel}
@@ -537,13 +606,13 @@ export default function Dashboard() {
           ) : isMobile ? (
             /* Mobile Timeline View */
             <MeasurementsTimeline
-              measurements={(recentMeasurements || []).slice(0, 10).map((m: any) => ({
+              measurements={(recentMeasurements as RecentMeasurement[] || []).slice(0, 10).map((m) => ({
                 id: m.id,
                 athleteId: m.user?.id || '',
                 athleteName: `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim() || 'Unknown',
                 metricType: m.metricType || '',
                 metricName: m.metricType ? getMetricDisplayName(m.metricType) : 'Unknown',
-                value: m.value ?? 0,
+                value: parseFloat(m.value) || 0,
                 date: m.date,
                 notes: m.notes,
                 teamName: m.team?.name,
@@ -563,7 +632,7 @@ export default function Dashboard() {
                 </tr>
               </thead>
               <tbody className="text-sm">
-                {Array.isArray(recentMeasurements) && recentMeasurements.slice(0, 10).map((measurement: any) => (
+                {Array.isArray(recentMeasurements) && (recentMeasurements as RecentMeasurement[]).slice(0, 10).map((measurement) => (
                   <tr key={measurement.id} className="border-b border-gray-100">
                     <td className="py-3">
                       <div className="flex items-center space-x-3">
