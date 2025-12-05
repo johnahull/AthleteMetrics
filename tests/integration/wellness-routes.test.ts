@@ -850,6 +850,7 @@ describe('Wellness Dashboard Routes', () => {
   beforeAll(async () => {
     // Calculate test date once at the start to avoid midnight UTC boundary issues
     testDate = new Date().toISOString().split('T')[0];
+    console.log(`📅 Test date set to: ${testDate} (UTC)`);
     // Create two teams
     const [t1] = await db.insert(teams).values({
       organizationId: testOrg.id,
@@ -1024,6 +1025,8 @@ describe('Wellness Dashboard Routes', () => {
     });
     createdResponseIds.push(resp2.id);
 
+    console.log(`📊 Created ${createdResponseIds.length} responses with date: ${testDate}`);
+
     // Create responses for yesterday for trend calculation
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
@@ -1116,11 +1119,13 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - calculates correct averageScore per template', async () => {
+    console.log(`🔍 Test requesting date: ${testDate}`);
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
       .query({ date: testDate })
       .set('Cookie', coachCookie);
 
+    console.log(`📥 API response body:`, JSON.stringify(res.body, null, 2));
     expect(res.status).toBe(200);
 
     // Team1 - Daily Wellness Template
