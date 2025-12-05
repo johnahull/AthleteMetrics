@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Phone Home Screen Mockup - AthleteMetrics</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .container {
+      display: flex;
+      gap: 3rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 1400px;
+    }
+
+    /* Phone Frame */
+    .phone {
+      position: relative;
+      width: 375px;
+      height: 812px;
+      background: #000;
+      border-radius: 40px;
+      padding: 12px;
+      box-shadow:
+        0 20px 60px rgba(0,0,0,0.5),
+        inset 0 0 0 3px #1a1a1a,
+        inset 0 0 0 6px #2a2a2a;
+    }
+
+    /* iPhone Notch */
+    .phone.iphone::before {
+      content: '';
+      position: absolute;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 180px;
+      height: 28px;
+      background: #000;
+      border-radius: 0 0 20px 20px;
+      z-index: 10;
+    }
+
+    /* Android Punch Hole */
+    .phone.android::after {
+      content: '';
+      position: absolute;
+      top: 25px;
+      right: 40px;
+      width: 12px;
+      height: 12px;
+      background: #000;
+      border-radius: 50%;
+      z-index: 10;
+      box-shadow: 0 0 0 2px #1a1a1a;
+    }
+
+    .screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 32px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Wallpapers */
+    .wallpaper-ios {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .wallpaper-android {
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      color: white;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .status-left {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    /* Home Screen Grid */
+    .home-screen {
+      padding: 20px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 20px;
+      row-gap: 16px;
+    }
+
+    /* App Icon */
+    .app-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .icon-wrapper {
+      width: 60px;
+      height: 60px;
+      border-radius: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      transition: transform 0.2s;
+    }
+
+    .app-icon:hover .icon-wrapper {
+      transform: scale(1.05);
+    }
+
+    /* iOS Style Icons */
+    .icon-wrapper.ios {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(20px);
+      box-shadow:
+        0 2px 8px rgba(0,0,0,0.15),
+        inset 0 1px 0 rgba(255,255,255,0.3);
+    }
+
+    /* Android Style Icons */
+    .icon-wrapper.android {
+      background: rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(10px);
+      border-radius: 50%;
+    }
+
+    .icon-wrapper img {
+      width: 85%;
+      height: 85%;
+      object-fit: contain;
+    }
+
+    .app-name {
+      color: white;
+      font-size: 11px;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* iOS Dock */
+    .dock {
+      position: absolute;
+      bottom: 30px;
+      left: 20px;
+      right: 20px;
+      height: 96px;
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(30px);
+      border-radius: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 0 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+
+    /* Android Navigation Bar */
+    .nav-bar {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 56px;
+      background: rgba(0, 0, 0, 0.4);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 80px;
+    }
+
+    .nav-button {
+      width: 8px;
+      height: 8px;
+      background: white;
+      border-radius: 50%;
+    }
+
+    .nav-button.pill {
+      width: 120px;
+      height: 4px;
+      border-radius: 2px;
+    }
+
+    /* Page Indicator */
+    .page-indicator {
+      position: absolute;
+      bottom: 140px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+    }
+
+    .page-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.5);
+    }
+
+    .page-dot.active {
+      background: white;
+    }
+
+    /* Highlight Your App */
+    .app-icon.highlight .icon-wrapper {
+      box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.8);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.8);
+      }
+      50% {
+        box-shadow: 0 0 0 6px rgba(255, 215, 0, 0.4);
+      }
+    }
+
+    /* Labels */
+    .phone-label {
+      position: absolute;
+      top: -40px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      color: white;
+      font-size: 24px;
+      font-weight: 700;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .container {
+        flex-direction: column;
+      }
+      .phone {
+        transform: scale(0.85);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- iPhone -->
+    <div class="phone iphone">
+      <div class="phone-label">📱 iPhone</div>
+      <div class="screen wallpaper-ios">
+        <div class="status-bar">
+          <div class="status-left">
+            <span>9:41</span>
+          </div>
+          <div>100% 🔋</div>
+        </div>
+
+        <div class="home-screen">
+          <!-- Row 1 -->
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              <span style="font-size: 32px;">📱</span>
+            </div>
+            <div class="app-name">Messages</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+              <span style="font-size: 32px;">📧</span>
+            </div>
+            <div class="app-name">Mail</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+              <span style="font-size: 32px;">🌐</span>
+            </div>
+            <div class="app-name">Safari</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+              <span style="font-size: 32px;">🎵</span>
+            </div>
+            <div class="app-name">Music</div>
+          </div>
+
+          <!-- Row 2 -->
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+              <span style="font-size: 32px;">📷</span>
+            </div>
+            <div class="app-name">Camera</div>
+          </div>
+          <div class="app-icon highlight">
+            <div class="icon-wrapper ios">
+              <img src="icon-192.png" alt="AthleteMetrics">
+            </div>
+            <div class="app-name">AthleteMetrics</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+              <span style="font-size: 32px;">📊</span>
+            </div>
+            <div class="app-name">Health</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+              <span style="font-size: 32px;">⚙️</span>
+            </div>
+            <div class="app-name">Settings</div>
+          </div>
+
+          <!-- Row 3 -->
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+              <span style="font-size: 32px;">🗺️</span>
+            </div>
+            <div class="app-name">Maps</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #ff6e7f 0%, #bfe9ff 100%);">
+              <span style="font-size: 32px;">☁️</span>
+            </div>
+            <div class="app-name">Weather</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);">
+              <span style="font-size: 32px;">📅</span>
+            </div>
+            <div class="app-name">Calendar</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper ios" style="background: linear-gradient(135deg, #f77062 0%, #fe5196 100%);">
+              <span style="font-size: 32px;">📝</span>
+            </div>
+            <div class="app-name">Notes</div>
+          </div>
+        </div>
+
+        <div class="page-indicator">
+          <div class="page-dot"></div>
+          <div class="page-dot active"></div>
+          <div class="page-dot"></div>
+        </div>
+
+        <div class="dock">
+          <div class="icon-wrapper ios" style="background: rgba(255, 255, 255, 0.3);">
+            <span style="font-size: 32px;">☎️</span>
+          </div>
+          <div class="icon-wrapper ios" style="background: rgba(255, 255, 255, 0.3);">
+            <span style="font-size: 32px;">💬</span>
+          </div>
+          <div class="icon-wrapper ios" style="background: rgba(255, 255, 255, 0.3);">
+            <span style="font-size: 32px;">🌐</span>
+          </div>
+          <div class="icon-wrapper ios" style="background: rgba(255, 255, 255, 0.3);">
+            <span style="font-size: 32px;">🎵</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Android -->
+    <div class="phone android">
+      <div class="phone-label">🤖 Android</div>
+      <div class="screen wallpaper-android">
+        <div class="status-bar">
+          <div class="status-left">
+            <span>10:30</span>
+          </div>
+          <div>🔋 Wi-Fi 📶</div>
+        </div>
+
+        <div class="home-screen" style="padding-top: 60px;">
+          <!-- Row 1 -->
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              <span style="font-size: 28px;">💬</span>
+            </div>
+            <div class="app-name">Messages</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+              <span style="font-size: 28px;">✉️</span>
+            </div>
+            <div class="app-name">Gmail</div>
+          </div>
+          <div class="app-icon highlight">
+            <div class="icon-wrapper android">
+              <img src="icon-192.png" alt="AthleteMetrics">
+            </div>
+            <div class="app-name">AthleteMetrics</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+              <span style="font-size: 28px;">🌐</span>
+            </div>
+            <div class="app-name">Chrome</div>
+          </div>
+
+          <!-- Row 2 -->
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #30cfd0 0%, #330867 100%);">
+              <span style="font-size: 28px;">📷</span>
+            </div>
+            <div class="app-name">Camera</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);">
+              <span style="font-size: 28px;">▶️</span>
+            </div>
+            <div class="app-name">YouTube</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);">
+              <span style="font-size: 28px;">🗺️</span>
+            </div>
+            <div class="app-name">Maps</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);">
+              <span style="font-size: 28px;">⚙️</span>
+            </div>
+            <div class="app-name">Settings</div>
+          </div>
+
+          <!-- Row 3 -->
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);">
+              <span style="font-size: 28px;">📁</span>
+            </div>
+            <div class="app-name">Files</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #ff6e7f 0%, #bfe9ff 100%);">
+              <span style="font-size: 28px;">☁️</span>
+            </div>
+            <div class="app-name">Weather</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #e0c3fc 0%, #8ec5fc 100%);">
+              <span style="font-size: 28px;">📅</span>
+            </div>
+            <div class="app-name">Calendar</div>
+          </div>
+          <div class="app-icon">
+            <div class="icon-wrapper android" style="background: linear-gradient(135deg, #f77062 0%, #fe5196 100%);">
+              <span style="font-size: 28px;">🎵</span>
+            </div>
+            <div class="app-name">Spotify</div>
+          </div>
+        </div>
+
+        <div class="nav-bar">
+          <div class="nav-button"></div>
+          <div class="nav-button pill"></div>
+          <div class="nav-button"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AthleteMetrics Logo Preview</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 3rem;
+      font-size: 2.5rem;
+    }
+    .logo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+    .logo-card {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+      transition: transform 0.3s ease;
+    }
+    .logo-card:hover {
+      transform: translateY(-5px);
+    }
+    .logo-preview {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 200px;
+      background: #f8f9fa;
+      border-radius: 12px;
+      margin-bottom: 1.5rem;
+      padding: 1rem;
+    }
+    .logo-preview img {
+      max-width: 100%;
+      height: auto;
+    }
+    h2 {
+      font-size: 1.25rem;
+      margin-bottom: 0.5rem;
+      color: #1a202c;
+    }
+    .size {
+      color: #718096;
+      font-size: 0.875rem;
+      margin-bottom: 0.5rem;
+    }
+    .usage {
+      color: #4a5568;
+      font-size: 0.875rem;
+      line-height: 1.6;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      margin-top: 0.5rem;
+    }
+    .badge-icon {
+      background: #edf2f7;
+      color: #2d3748;
+    }
+    .badge-full {
+      background: #bee3f8;
+      color: #2c5282;
+    }
+    .comparison {
+      background: white;
+      border-radius: 16px;
+      padding: 2rem;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+    }
+    .comparison h2 {
+      margin-bottom: 1.5rem;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2rem;
+    }
+    .comparison-item {
+      text-align: center;
+    }
+    .comparison-item img {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    @media (max-width: 768px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 AthleteMetrics Logo Preview</h1>
+
+    <div class="logo-grid">
+      <!-- Icon-only versions -->
+      <div class="logo-card">
+        <div class="logo-preview">
+          <img src="icon-192.png" alt="PWA Icon 192" width="192">
+        </div>
+        <h2>PWA Home Screen Icon</h2>
+        <div class="size">192 × 192 px (25KB)</div>
+        <div class="usage">Used when users add the app to their mobile home screen. Clean icon-only design for better recognition.</div>
+        <span class="badge badge-icon">Icon Only</span>
+      </div>
+
+      <div class="logo-card">
+        <div class="logo-preview">
+          <img src="icon-512.png" alt="PWA Icon 512" width="256">
+        </div>
+        <h2>PWA Splash Screen</h2>
+        <div class="size">512 × 512 px (165KB)</div>
+        <div class="usage">High-resolution icon for splash screens and app stores. Displays when the PWA launches.</div>
+        <span class="badge badge-icon">Icon Only</span>
+      </div>
+
+      <div class="logo-card">
+        <div class="logo-preview">
+          <img src="logo-64.png" alt="Small Logo" width="64">
+        </div>
+        <h2>Small Icon</h2>
+        <div class="size">64 × 64 px (3.8KB)</div>
+        <div class="usage">Compact version for sidebars, navigation, or small UI elements where space is limited.</div>
+        <span class="badge badge-icon">Icon Only</span>
+      </div>
+
+      <!-- Full logo versions -->
+      <div class="logo-card">
+        <div class="logo-preview">
+          <img src="logo-128.png" alt="Welcome Logo" width="128">
+        </div>
+        <h2>Welcome Page Logo</h2>
+        <div class="size">128 × 128 px (16KB)</div>
+        <div class="usage">Main logo for the welcome page. Includes text for brand recognition and introduction.</div>
+        <span class="badge badge-full">Full Logo</span>
+      </div>
+
+      <div class="logo-card">
+        <div class="logo-preview">
+          <img src="logo-256.png" alt="Marketing Logo" width="200">
+        </div>
+        <h2>Marketing & Large Display</h2>
+        <div class="size">256 × 256 px (58KB)</div>
+        <div class="usage">High-resolution logo for presentations, marketing materials, and large display contexts.</div>
+        <span class="badge badge-full">Full Logo</span>
+      </div>
+    </div>
+
+    <div class="comparison">
+      <h2>Side-by-Side Comparison</h2>
+      <div class="comparison-grid">
+        <div class="comparison-item">
+          <img src="icon-192.png" alt="Icon Only" width="150">
+          <div><strong>Icon-Only Version</strong></div>
+          <div class="size">Clean • Recognizable • App-like</div>
+        </div>
+        <div class="comparison-item">
+          <img src="logo-128.png" alt="Full Logo" width="150">
+          <div><strong>Full Logo Version</strong></div>
+          <div class="size">Branded • Complete • Professional</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
