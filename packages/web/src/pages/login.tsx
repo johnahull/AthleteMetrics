@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { BarChart3, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 export default function Login() {
   const [username, setUsername] = useState("");
@@ -42,9 +42,13 @@ export default function Login() {
       <Card className="w-full max-w-md mx-4">
         <CardContent className="pt-6">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 bg-primary rounded-full flex items-center justify-center mb-4">
-              <BarChart3 className="h-8 w-8 text-white" />
-            </div>
+            <img
+              src="/logo-128.png"
+              alt="AthleteMetrics logo"
+              className="h-32 w-32 mb-4"
+              width={128}
+              height={128}
+            />
             <div className="flex items-center justify-center gap-3 mb-2">
               <h1 className="text-2xl font-bold text-gray-900">AthleteMetrics</h1>
             </div>
