@@ -793,7 +793,7 @@ export class AnalyticsService {
           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date ASC) as first_row,
           ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY date DESC) as last_row
         FROM measurements
-        WHERE user_id = ANY(${athleteIds})
+        WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
           AND metric = ${metric}
           AND is_verified = true
           ${startDateStr ? sql`AND date >= ${startDateStr}` : sql``}
@@ -1019,7 +1019,7 @@ export class AnalyticsService {
           date,
           ROW_NUMBER() OVER (PARTITION BY user_id, metric ORDER BY date DESC) as row_num
         FROM measurements
-        WHERE user_id = ANY(${athleteIds})
+        WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
           AND is_verified = true
       ),
       recent_measurements AS (
@@ -1079,7 +1079,7 @@ export class AnalyticsService {
           MAX(date) as last_date,
           (CURRENT_DATE - MAX(date))::int as days_since
         FROM measurements
-        WHERE user_id = ANY(${athleteIds})
+        WHERE user_id = ANY(${sql.raw(`ARRAY[${athleteIds.map(id => `'${id}'`).join(',')}]::text[]`)})
           AND is_verified = true
         GROUP BY user_id
       )
