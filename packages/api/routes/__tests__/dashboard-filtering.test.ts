@@ -7,7 +7,7 @@ import { registerAnalyticsRoutes } from '../analytics-routes';
 import { registerDashboardTrendsRoutes } from '../dashboard-trends';
 import { registerAuthRoutes } from '../auth-routes';
 import { db } from '../../db';
-import { users, teams, measurements, userTeams, organizations } from '@shared/schema';
+import { users, teams, measurements, userTeams, organizations, userOrganizations } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 const app = express();
@@ -68,6 +68,14 @@ describe('Dashboard Filtering - Backend Integration', () => {
       })
       .returning();
     coachUserId = coach.id;
+
+    // Add coach to organization (required for auth to work)
+    await db.insert(userOrganizations).values({
+      userId: coachUserId,
+      organizationId: orgId,
+      role: 'coach',
+      isActive: true,
+    });
 
     // Create teams
     const [team1, team2] = await db
@@ -196,6 +204,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
     await db.delete(userTeams).where(eq(userTeams.userId, athlete1Id));
     await db.delete(userTeams).where(eq(userTeams.userId, athlete2Id));
     await db.delete(userTeams).where(eq(userTeams.userId, athlete3Id));
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachUserId));
     await db.delete(users).where(eq(users.id, athlete1Id));
     await db.delete(users).where(eq(users.id, athlete2Id));
     await db.delete(users).where(eq(users.id, athlete3Id));
