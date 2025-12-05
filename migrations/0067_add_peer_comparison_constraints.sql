@@ -2,6 +2,10 @@
 -- Date: 2025-12-04
 -- Purpose: Add CHECK constraints to enforce data integrity rules
 -- Expected impact: Prevent invalid data entry, enforce minimum sample sizes
+--
+-- NOTE: This migration uses pg_constraint for idempotency checks instead of
+-- information_schema.constraint_column_usage (used in migrations 0000-0066).
+-- The pg_constraint approach is more direct and performant for PostgreSQL.
 
 -- Constraint: Enforce minimum sample size of 10 for peer percentile cache
 -- This prevents displaying unreliable percentiles from small sample sizes

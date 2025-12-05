@@ -205,6 +205,25 @@ export function registerAnalyticsRoutes(app: Express) {
           if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
             return res.status(400).json({ message: "Invalid date format. Use ISO 8601 date format (YYYY-MM-DD)" });
           }
+
+          // Validate date range constraints (defense in depth - frontend also validates)
+          const maxRangeDays = 730; // 2 years
+          const rangeDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (rangeDays > maxRangeDays) {
+            return res.status(400).json({
+              message: `Date range exceeds maximum of ${maxRangeDays} days (2 years)`
+            });
+          }
+
+          if (startDate > endDate) {
+            return res.status(400).json({ message: "dateFrom must be before dateTo" });
+          }
+
+          const today = new Date();
+          if (endDate > today) {
+            return res.status(400).json({ message: "dateTo cannot be in the future" });
+          }
         }
       }
 

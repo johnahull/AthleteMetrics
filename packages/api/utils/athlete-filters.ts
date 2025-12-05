@@ -8,6 +8,14 @@ import { eq, and } from "drizzle-orm";
  * @param organizationId - The organization ID to filter by
  * @param teamId - Optional team ID to further filter athletes
  * @returns Array of unique athlete user IDs
+ *
+ * @example
+ * // Get all active athletes in organization
+ * const orgAthletes = await getAthleteIdsForScope(orgId);
+ *
+ * @example
+ * // Get active athletes for specific team
+ * const teamAthletes = await getAthleteIdsForScope(orgId, teamId);
  */
 export async function getAthleteIdsForScope(
   organizationId: string,
@@ -34,7 +42,12 @@ export async function getAthleteIdsForScope(
       .select({ userId: userTeams.userId })
       .from(userTeams)
       .innerJoin(teams, eq(userTeams.teamId, teams.id))
-      .where(eq(teams.organizationId, organizationId));
+      .where(
+        and(
+          eq(teams.organizationId, organizationId),
+          eq(userTeams.isActive, true)
+        )
+      );
     return [...new Set(orgAthletes.map(a => a.userId))];
   }
 }

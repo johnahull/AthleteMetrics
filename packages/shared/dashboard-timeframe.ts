@@ -17,6 +17,12 @@ export interface ComparisonPeriods {
   comparisonLabel: string;
 }
 
+/**
+ * Earliest measurement date in the system (platform launch date)
+ * Used for "All Time" timeframe preset
+ */
+export const PLATFORM_LAUNCH_DATE = new Date(Date.UTC(2020, 0, 1));
+
 export const TIMEFRAME_PRESETS: Array<{ value: TimeframePreset | 'custom'; label: string }> = [
   { value: '7d', label: 'Last 7 Days' },
   { value: '30d', label: 'Last 30 Days' },
@@ -84,8 +90,8 @@ export function getPresetDateRange(preset: TimeframePreset): DateRange {
       break;
 
     case 'all':
-      // All Time: Earliest date (2020-01-01) to today
-      start = new Date(Date.UTC(2020, 0, 1));
+      // All Time: Platform launch date to today
+      start = new Date(PLATFORM_LAUNCH_DATE);
       break;
 
     default:
