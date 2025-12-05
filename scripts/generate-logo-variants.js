@@ -14,8 +14,8 @@ const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 const sourceIPhone = join(rootDir, 'am-logo-iphone.png');
 const sourceAndroid = join(rootDir, 'am-logo-android.png');
-const sourceNoBrandTransparent = join(rootDir, 'attached_assets/am-mobile-nobrand-transparent.png');
-const sourceBrand = join(rootDir, 'attached_assets/am-mobile-brand-transparent.png');
+const sourceNoBrandTransparent = join(rootDir, 'am-logo-nobrand-transparent-gimp.png');
+const sourceBrand = join(rootDir, 'am-logo-brand-transparent-gimp.png');
 const outputDir = join(rootDir, 'packages/web/public');
 
 async function generateVariants() {
@@ -25,7 +25,7 @@ async function generateVariants() {
 
   // Use transparent runner icon for web icons (no white background)
   console.log('🔧 Generating web icons (transparent):');
-  console.log(`   Source: am-mobile-nobrand-transparent.png`);
+  console.log(`   Source: am-logo-nobrand-transparent-gimp.png`);
 
   await sharp(sourceNoBrandTransparent)
     .ensureAlpha()  // Ensure alpha channel exists
@@ -74,7 +74,7 @@ async function generateVariants() {
 
   console.log('');
   console.log('🔧 Generating full logo variants (with text):');
-  console.log(`   Source: am-mobile-brand-transparent.png`);
+  console.log(`   Source: am-logo-brand-transparent-gimp.png`);
 
   // Generate full logo variants (with text for website)
   await sharp(sourceBrand)
