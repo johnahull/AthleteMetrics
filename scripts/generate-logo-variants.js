@@ -28,29 +28,32 @@ async function generateVariants() {
   console.log(`   Source: am-mobile-nobrand-transparent.png`);
 
   await sharp(sourceNoBrandTransparent)
+    .ensureAlpha()  // Ensure alpha channel exists
     .resize(192, 192, {
       fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
+      background: { r: 255, g: 255, b: 255, alpha: 0 }  // Transparent white
     })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'icon-192.png'));
   console.log(`  ✅ icon-192.png (192x192) - PWA home screen icon (transparent)`);
 
   await sharp(sourceNoBrandTransparent)
+    .ensureAlpha()
     .resize(512, 512, {
       fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
     })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'icon-512.png'));
   console.log(`  ✅ icon-512.png (512x512) - PWA splash screen icon (transparent)`);
 
   await sharp(sourceNoBrandTransparent)
+    .ensureAlpha()
     .resize(64, 64, {
       fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
     })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'logo-64.png'));
   console.log(`  ✅ logo-64.png (64x64) - Small icon (sidebar)`);
 
@@ -75,20 +78,22 @@ async function generateVariants() {
 
   // Generate full logo variants (with text for website)
   await sharp(sourceBrand)
+    .ensureAlpha()
     .resize(128, 128, {
       fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
     })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'logo-128.png'));
   console.log(`  ✅ logo-128.png (128x128) - Welcome page logo`);
 
   await sharp(sourceBrand)
+    .ensureAlpha()
     .resize(256, 256, {
       fit: 'contain',
-      background: { r: 0, g: 0, b: 0, alpha: 0 }
+      background: { r: 255, g: 255, b: 255, alpha: 0 }
     })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(join(outputDir, 'logo-256.png'));
   console.log(`  ✅ logo-256.png (256x256) - Large marketing logo`);
 
