@@ -137,7 +137,7 @@ describe('DashboardTimeframeFilter', () => {
       const user = userEvent.setup();
       render(
         <DashboardTimeframeFilter
-          timeframe="qtd"
+          timeframe="180d"
           startDate={null}
           endDate={null}
           onTimeframeChange={mockOnTimeframeChange}

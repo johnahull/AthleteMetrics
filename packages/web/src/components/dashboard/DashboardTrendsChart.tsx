@@ -144,31 +144,16 @@ export function DashboardTrendsChart({
               now.getTime() - 90 * 24 * 60 * 60 * 1000
             ).toISOString();
             break;
-          case "mtd":
+          case "180d":
             calculatedDateFrom = new Date(
-              now.getFullYear(),
-              now.getMonth(),
-              1
+              now.getTime() - 180 * 24 * 60 * 60 * 1000
             ).toISOString();
             break;
-          case "lm":
+          case "1y":
             calculatedDateFrom = new Date(
-              now.getFullYear(),
-              now.getMonth() - 1,
-              1
-            ).toISOString();
-            calculatedDateTo = new Date(
-              now.getFullYear(),
+              now.getFullYear() - 1,
               now.getMonth(),
-              0
-            ).toISOString();
-            break;
-          case "qtd":
-            const quarter = Math.floor(now.getMonth() / 3);
-            calculatedDateFrom = new Date(
-              now.getFullYear(),
-              quarter * 3,
-              1
+              now.getDate()
             ).toISOString();
             break;
           case "ytd":

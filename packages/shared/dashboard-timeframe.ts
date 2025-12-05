@@ -3,7 +3,7 @@
  * Shared utilities for timeframe filtering with rolling comparison periods
  */
 
-export type TimeframePreset = '7d' | '30d' | '90d' | 'mtd' | 'lm' | 'qtd' | 'ytd' | 'all';
+export type TimeframePreset = '7d' | '30d' | '90d' | '180d' | '1y' | 'ytd' | 'all';
 
 export interface DateRange {
   start: Date;
@@ -21,9 +21,8 @@ export const TIMEFRAME_PRESETS: Array<{ value: TimeframePreset | 'custom'; label
   { value: '7d', label: 'Last 7 Days' },
   { value: '30d', label: 'Last 30 Days' },
   { value: '90d', label: 'Last 90 Days' },
-  { value: 'mtd', label: 'Month to Date' },
-  { value: 'lm', label: 'Last Month' },
-  { value: 'qtd', label: 'Quarter to Date' },
+  { value: '180d', label: 'Last 180 Days' },
+  { value: '1y', label: 'Last 1 Year' },
   { value: 'ytd', label: 'Year to Date' },
   { value: 'all', label: 'All Time' },
   { value: 'custom', label: 'Custom Range' },
@@ -69,20 +68,14 @@ export function getPresetDateRange(preset: TimeframePreset): DateRange {
       start.setUTCDate(start.getUTCDate() - 90);
       break;
 
-    case 'mtd':
-      // Month to Date: First day of current month to today
-      start = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), 1));
+    case '180d':
+      start = new Date(todayUTC);
+      start.setUTCDate(start.getUTCDate() - 180);
       break;
 
-    case 'lm':
-      // Last Month: First to last day of previous month
-      start = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth() - 1, 1));
-      const lastMonthEnd = new Date(Date.UTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth(), 0)); // Day 0 = last day of previous month
-      return { start, end: lastMonthEnd };
-
-    case 'qtd':
-      // Quarter to Date: First day of current quarter to today
-      start = getQuarterStartUTC(todayUTC.getUTCFullYear(), todayUTC.getUTCMonth());
+    case '1y':
+      start = new Date(todayUTC);
+      start.setUTCFullYear(start.getUTCFullYear() - 1);
       break;
 
     case 'ytd':

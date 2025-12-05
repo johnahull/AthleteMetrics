@@ -187,7 +187,7 @@ export function registerAnalyticsRoutes(app: Express) {
         // If any timeframe params provided, calculate date range
         if (timeframe && timeframe !== 'custom') {
           // Preset timeframe
-          const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd', 'all'];
+          const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd', 'all'];
           if (!validTimeframes.includes(timeframe as TimeframePreset)) {
             return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, custom` });
           }
@@ -420,7 +420,7 @@ export function registerAnalyticsRoutes(app: Express) {
       let endDate: Date | undefined;
 
       if (timeframe && timeframe !== 'custom' && timeframe !== 'all') {
-        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd'];
+        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd'];
         if (!validTimeframes.includes(timeframe as TimeframePreset)) {
           return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, all, custom` });
         }
@@ -517,7 +517,7 @@ export function registerAnalyticsRoutes(app: Express) {
       let endDate: Date | undefined;
 
       if (timeframe && timeframe !== 'custom' && timeframe !== 'all') {
-        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd'];
+        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd'];
         if (!validTimeframes.includes(timeframe as TimeframePreset)) {
           return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, all, custom` });
         }

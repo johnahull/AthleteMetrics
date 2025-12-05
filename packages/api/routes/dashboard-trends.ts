@@ -114,7 +114,7 @@ export function registerDashboardTrendsRoutes(app: Express) {
    * - organizationId (required): Organization UUID
    * - teamId (optional): Filter to specific team
    * - athleteId (optional): Filter to specific athlete
-   * - timeframe (optional): 7d, 30d, 90d, mtd, lm, qtd, ytd, all, custom (default: 30d)
+   * - timeframe (optional): 7d, 30d, 90d, 180d, 1y, ytd, all, custom (default: 30d)
    * - dateFrom (required if timeframe=custom): ISO 8601 date (YYYY-MM-DD)
    * - dateTo (required if timeframe=custom): ISO 8601 date (YYYY-MM-DD)
    */
@@ -168,7 +168,7 @@ export function registerDashboardTrendsRoutes(app: Express) {
       const dateToStr = req.query.dateTo as string | undefined;
 
       // Validate timeframe parameter
-      const validTimeframes = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd', 'all', 'custom'] as const;
+      const validTimeframes = ['7d', '30d', '90d', '180d', '1y', 'ytd', 'all', 'custom'] as const;
       type ValidTimeframe = typeof validTimeframes[number];
       const isValidTimeframe = (value: string): value is ValidTimeframe =>
         (validTimeframes as readonly string[]).includes(value);
