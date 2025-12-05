@@ -63,11 +63,8 @@ export default function Dashboard() {
     }
   };
 
-  // Build filter query string for API calls
+  // Get filter params for API calls
   const filterParams = getQueryParams();
-  const filterQueryString = Object.entries(filterParams)
-    .map(([key, value]) => `${key}=${value}`)
-    .join('&');
 
   // Fetch dashboard trends with scope and timeframe filters
   const { data: trendsData, isLoading: trendsLoading } = useDashboardTrends(
@@ -110,7 +107,7 @@ export default function Dashboard() {
     enabled: !!user && !!effectiveOrganizationId // Require organization for all users
   });
 
-  const { data: recentMeasurements } = useQuery({
+  const { data: recentMeasurements, isLoading: measurementsLoading, error: measurementsError } = useQuery({
     queryKey: ["/api/measurements", effectiveOrganizationId, filterParams.teamId, filterParams.athleteId],
     queryFn: async () => {
       // Build URL with scope filters (org, team, or athlete)
@@ -518,7 +515,26 @@ export default function Dashboard() {
               )}
             </div>
           </div>
-          {isMobile ? (
+          {measurementsError ? (
+            /* Error State */
+            <div className="py-8 text-center text-red-500">
+              Failed to load recent measurements
+            </div>
+          ) : measurementsLoading ? (
+            /* Loading State */
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <div key={i} className="flex items-center space-x-3 animate-pulse">
+                  <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
+                  <div className="flex-1">
+                    <div className="h-4 bg-gray-200 rounded w-32 mb-2"></div>
+                    <div className="h-3 bg-gray-200 rounded w-24"></div>
+                  </div>
+                  <div className="h-4 bg-gray-200 rounded w-16"></div>
+                </div>
+              ))}
+            </div>
+          ) : isMobile ? (
             /* Mobile Timeline View */
             <MeasurementsTimeline
               measurements={(recentMeasurements || []).slice(0, 10).map((m: any) => ({
@@ -536,14 +552,14 @@ export default function Dashboard() {
           ) : (
             /* Desktop Table View */
             <div className="overflow-x-auto md:block hidden">
-              <table className="w-full">
+              <table className="w-full" aria-label="Recent measurements">
               <thead>
                 <tr className="text-left text-sm font-medium text-gray-500 border-b border-gray-200">
-                  <th className="pb-3">Athlete</th>
-                  <th className="pb-3">{labels.team}</th>
-                  <th className="pb-3">Metric</th>
-                  <th className="pb-3">Value</th>
-                  <th className="pb-3">Date</th>
+                  <th className="pb-3" scope="col">Athlete</th>
+                  <th className="pb-3" scope="col">{labels.team}</th>
+                  <th className="pb-3" scope="col">Metric</th>
+                  <th className="pb-3" scope="col">Value</th>
+                  <th className="pb-3" scope="col">Date</th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -559,6 +575,7 @@ export default function Dashboard() {
                         <button
                           onClick={() => measurement.user?.id && setLocation(`/athletes/${measurement.user.id}`)}
                           className="font-medium text-gray-900 hover:text-primary cursor-pointer text-left"
+                          aria-label={`View profile for ${measurement.user?.fullName || 'athlete'}`}
                         >
                           {measurement.user?.fullName || 'Unknown'}
                         </button>
