@@ -38,7 +38,7 @@ export function AtRiskAthletesAlert({
   inactivityThreshold = 14,
 }: AtRiskAthletesAlertProps) {
   const [, setLocation] = useLocation();
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
 
   // Check localStorage on mount
