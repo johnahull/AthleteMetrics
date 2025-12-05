@@ -845,8 +845,11 @@ describe('Wellness Dashboard Routes', () => {
   let team2: any;
   let athlete1: any;
   let athlete2: any;
+  let testDate: string; // Store date to avoid timezone issues between test setup and execution
 
   beforeAll(async () => {
+    // Calculate test date once at the start to avoid midnight UTC boundary issues
+    testDate = new Date().toISOString().split('T')[0];
     // Create two teams
     const [t1] = await db.insert(teams).values({
       organizationId: testOrg.id,
@@ -984,9 +987,7 @@ describe('Wellness Dashboard Routes', () => {
     });
     createdTemplateIds.push(hooperTemplate.id);
 
-    // Create responses for today
-    const today = new Date().toISOString().split('T')[0];
-
+    // Create responses for today (using testDate to avoid timezone issues)
     // Athlete1 (Team1) - Daily Wellness: good score (4.5)
     const resp1 = await storage.createWellnessResponse({
       organizationId: testOrg.id,
@@ -996,7 +997,7 @@ describe('Wellness Dashboard Routes', () => {
       teamId: team1.id,
       teamNameSnapshot: team1.name,
       submittedAt: new Date(),
-      date: today,
+      date: testDate,
       responses: {
         sleep: { value: 5, label: 'Sleep Quality' },
         energy: { value: 4, label: 'Energy Level' },
@@ -1013,7 +1014,7 @@ describe('Wellness Dashboard Routes', () => {
       teamId: team2.id,
       teamNameSnapshot: team2.name,
       submittedAt: new Date(),
-      date: today,
+      date: testDate,
       responses: {
         sleep_hooper: { value: 2, label: 'Sleep' },
         stress: { value: 2, label: 'Stress' },
@@ -1092,11 +1093,9 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - returns templateAggregates array', async () => {
-    const today = new Date().toISOString().split('T')[0];
-
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
-      .query({ date: today })
+      .query({ date: testDate })
       .set('Cookie', coachCookie);
 
     expect(res.status).toBe(200);
@@ -1117,11 +1116,9 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - calculates correct averageScore per template', async () => {
-    const today = new Date().toISOString().split('T')[0];
-
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
-      .query({ date: today })
+      .query({ date: testDate })
       .set('Cookie', coachCookie);
 
     expect(res.status).toBe(200);
@@ -1170,11 +1167,9 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - sets correct scaleMax based on calculation method', async () => {
-    const today = new Date().toISOString().split('T')[0];
-
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
-      .query({ date: today })
+      .query({ date: testDate })
       .set('Cookie', coachCookie);
 
     expect(res.status).toBe(200);
@@ -1197,11 +1192,9 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - calculates trends per template', async () => {
-    const today = new Date().toISOString().split('T')[0];
-
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
-      .query({ date: today })
+      .query({ date: testDate })
       .set('Cookie', coachCookie);
 
     expect(res.status).toBe(200);
@@ -1238,11 +1231,9 @@ describe('Wellness Dashboard Routes', () => {
   });
 
   it('GET /api/organizations/:organizationId/wellness/dashboard - rejects unauthenticated requests', async () => {
-    const today = new Date().toISOString().split('T')[0];
-
     const res = await request(app)
       .get(`/api/organizations/${testOrg.id}/wellness/dashboard`)
-      .query({ date: today });
+      .query({ date: testDate });
 
     expect(res.status).toBe(401);
   });
