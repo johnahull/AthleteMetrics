@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, beforeAll, afterAll } from 'vitest';
 import request from 'supertest';
 import express from 'express';
 import session from 'express-session';
+import bcrypt from 'bcrypt';
 import { registerAnalyticsRoutes } from '../analytics-routes';
 import { registerDashboardTrendsRoutes } from '../dashboard-trends';
 import { registerAuthRoutes } from '../auth-routes';
@@ -50,12 +51,13 @@ describe('Dashboard Filtering - Backend Integration', () => {
       .returning();
     orgId = org.id;
 
-    // Create coach user
+    // Create coach user with hashed password
+    const hashedPassword = await bcrypt.hash('password', 10);
     const [coach] = await db
       .insert(users)
       .values({
         username: 'coach-filtering',
-        password: 'password',
+        password: hashedPassword,
         firstName: 'Coach',
         lastName: 'User',
         fullName: 'Coach User',
