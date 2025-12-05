@@ -14,6 +14,7 @@ const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 const sourceIPhone = join(rootDir, 'am-logo-iphone.png');
 const sourceAndroid = join(rootDir, 'am-logo-android.png');
+const sourceNoBrandTransparent = join(rootDir, 'attached_assets/am-mobile-nobrand-transparent.png');
 const sourceBrand = join(rootDir, 'attached_assets/am-mobile-brand-transparent.png');
 const outputDir = join(rootDir, 'packages/web/public');
 
@@ -22,32 +23,29 @@ async function generateVariants() {
   console.log('📁 Output directory:', outputDir);
   console.log('');
 
-  // Use the professional platform-specific icons
-  // These already have the proper containers and perfect sizing
-  console.log('🔧 Generating PWA icons:');
+  // Use transparent runner icon for web icons (no white background)
+  console.log('🔧 Generating web icons (transparent):');
+  console.log(`   Source: am-mobile-nobrand-transparent.png`);
 
-  // iPhone icon for iOS (already has rounded square container)
-  console.log(`   iOS Source: am-logo-iphone.png`);
-  await sharp(sourceIPhone)
+  await sharp(sourceNoBrandTransparent)
     .resize(192, 192, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 }
     })
     .png()
     .toFile(join(outputDir, 'icon-192.png'));
-  console.log(`  ✅ icon-192.png (192x192) - PWA home screen icon (iOS optimized)`);
+  console.log(`  ✅ icon-192.png (192x192) - PWA home screen icon (transparent)`);
 
-  await sharp(sourceIPhone)
+  await sharp(sourceNoBrandTransparent)
     .resize(512, 512, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 }
     })
     .png()
     .toFile(join(outputDir, 'icon-512.png'));
-  console.log(`  ✅ icon-512.png (512x512) - PWA splash screen icon (iOS optimized)`);
+  console.log(`  ✅ icon-512.png (512x512) - PWA splash screen icon (transparent)`);
 
-  // Small icon for sidebar (use iPhone version)
-  await sharp(sourceIPhone)
+  await sharp(sourceNoBrandTransparent)
     .resize(64, 64, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 }
@@ -83,12 +81,13 @@ async function generateVariants() {
   console.log('✨ All logo variants generated successfully!');
   console.log('');
   console.log('📋 Summary:');
-  console.log('  PWA icons (platform-optimized): icon-192.png, icon-512.png, logo-64.png');
+  console.log('  Web icons (transparent): icon-192.png, icon-512.png, logo-64.png');
   console.log('  Full logo (with text): logo-128.png, logo-256.png');
   console.log('');
-  console.log('ℹ️  Note: PWA icons use professionally designed platform-specific versions');
-  console.log('   - iOS: Rounded square container with perfect runner sizing');
-  console.log('   - Android: Circular container with perfect runner sizing');
+  console.log('ℹ️  Note: Web icons use transparent background for better web integration');
+  console.log('   Platform-specific icons (with white containers) are available separately:');
+  console.log('   - am-logo-iphone.png: iOS rounded square style');
+  console.log('   - am-logo-android.png: Android circular style');
 }
 
 generateVariants().catch(err => {
