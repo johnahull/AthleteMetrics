@@ -177,6 +177,11 @@ export function registerAnalyticsRoutes(app: Express) {
 
       // SECURITY: Verify athlete belongs to organization (IDOR protection)
       if (athleteId) {
+        // athleteId filtering requires organizationId
+        if (!organizationId) {
+          return res.status(400).json({ message: "organizationId is required when filtering by athleteId" });
+        }
+
         const athleteBelongsToOrg = await db
           .select({ userId: userTeams.userId })
           .from(userTeams)
@@ -407,6 +412,11 @@ export function registerAnalyticsRoutes(app: Express) {
 
       // SECURITY: Verify athlete belongs to organization (IDOR protection)
       if (athleteId) {
+        // athleteId filtering requires organizationId
+        if (!organizationId) {
+          return res.status(400).json({ message: "organizationId is required when filtering by athleteId" });
+        }
+
         const athleteBelongsToOrg = await db
           .select({ userId: userTeams.userId })
           .from(userTeams)
