@@ -3,7 +3,7 @@ import { useLocation } from 'wouter';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { BarChart3, Users, TrendingUp } from 'lucide-react';
+import { Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 export default function Welcome() {
@@ -29,13 +29,13 @@ export default function Welcome() {
         <CardContent className="pt-12 pb-8 px-8 space-y-6">
           {/* Logo/Icon */}
           <div className="flex justify-center">
-            <div
-              className="h-20 w-20 rounded-full bg-primary flex items-center justify-center"
-              aria-label="AthleteMetrics logo"
-              role="img"
-            >
-              <BarChart3 className="h-10 w-10 text-white" aria-hidden="true" />
-            </div>
+            <img
+              src="/logo-128.png"
+              alt="AthleteMetrics logo"
+              className="h-32 w-32"
+              width={128}
+              height={128}
+            />
           </div>
 
           {/* Title */}

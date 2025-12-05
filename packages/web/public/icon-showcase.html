@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AthleteMetrics Icon Showcase</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: linear-gradient(135deg, #1e3a5f 0%, #2d5a7b 50%, #1e3a5f 100%);
+      min-height: 100vh;
+      padding: 3rem 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    h1 {
+      color: white;
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      text-align: center;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+    }
+
+    .subtitle {
+      color: rgba(255,255,255,0.8);
+      font-size: 1.1rem;
+      margin-bottom: 3rem;
+      text-align: center;
+    }
+
+    .phones-container {
+      display: flex;
+      gap: 4rem;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 1600px;
+    }
+
+    .phone-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .phone-label {
+      color: white;
+      font-size: 1.3rem;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Phone Frame */
+    .phone {
+      position: relative;
+      width: 390px;
+      height: 844px;
+      background: #1a1a1a;
+      border-radius: 50px;
+      padding: 14px;
+      box-shadow:
+        0 30px 80px rgba(0,0,0,0.6),
+        0 0 0 1px rgba(255,255,255,0.1),
+        inset 0 0 0 1px rgba(255,255,255,0.05);
+    }
+
+    /* iPhone Notch (Dynamic Island) */
+    .phone.iphone::before {
+      content: '';
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 130px;
+      height: 37px;
+      background: #000;
+      border-radius: 25px;
+      z-index: 10;
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    }
+
+    /* Android Punch Hole Camera */
+    .phone.android::after {
+      content: '';
+      position: absolute;
+      top: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 14px;
+      height: 14px;
+      background: #000;
+      border-radius: 50%;
+      z-index: 10;
+      box-shadow: 0 0 0 2px #0a0a0a;
+    }
+
+    .screen {
+      width: 100%;
+      height: 100%;
+      border-radius: 40px;
+      overflow: hidden;
+      position: relative;
+      background: #000;
+    }
+
+    /* iOS Wallpaper - Purple Gradient */
+    .wallpaper-ios {
+      background: linear-gradient(135deg, #8B5CF6 0%, #EC4899 50%, #F59E0B 100%);
+      animation: gradientShift 10s ease infinite;
+    }
+
+    /* Android Wallpaper - Blue/Teal Material You */
+    .wallpaper-android {
+      background: linear-gradient(135deg, #0F172A 0%, #1E40AF 50%, #0EA5E9 100%);
+    }
+
+    @keyframes gradientShift {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+    }
+
+    /* Status Bar */
+    .status-bar {
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 25px;
+      color: white;
+      font-size: 16px;
+      font-weight: 600;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    }
+
+    .status-bar.android {
+      padding-top: 15px;
+    }
+
+    /* Home Screen Grid */
+    .home-screen {
+      padding: 20px 25px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 28px 20px;
+      align-content: start;
+    }
+
+    /* App Icon Container */
+    .app-icon {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+
+    .app-icon:hover {
+      transform: scale(1.05);
+    }
+
+    /* iOS App Icon Style - No extra container, icon already has it */
+    .icon-wrapper.ios {
+      width: 70px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-wrapper.ios img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* Android App Icon Style - No extra container, icon already has it */
+    .icon-wrapper.android {
+      width: 70px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .icon-wrapper.android img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+
+    /* App Labels */
+    .app-label {
+      color: white;
+      font-size: 12px;
+      font-weight: 500;
+      text-align: center;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      max-width: 70px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* AthleteMetrics Icon Highlight */
+    .app-icon.highlight .icon-wrapper {
+      box-shadow:
+        0 0 0 3px rgba(255,255,255,0.6),
+        0 8px 24px rgba(0,0,0,0.4);
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+    }
+
+    /* Dock */
+    .dock {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 25px;
+      padding: 15px 30px;
+      background: rgba(255,255,255,0.2);
+      backdrop-filter: blur(30px);
+      border-radius: 25px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+
+    .dock.android {
+      background: rgba(0,0,0,0.3);
+    }
+
+    .dock .icon-wrapper {
+      width: 60px;
+      height: 60px;
+    }
+
+    /* Emoji Icons for Demo Apps */
+    .emoji-icon {
+      font-size: 38px;
+    }
+  </style>
+</head>
+<body>
+  <h1>📱 AthleteMetrics App Icon</h1>
+  <p class="subtitle">See how it looks on iPhone and Android home screens</p>
+
+  <div class="phones-container">
+    <!-- iPhone -->
+    <div class="phone-wrapper">
+      <div class="phone-label">🍎 iPhone 15 Pro</div>
+      <div class="phone iphone">
+        <div class="screen wallpaper-ios">
+          <div class="status-bar">
+            <span>9:41</span>
+            <span>100% 🔋</span>
+          </div>
+
+          <div class="home-screen">
+            <!-- Row 1 -->
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">💬</div>
+              </div>
+              <div class="app-label">Messages</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">📧</div>
+              </div>
+              <div class="app-label">Mail</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">🌐</div>
+              </div>
+              <div class="app-label">Safari</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">🎵</div>
+              </div>
+              <div class="app-label">Music</div>
+            </div>
+
+            <!-- Row 2 -->
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">📷</div>
+              </div>
+              <div class="app-label">Camera</div>
+            </div>
+            <div class="app-icon highlight">
+              <div class="icon-wrapper ios">
+                <img src="icon-192.png" alt="AthleteMetrics">
+              </div>
+              <div class="app-label">AthleteMetrics</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">📊</div>
+              </div>
+              <div class="app-label">Health</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">⚙️</div>
+              </div>
+              <div class="app-label">Settings</div>
+            </div>
+
+            <!-- Row 3 -->
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">🗺️</div>
+              </div>
+              <div class="app-label">Maps</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">☁️</div>
+              </div>
+              <div class="app-label">Weather</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">📅</div>
+              </div>
+              <div class="app-label">Calendar</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper ios">
+                <div class="emoji-icon">📝</div>
+              </div>
+              <div class="app-label">Notes</div>
+            </div>
+          </div>
+
+          <div class="dock">
+            <div class="icon-wrapper ios">
+              <div class="emoji-icon">☎️</div>
+            </div>
+            <div class="icon-wrapper ios">
+              <div class="emoji-icon">💬</div>
+            </div>
+            <div class="icon-wrapper ios">
+              <div class="emoji-icon">🌐</div>
+            </div>
+            <div class="icon-wrapper ios">
+              <div class="emoji-icon">🎵</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Android -->
+    <div class="phone-wrapper">
+      <div class="phone-label">🤖 Google Pixel 8</div>
+      <div class="phone android">
+        <div class="screen wallpaper-android">
+          <div class="status-bar android">
+            <span>10:30</span>
+            <span>🔋 Wi-Fi 📶</span>
+          </div>
+
+          <div class="home-screen">
+            <!-- Row 1 -->
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">💬</div>
+              </div>
+              <div class="app-label">Messages</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">✉️</div>
+              </div>
+              <div class="app-label">Gmail</div>
+            </div>
+            <div class="app-icon highlight">
+              <div class="icon-wrapper android">
+                <img src="icon-android.png" alt="AthleteMetrics">
+              </div>
+              <div class="app-label">AthleteMetrics</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">🌐</div>
+              </div>
+              <div class="app-label">Chrome</div>
+            </div>
+
+            <!-- Row 2 -->
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">📷</div>
+              </div>
+              <div class="app-label">Camera</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">▶️</div>
+              </div>
+              <div class="app-label">YouTube</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">🗺️</div>
+              </div>
+              <div class="app-label">Maps</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">⚙️</div>
+              </div>
+              <div class="app-label">Settings</div>
+            </div>
+
+            <!-- Row 3 -->
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">📁</div>
+              </div>
+              <div class="app-label">Files</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">☁️</div>
+              </div>
+              <div class="app-label">Weather</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">📅</div>
+              </div>
+              <div class="app-label">Calendar</div>
+            </div>
+            <div class="app-icon">
+              <div class="icon-wrapper android">
+                <div class="emoji-icon">🎵</div>
+              </div>
+              <div class="app-label">Spotify</div>
+            </div>
+          </div>
+
+          <div class="dock android">
+            <div class="icon-wrapper android">
+              <div class="emoji-icon">☎️</div>
+            </div>
+            <div class="icon-wrapper android">
+              <div class="emoji-icon">💬</div>
+            </div>
+            <div class="icon-wrapper android">
+              <div class="emoji-icon">🌐</div>
+            </div>
+            <div class="icon-wrapper android">
+              <div class="emoji-icon">📷</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
