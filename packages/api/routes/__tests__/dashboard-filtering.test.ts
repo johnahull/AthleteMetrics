@@ -272,7 +272,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
   describe('GET /api/analytics/dashboard - Athlete Scope', () => {
     it('should return stats filtered by athleteId', async () => {
       const res = await request(app)
-        .get(`/api/analytics/dashboard?organizationId=${orgId}&athleteId=${athlete1Id}`)
+        .get(`/api/analytics/dashboard?organizationId=${orgId}&teamId=${team1Id}&athleteId=${athlete1Id}`)
         .set('Cookie', sessionCookie)
         .expect(200);
 
@@ -287,7 +287,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
 
     it('should not return measurements from other athletes', async () => {
       const res = await request(app)
-        .get(`/api/analytics/dashboard?organizationId=${orgId}&athleteId=${athlete2Id}`)
+        .get(`/api/analytics/dashboard?organizationId=${orgId}&teamId=${team1Id}&athleteId=${athlete2Id}`)
         .set('Cookie', sessionCookie)
         .expect(200);
 
@@ -339,7 +339,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
   describe('GET /api/dashboard/trends - Athlete Scope', () => {
     it('should return trends filtered by athleteId', async () => {
       const res = await request(app)
-        .get(`/api/dashboard/trends?organizationId=${orgId}&athleteId=${athlete1Id}`)
+        .get(`/api/dashboard/trends?organizationId=${orgId}&teamId=${team1Id}&athleteId=${athlete1Id}`)
         .set('Cookie', sessionCookie)
         .expect(200);
 
@@ -405,11 +405,15 @@ describe('Dashboard Filtering - Backend Integration', () => {
         .expect(400);
     });
 
-    it('should handle missing organizationId gracefully', async () => {
-      await request(app)
+    it('should use primaryOrganizationId when organizationId is missing', async () => {
+      // When organizationId is not provided, the API uses user's primaryOrganizationId
+      const res = await request(app)
         .get('/api/analytics/dashboard')
         .set('Cookie', sessionCookie)
-        .expect(400);
+        .expect(200);
+
+      // Should return data for coach's primary organization
+      expect(res.body).toHaveProperty('totalAthletes');
     });
   });
 });
