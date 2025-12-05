@@ -124,9 +124,8 @@ describe('DashboardTimeframeFilter', () => {
         expect(buttonTexts).toContain('Last 7 Days');
         expect(buttonTexts).toContain('Last 30 Days');
         expect(buttonTexts).toContain('Last 90 Days');
-        expect(buttonTexts).toContain('Month to Date');
-        expect(buttonTexts).toContain('Last Month');
-        expect(buttonTexts).toContain('Quarter to Date');
+        expect(buttonTexts).toContain('Last 180 Days');
+        expect(buttonTexts).toContain('Last Year');
         expect(buttonTexts).toContain('Year to Date');
         expect(buttonTexts).toContain('All Time');
         expect(buttonTexts).toContain('Custom Range...');
@@ -149,7 +148,7 @@ describe('DashboardTimeframeFilter', () => {
       await waitFor(() => {
         // Find all buttons in the popover
         const buttons = screen.getAllByRole('button');
-        const selectedOption = buttons.find(b => b.textContent === 'Quarter to Date');
+        const selectedOption = buttons.find(b => b.textContent === 'Last 180 Days');
         expect(selectedOption).toBeInTheDocument();
         // Check icon should be present and visible (not opacity-0)
         const checkIcons = selectedOption?.querySelectorAll('svg');
