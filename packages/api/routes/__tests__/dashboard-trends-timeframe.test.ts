@@ -205,23 +205,6 @@ describe("GET /api/dashboard/trends - Timeframe Filter", () => {
       expect(response.body.measurements.current).toBe(30);
     });
 
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('measurements');
-      // Should count measurements from first day of current month to today
-    });
-
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('measurements');
-      // Should count measurements from last month
-    });
-
-
-      expect(response.status).toBe(200);
-      expect(response.body).toHaveProperty('measurements');
-    });
-
     it("should accept timeframe=ytd (year to date)", async () => {
       const response = await request(app)
         .get("/api/dashboard/trends")

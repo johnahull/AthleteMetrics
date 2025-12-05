@@ -146,6 +146,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
         value: '1.00',
         date: today,
         isVerified: true,
+        submittedBy: coachUserId,
       },
       {
         userId: athlete2Id,
@@ -154,6 +155,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
         value: '30',
         date: today,
         isVerified: true,
+        submittedBy: coachUserId,
       },
       // Team B measurements
       {
@@ -163,6 +165,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
         value: '1.10',
         date: yesterday,
         isVerified: true,
+        submittedBy: coachUserId,
       },
     ]);
 

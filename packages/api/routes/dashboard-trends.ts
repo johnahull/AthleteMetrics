@@ -228,7 +228,23 @@ export function registerDashboardTrendsRoutes(app: Express) {
       // Get athlete IDs based on filter scope
       let athleteIds: string[];
       if (athleteId) {
-        // Filter to specific athlete
+        // SECURITY: Verify athlete belongs to the organization (IDOR protection)
+        const athleteBelongsToOrg = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              eq(userTeams.userId, athleteId),
+              eq(teams.organizationId, organizationId)
+            )
+          )
+          .limit(1);
+
+        if (athleteBelongsToOrg.length === 0) {
+          return res.status(403).json({ message: "Access denied - athlete does not belong to organization" });
+        }
+
         athleteIds = [athleteId];
       } else if (teamId) {
         // Verify team belongs to the organization (IDOR protection)

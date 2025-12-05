@@ -15,12 +15,15 @@ export async function getAthleteIdsForScope(
 ): Promise<string[]> {
   if (teamId) {
     // Get athletes for specific team
+    // SECURITY: Must verify team belongs to organization to prevent IDOR
     const teamAthletes = await db
       .select({ userId: userTeams.userId })
       .from(userTeams)
+      .innerJoin(teams, eq(userTeams.teamId, teams.id))
       .where(
         and(
           eq(userTeams.teamId, teamId),
+          eq(teams.organizationId, organizationId),
           eq(userTeams.isActive, true)
         )
       );
