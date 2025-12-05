@@ -125,7 +125,7 @@ describe('DashboardTimeframeFilter', () => {
         expect(buttonTexts).toContain('Last 30 Days');
         expect(buttonTexts).toContain('Last 90 Days');
         expect(buttonTexts).toContain('Last 180 Days');
-        expect(buttonTexts).toContain('Last Year');
+        expect(buttonTexts).toContain('Last 1 Year');
         expect(buttonTexts).toContain('Year to Date');
         expect(buttonTexts).toContain('All Time');
         expect(buttonTexts).toContain('Custom Range...');

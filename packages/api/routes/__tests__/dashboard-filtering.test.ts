@@ -4,6 +4,7 @@ import express from 'express';
 import session from 'express-session';
 import { registerAnalyticsRoutes } from '../analytics-routes';
 import { registerDashboardTrendsRoutes } from '../dashboard-trends';
+import { registerAuthRoutes } from '../auth-routes';
 import { db } from '../../db';
 import { users, teams, measurements, userTeams, organizations } from '@shared/schema';
 import { eq } from 'drizzle-orm';
@@ -22,6 +23,7 @@ app.use(
 );
 
 // Register routes
+registerAuthRoutes(app);
 registerAnalyticsRoutes(app);
 registerDashboardTrendsRoutes(app);
 
