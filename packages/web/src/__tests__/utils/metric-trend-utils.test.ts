@@ -7,9 +7,9 @@ import {
   calculateMetricTrend,
   getSparklineData,
   getBestValue,
-  isLowerIsBetter,
   type TrendDirection,
 } from '@/utils/metric-trend-utils';
+import { isLowerBetter as isLowerIsBetter } from '@/constants/metrics';
 
 describe('metric-trend-utils', () => {
   describe('isLowerIsBetter', () => {

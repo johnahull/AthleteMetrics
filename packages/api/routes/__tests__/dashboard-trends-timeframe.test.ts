@@ -2,7 +2,7 @@
  * Integration tests for timeframe filter on GET /api/dashboard/trends endpoint
  *
  * Test coverage:
- * - Accepts timeframe preset (7d, 30d, 90d, mtd, lm, qtd, ytd, all)
+ * - Accepts timeframe preset (7d, 30d, 90d, 180d, 1y, ytd, all)
  * - Accepts custom dateFrom/dateTo
  * - Defaults to last 30 days when no timeframe specified (backward compat)
  * - Calculates rolling comparison correctly (prior period = same duration before current)
@@ -205,39 +205,18 @@ describe("GET /api/dashboard/trends - Timeframe Filter", () => {
       expect(response.body.measurements.current).toBe(30);
     });
 
-    it("should accept timeframe=mtd (month to date)", async () => {
-      const response = await request(app)
-        .get("/api/dashboard/trends")
-        .query({
-          organizationId: testOrgId,
-          timeframe: 'mtd'
-        });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('measurements');
       // Should count measurements from first day of current month to today
     });
 
-    it("should accept timeframe=lm (last month)", async () => {
-      const response = await request(app)
-        .get("/api/dashboard/trends")
-        .query({
-          organizationId: testOrgId,
-          timeframe: 'lm'
-        });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('measurements');
       // Should count measurements from last month
     });
 
-    it("should accept timeframe=qtd (quarter to date)", async () => {
-      const response = await request(app)
-        .get("/api/dashboard/trends")
-        .query({
-          organizationId: testOrgId,
-          timeframe: 'qtd'
-        });
 
       expect(response.status).toBe(200);
       expect(response.body).toHaveProperty('measurements');

@@ -18,15 +18,14 @@ describe('Dashboard Timeframe Utilities', () => {
   describe('TIMEFRAME_PRESETS constant', () => {
     it('should export all preset options', () => {
       expect(TIMEFRAME_PRESETS).toBeDefined();
-      expect(TIMEFRAME_PRESETS).toHaveLength(9); // 8 presets + custom
+      expect(TIMEFRAME_PRESETS).toHaveLength(8); // 7 presets + custom
 
       const presetValues = TIMEFRAME_PRESETS.map(p => p.value);
       expect(presetValues).toContain('7d');
       expect(presetValues).toContain('30d');
       expect(presetValues).toContain('90d');
-      expect(presetValues).toContain('mtd');
-      expect(presetValues).toContain('lm');
-      expect(presetValues).toContain('qtd');
+      expect(presetValues).toContain('180d');
+      expect(presetValues).toContain('1y');
       expect(presetValues).toContain('ytd');
       expect(presetValues).toContain('all');
       expect(presetValues).toContain('custom');
@@ -37,9 +36,8 @@ describe('Dashboard Timeframe Utilities', () => {
       expect(labels).toContain('Last 7 Days');
       expect(labels).toContain('Last 30 Days');
       expect(labels).toContain('Last 90 Days');
-      expect(labels).toContain('Month to Date');
-      expect(labels).toContain('Last Month');
-      expect(labels).toContain('Quarter to Date');
+      expect(labels).toContain('Last 180 Days');
+      expect(labels).toContain('Last 1 Year');
       expect(labels).toContain('Year to Date');
       expect(labels).toContain('All Time');
       expect(labels).toContain('Custom Range');
@@ -71,30 +69,18 @@ describe('Dashboard Timeframe Utilities', () => {
       expect(range.start.toISOString().split('T')[0]).toBe('2024-08-31');
     });
 
-    it('should calculate Month to Date correctly', () => {
-      const range = getPresetDateRange('mtd');
+    it('should calculate Last 180 Days correctly', () => {
+      const range = getPresetDateRange('180d');
 
-      // End date should be today
       expect(range.end.toISOString().split('T')[0]).toBe('2024-11-29');
-
-      // Start date should be first day of current month
-      expect(range.start.toISOString().split('T')[0]).toBe('2024-11-01');
+      expect(range.start.toISOString().split('T')[0]).toBe('2024-06-02');
     });
 
-    it('should calculate Last Month correctly', () => {
-      const range = getPresetDateRange('lm');
+    it('should calculate Last 1 Year correctly', () => {
+      const range = getPresetDateRange('1y');
 
-      // For November 2024, last month is October 2024
-      expect(range.start.toISOString().split('T')[0]).toBe('2024-10-01');
-      expect(range.end.toISOString().split('T')[0]).toBe('2024-10-31');
-    });
-
-    it('should calculate Quarter to Date correctly', () => {
-      const range = getPresetDateRange('qtd');
-
-      // Q4 2024 started on Oct 1
-      expect(range.start.toISOString().split('T')[0]).toBe('2024-10-01');
       expect(range.end.toISOString().split('T')[0]).toBe('2024-11-29');
+      expect(range.start.toISOString().split('T')[0]).toBe('2023-11-29');
     });
 
     it('should calculate Year to Date correctly', () => {
@@ -110,37 +96,6 @@ describe('Dashboard Timeframe Utilities', () => {
       // Start date should be earliest date (2020-01-01)
       expect(range.start.toISOString().split('T')[0]).toBe('2020-01-01');
       expect(range.end.toISOString().split('T')[0]).toBe('2024-11-29');
-    });
-
-    it('should handle quarter boundaries correctly', () => {
-      // Test Q1 (Jan-Mar)
-      vi.setSystemTime(new Date('2024-02-15T12:00:00Z'));
-      const q1Range = getPresetDateRange('qtd');
-      expect(q1Range.start.toISOString().split('T')[0]).toBe('2024-01-01');
-
-      // Test Q2 (Apr-Jun)
-      vi.setSystemTime(new Date('2024-05-15T12:00:00Z'));
-      const q2Range = getPresetDateRange('qtd');
-      expect(q2Range.start.toISOString().split('T')[0]).toBe('2024-04-01');
-
-      // Test Q3 (Jul-Sep)
-      vi.setSystemTime(new Date('2024-08-15T12:00:00Z'));
-      const q3Range = getPresetDateRange('qtd');
-      expect(q3Range.start.toISOString().split('T')[0]).toBe('2024-07-01');
-    });
-
-    it('should handle Last Month edge cases', () => {
-      // January (previous month is December of previous year)
-      vi.setSystemTime(new Date('2024-01-15T12:00:00Z'));
-      const decRange = getPresetDateRange('lm');
-      expect(decRange.start.toISOString().split('T')[0]).toBe('2023-12-01');
-      expect(decRange.end.toISOString().split('T')[0]).toBe('2023-12-31');
-
-      // March (last month has 29 days in leap year)
-      vi.setSystemTime(new Date('2024-03-15T12:00:00Z'));
-      const febRange = getPresetDateRange('lm');
-      expect(febRange.start.toISOString().split('T')[0]).toBe('2024-02-01');
-      expect(febRange.end.toISOString().split('T')[0]).toBe('2024-02-29');
     });
   });
 
@@ -294,7 +249,7 @@ describe('Dashboard Timeframe Utilities', () => {
 
   describe('Type Safety', () => {
     it('should only accept valid TimeframePreset values', () => {
-      const validPresets: TimeframePreset[] = ['7d', '30d', '90d', 'mtd', 'lm', 'qtd', 'ytd', 'all'];
+      const validPresets: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd', 'all'];
 
       validPresets.forEach(preset => {
         expect(() => getPresetDateRange(preset)).not.toThrow();
