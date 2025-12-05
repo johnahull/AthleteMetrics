@@ -1066,55 +1066,36 @@ export class AnalyticsService {
 
     const decliningPerformances = await db.execute(decliningQuery) as any[];
 
-    // PART 2: Detect inactive athletes
-    const inactivityDate = new Date();
-    inactivityDate.setDate(inactivityDate.getDate() - inactivityThreshold);
-
-    // Get last measurement date for each athlete
-    const lastMeasurements = await db
-      .select({
-        athleteId: measurements.userId,
-        lastDate: sql<string>`MAX(${measurements.date})::text`,
-      })
-      .from(measurements)
-      .where(
-        and(
-          inArray(measurements.userId, athleteIds),
-          eq(measurements.isVerified, true)
-        )
-      )
-      .groupBy(measurements.userId);
-
-    const inactiveAthletes: Array<{
+    // PART 2: Detect inactive athletes using SQL
+    // Use SQL to calculate inactivity directly in database
+    const inactivityQuery = sql<{
       athleteId: string;
       lastMeasurementDate: string;
       daysSinceLastMeasurement: number;
-    }> = [];
+    }>`
+      WITH athlete_last_measurement AS (
+        SELECT
+          user_id as athlete_id,
+          MAX(date) as last_date,
+          EXTRACT(DAY FROM CURRENT_DATE - MAX(date))::int as days_since
+        FROM measurements
+        WHERE user_id = ANY(${athleteIds})
+          AND is_verified = true
+        GROUP BY user_id
+      ),
+      all_athletes AS (
+        SELECT unnest(${athleteIds}::text[]) as athlete_id
+      )
+      SELECT
+        a.athlete_id::text as "athleteId",
+        COALESCE(alm.last_date::text, '') as "lastMeasurementDate",
+        COALESCE(alm.days_since, 999) as "daysSinceLastMeasurement"
+      FROM all_athletes a
+      LEFT JOIN athlete_last_measurement alm ON a.athlete_id = alm.athlete_id
+      WHERE COALESCE(alm.days_since, 999) >= ${inactivityThreshold}
+    `;
 
-    lastMeasurements.forEach(m => {
-      const lastDate = new Date(m.lastDate);
-      const daysSince = Math.floor((Date.now() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
-
-      if (daysSince >= inactivityThreshold) {
-        inactiveAthletes.push({
-          athleteId: m.athleteId,
-          lastMeasurementDate: m.lastDate,
-          daysSinceLastMeasurement: daysSince,
-        });
-      }
-    });
-
-    // Athletes with no measurements at all
-    const athletesWithMeasurements = new Set(lastMeasurements.map(m => m.athleteId));
-    athleteIds.forEach(athleteId => {
-      if (!athletesWithMeasurements.has(athleteId)) {
-        inactiveAthletes.push({
-          athleteId,
-          lastMeasurementDate: '',
-          daysSinceLastMeasurement: 999, // Arbitrary large number for never measured
-        });
-      }
-    });
+    const inactiveAthletes = await db.execute(inactivityQuery) as any[];
 
     // Get athlete info
     const allAtRiskAthleteIds = [

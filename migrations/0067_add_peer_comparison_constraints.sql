@@ -18,6 +18,7 @@ BEGIN
   END IF;
 END $$;
 
+-- Add minimum sample size constraint
 DO $$
 BEGIN
   IF NOT EXISTS (

@@ -37,13 +37,13 @@ describe('DashboardScopeSelector', () => {
 
     // Default fetch mock
     (global.fetch as any).mockImplementation((url: string) => {
-      if (url.includes('/api/teams')) {
+      if (url.includes('/api/teams?organizationId=')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockTeams),
         });
       }
-      if (url.includes('/api/users?teamId=')) {
+      if (url.includes('/api/teams/') && url.includes('/members')) {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockAthletes),
@@ -182,7 +182,7 @@ describe('DashboardScopeSelector', () => {
 
       await waitFor(() => {
         expect(global.fetch).toHaveBeenCalledWith(
-          expect.stringContaining('/api/users?teamId=team-1'),
+          expect.stringContaining('/api/teams/team-1/members'),
           expect.any(Object)
         );
       });
@@ -258,13 +258,13 @@ describe('DashboardScopeSelector', () => {
 
       // Mock empty athletes array
       (global.fetch as any).mockImplementation((url: string) => {
-        if (url.includes('/api/teams')) {
+        if (url.includes('/api/teams?organizationId=')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve(mockTeams),
           });
         }
-        if (url.includes('/api/users?teamId=')) {
+        if (url.includes('/api/teams/') && url.includes('/members')) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve([]),
