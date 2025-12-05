@@ -55,6 +55,21 @@ async function generateVariants() {
   console.log(`  ✅ logo-64.png (64x64) - Small icon (sidebar)`);
 
   console.log('');
+  console.log('🔧 Generating platform mockup icons (for showcase only):');
+  console.log(`   iOS Source: am-logo-iphone.png`);
+  console.log(`   Android Source: am-logo-android.png`);
+
+  // Copy platform-specific icons for the showcase mockup
+  await sharp(sourceAndroid)
+    .resize(70, 70, {
+      fit: 'contain',
+      background: { r: 0, g: 0, b: 0, alpha: 0 }
+    })
+    .png()
+    .toFile(join(outputDir, 'icon-android.png'));
+  console.log(`  ✅ icon-android.png (70x70) - Android mockup icon (showcase only)`);
+
+  console.log('');
   console.log('🔧 Generating full logo variants (with text):');
   console.log(`   Source: am-mobile-brand-transparent.png`);
 
