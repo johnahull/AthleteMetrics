@@ -9,21 +9,21 @@ import { useAuth } from "@/lib/auth";
 import { OAuthButtons } from "./oauth-buttons";
 
 interface LoginFormData {
-  email: string;
+  username: string;  // Can be username or email - backend accepts both
   password: string;
   mfaToken?: string;
   rememberMe: boolean;
 }
 
 interface LoginError {
-  type: 'general' | 'email' | 'password' | 'mfa' | 'locked';
+  type: 'general' | 'username' | 'password' | 'mfa' | 'locked';
   message: string;
   lockUntil?: string;
 }
 
 export function EnhancedLoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
-    email: '',
+    username: '',
     password: '',
     rememberMe: false
   });
@@ -92,31 +92,35 @@ export function EnhancedLoginForm() {
     };
   }, [lockTimeRemaining]);
 
-  const validateEmail = (email: string): string => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) return 'Email is required';
-    if (!emailRegex.test(email)) return 'Please enter a valid email address';
-    
-    // Generate domain suggestions for common typos
-    const domain = email.split('@')[1];
-    if (domain) {
-      const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
-      const suggestions = commonDomains
-        .filter(d => {
-          // Check for similar domains (edit distance of 1-2)
-          const distance = getLevenshteinDistance(domain.toLowerCase(), d);
-          return distance > 0 && distance <= 2;
-        })
-        .slice(0, 2); // Limit to 2 suggestions
+  const validateUsername = (username: string): string => {
+    if (!username) return 'Username or email is required';
+    if (username.length < 3) return 'Please enter at least 3 characters';
 
-      if (suggestions.length > 0) {
-        const emailPrefix = email.split('@')[0];
-        setEmailSuggestions(suggestions.map(d => `${emailPrefix}@${d}`));
-      } else {
-        setEmailSuggestions([]);
+    // If it looks like an email, check for typos in common domains
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(username)) {
+      const domain = username.split('@')[1];
+      if (domain) {
+        const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
+        const suggestions = commonDomains
+          .filter(d => {
+            // Check for similar domains (edit distance of 1-2)
+            const distance = getLevenshteinDistance(domain.toLowerCase(), d);
+            return distance > 0 && distance <= 2;
+          })
+          .slice(0, 2); // Limit to 2 suggestions
+
+        if (suggestions.length > 0) {
+          const emailPrefix = username.split('@')[0];
+          setEmailSuggestions(suggestions.map(d => `${emailPrefix}@${d}`));
+        } else {
+          setEmailSuggestions([]);
+        }
       }
+    } else {
+      setEmailSuggestions([]);
     }
-    
+
     return '';
   };
 
@@ -156,10 +160,10 @@ export function EnhancedLoginForm() {
     setIsLoading(true);
     setError(null);
 
-    // Validate email
-    const emailError = validateEmail(formData.email);
-    if (emailError) {
-      setError({ type: 'email', message: emailError });
+    // Validate username/email
+    const usernameError = validateUsername(formData.username);
+    if (usernameError) {
+      setError({ type: 'username', message: usernameError });
       setIsLoading(false);
       return;
     }
@@ -191,9 +195,9 @@ export function EnhancedLoginForm() {
       if (result.requiresMFA && step === 'credentials') {
         setStep('mfa');
         setError(null);
-      } else if (result.success) {
-        // Since we already authenticated successfully, just redirect
-        // The session is handled server-side
+      } else if (result.user) {
+        // Login successful - backend returns user object on success
+        // Redirect based on backend-provided URL or default to dashboard
         window.location.href = result.redirectUrl || '/dashboard';
       } else {
         // Handle various error types
@@ -236,7 +240,7 @@ export function EnhancedLoginForm() {
   };
 
   const handleEmailSuggestionClick = (suggestion: string) => {
-    setFormData(prev => ({ ...prev, email: suggestion }));
+    setFormData(prev => ({ ...prev, username: suggestion }));
     setEmailSuggestions([]);
   };
 
@@ -273,27 +277,27 @@ export function EnhancedLoginForm() {
           {step === 'credentials' && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="email">Email or Username</Label>
+                <Label htmlFor="username">Username or Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
+                    id="username"
+                    type="text"
+                    value={formData.username}
                     onChange={(e) => {
-                      setFormData(prev => ({ ...prev, email: e.target.value }));
-                      validateEmail(e.target.value);
-                      if (error?.type === 'email') setError(null);
+                      setFormData(prev => ({ ...prev, username: e.target.value }));
+                      validateUsername(e.target.value);
+                      if (error?.type === 'username') setError(null);
                     }}
-                    className={`pl-10 ${error?.type === 'email' ? 'border-red-500' : ''}`}
-                    placeholder="Enter your email or username"
+                    className={`pl-10 ${error?.type === 'username' ? 'border-red-500' : ''}`}
+                    placeholder="Enter your username or email"
                     disabled={isLoading}
-                    autoComplete="email"
+                    autoComplete="username"
                     required
-                    data-testid="input-email"
+                    data-testid="input-username"
                   />
                 </div>
-                {error?.type === 'email' && (
+                {error?.type === 'username' && (
                   <p className="text-sm text-red-600 flex items-center gap-1">
                     <AlertCircle className="h-4 w-4" />
                     {error.message}
@@ -427,7 +431,7 @@ export function EnhancedLoginForm() {
             </>
           )}
 
-          {error && !['email', 'password', 'mfa'].includes(error.type) && (
+          {error && !['username', 'password', 'mfa'].includes(error.type) && (
             <Alert variant={error.type === 'locked' ? 'destructive' : 'destructive'}>
               <div className="flex items-start gap-2">
                 {error.type === 'locked' ? (
