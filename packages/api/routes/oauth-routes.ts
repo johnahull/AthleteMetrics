@@ -52,13 +52,28 @@ export function registerOAuthRoutes(app: Express) {
 
     /**
      * Google OAuth - Callback
+     * Uses custom callback to handle account linking scenario separately from failures
      */
-    app.get('/api/auth/google/callback',
-      passport.authenticate('google', { failureRedirect: '/login?error=oauth_failed' }),
-      async (req, res) => {
+    app.get('/api/auth/google/callback', (req, res, next) => {
+      passport.authenticate('google', async (err: any, oauthResult: any, info: any) => {
         try {
-          const oauthResult = req.user as any;
+          // Handle account linking scenario (not a failure - just needs email confirmation)
+          if (err && err.message === 'LINKING_REQUIRED') {
+            return res.redirect('/login?message=linking_email_sent');
+          }
 
+          // Handle other authentication errors
+          if (err) {
+            console.error('Google OAuth error:', err);
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          // No result means authentication failed
+          if (!oauthResult) {
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          // Handle linking scenario from result (backup check)
           if (!oauthResult.success) {
             if (oauthResult.requiresLinking) {
               return res.redirect('/login?message=linking_email_sent');
@@ -98,8 +113,8 @@ export function registerOAuthRoutes(app: Express) {
           console.error('Google OAuth callback error:', error);
           res.redirect('/login?error=oauth_failed');
         }
-      }
-    );
+      })(req, res, next);
+    });
   }
 
   // Apple OAuth routes (only if Apple is enabled)
@@ -116,13 +131,28 @@ export function registerOAuthRoutes(app: Express) {
 
     /**
      * Apple Sign In - Callback
+     * Uses custom callback to handle account linking scenario separately from failures
      */
-    app.post('/api/auth/apple/callback',
-      passport.authenticate('apple', { failureRedirect: '/login?error=oauth_failed' }),
-      async (req, res) => {
+    app.post('/api/auth/apple/callback', (req, res, next) => {
+      passport.authenticate('apple', async (err: any, oauthResult: any, info: any) => {
         try {
-          const oauthResult = req.user as any;
+          // Handle account linking scenario (not a failure - just needs email confirmation)
+          if (err && err.message === 'LINKING_REQUIRED') {
+            return res.redirect('/login?message=linking_email_sent');
+          }
 
+          // Handle other authentication errors
+          if (err) {
+            console.error('Apple OAuth error:', err);
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          // No result means authentication failed
+          if (!oauthResult) {
+            return res.redirect('/login?error=oauth_failed');
+          }
+
+          // Handle linking scenario from result (backup check)
           if (!oauthResult.success) {
             if (oauthResult.requiresLinking) {
               return res.redirect('/login?message=linking_email_sent');
@@ -158,8 +188,8 @@ export function registerOAuthRoutes(app: Express) {
           console.error('Apple OAuth callback error:', error);
           res.redirect('/login?error=oauth_failed');
         }
-      }
-    );
+      })(req, res, next);
+    });
   }
 
   /**

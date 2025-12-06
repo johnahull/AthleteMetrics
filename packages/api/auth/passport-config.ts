@@ -46,6 +46,19 @@ export function configurePassport() {
     }, async (accessToken, refreshToken, profile, done) => {
       try {
         const result = await oauthService.handleGoogleAuth(profile);
+
+        // If linking is required, we need to fail authentication gracefully
+        // and pass the info via a custom error that the callback can handle
+        if (!result.success) {
+          if (result.requiresLinking) {
+            // Pass linking info as error - this bypasses serialization
+            const linkingError = new Error('LINKING_REQUIRED') as any;
+            linkingError.requiresLinking = true;
+            return done(linkingError, false);
+          }
+          return done(new Error(result.error || 'OAuth authentication failed'), false);
+        }
+
         done(null, result);
       } catch (error) {
         done(error, false);
@@ -66,7 +79,20 @@ export function configurePassport() {
     }, (accessToken: string, refreshToken: string, idToken: string, appleProfile: any, done: any) => {
       // Note: Apple strategy doesn't support async/await in verify callback
       oauthService.handleAppleAuth(appleProfile)
-        .then((result) => done(null, result))
+        .then((result) => {
+          // If linking is required, we need to fail authentication gracefully
+          // and pass the info via a custom error that the callback can handle
+          if (!result.success) {
+            if (result.requiresLinking) {
+              // Pass linking info as error - this bypasses serialization
+              const linkingError = new Error('LINKING_REQUIRED') as any;
+              linkingError.requiresLinking = true;
+              return done(linkingError, false);
+            }
+            return done(new Error(result.error || 'OAuth authentication failed'), false);
+          }
+          done(null, result);
+        })
         .catch((error) => done(error, false));
     }));
   }
