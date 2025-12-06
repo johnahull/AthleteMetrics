@@ -142,8 +142,8 @@ export class UserService extends BaseService {
         throw new Error("User not found");
       }
 
-      // Verify current password (skip for invitation pending)
-      if (user.password !== INVITATION_PENDING_PASSWORD) {
+      // Verify current password (skip for invitation pending and OAuth-only accounts)
+      if (user.password && user.password !== INVITATION_PENDING_PASSWORD) {
         const isValidPassword = await bcrypt.compare(currentPassword, user.password);
         if (!isValidPassword) {
           throw new Error("Current password is incorrect");

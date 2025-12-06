@@ -91,6 +91,11 @@ const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-
 const GlobalAthletes = React.lazy(() => import("./pages/global-athletes"));
 const GlobalAthleteDetail = React.lazy(() => import("./pages/global-athlete-detail"));
 
+// Lazy load membership request pages
+const JoinOrganization = React.lazy(() => import("./pages/join-organization"));
+const JoinByCode = React.lazy(() => import("./pages/join-by-code"));
+const MyRequests = React.lazy(() => import("./pages/my-requests"));
+
 function Router() {
   return (
     <Switch>
@@ -124,6 +129,21 @@ function Router() {
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <VerifyEmail />
         </Suspense>
+      </Route>
+      <Route path="/join/:code">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinByCode />
+        </Suspense>
+      </Route>
+      <Route path="/join">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinOrganization />
+        </Suspense>
+      </Route>
+      <Route path="/my-requests">
+        <RouteWrapper loadingText="Loading Requests...">
+          <MyRequests />
+        </RouteWrapper>
       </Route>
       <Route path="/public/reports/:token">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>

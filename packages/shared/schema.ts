@@ -39,6 +39,11 @@ export const organizations = pgTable("organizations", {
   aiEnabled: boolean("ai_enabled").default(false).notNull(),
   // Wellness module feature flag (added in migration 0054)
   wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
+  // Membership request feature flags (added in migration 0069)
+  joinCode: varchar("join_code", { length: 20 }).unique(),
+  isPublicDirectory: boolean("is_public_directory").default(false).notNull(),
+  allowMembershipRequests: boolean("allow_membership_requests").default(true).notNull(),
+  autoApproveRequests: boolean("auto_approve_requests").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -396,6 +401,31 @@ export const invitations = pgTable("invitations", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Membership request status enum
+export const membershipRequestStatusEnum = ['pending', 'approved', 'rejected', 'cancelled'] as const;
+export const membershipRequestDiscoveryMethodEnum = ['join_code', 'directory', 'direct_link'] as const;
+
+// Membership requests - athlete-initiated requests to join organizations
+export const membershipRequests = pgTable("membership_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  status: text("status", { enum: membershipRequestStatusEnum }).default('pending').notNull(),
+  requestedRole: text("requested_role").default('athlete').notNull(),
+  discoveryMethod: text("discovery_method", { enum: membershipRequestDiscoveryMethodEnum }),
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: 'set null' }),
+  processedAt: timestamp("processed_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  // Prevent duplicate pending requests
+  uniquePendingRequest: sql`CREATE UNIQUE INDEX IF NOT EXISTS membership_requests_unique_pending ON ${table} (${table.userId}, ${table.organizationId}) WHERE ${table.status} = 'pending'`,
+  // Performance indexes
+  orgStatusIdx: index("membership_requests_org_status_idx").on(table.organizationId, table.status),
+  userIdx: index("membership_requests_user_idx").on(table.userId),
+}));
+
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
@@ -620,6 +650,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   teams: many(teams),
   userOrganizations: many(userOrganizations),
   invitations: many(invitations),
+  membershipRequests: many(membershipRequests),
   organizationMetrics: many(organizationMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
@@ -715,6 +746,21 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
   player: one(users, {
     fields: [invitations.playerId],
+    references: [users.id],
+  }),
+}));
+
+export const membershipRequestsRelations = relations(membershipRequests, ({ one }) => ({
+  user: one(users, {
+    fields: [membershipRequests.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [membershipRequests.organizationId],
+    references: [organizations.id],
+  }),
+  processedByUser: one(users, {
+    fields: [membershipRequests.processedBy],
     references: [users.id],
   }),
 }));
@@ -2171,3 +2217,36 @@ export const updateGoalSchema = z.object({
 
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
 export type UpdateGoal = z.infer<typeof updateGoalSchema>;
+
+// Membership request types and schemas
+export type MembershipRequest = typeof membershipRequests.$inferSelect;
+export type InsertMembershipRequest = typeof membershipRequests.$inferInsert;
+
+export const insertMembershipRequestSchema = createInsertSchema(membershipRequests).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  processedBy: true,
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  organizationId: z.string().min(1, "Organization ID is required"),
+  status: z.enum(membershipRequestStatusEnum).default('pending'),
+  requestedRole: z.string().default('athlete'),
+  discoveryMethod: z.enum(membershipRequestDiscoveryMethodEnum).optional(),
+});
+
+export const createMembershipRequestSchema = z.object({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  discoveryMethod: z.enum(membershipRequestDiscoveryMethodEnum).optional(),
+});
+
+export type CreateMembershipRequest = z.infer<typeof createMembershipRequestSchema>;
+
+// Organization membership settings update schema
+export const updateOrgMembershipSettingsSchema = z.object({
+  isPublicDirectory: z.boolean().optional(),
+  allowMembershipRequests: z.boolean().optional(),
+  autoApproveRequests: z.boolean().optional(),
+});
+
+export type UpdateOrgMembershipSettings = z.infer<typeof updateOrgMembershipSettingsSchema>;

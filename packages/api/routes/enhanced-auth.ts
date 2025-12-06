@@ -43,7 +43,14 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Verify password
+    // Verify password (OAuth users may not have password set)
+    // SECURITY: Use generic error message to prevent account enumeration
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
+    }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);

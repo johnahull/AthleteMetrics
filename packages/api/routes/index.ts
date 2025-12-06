@@ -23,6 +23,7 @@ import { registerGoalRoutes } from "./goal-routes";
 import { registerAchievementRoutes } from "./achievement-routes";
 import { registerGlobalAthleteRoutes } from "./global-athlete-routes";
 import { registerInvitationRoutes } from "./invitation-routes";
+import { registerMembershipRequestRoutes } from "./membership-request-routes";
 import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
@@ -94,6 +95,9 @@ export function registerAllRoutes(app: Express) {
 
   // Invitation management routes
   registerInvitationRoutes(app);
+
+  // Membership request routes (athlete self-service join requests)
+  registerMembershipRequestRoutes(app);
 
   // Import/Export routes (CSV/photo import and data export)
   registerImportExportRoutes(app);

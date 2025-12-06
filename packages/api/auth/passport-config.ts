@@ -59,7 +59,8 @@ export function configurePassport() {
           return done(new Error(result.error || 'OAuth authentication failed'), false);
         }
 
-        done(null, result);
+        // Pass result as any - the route handler will extract userId from result
+        done(null, result as any);
       } catch (error) {
         done(error, false);
       }
@@ -91,7 +92,8 @@ export function configurePassport() {
             }
             return done(new Error(result.error || 'OAuth authentication failed'), false);
           }
-          done(null, result);
+          // Pass result as any - the route handler will extract userId from result
+          done(null, result as any);
         })
         .catch((error) => done(error, false));
     }));
@@ -106,7 +108,8 @@ export function configurePassport() {
   passport.deserializeUser(async (id: string, done) => {
     try {
       const user = await oauthService.getUserById(id);
-      done(null, user);
+      // Cast user to Express.User - full User type is compatible
+      done(null, user as Express.User | undefined);
     } catch (error) {
       done(error, null);
     }

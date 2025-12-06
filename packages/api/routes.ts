@@ -296,7 +296,8 @@ export async function initializeDefaultUser() {
       // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
       // This prevents TOCTOU vulnerability where password could change between fetch and use
       // Using lockedUser.password ensures we compare against current value
-      passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
+      // Note: lockedUser.password should always exist for site admin users (non-OAuth)
+      passwordMatches = lockedUser.password ? await bcrypt.compare(adminPassword, lockedUser.password) : false;
 
       // Check privilege restoration AFTER password comparison to use fresh transaction context
       const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;

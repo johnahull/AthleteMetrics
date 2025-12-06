@@ -294,6 +294,11 @@ export class PasswordResetService {
         return { success: false, message: 'User not found' };
       }
 
+      // OAuth users may not have a password set
+      if (!user.password) {
+        return { success: false, message: 'Cannot change password for OAuth-only accounts. Please set a password first.' };
+      }
+
       // Verify current password
       const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
       if (!isCurrentPasswordValid) {

@@ -4,13 +4,12 @@
  * Provides site admin endpoints for managing global wellness templates
  */
 
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
   requireAuth,
   requireSiteAdmin,
-  type AuthenticatedRequest,
 } from "../middleware";
 import {
   createWellnessTemplateSchema,
@@ -32,7 +31,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     "/api/admin/wellness/templates",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const templates = await storage.getSystemWellnessTemplates();
         res.json(templates);
@@ -57,7 +56,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     "/api/admin/wellness/templates/:id/usage",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -94,7 +93,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     "/api/admin/wellness/templates",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const validation = createWellnessTemplateSchema.safeParse(req.body);
 
@@ -130,7 +129,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     "/api/admin/wellness/templates/:id",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
         const validation = updateWellnessTemplateSchema.safeParse(req.body);
@@ -176,7 +175,7 @@ export function registerAdminWellnessRoutes(app: Express) {
     "/api/admin/wellness/templates/:id",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 

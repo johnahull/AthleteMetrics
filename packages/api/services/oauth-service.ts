@@ -123,13 +123,11 @@ export class OAuthService extends BaseService {
     }
 
     const userData = {
-      id: userId,
       username,
       emails: [profile.email],
-      password: null,  // No password for OAuth-only users
+      // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
       firstName: profile.firstName,
       lastName: profile.lastName,
-      fullName: `${profile.firstName} ${profile.lastName}`,
       googleId: profile.provider === 'google' ? profile.providerId : undefined,
       appleId: profile.provider === 'apple' ? profile.providerId : undefined,
       oauthProvider: profile.provider,
@@ -140,7 +138,9 @@ export class OAuthService extends BaseService {
       accountLinkedAt: new Date(),
     };
 
-    return await this.storage.createUser(userData);
+    // Use type assertion since InsertUser expects password but OAuth users don't need one
+    // storage.createUser detects OAuth users (has googleId/appleId, no password) and sets password to null
+    return await this.storage.createUser(userData as any);
   }
 
   /**
@@ -229,7 +229,7 @@ export class OAuthService extends BaseService {
   /**
    * Get user by ID
    */
-  async getUserById(id: string): Promise<User | null> {
+  async getUserById(id: string): Promise<User | undefined> {
     return await this.storage.getUser(id);
   }
 }
