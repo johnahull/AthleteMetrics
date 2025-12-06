@@ -26,6 +26,7 @@ import { registerInvitationRoutes } from "./invitation-routes";
 import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
+import { registerRegistrationRoutes } from "./registration-routes";
 
 /**
  * Register all application routes
@@ -33,6 +34,9 @@ import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 export function registerAllRoutes(app: Express) {
   // Authentication routes
   registerAuthRoutes(app);
+
+  // Registration routes (public self-signup)
+  registerRegistrationRoutes(app);
 
   // User management routes
   registerUserRoutes(app);
