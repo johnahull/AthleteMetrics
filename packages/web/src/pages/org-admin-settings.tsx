@@ -207,7 +207,7 @@ export default function OrgAdminSettings() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}`] });
+      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
       toast({ title: "Membership settings updated" });
     },
     onError: (error: Error) => {
@@ -230,7 +230,7 @@ export default function OrgAdminSettings() {
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}`] });
+      queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
       toast({ title: "Join code regenerated", description: "The old join code will no longer work." });
     },
     onError: (error: Error) => {
