@@ -163,6 +163,9 @@ export function registerMeasurementRoutes(app: Express) {
       } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
         // Non-admin users without explicit organizationId should see their organization
         filters.organizationId = user.primaryOrganizationId;
+      } else if (!isSiteAdmin(user) && !user.primaryOrganizationId) {
+        // Users without an organization (e.g., newly self-registered) have no measurements to view
+        return res.json([]);
       }
 
       // Site admins can query across organizations, non-admins cannot
