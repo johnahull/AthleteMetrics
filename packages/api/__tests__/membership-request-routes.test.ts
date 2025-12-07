@@ -564,6 +564,74 @@ describe("Membership Request Routes", () => {
 
       testOrgJoinCode = newCode;
     });
+
+    it("should set a valid custom join code", async () => {
+      const customCode = "MYTEAM2024";
+      const newCode = await storage.regenerateJoinCode(testOrgId, customCode);
+
+      expect(newCode).toBe(customCode);
+
+      // Should be able to look up by the custom code
+      const org = await storage.getOrganizationByJoinCode(customCode);
+      expect(org?.id).toBe(testOrgId);
+
+      testOrgJoinCode = newCode;
+    });
+
+    it("should convert custom code to uppercase", async () => {
+      const customCode = "lowercase123";
+      const newCode = await storage.regenerateJoinCode(testOrgId, customCode);
+
+      expect(newCode).toBe("LOWERCASE123");
+
+      // Should be able to look up case-insensitively
+      const org = await storage.getOrganizationByJoinCode("lowercase123");
+      expect(org?.id).toBe(testOrgId);
+
+      testOrgJoinCode = newCode;
+    });
+
+    it("should reject custom code that is too short", async () => {
+      await expect(storage.regenerateJoinCode(testOrgId, "ABC"))
+        .rejects.toThrow("Join code must be between 4 and 20 characters");
+    });
+
+    it("should reject custom code that is too long", async () => {
+      const longCode = "A".repeat(21);
+      await expect(storage.regenerateJoinCode(testOrgId, longCode))
+        .rejects.toThrow("Join code must be between 4 and 20 characters");
+    });
+
+    it("should reject custom code with special characters", async () => {
+      await expect(storage.regenerateJoinCode(testOrgId, "MY@TEAM!"))
+        .rejects.toThrow("Join code can only contain letters and numbers");
+    });
+
+    it("should reject custom code with spaces", async () => {
+      await expect(storage.regenerateJoinCode(testOrgId, "MY TEAM"))
+        .rejects.toThrow("Join code can only contain letters and numbers");
+    });
+
+    it("should allow code at minimum length (4 chars)", async () => {
+      const customCode = "ABCD";
+      const newCode = await storage.regenerateJoinCode(testOrgId, customCode);
+      expect(newCode).toBe(customCode);
+      testOrgJoinCode = newCode;
+    });
+
+    it("should allow code at maximum length (20 chars)", async () => {
+      const customCode = "A".repeat(20);
+      const newCode = await storage.regenerateJoinCode(testOrgId, customCode);
+      expect(newCode).toBe(customCode);
+      testOrgJoinCode = newCode;
+    });
+
+    it("should trim whitespace from custom code", async () => {
+      const customCode = "  TRIMMED  ";
+      const newCode = await storage.regenerateJoinCode(testOrgId, customCode);
+      expect(newCode).toBe("TRIMMED");
+      testOrgJoinCode = newCode;
+    });
   });
 
   describe("PATCH /api/organizations/:id/membership-settings", () => {

@@ -138,7 +138,7 @@ export interface IStorage {
   // Public Organization Directory
   getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
   getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
-  regenerateJoinCode(organizationId: string): Promise<string>;
+  regenerateJoinCode(organizationId: string, customCode?: string): Promise<string>;
   updateOrganizationMembershipSettings(organizationId: string, settings: {
     isPublicDirectory?: boolean;
     allowMembershipRequests?: boolean;
@@ -2158,13 +2158,40 @@ export class DatabaseStorage implements IStorage {
     return org;
   }
 
-  async regenerateJoinCode(organizationId: string): Promise<string> {
-    // Generate a new 8-character uppercase hex code
-    const newCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+  async regenerateJoinCode(organizationId: string, customCode?: string): Promise<string> {
+    let newCode: string;
 
-    await db.update(organizations)
-      .set({ joinCode: newCode })
-      .where(eq(organizations.id, organizationId));
+    if (customCode) {
+      // Validate custom code: 4-20 chars, alphanumeric only
+      const sanitized = customCode.toUpperCase().trim();
+
+      if (sanitized.length < 4 || sanitized.length > 20) {
+        throw new Error('Join code must be between 4 and 20 characters');
+      }
+
+      if (!/^[A-Z0-9]+$/.test(sanitized)) {
+        throw new Error('Join code can only contain letters and numbers');
+      }
+
+      newCode = sanitized;
+    } else {
+      // Generate a new 8-character uppercase hex code
+      newCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    }
+
+    // Use database UNIQUE constraint for atomic uniqueness check
+    // This prevents race conditions where two requests could pass a pre-check simultaneously
+    try {
+      await db.update(organizations)
+        .set({ joinCode: newCode })
+        .where(eq(organizations.id, organizationId));
+    } catch (error: any) {
+      // Handle unique constraint violation (PostgreSQL error code 23505)
+      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+        throw new Error('This join code is already in use by another organization');
+      }
+      throw error;
+    }
 
     return newCode;
   }

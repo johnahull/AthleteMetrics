@@ -358,17 +358,25 @@ export function registerMembershipRequestRoutes(app: Express) {
   // are now in organization-routes.ts to ensure proper route ordering before /api/organizations/:id
 
   /**
-   * Regenerate organization join code (org admin only)
+   * Regenerate or set custom organization join code (org admin only)
    * POST /api/organizations/:id/regenerate-join-code
+   * Body: { customCode?: string } - if provided, sets custom code; otherwise generates random
    */
   app.post("/api/organizations/:id/regenerate-join-code", membershipLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
+      const { customCode } = req.body;
       const userId = req.session.user?.id;
       const currentUser = req.session.user;
 
       if (!userId) {
         return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      // Verify organization exists
+      const organization = await storage.getOrganization(id);
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found" });
       }
 
       // Check permissions - must be org admin
@@ -377,29 +385,36 @@ export function registerMembershipRequestRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
 
       if (!userIsSiteAdmin && userOrgRole?.role !== 'org_admin') {
-        return res.status(403).json({ message: "Only organization admins can regenerate join codes" });
+        return res.status(403).json({ message: "Only organization admins can manage join codes" });
       }
 
-      const newCode = await storage.regenerateJoinCode(id);
+      const newCode = await storage.regenerateJoinCode(id, customCode);
 
       // Audit log
       await storage.createAuditLog({
         userId,
-        action: 'organization_join_code_regenerated',
+        action: customCode ? 'organization_join_code_set' : 'organization_join_code_regenerated',
         resourceType: 'organization',
         resourceId: id,
-        details: JSON.stringify({ newCode }),
+        details: JSON.stringify({ newCode, isCustom: !!customCode }),
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
       });
 
       res.json({
         joinCode: newCode,
-        message: "Join code regenerated successfully"
+        message: customCode ? "Join code updated successfully" : "Join code regenerated successfully"
       });
-    } catch (error) {
-      console.error("Error regenerating join code:", error);
-      res.status(500).json({ message: "Failed to regenerate join code" });
+    } catch (error: any) {
+      console.error("Error managing join code:", error);
+      // Categorize errors for appropriate HTTP status codes
+      const errorMessage = error.message || "Failed to update join code";
+      const isValidationError =
+        errorMessage.includes('must be') ||
+        errorMessage.includes('can only') ||
+        errorMessage.includes('already in use');
+
+      res.status(isValidationError ? 400 : 500).json({ message: errorMessage });
     }
   });
 

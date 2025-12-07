@@ -20,7 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart, UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy, RefreshCw, Globe, CheckCircle } from "lucide-react";
+import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart, UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy, RefreshCw, Globe, CheckCircle, Pencil, X, Dices } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -107,6 +107,10 @@ export default function OrgAdminSettings() {
   // Modal state for inviting users
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [inviteRole, setInviteRole] = useState<"athlete" | "coach" | "org_admin">("coach");
+
+  // Join code edit mode state
+  const [isEditingJoinCode, setIsEditingJoinCode] = useState(false);
+  const [customJoinCode, setCustomJoinCode] = useState("");
 
   // Fetch organization data
   const { data: organization, isLoading, error } = useOrganization(organizationId);
@@ -219,23 +223,30 @@ export default function OrgAdminSettings() {
     },
   });
 
-  // Regenerate join code mutation
+  // Regenerate or set custom join code mutation
   const regenerateJoinCodeMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/organizations/${organizationId}/regenerate-join-code`);
+    mutationFn: async (customCode?: string) => {
+      const res = await apiRequest("POST", `/api/organizations/${organizationId}/regenerate-join-code`,
+        customCode ? { customCode } : undefined
+      );
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.message || "Failed to regenerate join code");
+        throw new Error(errorData.message || "Failed to update join code");
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
-      toast({ title: "Join code regenerated", description: "The old join code will no longer work." });
+      setIsEditingJoinCode(false);
+      setCustomJoinCode("");
+      toast({
+        title: data.message || "Join code updated",
+        description: "The old join code will no longer work."
+      });
     },
     onError: (error: Error) => {
       toast({
-        title: "Error regenerating code",
+        title: "Error updating join code",
         description: error.message,
         variant: "destructive"
       });
@@ -323,11 +334,59 @@ export default function OrgAdminSettings() {
   // Handle regenerate join code with confirmation
   const handleRegenerateJoinCode = () => {
     confirm({
-      title: "Regenerate Join Code",
+      title: "Generate Random Code",
       description: "This will invalidate the current join code. Anyone with the old code will no longer be able to use it. Are you sure?",
-      confirmText: "Regenerate",
-      onConfirm: () => regenerateJoinCodeMutation.mutate(),
+      confirmText: "Generate",
+      onConfirm: () => regenerateJoinCodeMutation.mutate(undefined),
     });
+  };
+
+  // Handle save custom join code
+  const handleSaveCustomJoinCode = () => {
+    const trimmed = customJoinCode.trim().toUpperCase();
+    if (trimmed.length < 4) {
+      toast({
+        title: "Invalid code",
+        description: "Join code must be at least 4 characters",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (trimmed.length > 20) {
+      toast({
+        title: "Invalid code",
+        description: "Join code must be 20 characters or less",
+        variant: "destructive"
+      });
+      return;
+    }
+    if (!/^[A-Z0-9]+$/.test(trimmed)) {
+      toast({
+        title: "Invalid code",
+        description: "Join code can only contain letters and numbers",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    confirm({
+      title: "Set Custom Join Code",
+      description: `This will change your join code to "${trimmed}". The old code will no longer work. Are you sure?`,
+      confirmText: "Save Code",
+      onConfirm: () => regenerateJoinCodeMutation.mutate(trimmed),
+    });
+  };
+
+  // Enter edit mode for join code
+  const startEditingJoinCode = () => {
+    setCustomJoinCode(organization?.joinCode || "");
+    setIsEditingJoinCode(true);
+  };
+
+  // Cancel editing join code
+  const cancelEditingJoinCode = () => {
+    setIsEditingJoinCode(false);
+    setCustomJoinCode("");
   };
 
   // Form setup with React Hook Form + Zod validation
@@ -587,50 +646,112 @@ export default function OrgAdminSettings() {
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative flex-1">
-                <Input
-                  value={organization?.joinCode || 'Not generated'}
-                  readOnly
-                  className="font-mono text-lg tracking-wider pr-20"
-                />
-                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+
+            {isEditingJoinCode ? (
+              /* Edit Mode */
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={customJoinCode}
+                    onChange={(e) => setCustomJoinCode(e.target.value.toUpperCase())}
+                    placeholder="Enter custom code (e.g., MYTEAM2024)"
+                    className="font-mono text-lg tracking-wider flex-1"
+                    maxLength={20}
+                    autoFocus
+                  />
                   <Button
                     type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={copyJoinCode}
-                    disabled={!organization?.joinCode}
-                    title="Copy code"
+                    variant="default"
+                    onClick={handleSaveCustomJoinCode}
+                    disabled={regenerateJoinCodeMutation.isPending || customJoinCode.trim().length < 4}
                   >
-                    <Copy className="h-4 w-4" />
+                    {regenerateJoinCodeMutation.isPending ? (
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    <span className="ml-2">Save</span>
                   </Button>
                   <Button
                     type="button"
                     variant="ghost"
-                    size="sm"
-                    onClick={copyJoinLink}
-                    disabled={!organization?.joinCode}
-                    title="Copy join link"
+                    onClick={cancelEditingJoinCode}
+                    disabled={regenerateJoinCodeMutation.isPending}
                   >
-                    <LinkIcon className="h-4 w-4" />
+                    <X className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleRegenerateJoinCode}
+                    disabled={regenerateJoinCodeMutation.isPending}
+                    title="Generate random code"
+                  >
+                    <Dices className="h-4 w-4" />
+                    <span className="ml-2 hidden sm:inline">Random</span>
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  4-20 characters, letters and numbers only
+                </p>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleRegenerateJoinCode}
-                disabled={regenerateJoinCodeMutation.isPending}
-              >
-                {regenerateJoinCodeMutation.isPending ? (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                <span className="ml-2">Regenerate</span>
-              </Button>
-            </div>
+            ) : (
+              /* Display Mode */
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    value={organization?.joinCode || 'Not generated'}
+                    readOnly
+                    className="font-mono text-lg tracking-wider pr-20"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyJoinCode}
+                      disabled={!organization?.joinCode}
+                      title="Copy code"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={copyJoinLink}
+                      disabled={!organization?.joinCode}
+                      title="Copy join link"
+                    >
+                      <LinkIcon className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={startEditingJoinCode}
+                  title="Edit or customize join code"
+                >
+                  <Pencil className="h-4 w-4" />
+                  <span className="ml-2">Edit</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleRegenerateJoinCode}
+                  disabled={regenerateJoinCodeMutation.isPending}
+                  title="Generate random code"
+                >
+                  {regenerateJoinCodeMutation.isPending ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                  ) : (
+                    <Dices className="h-4 w-4" />
+                  )}
+                  <span className="ml-2 hidden sm:inline">Random</span>
+                </Button>
+              </div>
+            )}
           </div>
 
           {/* Membership Toggles */}

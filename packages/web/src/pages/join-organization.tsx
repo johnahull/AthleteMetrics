@@ -19,7 +19,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Link as LinkIcon
+  Link as LinkIcon,
+  UserCheck
 } from 'lucide-react';
 
 interface PublicOrganization {
@@ -40,11 +41,28 @@ const ORG_TYPE_LABELS: Record<string, string> = {
   'elite_academy': 'Elite Academy',
 };
 
+const ROLE_LABELS: Record<string, string> = {
+  'org_admin': 'Admin',
+  'coach': 'Coach',
+  'athlete': 'Athlete',
+};
+
 export default function JoinOrganization() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, userOrganizations } = useAuth();
   const queryClient = useQueryClient();
+
+  // Helper to check if user is already a member of an organization
+  const isUserMemberOf = (orgId: string): boolean => {
+    return userOrganizations?.some(org => org.organizationId === orgId) ?? false;
+  };
+
+  // Helper to get user's role in an organization
+  const getUserRoleIn = (orgId: string): string | null => {
+    const membership = userOrganizations?.find(org => org.organizationId === orgId);
+    return membership?.role ?? null;
+  };
 
   const [activeTab, setActiveTab] = useState<'code' | 'directory'>('code');
   const [joinCode, setJoinCode] = useState('');
@@ -214,38 +232,70 @@ export default function JoinOrganization() {
                   </Button>
                 </div>
 
-                {selectedOrg && (
-                  <div className="border rounded-lg p-4 bg-green-50 border-green-200">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-semibold text-lg">{selectedOrg.name}</h3>
-                        {selectedOrg.description && (
-                          <p className="text-sm text-muted-foreground mt-1">{selectedOrg.description}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-                          <Badge variant="secondary">{ORG_TYPE_LABELS[selectedOrg.orgType] || selectedOrg.orgType}</Badge>
-                          {selectedOrg.location && (
-                            <span className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3" />
-                              {selectedOrg.location}
-                            </span>
+                {selectedOrg && (() => {
+                  const isMember = isUserMemberOf(selectedOrg.id);
+                  const userRole = getUserRoleIn(selectedOrg.id);
+
+                  return (
+                    <div className="border rounded-lg p-4 bg-green-50 border-green-200">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-semibold text-lg">{selectedOrg.name}</h3>
+                            {isMember && (
+                              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                <UserCheck className="h-3 w-3 mr-1" />
+                                Member{userRole ? ` (${ROLE_LABELS[userRole] || userRole})` : ''}
+                              </Badge>
+                            )}
+                          </div>
+                          {selectedOrg.description && (
+                            <p className="text-sm text-muted-foreground mt-1">{selectedOrg.description}</p>
                           )}
+                          <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+                            <Badge variant="secondary">{ORG_TYPE_LABELS[selectedOrg.orgType] || selectedOrg.orgType}</Badge>
+                            {selectedOrg.location && (
+                              <span className="flex items-center gap-1">
+                                <MapPin className="h-3 w-3" />
+                                {selectedOrg.location}
+                              </span>
+                            )}
+                          </div>
                         </div>
+                        <CheckCircle2 className="h-6 w-6 text-green-600" />
                       </div>
-                      <CheckCircle2 className="h-6 w-6 text-green-600" />
+                      {isMember ? (
+                        <div className="mt-4 space-y-2">
+                          <Alert>
+                            <UserCheck className="h-4 w-4" />
+                            <AlertDescription>
+                              You're already a member of this organization as {userRole ? ROLE_LABELS[userRole] || userRole : 'a member'}.
+                            </AlertDescription>
+                          </Alert>
+                          <Button
+                            className="w-full"
+                            variant="outline"
+                            onClick={() => setLocation(`/organizations/${selectedOrg.id}`)}
+                          >
+                            View Organization
+                            <ArrowRight className="h-4 w-4 ml-2" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          className="w-full mt-4"
+                          onClick={() => handleRequestMembership(selectedOrg, 'join_code')}
+                          disabled={requestMutation.isPending}
+                        >
+                          {requestMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          ) : null}
+                          Request to Join
+                        </Button>
+                      )}
                     </div>
-                    <Button
-                      className="w-full mt-4"
-                      onClick={() => handleRequestMembership(selectedOrg, 'join_code')}
-                      disabled={requestMutation.isPending}
-                    >
-                      {requestMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : null}
-                      Request to Join
-                    </Button>
-                  </div>
-                )}
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -278,46 +328,74 @@ export default function JoinOrganization() {
                   </div>
                 ) : publicOrgs && publicOrgs.length > 0 ? (
                   <div className="space-y-3">
-                    {publicOrgs.map((org) => (
-                      <div
-                        key={org.id}
-                        className="border rounded-lg p-4 hover:border-primary/50 transition-colors"
-                      >
-                        <div className="flex items-start justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-semibold">{org.name}</h3>
-                            {org.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {org.description}
-                              </p>
-                            )}
-                            <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-                              <Badge variant="secondary">
-                                {ORG_TYPE_LABELS[org.orgType] || org.orgType}
-                              </Badge>
-                              {org.location && (
-                                <span className="flex items-center gap-1">
-                                  <MapPin className="h-3 w-3" />
-                                  {org.location}
-                                </span>
+                    {publicOrgs.map((org) => {
+                      const isMember = isUserMemberOf(org.id);
+                      const userRole = getUserRoleIn(org.id);
+
+                      return (
+                        <div
+                          key={org.id}
+                          className={`border rounded-lg p-4 transition-colors ${
+                            isMember
+                              ? 'border-green-200 bg-green-50/50'
+                              : 'hover:border-primary/50'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-semibold">{org.name}</h3>
+                                {isMember && (
+                                  <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                    <UserCheck className="h-3 w-3 mr-1" />
+                                    Member{userRole ? ` (${ROLE_LABELS[userRole] || userRole})` : ''}
+                                  </Badge>
+                                )}
+                              </div>
+                              {org.description && (
+                                <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                                  {org.description}
+                                </p>
                               )}
-                              <span className="flex items-center gap-1">
-                                <Users className="h-3 w-3" />
-                                {org.memberCount} members
-                              </span>
+                              <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+                                <Badge variant="secondary">
+                                  {ORG_TYPE_LABELS[org.orgType] || org.orgType}
+                                </Badge>
+                                {org.location && (
+                                  <span className="flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" />
+                                    {org.location}
+                                  </span>
+                                )}
+                                <span className="flex items-center gap-1">
+                                  <Users className="h-3 w-3" />
+                                  {org.memberCount} members
+                                </span>
+                              </div>
                             </div>
+                            {isMember ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setLocation(`/organizations/${org.id}`)}
+                              >
+                                View
+                                <ArrowRight className="h-4 w-4 ml-1" />
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                onClick={() => handleRequestMembership(org, 'directory')}
+                                disabled={requestMutation.isPending}
+                              >
+                                Request
+                                <ArrowRight className="h-4 w-4 ml-1" />
+                              </Button>
+                            )}
                           </div>
-                          <Button
-                            size="sm"
-                            onClick={() => handleRequestMembership(org, 'directory')}
-                            disabled={requestMutation.isPending}
-                          >
-                            Request
-                            <ArrowRight className="h-4 w-4 ml-1" />
-                          </Button>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
