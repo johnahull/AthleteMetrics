@@ -16,10 +16,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
+import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart, UserPlus, Clock, Link as LinkIcon, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart, UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy, RefreshCw, Globe, CheckCircle } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -195,6 +196,52 @@ export default function OrgAdminSettings() {
     },
   });
 
+  // Update membership settings mutation
+  const updateMembershipSettingsMutation = useMutation({
+    mutationFn: async (settings: { isPublicDirectory?: boolean; allowMembershipRequests?: boolean; autoApproveRequests?: boolean }) => {
+      const res = await apiRequest("PATCH", `/api/organizations/${organizationId}/membership-settings`, settings);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to update membership settings");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}`] });
+      toast({ title: "Membership settings updated" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error updating settings",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Regenerate join code mutation
+  const regenerateJoinCodeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/organizations/${organizationId}/regenerate-join-code`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to regenerate join code");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}`] });
+      toast({ title: "Join code regenerated", description: "The old join code will no longer work." });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error regenerating code",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
   // Handle role change with confirmation for certain transitions
   const handleRoleChange = (userId: string, currentRole: string, newRole: string) => {
     if (currentRole === newRole) return;
@@ -248,6 +295,39 @@ export default function OrgAdminSettings() {
   const openInviteModal = (role: "athlete" | "coach" | "org_admin") => {
     setInviteRole(role);
     setInviteModalOpen(true);
+  };
+
+  // Copy join code to clipboard
+  const copyJoinCode = async () => {
+    if (!organization?.joinCode) return;
+    try {
+      await navigator.clipboard.writeText(organization.joinCode);
+      toast({ title: "Join code copied to clipboard" });
+    } catch {
+      toast({ title: "Failed to copy code", variant: "destructive" });
+    }
+  };
+
+  // Copy join link to clipboard
+  const copyJoinLink = async () => {
+    if (!organization?.joinCode) return;
+    const joinLink = `${window.location.protocol}//${window.location.host}/join/${organization.joinCode}`;
+    try {
+      await navigator.clipboard.writeText(joinLink);
+      toast({ title: "Join link copied to clipboard" });
+    } catch {
+      toast({ title: "Failed to copy link", variant: "destructive" });
+    }
+  };
+
+  // Handle regenerate join code with confirmation
+  const handleRegenerateJoinCode = () => {
+    confirm({
+      title: "Regenerate Join Code",
+      description: "This will invalidate the current join code. Anyone with the old code will no longer be able to use it. Are you sure?",
+      confirmText: "Regenerate",
+      onConfirm: () => regenerateJoinCodeMutation.mutate(),
+    });
   };
 
   // Form setup with React Hook Form + Zod validation
@@ -484,6 +564,150 @@ export default function OrgAdminSettings() {
           </div>
         </form>
       </Form>
+
+      {/* Membership Settings Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Membership Settings
+          </CardTitle>
+          <CardDescription>
+            Configure how athletes can discover and join your organization
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          {/* Join Code */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-medium">Join Code</h4>
+                <p className="text-sm text-muted-foreground">
+                  Share this code with athletes to let them request membership
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <Input
+                  value={organization?.joinCode || 'Not generated'}
+                  readOnly
+                  className="font-mono text-lg tracking-wider pr-20"
+                />
+                <div className="absolute right-1 top-1/2 -translate-y-1/2 flex gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={copyJoinCode}
+                    disabled={!organization?.joinCode}
+                    title="Copy code"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={copyJoinLink}
+                    disabled={!organization?.joinCode}
+                    title="Copy join link"
+                  >
+                    <LinkIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRegenerateJoinCode}
+                disabled={regenerateJoinCodeMutation.isPending}
+              >
+                {regenerateJoinCodeMutation.isPending ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                <span className="ml-2">Regenerate</span>
+              </Button>
+            </div>
+          </div>
+
+          {/* Membership Toggles */}
+          <div className="space-y-4">
+            <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-medium">Accept Membership Requests</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Allow athletes to request to join your organization
+                </p>
+              </div>
+              <Switch
+                checked={organization?.allowMembershipRequests ?? true}
+                onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ allowMembershipRequests: checked })}
+                disabled={updateMembershipSettingsMutation.isPending}
+              />
+            </div>
+
+            <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <Globe className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-medium">Public Directory</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  List your organization in the public browse directory
+                </p>
+              </div>
+              <Switch
+                checked={organization?.isPublicDirectory ?? false}
+                onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ isPublicDirectory: checked })}
+                disabled={updateMembershipSettingsMutation.isPending || !organization?.allowMembershipRequests}
+              />
+            </div>
+
+            <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <UserPlus className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-base font-medium">Auto-Approve Requests</span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Automatically approve all membership requests (open enrollment)
+                </p>
+              </div>
+              <Switch
+                checked={organization?.autoApproveRequests ?? false}
+                onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ autoApproveRequests: checked })}
+                disabled={updateMembershipSettingsMutation.isPending || !organization?.allowMembershipRequests}
+              />
+            </div>
+          </div>
+
+          {/* Status Summary */}
+          <div className="rounded-lg bg-muted p-4">
+            <h4 className="text-sm font-medium mb-2">Current Status</h4>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant={organization?.allowMembershipRequests ? "default" : "secondary"}>
+                {organization?.allowMembershipRequests ? "Accepting Requests" : "Not Accepting Requests"}
+              </Badge>
+              {organization?.allowMembershipRequests && (
+                <>
+                  <Badge variant={organization?.isPublicDirectory ? "default" : "outline"}>
+                    {organization?.isPublicDirectory ? "Listed in Directory" : "Private"}
+                  </Badge>
+                  <Badge variant={organization?.autoApproveRequests ? "default" : "outline"}>
+                    {organization?.autoApproveRequests ? "Auto-Approve On" : "Manual Approval"}
+                  </Badge>
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* User Management Section */}
       <Card>
