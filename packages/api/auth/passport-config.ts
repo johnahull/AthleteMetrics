@@ -43,8 +43,8 @@ export function configurePassport() {
       clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET!,
       callbackURL: `${process.env.APP_URL}/api/auth/google/callback`,
       scope: ['profile', 'email'],  // Minimal scopes - only what we need
-      store: true,  // Enable CSRF protection via state parameter
-    }, async (accessToken, refreshToken, profile, done) => {
+      // Note: Passport automatically uses session store for OAuth state (CSRF protection)
+    }, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
       try {
         const result = await oauthService.handleGoogleAuth(profile);
 
@@ -78,7 +78,7 @@ export function configurePassport() {
       callbackURL: `${process.env.APP_URL}/api/auth/apple/callback`,
       scope: ['name', 'email'],
       passReqToCallback: false,
-      store: true,  // Enable CSRF protection via state parameter
+      // Note: Passport automatically uses session store for OAuth state (CSRF protection)
     }, (accessToken: string, refreshToken: string, idToken: string, appleProfile: any, done: any) => {
       // Note: Apple strategy doesn't support async/await in verify callback
       oauthService.handleAppleAuth(appleProfile)
