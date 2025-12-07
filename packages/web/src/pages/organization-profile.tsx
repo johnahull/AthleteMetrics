@@ -41,17 +41,18 @@ const LoadingSpinner = ({ text }: { text: string }) => (
   </div>
 );
 
-const OrganizationDisplay = ({ organization, isLoading, error }: any) => {
+interface OrganizationDisplayProps {
+  organization: OrganizationProfile | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+const OrganizationDisplay = ({ organization, isLoading, error }: OrganizationDisplayProps) => {
   if (isLoading) return <LoadingSpinner text="Loading organization details..." />;
   if (error) return <p className="text-red-600">Error loading organization details: {error.message}</p>;
   if (!organization) return <p className="text-gray-500">No organization data available.</p>;
 
-  // Handle both flat and nested API response structures
-  // API returns { organization: {...}, coaches, ... } but type expects flat structure
-  const orgData = organization.organization || organization;
-  const name = orgData.name || organization.name;
-  const location = orgData.location || organization.location;
-  const description = orgData.description || organization.description;
+  const { location, description } = organization.organization;
 
   return (
     <div className="space-y-4">
@@ -97,12 +98,15 @@ const invitationSchema = z.object({
 type CreateUserForm = z.infer<typeof createUserSchema>;
 type InvitationForm = z.infer<typeof invitationSchema>;
 
+// API response structure - nested organization object with arrays
 type OrganizationProfile = {
-  id: string;
-  name: string;
-  description?: string;
-  location?: string;
-  orgType?: 'club' | 'hs' | 'college';
+  organization: {
+    id: string;
+    name: string;
+    description?: string;
+    location?: string;
+    orgType?: 'club' | 'hs' | 'college';
+  };
   coaches: Array<{
     user: {
       id: string;
@@ -110,7 +114,7 @@ type OrganizationProfile = {
       lastName: string;
       email: string;
       isActive?: string;
-      username?: string; // Added username to user type
+      username?: string;
     };
     role: string;
   }>;
@@ -133,7 +137,6 @@ type OrganizationProfile = {
         name: string;
       };
     }>;
-    // Added potential fields for athlete details
     dateOfBirth?: string;
     gender?: string;
     email?: string;
@@ -972,8 +975,6 @@ export default function OrganizationProfile() {
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
-  const isAthlete = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "athlete");
-  const hasOrgAccess = isOrgAdmin || isCoach;
 
   // Check if user has access to this specific organization (all members can view, including athletes)
   const userBelongsToOrg = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id);
@@ -1015,13 +1016,13 @@ export default function OrganizationProfile() {
 
   // Update document title when organization data loads
   useEffect(() => {
-    if (organization?.name) {
-      document.title = `${organization.name} - AthleteMetrics`;
+    if (organization?.organization?.name) {
+      document.title = `${organization.organization.name} - AthleteMetrics`;
     }
     return () => {
       document.title = "AthleteMetrics";
     };
-  }, [organization?.name]);
+  }, [organization?.organization?.name]);
 
   // Force refresh organization data when component mounts
   useEffect(() => {
@@ -1037,7 +1038,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (organization && userOrganizations && id) {
       const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
-      if (matchingUserOrg && matchingUserOrg.organization.name !== organization.name) {
+      if (matchingUserOrg && matchingUserOrg.organization.name !== organization.organization?.name) {
         // Force refresh both endpoints
         queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me/organizations"] });
@@ -1187,16 +1188,12 @@ export default function OrganizationProfile() {
             <div>
               <div className="flex items-center gap-2">
                 <CardTitle className="text-2xl">
-                  {organization?.name || (organization as any)?.organization?.name}
+                  {organization?.organization?.name}
                 </CardTitle>
-                {/* orgType may be at organization.orgType or organization.organization.orgType depending on API structure */}
-                {(organization?.orgType || (organization as any)?.organization?.orgType) && (
+                {organization?.organization?.orgType && (
                   <Badge variant="outline">
-                    {(() => {
-                      const orgType = organization?.orgType || (organization as any)?.organization?.orgType;
-                      return orgType === 'hs' ? 'High School' :
-                             orgType === 'college' ? 'College' : 'Club';
-                    })()}
+                    {organization.organization.orgType === 'hs' ? 'High School' :
+                     organization.organization.orgType === 'college' ? 'College' : 'Club'}
                   </Badge>
                 )}
               </div>
