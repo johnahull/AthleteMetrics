@@ -290,7 +290,7 @@ export function registerOAuthRoutes(app: Express) {
         // Increment failed attempts on errors to prevent brute force attacks
         if (result.shouldIncrementFailedAttempts) {
           try {
-            await oauthService.storage.incrementAccountLinkingTokenFailedAttempts(token);
+            await oauthService.incrementLinkingTokenFailedAttempts(token);
           } catch (err) {
             console.error('Failed to increment token failed attempts:', err);
           }

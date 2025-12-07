@@ -297,4 +297,11 @@ export class OAuthService extends BaseService {
   async getUserById(id: string): Promise<User | undefined> {
     return await this.storage.getUser(id);
   }
+
+  /**
+   * Increment failed attempts on an account linking token (for rate limiting)
+   */
+  async incrementLinkingTokenFailedAttempts(token: string): Promise<void> {
+    await this.storage.incrementAccountLinkingTokenFailedAttempts(token);
+  }
 }
