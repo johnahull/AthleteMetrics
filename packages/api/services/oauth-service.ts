@@ -156,6 +156,7 @@ export class OAuthService extends BaseService {
       // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
       firstName: profile.firstName,
       lastName: profile.lastName,
+      role: 'athlete',  // OAuth users default to athlete role
       googleId: profile.provider === 'google' ? profile.providerId : undefined,
       appleId: profile.provider === 'apple' ? profile.providerId : undefined,
       oauthProvider: profile.provider,
