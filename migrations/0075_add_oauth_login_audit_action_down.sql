@@ -5,7 +5,8 @@ BEGIN
   -- Drop existing constraint
   ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
 
-  -- Recreate constraint without OAuth login action (back to migration 0070 state)
+  -- Recreate constraint without OAuth login action
+  -- NOTE: This constraint must include ALL existing actions in the database (minus oauth_login)
   ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     -- Organization actions
     'organization_created',
@@ -56,6 +57,7 @@ BEGIN
     'report_created',
     'report_updated',
     'report_deleted',
+    'report_ai_insights_generated',
 
     -- Site Settings actions
     'site_settings_updated',
@@ -72,6 +74,27 @@ BEGIN
     'membership_request_rejected',
     'membership_request_cancelled',
     'join_code_regenerated',
-    'membership_settings_updated'
+    'membership_settings_updated',
+
+    -- Metric actions (site-wide metric management)
+    'metric_created',
+    'metric_updated',
+    'metric_deleted',
+    'metric_enabled',
+    'metric_disabled',
+
+    -- Organization metric actions
+    'org_metric_enabled',
+    'org_metric_disabled',
+    'org_metrics_bulk_enabled',
+
+    -- AI feature actions
+    'org_ai_enabled_by_org_admin',
+    'org_ai_enabled_by_site_admin',
+
+    -- Benchmark actions
+    'custom_benchmark_created',
+    'custom_benchmark_updated',
+    'org_benchmark_enabled'
   ));
 END $$;
