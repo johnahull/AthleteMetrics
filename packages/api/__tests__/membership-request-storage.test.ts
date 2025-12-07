@@ -37,7 +37,7 @@ describe("Membership Request Storage", () => {
 
     // Create test user (athlete)
     const [user] = await db.insert(users).values({
-      email: TEST_USER_EMAIL,
+      emails: [TEST_USER_EMAIL],
       username: `testathlete${testSuffix}`,
       firstName: "Test",
       lastName: "Athlete",
@@ -49,7 +49,7 @@ describe("Membership Request Storage", () => {
 
     // Create test admin
     const [admin] = await db.insert(users).values({
-      email: TEST_ADMIN_EMAIL,
+      emails: [TEST_ADMIN_EMAIL],
       username: `testadmin${testSuffix}`,
       firstName: "Test",
       lastName: "Admin",
