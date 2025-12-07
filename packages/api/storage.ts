@@ -21,7 +21,8 @@ import {
   type AchievementDefinition, type UserAchievement,
   type MembershipRequest,
   insertUserSchema,
-  type OrganizationType
+  type OrganizationType,
+  type InsertOAuthUser
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
@@ -49,7 +50,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByAppleId(appleId: string): Promise<User | null>;
-  createUser(user: InsertUser): Promise<User>;
+  createUser(user: InsertUser | InsertOAuthUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
   getUsersBatch(ids: string[]): Promise<Map<string, User>>;
@@ -470,7 +471,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(accountLinkingTokens.token, token));
   }
 
-  async createUser(user: InsertUser): Promise<User> {
+  async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
     // Check if this is an OAuth user (has googleId or appleId but no password)
     const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
 
@@ -1879,29 +1880,32 @@ export class DatabaseStorage implements IStorage {
       throw new Error('Only pending requests can be approved');
     }
 
-    // If linking to existing athlete, perform the data transfer
-    if (linkToAthleteId) {
-      await this.linkAthleteAccounts(
-        request.userId,        // requester (with login) - survives
-        linkToAthleteId,       // existing athlete (no login) - gets data transferred
-        request.organizationId
-      );
-    }
+    // Use transaction to ensure atomicity of approval operations
+    return await db.transaction(async (tx: any) => {
+      // If linking to existing athlete, perform the data transfer
+      if (linkToAthleteId) {
+        await this.linkAthleteAccounts(
+          request.userId,        // requester (with login) - survives
+          linkToAthleteId,       // existing athlete (no login) - gets data transferred
+          request.organizationId
+        );
+      }
 
-    // Update request status
-    const [updated] = await db.update(membershipRequests)
-      .set({
-        status: 'approved',
-        processedBy,
-        processedAt: new Date(),
-      })
-      .where(eq(membershipRequests.id, id))
-      .returning();
+      // Update request status
+      const [updated] = await tx.update(membershipRequests)
+        .set({
+          status: 'approved',
+          processedBy,
+          processedAt: new Date(),
+        })
+        .where(eq(membershipRequests.id, id))
+        .returning();
 
-    // Add user to organization
-    await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+      // Add user to organization
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
 
-    return updated;
+      return updated;
+    });
   }
 
   /**

@@ -5,7 +5,7 @@
 import crypto from 'crypto';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
-import type { User } from '@shared/schema';
+import type { User, InsertOAuthUser } from '@shared/schema';
 
 export interface OAuthProfile {
   provider: 'google' | 'apple';
@@ -150,7 +150,7 @@ export class OAuthService extends BaseService {
       throw new Error('Failed to generate unique username');
     }
 
-    const userData = {
+    const userData: InsertOAuthUser = {
       username,
       emails: [profile.email],
       // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
@@ -166,9 +166,8 @@ export class OAuthService extends BaseService {
       accountLinkedAt: new Date(),
     };
 
-    // Use type assertion since InsertUser expects password but OAuth users don't need one
-    // storage.createUser detects OAuth users (has googleId/appleId, no password) and sets password to null
-    return await this.storage.createUser(userData as any);
+    // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
+    return await this.storage.createUser(userData);
   }
 
   /**

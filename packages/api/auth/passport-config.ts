@@ -10,6 +10,25 @@ import { OAuthService } from '../services/oauth-service';
 const oauthService = new OAuthService();
 
 /**
+ * OAuth authentication result passed through Passport's done callback.
+ * This represents the result of handleGoogleAuth or handleAppleAuth.
+ */
+interface PassportOAuthResult {
+  success: boolean;
+  userId?: string;
+  requiresLinking?: boolean;
+  error?: string;
+}
+
+/**
+ * Custom error type for OAuth linking requirements.
+ * Used to signal that account linking is needed without failing authentication.
+ */
+interface OAuthLinkingError extends Error {
+  requiresLinking: boolean;
+}
+
+/**
  * Check if OAuth is enabled based on environment variables
  */
 export function isOAuthEnabled() {
@@ -53,15 +72,15 @@ export function configurePassport() {
         if (!result.success) {
           if (result.requiresLinking) {
             // Pass linking info as error - this bypasses serialization
-            const linkingError = new Error('LINKING_REQUIRED') as any;
+            const linkingError = new Error('LINKING_REQUIRED') as OAuthLinkingError;
             linkingError.requiresLinking = true;
             return done(linkingError, false);
           }
           return done(new Error(result.error || 'OAuth authentication failed'), false);
         }
 
-        // Pass result as any - the route handler will extract userId from result
-        done(null, result as any);
+        // Pass result with proper typing - the route handler will extract userId from result
+        done(null, result as PassportOAuthResult);
       } catch (error) {
         done(error, false);
       }
@@ -88,14 +107,14 @@ export function configurePassport() {
           if (!result.success) {
             if (result.requiresLinking) {
               // Pass linking info as error - this bypasses serialization
-              const linkingError = new Error('LINKING_REQUIRED') as any;
+              const linkingError = new Error('LINKING_REQUIRED') as OAuthLinkingError;
               linkingError.requiresLinking = true;
               return done(linkingError, false);
             }
             return done(new Error(result.error || 'OAuth authentication failed'), false);
           }
-          // Pass result as any - the route handler will extract userId from result
-          done(null, result as any);
+          // Pass result with proper typing - the route handler will extract userId from result
+          done(null, result as PassportOAuthResult);
         })
         .catch((error) => done(error, false));
     }));

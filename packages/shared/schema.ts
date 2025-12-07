@@ -1390,6 +1390,17 @@ export const insertUserSchema = createInsertSchema(users).omit({
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
 });
 
+// Schema for creating OAuth users (password is optional for OAuth-only accounts)
+export const insertOAuthUserSchema = insertUserSchema.omit({ password: true }).extend({
+  password: z.string()
+    .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "Password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "Password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "Password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character")
+    .optional(),
+});
+
 export const insertAthleteProfileSchema = createInsertSchema(athleteProfiles).omit({
   id: true,
   createdAt: true,
@@ -1892,6 +1903,7 @@ export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Team = typeof teams.$inferSelect;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertOAuthUser = z.infer<typeof insertOAuthUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
