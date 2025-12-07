@@ -31,13 +31,22 @@ export class OAuthService extends BaseService {
    * Handle Google OAuth authentication
    */
   async handleGoogleAuth(profile: any): Promise<OAuthResult> {
+    // Validate profile has required fields
+    if (!profile.emails || profile.emails.length === 0) {
+      return { success: false, error: 'No email address provided by OAuth provider' };
+    }
+
+    if (!profile.id) {
+      return { success: false, error: 'No user ID provided by OAuth provider' };
+    }
+
     const oauthProfile: OAuthProfile = {
       provider: 'google',
       providerId: profile.id,
       email: profile.emails[0].value,
       emailVerified: profile.emails[0].verified,
-      firstName: profile.name.givenName,
-      lastName: profile.name.familyName,
+      firstName: profile.name?.givenName || '',
+      lastName: profile.name?.familyName || '',
     };
 
     return this.authenticateWithOAuth(oauthProfile);
@@ -64,6 +73,11 @@ export class OAuthService extends BaseService {
    */
   private async authenticateWithOAuth(profile: OAuthProfile): Promise<OAuthResult> {
     try {
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(profile.email)) {
+        return { success: false, error: 'Invalid email address from OAuth provider' };
+      }
       // 1. Check if user exists with this provider ID
       const existingOAuthUser = await this.findUserByProviderId(profile.provider, profile.providerId);
 
@@ -77,6 +91,11 @@ export class OAuthService extends BaseService {
       const existingEmailUser = await this.storage.getUserByEmail(profile.email);
 
       if (existingEmailUser) {
+        // Validate user has email address
+        if (!existingEmailUser.emails || existingEmailUser.emails.length === 0) {
+          return { success: false, error: 'User account has no email address' };
+        }
+
         // Email exists - require account linking via email confirmation
         const linkingToken = await this.createAccountLinkingToken(
           existingEmailUser.id,
@@ -114,12 +133,21 @@ export class OAuthService extends BaseService {
   private async createOAuthUser(profile: OAuthProfile): Promise<User> {
     const userId = crypto.randomUUID();
 
-    // Generate username from email (ensure uniqueness)
+    // Generate username from email with random suffix (ensure uniqueness and prevent enumeration)
     let username = profile.email.split('@')[0];
-    let counter = 1;
-    while (await this.storage.getUserByUsername(username)) {
-      username = `${profile.email.split('@')[0]}${counter}`;
-      counter++;
+    let attempts = 0;
+    const maxAttempts = 5;
+
+    while (await this.storage.getUserByUsername(username) && attempts < maxAttempts) {
+      // Use cryptographically random suffix to prevent enumeration attacks
+      const randomSuffix = crypto.randomBytes(3).toString('hex');
+      username = `${profile.email.split('@')[0]}_${randomSuffix}`;
+      attempts++;
+    }
+
+    // If we exhausted attempts, fail gracefully
+    if (attempts >= maxAttempts) {
+      throw new Error('Failed to generate unique username');
     }
 
     const userData = {

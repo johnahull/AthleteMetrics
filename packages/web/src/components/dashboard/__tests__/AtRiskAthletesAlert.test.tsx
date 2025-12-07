@@ -174,6 +174,14 @@ describe("AtRiskAthletesAlert", () => {
       );
 
       await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
+
+      await waitFor(() => {
         expect(screen.getByText(/declining performance/i)).toBeInTheDocument();
       });
     });
@@ -183,6 +191,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
@@ -196,6 +212,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         const declineText = screen.getByText(/12\.5%/);
@@ -212,6 +236,14 @@ describe("AtRiskAthletesAlert", () => {
       );
 
       await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
+
+      await waitFor(() => {
         expect(screen.getByText(/Fly-10/)).toBeInTheDocument();
         expect(screen.getByText(/12\.5%/)).toBeInTheDocument();
       });
@@ -222,6 +254,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         // Should show "1.20 → 1.35" format
@@ -238,6 +278,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
@@ -290,6 +338,14 @@ describe("AtRiskAthletesAlert", () => {
       );
 
       await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
+
+      await waitFor(() => {
         expect(screen.getByText(/inactive athletes/i)).toBeInTheDocument();
       });
     });
@@ -299,6 +355,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         expect(screen.getByText("Bob Johnson")).toBeInTheDocument();
@@ -314,6 +378,14 @@ describe("AtRiskAthletesAlert", () => {
       );
 
       await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
+
+      await waitFor(() => {
         expect(screen.getByText(/last active 24 days ago/i)).toBeInTheDocument();
       });
 
@@ -325,6 +397,14 @@ describe("AtRiskAthletesAlert", () => {
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
+
+      await waitFor(() => {
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
+      });
+
+      // Expand the alert
+      const collapseToggle = screen.getByTestId("collapse-toggle");
+      await userEvent.click(collapseToggle);
 
       await waitFor(() => {
         expect(screen.getByText("Bob Johnson")).toBeInTheDocument();
@@ -448,15 +528,18 @@ describe("AtRiskAthletesAlert", () => {
       );
     });
 
-    it("should be expanded by default", async () => {
+    it("should be collapsed by default", async () => {
       render(
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
 
       await waitFor(() => {
-        expect(screen.getByText("John Smith")).toBeInTheDocument();
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
       });
+
+      // Should not show athlete names when collapsed
+      expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
     });
 
     it("should show collapse button/icon", async () => {
@@ -470,46 +553,49 @@ describe("AtRiskAthletesAlert", () => {
       });
     });
 
-    it("should collapse when toggle clicked", async () => {
+    it("should expand when toggle clicked", async () => {
       render(
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
 
       await waitFor(() => {
-        expect(screen.getByText("John Smith")).toBeInTheDocument();
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
       });
+
+      // Should be collapsed initially
+      expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
 
       const collapseToggle = screen.getByTestId("collapse-toggle");
       await userEvent.click(collapseToggle);
 
       await waitFor(() => {
-        expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
+        expect(screen.getByText("John Smith")).toBeInTheDocument();
       });
     });
 
-    it("should expand when toggle clicked again", async () => {
+    it("should collapse when toggle clicked again", async () => {
       render(
         <AtRiskAthletesAlert organizationId="org-123" />,
         { wrapper: createWrapper() }
       );
 
       await waitFor(() => {
-        expect(screen.getByText("John Smith")).toBeInTheDocument();
+        expect(screen.getByTestId("at-risk-alert")).toBeInTheDocument();
       });
 
       const collapseToggle = screen.getByTestId("collapse-toggle");
-
-      // Collapse
-      await userEvent.click(collapseToggle);
-      await waitFor(() => {
-        expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
-      });
 
       // Expand
       await userEvent.click(collapseToggle);
       await waitFor(() => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
+      });
+
+      // Collapse
+      await userEvent.click(collapseToggle);
+      await waitFor(() => {
+        expect(screen.queryByText("John Smith")).not.toBeInTheDocument();
       });
     });
   });

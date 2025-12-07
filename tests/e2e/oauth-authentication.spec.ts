@@ -27,7 +27,7 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should display OAuth buttons on login page', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Verify Google OAuth button exists
     const googleButton = page.locator('button:has-text("Continue with Google")');
@@ -43,10 +43,10 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should position OAuth buttons below traditional login form', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Get positions of elements
-    const passwordField = page.locator('[data-testid="input-password"], input[type="password"]').first();
+    const passwordField = page.locator('[data-testid="input-password"]').first();
     const googleButton = page.locator('button:has-text("Continue with Google")');
 
     const passwordBox = await passwordField.boundingBox();
@@ -60,7 +60,7 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should display divider with "Or continue with" text', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Look for divider text between traditional form and OAuth buttons
     const dividerText = page.locator('text=/or.*continue.*with/i');
@@ -69,15 +69,15 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should have correct label for email/username field', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
-    // Check label text is "Email or Username" or "Email address"
-    const label = page.locator('label:has-text("Email")').first();
+    // Check label text contains "Username"
+    const label = page.locator('label:has-text("Username")').first();
     await expect(label).toBeVisible();
 
     const labelText = await label.textContent();
-    // Accept "Email address", "Email or Username", or just "Email"
-    expect(labelText).toMatch(/email/i);
+    // Should be "Username or Email"
+    expect(labelText).toMatch(/username/i);
   });
 
   test('should redirect to Google OAuth endpoint when clicking Google button', async ({ page }) => {
@@ -132,7 +132,7 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should display error alert for OAuth failure (error=oauth_failed)', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login?error=oauth_failed`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Should show error alert/message
     const errorAlert = page.locator('[role="alert"], .alert, .error').filter({ hasText: /oauth|authentication|failed|error/i });
@@ -144,7 +144,7 @@ test.describe('OAuth Authentication UI Tests', () => {
 
   test('should display success message for account linking (message=account_linked)', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login?message=account_linked`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Should show success alert/message
     const successAlert = page.locator('[role="alert"], .alert, .success').filter({ hasText: /linked|success|account/i });
@@ -159,12 +159,12 @@ test.describe('OAuth Authentication UI Tests', () => {
     // For now, we'll test the error message pattern
 
     await page.goto(`${STAGING_URL}/login`);
-    await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+    await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
     // Fill in credentials for a hypothetical OAuth-only user
     // In a real scenario, this would be a test user created specifically for this test
-    await page.fill('[data-testid="input-email"], input[type="email"]', 'oauth-only-user@example.com');
-    await page.fill('[data-testid="input-password"], input[type="password"]', 'any-password');
+    await page.fill('[data-testid="input-username"]', 'oauth-only-user@example.com');
+    await page.fill('[data-testid="input-password"]', 'any-password');
 
     // Try to login
     await page.click('[data-testid="button-login"]');
@@ -194,7 +194,7 @@ test.describe('OAuth Error Message Handling', () => {
 
     for (const { code, expectedText } of errorCodes) {
       await page.goto(`${STAGING_URL}/login?error=${code}`);
-      await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+      await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
       // Should show some error alert (exact message may vary)
       const errorAlert = page.locator('[role="alert"], .alert, .error');
@@ -213,7 +213,7 @@ test.describe('OAuth Error Message Handling', () => {
 
     for (const { code, expectedText } of successMessages) {
       await page.goto(`${STAGING_URL}/login?message=${code}`);
-      await page.waitForSelector('[data-testid="input-email"], input[type="email"]', { state: 'visible' });
+      await page.waitForSelector('[data-testid="input-username"]', { state: 'visible' });
 
       // Should show some success alert
       const successAlert = page.locator('[role="alert"], .alert');
