@@ -33,11 +33,13 @@ export class OAuthService extends BaseService {
   async handleGoogleAuth(profile: any): Promise<OAuthResult> {
     // Validate profile has required fields
     if (!profile.emails || profile.emails.length === 0) {
-      return { success: false, error: 'No email address provided by OAuth provider' };
+      console.error('[OAuth Security] Missing email from Google OAuth provider');
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
     }
 
     if (!profile.id) {
-      return { success: false, error: 'No user ID provided by OAuth provider' };
+      console.error('[OAuth Security] Missing user ID from Google OAuth provider');
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
     }
 
     const oauthProfile: OAuthProfile = {
@@ -76,7 +78,8 @@ export class OAuthService extends BaseService {
       // Validate email format
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(profile.email)) {
-        return { success: false, error: 'Invalid email address from OAuth provider' };
+        console.error('[OAuth Security] Invalid email format from OAuth provider:', { provider: profile.provider });
+        return { success: false, error: 'Authentication failed. Please try again or contact support.' };
       }
       // 1. Check if user exists with this provider ID
       const existingOAuthUser = await this.findUserByProviderId(profile.provider, profile.providerId);
@@ -93,7 +96,8 @@ export class OAuthService extends BaseService {
       if (existingEmailUser) {
         // Validate user has email address
         if (!existingEmailUser.emails || existingEmailUser.emails.length === 0) {
-          return { success: false, error: 'User account has no email address' };
+          console.error('[OAuth Security] User account missing email array:', { userId: existingEmailUser.id });
+          return { success: false, error: 'Authentication failed. Please try again or contact support.' };
         }
 
         // Email exists - require account linking via email confirmation

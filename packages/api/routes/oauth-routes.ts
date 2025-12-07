@@ -23,6 +23,16 @@ const oauthLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'oauth'),
 });
 
+// Rate limiting for account linking endpoint (prevent token brute-force)
+const linkingLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,  // 15 minutes
+  limit: 5,  // 5 linking attempts per window (stricter than OAuth)
+  message: { message: "Too many account linking attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'oauth'),
+});
+
 export function registerOAuthRoutes(app: Express) {
   const { googleEnabled, appleEnabled, anyEnabled } = isOAuthEnabled();
 
@@ -195,7 +205,7 @@ export function registerOAuthRoutes(app: Express) {
   /**
    * Confirm account linking
    */
-  app.get('/api/auth/link-account/:token', async (req, res) => {
+  app.get('/api/auth/link-account/:token', linkingLimiter, async (req, res) => {
     try {
       const { token } = req.params;
       const result = await oauthService.confirmAccountLinking(token);

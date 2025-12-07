@@ -20,6 +20,16 @@ const registrationLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'auth'),
 });
 
+// Rate limiting for availability check endpoints (prevent enumeration attacks)
+const availabilityCheckLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // 100 checks per 15 minutes (reasonable for legitimate use)
+  message: { message: "Too many availability checks, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
+});
+
 // Validation schema for registration
 const registrationSchema = z.object({
   firstName: z.string()
@@ -224,7 +234,7 @@ export function registerRegistrationRoutes(app: Express) {
    * Check username availability
    * Used for real-time validation in the registration form
    */
-  app.get("/api/auth/check-username/:username", async (req: Request, res: Response) => {
+  app.get("/api/auth/check-username/:username", availabilityCheckLimiter, async (req: Request, res: Response) => {
     try {
       const { username } = req.params;
 
@@ -257,7 +267,7 @@ export function registerRegistrationRoutes(app: Express) {
    * Check email availability
    * Used for real-time validation in the registration form
    */
-  app.get("/api/auth/check-email", async (req: Request, res: Response) => {
+  app.get("/api/auth/check-email", availabilityCheckLimiter, async (req: Request, res: Response) => {
     try {
       const email = (req.query.email as string)?.toLowerCase()?.trim();
 
