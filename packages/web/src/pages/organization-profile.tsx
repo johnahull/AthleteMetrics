@@ -46,20 +46,26 @@ const OrganizationDisplay = ({ organization, isLoading, error }: any) => {
   if (error) return <p className="text-red-600">Error loading organization details: {error.message}</p>;
   if (!organization) return <p className="text-gray-500">No organization data available.</p>;
 
+  // Handle both flat and nested API response structures
+  // API returns { organization: {...}, coaches, ... } but type expects flat structure
+  const orgData = organization.organization || organization;
+  const name = orgData.name || organization.name;
+  const location = orgData.location || organization.location;
+  const description = orgData.description || organization.description;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Building2 className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
-      </div>
-      {organization.location && (
+      {location && (
         <div className="flex items-center gap-2 text-gray-600">
           <MapPin className="h-4 w-4" />
-          <span>{organization.location}</span>
+          <span>{location}</span>
         </div>
       )}
-      {organization.description && (
-        <p className="text-gray-600 mt-2">{organization.description}</p>
+      {description && (
+        <p className="text-gray-600">{description}</p>
+      )}
+      {!location && !description && (
+        <p className="text-gray-500 text-sm italic">No additional details available for this organization.</p>
       )}
     </div>
   );
@@ -96,6 +102,7 @@ type OrganizationProfile = {
   name: string;
   description?: string;
   location?: string;
+  orgType?: 'club' | 'hs' | 'college';
   coaches: Array<{
     user: {
       id: string;
@@ -965,10 +972,12 @@ export default function OrganizationProfile() {
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
+  const isAthlete = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "athlete");
   const hasOrgAccess = isOrgAdmin || isCoach;
 
-  // Check if user has access to this specific organization
-  const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
+  // Check if user has access to this specific organization (all members can view, including athletes)
+  const userBelongsToOrg = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id);
+  const userHasAccessToOrg = user?.isSiteAdmin || userBelongsToOrg;
 
   // Fetch organization data - needs to be declared before useEffect hooks that use it
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
@@ -1176,9 +1185,23 @@ export default function OrganizationProfile() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl">{organization?.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-2xl">
+                  {organization?.name || (organization as any)?.organization?.name}
+                </CardTitle>
+                {/* orgType may be at organization.orgType or organization.organization.orgType depending on API structure */}
+                {(organization?.orgType || (organization as any)?.organization?.orgType) && (
+                  <Badge variant="outline">
+                    {(() => {
+                      const orgType = organization?.orgType || (organization as any)?.organization?.orgType;
+                      return orgType === 'hs' ? 'High School' :
+                             orgType === 'college' ? 'College' : 'Club';
+                    })()}
+                  </Badge>
+                )}
+              </div>
               <CardDescription>
-                Organization Profile and Settings
+                {canEdit ? "Organization Profile and Settings" : "Organization Profile"}
               </CardDescription>
             </div>
             <div className="flex gap-2">
