@@ -495,6 +495,7 @@ export const accountLinkingTokens = pgTable("account_linking_tokens", {
   providerEmail: text("provider_email").notNull(),
   expiresAt: timestamp("expires_at").notNull(),
   usedAt: timestamp("used_at"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Index for efficient token lookup

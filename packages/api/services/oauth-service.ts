@@ -42,6 +42,13 @@ export class OAuthService extends BaseService {
       return { success: false, error: 'Authentication failed. Please try again or contact support.' };
     }
 
+    // Validate provider ID format (prevent injection attacks)
+    const providerIdRegex = /^[a-zA-Z0-9_\-]{1,255}$/;
+    if (!providerIdRegex.test(profile.id)) {
+      console.error('[OAuth Security] Invalid provider ID format from Google:', { providerId: profile.id });
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
+    }
+
     const oauthProfile: OAuthProfile = {
       provider: 'google',
       providerId: profile.id,
@@ -58,6 +65,24 @@ export class OAuthService extends BaseService {
    * Handle Apple OAuth authentication
    */
   async handleAppleAuth(profile: any): Promise<OAuthResult> {
+    // Validate required fields
+    if (!profile.id) {
+      console.error('[OAuth Security] Missing user ID from Apple OAuth provider');
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
+    }
+
+    if (!profile.email) {
+      console.error('[OAuth Security] Missing email from Apple OAuth provider');
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
+    }
+
+    // Validate provider ID format (prevent injection attacks)
+    const providerIdRegex = /^[a-zA-Z0-9_\-\.]{1,255}$/;
+    if (!providerIdRegex.test(profile.id)) {
+      console.error('[OAuth Security] Invalid provider ID format from Apple:', { providerId: profile.id });
+      return { success: false, error: 'Authentication failed. Please try again or contact support.' };
+    }
+
     const oauthProfile: OAuthProfile = {
       provider: 'apple',
       providerId: profile.id,
@@ -183,7 +208,7 @@ export class OAuthService extends BaseService {
     profile: OAuthProfile
   ): Promise<string> {
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minute expiry (reduced from 1 hour)
 
     await this.storage.createAccountLinkingToken({
       userId,
@@ -192,6 +217,7 @@ export class OAuthService extends BaseService {
       providerId: profile.providerId,
       providerEmail: profile.email,
       expiresAt,
+      failedAttempts: 0,
     });
 
     return token;
@@ -200,20 +226,26 @@ export class OAuthService extends BaseService {
   /**
    * Confirm account linking via email token
    */
-  async confirmAccountLinking(token: string): Promise<{ success: boolean; error?: string }> {
+  async confirmAccountLinking(token: string): Promise<{ success: boolean; error?: string; shouldIncrementFailedAttempts?: boolean }> {
     try {
       const linkingToken = await this.storage.getAccountLinkingToken(token);
 
       if (!linkingToken) {
-        return { success: false, error: 'Invalid or expired linking token' };
+        return { success: false, error: 'Invalid or expired linking token', shouldIncrementFailedAttempts: false };
       }
 
       if (linkingToken.usedAt) {
-        return { success: false, error: 'This linking token has already been used' };
+        return { success: false, error: 'This linking token has already been used', shouldIncrementFailedAttempts: false };
       }
 
       if (new Date() > linkingToken.expiresAt) {
-        return { success: false, error: 'This linking token has expired' };
+        return { success: false, error: 'This linking token has expired', shouldIncrementFailedAttempts: false };
+      }
+
+      // Check failed attempts (invalidate after 3 failed attempts)
+      if (linkingToken.failedAttempts >= 3) {
+        console.error('[OAuth Security] Token invalidated due to too many failed attempts:', { token: token.substring(0, 8) });
+        return { success: false, error: 'This linking token has been invalidated due to too many failed attempts', shouldIncrementFailedAttempts: false };
       }
 
       // Link OAuth account to existing user
@@ -229,10 +261,11 @@ export class OAuthService extends BaseService {
       // Mark token as used
       await this.storage.markAccountLinkingTokenUsed(token);
 
-      return { success: true };
+      return { success: true, shouldIncrementFailedAttempts: false };
     } catch (error) {
       console.error('OAuthService.confirmAccountLinking:', error);
-      return { success: false, error: 'Failed to link accounts' };
+      // On unexpected errors, increment failed attempts to prevent brute force
+      return { success: false, error: 'Failed to link accounts', shouldIncrementFailedAttempts: true };
     }
   }
 

@@ -157,6 +157,7 @@ export interface IStorage {
   createAccountLinkingToken(data: any): Promise<void>;
   getAccountLinkingToken(token: string): Promise<any>;
   markAccountLinkingTokenUsed(token: string): Promise<void>;
+  incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -468,6 +469,13 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(accountLinkingTokens)
       .set({ usedAt: new Date() })
+      .where(eq(accountLinkingTokens.token, token));
+  }
+
+  async incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ failedAttempts: sql`${accountLinkingTokens.failedAttempts} + 1` })
       .where(eq(accountLinkingTokens.token, token));
   }
 
