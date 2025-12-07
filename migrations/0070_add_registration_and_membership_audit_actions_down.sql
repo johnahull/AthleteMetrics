@@ -7,6 +7,7 @@ BEGIN
   ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_action_valid;
 
   -- Restore previous constraint (0055 version)
+  -- Note: This includes actions added after 0055 but before 0070 to maintain compatibility
   ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     'organization_created',
     'organization_updated',
@@ -20,6 +21,8 @@ BEGIN
     'user_updated',
     'user_deleted',
     'user_role_changed',
+    'user_role_updated',
+    'user_registered',
     'role_changed',
     'password_reset_unknown_email',
     'email_verification_requested',
@@ -34,6 +37,8 @@ BEGIN
     'measurement_created',
     'measurement_updated',
     'measurement_deleted',
+    'measurements_bulk_verify',
+    'measurements_bulk_unverify',
     'invitation_created',
     'invitation_accepted',
     'invitation_cancelled',
@@ -72,6 +77,8 @@ BEGIN
     'report_ai_insights_generation_failed',
     'organization_type_metrics_queried',
     'organization_type_benchmarks_queried',
+    'cache_invalidated',
+    'cache_invalidation_failed',
     'site_wellness_module_toggled',
     'org_wellness_enabled',
     'org_wellness_disabled'

@@ -501,6 +501,8 @@ export const accountLinkingTokens = pgTable("account_linking_tokens", {
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_token_idx ON ${table} (${table.token})`,
   // Index for user_id lookups
   userIdIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_user_id_idx ON ${table} (${table.userId})`,
+  // Index for token expiry cleanup (added in migration 0072)
+  expiresAtIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_expires_at_idx ON ${table} (${table.expiresAt})`,
 }));
 
 // Site Settings - Global site configuration (singleton table)
