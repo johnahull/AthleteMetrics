@@ -29,15 +29,31 @@ CREATE TABLE IF NOT EXISTS membership_requests (
   expires_at TIMESTAMP
 );
 
--- 4. Add check constraint for status enum
-ALTER TABLE membership_requests
-  ADD CONSTRAINT membership_requests_status_check
-  CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
+-- 4. Add check constraint for status enum (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'membership_requests_status_check'
+  ) THEN
+    ALTER TABLE membership_requests
+      ADD CONSTRAINT membership_requests_status_check
+      CHECK (status IN ('pending', 'approved', 'rejected', 'cancelled'));
+  END IF;
+END $$;
 
--- 5. Add check constraint for discovery_method enum
-ALTER TABLE membership_requests
-  ADD CONSTRAINT membership_requests_discovery_method_check
-  CHECK (discovery_method IS NULL OR discovery_method IN ('join_code', 'directory', 'direct_link'));
+-- 5. Add check constraint for discovery_method enum (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'membership_requests_discovery_method_check'
+  ) THEN
+    ALTER TABLE membership_requests
+      ADD CONSTRAINT membership_requests_discovery_method_check
+      CHECK (discovery_method IS NULL OR discovery_method IN ('join_code', 'directory', 'direct_link'));
+  END IF;
+END $$;
 
 -- 6. Create indexes
 -- Prevent duplicate pending requests per user/org combination
