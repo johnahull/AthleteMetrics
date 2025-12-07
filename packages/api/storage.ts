@@ -144,6 +144,9 @@ export interface IStorage {
     autoApproveRequests?: boolean;
   }): Promise<Organization>;
 
+  // Unlinked Athletes (for account linking during membership approval)
+  getUnlinkedAthletes(organizationId: string): Promise<User[]>;
+
   // Email Verification
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
