@@ -88,16 +88,17 @@ describe('VerifyEmail Page', () => {
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalledWith(
-          '/api/auth/verify-email/test-token-456',
+          '/api/enhanced-auth/verify-email',
           expect.objectContaining({
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: 'test-token-456' }),
           })
         );
       });
     });
 
-    it('should display dashboard navigation button', async () => {
+    it('should display sign in navigation button', async () => {
       vi.stubGlobal('location', { search: '?token=valid-token' });
 
       mockFetch.mockResolvedValueOnce({
@@ -108,12 +109,12 @@ describe('VerifyEmail Page', () => {
       render(<VerifyEmail />);
 
       await waitFor(() => {
-        const dashboardButton = screen.getByRole('button', { name: /go to dashboard/i });
-        expect(dashboardButton).toBeInTheDocument();
+        const signInButton = screen.getByRole('button', { name: /sign in now/i });
+        expect(signInButton).toBeInTheDocument();
       });
     });
 
-    it('should navigate to dashboard on button click', async () => {
+    it('should navigate to login on button click', async () => {
       vi.stubGlobal('location', { search: '?token=valid-token' });
 
       mockFetch.mockResolvedValueOnce({
@@ -123,10 +124,10 @@ describe('VerifyEmail Page', () => {
 
       render(<VerifyEmail />);
 
-      const dashboardButton = await screen.findByRole('button', { name: /go to dashboard/i });
-      dashboardButton.click();
+      const signInButton = await screen.findByRole('button', { name: /sign in now/i });
+      signInButton.click();
 
-      expect(mockSetLocation).toHaveBeenCalledWith('/dashboard');
+      expect(mockSetLocation).toHaveBeenCalledWith('/login?verified=true');
     });
   });
 
@@ -162,7 +163,7 @@ describe('VerifyEmail Page', () => {
       });
     });
 
-    it('should display profile navigation button on error', async () => {
+    it('should display login navigation button on error', async () => {
       vi.stubGlobal('location', { search: '?token=expired-token' });
 
       mockFetch.mockResolvedValueOnce({
@@ -173,12 +174,12 @@ describe('VerifyEmail Page', () => {
       render(<VerifyEmail />);
 
       await waitFor(() => {
-        const profileButton = screen.getByRole('button', { name: /go to profile/i });
-        expect(profileButton).toBeInTheDocument();
+        const loginButton = screen.getByRole('button', { name: /go to login/i });
+        expect(loginButton).toBeInTheDocument();
       });
     });
 
-    it('should navigate to profile on button click', async () => {
+    it('should navigate to login on button click', async () => {
       vi.stubGlobal('location', { search: '?token=expired-token' });
 
       mockFetch.mockResolvedValueOnce({
@@ -188,10 +189,10 @@ describe('VerifyEmail Page', () => {
 
       render(<VerifyEmail />);
 
-      const profileButton = await screen.findByRole('button', { name: /go to profile/i });
-      profileButton.click();
+      const loginButton = await screen.findByRole('button', { name: /go to login/i });
+      loginButton.click();
 
-      expect(mockSetLocation).toHaveBeenCalledWith('/profile');
+      expect(mockSetLocation).toHaveBeenCalledWith('/login');
     });
   });
 
@@ -328,7 +329,7 @@ describe('VerifyEmail Page', () => {
 
       await waitFor(() => {
         expect(
-          screen.getByText(/request a new verification email/i)
+          screen.getByText(/sign in and request a new verification email/i)
         ).toBeInTheDocument();
       });
     });

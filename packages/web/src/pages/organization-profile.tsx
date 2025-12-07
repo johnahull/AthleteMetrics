@@ -4,15 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Building2, Users, UserCog, MapPin, Mail, MailCheck, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit, Settings } from "lucide-react";
+import { Building2, Users, UserCog, MapPin, Mail, MailCheck, Phone, Plus, UserPlus, Send, Clock, CheckCircle, AlertCircle, Trash2, Copy, RefreshCw, ArrowLeft, Eye, EyeOff, Edit, Settings, XCircle, UserCheck, Loader2, Link2, Search } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,6 +26,7 @@ import { mutations } from "@/lib/api";
 import { validateUsername } from "@shared/username-validation";
 import OrganizationMetricsCard from "@/components/organization-metrics-card";
 import { getInvitationStatusMessage } from "@/lib/invitation-helpers";
+import { formatDistanceToNow } from "date-fns";
 
 // Constants
 const EMAIL_SENT_NO_TIMESTAMP_FALLBACK = 'recently';
@@ -39,25 +41,32 @@ const LoadingSpinner = ({ text }: { text: string }) => (
   </div>
 );
 
-const OrganizationDisplay = ({ organization, isLoading, error }: any) => {
+interface OrganizationDisplayProps {
+  organization: OrganizationProfile | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}
+
+const OrganizationDisplay = ({ organization, isLoading, error }: OrganizationDisplayProps) => {
   if (isLoading) return <LoadingSpinner text="Loading organization details..." />;
   if (error) return <p className="text-red-600">Error loading organization details: {error.message}</p>;
   if (!organization) return <p className="text-gray-500">No organization data available.</p>;
 
+  const { location, description } = organization.organization;
+
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <Building2 className="h-8 w-8 text-primary" />
-        <h1 className="text-3xl font-bold text-gray-900">{organization.name}</h1>
-      </div>
-      {organization.location && (
+      {location && (
         <div className="flex items-center gap-2 text-gray-600">
           <MapPin className="h-4 w-4" />
-          <span>{organization.location}</span>
+          <span>{location}</span>
         </div>
       )}
-      {organization.description && (
-        <p className="text-gray-600 mt-2">{organization.description}</p>
+      {description && (
+        <p className="text-gray-600">{description}</p>
+      )}
+      {!location && !description && (
+        <p className="text-gray-500 text-sm italic">No additional details available for this organization.</p>
       )}
     </div>
   );
@@ -89,11 +98,15 @@ const invitationSchema = z.object({
 type CreateUserForm = z.infer<typeof createUserSchema>;
 type InvitationForm = z.infer<typeof invitationSchema>;
 
+// API response structure - nested organization object with arrays
 type OrganizationProfile = {
-  id: string;
-  name: string;
-  description?: string;
-  location?: string;
+  organization: {
+    id: string;
+    name: string;
+    description?: string;
+    location?: string;
+    orgType?: 'club' | 'hs' | 'college';
+  };
   coaches: Array<{
     user: {
       id: string;
@@ -101,7 +114,7 @@ type OrganizationProfile = {
       lastName: string;
       email: string;
       isActive?: string;
-      username?: string; // Added username to user type
+      username?: string;
     };
     role: string;
   }>;
@@ -124,7 +137,6 @@ type OrganizationProfile = {
         name: string;
       };
     }>;
-    // Added potential fields for athlete details
     dateOfBirth?: string;
     gender?: string;
     email?: string;
@@ -142,6 +154,419 @@ type OrganizationProfile = {
     emailSentAt?: string;
   }>;
 };
+
+// Membership request type
+interface MembershipRequest {
+  id: string;
+  userId: string;
+  organizationId: string;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  requestedRole: string;
+  discoveryMethod: string | null;
+  createdAt: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    fullName: string;
+  };
+}
+
+// Type for unlinked athlete
+interface UnlinkedAthlete {
+  id: string;
+  fullName: string;
+  firstName: string;
+  lastName: string;
+  birthYear: number | null;
+  school: string | null;
+}
+
+// Pending Membership Requests Component
+function PendingMembershipRequests({ organizationId }: { organizationId: string }) {
+  const { toast } = useToast();
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [linkingRequestId, setLinkingRequestId] = useState<string | null>(null);
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string | null>(null);
+  const [athleteSearch, setAthleteSearch] = useState('');
+
+  // Fetch pending membership requests
+  const { data, isLoading, error } = useQuery({
+    queryKey: [`/api/organizations/${organizationId}/membership-requests`, 'pending'],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/organizations/${organizationId}/membership-requests?status=pending`);
+      return res.json();
+    },
+  });
+
+  const requests = data?.requests as MembershipRequest[] | undefined;
+
+  // Fetch unlinked athletes (only when linking dialog is open)
+  const { data: unlinkedAthletesData, isLoading: loadingUnlinkedAthletes } = useQuery({
+    queryKey: [`/api/organizations/${organizationId}/unlinked-athletes`],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/organizations/${organizationId}/unlinked-athletes`);
+      return res.json();
+    },
+    enabled: linkingRequestId !== null,
+  });
+
+  const unlinkedAthletes = unlinkedAthletesData?.athletes as UnlinkedAthlete[] | undefined;
+
+  // Filter athletes based on search
+  const filteredAthletes = unlinkedAthletes?.filter((athlete) => {
+    if (!athleteSearch) return true;
+    const searchLower = athleteSearch.toLowerCase();
+    return (
+      athlete.fullName?.toLowerCase().includes(searchLower) ||
+      athlete.firstName?.toLowerCase().includes(searchLower) ||
+      athlete.lastName?.toLowerCase().includes(searchLower) ||
+      athlete.school?.toLowerCase().includes(searchLower) ||
+      athlete.birthYear?.toString().includes(searchLower)
+    );
+  });
+
+  // Approve mutation (without linking)
+  const approveMutation = useMutation({
+    mutationFn: async (requestId: string) => {
+      const res = await apiRequest("POST", `/api/membership-requests/${requestId}/approve`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/membership-requests`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
+      toast({
+        title: "Request Approved",
+        description: "The membership request has been approved.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Approve with athlete linking mutation
+  const approveWithLinkingMutation = useMutation({
+    mutationFn: async ({ requestId, linkToAthleteId }: { requestId: string; linkToAthleteId: string }) => {
+      const res = await apiRequest("POST", `/api/membership-requests/${requestId}/approve`, { linkToAthleteId });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/membership-requests`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/profile`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/unlinked-athletes`] });
+      setLinkingRequestId(null);
+      setSelectedAthleteId(null);
+      setAthleteSearch('');
+      toast({
+        title: "Request Approved & Linked",
+        description: "The membership request has been approved and linked to the existing athlete profile.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleLinkAndApprove = () => {
+    if (linkingRequestId && selectedAthleteId) {
+      approveWithLinkingMutation.mutate({
+        requestId: linkingRequestId,
+        linkToAthleteId: selectedAthleteId,
+      });
+    }
+  };
+
+  // Reject mutation
+  const rejectMutation = useMutation({
+    mutationFn: async ({ requestId, reason }: { requestId: string; reason?: string }) => {
+      const res = await apiRequest("POST", `/api/membership-requests/${requestId}/reject`, { reason });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/organizations/${organizationId}/membership-requests`] });
+      setRejectingId(null);
+      setRejectionReason('');
+      toast({
+        title: "Request Rejected",
+        description: "The membership request has been rejected.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleReject = (requestId: string) => {
+    rejectMutation.mutate({ requestId, reason: rejectionReason || undefined });
+  };
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCheck className="h-5 w-5" />
+            Pending Membership Requests
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return null; // Don't show errors for missing permissions
+  }
+
+  if (!requests || requests.length === 0) {
+    return null; // Don't show section if no pending requests
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <UserCheck className="h-5 w-5" />
+          Pending Membership Requests ({requests.length})
+        </CardTitle>
+        <CardDescription>
+          Review and approve athletes requesting to join your organization
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {requests.map((request) => (
+            <div
+              key={request.id}
+              className="flex items-center justify-between p-3 bg-amber-50 border border-amber-200 rounded-lg"
+            >
+              <div className="flex-1">
+                <div className="font-medium">{request.user.fullName}</div>
+                <div className="text-sm text-muted-foreground flex items-center gap-2">
+                  <Mail className="h-3 w-3" />
+                  {request.user.email}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
+                  <Clock className="h-3 w-3" />
+                  Requested {formatDistanceToNow(new Date(request.createdAt), { addSuffix: true })}
+                  {request.discoveryMethod && (
+                    <Badge variant="outline" className="ml-2 text-xs">
+                      via {request.discoveryMethod === 'join_code' ? 'join code' : 'directory'}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {rejectingId === request.id ? (
+                  <div className="flex items-center gap-2">
+                    <Textarea
+                      placeholder="Reason (optional)"
+                      value={rejectionReason}
+                      onChange={(e) => setRejectionReason(e.target.value)}
+                      className="w-48 h-16 text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => handleReject(request.id)}
+                      disabled={rejectMutation.isPending}
+                    >
+                      {rejectMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Confirm'
+                      )}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setRejectingId(null);
+                        setRejectionReason('');
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="default"
+                      className="bg-green-600 hover:bg-green-700"
+                      onClick={() => approveMutation.mutate(request.id)}
+                      disabled={approveMutation.isPending}
+                      data-testid={`approve-request-${request.id}`}
+                    >
+                      {approveMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                      ) : (
+                        <CheckCircle className="h-4 w-4 mr-1" />
+                      )}
+                      Approve
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      onClick={() => {
+                        setLinkingRequestId(request.id);
+                        setSelectedAthleteId(null);
+                        setAthleteSearch('');
+                      }}
+                      data-testid={`link-request-${request.id}`}
+                    >
+                      <Link2 className="h-4 w-4 mr-1" />
+                      Link to Existing
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => setRejectingId(request.id)}
+                      data-testid={`reject-request-${request.id}`}
+                    >
+                      <XCircle className="h-4 w-4 mr-1" />
+                      Reject
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Link to Existing Athlete Dialog */}
+        <Dialog open={linkingRequestId !== null} onOpenChange={(open) => {
+          if (!open) {
+            setLinkingRequestId(null);
+            setSelectedAthleteId(null);
+            setAthleteSearch('');
+          }
+        }}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Link2 className="h-5 w-5" />
+                Link to Existing Athlete
+              </DialogTitle>
+              <DialogDescription>
+                Select an existing athlete profile to link with this membership request.
+                The requester's account will inherit the existing athlete's data (measurements, team memberships).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Search input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search athletes by name, school, or birth year..."
+                  className="pl-9"
+                  value={athleteSearch}
+                  onChange={(e) => setAthleteSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Athletes list */}
+              <div className="max-h-60 overflow-y-auto border rounded-md">
+                {loadingUnlinkedAthletes ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : filteredAthletes && filteredAthletes.length > 0 ? (
+                  <div className="divide-y">
+                    {filteredAthletes.map((athlete) => (
+                      <div
+                        key={athlete.id}
+                        className={`p-3 cursor-pointer hover:bg-gray-50 transition-colors ${
+                          selectedAthleteId === athlete.id ? 'bg-blue-50 border-l-2 border-l-blue-500' : ''
+                        }`}
+                        onClick={() => setSelectedAthleteId(athlete.id)}
+                      >
+                        <div className="font-medium">{athlete.fullName}</div>
+                        <div className="text-sm text-muted-foreground flex items-center gap-2 mt-1">
+                          {athlete.birthYear && (
+                            <span>Born {athlete.birthYear}</span>
+                          )}
+                          {athlete.school && (
+                            <>
+                              {athlete.birthYear && <span>•</span>}
+                              <span>{athlete.school}</span>
+                            </>
+                          )}
+                          {!athlete.birthYear && !athlete.school && (
+                            <span className="italic">No additional info</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">
+                      {athleteSearch
+                        ? 'No athletes match your search'
+                        : 'No unlinked athletes found'}
+                    </p>
+                    <p className="text-xs mt-1">
+                      {!athleteSearch && 'All athletes in this organization have login credentials'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setLinkingRequestId(null);
+                  setSelectedAthleteId(null);
+                  setAthleteSearch('');
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleLinkAndApprove}
+                disabled={!selectedAthleteId || approveWithLinkingMutation.isPending}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {approveWithLinkingMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Link2 className="h-4 w-4 mr-2" />
+                )}
+                Link & Approve
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </CardContent>
+    </Card>
+  );
+}
 
 // User Management Modal Component
 function UserManagementModal({ organizationId }: { organizationId: string }) {
@@ -550,10 +975,10 @@ export default function OrganizationProfile() {
 
   const isOrgAdmin = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "org_admin");
   const isCoach = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id && org.role === "coach");
-  const hasOrgAccess = isOrgAdmin || isCoach;
 
-  // Check if user has access to this specific organization
-  const userHasAccessToOrg = user?.isSiteAdmin || hasOrgAccess;
+  // Check if user has access to this specific organization (all members can view, including athletes)
+  const userBelongsToOrg = Array.isArray(userOrganizations) && userOrganizations.some((org: any) => org.organizationId === id);
+  const userHasAccessToOrg = user?.isSiteAdmin || userBelongsToOrg;
 
   // Fetch organization data - needs to be declared before useEffect hooks that use it
   const { data: organization, isLoading, error } = useQuery<OrganizationProfile>({
@@ -591,13 +1016,13 @@ export default function OrganizationProfile() {
 
   // Update document title when organization data loads
   useEffect(() => {
-    if (organization?.name) {
-      document.title = `${organization.name} - AthleteMetrics`;
+    if (organization?.organization?.name) {
+      document.title = `${organization.organization.name} - AthleteMetrics`;
     }
     return () => {
       document.title = "AthleteMetrics";
     };
-  }, [organization?.name]);
+  }, [organization?.organization?.name]);
 
   // Force refresh organization data when component mounts
   useEffect(() => {
@@ -613,7 +1038,7 @@ export default function OrganizationProfile() {
   useEffect(() => {
     if (organization && userOrganizations && id) {
       const matchingUserOrg = userOrganizations.find((userOrg: any) => userOrg.organizationId === id);
-      if (matchingUserOrg && matchingUserOrg.organization.name !== organization.name) {
+      if (matchingUserOrg && matchingUserOrg.organization.name !== organization.organization?.name) {
         // Force refresh both endpoints
         queryClient.invalidateQueries({ queryKey: [`/api/organizations/${id}/profile`] });
         queryClient.invalidateQueries({ queryKey: ["/api/auth/me/organizations"] });
@@ -761,9 +1186,19 @@ export default function OrganizationProfile() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-2xl">{organization?.name}</CardTitle>
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-2xl">
+                  {organization?.organization?.name}
+                </CardTitle>
+                {organization?.organization?.orgType && (
+                  <Badge variant="outline">
+                    {organization.organization.orgType === 'hs' ? 'High School' :
+                     organization.organization.orgType === 'college' ? 'College' : 'Club'}
+                  </Badge>
+                )}
+              </div>
               <CardDescription>
-                Organization Profile and Settings
+                {canEdit ? "Organization Profile and Settings" : "Organization Profile"}
               </CardDescription>
             </div>
             <div className="flex gap-2">
@@ -987,6 +1422,11 @@ export default function OrganizationProfile() {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* Pending Membership Requests Section - Visible to Site Admins, Org Admins, and Coaches */}
+      {(user?.isSiteAdmin || isOrgAdmin || isCoach) && (
+        <PendingMembershipRequests organizationId={id!} />
       )}
 
       {/* Metrics Configuration Section - Visible to Site Admins and Org Admins */}

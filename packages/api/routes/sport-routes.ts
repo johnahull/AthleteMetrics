@@ -6,12 +6,11 @@
  * - Authenticated users can read active sports and positions
  */
 
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import { db } from "../db";
 import {
   requireAuth,
   requireSiteAdmin,
-  type AuthenticatedRequest,
 } from "../middleware";
 import {
   siteSports,
@@ -52,7 +51,7 @@ export function registerSportsRoutes(app: Express) {
   app.get(
     "/api/sports",
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const sports = await db
           .select()
@@ -80,7 +79,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/site-sports",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const sports = await db
           .select()
@@ -106,7 +105,7 @@ export function registerSportsRoutes(app: Express) {
   app.get(
     "/api/sports/:code",
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
 
@@ -151,7 +150,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/sports/:code/usage",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
 
@@ -217,7 +216,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/sports",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const validation = insertSiteSportSchema.safeParse(req.body);
         if (!validation.success) {
@@ -275,7 +274,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/sports/:code",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
 
@@ -327,7 +326,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/sports/:code",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
 
@@ -374,7 +373,7 @@ export function registerSportsRoutes(app: Express) {
   app.get(
     "/api/sports/:sportCode/positions",
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { sportCode } = req.params;
 
@@ -419,7 +418,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/sports/:sportCode/positions",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { sportCode } = req.params;
 
@@ -495,7 +494,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/positions/:id",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -547,7 +546,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/positions/:id",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -591,7 +590,7 @@ export function registerSportsRoutes(app: Express) {
     "/api/positions/:id/usage",
     requireAuth,
     requireSiteAdmin,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 

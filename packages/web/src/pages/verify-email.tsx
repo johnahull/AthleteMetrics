@@ -19,10 +19,11 @@ export default function VerifyEmail() {
       return;
     }
 
-    // Verify the email
-    fetch(`/api/auth/verify-email/${token}`, {
+    // Verify the email using enhanced auth endpoint
+    fetch('/api/enhanced-auth/verify-email', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token })
     })
       .then(async (res) => {
         const data = await res.json();
@@ -64,26 +65,26 @@ export default function VerifyEmail() {
           {status === 'success' && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 text-center">
-                Your email has been successfully verified. You can now access all features of your account.
+                Your email has been successfully verified. You can now sign in to your account.
               </p>
               <Button
-                onClick={() => setLocation('/dashboard')}
+                onClick={() => setLocation('/login?verified=true')}
                 className="w-full"
               >
-                Go to Dashboard
+                Sign In Now
               </Button>
             </div>
           )}
           {status === 'error' && (
             <div className="space-y-3">
               <p className="text-sm text-gray-600 text-center">
-                The verification link may have expired or is invalid. You can request a new verification email from your profile.
+                The verification link may have expired or is invalid. Please sign in and request a new verification email.
               </p>
               <Button
-                onClick={() => setLocation('/profile')}
+                onClick={() => setLocation('/login')}
                 className="w-full"
               >
-                Go to Profile
+                Go to Login
               </Button>
             </div>
           )}

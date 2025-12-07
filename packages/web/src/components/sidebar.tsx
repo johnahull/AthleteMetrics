@@ -20,7 +20,8 @@ import {
   Heart,
   ClipboardCheck,
   Trophy,
-  Link
+  Link,
+  UserPlus
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -88,7 +89,8 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
     { name: "My Measurements", href: "/my-measurements", icon: ClipboardList },
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users },
-    { name: "My Goals", href: "/my-goals", icon: Target }
+    { name: "My Goals", href: "/my-goals", icon: Target },
+    { name: "Join Organization", href: "/join", icon: UserPlus }
   ]
 });
 

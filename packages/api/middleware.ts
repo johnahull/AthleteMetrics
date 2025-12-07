@@ -2,19 +2,9 @@ import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
 import type { Express, Request, Response, NextFunction } from "express";
 
-// Extended request type with user info
-export interface AuthenticatedRequest extends Request {
-  user?: {
-    id: string;
-    email: string;
-    firstName: string;
-    lastName: string;
-    role: string;
-    isSiteAdmin?: boolean;
-    primaryOrganizationId?: string;
-    accessMethod?: string; // For wellness access tracking
-  };
-}
+// Re-export for backwards compatibility - AuthenticatedRequest is now just Request
+// since we've augmented the Express.Request interface globally in types/session.d.ts
+export type AuthenticatedRequest = Request;
 
 const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
   if (!user?.id || !organizationId) return false;

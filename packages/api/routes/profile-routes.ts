@@ -353,7 +353,10 @@ export function registerProfileRoutes(app: Express) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Verify current password
+      // Verify current password (OAuth users may not have password set)
+      if (!dbUser.password) {
+        return res.status(400).json({ message: "Cannot change password for OAuth-only accounts. Please set a password first." });
+      }
       const isCurrentPasswordValid = await bcrypt.compare(passwordData.currentPassword, dbUser.password);
       if (!isCurrentPasswordValid) {
         return res.status(400).json({ message: "Current password is incorrect" });

@@ -258,6 +258,24 @@ export class EmailService {
   }
 
   /**
+   * Send OAuth account linking confirmation email
+   */
+  async sendAccountLinkingEmail(
+    email: string,
+    firstName: string,
+    provider: 'google' | 'apple',
+    token: string
+  ): Promise<boolean> {
+    const html = this.generateAccountLinkingTemplate({ email, firstName, provider, token });
+
+    return this.sendEmail({
+      to: email,
+      subject: `Confirm ${provider === 'google' ? 'Google' : 'Apple'} Account Linking - AthleteMetrics`,
+      html
+    });
+  }
+
+  /**
    * Send wellness questionnaire request notification
    */
   async sendWellnessRequest(email: string, data: WellnessRequestEmailData): Promise<boolean> {
@@ -632,6 +650,96 @@ export class EmailService {
       `.trim();
     } catch (error) {
       console.error('Failed to generate password reset email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate OAuth account linking confirmation template
+   */
+  private generateAccountLinkingTemplate(data: { email: string, firstName: string, provider: 'google' | 'apple', token: string }): string {
+    try {
+      const providerName = data.provider === 'google' ? 'Google' : 'Apple';
+      const linkUrl = `${process.env.APP_URL}/api/auth/link-account/${data.token}`;
+      const sanitizedLinkUrl = sanitizeUrl(linkUrl);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm ${providerName} Account Linking</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Confirm ${providerName} Account Linking</h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.firstName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Someone tried to sign in to your AthleteMetrics account using ${providerName}.
+              </p>
+
+              <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                To link your ${providerName} account and enable social sign-in, please click the button below:
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedLinkUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      Confirm Account Linking
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(linkUrl)}
+              </p>
+
+              <p style="margin: 0 0 16px; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                This link will expire in 1 hour.
+              </p>
+
+              <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                If you didn't request this, please ignore this email and consider changing your password.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Athletic Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate account linking email template:', error);
       throw new Error('Failed to generate email template');
     }
   }

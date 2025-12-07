@@ -13,6 +13,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { createServer } from "http";
 import session from "express-session";
+import passport from "passport";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import csrf from "csrf";
@@ -28,6 +29,8 @@ import { METRIC_CONFIG } from "@shared/analytics-types";
 import { AuthSecurity } from "./auth/security";
 import { validateAIProviderConfiguration } from "./services/ai-insights-service";
 import { registerAllRoutes } from "./routes/index";
+import { configurePassport } from "./auth/passport-config";
+import { registerOAuthRoutes } from "./routes/oauth-routes";
 
 // Session configuration
 declare module 'express-session' {
@@ -293,7 +296,8 @@ export async function initializeDefaultUser() {
       // CRITICAL: Compare password INSIDE transaction using fresh data from locked row
       // This prevents TOCTOU vulnerability where password could change between fetch and use
       // Using lockedUser.password ensures we compare against current value
-      passwordMatches = await bcrypt.compare(adminPassword, lockedUser.password);
+      // Note: lockedUser.password should always exist for site admin users (non-OAuth)
+      passwordMatches = lockedUser.password ? await bcrypt.compare(adminPassword, lockedUser.password) : false;
 
       // Check privilege restoration AFTER password comparison to use fresh transaction context
       const needsPrivilegeRestore = lockedUser.isSiteAdmin !== true;
@@ -566,6 +570,11 @@ export async function registerRoutes(app: Express) {
 
   app.use(session(sessionConfig));
 
+  // Initialize Passport for OAuth authentication
+  configurePassport();
+  app.use(passport.initialize());
+  app.use(passport.session());
+
   // CRITICAL: Sync req.session.user.id to database userId column for session revocation
   // connect-pg-simple does NOT automatically sync custom columns - we must do this manually
   // This middleware ensures that when password changes trigger revokeAllUserSessions(),
@@ -657,6 +666,9 @@ export async function registerRoutes(app: Express) {
     next();
   });
 
+  // Register OAuth routes - BEFORE other routes
+  registerOAuthRoutes(app);
+
   // Register new refactored routes - AFTER session middleware
   registerAllRoutes(app);
 
@@ -665,11 +677,11 @@ export async function registerRoutes(app: Express) {
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles for UI components
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Allow inline styles and Google Fonts
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
         connectSrc: ["'self'"],
-        fontSrc: ["'self'"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com"], // Allow Google Fonts CDN
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
         frameSrc: ["'none'"],

@@ -1,0 +1,138 @@
+/**
+ * Passport.js configuration for Google and Apple OAuth strategies
+ */
+
+import passport from 'passport';
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { Strategy as AppleStrategy } from 'passport-apple';
+import { OAuthService } from '../services/oauth-service';
+
+const oauthService = new OAuthService();
+
+/**
+ * OAuth authentication result passed through Passport's done callback.
+ * This represents the result of handleGoogleAuth or handleAppleAuth.
+ */
+interface PassportOAuthResult {
+  success: boolean;
+  userId?: string;
+  requiresLinking?: boolean;
+  error?: string;
+}
+
+/**
+ * Custom error type for OAuth linking requirements.
+ * Used to signal that account linking is needed without failing authentication.
+ */
+interface OAuthLinkingError extends Error {
+  requiresLinking: boolean;
+}
+
+/**
+ * Check if OAuth is enabled based on environment variables
+ */
+export function isOAuthEnabled() {
+  const googleEnabled = !!(process.env.GOOGLE_OAUTH_CLIENT_ID && process.env.GOOGLE_OAUTH_CLIENT_SECRET);
+  const appleEnabled = !!(
+    process.env.APPLE_OAUTH_CLIENT_ID &&
+    process.env.APPLE_OAUTH_TEAM_ID &&
+    process.env.APPLE_OAUTH_KEY_ID &&
+    process.env.APPLE_OAUTH_PRIVATE_KEY_PATH
+  );
+  return { googleEnabled, appleEnabled, anyEnabled: googleEnabled || appleEnabled };
+}
+
+/**
+ * Configure Passport with OAuth strategies (only if credentials are present)
+ */
+export function configurePassport() {
+  const { googleEnabled, appleEnabled, anyEnabled } = isOAuthEnabled();
+
+  if (!anyEnabled) {
+    console.log('[OAuth] OAuth authentication is disabled (no credentials configured)');
+    return;
+  }
+
+  console.log(`[OAuth] Configuring OAuth strategies: Google=${googleEnabled}, Apple=${appleEnabled}`);
+
+  // Google OAuth Strategy (only if credentials are present)
+  if (googleEnabled) {
+    passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_OAUTH_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET!,
+      callbackURL: `${process.env.APP_URL}/api/auth/google/callback`,
+      scope: ['profile', 'email'],  // Minimal scopes - only what we need
+      // Note: Passport automatically uses session store for OAuth state (CSRF protection)
+    }, async (accessToken: string, refreshToken: string, profile: any, done: any) => {
+      try {
+        const result = await oauthService.handleGoogleAuth(profile);
+
+        // If linking is required, we need to fail authentication gracefully
+        // and pass the info via a custom error that the callback can handle
+        if (!result.success) {
+          if (result.requiresLinking) {
+            // Pass linking info as error - this bypasses serialization
+            const linkingError = new Error('LINKING_REQUIRED') as OAuthLinkingError;
+            linkingError.requiresLinking = true;
+            return done(linkingError, false);
+          }
+          return done(new Error(result.error || 'OAuth authentication failed'), false);
+        }
+
+        // Pass result with proper typing - the route handler will extract userId from result
+        done(null, result as PassportOAuthResult);
+      } catch (error) {
+        done(error, false);
+      }
+    }));
+  }
+
+  // Apple Sign In Strategy (only if credentials are present)
+  if (appleEnabled) {
+    passport.use(new AppleStrategy({
+      clientID: process.env.APPLE_OAUTH_CLIENT_ID!,
+      teamID: process.env.APPLE_OAUTH_TEAM_ID!,
+      keyID: process.env.APPLE_OAUTH_KEY_ID!,
+      privateKeyLocation: process.env.APPLE_OAUTH_PRIVATE_KEY_PATH!,
+      callbackURL: `${process.env.APP_URL}/api/auth/apple/callback`,
+      scope: ['name', 'email'],
+      passReqToCallback: false,
+      // Note: Passport automatically uses session store for OAuth state (CSRF protection)
+    }, (accessToken: string, refreshToken: string, idToken: string, appleProfile: any, done: any) => {
+      // Note: Apple strategy doesn't support async/await in verify callback
+      oauthService.handleAppleAuth(appleProfile)
+        .then((result) => {
+          // If linking is required, we need to fail authentication gracefully
+          // and pass the info via a custom error that the callback can handle
+          if (!result.success) {
+            if (result.requiresLinking) {
+              // Pass linking info as error - this bypasses serialization
+              const linkingError = new Error('LINKING_REQUIRED') as OAuthLinkingError;
+              linkingError.requiresLinking = true;
+              return done(linkingError, false);
+            }
+            return done(new Error(result.error || 'OAuth authentication failed'), false);
+          }
+          // Pass result with proper typing - the route handler will extract userId from result
+          done(null, result as PassportOAuthResult);
+        })
+        .catch((error) => done(error, false));
+    }));
+  }
+
+  // Serialize user to session
+  passport.serializeUser((user: any, done) => {
+    done(null, user.userId);
+  });
+
+  // Deserialize user from session
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const user = await oauthService.getUserById(id);
+      // Cast user to Express.User - full User type is compatible
+      done(null, user as Express.User | undefined);
+    } catch (error) {
+      done(error, null);
+    }
+  });
+}

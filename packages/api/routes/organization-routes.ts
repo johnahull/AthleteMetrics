@@ -8,10 +8,23 @@ import { OrganizationService } from "../services/organization-service";
 import { OrganizationTypeService } from "../services/organization-type-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
+import type { OrganizationType } from "@shared/schema";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
 const organizationTypeService = new OrganizationTypeService();
+
+/**
+ * Rate limiter for public directory endpoints
+ * Prevents abuse of unauthenticated endpoints
+ */
+const directoryLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: 100, // 100 requests per 15 minutes
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { message: "Too many requests, please try again later" },
+});
 
 /**
  * Sanitize error messages for production
@@ -155,6 +168,65 @@ export function registerOrganizationRoutes(app: Express) {
     } catch (error) {
       console.error("Get organizations error:", error);
       res.status(500).json({ message: sanitizeError(error, "Failed to fetch organizations") });
+    }
+  });
+
+  /**
+   * Get public organization directory (no auth required)
+   * IMPORTANT: This route MUST be registered before /api/organizations/:id
+   * to prevent the :id param from matching "public"
+   * GET /api/organizations/public
+   */
+  app.get("/api/organizations/public", directoryLimiter, async (req, res) => {
+    try {
+      const search = req.query.search as string | undefined;
+      const orgType = req.query.orgType as OrganizationType | undefined;
+
+      const organizations = await storage.getPublicOrganizations({ search, orgType });
+      res.json({ organizations });
+    } catch (error) {
+      console.error("Error fetching public organizations:", error);
+      res.status(500).json({ message: "Failed to fetch public organizations" });
+    }
+  });
+
+  /**
+   * Get organization by join code (no auth required)
+   * IMPORTANT: This route MUST be registered before /api/organizations/:id
+   * GET /api/organizations/join/:code
+   */
+  app.get("/api/organizations/join/:code", directoryLimiter, async (req, res) => {
+    try {
+      const { code } = req.params;
+
+      if (!code || code.length < 4) {
+        return res.status(400).json({ message: "Invalid join code" });
+      }
+
+      const organization = await storage.getOrganizationByJoinCode(code);
+
+      if (!organization) {
+        return res.status(404).json({ message: "Organization not found or join code is invalid" });
+      }
+
+      if (!organization.allowMembershipRequests) {
+        return res.status(400).json({ message: "This organization is not accepting membership requests" });
+      }
+
+      // Return limited public info
+      res.json({
+        organization: {
+          id: organization.id,
+          name: organization.name,
+          description: organization.description,
+          location: organization.location,
+          orgType: organization.orgType,
+          autoApproveRequests: organization.autoApproveRequests,
+        }
+      });
+    } catch (error) {
+      console.error("Error fetching organization by join code:", error);
+      res.status(500).json({ message: "Failed to fetch organization" });
     }
   });
 

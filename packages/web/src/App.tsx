@@ -51,6 +51,7 @@ const OrganizationProfile = React.lazy(() => import("./pages/organization-profil
 const OrganizationSettings = React.lazy(() => import("./pages/organization-settings"));
 const OrgAdminSettings = React.lazy(() => import("./pages/org-admin-settings"));
 const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
+const Register = React.lazy(() => import("./pages/register"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
@@ -90,6 +91,11 @@ const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-
 const GlobalAthletes = React.lazy(() => import("./pages/global-athletes"));
 const GlobalAthleteDetail = React.lazy(() => import("./pages/global-athlete-detail"));
 
+// Lazy load membership request pages
+const JoinOrganization = React.lazy(() => import("./pages/join-organization"));
+const JoinByCode = React.lazy(() => import("./pages/join-by-code"));
+const MyRequests = React.lazy(() => import("./pages/my-requests"));
+
 function Router() {
   return (
     <Switch>
@@ -100,7 +106,7 @@ function Router() {
       </Route>
       <Route path="/register">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
-          <AcceptInvitation />
+          <Register />
         </Suspense>
       </Route>
       <Route path="/login" component={Login} />
@@ -123,6 +129,21 @@ function Router() {
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <VerifyEmail />
         </Suspense>
+      </Route>
+      <Route path="/join/:code">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinByCode />
+        </Suspense>
+      </Route>
+      <Route path="/join">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinOrganization />
+        </Suspense>
+      </Route>
+      <Route path="/my-requests">
+        <RouteWrapper loadingText="Loading Requests...">
+          <MyRequests />
+        </RouteWrapper>
       </Route>
       <Route path="/public/reports/:token">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>

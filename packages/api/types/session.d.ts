@@ -47,7 +47,26 @@ declare module "express-session" {
 
 declare global {
   namespace Express {
+    /**
+     * Augment Express.User interface with our application's user properties
+     */
+    interface User {
+      id: string;
+      email: string;
+      firstName: string;
+      lastName: string;
+      role: string;
+      isSiteAdmin?: boolean;
+      primaryOrganizationId?: string;
+      accessMethod?: string;
+    }
+
     interface Request {
+      /**
+       * Authenticated user set by requireAuth middleware
+       * Type is Express.User which we've augmented above
+       */
+      user?: User;
       /**
        * Organization type validated and set by organization-type middleware
        */

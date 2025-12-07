@@ -8,7 +8,7 @@
  * - Analytics queries (team summaries, athlete trends)
  */
 
-import type { Express, Response } from "express";
+import type { Express, Request, Response } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -28,7 +28,6 @@ import {
   requireOrganizationAccess,
   requireWellnessAccess,
   requireWellnessEnabled,
-  type AuthenticatedRequest,
 } from "../middleware";
 import {
   createWellnessTemplateSchema,
@@ -145,7 +144,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const validation = createWellnessTemplateSchema.safeParse(req.body);
@@ -186,7 +185,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess(),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const activeOnly = req.query.activeOnly === 'true';
@@ -211,7 +210,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -281,7 +280,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
         const validation = updateWellnessTemplateSchema.safeParse(req.body);
@@ -325,7 +324,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -362,7 +361,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { category, tags, search } = req.query;
@@ -420,7 +419,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, id } = req.params;
 
@@ -467,7 +466,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const validation = createWellnessRequestSchema.safeParse(req.body);
@@ -580,7 +579,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const status = req.query.status as string | undefined;
@@ -605,7 +604,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -788,7 +787,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -817,7 +816,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -850,7 +849,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, requestId } = req.params;
 
@@ -881,7 +880,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/responses",
     tokenValidationLimiter, // Stricter rate limiting for magic link validation
     requireWellnessAccess(false),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const validation = submitWellnessResponseSchema.safeParse(req.body);
 
@@ -1079,7 +1078,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/responses/:id",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -1122,7 +1121,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/my-requests",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const userId = req.user!.id;
 
@@ -1171,7 +1170,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/my-responses",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const userId = req.user!.id;
 
@@ -1219,7 +1218,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/my-status",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const userId = req.user!.id;
 
@@ -1326,7 +1325,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { startDate, endDate, teamIds, athleteIds } = req.query;
@@ -1393,7 +1392,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/requests/:requestId/check-submission",
     highVolumeLimiter,
     requireWellnessAccess(false),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { requestId } = req.params;
         const userId = req.user!.id;
@@ -1438,7 +1437,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { teamId, startDate, endDate } = req.query;
 
@@ -1471,7 +1470,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { athleteId } = req.params;
         const { startDate, endDate } = req.query;
@@ -1510,7 +1509,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { startDate, endDate, questionIds } = req.query;
@@ -1555,7 +1554,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
 

@@ -1,11 +1,12 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
   goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
+  membershipRequests,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -18,8 +19,10 @@ import {
   type WellnessTemplate, type WellnessRequest, type WellnessResponse,
   type Goal, type InsertGoal, type UpdateGoal,
   type AchievementDefinition, type UserAchievement,
+  type MembershipRequest,
   insertUserSchema,
-  type OrganizationType
+  type OrganizationType,
+  type InsertOAuthUser
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
@@ -45,7 +48,9 @@ export interface IStorage {
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getUserByGoogleId(googleId: string): Promise<User | null>;
+  getUserByAppleId(appleId: string): Promise<User | null>;
+  createUser(user: InsertUser | InsertOAuthUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
   getUsersBatch(ids: string[]): Promise<Map<string, User>>;
@@ -116,10 +121,43 @@ export interface IStorage {
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
+  // Membership Requests
+  createMembershipRequest(data: {
+    userId: string;
+    organizationId: string;
+    discoveryMethod?: 'join_code' | 'directory' | 'direct_link';
+  }): Promise<MembershipRequest>;
+  getMembershipRequest(id: string): Promise<MembershipRequest | undefined>;
+  getMembershipRequestsByOrganization(organizationId: string, filters?: { status?: string }): Promise<(MembershipRequest & { user: User })[]>;
+  getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]>;
+  approveMembershipRequest(id: string, processedBy: string): Promise<MembershipRequest>;
+  rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
+  cancelMembershipRequest(id: string): Promise<void>;
+  hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
+
+  // Public Organization Directory
+  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
+  getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
+  regenerateJoinCode(organizationId: string, customCode?: string): Promise<string>;
+  updateOrganizationMembershipSettings(organizationId: string, settings: {
+    isPublicDirectory?: boolean;
+    allowMembershipRequests?: boolean;
+    autoApproveRequests?: boolean;
+  }): Promise<Organization>;
+
+  // Unlinked Athletes (for account linking during membership approval)
+  getUnlinkedAthletes(organizationId: string): Promise<User[]>;
+
   // Email Verification
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
   getEmailVerificationToken(token: string): Promise<any>;
+
+  // Account Linking (OAuth)
+  createAccountLinkingToken(data: any): Promise<void>;
+  getAccountLinkingToken(token: string): Promise<any>;
+  markAccountLinkingTokenUsed(token: string): Promise<void>;
+  incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -343,6 +381,8 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (!user) return null;
+    // OAuth users may not have a password
+    if (!user.password) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
@@ -356,6 +396,8 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (!user) return null;
+    // OAuth users may not have a password
+    if (!user.password) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
@@ -382,10 +424,72 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async createUser(user: InsertUser): Promise<User> {
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.googleId, googleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async getUserByAppleId(appleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.appleId, appleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async createAccountLinkingToken(data: any): Promise<void> {
+    await db.insert(accountLinkingTokens).values(data);
+  }
+
+  async getAccountLinkingToken(token: string): Promise<any | null> {
+    const [linkingToken] = await db
+      .select()
+      .from(accountLinkingTokens)
+      .where(eq(accountLinkingTokens.token, token))
+      .limit(1);
+    return linkingToken || null;
+  }
+
+  async markAccountLinkingTokenUsed(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(accountLinkingTokens.token, token));
+  }
+
+  async incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ failedAttempts: sql`${accountLinkingTokens.failedAttempts} + 1` })
+      .where(eq(accountLinkingTokens.token, token));
+  }
+
+  async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
+    // Check if this is an OAuth user (has googleId or appleId but no password)
+    const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
+
+    // For OAuth users, password should be null
     // For invited users, password might be empty - use a placeholder
-    const password = user.password || "INVITATION_PENDING";
-    const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    let hashedPassword: string | null = null;
+    if (!isOAuthUser) {
+      const password = user.password || "INVITATION_PENDING";
+      hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    }
 
     // Calculate fullName and birthYear from provided data
     const fullName = `${user.firstName} ${user.lastName}`;
@@ -400,7 +504,9 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
+      'lastAuthMethod', 'accountLinkedAt'
     ];
 
     // Filter to only include valid database columns and non-undefined values
@@ -416,7 +522,7 @@ export class DatabaseStorage implements IStorage {
     const insertData: any = {
       ...cleanedUser,
       emails, // Always override with sanitized emails
-      password: hashedPassword, // Always override with hashed password
+      password: hashedPassword, // Set hashed password or null for OAuth users
       fullName, // Always set computed fullName
       ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
     };
@@ -1646,6 +1752,476 @@ export class DatabaseStorage implements IStorage {
       ));
 
     return verificationToken || undefined;
+  }
+
+  // Membership Requests
+  async createMembershipRequest(data: {
+    userId: string;
+    organizationId: string;
+    discoveryMethod?: 'join_code' | 'directory' | 'direct_link';
+  }): Promise<MembershipRequest> {
+    // Check if organization allows membership requests
+    const org = await this.getOrganization(data.organizationId);
+    if (!org) {
+      throw new Error('Organization not found');
+    }
+    if (!org.allowMembershipRequests) {
+      throw new Error('Organization does not accept membership requests');
+    }
+
+    // Check if user already has a pending request
+    const hasPending = await this.hasPendingMembershipRequest(data.userId, data.organizationId);
+    if (hasPending) {
+      throw new Error('You already have a pending membership request for this organization');
+    }
+
+    // Check if user is already a member
+    const existingMembership = await db.select()
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, data.userId),
+        eq(userOrganizations.organizationId, data.organizationId)
+      ))
+      .limit(1);
+
+    if (existingMembership.length > 0) {
+      throw new Error('You are already a member of this organization');
+    }
+
+    // Set expiration to 30 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // If auto-approve is enabled, approve immediately
+    const status = org.autoApproveRequests ? 'approved' : 'pending';
+
+    const insertValues: any = {
+      userId: data.userId,
+      organizationId: data.organizationId,
+      status,
+      requestedRole: 'athlete',
+      expiresAt,
+    };
+
+    // Only set optional fields if they have values
+    if (data.discoveryMethod) {
+      insertValues.discoveryMethod = data.discoveryMethod;
+    }
+    if (org.autoApproveRequests) {
+      insertValues.processedAt = new Date();
+    }
+
+    const [request] = await db.insert(membershipRequests).values(insertValues).returning();
+
+    // If auto-approved, add user to organization immediately
+    if (org.autoApproveRequests) {
+      await this.addUserToOrganization(data.userId, data.organizationId, 'athlete');
+    }
+
+    return request;
+  }
+
+  async getMembershipRequest(id: string): Promise<MembershipRequest | undefined> {
+    const [request] = await db.select()
+      .from(membershipRequests)
+      .where(eq(membershipRequests.id, id));
+    return request;
+  }
+
+  async getMembershipRequestsByOrganization(
+    organizationId: string,
+    filters?: { status?: string }
+  ): Promise<(MembershipRequest & { user: User })[]> {
+    const conditions = [eq(membershipRequests.organizationId, organizationId)];
+    if (filters?.status) {
+      conditions.push(eq(membershipRequests.status, filters.status as any));
+    }
+
+    const results = await db.select()
+      .from(membershipRequests)
+      .innerJoin(users, eq(membershipRequests.userId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(membershipRequests.createdAt));
+
+    return results.map(r => ({
+      ...r.membership_requests,
+      user: r.users,
+    }));
+  }
+
+  async getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]> {
+    const results = await db.select()
+      .from(membershipRequests)
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(eq(membershipRequests.userId, userId))
+      .orderBy(desc(membershipRequests.createdAt));
+
+    return results.map(r => ({
+      ...r.membership_requests,
+      organization: r.organizations,
+    }));
+  }
+
+  /**
+   * Approve a membership request, optionally linking to an existing athlete.
+   *
+   * When linkToAthleteId is provided:
+   * 1. Transfer measurements FROM existing athlete TO requester
+   * 2. Transfer team memberships FROM existing athlete TO requester
+   * 3. Copy profile data FROM existing athlete TO requester (if requester is missing it)
+   * 4. Deactivate the existing athlete (they no longer have login access)
+   * 5. Add requester to organization as athlete
+   *
+   * This is consistent with how invitation acceptance works - the account with
+   * login credentials becomes the surviving account.
+   */
+  async approveMembershipRequest(
+    id: string,
+    processedBy: string,
+    linkToAthleteId?: string
+  ): Promise<MembershipRequest> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be approved');
+    }
+
+    // Use transaction to ensure atomicity of approval operations
+    return await db.transaction(async (tx: any) => {
+      // If linking to existing athlete, perform the data transfer
+      if (linkToAthleteId) {
+        await this.linkAthleteAccounts(
+          request.userId,        // requester (with login) - survives
+          linkToAthleteId,       // existing athlete (no login) - gets data transferred
+          request.organizationId
+        );
+      }
+
+      // Update request status
+      const [updated] = await tx.update(membershipRequests)
+        .set({
+          status: 'approved',
+          processedBy,
+          processedAt: new Date(),
+        })
+        .where(eq(membershipRequests.id, id))
+        .returning();
+
+      // Add user to organization
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+
+      return updated;
+    });
+  }
+
+  /**
+   * Link an existing athlete's data to a new requester account.
+   * Transfers measurements, team memberships, and profile data from the
+   * existing athlete to the requester, then deactivates the existing athlete.
+   *
+   * @param requesterId - The user ID of the requester (with login credentials)
+   * @param existingAthleteId - The user ID of the existing athlete (no login)
+   * @param organizationId - The organization context for the linking
+   */
+  private async linkAthleteAccounts(
+    requesterId: string,
+    existingAthleteId: string,
+    organizationId: string
+  ): Promise<void> {
+    // 1. Transfer measurements from existing athlete to requester
+    await db.update(measurements)
+      .set({ userId: requesterId })
+      .where(eq(measurements.userId, existingAthleteId));
+
+    // 2. Transfer team memberships from existing athlete to requester
+    // First, get existing team memberships to avoid duplicates
+    const existingTeamMemberships = await db.select()
+      .from(userTeams)
+      .where(eq(userTeams.userId, existingAthleteId));
+
+    for (const membership of existingTeamMemberships) {
+      // Check if requester already has this team membership
+      const [existing] = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, requesterId),
+          eq(userTeams.teamId, membership.teamId)
+        ))
+        .limit(1);
+
+      if (!existing) {
+        // Transfer the team membership
+        await db.update(userTeams)
+          .set({ userId: requesterId })
+          .where(and(
+            eq(userTeams.userId, existingAthleteId),
+            eq(userTeams.teamId, membership.teamId)
+          ));
+      } else {
+        // Delete the old team membership (requester already has it)
+        await db.delete(userTeams)
+          .where(and(
+            eq(userTeams.userId, existingAthleteId),
+            eq(userTeams.teamId, membership.teamId)
+          ));
+      }
+    }
+
+    // 3. Copy profile data from existing athlete to requester (if requester is missing it)
+    const [existingAthlete] = await db.select()
+      .from(users)
+      .where(eq(users.id, existingAthleteId));
+
+    const [requester] = await db.select()
+      .from(users)
+      .where(eq(users.id, requesterId));
+
+    if (existingAthlete && requester) {
+      const profileUpdates: Partial<typeof users.$inferInsert> = {};
+
+      // Copy profile fields if requester is missing them
+      if (!requester.birthYear && existingAthlete.birthYear) {
+        profileUpdates.birthYear = existingAthlete.birthYear;
+      }
+      if (!requester.school && existingAthlete.school) {
+        profileUpdates.school = existingAthlete.school;
+      }
+      if (!requester.graduationYear && existingAthlete.graduationYear) {
+        profileUpdates.graduationYear = existingAthlete.graduationYear;
+      }
+      if (!requester.height && existingAthlete.height) {
+        profileUpdates.height = existingAthlete.height;
+      }
+      if (!requester.weight && existingAthlete.weight) {
+        profileUpdates.weight = existingAthlete.weight;
+      }
+      if ((!requester.sports || requester.sports.length === 0) && existingAthlete.sports && existingAthlete.sports.length > 0) {
+        profileUpdates.sports = existingAthlete.sports;
+      }
+      if ((!requester.positions || requester.positions.length === 0) && existingAthlete.positions && existingAthlete.positions.length > 0) {
+        profileUpdates.positions = existingAthlete.positions;
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        await db.update(users)
+          .set(profileUpdates)
+          .where(eq(users.id, requesterId));
+      }
+    }
+
+    // 4. Deactivate the existing athlete (they no longer need login access)
+    await db.update(users)
+      .set({ isActive: false })
+      .where(eq(users.id, existingAthleteId));
+
+    // 5. Remove existing athlete from organization (requester will be added later)
+    await db.delete(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, existingAthleteId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+  }
+
+  async rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be rejected');
+    }
+
+    const [updated] = await db.update(membershipRequests)
+      .set({
+        status: 'rejected',
+        processedBy,
+        processedAt: new Date(),
+        rejectionReason: reason || null,
+      })
+      .where(eq(membershipRequests.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async cancelMembershipRequest(id: string): Promise<void> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be cancelled');
+    }
+
+    await db.update(membershipRequests)
+      .set({ status: 'cancelled' })
+      .where(eq(membershipRequests.id, id));
+  }
+
+  async hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean> {
+    const [existing] = await db.select()
+      .from(membershipRequests)
+      .where(and(
+        eq(membershipRequests.userId, userId),
+        eq(membershipRequests.organizationId, organizationId),
+        eq(membershipRequests.status, 'pending')
+      ))
+      .limit(1);
+    return !!existing;
+  }
+
+  /**
+   * Get athletes in an organization that have no login credentials (unlinked).
+   * These are athletes that were imported via CSV, manually created, or invited
+   * but never set up login credentials. They can be linked to incoming membership
+   * requests from users who want to join the organization.
+   *
+   * Criteria for "unlinked" athlete:
+   * - Has role='athlete' in the organization
+   * - Has no password (password is NULL)
+   * - Has no OAuth credentials (googleId and appleId are NULL)
+   */
+  async getUnlinkedAthletes(organizationId: string): Promise<User[]> {
+    const result = await db.select({
+      user: users
+    })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(
+        eq(userOrganizations.organizationId, organizationId),
+        eq(userOrganizations.role, 'athlete'),
+        eq(users.isActive, true),
+        isNull(users.password),
+        isNull(users.googleId),
+        isNull(users.appleId)
+      ))
+      .orderBy(users.fullName);
+
+    return result.map(r => r.user);
+  }
+
+  // Public Organization Directory
+  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]> {
+    const conditions = [
+      eq(organizations.isPublicDirectory, true),
+      eq(organizations.isActive, true),
+      isNull(organizations.deletedAt),
+    ];
+
+    if (filters?.orgType) {
+      conditions.push(eq(organizations.orgType, filters.orgType));
+    }
+
+    // Get organizations
+    let query = db.select()
+      .from(organizations)
+      .where(and(...conditions))
+      .orderBy(organizations.name);
+
+    const orgs = await query;
+
+    // If search filter, apply client-side filtering (PostgreSQL ILIKE would be better but keeping it simple)
+    let filteredOrgs = orgs;
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      filteredOrgs = orgs.filter(org =>
+        org.name.toLowerCase().includes(searchLower) ||
+        (org.description && org.description.toLowerCase().includes(searchLower)) ||
+        (org.location && org.location.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Get member counts for each org
+    const orgIds = filteredOrgs.map(o => o.id);
+    if (orgIds.length === 0) {
+      return [];
+    }
+
+    const memberCounts = await db.select({
+      organizationId: userOrganizations.organizationId,
+      count: sql<number>`count(*)::int`,
+    })
+      .from(userOrganizations)
+      .where(inArray(userOrganizations.organizationId, orgIds))
+      .groupBy(userOrganizations.organizationId);
+
+    const countMap = new Map(memberCounts.map(mc => [mc.organizationId, mc.count]));
+
+    return filteredOrgs.map(org => ({
+      ...org,
+      memberCount: countMap.get(org.id) || 0,
+    }));
+  }
+
+  async getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined> {
+    const [org] = await db.select()
+      .from(organizations)
+      .where(and(
+        eq(organizations.joinCode, joinCode.toUpperCase()),
+        eq(organizations.isActive, true),
+        isNull(organizations.deletedAt)
+      ));
+    return org;
+  }
+
+  async regenerateJoinCode(organizationId: string, customCode?: string): Promise<string> {
+    let newCode: string;
+
+    if (customCode) {
+      // Validate custom code: 4-20 chars, alphanumeric only
+      const sanitized = customCode.toUpperCase().trim();
+
+      if (sanitized.length < 4 || sanitized.length > 20) {
+        throw new Error('Join code must be between 4 and 20 characters');
+      }
+
+      if (!/^[A-Z0-9]+$/.test(sanitized)) {
+        throw new Error('Join code can only contain letters and numbers');
+      }
+
+      newCode = sanitized;
+    } else {
+      // Generate a new 8-character uppercase hex code
+      newCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    }
+
+    // Use database UNIQUE constraint for atomic uniqueness check
+    // This prevents race conditions where two requests could pass a pre-check simultaneously
+    try {
+      await db.update(organizations)
+        .set({ joinCode: newCode })
+        .where(eq(organizations.id, organizationId));
+    } catch (error: any) {
+      // Handle unique constraint violation (PostgreSQL error code 23505)
+      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+        throw new Error('This join code is already in use by another organization');
+      }
+      throw error;
+    }
+
+    return newCode;
+  }
+
+  async updateOrganizationMembershipSettings(
+    organizationId: string,
+    settings: {
+      isPublicDirectory?: boolean;
+      allowMembershipRequests?: boolean;
+      autoApproveRequests?: boolean;
+    }
+  ): Promise<Organization> {
+    const [updated] = await db.update(organizations)
+      .set(settings)
+      .where(eq(organizations.id, organizationId))
+      .returning();
+
+    if (!updated) {
+      throw new Error('Organization not found');
+    }
+
+    return updated;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers
