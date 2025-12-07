@@ -354,61 +354,8 @@ export function registerMembershipRequestRoutes(app: Express) {
     }
   });
 
-  /**
-   * Get public organization directory (no auth required)
-   * GET /api/organizations/public
-   */
-  app.get("/api/organizations/public", directoryLimiter, async (req: Request, res: Response) => {
-    try {
-      const search = req.query.search as string | undefined;
-      const orgType = req.query.orgType as OrganizationType | undefined;
-
-      const organizations = await storage.getPublicOrganizations({ search, orgType });
-      res.json({ organizations });
-    } catch (error) {
-      console.error("Error fetching public organizations:", error);
-      res.status(500).json({ message: "Failed to fetch public organizations" });
-    }
-  });
-
-  /**
-   * Get organization by join code (no auth required)
-   * GET /api/organizations/join/:code
-   */
-  app.get("/api/organizations/join/:code", directoryLimiter, async (req: Request, res: Response) => {
-    try {
-      const { code } = req.params;
-
-      if (!code || code.length < 4) {
-        return res.status(400).json({ message: "Invalid join code" });
-      }
-
-      const organization = await storage.getOrganizationByJoinCode(code);
-
-      if (!organization) {
-        return res.status(404).json({ message: "Organization not found or join code is invalid" });
-      }
-
-      if (!organization.allowMembershipRequests) {
-        return res.status(400).json({ message: "This organization is not accepting membership requests" });
-      }
-
-      // Return limited public info
-      res.json({
-        organization: {
-          id: organization.id,
-          name: organization.name,
-          description: organization.description,
-          location: organization.location,
-          orgType: organization.orgType,
-          autoApproveRequests: organization.autoApproveRequests,
-        }
-      });
-    } catch (error) {
-      console.error("Error fetching organization by join code:", error);
-      res.status(500).json({ message: "Failed to fetch organization" });
-    }
-  });
+  // NOTE: Public organization routes (/api/organizations/public and /api/organizations/join/:code)
+  // are now in organization-routes.ts to ensure proper route ordering before /api/organizations/:id
 
   /**
    * Regenerate organization join code (org admin only)
