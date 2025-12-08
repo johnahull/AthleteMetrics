@@ -176,14 +176,14 @@ export class EmailService {
       });
 
       if (error) {
-        console.error('❌ Failed to send email (Resend API error):', error);
+        console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - Resend API error:`, error);
         return false;
       }
 
-      console.log(`✅ Email sent successfully to ${options.to} (id: ${data?.id})`);
+      console.log(`✅ Email sent successfully to ${options.to} (subject: "${options.subject}", id: ${data?.id})`);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send email (exception):', error);
+      console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - exception:`, error);
       return false;
     }
   }
@@ -707,7 +707,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(linkUrl)}
+                ${escapeHtml(sanitizedLinkUrl)}
               </p>
 
               <p style="margin: 0 0 16px; color: #a0aec0; font-size: 12px; line-height: 1.6;">

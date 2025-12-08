@@ -13,7 +13,7 @@
   "dependencies": {
     "@athletemetrics/shared": "*",
     "@neondatabase/serverless": "^0.10.4",
-    "resend": "^4.0.0",
+    "resend": "^4.8.0",
     "@types/bcrypt": "^6.0.0",
     "@types/multer": "^2.0.0",
     "bcrypt": "^6.0.0",

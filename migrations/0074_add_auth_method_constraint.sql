@@ -2,26 +2,177 @@
 -- Prevents orphaned accounts with no way to login
 
 -- First, clean up orphaned test users that have no auth method
--- These are test artifacts with '_test_' in username that can't login anyway
+-- These are test artifacts that can't login anyway
+-- Pattern matches test data created by integration tests (see scripts/cleanup-test-data.ts)
 
--- Delete related user_teams records first (FK constraint)
+-- Delete related records first (FK constraints)
+-- Note: We need to check for NULL auth methods AND test username patterns
+
+-- Delete measurements
+DELETE FROM measurements
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete audit logs
+DELETE FROM audit_logs
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete sessions (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+    DELETE FROM sessions
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
+
+-- Delete email verification tokens
+DELETE FROM email_verification_tokens
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete account linking tokens
+DELETE FROM account_linking_tokens
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete athlete profiles
+DELETE FROM athlete_profiles
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete invitations
+DELETE FROM invitations
+WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+);
+
+-- Delete user_teams records
 DELETE FROM user_teams
 WHERE user_id IN (
   SELECT id FROM users
   WHERE password IS NULL
     AND google_id IS NULL
     AND apple_id IS NULL
-    AND username LIKE '%\_test\_%' ESCAPE '\'
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
 );
 
--- Delete related user_organizations records (FK constraint)
+-- Delete user_organizations records
 DELETE FROM user_organizations
 WHERE user_id IN (
   SELECT id FROM users
   WHERE password IS NULL
     AND google_id IS NULL
     AND apple_id IS NULL
-    AND username LIKE '%\_test\_%' ESCAPE '\'
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
 );
 
 -- Now delete the orphaned test users
@@ -29,7 +180,15 @@ DELETE FROM users
 WHERE password IS NULL
   AND google_id IS NULL
   AND apple_id IS NULL
-  AND username LIKE '%\_test\_%' ESCAPE '\';
+  AND (
+    username LIKE 'test-%'
+    OR username LIKE '%-api-%'
+    OR username LIKE '%-creation-%'
+    OR username LIKE '%-del-%'
+    OR username LIKE 'bulk-ops-%'
+    OR username LIKE 'dep-user%'
+    OR emails::text LIKE '%@test.com%'
+  );
 
 -- Add CHECK constraint ensuring at least one auth method exists (idempotent via DO $$ block)
 DO $$
