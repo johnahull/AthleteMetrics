@@ -66,10 +66,11 @@ BEGIN
 END $$;
 
 -- Delete sessions (if table exists)
+-- Note: Table name is 'session' (singular), created by connect-pg-simple
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions' AND table_schema = 'public') THEN
-    DELETE FROM sessions
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'session' AND table_schema = 'public') THEN
+    DELETE FROM session
     WHERE user_id IN (
       SELECT id FROM users
       WHERE password IS NULL
