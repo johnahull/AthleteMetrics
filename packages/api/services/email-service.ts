@@ -543,7 +543,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.verificationLink)}
+                ${escapeHtml(sanitizeUrl(data.verificationLink, 'verification'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -621,7 +621,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.resetLink)}
+                ${escapeHtml(sanitizeUrl(data.resetLink, 'password-reset'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
