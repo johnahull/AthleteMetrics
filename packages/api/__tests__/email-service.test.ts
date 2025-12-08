@@ -4,15 +4,16 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import sgMail from '@sendgrid/mail';
 import { EmailService } from '../services/email-service';
 
-// Mock SendGrid
-vi.mock('@sendgrid/mail', () => ({
-  default: {
-    setApiKey: vi.fn(),
-    send: vi.fn()
-  }
+// Mock Resend
+const mockSend = vi.fn();
+vi.mock('resend', () => ({
+  Resend: vi.fn().mockImplementation(() => ({
+    emails: {
+      send: mockSend
+    }
+  }))
 }));
 
 // TODO: These tests need to be fixed - they have issues with mock setup and email service interface
@@ -25,9 +26,9 @@ describe.skip('EmailService', () => {
     originalEnv = { ...process.env };
 
     // Set up test environment variables
-    process.env.SENDGRID_API_KEY = 'test-api-key-sg.12345';
-    process.env.SENDGRID_FROM_EMAIL = 'test@athletemetrics.com';
-    process.env.SENDGRID_FROM_NAME = 'AthleteMetrics Test';
+    process.env.RESEND_API_KEY = 'test-api-key-re_12345';
+    process.env.EMAIL_FROM_ADDRESS = 'team@athletemetrics.io';
+    process.env.EMAIL_FROM_NAME = 'AthleteMetrics Test';
     process.env.APP_URL = 'https://test.athletemetrics.com';
 
     // Reset mocks
@@ -44,8 +45,7 @@ describe.skip('EmailService', () => {
 
   describe('HTML Escaping Security', () => {
     it('should escape <script> tags in user names', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: '<script>alert("xss")</script>John',
@@ -55,14 +55,13 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;John');
       expect(sentEmail.html).not.toContain('<script>alert("xss")</script>');
     });
 
     it('should escape HTML entities in email addresses', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWelcome('test@example.com', {
         userName: 'User<>&"\'Name',
@@ -70,14 +69,13 @@ describe.skip('EmailService', () => {
         role: 'athlete'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('User&lt;&gt;&amp;&quot;&#039;Name');
       expect(sentEmail.html).not.toContain('User<>&"\'Name');
     });
 
     it('should escape special characters in organization names', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -87,14 +85,13 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('Org &amp; &quot;Team&quot; &lt;Division&gt;');
       expect(sentEmail.html).toContain('Coach&lt;script&gt;');
     });
 
     it('should handle undefined/null values in HTML escaping', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -105,15 +102,14 @@ describe.skip('EmailService', () => {
         role: undefined // Optional field
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       // Should not crash and should render template correctly
       expect(sentEmail.html).toContain('John Doe');
       expect(sentEmail.html).toBeDefined();
     });
 
     it('should escape all user-provided content in invitation email', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: '<img src=x onerror=alert(1)>',
@@ -124,7 +120,7 @@ describe.skip('EmailService', () => {
         role: '<iframe src="evil.com">'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('<img');
       expect(sentEmail.html).not.toContain('onerror');
       expect(sentEmail.html).not.toContain('<script>');
@@ -133,8 +129,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should escape wellness request template data', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessRequest('test@example.com', {
         athleteName: '<script>xss</script>',
@@ -146,7 +141,7 @@ describe.skip('EmailService', () => {
         estimatedMinutes: 5
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('&lt;script&gt;xss&lt;/script&gt;');
       expect(sentEmail.html).toContain('Coach&lt;&gt;&amp;&quot;');
       expect(sentEmail.html).toContain('Org&#039;s &quot;Team&quot;');
@@ -156,8 +151,7 @@ describe.skip('EmailService', () => {
 
   describe('URL Sanitization Security', () => {
     it('should allow valid HTTPS URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -167,26 +161,24 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('https://secure.athletemetrics.com/accept-invitation?token=abc123');
     });
 
     it('should allow valid HTTP URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendPasswordReset('test@example.com', {
         userName: 'John Doe',
         resetLink: 'http://localhost:5000/reset-password?token=abc123'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('http://localhost:5000/reset-password?token=abc123');
     });
 
     it('should block javascript: protocol URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -198,7 +190,7 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('javascript:');
       expect(sentEmail.html).toContain('href="#"');
       expect(consoleErrorSpy).toHaveBeenCalledWith(
@@ -210,8 +202,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should block data: protocol URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -220,7 +211,7 @@ describe.skip('EmailService', () => {
         verificationLink: 'data:text/html,<script>alert(1)</script>'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('data:text/html');
       expect(sentEmail.html).toContain('href="#"');
       expect(consoleErrorSpy).toHaveBeenCalled();
@@ -229,8 +220,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should block file: protocol URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -239,7 +229,7 @@ describe.skip('EmailService', () => {
         resetLink: 'file:///etc/passwd'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('file:///');
       expect(sentEmail.html).toContain('href="#"');
 
@@ -247,8 +237,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should block vbscript: protocol URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -260,15 +249,14 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('vbscript:');
 
       consoleErrorSpy.mockRestore();
     });
 
     it('should reject URLs without valid protocols', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -278,26 +266,24 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('href="#"');
     });
 
     it('should handle empty/null URLs safely', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendPasswordReset('test@example.com', {
         userName: 'John Doe',
         resetLink: ''
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('href="#"');
     });
 
     it('should warn about URL format mismatches but allow through', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -309,7 +295,7 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       // Should still include the URL (defense in depth, not blocking)
       expect(sentEmail.html).toContain('https://test.com/wrong-path?token=abc123');
       expect(consoleWarnSpy).toHaveBeenCalledWith(
@@ -323,8 +309,7 @@ describe.skip('EmailService', () => {
 
   describe('Email Template Methods', () => {
     it('should send invitation email with correct data', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('athlete@example.com', {
         recipientName: 'John Athlete',
@@ -336,7 +321,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('athlete@example.com');
       expect(sentEmail.subject).toBe("You've been invited to join Elite Sports Academy on AthleteMetrics");
@@ -349,8 +334,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send invitation email without role', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('athlete@example.com', {
         recipientName: 'John Athlete',
@@ -360,14 +344,13 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('as a <strong>');
       expect(sentEmail.html).toContain('John Athlete');
     });
 
     it('should send welcome email with correct data', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWelcome('newuser@example.com', {
         userName: 'Jane Smith',
@@ -376,7 +359,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('newuser@example.com');
       expect(sentEmail.subject).toBe('Welcome to Pro Athletics on AthleteMetrics!');
@@ -386,8 +369,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send email verification with token', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendEmailVerification('verify@example.com', {
         userName: 'Test User',
@@ -395,7 +377,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('verify@example.com');
       expect(sentEmail.subject).toBe('Verify your email address');
@@ -405,8 +387,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send password reset with expiry info', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendPasswordReset('reset@example.com', {
         userName: 'Forgot User',
@@ -414,7 +395,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('reset@example.com');
       expect(sentEmail.subject).toBe('Reset your AthleteMetrics password');
@@ -424,8 +405,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send account linking email with provider name', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendAccountLinkingEmail(
         'link@example.com',
@@ -435,7 +415,7 @@ describe.skip('EmailService', () => {
       );
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('link@example.com');
       expect(sentEmail.subject).toBe('Confirm Google Account Linking - AthleteMetrics');
@@ -446,8 +426,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send Apple account linking email', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendAccountLinkingEmail(
         'link@example.com',
@@ -456,7 +435,7 @@ describe.skip('EmailService', () => {
         'apple-token-456'
       );
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.subject).toBe('Confirm Apple Account Linking - AthleteMetrics');
       expect(sentEmail.html).toContain('Apple');
@@ -464,8 +443,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send wellness request with all required fields', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessRequest('athlete@example.com', {
         athleteName: 'Alex Runner',
@@ -478,7 +456,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('athlete@example.com');
       expect(sentEmail.subject).toBe('Coach Mike has sent you a wellness check from Track Team');
@@ -491,8 +469,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send wellness reminder with urgency', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessReminder('athlete@example.com', {
         athleteName: 'Alex Runner',
@@ -504,7 +481,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.subject).toBe('Reminder: Complete your wellness check for Track Team');
       expect(sentEmail.html).toContain('This link expires in 6 hours');
@@ -512,8 +489,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send wellness alert to coach', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessAlert('coach@example.com', {
         coachName: 'Coach Sarah',
@@ -524,7 +500,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('coach@example.com');
       expect(sentEmail.subject).toBe('Wellness Alert: John Athlete - High Fatigue');
@@ -536,8 +512,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send account linked notification', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendAccountLinkedNotification({
         email: 'athlete@example.com',
@@ -547,7 +522,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('athlete@example.com');
       expect(sentEmail.subject).toBe('Your AthleteMetrics accounts have been linked');
@@ -557,8 +532,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should send claim verification email', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendClaimVerificationEmail({
         email: 'claim@example.com',
@@ -567,7 +541,7 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledOnce();
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       expect(sentEmail.to).toBe('claim@example.com');
       expect(sentEmail.subject).toBe('Verify your email to link your AthleteMetrics account');
@@ -576,10 +550,9 @@ describe.skip('EmailService', () => {
     });
   });
 
-  describe('SendGrid Integration', () => {
-    it('should send correct payload to SendGrid', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+  describe('Resend Integration', () => {
+    it('should send correct payload to Resend', async () => {
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -590,41 +563,40 @@ describe.skip('EmailService', () => {
       });
 
       expect(mockSend).toHaveBeenCalledWith({
-        from: {
-          email: 'test@athletemetrics.com',
-          name: 'AthleteMetrics Test'
-        },
+        from: 'AthleteMetrics Test <team@athletemetrics.io>',
         to: 'test@example.com',
         subject: expect.any(String),
         html: expect.any(String),
-        text: expect.any(String),
-        trackingSettings: {
-          clickTracking: {
-            enable: false
-          }
-        }
+        text: expect.any(String)
       });
     });
 
-    it('should disable click tracking in SendGrid', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
-
-      await emailService.sendWelcome('test@example.com', {
-        userName: 'John Doe',
-        organizationName: 'Test Org',
-        role: 'athlete'
-      });
-
-      const sentEmail = mockSend.mock.calls[0][0];
-      expect(sentEmail.trackingSettings?.clickTracking?.enable).toBe(false);
-    });
-
-    it('should handle SendGrid API errors gracefully', async () => {
-      const mockSend = vi.mocked(sgMail.send);
+    it('should handle Resend API errors gracefully', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      mockSend.mockRejectedValueOnce(new Error('SendGrid API error'));
+      mockSend.mockResolvedValueOnce({ data: null, error: { message: 'Resend API error' } });
+
+      const result = await emailService.sendInvitation('test@example.com', {
+        recipientName: 'John Doe',
+        inviterName: 'Coach Smith',
+        organizationName: 'Test Org',
+        invitationLink: 'https://test.com/accept-invitation?token=abc123',
+        expiryDays: 7
+      });
+
+      expect(result).toBe(false);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to send email'),
+        expect.any(Object)
+      );
+
+      consoleErrorSpy.mockRestore();
+    });
+
+    it('should handle Resend thrown errors gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      mockSend.mockRejectedValueOnce(new Error('Network error'));
 
       const result = await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -643,8 +615,8 @@ describe.skip('EmailService', () => {
       consoleErrorSpy.mockRestore();
     });
 
-    it('should not send email if SendGrid API key is missing', async () => {
-      delete process.env.SENDGRID_API_KEY;
+    it('should not send email if Resend API key is missing', async () => {
+      delete process.env.RESEND_API_KEY;
 
       const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       const emailServiceNoKey = new EmailService();
@@ -667,8 +639,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should generate plain text version from HTML', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWelcome('test@example.com', {
         userName: 'John Doe',
@@ -676,7 +647,7 @@ describe.skip('EmailService', () => {
         role: 'athlete'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.text).toBeDefined();
       expect(sentEmail.text).not.toContain('<html>');
       expect(sentEmail.text).not.toContain('<table>');
@@ -686,8 +657,7 @@ describe.skip('EmailService', () => {
 
   describe('Edge Cases', () => {
     it('should handle very long names', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const longName = 'A'.repeat(500);
 
@@ -697,13 +667,12 @@ describe.skip('EmailService', () => {
         role: 'athlete'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain(longName);
     });
 
     it('should handle Unicode characters in names', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'José González 日本語',
@@ -713,15 +682,14 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('José González 日本語');
       expect(sentEmail.html).toContain('Coach Müller');
       expect(sentEmail.html).toContain('Équipe François');
     });
 
     it('should handle special characters in template names', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessRequest('test@example.com', {
         athleteName: 'John Doe',
@@ -733,13 +701,12 @@ describe.skip('EmailService', () => {
         estimatedMinutes: 5
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('Daily Check-In (Morning) - Week 1 [Required]');
     });
 
     it('should handle organization list with special characters', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendAccountLinkedNotification({
         email: 'athlete@example.com',
@@ -748,13 +715,12 @@ describe.skip('EmailService', () => {
         linkedOrganizations: ['Team <A>', 'Team "B"', 'Team & C']
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('Team &lt;A&gt;, Team &quot;B&quot;, Team &amp; C');
     });
 
     it('should handle empty organization list', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendAccountLinkedNotification({
         email: 'athlete@example.com',
@@ -763,13 +729,13 @@ describe.skip('EmailService', () => {
         linkedOrganizations: []
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toBeDefined();
       expect(mockSend).toHaveBeenCalled();
     });
 
     it('should handle template generation errors', async () => {
-      const mockSend = vi.mocked(sgMail.send);
+      // mockSend is already defined at module level
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       // @ts-expect-error Testing invalid data
@@ -785,8 +751,7 @@ describe.skip('EmailService', () => {
       process.env.APP_URL = 'https://production.athletemetrics.com';
 
       const emailServiceProd = new EmailService();
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailServiceProd.sendAccountLinkingEmail(
         'link@example.com',
@@ -795,13 +760,13 @@ describe.skip('EmailService', () => {
         'token123'
       );
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('https://production.athletemetrics.com/api/auth/link-account/token123');
     });
 
     it('should use default from email and name if env vars missing', () => {
-      delete process.env.SENDGRID_FROM_EMAIL;
-      delete process.env.SENDGRID_FROM_NAME;
+      delete process.env.EMAIL_FROM_ADDRESS;
+      delete process.env.EMAIL_FROM_NAME;
 
       const emailServiceDefaults = new EmailService();
 
@@ -809,23 +774,22 @@ describe.skip('EmailService', () => {
       expect(emailServiceDefaults).toBeDefined();
     });
 
-    it('should warn on construction if SendGrid API key is missing', () => {
-      delete process.env.SENDGRID_API_KEY;
+    it('should warn on construction if Resend API key is missing', () => {
+      delete process.env.RESEND_API_KEY;
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       new EmailService();
 
       expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('SendGrid API key not configured')
+        expect.stringContaining('Resend API key not configured')
       );
 
       consoleWarnSpy.mockRestore();
     });
 
     it('should handle zero expiry days', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -835,13 +799,12 @@ describe.skip('EmailService', () => {
         expiryDays: 0
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).toContain('This invitation will expire in 0 days');
     });
 
     it('should log successful email send', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
@@ -861,8 +824,7 @@ describe.skip('EmailService', () => {
 
   describe('URL Validation Pattern Matching', () => {
     it('should validate invitation URL pattern', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -883,8 +845,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should validate verification URL pattern', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -902,8 +863,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should validate password reset URL pattern', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -921,8 +881,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should not warn for correctly formatted invitation URLs', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -945,8 +904,7 @@ describe.skip('EmailService', () => {
 
   describe('Security - XSS Prevention in Multiple Contexts', () => {
     it('should prevent XSS in subject lines', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -956,14 +914,13 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       // Subject should contain the org name but HTML is stripped in subject lines by email clients
       expect(sentEmail.subject).toContain('Org');
     });
 
     it('should prevent XSS through nested HTML injection', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendWellnessAlert('coach@example.com', {
         coachName: 'Coach</td></tr></table><script>alert(1)</script>',
@@ -973,7 +930,7 @@ describe.skip('EmailService', () => {
         viewLink: 'https://test.com/athlete/123/wellness'
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
       expect(sentEmail.html).not.toContain('<script>');
       expect(sentEmail.html).not.toContain('<iframe>');
       expect(sentEmail.html).not.toContain('<style>');
@@ -982,8 +939,7 @@ describe.skip('EmailService', () => {
     });
 
     it('should sanitize URLs in multiple positions within email', async () => {
-      const mockSend = vi.mocked(sgMail.send);
-      mockSend.mockResolvedValueOnce([{} as any, {}]);
+      mockSend.mockResolvedValueOnce({ data: { id: 'test-id' }, error: null });
 
       await emailService.sendInvitation('test@example.com', {
         recipientName: 'John Doe',
@@ -993,7 +949,7 @@ describe.skip('EmailService', () => {
         expiryDays: 7
       });
 
-      const sentEmail = mockSend.mock.calls[0][0];
+      const sentEmail = mockSend.mock.calls[0][0] as any;
 
       // Check button href
       const buttonMatch = sentEmail.html.match(/<a href="([^"]+)"[^>]*>Accept Invitation<\/a>/);
