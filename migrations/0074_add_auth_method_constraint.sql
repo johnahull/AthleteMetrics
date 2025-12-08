@@ -1,6 +1,14 @@
 -- Migration: Add constraint to ensure users have at least one authentication method
 -- Prevents orphaned accounts with no way to login
 
+-- ONE-TIME CLEANUP: This migration deletes test user artifacts created before 2024-12-08
+-- These patterns match test data conventions from integration tests (see scripts/cleanup-test-data.ts)
+-- Rationale for broad patterns (e.g., '%-api-%', '%-del-%'):
+--   1. Limited scope: Only applies to users with NULL password AND NULL OAuth IDs
+--   2. Production safety: Real users must have at least one auth method
+--   3. Historical cleanup: This is a one-time operation for legacy test data
+-- Future test data should use stricter naming conventions (e.g., 'test-api-*' instead of '*-api-*')
+
 -- First, clean up orphaned test users that have no auth method
 -- These are test artifacts that can't login anyway
 -- Pattern matches test data created by integration tests (see scripts/cleanup-test-data.ts)
@@ -121,9 +129,24 @@ WHERE user_id IN (
     )
 );
 
--- Delete invitations
+-- Delete invitations (check both user_id and invited_by FK references)
 DELETE FROM invitations
 WHERE user_id IN (
+  SELECT id FROM users
+  WHERE password IS NULL
+    AND google_id IS NULL
+    AND apple_id IS NULL
+    AND (
+      username LIKE 'test-%'
+      OR username LIKE '%-api-%'
+      OR username LIKE '%-creation-%'
+      OR username LIKE '%-del-%'
+      OR username LIKE 'bulk-ops-%'
+      OR username LIKE 'dep-user%'
+      OR emails::text LIKE '%@test.com%'
+    )
+)
+OR invited_by IN (
   SELECT id FROM users
   WHERE password IS NULL
     AND google_id IS NULL
