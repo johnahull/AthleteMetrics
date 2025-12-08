@@ -11,7 +11,7 @@ WHERE user_id IN (
   WHERE password IS NULL
     AND google_id IS NULL
     AND apple_id IS NULL
-    AND username LIKE '%_test_%'
+    AND username LIKE '%\_test\_%' ESCAPE '\'
 );
 
 -- Delete related user_organizations records (FK constraint)
@@ -21,7 +21,7 @@ WHERE user_id IN (
   WHERE password IS NULL
     AND google_id IS NULL
     AND apple_id IS NULL
-    AND username LIKE '%_test_%'
+    AND username LIKE '%\_test\_%' ESCAPE '\'
 );
 
 -- Now delete the orphaned test users
@@ -29,7 +29,7 @@ DELETE FROM users
 WHERE password IS NULL
   AND google_id IS NULL
   AND apple_id IS NULL
-  AND username LIKE '%_test_%';
+  AND username LIKE '%\_test\_%' ESCAPE '\';
 
 -- Add CHECK constraint ensuring at least one auth method exists (idempotent via DO $$ block)
 DO $$

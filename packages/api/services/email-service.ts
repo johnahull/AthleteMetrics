@@ -46,9 +46,9 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   // Additional validation for expected URL types
   if (expectedType) {
     const urlPatterns = {
-      invitation: /\/accept-invitation\?token=/,
-      verification: /\/verify-email\?token=/,
-      'password-reset': /\/reset-password\?token=/
+      invitation: /^https?:\/\/[^\/]+\/accept-invitation\?token=.+$/,
+      verification: /^https?:\/\/[^\/]+\/verify-email\?token=.+$/,
+      'password-reset': /^https?:\/\/[^\/]+\/reset-password\?token=.+$/
     };
 
     const pattern = urlPatterns[expectedType];

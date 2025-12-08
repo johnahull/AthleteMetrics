@@ -16,8 +16,7 @@ vi.mock('resend', () => ({
   }))
 }));
 
-// TODO: These tests need to be fixed - they have issues with mock setup and email service interface
-describe.skip('EmailService', () => {
+describe('EmailService', () => {
   let emailService: EmailService;
   let originalEnv: NodeJS.ProcessEnv;
 
