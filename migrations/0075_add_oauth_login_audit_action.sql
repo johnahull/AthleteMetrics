@@ -33,6 +33,7 @@ BEGIN
     'privilege_restoration_blocked',
     'admin_password_synced',
     'privilege_restored',
+    'sessions_revoked',  -- User session management
     'oauth_login',  -- NEW: OAuth authentication success
 
     -- Team actions
@@ -60,11 +61,13 @@ BEGIN
     'report_updated',
     'report_deleted',
     'report_ai_insights_generated',  -- AI-generated report insights
+    'report_ai_insights_updated',  -- AI report insights updated
 
     -- Site Settings actions
     'site_settings_updated',
     'ai_model_updated',
     'wellness_module_toggled',
+    'site_wellness_module_toggled',  -- Site-wide wellness module toggle
 
     -- Cache actions
     'cache_invalidated',
@@ -77,6 +80,8 @@ BEGIN
     'membership_request_cancelled',
     'join_code_regenerated',
     'membership_settings_updated',
+    'organization_join_code_regenerated',  -- Legacy: org-prefixed variant
+    'organization_membership_settings_updated',  -- Legacy: org-prefixed variant
 
     -- Metric actions (site-wide metric management)
     'metric_created',
@@ -95,8 +100,14 @@ BEGIN
     'org_ai_enabled_by_site_admin',
 
     -- Benchmark actions
+    'benchmark_created',
+    'benchmark_updated',
+    'benchmark_deleted',
+    'benchmark_disabled',
     'custom_benchmark_created',
     'custom_benchmark_updated',
-    'org_benchmark_enabled'
+    'custom_benchmark_deleted',
+    'org_benchmark_enabled',
+    'org_benchmark_disabled'
   ));
 END $$;
