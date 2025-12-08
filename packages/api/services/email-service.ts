@@ -1,9 +1,9 @@
 /**
  * Email Service
- * Handles all email sending operations using SendGrid
+ * Handles all email sending operations using Resend
  */
 
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 
 /**
  * HTML escape function to prevent XSS in email templates
@@ -46,9 +46,9 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   // Additional validation for expected URL types
   if (expectedType) {
     const urlPatterns = {
-      invitation: /\/accept-invitation\?token=/,
-      verification: /\/verify-email\?token=/,
-      'password-reset': /\/reset-password\?token=/
+      invitation: /^https?:\/\/[^\/]+\/accept-invitation\?token=.+$/,
+      verification: /^https?:\/\/[^\/]+\/verify-email\?token=.+$/,
+      'password-reset': /^https?:\/\/[^\/]+\/reset-password\?token=.+$/
     };
 
     const pattern = urlPatterns[expectedType];
@@ -62,11 +62,7 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   return urlString;
 }
 
-// Initialize SendGrid
-const apiKey = process.env.SENDGRID_API_KEY;
-if (apiKey) {
-  sgMail.setApiKey(apiKey);
-}
+// Resend client is initialized in the EmailService class
 
 interface EmailOptions {
   to: string;
@@ -141,17 +137,20 @@ interface ClaimVerificationEmailData {
 }
 
 export class EmailService {
+  private resend: Resend | null = null;
   private fromEmail: string;
   private fromName: string;
   private enabled: boolean;
 
   constructor() {
-    this.fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@athletemetrics.com';
-    this.fromName = process.env.SENDGRID_FROM_NAME || 'AthleteMetrics';
-    this.enabled = !!process.env.SENDGRID_API_KEY;
+    this.fromEmail = process.env.EMAIL_FROM_ADDRESS || 'team@athletemetrics.io';
+    this.fromName = process.env.EMAIL_FROM_NAME || 'AthleteMetrics';
+    this.enabled = !!process.env.RESEND_API_KEY;
 
-    if (!this.enabled) {
-      console.warn('⚠️ SendGrid API key not configured. Email sending is disabled.');
+    if (this.enabled) {
+      this.resend = new Resend(process.env.RESEND_API_KEY);
+    } else {
+      console.warn('⚠️ Resend API key not configured. Email sending is disabled.');
     }
   }
 
@@ -159,7 +158,7 @@ export class EmailService {
    * Send a raw email
    */
   private async sendEmail(options: EmailOptions): Promise<boolean> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.resend) {
       console.log('📧 Email sending disabled (no API key). Would have sent:', {
         to: options.to,
         subject: options.subject
@@ -168,26 +167,23 @@ export class EmailService {
     }
 
     try {
-      await sgMail.send({
-        from: {
-          email: this.fromEmail,
-          name: this.fromName
-        },
+      const { data, error } = await this.resend.emails.send({
+        from: `${this.fromName} <${this.fromEmail}>`,
         to: options.to,
         subject: options.subject,
         html: options.html,
-        text: options.text || this.stripHtml(options.html),
-        trackingSettings: {
-          clickTracking: {
-            enable: false
-          }
-        }
+        text: options.text || this.stripHtml(options.html)
       });
 
-      console.log(`✅ Email sent successfully to ${options.to}`);
+      if (error) {
+        console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - Resend API error:`, error);
+        return false;
+      }
+
+      console.log(`✅ Email sent successfully to ${options.to} (subject: "${options.subject}", id: ${data?.id})`);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send email:', error);
+      console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - exception:`, error);
       return false;
     }
   }
@@ -547,7 +543,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.verificationLink)}
+                ${escapeHtml(sanitizeUrl(data.verificationLink, 'verification'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -625,7 +621,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.resetLink)}
+                ${escapeHtml(sanitizeUrl(data.resetLink, 'password-reset'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -711,7 +707,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(linkUrl)}
+                ${escapeHtml(sanitizedLinkUrl)}
               </p>
 
               <p style="margin: 0 0 16px; color: #a0aec0; font-size: 12px; line-height: 1.6;">

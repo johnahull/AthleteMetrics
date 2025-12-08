@@ -8,6 +8,7 @@ BEGIN
 
   -- Recreate constraint with OAuth login action added
   -- NOTE: This constraint must include ALL existing actions in the database
+  -- Based on migration 0070 with additions from subsequent features
   ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     -- Organization actions
     'organization_created',
@@ -50,53 +51,71 @@ BEGIN
 
     -- Invitation actions
     'invitation_created',
-    'invitation_sent',
     'invitation_accepted',
-    'invitation_revoked',
+    'invitation_cancelled',
     'invitation_resent',
 
-    -- Report actions
-    'report_created',
-    'report_updated',
-    'report_deleted',
-    'report_ai_insights_generated',  -- AI-generated report insights
+    -- Session actions
+    'sessions_revoked',
+    'zombie_sessions_cleaned',
+    'zombie_cleanup_failed',
+    'session_revocation_failed',
 
-    -- Site Settings actions
-    'site_settings_updated',
-    'ai_model_updated',
-    'wellness_module_toggled',
+    -- Metric actions (site-wide metric management)
+    'metric_created',
+    'metric_updated',
+    'metric_enabled',
+    'metric_disabled',
+    'metric_deleted',
+    'org_metric_enabled',
+    'org_metric_disabled',
+    'org_metric_updated',
+    'org_metrics_bulk_enabled',
+
+    -- Benchmark actions
+    'benchmark_created',
+    'benchmark_updated',
+    'benchmark_deleted',
+    'benchmark_enabled',
+    'benchmark_disabled',
+    'custom_benchmark_created',
+    'custom_benchmark_updated',
+    'custom_benchmark_deleted',
+    'org_benchmark_enabled',
+    'org_benchmark_disabled',
+    'org_benchmark_updated',
+
+    -- AI feature actions
+    'org_ai_enabled_by_site_admin',
+    'org_ai_disabled_by_site_admin',
+    'org_ai_enabled_by_org_admin',
+    'org_ai_disabled_by_org_admin',
+    'site_ai_model_changed',
+    'report_ai_insights_generated',
+    'report_ai_insights_updated',
+    'report_ai_insights_generation_failed',
+
+    -- Organization type actions
+    'organization_type_metrics_queried',
+    'organization_type_benchmarks_queried',
 
     -- Cache actions
     'cache_invalidated',
     'cache_invalidation_failed',
 
-    -- Membership Request actions
+    -- Site settings actions
+    'site_wellness_module_toggled',
+
+    -- Organization wellness actions
+    'org_wellness_enabled',
+    'org_wellness_disabled',
+
+    -- Membership request actions
     'membership_request_created',
     'membership_request_approved',
     'membership_request_rejected',
     'membership_request_cancelled',
-    'join_code_regenerated',
-    'membership_settings_updated',
-
-    -- Metric actions (site-wide metric management)
-    'metric_created',
-    'metric_updated',
-    'metric_deleted',
-    'metric_enabled',
-    'metric_disabled',
-
-    -- Organization metric actions
-    'org_metric_enabled',
-    'org_metric_disabled',
-    'org_metrics_bulk_enabled',
-
-    -- AI feature actions
-    'org_ai_enabled_by_org_admin',
-    'org_ai_enabled_by_site_admin',
-
-    -- Benchmark actions
-    'custom_benchmark_created',
-    'custom_benchmark_updated',
-    'org_benchmark_enabled'
+    'organization_join_code_regenerated',
+    'organization_membership_settings_updated'
   ));
 END $$;

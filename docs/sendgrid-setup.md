@@ -1,10 +1,16 @@
 # SendGrid Email Service Configuration
 
+> **⚠️ DEPRECATED**: This documentation is outdated. AthleteMetrics has migrated from SendGrid to Resend.
+> **See**: `docs/resend-setup.md` for current email service setup instructions.
+> **Migration PR**: #266 (December 2025)
+
+---
+
 ## Overview
 
-AthleteMetrics uses SendGrid for transactional email delivery. The integration is fully implemented with professional HTML email templates and graceful degradation when SendGrid is unavailable.
+~~AthleteMetrics uses SendGrid for transactional email delivery.~~ **This integration has been replaced with Resend.**
 
-**Current Status**: SendGrid integration is code-complete but requires configuration to enable email sending.
+**Current Status**: ~~SendGrid integration is code-complete but requires configuration to enable email sending.~~ **Email service now uses Resend SDK. This document is kept for historical reference only.**
 
 ## Email Features
 
