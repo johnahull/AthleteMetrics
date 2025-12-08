@@ -28,6 +28,7 @@ import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
+import enhancedAuthRoutes from "./enhanced-auth";
 
 /**
  * Register all application routes
@@ -35,6 +36,9 @@ import { registerRegistrationRoutes } from "./registration-routes";
 export function registerAllRoutes(app: Express) {
   // Authentication routes
   registerAuthRoutes(app);
+
+  // Enhanced authentication routes (MFA, email verification, password reset)
+  app.use("/api/enhanced-auth", enhancedAuthRoutes);
 
   // Registration routes (public self-signup)
   registerRegistrationRoutes(app);
