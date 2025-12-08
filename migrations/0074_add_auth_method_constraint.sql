@@ -16,46 +16,59 @@
 -- Delete related records first (FK constraints)
 -- Note: We need to check for NULL auth methods AND test username patterns
 
--- Delete measurements
-DELETE FROM measurements
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- All DELETE statements wrapped in DO $$ blocks for E2E test compatibility
+-- E2E tests use db:push which doesn't create all tables (e.g., audit_logs is migration-only)
 
--- Delete audit logs
-DELETE FROM audit_logs
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete measurements (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'measurements' AND table_schema = 'public') THEN
+    DELETE FROM measurements
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
+
+-- Delete audit logs (if table exists - created by migration 0003, not in schema.ts)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'audit_logs' AND table_schema = 'public') THEN
+    DELETE FROM audit_logs
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
 -- Delete sessions (if table exists)
 DO $$
 BEGIN
-  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions') THEN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'sessions' AND table_schema = 'public') THEN
     DELETE FROM sessions
     WHERE user_id IN (
       SELECT id FROM users
@@ -75,130 +88,160 @@ BEGIN
   END IF;
 END $$;
 
--- Delete email verification tokens
-DELETE FROM email_verification_tokens
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete email verification tokens (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'email_verification_tokens' AND table_schema = 'public') THEN
+    DELETE FROM email_verification_tokens
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Delete account linking tokens
-DELETE FROM account_linking_tokens
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete account linking tokens (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'account_linking_tokens' AND table_schema = 'public') THEN
+    DELETE FROM account_linking_tokens
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Delete athlete profiles
-DELETE FROM athlete_profiles
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete athlete profiles (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'athlete_profiles' AND table_schema = 'public') THEN
+    DELETE FROM athlete_profiles
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Delete invitations (check both user_id and invited_by FK references)
-DELETE FROM invitations
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
+-- Delete invitations (if table exists - check both user_id and invited_by FK references)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'invitations' AND table_schema = 'public') THEN
+    DELETE FROM invitations
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
     )
-)
-OR invited_by IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+    OR invited_by IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Delete user_teams records
-DELETE FROM user_teams
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete user_teams records (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_teams' AND table_schema = 'public') THEN
+    DELETE FROM user_teams
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Delete user_organizations records
-DELETE FROM user_organizations
-WHERE user_id IN (
-  SELECT id FROM users
-  WHERE password IS NULL
-    AND google_id IS NULL
-    AND apple_id IS NULL
-    AND (
-      username LIKE 'test-%'
-      OR username LIKE '%-api-%'
-      OR username LIKE '%-creation-%'
-      OR username LIKE '%-del-%'
-      OR username LIKE 'bulk-ops-%'
-      OR username LIKE 'dep-user%'
-      OR emails::text LIKE '%@test.com%'
-    )
-);
+-- Delete user_organizations records (if table exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_organizations' AND table_schema = 'public') THEN
+    DELETE FROM user_organizations
+    WHERE user_id IN (
+      SELECT id FROM users
+      WHERE password IS NULL
+        AND google_id IS NULL
+        AND apple_id IS NULL
+        AND (
+          username LIKE 'test-%'
+          OR username LIKE '%-api-%'
+          OR username LIKE '%-creation-%'
+          OR username LIKE '%-del-%'
+          OR username LIKE 'bulk-ops-%'
+          OR username LIKE 'dep-user%'
+          OR emails::text LIKE '%@test.com%'
+        )
+    );
+  END IF;
+END $$;
 
--- Now delete the orphaned test users
+-- Now delete the orphaned test users (users table always exists)
 DELETE FROM users
 WHERE password IS NULL
   AND google_id IS NULL
