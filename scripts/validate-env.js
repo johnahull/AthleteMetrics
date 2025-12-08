@@ -49,16 +49,16 @@ const REQUIRED_VARS = {
   },
 
   // Email service
-  SENDGRID_API_KEY: {
+  RESEND_API_KEY: {
     required: false,
-    description: 'SendGrid API key',
-    validator: (val) => !val || val.startsWith('SG.')
+    description: 'Resend API key',
+    validator: (val) => !val || val.startsWith('re_')
   },
-  SENDGRID_FROM_EMAIL: {
+  EMAIL_FROM_ADDRESS: {
     required: false,
     description: 'Email sender address'
   },
-  SENDGRID_FROM_NAME: {
+  EMAIL_FROM_NAME: {
     required: false,
     description: 'Email sender name'
   },
