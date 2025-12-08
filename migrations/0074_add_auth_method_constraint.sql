@@ -157,12 +157,13 @@ BEGIN
   END IF;
 END $$;
 
--- Delete invitations (if table exists - check both user_id and invited_by FK references)
+-- Delete invitations (if table exists - check both player_id and invited_by FK references)
+-- Note: invitations table uses 'player_id' not 'user_id' for the invited athlete
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'invitations' AND table_schema = 'public') THEN
     DELETE FROM invitations
-    WHERE user_id IN (
+    WHERE player_id IN (
       SELECT id FROM users
       WHERE password IS NULL
         AND google_id IS NULL
