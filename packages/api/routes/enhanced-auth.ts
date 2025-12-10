@@ -23,13 +23,17 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Find user by username
-    const user = await storage.getUserByUsername(username);
+    // Find user by username or email
+    let user = await storage.getUserByUsername(username);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid username or password'
-      });
+      // Try email lookup if username lookup failed
+      user = await storage.getUserByEmail(username);
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid username or password'
+        });
+      }
     }
 
     // Check for account lockout
