@@ -122,7 +122,9 @@ export default defineConfig({
           }
         ],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        navigateFallback: '/index.html',
+        // Don't use navigateFallback - let the server handle routing
+        // This prevents the PWA from intercepting navigation requests
+        navigateFallback: undefined,
         navigateFallbackDenylist: [/^\/api/],
       },
       devOptions: {

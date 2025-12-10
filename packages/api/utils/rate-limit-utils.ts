@@ -12,12 +12,12 @@ import type { Request } from 'express';
  * regardless of environment variable settings.
  *
  * @param req - Express request object
- * @param rateLimitType - Type of rate limiting ('auth' | 'general' | 'analytics' | 'upload')
+ * @param rateLimitType - Type of rate limiting ('auth' | 'general' | 'analytics' | 'upload' | 'oauth')
  * @returns true if rate limiting should be skipped, false otherwise
  */
 export function shouldSkipRateLimiting(
   req: Request,
-  rateLimitType: 'auth' | 'general' | 'analytics' | 'upload' = 'general'
+  rateLimitType: 'auth' | 'general' | 'analytics' | 'upload' | 'oauth' = 'general'
 ): boolean {
   const isLocalhost = req.ip === '127.0.0.1' || req.ip === '::1' || req.ip === '::ffff:127.0.0.1';
   const isTestEnv = process.env.NODE_ENV === 'test';

@@ -15,6 +15,14 @@ export const MAX_INSIGHTS_LENGTH = 10000;
  */
 export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 'private_facility', 'elite_academy'] as const;
 
+/**
+ * Metric type enum for determining if metrics are better when higher/lower or just tracked
+ * - lower_is_better: Decreasing values = improvement (e.g., FLY10_TIME, DASH_40YD)
+ * - higher_is_better: Increasing values = improvement (e.g., VERTICAL_JUMP, TOP_SPEED)
+ * - tracking: No better/worse direction, just informational (e.g., HEIGHT, WEIGHT)
+ */
+export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'] as const;
+
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
@@ -31,6 +39,11 @@ export const organizations = pgTable("organizations", {
   aiEnabled: boolean("ai_enabled").default(false).notNull(),
   // Wellness module feature flag (added in migration 0054)
   wellnessEnabled: boolean("wellness_enabled").default(true).notNull(),
+  // Membership request feature flags (added in migration 0069)
+  joinCode: varchar("join_code", { length: 20 }).unique(),
+  isPublicDirectory: boolean("is_public_directory").default(false).notNull(),
+  allowMembershipRequests: boolean("allow_membership_requests").default(true).notNull(),
+  autoApproveRequests: boolean("auto_approve_requests").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -49,7 +62,7 @@ export const teams = pgTable("teams", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   // Unique constraint: team names must be unique within an organization
-  uniqueTeamPerOrg: unique().on(table.organizationId, table.name),
+  uniqueTeamPerOrg: unique("teams_organization_id_name_unique").on(table.organizationId, table.name),
   // Performance index for common queries
   orgNameIndex: index("teams_org_name_idx").on(table.organizationId, table.name),
 }));
@@ -58,7 +71,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   emails: text("emails").array().notNull().default(sql`ARRAY[]::text[]`),
-  password: text("password").notNull(),
+  password: text("password"), // Nullable for OAuth-only accounts
   firstName: text("first_name").notNull(),
   lastName: text("last_name").notNull(),
   fullName: text("full_name").notNull(),
@@ -83,10 +96,21 @@ export const users = pgTable("users", {
   isEmailVerified: boolean("is_email_verified").default(false).notNull(),
   requiresPasswordChange: boolean("requires_password_change").default(false).notNull(),
   passwordChangedAt: timestamp("password_changed_at"),
+  // OAuth provider fields
+  googleId: text("google_id").unique(),
+  appleId: text("apple_id").unique(),
+  oauthProvider: text("oauth_provider").$type<"google" | "apple" | "password">(),
+  oauthEmail: text("oauth_email"),
+  oauthEmailVerified: boolean("oauth_email_verified").default(false).notNull(),
+  lastAuthMethod: text("last_auth_method").$type<"password" | "google" | "apple">(),
+  accountLinkedAt: timestamp("account_linked_at"),
   // System fields
   isSiteAdmin: boolean("is_site_admin").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   deletedAt: timestamp("deleted_at"), // Soft delete - user marked as deleted but data preserved
+  // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
+  showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
+  peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -119,7 +143,7 @@ export const siteMetrics = pgTable("site_metrics", {
   label: varchar("label", { length: 100 }).notNull(), // "10-Yard Fly Time"
   category: varchar("category", { length: 50 }), // "speed", "agility", "strength", "power"
   unit: varchar("unit", { length: 20 }), // "s", "in", "mph", "m"
-  lowerIsBetter: boolean("lower_is_better").default(true).notNull(),
+  metricType: text("metric_type", { enum: metricTypeEnum }).default('lower_is_better').notNull(),
   isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot be deleted
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
@@ -156,7 +180,7 @@ export const organizationMetrics = pgTable("organization_metrics", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
-  uniqueOrgMetric: unique().on(table.organizationId, table.metricCode),
+  uniqueOrgMetric: unique("organization_metrics_unique_org_metric").on(table.organizationId, table.metricCode),
   orgIdx: index("org_metrics_org_idx").on(table.organizationId),
   orgEnabledIdx: index("org_metrics_org_enabled_idx").on(table.organizationId, table.isEnabled),
 }));
@@ -169,7 +193,7 @@ export const siteSports = pgTable("site_sports", {
   description: text("description"),
   icon: varchar("icon", { length: 50 }), // Icon identifier for UI
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   isSystemDefault: boolean("is_system_default").default(false).notNull(), // Cannot delete seeded sports
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -189,7 +213,7 @@ export const sitePositions = pgTable("site_positions", {
   name: varchar("name", { length: 100 }).notNull(), // "Forward", "Midfielder"
   shortName: varchar("short_name", { length: 10 }), // "FW", "MF" (optional abbreviation)
   description: text("description"),
-  displayOrder: integer("display_order"),
+  displayOrder: integer("display_order").default(999).notNull(),
   color: varchar("color", { length: 20 }),
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
@@ -223,6 +247,15 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   isSystemDefault: boolean("is_system_default").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   displayOrder: integer("display_order").default(999).notNull(),
+  // Peer comparison benchmark settings (Phase 2.3)
+  benchmarkSource: varchar("benchmark_source", { length: 20 }).default('static').notNull(), // 'static' or 'peer_percentile'
+  peerPercentileTarget: integer("peer_percentile_target"), // e.g., 75 means "top 25%" (75th percentile)
+  peerFilterCriteria: jsonb("peer_filter_criteria").$type<{
+    ageRange?: [number, number];
+    gender?: 'Male' | 'Female';
+    orgTypes?: string[];
+    sports?: string[];
+  }>(), // Filter criteria for peer pool
   // Display settings
   color: varchar("color", { length: 20 }),
   icon: varchar("icon", { length: 50 }),
@@ -239,6 +272,8 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   uniqueMetricName: unique("site_benchmarks_metric_name_unique").on(table.metricCode, table.name),
   // Index for organization type filtering
   orgTypesIdx: index("site_benchmarks_org_types_idx").on(table.applicableOrgTypes),
+  // Index for peer benchmark filtering
+  peerBenchmarkIdx: index("site_benchmarks_peer_idx").on(table.benchmarkSource),
 }));
 
 // Organization-specific custom benchmarks
@@ -283,9 +318,10 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
 }, (table) => ({
-  uniqueOrgBenchmark: unique().on(table.organizationId, table.benchmarkId, table.benchmarkType),
-  // Partial unique index for display_order (migration 0024)
-  displayOrderUnique: unique("org_benchmarks_display_order_unique").on(table.organizationId, table.displayOrder),
+  uniqueOrgBenchmark: unique("organization_benchmarks_unique_org_benchmark").on(table.organizationId, table.benchmarkId, table.benchmarkType),
+  // Note: displayOrderUnique is a PARTIAL unique index (WHERE display_order IS NOT NULL)
+  // created in migration 0024. It cannot be defined in Drizzle schema as Drizzle doesn't
+  // support partial constraints. The index name is: org_benchmarks_display_order_unique
   // Note: orgIdx removed as redundant (org_benchmarks_org_enabled_idx covers single-column queries via leftmost prefix rule)
   orgEnabledIdx: index("org_benchmarks_org_enabled_idx").on(table.organizationId, table.isEnabled),
   benchmarkIdx: index("org_benchmarks_benchmark_idx").on(table.benchmarkId, table.benchmarkType),
@@ -318,8 +354,15 @@ export const measurements = pgTable("measurements", {
   organizationId: varchar("organization_id"), // Organization ID at time of measurement (no FK - historical reference)
   season: text("season"), // Season designation (e.g., "2024-Fall")
   teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
+  // Global athlete linking for cross-org aggregation
+  globalAthleteId: varchar("global_athlete_id"), // Historical reference (no FK - allows orphaned data)
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
+  // Performance indexes for peer comparison queries
+  metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
+  userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
+}));
 
 export const userOrganizations = pgTable("user_organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -357,6 +400,31 @@ export const invitations = pgTable("invitations", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+// Membership request status enum
+export const membershipRequestStatusEnum = ['pending', 'approved', 'rejected', 'cancelled'] as const;
+export const membershipRequestDiscoveryMethodEnum = ['join_code', 'directory', 'direct_link'] as const;
+
+// Membership requests - athlete-initiated requests to join organizations
+export const membershipRequests = pgTable("membership_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  status: text("status", { enum: membershipRequestStatusEnum }).default('pending').notNull(),
+  requestedRole: text("requested_role").default('athlete').notNull(),
+  discoveryMethod: text("discovery_method", { enum: membershipRequestDiscoveryMethodEnum }),
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: 'set null' }),
+  processedAt: timestamp("processed_at"),
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+}, (table) => ({
+  // Prevent duplicate pending requests
+  uniquePendingRequest: sql`CREATE UNIQUE INDEX IF NOT EXISTS membership_requests_unique_pending ON ${table} (${table.userId}, ${table.organizationId}) WHERE ${table.status} = 'pending'`,
+  // Performance indexes
+  orgStatusIdx: index("membership_requests_org_status_idx").on(table.organizationId, table.status),
+  userIdx: index("membership_requests_user_idx").on(table.userId),
+}));
 
 // Audit log for security-sensitive operations
 export const auditLogs = pgTable("audit_logs", {
@@ -415,6 +483,27 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
 }, (table) => ({
   // Index for efficient token lookup
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
+}));
+
+// Account Linking Tokens - OAuth account linking verification
+export const accountLinkingTokens = pgTable("account_linking_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  token: text("token").notNull().unique(),
+  provider: text("provider").notNull().$type<"google" | "apple">(),
+  providerId: text("provider_id").notNull(), // googleId or appleId from OAuth provider
+  providerEmail: text("provider_email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Index for efficient token lookup
+  tokenIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_token_idx ON ${table} (${table.token})`,
+  // Index for user_id lookups
+  userIdIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_user_id_idx ON ${table} (${table.userId})`,
+  // Index for token expiry cleanup (added in migration 0072)
+  expiresAtIdx: sql`CREATE INDEX IF NOT EXISTS account_linking_tokens_expires_at_idx ON ${table} (${table.expiresAt})`,
 }));
 
 // Site Settings - Global site configuration (singleton table)
@@ -564,6 +653,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   teams: many(teams),
   userOrganizations: many(userOrganizations),
   invitations: many(invitations),
+  membershipRequests: many(membershipRequests),
   organizationMetrics: many(organizationMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
@@ -612,6 +702,7 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   reportSnapshotsCreated: many(reportSnapshots, { relationName: "reportSnapshotsCreated" }),
   wellnessTemplatesCreated: many(wellnessTemplates, { relationName: "wellnessTemplatesCreated" }),
   wellnessRequestsCreated: many(wellnessRequests, { relationName: "wellnessRequestsCreated" }),
+  goals: many(goals),
   athleteProfile: one(athleteProfiles, {
     fields: [users.id],
     references: [athleteProfiles.userId],
@@ -658,6 +749,21 @@ export const invitationsRelations = relations(invitations, ({ one }) => ({
   }),
   player: one(users, {
     fields: [invitations.playerId],
+    references: [users.id],
+  }),
+}));
+
+export const membershipRequestsRelations = relations(membershipRequests, ({ one }) => ({
+  user: one(users, {
+    fields: [membershipRequests.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [membershipRequests.organizationId],
+    references: [organizations.id],
+  }),
+  processedByUser: one(users, {
+    fields: [membershipRequests.processedBy],
     references: [users.id],
   }),
 }));
@@ -866,6 +972,239 @@ export const wellnessResponses = pgTable("wellness_responses", {
     .on(table.userId, table.submittedAt.desc()),
 }));
 
+// Achievement & Badge System
+export const achievementCategoryEnum = ['performance', 'consistency', 'improvement', 'goal'] as const;
+export const achievementRarityEnum = ['common', 'rare', 'epic', 'legendary'] as const;
+
+// Achievement definitions (seeded data)
+export const achievementDefinitions = pgTable("achievement_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  code: varchar("code", { length: 50 }).notNull().unique(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  category: text("category", { enum: achievementCategoryEnum }).notNull(),
+  icon: varchar("icon", { length: 50 }), // lucide icon name
+  color: varchar("color", { length: 20 }), // tailwind color class
+  rarity: text("rarity", { enum: achievementRarityEnum }).default('common').notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: index("achievement_definitions_code_idx").on(table.code),
+  categoryIdx: index("achievement_definitions_category_idx").on(table.category),
+  activeIdx: index("achievement_definitions_active_idx").on(table.isActive),
+}));
+
+// User achievements (junction table)
+export const userAchievements = pgTable("user_achievements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  achievementId: varchar("achievement_id").notNull().references(() => achievementDefinitions.id, { onDelete: 'restrict' }),
+  unlockedAt: timestamp("unlocked_at").defaultNow().notNull(),
+  metadata: jsonb("metadata"), // { metric, value, improvement, etc. }
+}, (table) => ({
+  userIdx: index("user_achievements_user_idx").on(table.userId),
+  orgIdx: index("user_achievements_org_idx").on(table.organizationId),
+  achievementIdx: index("user_achievements_achievement_idx").on(table.achievementId),
+  userOrgIdx: index("user_achievements_user_org_idx").on(table.userId, table.organizationId),
+  uniqueUserAchievement: unique("user_achievements_user_org_achievement_unique").on(table.userId, table.organizationId, table.achievementId),
+}));
+
+// Goal Setting System
+export const goalTypeEnum = ['target_value', 'improvement_percentage', 'consistency'] as const;
+export const goalStatusEnum = ['active', 'achieved', 'missed', 'abandoned'] as const;
+
+export const goals = pgTable("goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  metric: text("metric").notNull().references(() => siteMetrics.code, { onDelete: 'restrict', onUpdate: 'cascade' }), // Metric code (e.g., "FLY10_TIME", "VERTICAL_JUMP")
+  goalType: text("goal_type", { enum: goalTypeEnum }).notNull(),
+  targetValue: decimal("target_value", { precision: 10, scale: 3 }).notNull(),
+  baselineValue: decimal("baseline_value", { precision: 10, scale: 3 }).notNull(),
+  currentValue: decimal("current_value", { precision: 10, scale: 3 }).notNull(),
+  targetDate: date("target_date").notNull(),
+  status: text("status", { enum: goalStatusEnum }).default('active').notNull(),
+  notes: text("notes"),
+  achievedAt: timestamp("achieved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  // Index for user's goals lookup
+  userIdx: index("goals_user_idx").on(table.userId),
+  // Index for active goals queries
+  statusIdx: index("goals_status_idx").on(table.status),
+  // Composite index for user's active goals
+  userStatusIdx: index("goals_user_status_idx").on(table.userId, table.status),
+  // Index for metric-based queries
+  metricIdx: index("goals_metric_idx").on(table.metric),
+  // Index for target date queries (upcoming deadlines)
+  targetDateIdx: index("goals_target_date_idx").on(table.targetDate),
+  // Composite index for user + metric queries
+  userMetricIdx: index("goals_user_metric_idx").on(table.userId, table.metric),
+}));
+
+// Global Athlete Registry for Cross-Organization Linking
+export const linkStatusEnum = ['pending', 'confirmed', 'rejected', 'revoked'] as const;
+export const linkTypeEnum = ['auto_email', 'auto_import', 'athlete_claimed', 'org_proposed', 'admin_forced'] as const;
+export const actorTypeEnum = ['athlete', 'org_admin', 'site_admin', 'system'] as const;
+
+export const globalAthletes = pgTable("global_athletes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Verified identity information
+  verifiedEmails: text("verified_emails").array().notNull().default(sql`ARRAY[]::text[]`),
+  primaryEmail: text("primary_email"),
+  // Canonical profile (denormalized for display)
+  canonicalFirstName: text("canonical_first_name").notNull(),
+  canonicalLastName: text("canonical_last_name").notNull(),
+  canonicalFullName: text("canonical_full_name").notNull(),
+  birthDate: date("birth_date"),
+  // Privacy preferences
+  allowCrossOrgLinking: boolean("allow_cross_org_linking").default(true).notNull(),
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+}, (table) => ({
+  verifiedEmailsGinIdx: index("global_athletes_verified_emails_gin").using("gin", table.verifiedEmails),
+  primaryEmailIdx: index("global_athletes_primary_email_idx").on(table.primaryEmail),
+  canonicalNameIdx: index("global_athletes_canonical_name_idx").on(table.canonicalFirstName, table.canonicalLastName),
+}));
+
+export const userGlobalAthleteLinks = pgTable("user_global_athlete_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  globalAthleteId: varchar("global_athlete_id").notNull().references(() => globalAthletes.id, { onDelete: 'cascade' }),
+  // Link status
+  linkStatus: text("link_status", { enum: linkStatusEnum }).default('pending').notNull(),
+  linkType: text("link_type", { enum: linkTypeEnum }).notNull(),
+  // Approval workflow
+  proposedBy: varchar("proposed_by").references(() => users.id, { onDelete: 'set null' }),
+  proposedAt: timestamp("proposed_at").defaultNow().notNull(),
+  confirmedBy: varchar("confirmed_by").references(() => users.id, { onDelete: 'set null' }),
+  confirmedAt: timestamp("confirmed_at"),
+  // Data sharing (per-link control)
+  shareMeasurements: boolean("share_measurements").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Notification tracking
+  notifiedAt: timestamp("notified_at"),
+  notificationAcknowledgedAt: timestamp("notification_acknowledged_at"),
+}, (table) => ({
+  // One user links to at most one global athlete
+  uniqueUserId: unique("user_global_athlete_links_user_id_unique").on(table.userId),
+  globalAthleteIdIdx: index("ugal_global_athlete_id_idx").on(table.globalAthleteId),
+  statusIdx: index("ugal_status_idx").on(table.linkStatus),
+  // Composite index for confirmed links lookup
+  globalConfirmedIdx: index("ugal_global_confirmed_idx").on(table.globalAthleteId, table.linkStatus),
+}));
+
+export const globalAthleteAuditLog = pgTable("global_athlete_audit_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  globalAthleteId: varchar("global_athlete_id").notNull().references(() => globalAthletes.id, { onDelete: 'cascade' }),
+  action: text("action").notNull(), // 'created', 'link_proposed', 'link_confirmed', 'link_rejected', 'privacy_changed', etc.
+  actorId: varchar("actor_id").references(() => users.id, { onDelete: 'set null' }),
+  actorType: text("actor_type", { enum: actorTypeEnum }).notNull(),
+  details: jsonb("details").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  globalAthleteIdx: index("gaal_global_athlete_idx").on(table.globalAthleteId, table.createdAt),
+  actionIdx: index("gaal_action_idx").on(table.action, table.createdAt),
+}));
+
+// Claim status enum
+const claimStatusEnum = ["pending", "verified", "expired", "cancelled"] as const;
+
+// Global Athlete Claims - for manually claiming additional email addresses
+export const globalAthleteClaims = pgTable("global_athlete_claims", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  globalAthleteId: varchar("global_athlete_id").notNull().references(() => globalAthletes.id, { onDelete: 'cascade' }),
+  claimedEmail: text("claimed_email").notNull(),
+  token: varchar("token", { length: 64 }).notNull().unique(),
+  status: text("status", { enum: claimStatusEnum }).default('pending').notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  verifiedAt: timestamp("verified_at"),
+}, (table) => ({
+  globalAthleteIdx: index("gac_global_athlete_idx").on(table.globalAthleteId),
+  tokenIdx: index("gac_token_idx").on(table.token),
+  emailIdx: index("gac_email_idx").on(table.claimedEmail),
+  statusIdx: index("gac_status_idx").on(table.status),
+}));
+
+// Peer Percentile Cache - pre-computed distributions for cross-org peer comparison (Phase 2.3)
+export const peerPercentileCache = pgTable("peer_percentile_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  filterCriteria: jsonb("filter_criteria").$type<{
+    ageRange?: [number, number];
+    gender?: 'Male' | 'Female';
+    orgTypes?: string[];
+    sports?: string[];
+  }>().notNull().default({}),
+  // Hash of filterCriteria for deterministic lookups (avoids JSONB key ordering issues)
+  // NOTE: MD5 is used for cache key generation (performance), NOT cryptographic security
+  // JSONB objects {"age": 18, "gender": "M"} and {"gender": "M", "age": 18} have different ::text representations
+  // Using MD5 hash ensures consistent lookups regardless of key ordering
+  filterHash: varchar("filter_hash", { length: 64 }).generatedAlwaysAs(sql`md5(filter_criteria::text)`),
+  // Distribution data
+  sampleSize: integer("sample_size").notNull(),
+  p10: decimal("p10", { precision: 10, scale: 4 }),
+  p25: decimal("p25", { precision: 10, scale: 4 }),
+  p50: decimal("p50", { precision: 10, scale: 4 }),
+  p75: decimal("p75", { precision: 10, scale: 4 }),
+  p90: decimal("p90", { precision: 10, scale: 4 }),
+  mean: decimal("mean", { precision: 10, scale: 4 }),
+  // Cache metadata
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => ({
+  metricIdx: index("peer_percentile_cache_metric_idx").on(table.metricCode),
+  expiresIdx: index("peer_percentile_cache_expires_idx").on(table.expiresAt),
+  // Unique constraint on metric + filter hash for upsert operations (more reliable than JSONB)
+  uniqueMetricFilterHash: unique("peer_percentile_cache_metric_hash_unique").on(table.metricCode, table.filterHash),
+}));
+
+// Global Athlete Relations
+export const globalAthletesRelations = relations(globalAthletes, ({ one, many }) => ({
+  createdBy: one(users, {
+    fields: [globalAthletes.createdBy],
+    references: [users.id],
+  }),
+  links: many(userGlobalAthleteLinks),
+  auditLogs: many(globalAthleteAuditLog),
+}));
+
+export const userGlobalAthleteLinksRelations = relations(userGlobalAthleteLinks, ({ one }) => ({
+  user: one(users, {
+    fields: [userGlobalAthleteLinks.userId],
+    references: [users.id],
+  }),
+  globalAthlete: one(globalAthletes, {
+    fields: [userGlobalAthleteLinks.globalAthleteId],
+    references: [globalAthletes.id],
+  }),
+  proposedBy: one(users, {
+    fields: [userGlobalAthleteLinks.proposedBy],
+    references: [users.id],
+    relationName: "proposedLinks",
+  }),
+  confirmedBy: one(users, {
+    fields: [userGlobalAthleteLinks.confirmedBy],
+    references: [users.id],
+    relationName: "confirmedLinks",
+  }),
+}));
+
+export const globalAthleteAuditLogRelations = relations(globalAthleteAuditLog, ({ one }) => ({
+  globalAthlete: one(globalAthletes, {
+    fields: [globalAthleteAuditLog.globalAthleteId],
+    references: [globalAthletes.id],
+  }),
+  actor: one(users, {
+    fields: [globalAthleteAuditLog.actorId],
+    references: [users.id],
+  }),
+}));
+
 // Wellness Relations
 export const wellnessTemplatesRelations = relations(wellnessTemplates, ({ one, many }) => ({
   organization: one(organizations, {
@@ -902,10 +1241,60 @@ export const wellnessResponsesRelations = relations(wellnessResponses, ({ one })
   }),
 }));
 
+// Goals Relations
+export const goalsRelations = relations(goals, ({ one }) => ({
+  user: one(users, {
+    fields: [goals.userId],
+    references: [users.id],
+  }),
+}));
+
+// Achievement Relations
+export const achievementDefinitionsRelations = relations(achievementDefinitions, ({ many }) => ({
+  userAchievements: many(userAchievements),
+}));
+
+export const userAchievementsRelations = relations(userAchievements, ({ one }) => ({
+  user: one(users, {
+    fields: [userAchievements.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [userAchievements.organizationId],
+    references: [organizations.id],
+  }),
+  achievement: one(achievementDefinitions, {
+    fields: [userAchievements.achievementId],
+    references: [achievementDefinitions.id],
+  }),
+}));
+
 // Wellness type exports
 export type WellnessTemplate = typeof wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof wellnessRequests.$inferSelect;
 export type WellnessResponse = typeof wellnessResponses.$inferSelect;
+
+// Goals type exports
+export type Goal = typeof goals.$inferSelect;
+export type GoalType = (typeof goalTypeEnum)[number];
+export type GoalStatus = (typeof goalStatusEnum)[number];
+
+// Achievement type exports
+export type AchievementDefinition = typeof achievementDefinitions.$inferSelect;
+export type UserAchievement = typeof userAchievements.$inferSelect;
+export type AchievementCategory = (typeof achievementCategoryEnum)[number];
+export type AchievementRarity = (typeof achievementRarityEnum)[number];
+
+// Global Athlete type exports
+export type GlobalAthlete = typeof globalAthletes.$inferSelect;
+export type UserGlobalAthleteLink = typeof userGlobalAthleteLinks.$inferSelect;
+export type GlobalAthleteAuditLog = typeof globalAthleteAuditLog.$inferSelect;
+export type GlobalAthleteClaim = typeof globalAthleteClaims.$inferSelect;
+export type PeerPercentileCache = typeof peerPercentileCache.$inferSelect;
+export type LinkStatus = (typeof linkStatusEnum)[number];
+export type LinkType = (typeof linkTypeEnum)[number];
+export type ActorType = (typeof actorTypeEnum)[number];
+export type ClaimStatus = (typeof claimStatusEnum)[number];
 
 // Insert schemas
 export const insertOrganizationSchema = createInsertSchema(organizations).omit({
@@ -1002,6 +1391,17 @@ export const insertUserSchema = createInsertSchema(users).omit({
   positions: z.array(z.string().min(1, "Position code required")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
+});
+
+// Schema for creating OAuth users (password is optional for OAuth-only accounts)
+export const insertOAuthUserSchema = insertUserSchema.omit({ password: true }).extend({
+  password: z.string()
+    .min(PASSWORD_REQUIREMENTS.minLength, `Password must be at least ${PASSWORD_REQUIREMENTS.minLength} characters`)
+    .regex(PASSWORD_REGEX.lowercase, "Password must contain at least one lowercase letter")
+    .regex(PASSWORD_REGEX.uppercase, "Password must contain at least one uppercase letter")
+    .regex(PASSWORD_REGEX.number, "Password must contain at least one number")
+    .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character")
+    .optional(),
 });
 
 export const insertAthleteProfileSchema = createInsertSchema(athleteProfiles).omit({
@@ -1132,7 +1532,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   label: z.string().min(1, "Label is required").max(100, "Label must be 100 characters or less"),
   category: z.string().max(50, "Category must be 50 characters or less").optional(),
   unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
-  lowerIsBetter: z.boolean().default(true),
+  metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
@@ -1149,7 +1549,7 @@ export const updateSiteMetricSchema = z.object({
   label: z.string().min(1).max(100).optional(),
   category: z.string().max(50).optional(),
   unit: z.string().max(20).optional(),
-  lowerIsBetter: z.boolean().optional(),
+  metricType: z.enum(metricTypeEnum).optional(),
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
@@ -1506,6 +1906,7 @@ export type InsertTeam = z.infer<typeof insertTeamSchema>;
 export type Team = typeof teams.$inferSelect;
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertOAuthUser = z.infer<typeof insertOAuthUserSchema>;
 export type User = typeof users.$inferSelect;
 export type UpdateProfile = z.infer<typeof updateProfileSchema>;
 export type ChangePassword = z.infer<typeof changePasswordSchema>;
@@ -1642,15 +2043,18 @@ export const MetricType = {
 } as const;
 
 // Valid metrics for analytics with optimization hints
-// Defines which metrics should be minimized (lower is better) vs maximized (higher is better)
+// Defines metric types: lower_is_better, higher_is_better, tracking
 export const VALID_METRICS = [
-  { key: 'FLY10_TIME', lowerIsBetter: true },
-  { key: 'VERTICAL_JUMP', lowerIsBetter: false },
-  { key: 'AGILITY_505', lowerIsBetter: true },
-  { key: 'AGILITY_5105', lowerIsBetter: true },
-  { key: 'T_TEST', lowerIsBetter: true },
-  { key: 'DASH_40YD', lowerIsBetter: true },
-  { key: 'RSI', lowerIsBetter: false },
+  { key: 'FLY10_TIME', metricType: 'lower_is_better' },
+  { key: 'VERTICAL_JUMP', metricType: 'higher_is_better' },
+  { key: 'AGILITY_505', metricType: 'lower_is_better' },
+  { key: 'AGILITY_5105', metricType: 'lower_is_better' },
+  { key: 'T_TEST', metricType: 'lower_is_better' },
+  { key: 'DASH_40YD', metricType: 'lower_is_better' },
+  { key: 'RSI', metricType: 'higher_is_better' },
+  { key: 'TOP_SPEED', metricType: 'higher_is_better' },
+  { key: 'HEIGHT', metricType: 'tracking' },
+  { key: 'WEIGHT', metricType: 'tracking' },
 ] as const;
 
 export const TeamLevel = {
@@ -1771,3 +2175,93 @@ export const updateReportInsightsSchema = z.object({
 export const generateReportInsightsSchema = z.object({
   reportId: z.string().uuid(),
 });
+
+// Goal validation schemas
+export const insertGoalSchema = createInsertSchema(goals).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  achievedAt: true, // Managed by system when status changes to 'achieved'
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  metric: z.string().min(1, "Metric is required"),
+  goalType: z.enum(goalTypeEnum),
+  targetValue: z.number().positive("Target value must be positive"),
+  baselineValue: z.number().nonnegative("Baseline value must be non-negative"),
+  currentValue: z.number().nonnegative("Current value must be non-negative").optional(),
+  targetDate: z.string().date("Target date must be in YYYY-MM-DD format"),
+  status: z.enum(goalStatusEnum).default('active'),
+  notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
+}).refine(
+  (data) => {
+    const targetDate = new Date(data.targetDate);
+    const now = new Date();
+    now.setHours(0, 0, 0, 0); // Reset to start of day for fair comparison
+    return targetDate >= now;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export const updateGoalSchema = z.object({
+  metric: z.string().min(1).optional(),
+  goalType: z.enum(goalTypeEnum).optional(),
+  targetValue: z.number().positive().optional(),
+  baselineValue: z.number().nonnegative().optional(),
+  currentValue: z.number().nonnegative().optional(),
+  targetDate: z.string().date().optional(),
+  status: z.enum(goalStatusEnum).optional(),
+  notes: z.string().max(1000).optional(),
+}).strict().refine(
+  (data) => {
+    if (data.targetDate) {
+      const targetDate = new Date(data.targetDate);
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      return targetDate >= now;
+    }
+    return true;
+  },
+  {
+    message: "Target date must be today or in the future",
+    path: ["targetDate"],
+  }
+);
+
+export type InsertGoal = z.infer<typeof insertGoalSchema>;
+export type UpdateGoal = z.infer<typeof updateGoalSchema>;
+
+// Membership request types and schemas
+export type MembershipRequest = typeof membershipRequests.$inferSelect;
+export type InsertMembershipRequest = typeof membershipRequests.$inferInsert;
+
+export const insertMembershipRequestSchema = createInsertSchema(membershipRequests).omit({
+  id: true,
+  createdAt: true,
+  processedAt: true,
+  processedBy: true,
+}).extend({
+  userId: z.string().min(1, "User ID is required"),
+  organizationId: z.string().min(1, "Organization ID is required"),
+  status: z.enum(membershipRequestStatusEnum).default('pending'),
+  requestedRole: z.string().default('athlete'),
+  discoveryMethod: z.enum(membershipRequestDiscoveryMethodEnum).optional(),
+});
+
+export const createMembershipRequestSchema = z.object({
+  organizationId: z.string().min(1, "Organization ID is required"),
+  discoveryMethod: z.enum(membershipRequestDiscoveryMethodEnum).optional(),
+});
+
+export type CreateMembershipRequest = z.infer<typeof createMembershipRequestSchema>;
+
+// Organization membership settings update schema
+export const updateOrgMembershipSettingsSchema = z.object({
+  isPublicDirectory: z.boolean().optional(),
+  allowMembershipRequests: z.boolean().optional(),
+  autoApproveRequests: z.boolean().optional(),
+});
+
+export type UpdateOrgMembershipSettings = z.infer<typeof updateOrgMembershipSettingsSchema>;

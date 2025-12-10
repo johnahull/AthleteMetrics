@@ -19,7 +19,16 @@ import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
 import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
 import { registerSportsRoutes } from "./sport-routes";
-// import { registerImportRoutes } from "./import-routes";
+import { registerGoalRoutes } from "./goal-routes";
+import { registerAchievementRoutes } from "./achievement-routes";
+import { registerGlobalAthleteRoutes } from "./global-athlete-routes";
+import { registerInvitationRoutes } from "./invitation-routes";
+import { registerMembershipRequestRoutes } from "./membership-request-routes";
+import { registerImportExportRoutes } from "./import-export-routes";
+import { registerProfileRoutes } from "./profile-routes";
+import { registerAdminUtilityRoutes } from "./admin-utility-routes";
+import { registerRegistrationRoutes } from "./registration-routes";
+import enhancedAuthRoutes from "./enhanced-auth";
 
 /**
  * Register all application routes
@@ -27,6 +36,12 @@ import { registerSportsRoutes } from "./sport-routes";
 export function registerAllRoutes(app: Express) {
   // Authentication routes
   registerAuthRoutes(app);
+
+  // Enhanced authentication routes (MFA, email verification, password reset)
+  app.use("/api/enhanced-auth", enhancedAuthRoutes);
+
+  // Registration routes (public self-signup)
+  registerRegistrationRoutes(app);
 
   // User management routes
   registerUserRoutes(app);
@@ -73,8 +88,29 @@ export function registerAllRoutes(app: Express) {
   // Sports and positions management routes
   registerSportsRoutes(app);
 
-  // TODO: Add remaining route modules
-  // registerImportRoutes(app);
+  // Goal management routes
+  registerGoalRoutes(app);
+
+  // Achievement & badge system routes
+  registerAchievementRoutes(app);
+
+  // Global athlete cross-organization identity routes
+  registerGlobalAthleteRoutes(app);
+
+  // Invitation management routes
+  registerInvitationRoutes(app);
+
+  // Membership request routes (athlete self-service join requests)
+  registerMembershipRequestRoutes(app);
+
+  // Import/Export routes (CSV/photo import and data export)
+  registerImportExportRoutes(app);
+
+  // Profile and user management routes
+  registerProfileRoutes(app);
+
+  // Admin utility routes (data cleanup, testing)
+  registerAdminUtilityRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
@@ -96,8 +132,12 @@ export function getRouteStats() {
       benchmarks: "✅ Registered (new service)",
       reports: "✅ Registered (new service)",
       sports: "✅ Registered (new service)",
-      imports: "🚧 Pending migration"
+      goals: "✅ Registered (new service)",
+      achievements: "✅ Registered (new service)",
+      globalAthletes: "✅ Registered (new service)",
+      invitations: "✅ Registered (new service)",
+      importExport: "✅ Registered (new service)"
     },
-    status: "Migration nearly complete - 11/12 modules refactored"
+    status: "Migration complete - 16/16 modules refactored"
   };
 }

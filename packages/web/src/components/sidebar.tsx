@@ -19,7 +19,9 @@ import {
   Activity,
   Heart,
   ClipboardCheck,
-  Trophy
+  Trophy,
+  Link,
+  UserPlus
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -36,6 +38,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Dashboard", href: "/", icon: LayoutDashboard },
       { name: "Organizations", href: "/organizations", icon: Building2 },
       { name: "User Management", href: "/user-management", icon: UserCog },
+      { name: "Global Athletes", href: "/global-athletes", icon: Link, testId: "global-athletes-menu-item" },
       { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
       { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
@@ -82,7 +85,12 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
   ],
   athlete: [
-    { name: "Analytics", href: "/analytics", icon: BarChart3 }
+    { name: "My Profile", href: "/my-profile", icon: UsersRound },
+    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
+    { name: "My Measurements", href: "/my-measurements", icon: ClipboardList },
+    { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users },
+    { name: "My Goals", href: "/my-goals", icon: Target },
+    { name: "Join Organization", href: "/join", icon: UserPlus }
   ]
 });
 
@@ -110,11 +118,8 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
   let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
   
-  // Special handling for athletes with profiles
-  if (role === "athlete" && (user?.athleteId || user?.id)) {
-    const profileId = user?.athleteId || user?.id;
-    navigation.unshift({ name: "My Profile", href: `/athletes/${profileId}`, icon: UsersRound });
-  }
+  // Athletes now use the static /my-profile and /my-dashboard routes
+  // No special handling needed - routes are already in the NAVIGATION_CONFIGS
   
   // Update org admin organization link with specific ID
   if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {

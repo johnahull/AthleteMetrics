@@ -1,9 +1,12 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
   wellnessTemplates, wellnessRequests, wellnessResponses,
+  goals, goalStatusEnum,
+  achievementDefinitions, userAchievements,
+  membershipRequests,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -14,11 +17,16 @@ import {
   type UpdateSiteBenchmark, type UpdateCustomBenchmark, type UpdateOrganizationBenchmark,
   type SiteSettings, type Report,
   type WellnessTemplate, type WellnessRequest, type WellnessResponse,
+  type Goal, type InsertGoal, type UpdateGoal,
+  type AchievementDefinition, type UserAchievement,
+  type MembershipRequest,
   insertUserSchema,
-  type OrganizationType
+  type OrganizationType,
+  type InsertOAuthUser
 } from "@shared/schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
+import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
 import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
@@ -40,9 +48,12 @@ export interface IStorage {
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getUserByGoogleId(googleId: string): Promise<User | null>;
+  getUserByAppleId(appleId: string): Promise<User | null>;
+  createUser(user: InsertUser | InsertOAuthUser): Promise<User>;
   getUsers(): Promise<User[]>;
   getUser(id: string): Promise<User | undefined>;
+  getUsersBatch(ids: string[]): Promise<Map<string, User>>;
   updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
@@ -52,6 +63,7 @@ export interface IStorage {
   // Organizations
   getOrganizations(filters?: { includeInactive?: boolean; orgType?: OrganizationType | null }): Promise<Organization[]>;
   getOrganization(id: string): Promise<Organization | undefined>;
+  getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>>;
   getOrganizationByName(name: string): Promise<Organization | undefined>;
   createOrganization(organization: InsertOrganization): Promise<Organization>;
   updateOrganization(id: string, organization: Partial<InsertOrganization>): Promise<Organization>;
@@ -109,10 +121,43 @@ export interface IStorage {
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
+  // Membership Requests
+  createMembershipRequest(data: {
+    userId: string;
+    organizationId: string;
+    discoveryMethod?: 'join_code' | 'directory' | 'direct_link';
+  }): Promise<MembershipRequest>;
+  getMembershipRequest(id: string): Promise<MembershipRequest | undefined>;
+  getMembershipRequestsByOrganization(organizationId: string, filters?: { status?: string }): Promise<(MembershipRequest & { user: User })[]>;
+  getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]>;
+  approveMembershipRequest(id: string, processedBy: string): Promise<MembershipRequest>;
+  rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
+  cancelMembershipRequest(id: string): Promise<void>;
+  hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
+
+  // Public Organization Directory
+  getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
+  getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
+  regenerateJoinCode(organizationId: string, customCode?: string): Promise<string>;
+  updateOrganizationMembershipSettings(organizationId: string, settings: {
+    isPublicDirectory?: boolean;
+    allowMembershipRequests?: boolean;
+    autoApproveRequests?: boolean;
+  }): Promise<Organization>;
+
+  // Unlinked Athletes (for account linking during membership approval)
+  getUnlinkedAthletes(organizationId: string): Promise<User[]>;
+
   // Email Verification
   createEmailVerificationToken(userId: string, email: string): Promise<{ token: string; expiresAt: Date }>;
   verifyEmailToken(token: string): Promise<{ success: boolean; userId?: string; email?: string }>;
   getEmailVerificationToken(token: string): Promise<any>;
+
+  // Account Linking (OAuth)
+  createAccountLinkingToken(data: any): Promise<void>;
+  getAccountLinkingToken(token: string): Promise<any>;
+  markAccountLinkingTokenUsed(token: string): Promise<void>;
+  incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void>;
 
   // Athletes (users with athlete role)
   getAthletes(filters?: {
@@ -317,6 +362,13 @@ export interface IStorage {
   getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any>;
   getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]>;
   getRequestCompletionRate(organizationId: string, requestId: string): Promise<{ completed: number; total: number; percentage: number }>;
+
+  // Goals
+  getGoalsByUser(userId: string, filters?: { status?: string }): Promise<Goal[]>;
+  getGoal(id: string): Promise<Goal | undefined>;
+  createGoal(goal: InsertGoal): Promise<Goal>;
+  updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal>;
+  deleteGoal(id: string, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -329,6 +381,8 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (!user) return null;
+    // OAuth users may not have a password
+    if (!user.password) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
@@ -342,6 +396,8 @@ export class DatabaseStorage implements IStorage {
       )
     );
     if (!user) return null;
+    // OAuth users may not have a password
+    if (!user.password) return null;
 
     const isValid = await bcrypt.compare(password, user.password);
     return isValid ? user : null;
@@ -368,10 +424,72 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async createUser(user: InsertUser): Promise<User> {
+  async getUserByGoogleId(googleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.googleId, googleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async getUserByAppleId(appleId: string): Promise<User | null> {
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.appleId, appleId),
+          whereUserNotDeleted()
+        )
+      )
+      .limit(1);
+    return user || null;
+  }
+
+  async createAccountLinkingToken(data: any): Promise<void> {
+    await db.insert(accountLinkingTokens).values(data);
+  }
+
+  async getAccountLinkingToken(token: string): Promise<any | null> {
+    const [linkingToken] = await db
+      .select()
+      .from(accountLinkingTokens)
+      .where(eq(accountLinkingTokens.token, token))
+      .limit(1);
+    return linkingToken || null;
+  }
+
+  async markAccountLinkingTokenUsed(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(accountLinkingTokens.token, token));
+  }
+
+  async incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void> {
+    await db
+      .update(accountLinkingTokens)
+      .set({ failedAttempts: sql`${accountLinkingTokens.failedAttempts} + 1` })
+      .where(eq(accountLinkingTokens.token, token));
+  }
+
+  async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
+    // Check if this is an OAuth user (has googleId or appleId but no password)
+    const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
+
+    // For OAuth users, password should be null
     // For invited users, password might be empty - use a placeholder
-    const password = user.password || "INVITATION_PENDING";
-    const hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    let hashedPassword: string | null = null;
+    if (!isOAuthUser) {
+      const password = user.password || "INVITATION_PENDING";
+      hashedPassword = await bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
+    }
 
     // Calculate fullName and birthYear from provided data
     const fullName = `${user.firstName} ${user.lastName}`;
@@ -386,7 +504,9 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
+      'lastAuthMethod', 'accountLinkedAt'
     ];
 
     // Filter to only include valid database columns and non-undefined values
@@ -402,7 +522,7 @@ export class DatabaseStorage implements IStorage {
     const insertData: any = {
       ...cleanedUser,
       emails, // Always override with sanitized emails
-      password: hashedPassword, // Always override with hashed password
+      password: hashedPassword, // Set hashed password or null for OAuth users
       fullName, // Always set computed fullName
       ...(birthYear !== undefined && { birthYear }) // Only include birthYear if not undefined
     };
@@ -438,6 +558,14 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(invitations).orderBy(asc(invitations.createdAt));
   }
 
+  async getInvitationsByOrganization(organizationId: string): Promise<Invitation[]> {
+    return await db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.organizationId, organizationId))
+      .orderBy(asc(invitations.createdAt));
+  }
+
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(
       and(
@@ -446,6 +574,14 @@ export class DatabaseStorage implements IStorage {
       )
     );
     return user || undefined;
+  }
+
+  async getUsersBatch(ids: string[]): Promise<Map<string, User>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const users = await this.getUsersByIds(ids);
+    return new Map(users.map(user => [user.id, user]));
   }
 
   async getUsersByIds(userIds: string[]): Promise<User[]> {
@@ -712,7 +848,6 @@ export class DatabaseStorage implements IStorage {
         .limit(1); // Enforce single role
 
       const roles = result.length > 0 ? [result[0].role] : [];
-      console.log(`User roles query: found ${result.length} records`);
       return roles;
     } else {
       // Get all organization roles for the user (one per organization maximum)
@@ -747,10 +882,6 @@ export class DatabaseStorage implements IStorage {
       team: { ...team, organization: organizations }
     }));
 
-    if (result.length > 0) {
-      console.log(`User teams query: found ${result.length} team(s)`);
-    }
-
     return mappedResult;
   }
 
@@ -784,6 +915,17 @@ export class DatabaseStorage implements IStorage {
   async getOrganization(id: string): Promise<Organization | undefined> {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, id));
     return org || undefined;
+  }
+
+  async getOrganizationsBatch(ids: string[]): Promise<Map<string, Organization>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+    const orgs = await db
+      .select()
+      .from(organizations)
+      .where(inArray(organizations.id, ids));
+    return new Map(orgs.map(org => [org.id, org]));
   }
 
   async getOrganizationByName(name: string): Promise<Organization | undefined> {
@@ -1610,6 +1752,476 @@ export class DatabaseStorage implements IStorage {
       ));
 
     return verificationToken || undefined;
+  }
+
+  // Membership Requests
+  async createMembershipRequest(data: {
+    userId: string;
+    organizationId: string;
+    discoveryMethod?: 'join_code' | 'directory' | 'direct_link';
+  }): Promise<MembershipRequest> {
+    // Check if organization allows membership requests
+    const org = await this.getOrganization(data.organizationId);
+    if (!org) {
+      throw new Error('Organization not found');
+    }
+    if (!org.allowMembershipRequests) {
+      throw new Error('Organization does not accept membership requests');
+    }
+
+    // Check if user already has a pending request
+    const hasPending = await this.hasPendingMembershipRequest(data.userId, data.organizationId);
+    if (hasPending) {
+      throw new Error('You already have a pending membership request for this organization');
+    }
+
+    // Check if user is already a member
+    const existingMembership = await db.select()
+      .from(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, data.userId),
+        eq(userOrganizations.organizationId, data.organizationId)
+      ))
+      .limit(1);
+
+    if (existingMembership.length > 0) {
+      throw new Error('You are already a member of this organization');
+    }
+
+    // Set expiration to 30 days from now
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    // If auto-approve is enabled, approve immediately
+    const status = org.autoApproveRequests ? 'approved' : 'pending';
+
+    const insertValues: any = {
+      userId: data.userId,
+      organizationId: data.organizationId,
+      status,
+      requestedRole: 'athlete',
+      expiresAt,
+    };
+
+    // Only set optional fields if they have values
+    if (data.discoveryMethod) {
+      insertValues.discoveryMethod = data.discoveryMethod;
+    }
+    if (org.autoApproveRequests) {
+      insertValues.processedAt = new Date();
+    }
+
+    const [request] = await db.insert(membershipRequests).values(insertValues).returning();
+
+    // If auto-approved, add user to organization immediately
+    if (org.autoApproveRequests) {
+      await this.addUserToOrganization(data.userId, data.organizationId, 'athlete');
+    }
+
+    return request;
+  }
+
+  async getMembershipRequest(id: string): Promise<MembershipRequest | undefined> {
+    const [request] = await db.select()
+      .from(membershipRequests)
+      .where(eq(membershipRequests.id, id));
+    return request;
+  }
+
+  async getMembershipRequestsByOrganization(
+    organizationId: string,
+    filters?: { status?: string }
+  ): Promise<(MembershipRequest & { user: User })[]> {
+    const conditions = [eq(membershipRequests.organizationId, organizationId)];
+    if (filters?.status) {
+      conditions.push(eq(membershipRequests.status, filters.status as any));
+    }
+
+    const results = await db.select()
+      .from(membershipRequests)
+      .innerJoin(users, eq(membershipRequests.userId, users.id))
+      .where(and(...conditions))
+      .orderBy(desc(membershipRequests.createdAt));
+
+    return results.map(r => ({
+      ...r.membership_requests,
+      user: r.users,
+    }));
+  }
+
+  async getMembershipRequestsByUser(userId: string): Promise<(MembershipRequest & { organization: Organization })[]> {
+    const results = await db.select()
+      .from(membershipRequests)
+      .innerJoin(organizations, eq(membershipRequests.organizationId, organizations.id))
+      .where(eq(membershipRequests.userId, userId))
+      .orderBy(desc(membershipRequests.createdAt));
+
+    return results.map(r => ({
+      ...r.membership_requests,
+      organization: r.organizations,
+    }));
+  }
+
+  /**
+   * Approve a membership request, optionally linking to an existing athlete.
+   *
+   * When linkToAthleteId is provided:
+   * 1. Transfer measurements FROM existing athlete TO requester
+   * 2. Transfer team memberships FROM existing athlete TO requester
+   * 3. Copy profile data FROM existing athlete TO requester (if requester is missing it)
+   * 4. Deactivate the existing athlete (they no longer have login access)
+   * 5. Add requester to organization as athlete
+   *
+   * This is consistent with how invitation acceptance works - the account with
+   * login credentials becomes the surviving account.
+   */
+  async approveMembershipRequest(
+    id: string,
+    processedBy: string,
+    linkToAthleteId?: string
+  ): Promise<MembershipRequest> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be approved');
+    }
+
+    // Use transaction to ensure atomicity of approval operations
+    return await db.transaction(async (tx: any) => {
+      // If linking to existing athlete, perform the data transfer
+      if (linkToAthleteId) {
+        await this.linkAthleteAccounts(
+          request.userId,        // requester (with login) - survives
+          linkToAthleteId,       // existing athlete (no login) - gets data transferred
+          request.organizationId
+        );
+      }
+
+      // Update request status
+      const [updated] = await tx.update(membershipRequests)
+        .set({
+          status: 'approved',
+          processedBy,
+          processedAt: new Date(),
+        })
+        .where(eq(membershipRequests.id, id))
+        .returning();
+
+      // Add user to organization
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+
+      return updated;
+    });
+  }
+
+  /**
+   * Link an existing athlete's data to a new requester account.
+   * Transfers measurements, team memberships, and profile data from the
+   * existing athlete to the requester, then deactivates the existing athlete.
+   *
+   * @param requesterId - The user ID of the requester (with login credentials)
+   * @param existingAthleteId - The user ID of the existing athlete (no login)
+   * @param organizationId - The organization context for the linking
+   */
+  private async linkAthleteAccounts(
+    requesterId: string,
+    existingAthleteId: string,
+    organizationId: string
+  ): Promise<void> {
+    // 1. Transfer measurements from existing athlete to requester
+    await db.update(measurements)
+      .set({ userId: requesterId })
+      .where(eq(measurements.userId, existingAthleteId));
+
+    // 2. Transfer team memberships from existing athlete to requester
+    // First, get existing team memberships to avoid duplicates
+    const existingTeamMemberships = await db.select()
+      .from(userTeams)
+      .where(eq(userTeams.userId, existingAthleteId));
+
+    for (const membership of existingTeamMemberships) {
+      // Check if requester already has this team membership
+      const [existing] = await db.select()
+        .from(userTeams)
+        .where(and(
+          eq(userTeams.userId, requesterId),
+          eq(userTeams.teamId, membership.teamId)
+        ))
+        .limit(1);
+
+      if (!existing) {
+        // Transfer the team membership
+        await db.update(userTeams)
+          .set({ userId: requesterId })
+          .where(and(
+            eq(userTeams.userId, existingAthleteId),
+            eq(userTeams.teamId, membership.teamId)
+          ));
+      } else {
+        // Delete the old team membership (requester already has it)
+        await db.delete(userTeams)
+          .where(and(
+            eq(userTeams.userId, existingAthleteId),
+            eq(userTeams.teamId, membership.teamId)
+          ));
+      }
+    }
+
+    // 3. Copy profile data from existing athlete to requester (if requester is missing it)
+    const [existingAthlete] = await db.select()
+      .from(users)
+      .where(eq(users.id, existingAthleteId));
+
+    const [requester] = await db.select()
+      .from(users)
+      .where(eq(users.id, requesterId));
+
+    if (existingAthlete && requester) {
+      const profileUpdates: Partial<typeof users.$inferInsert> = {};
+
+      // Copy profile fields if requester is missing them
+      if (!requester.birthYear && existingAthlete.birthYear) {
+        profileUpdates.birthYear = existingAthlete.birthYear;
+      }
+      if (!requester.school && existingAthlete.school) {
+        profileUpdates.school = existingAthlete.school;
+      }
+      if (!requester.graduationYear && existingAthlete.graduationYear) {
+        profileUpdates.graduationYear = existingAthlete.graduationYear;
+      }
+      if (!requester.height && existingAthlete.height) {
+        profileUpdates.height = existingAthlete.height;
+      }
+      if (!requester.weight && existingAthlete.weight) {
+        profileUpdates.weight = existingAthlete.weight;
+      }
+      if ((!requester.sports || requester.sports.length === 0) && existingAthlete.sports && existingAthlete.sports.length > 0) {
+        profileUpdates.sports = existingAthlete.sports;
+      }
+      if ((!requester.positions || requester.positions.length === 0) && existingAthlete.positions && existingAthlete.positions.length > 0) {
+        profileUpdates.positions = existingAthlete.positions;
+      }
+
+      if (Object.keys(profileUpdates).length > 0) {
+        await db.update(users)
+          .set(profileUpdates)
+          .where(eq(users.id, requesterId));
+      }
+    }
+
+    // 4. Deactivate the existing athlete (they no longer need login access)
+    await db.update(users)
+      .set({ isActive: false })
+      .where(eq(users.id, existingAthleteId));
+
+    // 5. Remove existing athlete from organization (requester will be added later)
+    await db.delete(userOrganizations)
+      .where(and(
+        eq(userOrganizations.userId, existingAthleteId),
+        eq(userOrganizations.organizationId, organizationId)
+      ));
+  }
+
+  async rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be rejected');
+    }
+
+    const [updated] = await db.update(membershipRequests)
+      .set({
+        status: 'rejected',
+        processedBy,
+        processedAt: new Date(),
+        rejectionReason: reason || null,
+      })
+      .where(eq(membershipRequests.id, id))
+      .returning();
+
+    return updated;
+  }
+
+  async cancelMembershipRequest(id: string): Promise<void> {
+    const request = await this.getMembershipRequest(id);
+    if (!request) {
+      throw new Error('Membership request not found');
+    }
+    if (request.status !== 'pending') {
+      throw new Error('Only pending requests can be cancelled');
+    }
+
+    await db.update(membershipRequests)
+      .set({ status: 'cancelled' })
+      .where(eq(membershipRequests.id, id));
+  }
+
+  async hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean> {
+    const [existing] = await db.select()
+      .from(membershipRequests)
+      .where(and(
+        eq(membershipRequests.userId, userId),
+        eq(membershipRequests.organizationId, organizationId),
+        eq(membershipRequests.status, 'pending')
+      ))
+      .limit(1);
+    return !!existing;
+  }
+
+  /**
+   * Get athletes in an organization that have no login credentials (unlinked).
+   * These are athletes that were imported via CSV, manually created, or invited
+   * but never set up login credentials. They can be linked to incoming membership
+   * requests from users who want to join the organization.
+   *
+   * Criteria for "unlinked" athlete:
+   * - Has role='athlete' in the organization
+   * - Has no password (password is NULL)
+   * - Has no OAuth credentials (googleId and appleId are NULL)
+   */
+  async getUnlinkedAthletes(organizationId: string): Promise<User[]> {
+    const result = await db.select({
+      user: users
+    })
+      .from(users)
+      .innerJoin(userOrganizations, eq(users.id, userOrganizations.userId))
+      .where(and(
+        eq(userOrganizations.organizationId, organizationId),
+        eq(userOrganizations.role, 'athlete'),
+        eq(users.isActive, true),
+        isNull(users.password),
+        isNull(users.googleId),
+        isNull(users.appleId)
+      ))
+      .orderBy(users.fullName);
+
+    return result.map(r => r.user);
+  }
+
+  // Public Organization Directory
+  async getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]> {
+    const conditions = [
+      eq(organizations.isPublicDirectory, true),
+      eq(organizations.isActive, true),
+      isNull(organizations.deletedAt),
+    ];
+
+    if (filters?.orgType) {
+      conditions.push(eq(organizations.orgType, filters.orgType));
+    }
+
+    // Get organizations
+    let query = db.select()
+      .from(organizations)
+      .where(and(...conditions))
+      .orderBy(organizations.name);
+
+    const orgs = await query;
+
+    // If search filter, apply client-side filtering (PostgreSQL ILIKE would be better but keeping it simple)
+    let filteredOrgs = orgs;
+    if (filters?.search) {
+      const searchLower = filters.search.toLowerCase();
+      filteredOrgs = orgs.filter(org =>
+        org.name.toLowerCase().includes(searchLower) ||
+        (org.description && org.description.toLowerCase().includes(searchLower)) ||
+        (org.location && org.location.toLowerCase().includes(searchLower))
+      );
+    }
+
+    // Get member counts for each org
+    const orgIds = filteredOrgs.map(o => o.id);
+    if (orgIds.length === 0) {
+      return [];
+    }
+
+    const memberCounts = await db.select({
+      organizationId: userOrganizations.organizationId,
+      count: sql<number>`count(*)::int`,
+    })
+      .from(userOrganizations)
+      .where(inArray(userOrganizations.organizationId, orgIds))
+      .groupBy(userOrganizations.organizationId);
+
+    const countMap = new Map(memberCounts.map(mc => [mc.organizationId, mc.count]));
+
+    return filteredOrgs.map(org => ({
+      ...org,
+      memberCount: countMap.get(org.id) || 0,
+    }));
+  }
+
+  async getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined> {
+    const [org] = await db.select()
+      .from(organizations)
+      .where(and(
+        eq(organizations.joinCode, joinCode.toUpperCase()),
+        eq(organizations.isActive, true),
+        isNull(organizations.deletedAt)
+      ));
+    return org;
+  }
+
+  async regenerateJoinCode(organizationId: string, customCode?: string): Promise<string> {
+    let newCode: string;
+
+    if (customCode) {
+      // Validate custom code: 4-20 chars, alphanumeric only
+      const sanitized = customCode.toUpperCase().trim();
+
+      if (sanitized.length < 4 || sanitized.length > 20) {
+        throw new Error('Join code must be between 4 and 20 characters');
+      }
+
+      if (!/^[A-Z0-9]+$/.test(sanitized)) {
+        throw new Error('Join code can only contain letters and numbers');
+      }
+
+      newCode = sanitized;
+    } else {
+      // Generate a new 8-character uppercase hex code
+      newCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+    }
+
+    // Use database UNIQUE constraint for atomic uniqueness check
+    // This prevents race conditions where two requests could pass a pre-check simultaneously
+    try {
+      await db.update(organizations)
+        .set({ joinCode: newCode })
+        .where(eq(organizations.id, organizationId));
+    } catch (error: any) {
+      // Handle unique constraint violation (PostgreSQL error code 23505)
+      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+        throw new Error('This join code is already in use by another organization');
+      }
+      throw error;
+    }
+
+    return newCode;
+  }
+
+  async updateOrganizationMembershipSettings(
+    organizationId: string,
+    settings: {
+      isPublicDirectory?: boolean;
+      allowMembershipRequests?: boolean;
+      autoApproveRequests?: boolean;
+    }
+  ): Promise<Organization> {
+    const [updated] = await db.update(organizations)
+      .set(settings)
+      .where(eq(organizations.id, organizationId))
+      .returning();
+
+    if (!updated) {
+      throw new Error('Organization not found');
+    }
+
+    return updated;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers
@@ -4256,339 +4868,113 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ==================== Wellness Templates ====================
+  // Delegated to WellnessRepository for maintainability
 
   async createWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
-    const [created] = await db
-      .insert(wellnessTemplates)
-      .values({
-        ...template,
-        isDefault: template.isDefault ?? false,
-        isActive: template.isActive ?? true,
-      } as any)
-      .returning();
-
-    if (!created) {
-      throw new Error('Failed to create wellness template');
-    }
-
-    return created;
+    return wellnessRepository.createWellnessTemplate(template);
   }
 
   async getWellnessTemplates(organizationId: string, filters?: { activeOnly?: boolean }): Promise<WellnessTemplate[]> {
-    const conditions: SQL[] = [eq(wellnessTemplates.organizationId, organizationId)];
-
-    if (filters?.activeOnly) {
-      conditions.push(eq(wellnessTemplates.isActive, true));
-    }
-
-    return await db
-      .select()
-      .from(wellnessTemplates)
-      .where(and(...conditions))
-      .orderBy(desc(wellnessTemplates.createdAt));
+    return wellnessRepository.getWellnessTemplates(organizationId, filters);
   }
 
   async getWellnessTemplate(id: string): Promise<WellnessTemplate | undefined> {
-    const [template] = await db
-      .select()
-      .from(wellnessTemplates)
-      .where(eq(wellnessTemplates.id, id));
-
-    return template || undefined;
+    return wellnessRepository.getWellnessTemplate(id);
   }
 
   async updateWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
-    const [updated] = await db
-      .update(wellnessTemplates)
-      .set({
-        ...template,
-        updatedAt: new Date(),
-      })
-      .where(eq(wellnessTemplates.id, id))
-      .returning();
-
-    if (!updated) {
-      throw new Error(`Wellness template ${id} not found`);
-    }
-
-    return updated;
+    return wellnessRepository.updateWellnessTemplate(id, template);
   }
 
   async deleteWellnessTemplate(id: string): Promise<void> {
-    await db
-      .delete(wellnessTemplates)
-      .where(eq(wellnessTemplates.id, id));
+    return wellnessRepository.deleteWellnessTemplate(id);
   }
 
   // ==================== System Wellness Templates (Admin) ====================
+  // Delegated to WellnessRepository
 
   async getSystemWellnessTemplates(): Promise<WellnessTemplate[]> {
-    return await db
-      .select()
-      .from(wellnessTemplates)
-      .where(
-        and(
-          eq(wellnessTemplates.isSystemSeeded, true),
-          isNull(wellnessTemplates.organizationId)
-        )
-      )
-      .orderBy(desc(wellnessTemplates.createdAt));
+    return wellnessRepository.getSystemWellnessTemplates();
   }
 
   async getSystemTemplateUsage(templateId: string): Promise<{ templateId: string; organizationCount: number; cloneCount: number }> {
-    // Count how many orgs have cloned this template
-    const clones = await db
-      .select()
-      .from(wellnessTemplates)
-      .where(eq(wellnessTemplates.sourceTemplateId, templateId));
-
-    const uniqueOrgs = new Set(
-      clones
-        .map(c => c.organizationId)
-        .filter((id): id is string => id !== null)
-    );
-
-    return {
-      templateId,
-      organizationCount: uniqueOrgs.size,
-      cloneCount: clones.length,
-    };
+    return wellnessRepository.getSystemTemplateUsage(templateId);
   }
 
   async createSystemWellnessTemplate(template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
-    const [created] = await db
-      .insert(wellnessTemplates)
-      .values({
-        ...template,
-        organizationId: null, // System templates have NULL org_id
-        isSystemSeeded: true,
-        isDefault: template.isDefault ?? false,
-        isActive: template.isActive ?? true,
-      } as any)
-      .returning();
-
-    if (!created) {
-      throw new Error('Failed to create system wellness template');
-    }
-
-    return created;
+    return wellnessRepository.createSystemWellnessTemplate(template);
   }
 
   async updateSystemWellnessTemplate(id: string, template: Partial<WellnessTemplate>): Promise<WellnessTemplate> {
-    const [updated] = await db
-      .update(wellnessTemplates)
-      .set({
-        ...template,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(wellnessTemplates.id, id),
-          eq(wellnessTemplates.isSystemSeeded, true)
-        )
-      )
-      .returning();
-
-    if (!updated) {
-      throw new Error(`System wellness template ${id} not found`);
-    }
-
-    return updated;
+    return wellnessRepository.updateSystemWellnessTemplate(id, template);
   }
 
   async deleteSystemWellnessTemplate(id: string): Promise<void> {
-    await db
-      .delete(wellnessTemplates)
-      .where(
-        and(
-          eq(wellnessTemplates.id, id),
-          eq(wellnessTemplates.isSystemSeeded, true)
-        )
-      );
+    return wellnessRepository.deleteSystemWellnessTemplate(id);
   }
 
   // ==================== Wellness Requests ====================
+  // Delegated to WellnessRepository for maintainability
 
   async createWellnessRequest(request: Partial<WellnessRequest>): Promise<WellnessRequest> {
-    const [created] = await db
-      .insert(wellnessRequests)
-      .values({
-        ...request,
-        status: request.status ?? 'active',
-        requiresAuth: request.requiresAuth ?? false,
-        targetAthleteIds: request.targetAthleteIds ?? null,
-        targetTeamIds: request.targetTeamIds ?? null,
-      } as any)
-      .returning();
-
-    if (!created) {
-      throw new Error('Failed to create wellness request');
-    }
-
-    return created;
+    return wellnessRepository.createWellnessRequest(request);
   }
 
   async getWellnessRequests(organizationId: string, filters?: { status?: string }): Promise<WellnessRequest[]> {
-    const conditions: SQL[] = [eq(wellnessRequests.organizationId, organizationId)];
-
-    if (filters?.status) {
-      conditions.push(eq(wellnessRequests.status, filters.status));
-    }
-
-    return await db
-      .select()
-      .from(wellnessRequests)
-      .where(and(...conditions))
-      .orderBy(desc(wellnessRequests.createdAt));
+    return wellnessRepository.getWellnessRequests(organizationId, filters);
   }
 
   async getWellnessRequestsByOrganizations(
     organizationIds: string[],
     filters?: { status?: string }
   ): Promise<WellnessRequest[]> {
-    if (organizationIds.length === 0) {
-      return [];
-    }
-
-    const conditions: SQL[] = [inArray(wellnessRequests.organizationId, organizationIds)];
-
-    if (filters?.status) {
-      conditions.push(eq(wellnessRequests.status, filters.status));
-    }
-
-    return await db
-      .select()
-      .from(wellnessRequests)
-      .where(and(...conditions))
-      .orderBy(desc(wellnessRequests.createdAt));
+    return wellnessRepository.getWellnessRequestsByOrganizations(organizationIds, filters);
   }
 
   async getWellnessRequest(id: string): Promise<WellnessRequest | undefined> {
-    const [request] = await db
-      .select()
-      .from(wellnessRequests)
-      .where(eq(wellnessRequests.id, id));
-
-    return request || undefined;
+    return wellnessRepository.getWellnessRequest(id);
   }
 
   async getWellnessRequestByToken(token: string): Promise<WellnessRequest | undefined> {
-    const [request] = await db
-      .select()
-      .from(wellnessRequests)
-      .where(eq(wellnessRequests.publicToken, token));
-
-    return request || undefined;
+    return wellnessRepository.getWellnessRequestByToken(token);
   }
 
   async updateWellnessRequest(id: string, request: Partial<WellnessRequest>): Promise<WellnessRequest> {
-    const [updated] = await db
-      .update(wellnessRequests)
-      .set(request)
-      .where(eq(wellnessRequests.id, id))
-      .returning();
-
-    if (!updated) {
-      throw new Error(`Wellness request ${id} not found`);
-    }
-
-    return updated;
+    return wellnessRepository.updateWellnessRequest(id, request);
   }
 
   async deleteWellnessRequest(id: string): Promise<void> {
-    await db
-      .delete(wellnessRequests)
-      .where(eq(wellnessRequests.id, id));
+    return wellnessRepository.deleteWellnessRequest(id);
   }
 
   // ==================== Wellness Responses ====================
+  // Delegated to WellnessRepository for maintainability
 
   async createWellnessResponse(response: Partial<WellnessResponse>): Promise<WellnessResponse> {
-    const [created] = await db
-      .insert(wellnessResponses)
-      .values({
-        ...response,
-        submittedAt: response.submittedAt ?? new Date(),
-      } as any)
-      .returning();
-
-    if (!created) {
-      throw new Error('Failed to create wellness response');
-    }
-
-    return created;
+    return wellnessRepository.createWellnessResponse(response);
   }
 
   async getWellnessResponse(id: string): Promise<WellnessResponse | undefined> {
-    const [response] = await db
-      .select()
-      .from(wellnessResponses)
-      .where(eq(wellnessResponses.id, id));
-
-    return response || undefined;
+    return wellnessRepository.getWellnessResponse(id);
   }
 
   async getWellnessResponsesByAthlete(userId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
-    const conditions: SQL[] = [eq(wellnessResponses.userId, userId)];
-
-    if (filters?.startDate) {
-      conditions.push(gte(wellnessResponses.date, filters.startDate));
-    }
-
-    if (filters?.endDate) {
-      conditions.push(lte(wellnessResponses.date, filters.endDate));
-    }
-
-    return await db
-      .select()
-      .from(wellnessResponses)
-      .where(and(...conditions))
-      .orderBy(desc(wellnessResponses.submittedAt));
+    return wellnessRepository.getWellnessResponsesByAthlete(userId, filters);
   }
 
   async getWellnessResponsesByOrganization(organizationId: string, filters?: { startDate?: string; endDate?: string }): Promise<WellnessResponse[]> {
-    const conditions: SQL[] = [eq(wellnessResponses.organizationId, organizationId)];
-
-    if (filters?.startDate) {
-      conditions.push(gte(wellnessResponses.date, filters.startDate));
-    }
-
-    if (filters?.endDate) {
-      conditions.push(lte(wellnessResponses.date, filters.endDate));
-    }
-
-    return await db
-      .select()
-      .from(wellnessResponses)
-      .where(and(...conditions))
-      .orderBy(desc(wellnessResponses.submittedAt));
+    return wellnessRepository.getWellnessResponsesByOrganization(organizationId, filters);
   }
 
   // ==================== Wellness Batch Operations (Performance Optimization) ====================
+  // Delegated to WellnessRepository for maintainability
 
   /**
    * Batch fetch all team rosters for an organization in a single query
    * Optimizes dashboard performance by avoiding N+1 queries
    */
   async getTeamRostersBatch(organizationId: string): Promise<Array<{ teamId: string; userId: string; userFullName: string }>> {
-    const rosters = await db
-      .select({
-        teamId: userTeams.teamId,
-        userId: userTeams.userId,
-        userFullName: users.fullName,
-      })
-      .from(userTeams)
-      .innerJoin(userOrganizations, eq(userTeams.userId, userOrganizations.userId))
-      .innerJoin(users, eq(users.id, userOrganizations.userId))
-      .where(
-        and(
-          eq(userOrganizations.organizationId, organizationId),
-          eq(userTeams.isActive, true),
-          eq(userOrganizations.role, 'athlete')
-        )
-      );
-
-    return rosters;
+    return wellnessRepository.getTeamRostersBatch(organizationId);
   }
 
   /**
@@ -4596,271 +4982,226 @@ export class DatabaseStorage implements IStorage {
    * Optimizes dashboard performance by avoiding sequential template lookups
    */
   async getWellnessTemplatesBatch(templateIds: string[]): Promise<WellnessTemplate[]> {
-    if (templateIds.length === 0) {
-      return [];
-    }
-
-    const templates = await db
-      .select()
-      .from(wellnessTemplates)
-      .where(inArray(wellnessTemplates.id, templateIds));
-
-    return templates as WellnessTemplate[];
+    return wellnessRepository.getWellnessTemplatesBatch(templateIds);
   }
 
   // ==================== Wellness Analytics ====================
+  // Delegated to WellnessRepository for maintainability
 
   async getTeamWellnessSummary(teamId: string, filters: { startDate: string; endDate: string }): Promise<any> {
-    const responses = await db
-      .select()
-      .from(wellnessResponses)
-      .where(
-        and(
-          eq(wellnessResponses.teamId, teamId),
-          gte(wellnessResponses.date, filters.startDate),
-          lte(wellnessResponses.date, filters.endDate)
-        )
-      );
-
-    const uniqueAthletes = new Set(responses.map(r => r.userId)).size;
-    const totalResponses = responses.length;
-
-    // Calculate average scores per question
-    const averageScores: Record<string, number> = {};
-    const questionCounts: Record<string, number> = {};
-
-    responses.forEach(response => {
-      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
-        if (typeof data.value === 'number') {
-          averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
-          questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
-        }
-      });
-    });
-
-    Object.keys(averageScores).forEach(questionId => {
-      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
-    });
-
-    return {
-      teamId,
-      teamName: responses[0]?.teamNameSnapshot || 'Unknown',
-      totalResponses,
-      uniqueAthletes,
-      completionRate: 0, // TODO: Calculate based on request targets
-      averageScores,
-      lastUpdated: new Date(),
-    };
+    return wellnessRepository.getTeamWellnessSummary(teamId, filters);
   }
 
   async getAthleteWellnessSummary(userId: string, filters: { startDate: string; endDate: string }): Promise<any> {
-    const responses = await this.getWellnessResponsesByAthlete(userId, filters);
-
-    const totalResponses = responses.length;
-
-    // Calculate average scores per question
-    const averageScores: Record<string, number> = {};
-    const questionCounts: Record<string, number> = {};
-
-    responses.forEach(response => {
-      Object.entries(response.responses as any).forEach(([questionId, data]: [string, any]) => {
-        if (typeof data.value === 'number') {
-          averageScores[questionId] = (averageScores[questionId] || 0) + data.value;
-          questionCounts[questionId] = (questionCounts[questionId] || 0) + 1;
-        }
-      });
-    });
-
-    Object.keys(averageScores).forEach(questionId => {
-      averageScores[questionId] = averageScores[questionId] / questionCounts[questionId];
-    });
-
-    return {
-      userId,
-      userFullName: responses[0]?.userFullName || 'Unknown',
-      totalResponses,
-      latestResponse: responses[0]?.submittedAt || null,
-      averageScores,
-      trends: {}, // TODO: Calculate trends
-    };
+    return wellnessRepository.getAthleteWellnessSummary(userId, filters);
   }
 
   /**
    * Get wellness trends aggregated at database level using PostgreSQL JSON functions
-   *
-   * Performance improvements over in-memory aggregation:
-   * - 80-90% reduction in data transfer
-   * - 5-10x faster query execution
-   * - Proper aggregation (fixed hardcoded count=1 bug)
-   * - Efficient SQL-level grouping by date and question
-   *
-   * @param organizationId - Organization ID to filter responses
-   * @param filters - Date range and optional question filters
-   * @returns Array of trends grouped by question with aggregated data points by date
    */
   async getWellnessTrends(organizationId: string, filters: { startDate: string; endDate: string; questionIds?: string[] }): Promise<WellnessTrend[]> {
-    // Build WHERE conditions
-    const conditions: SQL[] = [
-      eq(wellnessResponses.organizationId, organizationId),
-      gte(wellnessResponses.date, filters.startDate),
-      lte(wellnessResponses.date, filters.endDate),
-    ];
-
-    // SQL aggregation query using PostgreSQL JSON functions
-    // Uses jsonb_each to expand the responses JSONB into rows
-    // Groups by date and question_id to aggregate values
-    const query = sql<{
-      date: string;
-      question_id: string;
-      question_label: string;
-      avg_value: number;
-      response_count: number;
-    }>`
-      SELECT
-        ${wellnessResponses.date} as date,
-        response_entry.question_id::text as question_id,
-        MAX((response_entry.response_data->>'label')::text) as question_label,
-        AVG((response_entry.response_data->>'value')::numeric) as avg_value,
-        COUNT(*)::integer as response_count
-      FROM ${wellnessResponses}
-      CROSS JOIN LATERAL jsonb_each(${wellnessResponses.responses})
-        AS response_entry(question_id, response_data)
-      WHERE
-        ${sql.join(conditions, sql` AND `)}
-        AND (response_entry.response_data->>'value')::text ~ '^-?[0-9]+(\\.[0-9]+)?$'
-        ${filters.questionIds && filters.questionIds.length > 0
-          ? sql`AND response_entry.question_id::text = ANY(ARRAY[${sql.join(filters.questionIds.map(id => sql`${id}`), sql`, `)}])`
-          : sql``}
-      GROUP BY ${wellnessResponses.date}, response_entry.question_id
-      ORDER BY response_entry.question_id, ${wellnessResponses.date}
-    `;
-
-    const results = await db.execute(query);
-
-    // Limit total data points to prevent memory exhaustion
-    // With 365-day max range and daily data, this allows ~3x safety margin
-    const MAX_TOTAL_DATA_POINTS = 1000;
-    const limitedResults = (results as any[]).slice(0, MAX_TOTAL_DATA_POINTS);
-
-    if ((results as any[]).length > MAX_TOTAL_DATA_POINTS) {
-      console.warn(
-        `Wellness trends query returned ${(results as any[]).length} data points, ` +
-        `limiting to ${MAX_TOTAL_DATA_POINTS} for performance`
-      );
-    }
-
-    // Group results by question
-    const trendsByQuestion: Record<string, WellnessTrend> = {};
-
-    // drizzle's execute() returns results directly as an array
-    for (const row of limitedResults) {
-      if (!trendsByQuestion[row.question_id]) {
-        trendsByQuestion[row.question_id] = {
-          questionId: row.question_id,
-          questionLabel: row.question_label,
-          dataPoints: [],
-          trend: 'stable',
-          trendPercentage: 0,
-        };
-      }
-
-      // Additional per-question limit to ensure balanced data distribution
-      const MAX_DATA_POINTS_PER_QUESTION = 365;
-      if (trendsByQuestion[row.question_id].dataPoints.length < MAX_DATA_POINTS_PER_QUESTION) {
-        trendsByQuestion[row.question_id].dataPoints.push({
-          date: row.date,
-          value: Number(row.avg_value),
-          count: Number(row.response_count),
-        });
-      }
-    }
-
-    return Object.values(trendsByQuestion);
+    return wellnessRepository.getWellnessTrends(organizationId, filters);
   }
 
   /**
    * Calculate accurate completion rate for a wellness request
-   * Properly expands team targets to actual athlete counts
-   * Wrapped in transaction to ensure data consistency
-   *
-   * @param organizationId - Organization ID for filtering
-   * @param requestId - Wellness request ID
-   * @returns { completed: number, total: number, percentage: number }
    */
   async getRequestCompletionRate(
     organizationId: string,
     requestId: string
   ): Promise<{ completed: number; total: number; percentage: number }> {
-    // Wrap entire calculation in transaction for consistency
-    return db.transaction(async (tx) => {
-      // Step 1: Get the request details
-      const request = await tx.query.wellnessRequests.findFirst({
-        where: eq(wellnessRequests.id, requestId),
-      });
+    return wellnessRepository.getRequestCompletionRate(organizationId, requestId);
+  }
 
-      if (!request) {
-        return { completed: 0, total: 0, percentage: 0 };
-      }
+  // Goals
+  async getGoalsByUser(userId: string, filters?: { status?: typeof goalStatusEnum[number] }): Promise<Goal[]> {
+    const conditions: SQL[] = [eq(goals.userId, userId)];
 
-      // Step 2: Build set of all targeted athlete IDs
-      const targetAthleteIds = new Set<string>();
+    if (filters?.status) {
+      conditions.push(eq(goals.status, filters.status));
+    }
 
-      // Add direct athlete targets
-      if (request.targetAthleteIds && request.targetAthleteIds.length > 0) {
-        request.targetAthleteIds.forEach(id => targetAthleteIds.add(id));
-      }
+    return await db
+      .select()
+      .from(goals)
+      .where(and(...conditions))
+      .orderBy(desc(goals.createdAt));
+  }
 
-      // Step 3: Expand team targets to athlete IDs
-      if (request.targetTeamIds && request.targetTeamIds.length > 0) {
-        // Get team members who are active in their teams and active users
-        const teamMemberRecords = await tx
-          .select({
-            userId: userTeams.userId
-          })
-          .from(userTeams)
-          .innerJoin(users, eq(userTeams.userId, users.id))
-          .innerJoin(userOrganizations, eq(userTeams.userId, userOrganizations.userId))
-          .where(
-            and(
-              inArray(userTeams.teamId, request.targetTeamIds),
-              eq(userTeams.isActive, true),
-              eq(userOrganizations.organizationId, organizationId),
-              eq(users.isActive, true),
-              isNull(users.deletedAt)
-            )
-          );
+  async getGoal(id: string): Promise<Goal | undefined> {
+    const [goal] = await db
+      .select()
+      .from(goals)
+      .where(eq(goals.id, id));
 
-        teamMemberRecords.forEach(({ userId }) => targetAthleteIds.add(userId));
-      }
+    return goal || undefined;
+  }
 
-      const totalTargets = targetAthleteIds.size;
+  async createGoal(goal: InsertGoal): Promise<Goal> {
+    const [newGoal] = await db
+      .insert(goals)
+      .values({
+        userId: goal.userId,
+        metric: goal.metric,
+        goalType: goal.goalType,
+        targetValue: goal.targetValue.toString(),
+        baselineValue: goal.baselineValue.toString(),
+        currentValue: (goal.currentValue ?? goal.baselineValue).toString(),
+        targetDate: goal.targetDate,
+        status: goal.status,
+        notes: goal.notes,
+      })
+      .returning();
 
-      if (totalTargets === 0) {
-        return { completed: 0, total: 0, percentage: 0 };
-      }
+    return newGoal;
+  }
 
-      // Step 4: Get unique respondents for this request
-      const responses = await tx
-        .select({ userId: wellnessResponses.userId })
-        .from(wellnessResponses)
-        .where(
-          and(
-            eq(wellnessResponses.requestId, requestId),
-            eq(wellnessResponses.organizationId, organizationId)
-          )
-        );
+  async updateGoal(id: string, userId: string, goal: Partial<UpdateGoal> & { achievedAt?: Date }): Promise<Goal> {
+    // Build the update object, converting numbers to strings for decimal columns
+    const updateData: any = {
+      updatedAt: new Date(),
+    };
 
-      // Count unique respondents (handle duplicates)
-      const uniqueRespondents = new Set(responses.map(r => r.userId));
-      const completedCount = uniqueRespondents.size;
-      const percentage = Math.round((completedCount / totalTargets) * 100);
+    if (goal.metric !== undefined) updateData.metric = goal.metric;
+    if (goal.goalType !== undefined) updateData.goalType = goal.goalType;
+    if (goal.targetValue !== undefined) updateData.targetValue = goal.targetValue.toString();
+    if (goal.baselineValue !== undefined) updateData.baselineValue = goal.baselineValue.toString();
+    if (goal.currentValue !== undefined) updateData.currentValue = goal.currentValue.toString();
+    if (goal.targetDate !== undefined) updateData.targetDate = goal.targetDate;
+    if (goal.status !== undefined) updateData.status = goal.status;
+    if (goal.notes !== undefined) updateData.notes = goal.notes;
+    if (goal.achievedAt !== undefined) updateData.achievedAt = goal.achievedAt;
 
-      return {
-        completed: completedCount,
-        total: totalTargets,
-        percentage,
-      };
-    });
+    const [updatedGoal] = await db
+      .update(goals)
+      .set(updateData)
+      .where(and(eq(goals.id, id), eq(goals.userId, userId)))
+      .returning();
+
+    if (!updatedGoal) {
+      throw new Error(`Goal with id ${id} not found or access denied`);
+    }
+
+    return updatedGoal;
+  }
+
+  async deleteGoal(id: string, userId: string): Promise<void> {
+    const result = await db.delete(goals).where(and(eq(goals.id, id), eq(goals.userId, userId))).returning();
+    if (result.length === 0) {
+      throw new Error(`Goal with id ${id} not found or access denied`);
+    }
+  }
+
+  // Achievement methods
+  async getAchievementDefinitions(filters?: { isActive?: boolean }): Promise<AchievementDefinition[]> {
+    const conditions: SQL[] = [];
+
+    if (filters?.isActive !== undefined) {
+      conditions.push(eq(achievementDefinitions.isActive, filters.isActive));
+    }
+
+    return await db
+      .select()
+      .from(achievementDefinitions)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(achievementDefinitions.category, achievementDefinitions.createdAt);
+  }
+
+  async getAchievementDefinitionByCode(code: string): Promise<AchievementDefinition | undefined> {
+    const [definition] = await db
+      .select()
+      .from(achievementDefinitions)
+      .where(eq(achievementDefinitions.code, code))
+      .limit(1);
+
+    return definition || undefined;
+  }
+
+  async getUserAchievements(userId: string, organizationId: string): Promise<(UserAchievement & { achievement: AchievementDefinition })[]> {
+    return await db
+      .select({
+        id: userAchievements.id,
+        userId: userAchievements.userId,
+        organizationId: userAchievements.organizationId,
+        achievementId: userAchievements.achievementId,
+        unlockedAt: userAchievements.unlockedAt,
+        metadata: userAchievements.metadata,
+        achievement: achievementDefinitions,
+      })
+      .from(userAchievements)
+      .innerJoin(achievementDefinitions, eq(userAchievements.achievementId, achievementDefinitions.id))
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId)
+      ))
+      .orderBy(desc(userAchievements.unlockedAt));
+  }
+
+  async checkAchievementExists(userId: string, organizationId: string, achievementCode: string): Promise<boolean> {
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      return false;
+    }
+
+    const [existing] = await db
+      .select()
+      .from(userAchievements)
+      .where(and(
+        eq(userAchievements.userId, userId),
+        eq(userAchievements.organizationId, organizationId),
+        eq(userAchievements.achievementId, definition.id)
+      ))
+      .limit(1);
+
+    return !!existing;
+  }
+
+  async awardAchievement(
+    userId: string,
+    organizationId: string,
+    achievementCode: string,
+    metadata?: any
+  ): Promise<UserAchievement> {
+    // Validate user belongs to organization
+    const userOrgs = await this.getUserOrganizations(userId);
+    const belongsToOrg = userOrgs.some(uo => uo.organizationId === organizationId);
+    if (!belongsToOrg) {
+      throw new Error(`User ${userId} does not belong to organization ${organizationId}`);
+    }
+
+    const definition = await this.getAchievementDefinitionByCode(achievementCode);
+    if (!definition) {
+      throw new Error(`Achievement definition not found: ${achievementCode}`);
+    }
+
+    // Use onConflictDoNothing to handle race conditions gracefully
+    const [newAchievement] = await db
+      .insert(userAchievements)
+      .values({
+        userId,
+        organizationId,
+        achievementId: definition.id,
+        metadata: metadata || null,
+      })
+      .onConflictDoNothing({
+        target: [userAchievements.userId, userAchievements.achievementId],
+      })
+      .returning();
+
+    // If insert was skipped due to conflict, fetch existing achievement
+    if (!newAchievement) {
+      const [existing] = await db
+        .select()
+        .from(userAchievements)
+        .where(and(
+          eq(userAchievements.userId, userId),
+          eq(userAchievements.achievementId, definition.id)
+        ))
+        .limit(1);
+      return existing;
+    }
+
+    return newAchievement;
   }
 }
 

@@ -1,6 +1,12 @@
 # SendGrid Email Testing Guide
 
-This guide provides step-by-step instructions for testing your SendGrid email integration in AthleteMetrics.
+> **⚠️ DEPRECATED**: This documentation is outdated. AthleteMetrics has migrated from SendGrid to Resend.
+> **See**: `docs/TESTING_RESEND.md` for current email testing instructions.
+> **Migration PR**: #266 (December 2025)
+
+---
+
+~~This guide provides step-by-step instructions for testing your SendGrid email integration in AthleteMetrics.~~ **This guide is kept for historical reference only. Use Resend testing documentation instead.**
 
 ## Table of Contents
 

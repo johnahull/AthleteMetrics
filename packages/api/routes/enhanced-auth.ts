@@ -23,13 +23,17 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Find user by username
-    const user = await storage.getUserByUsername(username);
+    // Find user by username or email
+    let user = await storage.getUserByUsername(username);
     if (!user) {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid username or password'
-      });
+      // Try email lookup if username lookup failed
+      user = await storage.getUserByEmail(username);
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Invalid username or password'
+        });
+      }
     }
 
     // Check for account lockout
@@ -43,7 +47,14 @@ router.post('/login', async (req: Request, res: Response) => {
       });
     }
 
-    // Verify password
+    // Verify password (OAuth users may not have password set)
+    // SECURITY: Use generic error message to prevent account enumeration
+    if (!user.password) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid username or password'
+      });
+    }
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       await AuthSecurity.recordFailedLogin(user.emails?.[0] || '', ipAddress, userAgent);
@@ -124,7 +135,7 @@ router.post('/login', async (req: Request, res: Response) => {
     if (userRole === 'site_admin') redirectUrl = '/admin';
     else if (userRole === 'org_admin') redirectUrl = '/organization';
     else if (userRole === 'coach') redirectUrl = '/coaching';
-    else if (userRole === 'athlete') redirectUrl = '/athlete';
+    else if (userRole === 'athlete') redirectUrl = '/my-dashboard';
 
     return res.status(200).json({
       success: true,

@@ -4,6 +4,7 @@ import { AuthSecurity } from './security';
 import { passwordSchema } from '@shared/password-validation';
 import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
+import { globalAthleteService } from '../services/global-athlete-service';
 
 export class PasswordResetService {
   private static readonly RESET_TOKEN_EXPIRY = 60 * 60 * 1000; // 1 hour
@@ -259,6 +260,16 @@ export class PasswordResetService {
         severity: 'info',
       });
 
+      // Trigger global athlete auto-linking
+      // This creates or links to a global athlete identity based on the verified email
+      try {
+        await globalAthleteService.onEmailVerified(userId, email);
+        console.log(`Global athlete auto-linking completed for user ${userId} with email ${email}`);
+      } catch (linkError) {
+        // Log but don't fail verification if auto-linking fails
+        console.error('Global athlete auto-linking error:', linkError);
+      }
+
       return { success: true, message: 'Email address verified successfully!' };
     } catch (error) {
       console.error('Email verification error:', error);
@@ -281,6 +292,11 @@ export class PasswordResetService {
       const user = await storage.getUser(userId);
       if (!user) {
         return { success: false, message: 'User not found' };
+      }
+
+      // OAuth users may not have a password set
+      if (!user.password) {
+        return { success: false, message: 'Cannot change password for OAuth-only accounts. Please set a password first.' };
       }
 
       // Verify current password

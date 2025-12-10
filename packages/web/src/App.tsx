@@ -25,6 +25,16 @@ const Dashboard = React.lazy(() => import("./pages/dashboard"));
 const Teams = React.lazy(() => import("./pages/teams"));
 const Athletes = React.lazy(() => import("./pages/athletes"));
 const AthleteProfile = React.lazy(() => import("./pages/athlete-profile"));
+
+// Athlete self-view pages (Profile/Dashboard split)
+const MyProfile = React.lazy(() => import("./pages/my-profile"));
+const MyDashboard = React.lazy(() => import("./pages/my-dashboard"));
+const MyGoals = React.lazy(() => import("./pages/my-goals"));
+const MyMeasurements = React.lazy(() => import("./pages/my-measurements"));
+const MyMeasurementsAdd = React.lazy(() => import("./pages/my-measurements-add"));
+const MyPeerComparison = React.lazy(() => import("./pages/my-peer-comparison"));
+const MyGlobalProfile = React.lazy(() => import("./pages/my-global-profile"));
+const UnifiedDashboard = React.lazy(() => import("./pages/unified-dashboard"));
 const DataEntry = React.lazy(() => import("./pages/data-entry"));
 const Publish = React.lazy(() => import("./pages/publish"));
 const ImportExport = React.lazy(() => import("./pages/import-export"));
@@ -41,6 +51,7 @@ const OrganizationProfile = React.lazy(() => import("./pages/organization-profil
 const OrganizationSettings = React.lazy(() => import("./pages/organization-settings"));
 const OrgAdminSettings = React.lazy(() => import("./pages/org-admin-settings"));
 const AcceptInvitation = React.lazy(() => import("./pages/accept-invitation"));
+const Register = React.lazy(() => import("./pages/register"));
 const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
@@ -76,6 +87,15 @@ const PublicReport = React.lazy(() => import("./pages/public-report"));
 // Lazy load component test pages (development only)
 const TeamAthleteSelectorTest = React.lazy(() => import("./pages/component-test-team-selector"));
 
+// Lazy load global athletes admin pages
+const GlobalAthletes = React.lazy(() => import("./pages/global-athletes"));
+const GlobalAthleteDetail = React.lazy(() => import("./pages/global-athlete-detail"));
+
+// Lazy load membership request pages
+const JoinOrganization = React.lazy(() => import("./pages/join-organization"));
+const JoinByCode = React.lazy(() => import("./pages/join-by-code"));
+const MyRequests = React.lazy(() => import("./pages/my-requests"));
+
 function Router() {
   return (
     <Switch>
@@ -86,7 +106,7 @@ function Router() {
       </Route>
       <Route path="/register">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
-          <AcceptInvitation />
+          <Register />
         </Suspense>
       </Route>
       <Route path="/login" component={Login} />
@@ -110,6 +130,21 @@ function Router() {
           <VerifyEmail />
         </Suspense>
       </Route>
+      <Route path="/join/:code">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinByCode />
+        </Suspense>
+      </Route>
+      <Route path="/join">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <JoinOrganization />
+        </Suspense>
+      </Route>
+      <Route path="/my-requests">
+        <RouteWrapper loadingText="Loading Requests...">
+          <MyRequests />
+        </RouteWrapper>
+      </Route>
       <Route path="/public/reports/:token">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <PublicReport />
@@ -120,6 +155,61 @@ function Router() {
           <WellnessSubmit />
         </Suspense>
       </Route>
+      {/* Athlete self-view routes (Profile/Dashboard split) */}
+      <Route path="/my-profile">
+        <RouteWrapper loadingText="Loading Profile...">
+          <MyProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-dashboard">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <MyDashboard />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-goals">
+        <RouteWrapper loadingText="Loading Goals...">
+          <MyGoals />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-measurements/add">
+        <RouteWrapper loadingText="Loading Add Measurement...">
+          <MyMeasurementsAdd />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-measurements">
+        <RouteWrapper loadingText="Loading Measurements...">
+          <MyMeasurements />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-peer-comparison">
+        <RouteWrapper loadingText="Loading Peer Comparison...">
+          <MyPeerComparison />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-global-profile">
+        <RouteWrapper loadingText="Loading Global Profile...">
+          <MyGlobalProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/unified-dashboard">
+        <RouteWrapper loadingText="Loading Unified Dashboard...">
+          <UnifiedDashboard />
+        </RouteWrapper>
+      </Route>
+
+      {/* Coach view of athlete - more specific routes first */}
+      <Route path="/athletes/:id/profile">
+        <RouteWrapper loadingText="Loading Athlete Profile...">
+          <AthleteProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/athletes/:id/dashboard">
+        <RouteWrapper loadingText="Loading Athlete Dashboard...">
+          <AthleteProfile />
+        </RouteWrapper>
+      </Route>
+
+      {/* Legacy athlete route - redirects to dashboard view */}
       <Route path="/athletes/:id">
         <RouteWrapper>
           <AthleteProfile />
@@ -158,6 +248,16 @@ function Router() {
       <Route path="/user-management">
         <RouteWrapper loadingText="Loading User Management...">
           <UserManagement />
+        </RouteWrapper>
+      </Route>
+      <Route path="/global-athletes/:id">
+        <RouteWrapper loadingText="Loading Global Athlete...">
+          <GlobalAthleteDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/global-athletes">
+        <RouteWrapper loadingText="Loading Global Athletes...">
+          <GlobalAthletes />
         </RouteWrapper>
       </Route>
       <Route path="/data-entry">

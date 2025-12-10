@@ -22,6 +22,34 @@
       "when": 1763739432459,
       "tag": "0002_watery_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1764388611213,
+      "tag": "0003_parched_hairball",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1764436202625,
+      "tag": "0004_romantic_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1764611922063,
+      "tag": "0005_melodic_violations",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1764685435604,
+      "tag": "0006_milky_bloodstorm",
+      "breakpoints": true
     }
   ]
 }

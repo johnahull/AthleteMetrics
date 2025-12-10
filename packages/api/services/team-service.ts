@@ -10,6 +10,7 @@ import {
   userTeams,
   userOrganizations,
   measurements,
+  users,
   type Team,
   type Organization,
   type UserTeam,
@@ -550,5 +551,54 @@ export class TeamService {
           )
         );
     });
+  }
+
+  /**
+   * Get all active members of a team
+   * Returns user information including fullName for display purposes
+   *
+   * Security: When expectedOrganizationId is provided, validates team belongs
+   * to expected organization to prevent IDOR attacks.
+   *
+   * @param teamId Team ID
+   * @param expectedOrganizationId Optional organization ID for IDOR protection
+   * @returns Array of team members with id, firstName, lastName, fullName
+   * @throws Error if team not found or organization mismatch
+   */
+  async getTeamMembers(
+    teamId: string,
+    expectedOrganizationId?: string
+  ): Promise<{ id: string; firstName: string; lastName: string; fullName: string }[]> {
+    // First verify team exists and optionally validate organization
+    const team = await this.getTeam(teamId);
+
+    if (!team) {
+      throw new Error('Team not found');
+    }
+
+    // Defense-in-depth: Validate organization ownership at service layer
+    if (expectedOrganizationId && team.organization.id !== expectedOrganizationId) {
+      throw new Error('Access denied - team belongs to different organization');
+    }
+
+    // Query active team members with user details
+    const result = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        fullName: users.fullName,
+      })
+      .from(userTeams)
+      .innerJoin(users, eq(userTeams.userId, users.id))
+      .where(
+        and(
+          eq(userTeams.teamId, teamId),
+          eq(userTeams.isActive, true)
+        )
+      )
+      .orderBy(asc(users.lastName), asc(users.firstName));
+
+    return result;
   }
 }

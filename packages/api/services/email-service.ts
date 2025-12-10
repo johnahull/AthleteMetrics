@@ -1,9 +1,9 @@
 /**
  * Email Service
- * Handles all email sending operations using SendGrid
+ * Handles all email sending operations using Resend
  */
 
-import sgMail from '@sendgrid/mail';
+import { Resend } from 'resend';
 
 /**
  * HTML escape function to prevent XSS in email templates
@@ -46,9 +46,9 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   // Additional validation for expected URL types
   if (expectedType) {
     const urlPatterns = {
-      invitation: /\/accept-invitation\?token=/,
-      verification: /\/verify-email\?token=/,
-      'password-reset': /\/reset-password\?token=/
+      invitation: /^https?:\/\/[^\/]+\/accept-invitation\?token=.+$/,
+      verification: /^https?:\/\/[^\/]+\/verify-email\?token=.+$/,
+      'password-reset': /^https?:\/\/[^\/]+\/reset-password\?token=.+$/
     };
 
     const pattern = urlPatterns[expectedType];
@@ -62,11 +62,7 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   return urlString;
 }
 
-// Initialize SendGrid
-const apiKey = process.env.SENDGRID_API_KEY;
-if (apiKey) {
-  sgMail.setApiKey(apiKey);
-}
+// Resend client is initialized in the EmailService class
 
 interface EmailOptions {
   to: string;
@@ -127,18 +123,34 @@ interface WellnessAlertEmailData {
   viewLink: string;
 }
 
+interface AccountLinkedNotificationData {
+  email: string;
+  userName: string;
+  globalAthleteName: string;
+  linkedOrganizations: string[];
+}
+
+interface ClaimVerificationEmailData {
+  email: string;
+  userName: string;
+  verificationLink: string;
+}
+
 export class EmailService {
+  private resend: Resend | null = null;
   private fromEmail: string;
   private fromName: string;
   private enabled: boolean;
 
   constructor() {
-    this.fromEmail = process.env.SENDGRID_FROM_EMAIL || 'noreply@athletemetrics.com';
-    this.fromName = process.env.SENDGRID_FROM_NAME || 'AthleteMetrics';
-    this.enabled = !!process.env.SENDGRID_API_KEY;
+    this.fromEmail = process.env.EMAIL_FROM_ADDRESS || 'team@athletemetrics.io';
+    this.fromName = process.env.EMAIL_FROM_NAME || 'AthleteMetrics';
+    this.enabled = !!process.env.RESEND_API_KEY;
 
-    if (!this.enabled) {
-      console.warn('⚠️ SendGrid API key not configured. Email sending is disabled.');
+    if (this.enabled) {
+      this.resend = new Resend(process.env.RESEND_API_KEY);
+    } else {
+      console.warn('⚠️ Resend API key not configured. Email sending is disabled.');
     }
   }
 
@@ -146,7 +158,7 @@ export class EmailService {
    * Send a raw email
    */
   private async sendEmail(options: EmailOptions): Promise<boolean> {
-    if (!this.enabled) {
+    if (!this.enabled || !this.resend) {
       console.log('📧 Email sending disabled (no API key). Would have sent:', {
         to: options.to,
         subject: options.subject
@@ -155,26 +167,23 @@ export class EmailService {
     }
 
     try {
-      await sgMail.send({
-        from: {
-          email: this.fromEmail,
-          name: this.fromName
-        },
+      const { data, error } = await this.resend.emails.send({
+        from: `${this.fromName} <${this.fromEmail}>`,
         to: options.to,
         subject: options.subject,
         html: options.html,
-        text: options.text || this.stripHtml(options.html),
-        trackingSettings: {
-          clickTracking: {
-            enable: false
-          }
-        }
+        text: options.text || this.stripHtml(options.html)
       });
 
-      console.log(`✅ Email sent successfully to ${options.to}`);
+      if (error) {
+        console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - Resend API error:`, error);
+        return false;
+      }
+
+      console.log(`✅ Email sent successfully to ${options.to} (subject: "${options.subject}", id: ${data?.id})`);
       return true;
     } catch (error) {
-      console.error('❌ Failed to send email:', error);
+      console.error(`❌ Failed to send email to ${options.to} (subject: "${options.subject}") - exception:`, error);
       return false;
     }
   }
@@ -245,6 +254,24 @@ export class EmailService {
   }
 
   /**
+   * Send OAuth account linking confirmation email
+   */
+  async sendAccountLinkingEmail(
+    email: string,
+    firstName: string,
+    provider: 'google' | 'apple',
+    token: string
+  ): Promise<boolean> {
+    const html = this.generateAccountLinkingTemplate({ email, firstName, provider, token });
+
+    return this.sendEmail({
+      to: email,
+      subject: `Confirm ${provider === 'google' ? 'Google' : 'Apple'} Account Linking - AthleteMetrics`,
+      html
+    });
+  }
+
+  /**
    * Send wellness questionnaire request notification
    */
   async sendWellnessRequest(email: string, data: WellnessRequestEmailData): Promise<boolean> {
@@ -284,12 +311,39 @@ export class EmailService {
   }
 
   /**
+   * Send notification when user's account is auto-linked to a global athlete
+   */
+  async sendAccountLinkedNotification(data: AccountLinkedNotificationData): Promise<boolean> {
+    const html = this.generateAccountLinkedTemplate(data);
+
+    return this.sendEmail({
+      to: data.email,
+      subject: 'Your AthleteMetrics accounts have been linked',
+      html
+    });
+  }
+
+  /**
+   * Send verification email for manual account claim
+   */
+  async sendClaimVerificationEmail(data: ClaimVerificationEmailData): Promise<boolean> {
+    const html = this.generateClaimVerificationTemplate(data);
+
+    return this.sendEmail({
+      to: data.email,
+      subject: 'Verify your email to link your AthleteMetrics account',
+      html
+    });
+  }
+
+  /**
    * Generate invitation email template
    */
   private generateInvitationTemplate(data: InvitationEmailData): string {
     try {
       // Generate the invitation URL once to ensure consistency between button and display text
-      const invitationUrl = data.invitationLink;
+      // Sanitize URL to prevent XSS and injection attacks
+      const invitationUrl = sanitizeUrl(data.invitationLink, 'invitation');
 
       return `
 <!DOCTYPE html>
@@ -489,7 +543,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.verificationLink)}
+                ${escapeHtml(sanitizeUrl(data.verificationLink, 'verification'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -567,7 +621,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
-                ${escapeHtml(data.resetLink)}
+                ${escapeHtml(sanitizeUrl(data.resetLink, 'password-reset'))}
               </p>
 
               <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
@@ -592,6 +646,96 @@ export class EmailService {
       `.trim();
     } catch (error) {
       console.error('Failed to generate password reset email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate OAuth account linking confirmation template
+   */
+  private generateAccountLinkingTemplate(data: { email: string, firstName: string, provider: 'google' | 'apple', token: string }): string {
+    try {
+      const providerName = data.provider === 'google' ? 'Google' : 'Apple';
+      const linkUrl = `${process.env.APP_URL}/api/auth/link-account/${data.token}`;
+      const sanitizedLinkUrl = sanitizeUrl(linkUrl);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm ${providerName} Account Linking</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Confirm ${providerName} Account Linking</h1>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.firstName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Someone tried to sign in to your AthleteMetrics account using ${providerName}.
+              </p>
+
+              <p style="margin: 0 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                To link your ${providerName} account and enable social sign-in, please click the button below:
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedLinkUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      Confirm Account Linking
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #667eea; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(sanitizedLinkUrl)}
+              </p>
+
+              <p style="margin: 0 0 16px; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                This link will expire in 1 hour.
+              </p>
+
+              <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                If you didn't request this, please ignore this email and consider changing your password.
+              </p>
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Athletic Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate account linking email template:', error);
       throw new Error('Failed to generate email template');
     }
   }
@@ -866,6 +1010,182 @@ export class EmailService {
       `.trim();
     } catch (error) {
       console.error('Failed to generate wellness alert email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate account linked notification email template
+   */
+  private generateAccountLinkedTemplate(data: AccountLinkedNotificationData): string {
+    try {
+      const orgList = data.linkedOrganizations.map(org => escapeHtml(org)).join(', ');
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accounts Linked - AthleteMetrics</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Accounts Linked</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.userName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Good news! Your AthleteMetrics account has been automatically linked to an existing global athlete profile: <strong>${escapeHtml(data.globalAthleteName)}</strong>.
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                This means you can now view all your performance data from the following organizations in one unified dashboard:
+              </p>
+
+              <!-- Organizations List -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 24px; background-color: #f8fafc; border-radius: 6px;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <p style="margin: 0; color: #6366f1; font-size: 15px; font-weight: 600;">
+                      ${orgList}
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                You can manage your cross-organization data sharing and privacy settings at any time from your profile.
+              </p>
+
+              <p style="margin: 0; color: #718096; font-size: 14px; line-height: 1.6;">
+                If you don't recognize this activity or wish to unlink your accounts, please visit your global athlete profile settings.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Cross-Organization Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate account linked email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate claim verification email template
+   */
+  private generateClaimVerificationTemplate(data: ClaimVerificationEmailData): string {
+    try {
+      const sanitizedLink = sanitizeUrl(data.verificationLink);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verify Email to Link Account</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">Verify Email to Link Account</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi,
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                <strong>${escapeHtml(data.userName)}</strong> has requested to link this email address to their AthleteMetrics global athlete profile.
+              </p>
+
+              <p style="margin: 0 0 24px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                If you own this email address and want to link your accounts, click the button below to verify:
+              </p>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedLink}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      Verify & Link Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #06b6d4; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(data.verificationLink)}
+              </p>
+
+              <p style="margin: 0 0 16px; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                This link will expire in 24 hours.
+              </p>
+
+              <p style="margin: 0; color: #a0aec0; font-size: 12px; line-height: 1.6;">
+                If you didn't request this or don't recognize the user, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                AthleteMetrics - Cross-Organization Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate claim verification email template:', error);
       throw new Error('Failed to generate email template');
     }
   }

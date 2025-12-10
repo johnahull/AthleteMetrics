@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Logo Background Test - AthleteMetrics</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 {
+      color: white;
+      text-align: center;
+      margin-bottom: 1rem;
+      font-size: 2rem;
+    }
+    .subtitle {
+      color: #999;
+      text-align: center;
+      margin-bottom: 3rem;
+      font-size: 1rem;
+    }
+    .test-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 2rem;
+      margin-bottom: 3rem;
+    }
+    .test-card {
+      background: #2a2a2a;
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+    }
+    .test-card h2 {
+      color: white;
+      font-size: 1.1rem;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+    .device-name {
+      color: #666;
+      font-size: 0.85rem;
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .icon-preview {
+      width: 150px;
+      height: 150px;
+      margin: 0 auto 1rem;
+      border-radius: 22%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .icon-preview img {
+      width: 80%;
+      height: 80%;
+      object-fit: contain;
+    }
+    /* iOS Style */
+    .ios {
+      background: linear-gradient(135deg, #f5f5f5 0%, #e5e5e5 100%);
+      box-shadow:
+        0 2px 8px rgba(0,0,0,0.1),
+        inset 0 1px 0 rgba(255,255,255,0.8);
+    }
+    /* Android Light */
+    .android-light {
+      background: #ffffff;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    /* Android Dark */
+    .android-dark {
+      background: #1f1f1f;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    /* Wallpaper - Beach */
+    .wallpaper-beach {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+    /* Wallpaper - Dark */
+    .wallpaper-dark {
+      background: linear-gradient(135deg, #0f0c29 0%, #302b63 50%, #24243e 100%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+    }
+    /* Wallpaper - Light */
+    .wallpaper-light {
+      background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .notes {
+      background: #2a2a2a;
+      border-radius: 12px;
+      padding: 2rem;
+      color: #ccc;
+      margin-top: 3rem;
+      border-left: 4px solid #667eea;
+    }
+    .notes h3 {
+      color: white;
+      margin-bottom: 1rem;
+    }
+    .notes ul {
+      margin-left: 1.5rem;
+      line-height: 1.8;
+    }
+    .notes li {
+      margin-bottom: 0.5rem;
+    }
+    .good { color: #4ade80; }
+    .bad { color: #f87171; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🎨 How Your Logo Looks on Different Devices</h1>
+    <p class="subtitle">Testing transparent logo on various backgrounds</p>
+
+    <div class="test-grid">
+      <div class="test-card">
+        <h2>iOS (iPhone)</h2>
+        <div class="device-name">System Background</div>
+        <div class="icon-preview ios">
+          <img src="icon-192.png" alt="iOS icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          iOS adds light background automatically
+        </p>
+      </div>
+
+      <div class="test-card">
+        <h2>Android (Light Mode)</h2>
+        <div class="device-name">Material You</div>
+        <div class="icon-preview android-light">
+          <img src="icon-192.png" alt="Android light icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          Clean white background
+        </p>
+      </div>
+
+      <div class="test-card">
+        <h2>Android (Dark Mode)</h2>
+        <div class="device-name">Material You</div>
+        <div class="icon-preview android-dark">
+          <img src="icon-192.png" alt="Android dark icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          Adapts to dark theme
+        </p>
+      </div>
+
+      <div class="test-card">
+        <h2>Custom Wallpaper</h2>
+        <div class="device-name">Gradient Background</div>
+        <div class="icon-preview wallpaper-beach">
+          <img src="icon-192.png" alt="Gradient wallpaper icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          Vibrant gradient wallpaper
+        </p>
+      </div>
+
+      <div class="test-card">
+        <h2>Dark Wallpaper</h2>
+        <div class="device-name">Night Mode</div>
+        <div class="icon-preview wallpaper-dark">
+          <img src="icon-192.png" alt="Dark wallpaper icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          Dark gradient wallpaper
+        </p>
+      </div>
+
+      <div class="test-card">
+        <h2>Light Wallpaper</h2>
+        <div class="device-name">Day Mode</div>
+        <div class="icon-preview wallpaper-light">
+          <img src="icon-192.png" alt="Light wallpaper icon">
+        </div>
+        <p style="color: #888; text-align: center; font-size: 0.85rem;">
+          Light gradient wallpaper
+        </p>
+      </div>
+    </div>
+
+    <div class="notes">
+      <h3>✅ Why Transparent Background is Perfect</h3>
+      <ul>
+        <li class="good"><strong>Adapts to any background:</strong> Looks great on light, dark, or colorful wallpapers</li>
+        <li class="good"><strong>Respects user preferences:</strong> Works with system dark mode</li>
+        <li class="good"><strong>iOS handles it automatically:</strong> Apple adds their own background styling</li>
+        <li class="good"><strong>Android flexibility:</strong> Modern launchers add appropriate backgrounds</li>
+        <li class="good"><strong>Professional appearance:</strong> Matches native app icons</li>
+      </ul>
+
+      <h3 style="margin-top: 2rem;">❌ Why Adding White Background Would Be Bad</h3>
+      <ul>
+        <li class="bad"><strong>Looks bad on dark wallpapers:</strong> Bright white square stands out awkwardly</li>
+        <li class="bad"><strong>Double-container on iOS:</strong> White square inside iOS's container</li>
+        <li class="bad"><strong>Ignores dark mode:</strong> Doesn't respect user's system preferences</li>
+        <li class="bad"><strong>Less flexible:</strong> Can't adapt to future design trends</li>
+      </ul>
+
+      <h3 style="margin-top: 2rem;">📋 Verdict</h3>
+      <p style="color: #4ade80; font-weight: 600; font-size: 1.1rem; margin-top: 1rem;">
+        Your current transparent logo is perfect! No background needed. ✨
+      </p>
+    </div>
+  </div>
+</body>
+</html>

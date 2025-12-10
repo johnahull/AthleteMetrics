@@ -7,12 +7,14 @@ import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
+import type { MetricType } from '@shared/analytics-types';
 
 export interface AvailableMetric {
   code: string;
   label: string;
   unit: string;
-  lowerIsBetter: boolean;
+  metricType: MetricType;
+  lowerIsBetter: boolean; // Derived from metricType for backward compatibility
   category?: string;
   description?: string;
 }
@@ -64,7 +66,7 @@ export function useAvailableMetrics(): {
     code: string;
     label: string;
     unit: string | null;
-    lowerIsBetter: boolean;
+    metricType: MetricType;
     category: string | null;
     description: string | null;
     isActive: boolean;
@@ -98,7 +100,8 @@ export function useAvailableMetrics(): {
           code: om.metricCode,
           label: om.customLabel || om.siteMetric.label, // Custom label takes precedence
           unit: om.siteMetric.unit || '',
-          lowerIsBetter: om.siteMetric.lowerIsBetter,
+          metricType: om.siteMetric.metricType,
+          lowerIsBetter: om.siteMetric.metricType === 'lower_is_better',
           category: om.siteMetric.category || undefined,
           description: om.siteMetric.description || undefined,
         }));
@@ -112,7 +115,8 @@ export function useAvailableMetrics(): {
           code: sm.code,
           label: sm.label,
           unit: sm.unit || '',
-          lowerIsBetter: sm.lowerIsBetter,
+          metricType: sm.metricType,
+          lowerIsBetter: sm.metricType === 'lower_is_better',
           category: sm.category || undefined,
           description: sm.description || undefined,
         }));

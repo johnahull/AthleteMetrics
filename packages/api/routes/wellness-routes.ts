@@ -8,8 +8,8 @@
  * - Analytics queries (team summaries, athlete trends)
  */
 
-import type { Express, Response } from "express";
-import rateLimit from "express-rate-limit";
+import type { Express, Request, Response } from "express";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { storage } from "../storage";
 import { db } from "../db";
 import {
@@ -28,7 +28,6 @@ import {
   requireOrganizationAccess,
   requireWellnessAccess,
   requireWellnessEnabled,
-  type AuthenticatedRequest,
 } from "../middleware";
 import {
   createWellnessTemplateSchema,
@@ -123,10 +122,7 @@ const tokenValidationLimiter = rateLimit({
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: () => shouldBypassRateLimit(),
-  keyGenerator: (req) => {
-    // Rate limit by IP address for unauthenticated requests
-    return req.ip || 'unknown';
-  },
+  keyGenerator: (req) => ipKeyGenerator(req.ip || 'unknown'), // IPv6-aware IP normalization
 });
 
 /**
@@ -148,7 +144,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const validation = createWellnessTemplateSchema.safeParse(req.body);
@@ -189,7 +185,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess(),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const activeOnly = req.query.activeOnly === 'true';
@@ -214,7 +210,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -284,7 +280,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
         const validation = updateWellnessTemplateSchema.safeParse(req.body);
@@ -328,7 +324,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -365,7 +361,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { category, tags, search } = req.query;
@@ -423,7 +419,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, id } = req.params;
 
@@ -470,7 +466,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const validation = createWellnessRequestSchema.safeParse(req.body);
@@ -583,7 +579,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const status = req.query.status as string | undefined;
@@ -608,7 +604,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -651,6 +647,52 @@ export function registerWellnessRoutes(app: Express) {
       } catch (error: any) {
         console.error("Failed to fetch wellness request by token:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness request", error));
+      }
+    }
+  );
+
+  /**
+   * GET /api/wellness/requests/by-token/:token/template
+   * Get wellness template for a valid request token
+   * Access: Public (token acts as authentication)
+   */
+  app.get(
+    "/api/wellness/requests/by-token/:token/template",
+    highVolumeLimiter,
+    async (req, res: Response) => {
+      try {
+        const { token } = req.params;
+
+        // Validate token and get request
+        const request = await storage.getWellnessRequestByToken(token);
+        if (!request) {
+          return res.status(404).json({ message: "Wellness request not found" });
+        }
+
+        // Check if expired
+        if (request.expiresAt && new Date(request.expiresAt) < new Date()) {
+          return res.status(410).json({ message: "This wellness request has expired" });
+        }
+
+        // Get template - token proves legitimate access
+        const template = await storage.getWellnessTemplate(request.templateId);
+        if (!template) {
+          return res.status(404).json({ message: "Template not found" });
+        }
+
+        // Return public-safe template fields
+        const publicTemplate = {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          config: template.config,
+          isActive: template.isActive,
+        };
+
+        res.json(publicTemplate);
+      } catch (error: any) {
+        console.error("Failed to fetch template by token:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch template", error));
       }
     }
   );
@@ -745,7 +787,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -774,7 +816,7 @@ export function registerWellnessRoutes(app: Express) {
     batchLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -807,7 +849,7 @@ export function registerWellnessRoutes(app: Express) {
     requireAuth,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId, requestId } = req.params;
 
@@ -838,7 +880,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/responses",
     tokenValidationLimiter, // Stricter rate limiting for magic link validation
     requireWellnessAccess(false),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const validation = submitWellnessResponseSchema.safeParse(req.body);
 
@@ -1036,7 +1078,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/responses/:id",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { id } = req.params;
 
@@ -1079,7 +1121,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/my-requests",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const userId = req.user!.id;
 
@@ -1128,7 +1170,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/my-responses",
     highVolumeLimiter,
     requireAuth,
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const userId = req.user!.id;
 
@@ -1167,6 +1209,113 @@ export function registerWellnessRoutes(app: Express) {
   );
 
   /**
+   * GET /api/wellness/my-status
+   * Get computed wellness status for authenticated athlete's dashboard
+   * Access: Authenticated user (athlete)
+   * Returns: { lastSubmissionDate, flaggedConcerns, overallStatus }
+   */
+  app.get(
+    "/api/wellness/my-status",
+    highVolumeLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.user!.id;
+
+        // Get the latest response for this athlete
+        const allResponses = await storage.getWellnessResponsesByAthlete(userId);
+
+        if (!allResponses || allResponses.length === 0) {
+          return res.json(null);
+        }
+
+        // Sort by submission date and get the most recent
+        allResponses.sort((a, b) =>
+          new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
+        );
+        const latestResponse = allResponses[0];
+
+        // Get the template for this response
+        const template = await storage.getWellnessTemplate(latestResponse.templateId);
+        if (!template) {
+          // Template was deleted, return null
+          return res.json(null);
+        }
+
+        // Validate template config using type guard
+        const validatedTemplate = validateTemplate(template);
+        if (!validatedTemplate) {
+          console.error(`Invalid template config for wellness status, template ${template.id}`);
+          return res.json(null);
+        }
+
+        // Calculate status using shared utility
+        // Type assertion: Database schema type is compatible with WellnessResponse interface
+        // Both define the same structure for responses field (Record<string, { value: any }>)
+        const { status } = calculateAthleteStatus(
+          latestResponse as unknown as WellnessResponse,
+          validatedTemplate
+        );
+
+        // Build flagged concerns from low scores and injuries
+        const flaggedConcerns: { question: string; answer: string }[] = [];
+        const responses = latestResponse.responses as Record<string, { value: any }>;
+
+        // Check scale questions for concerning values
+        for (const question of validatedTemplate.config.questions) {
+          const answer = responses[question.id];
+          if (!answer) continue;
+
+          if (question.type === 'scale' && typeof answer.value === 'number') {
+            // Get scale range
+            const scaleMin = question.scaleMin;
+            const scaleMax = question.scaleMax;
+            const range = scaleMax - scaleMin;
+
+            // Check orientation
+            const orientation = validatedTemplate.config.statusConfig?.scaleOrientation || 'higher_is_better';
+
+            if (orientation === 'higher_is_better') {
+              // Low values are concerning
+              if (answer.value <= scaleMin + Math.round(range * 0.3)) {
+                flaggedConcerns.push({
+                  question: question.label,
+                  answer: `${answer.value}/${scaleMax}`,
+                });
+              }
+            } else {
+              // High values are concerning (lower_is_better)
+              if (answer.value >= scaleMax - Math.round(range * 0.3)) {
+                flaggedConcerns.push({
+                  question: question.label,
+                  answer: `${answer.value}/${scaleMax}`,
+                });
+              }
+            }
+          }
+
+          // Check body_map for injuries
+          if (question.type === 'body_map' && Array.isArray(answer.value) && answer.value.length > 0) {
+            flaggedConcerns.push({
+              question: question.label,
+              answer: `${answer.value.length} area(s) marked`,
+            });
+          }
+        }
+
+        res.json({
+          lastSubmissionDate: latestResponse.submittedAt,
+          flaggedConcerns,
+          overallStatus: status,
+        });
+      } catch (error: any) {
+        console.error("Failed to fetch athlete wellness status:", error);
+        res.status(500).json(createErrorResponse("Failed to fetch wellness status", error));
+      }
+    }
+  );
+
+  /**
    * GET /api/organizations/:organizationId/wellness/responses
    * Get all wellness responses for an organization with filtering
    * Access: Coach, Org Admin
@@ -1176,7 +1325,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { startDate, endDate, teamIds, athleteIds } = req.query;
@@ -1243,7 +1392,7 @@ export function registerWellnessRoutes(app: Express) {
     "/api/wellness/requests/:requestId/check-submission",
     highVolumeLimiter,
     requireWellnessAccess(false),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { requestId } = req.params;
         const userId = req.user!.id;
@@ -1288,7 +1437,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { teamId, startDate, endDate } = req.query;
 
@@ -1321,7 +1470,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { athleteId } = req.params;
         const { startDate, endDate } = req.query;
@@ -1360,7 +1509,7 @@ export function registerWellnessRoutes(app: Express) {
     analyticsLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
         const { startDate, endDate, questionIds } = req.query;
@@ -1405,7 +1554,7 @@ export function registerWellnessRoutes(app: Express) {
     highVolumeLimiter,
     requireAuth,
     requireOrganizationAccess("coach"),
-    async (req: AuthenticatedRequest, res: Response) => {
+    async (req: Request, res: Response) => {
       try {
         const { organizationId } = req.params;
 
@@ -1613,6 +1762,139 @@ export function registerWellnessRoutes(app: Express) {
 
           const trend = calculateTrend(currentScores, previousScores);
 
+          // Calculate template aggregates (per-template wellness averages)
+          // Group current responses by templateId
+          const responsesByTemplate = new Map<string, typeof teamResponses>();
+          for (const response of teamResponses) {
+            if (!responsesByTemplate.has(response.templateId)) {
+              responsesByTemplate.set(response.templateId, []);
+            }
+            responsesByTemplate.get(response.templateId)!.push(response);
+          }
+
+          // Group previous responses by templateId for trend calculation
+          const previousResponsesByTemplate = new Map<string, typeof teamPreviousResponses>();
+          for (const response of teamPreviousResponses) {
+            if (!previousResponsesByTemplate.has(response.templateId)) {
+              previousResponsesByTemplate.set(response.templateId, []);
+            }
+            previousResponsesByTemplate.get(response.templateId)!.push(response);
+          }
+
+          // Build template aggregates
+          const templateAggregates: {
+            templateId: string;
+            templateName: string;
+            averageScore: number | null;
+            scaleMax: number;
+            responseCount: number;
+            trend: 'up' | 'down' | 'stable';
+            status: 'red' | 'yellow' | 'green';
+          }[] = [];
+
+          for (const [templateId, responses] of responsesByTemplate.entries()) {
+            const template = templateMap.get(templateId);
+            if (!template) continue;
+
+            const validatedTemplate = validateTemplate(template);
+            if (!validatedTemplate) continue;
+
+            // Calculate average score for this template
+            const scores = responses.map(r => {
+              const typedResponse = r as WellnessResponse;
+              const status = calculateAthleteStatus(typedResponse, validatedTemplate);
+              return status.score;
+            }).filter((s): s is number => s !== null);
+
+            const averageScore = scores.length > 0
+              ? scores.reduce((sum, score) => sum + score, 0) / scores.length
+              : null;
+
+            // Determine scaleMax from template config
+            let templateScaleMax = 10; // Default
+            if (hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config) {
+                const scaleQuestions = validatedTemplate.config.questions.filter(q => q.type === 'scale');
+                if (scaleQuestions.length > 0) {
+                  const firstScale = scaleQuestions[0];
+                  if ('scaleMax' in firstScale) {
+                    const calculationMethod = config.calculationMethod || 'average';
+                    if (calculationMethod === 'sum') {
+                      // For sum method, max is scaleMax * number of questions
+                      templateScaleMax = firstScale.scaleMax * scaleQuestions.length;
+                    } else {
+                      // For average method, use single question's scaleMax
+                      templateScaleMax = firstScale.scaleMax;
+                    }
+                  }
+                }
+              }
+            }
+
+            // Calculate trend for this template
+            const previousTemplateResponses = previousResponsesByTemplate.get(templateId) || [];
+            const previousTemplateScores = previousTemplateResponses.map(r => {
+              const template = templateMap.get(r.templateId);
+              if (!template) return null;
+              const validatedTemplate = validateTemplate(template);
+              if (!validatedTemplate) return null;
+              const typedResponse = r as WellnessResponse;
+              const status = calculateAthleteStatus(typedResponse, validatedTemplate);
+              return status.score;
+            }).filter((s): s is number => s !== null);
+
+            let templateTrend = calculateTrend(scores, previousTemplateScores);
+
+            // Invert trend for lower_is_better scales (increase in score = worse performance = 'down' trend)
+            if (hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config && config.scaleOrientation === 'lower_is_better') {
+                if (templateTrend === 'up') templateTrend = 'down';
+                else if (templateTrend === 'down') templateTrend = 'up';
+                // 'stable' remains 'stable'
+              }
+            }
+
+            // Calculate status based on template thresholds
+            let templateStatus: 'red' | 'yellow' | 'green' = 'green';
+            if (averageScore !== null && hasValidStatusConfig(validatedTemplate)) {
+              const config = getStatusConfig(validatedTemplate);
+              if (config) {
+                const scaleOrientation = config.scaleOrientation;
+                if (scaleOrientation === 'higher_is_better') {
+                  // Higher scores are better
+                  if (averageScore <= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore <= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                } else {
+                  // Lower scores are better (e.g., fatigue/stress scales)
+                  if (averageScore >= config.redThreshold) {
+                    templateStatus = 'red';
+                  } else if (averageScore >= config.yellowThreshold) {
+                    templateStatus = 'yellow';
+                  } else {
+                    templateStatus = 'green';
+                  }
+                }
+              }
+            }
+
+            templateAggregates.push({
+              templateId,
+              templateName: template.name,
+              averageScore,
+              scaleMax: templateScaleMax,
+              responseCount: responses.length,
+              trend: templateTrend,
+              status: templateStatus,
+            });
+          }
+
           dashboardData.push({
             teamId: team.id,
             teamName: team.name,
@@ -1627,6 +1909,7 @@ export function registerWellnessRoutes(app: Express) {
             trend,
             commonInjuries,
             athletes: athleteStatuses,
+            templateAggregates,
           });
         }
 

@@ -78,7 +78,7 @@ export function MetricsSelector({
       label: m.label,
       category: m.category,
       unit: m.unit,
-      lowerIsBetter: m.lowerIsBetter,
+      metricType: m.metricType,
       isActive: true, // Already filtered by hook
       isSystemDefault: false, // Not exposed by hook, but not needed for display
     }));
@@ -193,7 +193,7 @@ export function MetricsSelector({
                       </span>
                       <span className="text-xs text-muted-foreground flex items-center gap-2">
                         <span>
-                          {config?.unit} • {config?.lowerIsBetter ? 'Lower is better' : 'Higher is better'}
+                          {config?.unit} • {config?.metricType === 'tracking' ? 'Tracking' : config?.metricType === 'lower_is_better' ? 'Lower is better' : 'Higher is better'}
                         </span>
                         {hasData && <MetricIndicator count={count} maxCount={maxCount} />}
                       </span>

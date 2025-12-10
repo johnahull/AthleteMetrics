@@ -163,6 +163,9 @@ export function registerMeasurementRoutes(app: Express) {
       } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
         // Non-admin users without explicit organizationId should see their organization
         filters.organizationId = user.primaryOrganizationId;
+      } else if (!isSiteAdmin(user) && !user.primaryOrganizationId) {
+        // Users without an organization (e.g., newly self-registered) have no measurements to view
+        return res.json([]);
       }
 
       // Site admins can query across organizations, non-admins cannot
@@ -370,11 +373,31 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY: Athletes cannot modify verified measurements (only coaches/admins can)
-      if (user.role === 'athlete' && existingMeasurement.isVerified) {
-        return res.status(403).json({
-          message: "Cannot modify verified measurements. Contact your coach to make changes."
-        });
+      // SECURITY: Consolidated athlete authorization checks to prevent IDOR
+      // All athlete-specific checks are performed together to prevent bypass
+      if (user.role === 'athlete') {
+        // Athletes cannot modify verified measurements (only coaches/admins can)
+        if (existingMeasurement.isVerified) {
+          return res.status(403).json({
+            message: "Cannot modify verified measurements. Contact your coach to make changes."
+          });
+        }
+
+        // Athletes can only update their own measurements
+        // Prevents IDOR vulnerability where Athlete A updates Athlete B's measurement
+        if (existingMeasurement.userId !== user.id) {
+          return res.status(403).json({
+            message: "Access denied - athletes can only update their own measurements"
+          });
+        }
+
+        // Athletes cannot modify measurements submitted by coaches
+        // Prevents athletes from changing coach-submitted data (e.g., official testing results)
+        if (existingMeasurement.submittedBy !== user.id) {
+          return res.status(403).json({
+            message: "Athletes cannot modify coach-submitted measurements"
+          });
+        }
       }
 
       // Permission check: submitter, org admins/coaches in same org, or site admins can update
@@ -382,18 +405,6 @@ export function registerMeasurementRoutes(app: Express) {
       const isOrgAdminOrCoach = !isSiteAdmin(user) &&
         (user.role === 'org_admin' || user.role === 'coach') &&
         existingMeasurement.organizationId === user.primaryOrganizationId;
-
-      // SECURITY: Athletes can only update their own measurements
-      // Prevents IDOR vulnerability where Athlete A updates Athlete B's measurement
-      if (user.role === 'athlete' && existingMeasurement.userId !== user.id) {
-        return res.status(403).json({ message: "Access denied - athletes can only update their own measurements" });
-      }
-
-      // SECURITY: Athletes cannot modify measurements submitted by coaches
-      // Prevents athletes from changing coach-submitted data (e.g., official testing results)
-      if (user.role === 'athlete' && existingMeasurement.submittedBy !== user.id) {
-        return res.status(403).json({ message: "Athletes cannot modify coach-submitted measurements" });
-      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });

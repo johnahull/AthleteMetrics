@@ -1,12 +1,14 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EmailService } from '../../packages/api/services/email-service';
 
-// Mock SendGrid
-vi.mock('@sendgrid/mail', () => ({
-  default: {
-    setApiKey: vi.fn(),
-    send: vi.fn().mockResolvedValue([{ statusCode: 202 }]),
-  },
+// Mock Resend
+const mockSend = vi.fn();
+vi.mock('resend', () => ({
+  Resend: vi.fn().mockImplementation(() => ({
+    emails: {
+      send: mockSend
+    }
+  }))
 }));
 
 describe('EmailService', () => {
@@ -15,19 +17,20 @@ describe('EmailService', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset only the email-related env vars we modify in tests
-    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
-      if (key in originalEnv) {
-        process.env[key] = originalEnv[key];
-      } else {
-        delete process.env[key];
-      }
-    });
+    // Set up test environment variables
+    process.env.RESEND_API_KEY = 'test-api-key-re_12345';
+    process.env.EMAIL_FROM_ADDRESS = 'team@athletemetrics.io';
+    process.env.EMAIL_FROM_NAME = 'AthleteMetrics Test';
+
+    // Reset mock to default success response
+    mockSend.mockResolvedValue({ data: { id: 'test-id' }, error: null });
+
+    emailService = new EmailService();
   });
 
   afterEach(() => {
     // Restore only the email-related env vars we modify in tests
-    ['SENDGRID_API_KEY', 'SENDGRID_FROM_EMAIL', 'SENDGRID_FROM_NAME'].forEach(key => {
+    ['RESEND_API_KEY', 'EMAIL_FROM_ADDRESS', 'EMAIL_FROM_NAME'].forEach(key => {
       if (key in originalEnv) {
         process.env[key] = originalEnv[key];
       } else {
@@ -37,10 +40,10 @@ describe('EmailService', () => {
   });
 
   describe('constructor', () => {
-    it('should initialize with SendGrid API key when provided', () => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      process.env.SENDGRID_FROM_EMAIL = 'test@example.com';
-      process.env.SENDGRID_FROM_NAME = 'Test Sender';
+    it('should initialize with Resend API key when provided', () => {
+      process.env.RESEND_API_KEY = 'test-api-key';
+      process.env.EMAIL_FROM_ADDRESS = 'test@example.com';
+      process.env.EMAIL_FROM_NAME = 'Test Sender';
 
       emailService = new EmailService();
 
@@ -48,7 +51,7 @@ describe('EmailService', () => {
     });
 
     it('should work without API key (disabled mode)', () => {
-      delete process.env.SENDGRID_API_KEY;
+      delete process.env.RESEND_API_KEY;
 
       emailService = new EmailService();
 
@@ -57,45 +60,40 @@ describe('EmailService', () => {
   });
 
   describe('sendInvitation', () => {
-    beforeEach(() => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      emailService = new EmailService();
-    });
-
     it('should send invitation email with correct data', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       const result = await emailService.sendInvitation('user@example.com', {
         recipientName: 'John Doe',
         inviterName: 'Jane Smith',
         organizationName: 'Test Org',
-        invitationLink: 'https://example.com/invite/token123',
+        invitationLink: 'https://example.com/accept-invitation?token=token123',
         expiryDays: 7,
         role: 'Athlete',
       });
 
       expect(result).toBe(true);
-      expect(sgMail.default.send).toHaveBeenCalledWith(
+      expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'user@example.com',
           subject: "You've been invited to join Test Org on AthleteMetrics",
-          html: expect.stringContaining('John Doe'),
-          html: expect.stringContaining('Jane Smith'),
-          html: expect.stringContaining('Test Org'),
-          html: expect.stringContaining('https://example.com/invite/token123'),
+          from: 'AthleteMetrics Test <team@athletemetrics.io>',
         })
       );
+
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('John Doe');
+      expect(sentEmail.html).toContain('Jane Smith');
+      expect(sentEmail.html).toContain('Test Org');
+      expect(sentEmail.html).toContain('https://example.com/accept-invitation?token=token123');
     });
 
     it('should return false when email sending fails', async () => {
-      const sgMail = await import('@sendgrid/mail');
-      vi.mocked(sgMail.default.send).mockRejectedValueOnce(new Error('SendGrid error'));
+      mockSend.mockResolvedValueOnce({ data: null, error: { message: 'Resend error' } });
 
       const result = await emailService.sendInvitation('user@example.com', {
         recipientName: 'John Doe',
         inviterName: 'Jane Smith',
         organizationName: 'Test Org',
-        invitationLink: 'https://example.com/invite/token123',
+        invitationLink: 'https://example.com/accept-invitation?token=token123',
         expiryDays: 7,
         role: 'Athlete',
       });
@@ -104,14 +102,14 @@ describe('EmailService', () => {
     });
 
     it('should return false when API key is not configured', async () => {
-      delete process.env.SENDGRID_API_KEY;
+      delete process.env.RESEND_API_KEY;
       emailService = new EmailService();
 
       const result = await emailService.sendInvitation('user@example.com', {
         recipientName: 'John Doe',
         inviterName: 'Jane Smith',
         organizationName: 'Test Org',
-        invitationLink: 'https://example.com/invite/token123',
+        invitationLink: 'https://example.com/accept-invitation?token=token123',
         expiryDays: 7,
         role: 'Athlete',
       });
@@ -121,14 +119,7 @@ describe('EmailService', () => {
   });
 
   describe('sendWelcome', () => {
-    beforeEach(() => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      emailService = new EmailService();
-    });
-
     it('should send welcome email with correct data', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       const result = await emailService.sendWelcome('user@example.com', {
         userName: 'John Doe',
         organizationName: 'Test Org',
@@ -136,111 +127,94 @@ describe('EmailService', () => {
       });
 
       expect(result).toBe(true);
-      expect(sgMail.default.send).toHaveBeenCalledWith(
+      expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'user@example.com',
           subject: 'Welcome to Test Org on AthleteMetrics!',
-          html: expect.stringContaining('John Doe'),
-          html: expect.stringContaining('Test Org'),
-          html: expect.stringContaining('Coach'),
         })
       );
+
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('John Doe');
+      expect(sentEmail.html).toContain('Test Org');
+      expect(sentEmail.html).toContain('Coach');
     });
   });
 
   describe('sendEmailVerification', () => {
-    beforeEach(() => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      emailService = new EmailService();
-    });
-
     it('should send verification email with correct data', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       const result = await emailService.sendEmailVerification('user@example.com', {
         userName: 'John Doe',
-        verificationLink: 'https://example.com/verify/token123',
+        verificationLink: 'https://example.com/verify-email?token=token123',
       });
 
       expect(result).toBe(true);
-      expect(sgMail.default.send).toHaveBeenCalledWith(
+      expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'user@example.com',
           subject: 'Verify your email address',
-          html: expect.stringContaining('John Doe'),
-          html: expect.stringContaining('https://example.com/verify/token123'),
         })
       );
+
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('John Doe');
+      expect(sentEmail.html).toContain('https://example.com/verify-email?token=token123');
     });
   });
 
   describe('sendPasswordReset', () => {
-    beforeEach(() => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      emailService = new EmailService();
-    });
-
     it('should send password reset email with correct data', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       const result = await emailService.sendPasswordReset('user@example.com', {
         userName: 'John Doe',
-        resetLink: 'https://example.com/reset/token123',
+        resetLink: 'https://example.com/reset-password?token=token123',
       });
 
       expect(result).toBe(true);
-      expect(sgMail.default.send).toHaveBeenCalledWith(
+      expect(mockSend).toHaveBeenCalledWith(
         expect.objectContaining({
           to: 'user@example.com',
           subject: 'Reset your AthleteMetrics password',
-          html: expect.stringContaining('John Doe'),
-          html: expect.stringContaining('https://example.com/reset/token123'),
         })
       );
+
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('John Doe');
+      expect(sentEmail.html).toContain('https://example.com/reset-password?token=token123');
     });
   });
 
   describe('HTML template generation', () => {
-    beforeEach(() => {
-      process.env.SENDGRID_API_KEY = 'test-api-key';
-      emailService = new EmailService();
-    });
-
     it('should include all required fields in invitation template', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       await emailService.sendInvitation('user@example.com', {
         recipientName: 'John Doe',
         inviterName: 'Jane Smith',
         organizationName: 'Test Org',
-        invitationLink: 'https://example.com/invite/token123',
+        invitationLink: 'https://example.com/accept-invitation?token=token123',
         expiryDays: 7,
         role: 'Organization Admin',
       });
 
-      const call = vi.mocked(sgMail.default.send).mock.calls[0][0];
-      expect(call.html).toContain('AthleteMetrics');
-      expect(call.html).toContain('Accept Invitation');
-      expect(call.html).toContain('7 days');
-      expect(call.html).toContain('Organization Admin');
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.html).toContain('AthleteMetrics');
+      expect(sentEmail.html).toContain('Accept Invitation');
+      expect(sentEmail.html).toContain('7 days');
+      expect(sentEmail.html).toContain('Organization Admin');
     });
 
     it('should generate proper plain text fallback', async () => {
-      const sgMail = await import('@sendgrid/mail');
-
       await emailService.sendInvitation('user@example.com', {
         recipientName: 'John Doe',
         inviterName: 'Jane Smith',
         organizationName: 'Test Org',
-        invitationLink: 'https://example.com/invite/token123',
+        invitationLink: 'https://example.com/accept-invitation?token=token123',
         expiryDays: 7,
         role: 'Athlete',
       });
 
-      const call = vi.mocked(sgMail.default.send).mock.calls[0][0];
-      expect(call.text).toBeDefined();
-      expect(call.text).not.toContain('<');
-      expect(call.text).not.toContain('>');
+      const sentEmail = mockSend.mock.calls[0][0];
+      expect(sentEmail.text).toBeDefined();
+      expect(sentEmail.text).not.toContain('<html>');
+      expect(sentEmail.text).not.toContain('<table>');
     });
   });
 });

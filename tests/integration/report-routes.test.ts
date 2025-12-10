@@ -552,11 +552,11 @@ describe('Report Snapshots', () => {
   });
 
   afterEach(async () => {
-    // Clean up snapshots
-    if (testSnapshot) {
+    // Clean up snapshots - check for valid id to avoid UNDEFINED_VALUE error
+    if (testSnapshot?.id) {
       await db.delete(reportSnapshots).where(eq(reportSnapshots.id, testSnapshot.id));
-      testSnapshot = null;
     }
+    testSnapshot = null;
   });
 
   describe('POST /api/reports/:id/snapshots', () => {

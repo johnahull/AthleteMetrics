@@ -406,6 +406,7 @@ export default function Teams() {
         isOpen={!!editingTeam}
         onClose={() => setEditingTeam(null)}
         team={editingTeam}
+        organizationId={effectiveOrganizationId || undefined}
       />
 
       {archivingTeam && (

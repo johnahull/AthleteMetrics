@@ -6,12 +6,18 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AnalyticsService } from "../services/analytics-service";
+import { AnalyticsService as AdvancedAnalyticsService } from "../analytics-simple";
+import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import {
+  getPresetDateRange,
+  type TimeframePreset
+} from "@shared/dashboard-timeframe";
 
 // Rate limiting for analytics endpoints
 // Analytics queries can be expensive, so we use stricter limits
@@ -40,6 +46,7 @@ const analyticsLimiter = rateLimit({
 
 export function registerAnalyticsRoutes(app: Express) {
   const analyticsService = new AnalyticsService();
+  const advancedAnalyticsService = new AdvancedAnalyticsService();
 
   /**
    * Get athlete statistics (best performances, measurement count)
@@ -150,11 +157,147 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - organization mismatch" });
       }
 
-      const dashboardStats = await analyticsService.getDashboardStats(organizationId);
+      // Parse optional filter parameters
+      const teamId = req.query.teamId as string | undefined;
+      const athleteId = req.query.athleteId as string | undefined;
+
+      // Validate UUID format for filters
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+      if (athleteId && !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid athleteId format" });
+      }
+
+      // athleteId requires teamId
+      if (athleteId && !teamId) {
+        return res.status(400).json({ message: "athleteId requires teamId to be specified" });
+      }
+
+      // SECURITY: Verify athlete belongs to organization (IDOR protection)
+      if (athleteId) {
+        // athleteId filtering requires organizationId
+        if (!organizationId) {
+          return res.status(400).json({ message: "organizationId is required when filtering by athleteId" });
+        }
+
+        const athleteBelongsToOrg = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              eq(userTeams.userId, athleteId),
+              eq(teams.organizationId, organizationId)
+            )
+          )
+          .limit(1);
+
+        if (athleteBelongsToOrg.length === 0) {
+          return res.status(403).json({ message: "Access denied - athlete does not belong to organization" });
+        }
+      }
+
+      // Parse timeframe parameters (optional)
+      const timeframe = req.query.timeframe as string | undefined;
+      const dateFromStr = req.query.dateFrom as string | undefined;
+      const dateToStr = req.query.dateTo as string | undefined;
+
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+
+      if (timeframe || dateFromStr || dateToStr) {
+        // If any timeframe params provided, calculate date range
+        if (timeframe && timeframe !== 'custom') {
+          // Preset timeframe
+          const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd', 'all'];
+          if (!validTimeframes.includes(timeframe as TimeframePreset)) {
+            return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, custom` });
+          }
+          const dateRange = getPresetDateRange(timeframe as TimeframePreset);
+          startDate = dateRange.start;
+          endDate = dateRange.end;
+        } else if (timeframe === 'custom') {
+          // Custom date range
+          if (!dateFromStr || !dateToStr) {
+            return res.status(400).json({ message: "dateFrom and dateTo are required when timeframe=custom" });
+          }
+          startDate = new Date(dateFromStr);
+          endDate = new Date(dateToStr);
+
+          if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+            return res.status(400).json({ message: "Invalid date format. Use ISO 8601 date format (YYYY-MM-DD)" });
+          }
+
+          // Validate date range constraints (defense in depth - frontend also validates)
+          const maxRangeDays = 730; // 2 years
+          const rangeDays = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+
+          if (rangeDays > maxRangeDays) {
+            return res.status(400).json({
+              message: `Date range exceeds maximum of ${maxRangeDays} days (2 years)`
+            });
+          }
+
+          if (startDate > endDate) {
+            return res.status(400).json({ message: "dateFrom must be before dateTo" });
+          }
+
+          const today = new Date();
+          if (endDate > today) {
+            return res.status(400).json({ message: "dateTo cannot be in the future" });
+          }
+        }
+      }
+
+      const dashboardStats = await analyticsService.getDashboardStats(organizationId, {
+        teamId,
+        athleteId,
+        startDate,
+        endDate,
+      });
       res.json(dashboardStats);
     } catch (error) {
       console.error("Get dashboard stats error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch dashboard statistics";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * POST analytics dashboard data with complex filters
+   * Used by CoachAnalytics page for detailed measurement analysis
+   */
+  app.post("/api/analytics/dashboard", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate request body
+      const validation = validateAnalyticsRequest(req.body);
+      if (!validation.success || !validation.data) {
+        return res.status(400).json({
+          message: "Invalid analytics request",
+          errors: validation.errors
+        });
+      }
+
+      const request = validation.data;
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && request.filters.organizationId !== user.primaryOrganizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Call the advanced analytics service
+      const analyticsData = await advancedAnalyticsService.getAnalyticsData(request);
+      res.json(analyticsData);
+    } catch (error) {
+      console.error("POST analytics dashboard error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch analytics data";
       res.status(500).json({ message });
     }
   });
@@ -249,11 +392,328 @@ export function registerAnalyticsRoutes(app: Express) {
         ? metricsParam.split(',').map(m => m.trim())
         : ['FLY10_TIME', 'VERTICAL_JUMP'];
 
-      const trendsData = await analyticsService.getPerformanceTrends(organizationId, dateFrom, metrics);
+      // Parse optional team/athlete filters
+      const teamId = req.query.teamId as string | undefined;
+      const athleteId = req.query.athleteId as string | undefined;
+
+      // Validate UUID format
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+      if (athleteId && !uuidRegex.test(athleteId)) {
+        return res.status(400).json({ message: "Invalid athleteId format" });
+      }
+
+      // athleteId requires teamId
+      if (athleteId && !teamId) {
+        return res.status(400).json({ message: "athleteId requires teamId to be specified" });
+      }
+
+      // SECURITY: Verify athlete belongs to organization (IDOR protection)
+      if (athleteId) {
+        // athleteId filtering requires organizationId
+        if (!organizationId) {
+          return res.status(400).json({ message: "organizationId is required when filtering by athleteId" });
+        }
+
+        const athleteBelongsToOrg = await db
+          .select({ userId: userTeams.userId })
+          .from(userTeams)
+          .innerJoin(teams, eq(userTeams.teamId, teams.id))
+          .where(
+            and(
+              eq(userTeams.userId, athleteId),
+              eq(teams.organizationId, organizationId)
+            )
+          )
+          .limit(1);
+
+        if (athleteBelongsToOrg.length === 0) {
+          return res.status(403).json({ message: "Access denied - athlete does not belong to organization" });
+        }
+      }
+
+      const trendsData = await analyticsService.getPerformanceTrends(
+        organizationId,
+        dateFrom,
+        metrics,
+        { teamId, athleteId }
+      );
       res.json(trendsData);
     } catch (error) {
       console.error("Get performance trends error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch performance trends";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get leaderboard rankings for a specific metric
+   * Returns top performers with percentile rankings
+   */
+  app.get("/api/analytics/leaderboard", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot access leaderboard (coach/admin feature)
+      if (user.role === 'athlete') {
+        return res.status(403).json({ message: "Access denied - athletes cannot view leaderboards" });
+      }
+
+      // Get organizationId from query or user's primary organization
+      let organizationId = req.query.organizationId as string | undefined;
+
+      if (!organizationId && !isSiteAdmin(user)) {
+        organizationId = user.primaryOrganizationId;
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "organizationId is required" });
+      }
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Validate required metric parameter
+      const metric = req.query.metric as string | undefined;
+      if (!metric) {
+        return res.status(400).json({ message: "metric parameter is required" });
+      }
+
+      // Validate optional parameters
+      const teamId = req.query.teamId as string | undefined;
+      const limitStr = req.query.limit as string | undefined;
+      const limit = limitStr ? parseInt(limitStr, 10) : 10;
+
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "limit must be a number between 1 and 100" });
+      }
+
+      // Validate UUID format for filters
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+
+      // Parse timeframe parameters
+      const timeframe = req.query.timeframe as string | undefined;
+      const dateFromStr = req.query.dateFrom as string | undefined;
+      const dateToStr = req.query.dateTo as string | undefined;
+
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+
+      if (timeframe && timeframe !== 'custom' && timeframe !== 'all') {
+        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd'];
+        if (!validTimeframes.includes(timeframe as TimeframePreset)) {
+          return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, all, custom` });
+        }
+        const dateRange = getPresetDateRange(timeframe as TimeframePreset);
+        startDate = dateRange.start;
+        endDate = dateRange.end;
+      } else if (timeframe === 'custom') {
+        if (!dateFromStr || !dateToStr) {
+          return res.status(400).json({ message: "dateFrom and dateTo are required when timeframe=custom" });
+        }
+        startDate = new Date(dateFromStr);
+        endDate = new Date(dateToStr);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          return res.status(400).json({ message: "Invalid date format. Use ISO 8601 date format (YYYY-MM-DD)" });
+        }
+      }
+      // If timeframe is 'all' or undefined, startDate and endDate remain undefined (no filter)
+
+      const leaderboardData = await analyticsService.getLeaderboard(organizationId, metric, {
+        teamId,
+        startDate,
+        endDate,
+        limit,
+      });
+
+      res.json(leaderboardData);
+    } catch (error) {
+      console.error("Get leaderboard error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch leaderboard";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get most improved athletes for a specific metric
+   * Returns athletes with highest improvement percentage over a time period
+   */
+  app.get("/api/analytics/most-improved", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot access most-improved (coach/admin feature)
+      if (user.role === 'athlete') {
+        return res.status(403).json({ message: "Access denied - athletes cannot view improvement rankings" });
+      }
+
+      // Get organizationId from query or user's primary organization
+      let organizationId = req.query.organizationId as string | undefined;
+
+      if (!organizationId && !isSiteAdmin(user)) {
+        organizationId = user.primaryOrganizationId;
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "organizationId is required" });
+      }
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Validate required metric parameter
+      const metric = req.query.metric as string | undefined;
+      if (!metric) {
+        return res.status(400).json({ message: "metric parameter is required" });
+      }
+
+      // Validate optional parameters
+      const teamId = req.query.teamId as string | undefined;
+      const limitStr = req.query.limit as string | undefined;
+      const limit = limitStr ? parseInt(limitStr, 10) : 5;
+
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "limit must be a number between 1 and 100" });
+      }
+
+      // Validate UUID format for filters
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+
+      // Parse timeframe parameters
+      const timeframe = req.query.timeframe as string | undefined;
+      const dateFromStr = req.query.dateFrom as string | undefined;
+      const dateToStr = req.query.dateTo as string | undefined;
+
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+
+      if (timeframe && timeframe !== 'custom' && timeframe !== 'all') {
+        const validTimeframes: TimeframePreset[] = ['7d', '30d', '90d', '180d', '1y', 'ytd'];
+        if (!validTimeframes.includes(timeframe as TimeframePreset)) {
+          return res.status(400).json({ message: `Invalid timeframe. Must be one of: ${validTimeframes.join(', ')}, all, custom` });
+        }
+        const dateRange = getPresetDateRange(timeframe as TimeframePreset);
+        startDate = dateRange.start;
+        endDate = dateRange.end;
+      } else if (timeframe === 'custom') {
+        if (!dateFromStr || !dateToStr) {
+          return res.status(400).json({ message: "dateFrom and dateTo are required when timeframe=custom" });
+        }
+        startDate = new Date(dateFromStr);
+        endDate = new Date(dateToStr);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          return res.status(400).json({ message: "Invalid date format. Use ISO 8601 date format (YYYY-MM-DD)" });
+        }
+      }
+      // If timeframe is 'all' or undefined, startDate and endDate remain undefined (no filter)
+
+      const mostImprovedData = await analyticsService.getMostImproved(organizationId, metric, {
+        teamId,
+        startDate,
+        endDate,
+        limit,
+      });
+
+      res.json(mostImprovedData);
+    } catch (error) {
+      console.error("Get most-improved error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch improvement rankings";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get at-risk athletes (declining performance or inactive)
+   * Returns athletes with performance decline > 5% or no measurements in N days
+   */
+  app.get("/api/analytics/at-risk", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Athletes cannot access at-risk data (coach/admin feature)
+      if (user.role === 'athlete') {
+        return res.status(403).json({ message: "Access denied - athletes cannot view at-risk data" });
+      }
+
+      // Get organizationId from query or user's primary organization
+      let organizationId = req.query.organizationId as string | undefined;
+
+      if (!organizationId && !isSiteAdmin(user)) {
+        organizationId = user.primaryOrganizationId;
+      }
+
+      if (!organizationId) {
+        return res.status(400).json({ message: "organizationId is required" });
+      }
+
+      // Permission check: non-admin users can only access their organization
+      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      }
+
+      // Validate optional parameters
+      const teamId = req.query.teamId as string | undefined;
+      const inactivityThresholdStr = req.query.inactivityThreshold as string | undefined;
+      const inactivityThreshold = inactivityThresholdStr ? parseInt(inactivityThresholdStr, 10) : 14;
+
+      // Validate pagination parameters
+      const limitStr = req.query.limit as string | undefined;
+      const offsetStr = req.query.offset as string | undefined;
+      const limit = limitStr ? parseInt(limitStr, 10) : 20;
+      const offset = offsetStr ? parseInt(offsetStr, 10) : 0;
+
+      if (isNaN(inactivityThreshold) || inactivityThreshold < 1 || inactivityThreshold > 365) {
+        return res.status(400).json({ message: "inactivityThreshold must be a number between 1 and 365" });
+      }
+
+      if (isNaN(limit) || limit < 1 || limit > 100) {
+        return res.status(400).json({ message: "limit must be a number between 1 and 100" });
+      }
+
+      if (isNaN(offset) || offset < 0) {
+        return res.status(400).json({ message: "offset must be a non-negative number" });
+      }
+
+      // Validate UUID format for teamId filter
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (teamId && !uuidRegex.test(teamId)) {
+        return res.status(400).json({ message: "Invalid teamId format" });
+      }
+
+      const atRiskData = await analyticsService.getAtRiskAthletes(organizationId, {
+        teamId,
+        inactivityThreshold,
+        limit,
+        offset,
+      });
+
+      res.json(atRiskData);
+    } catch (error) {
+      console.error("Get at-risk athletes error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch at-risk athletes";
       res.status(500).json({ message });
     }
   });

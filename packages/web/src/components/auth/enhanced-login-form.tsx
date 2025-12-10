@@ -6,23 +6,24 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Shield, Mail, Lock, AlertCircle, CheckCircle, Clock } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import { OAuthButtons } from "./oauth-buttons";
 
 interface LoginFormData {
-  email: string;
+  username: string;  // Can be username or email - backend accepts both
   password: string;
   mfaToken?: string;
   rememberMe: boolean;
 }
 
 interface LoginError {
-  type: 'general' | 'email' | 'password' | 'mfa' | 'locked';
+  type: 'general' | 'username' | 'password' | 'mfa' | 'locked';
   message: string;
   lockUntil?: string;
 }
 
 export function EnhancedLoginForm() {
   const [formData, setFormData] = useState<LoginFormData>({
-    email: '',
+    username: '',
     password: '',
     rememberMe: false
   });
@@ -32,8 +33,43 @@ export function EnhancedLoginForm() {
   const [isLoading, setIsLoading] = useState(false);
   const [emailSuggestions, setEmailSuggestions] = useState<string[]>([]);
   const [lockTimeRemaining, setLockTimeRemaining] = useState<number>(0);
-  
+  const [oauthMessage, setOauthMessage] = useState<{ type: 'error' | 'success', text: string } | null>(null);
+
   const { login } = useAuth();
+
+  // Handle OAuth redirect messages from URL params
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const errorParam = params.get('error');
+    const messageParam = params.get('message');
+
+    if (errorParam) {
+      const errorMessages: Record<string, string> = {
+        'oauth_failed': 'OAuth authentication failed. Please try again.',
+        'user_not_found': 'User account not found. Please contact support.',
+        'linking_failed': 'Account linking failed. Please try again.',
+      };
+      setOauthMessage({
+        type: 'error',
+        text: errorMessages[errorParam] || 'Authentication failed. Please try again.'
+      });
+    } else if (messageParam) {
+      const successMessages: Record<string, string> = {
+        'account_linked': 'Your account has been successfully linked!',
+        'linking_email_sent': 'Please check your email to confirm account linking.',
+      };
+      setOauthMessage({
+        type: 'success',
+        text: successMessages[messageParam] || 'Success!'
+      });
+    }
+
+    // Clean up URL params after displaying message
+    if (errorParam || messageParam) {
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, '', newUrl);
+    }
+  }, []);
 
   // Countdown timer for account lockout
   useEffect(() => {
@@ -56,31 +92,35 @@ export function EnhancedLoginForm() {
     };
   }, [lockTimeRemaining]);
 
-  const validateEmail = (email: string): string => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email) return 'Email is required';
-    if (!emailRegex.test(email)) return 'Please enter a valid email address';
-    
-    // Generate domain suggestions for common typos
-    const domain = email.split('@')[1];
-    if (domain) {
-      const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
-      const suggestions = commonDomains
-        .filter(d => {
-          // Check for similar domains (edit distance of 1-2)
-          const distance = getLevenshteinDistance(domain.toLowerCase(), d);
-          return distance > 0 && distance <= 2;
-        })
-        .slice(0, 2); // Limit to 2 suggestions
+  const validateUsername = (username: string): string => {
+    if (!username) return 'Username or email is required';
+    if (username.length < 3) return 'Please enter at least 3 characters';
 
-      if (suggestions.length > 0) {
-        const emailPrefix = email.split('@')[0];
-        setEmailSuggestions(suggestions.map(d => `${emailPrefix}@${d}`));
-      } else {
-        setEmailSuggestions([]);
+    // If it looks like an email, check for typos in common domains
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (emailRegex.test(username)) {
+      const domain = username.split('@')[1];
+      if (domain) {
+        const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'icloud.com'];
+        const suggestions = commonDomains
+          .filter(d => {
+            // Check for similar domains (edit distance of 1-2)
+            const distance = getLevenshteinDistance(domain.toLowerCase(), d);
+            return distance > 0 && distance <= 2;
+          })
+          .slice(0, 2); // Limit to 2 suggestions
+
+        if (suggestions.length > 0) {
+          const emailPrefix = username.split('@')[0];
+          setEmailSuggestions(suggestions.map(d => `${emailPrefix}@${d}`));
+        } else {
+          setEmailSuggestions([]);
+        }
       }
+    } else {
+      setEmailSuggestions([]);
     }
-    
+
     return '';
   };
 
@@ -120,10 +160,10 @@ export function EnhancedLoginForm() {
     setIsLoading(true);
     setError(null);
 
-    // Validate email
-    const emailError = validateEmail(formData.email);
-    if (emailError) {
-      setError({ type: 'email', message: emailError });
+    // Validate username/email
+    const usernameError = validateUsername(formData.username);
+    if (usernameError) {
+      setError({ type: 'username', message: usernameError });
       setIsLoading(false);
       return;
     }
@@ -155,9 +195,9 @@ export function EnhancedLoginForm() {
       if (result.requiresMFA && step === 'credentials') {
         setStep('mfa');
         setError(null);
-      } else if (result.success) {
-        // Since we already authenticated successfully, just redirect
-        // The session is handled server-side
+      } else if (result.user) {
+        // Login successful - backend returns user object on success
+        // Redirect based on backend-provided URL or default to dashboard
         window.location.href = result.redirectUrl || '/dashboard';
       } else {
         // Handle various error types
@@ -200,7 +240,7 @@ export function EnhancedLoginForm() {
   };
 
   const handleEmailSuggestionClick = (suggestion: string) => {
-    setFormData(prev => ({ ...prev, email: suggestion }));
+    setFormData(prev => ({ ...prev, username: suggestion }));
     setEmailSuggestions([]);
   };
 
@@ -219,30 +259,45 @@ export function EnhancedLoginForm() {
       </CardHeader>
       
       <CardContent>
+        {/* OAuth redirect messages */}
+        {oauthMessage && (
+          <Alert variant={oauthMessage.type === 'error' ? 'destructive' : 'default'} className="mb-4">
+            <div className="flex items-start gap-2">
+              {oauthMessage.type === 'error' ? (
+                <AlertCircle className="h-4 w-4 mt-0.5" />
+              ) : (
+                <CheckCircle className="h-4 w-4 mt-0.5" />
+              )}
+              <AlertDescription>{oauthMessage.text}</AlertDescription>
+            </div>
+          </Alert>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           {step === 'credentials' && (
             <>
               <div className="space-y-2">
-                <Label htmlFor="email">Email address</Label>
+                <Label htmlFor="username">Username or Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
                   <Input
-                    id="email"
-                    type="email"
-                    value={formData.email}
+                    id="username"
+                    type="text"
+                    value={formData.username}
                     onChange={(e) => {
-                      setFormData(prev => ({ ...prev, email: e.target.value }));
-                      validateEmail(e.target.value);
-                      if (error?.type === 'email') setError(null);
+                      setFormData(prev => ({ ...prev, username: e.target.value }));
+                      validateUsername(e.target.value);
+                      if (error?.type === 'username') setError(null);
                     }}
-                    className={`pl-10 ${error?.type === 'email' ? 'border-red-500' : ''}`}
-                    placeholder="Enter your email"
+                    className={`pl-10 ${error?.type === 'username' ? 'border-red-500' : ''}`}
+                    placeholder="Enter your username or email"
                     disabled={isLoading}
-                    autoComplete="email"
+                    autoComplete="username"
                     required
+                    data-testid="input-username"
                   />
                 </div>
-                {error?.type === 'email' && (
+                {error?.type === 'username' && (
                   <p className="text-sm text-red-600 flex items-center gap-1">
                     <AlertCircle className="h-4 w-4" />
                     {error.message}
@@ -284,6 +339,7 @@ export function EnhancedLoginForm() {
                     disabled={isLoading}
                     autoComplete="current-password"
                     required
+                    data-testid="input-password"
                   />
                   <button
                     type="button"
@@ -375,7 +431,7 @@ export function EnhancedLoginForm() {
             </>
           )}
 
-          {error && !['email', 'password', 'mfa'].includes(error.type) && (
+          {error && !['username', 'password', 'mfa'].includes(error.type) && (
             <Alert variant={error.type === 'locked' ? 'destructive' : 'destructive'}>
               <div className="flex items-start gap-2">
                 {error.type === 'locked' ? (
@@ -397,10 +453,11 @@ export function EnhancedLoginForm() {
             </Alert>
           )}
 
-          <Button 
-            type="submit" 
-            className="w-full" 
+          <Button
+            type="submit"
+            className="w-full"
             disabled={isLoading || (error?.type === 'locked' && lockTimeRemaining > 0)}
+            data-testid="button-login"
           >
             {isLoading ? (
               <>
@@ -413,14 +470,19 @@ export function EnhancedLoginForm() {
               'Sign In'
             )}
           </Button>
-          
+
           {step === 'credentials' && (
-            <div className="text-center text-sm text-gray-600">
-              Don't have an account?{' '}
-              <a href="/register" className="text-blue-600 hover:underline">
-                Sign up
-              </a>
-            </div>
+            <>
+              <div className="text-center text-sm text-gray-600">
+                Don't have an account?{' '}
+                <a href="/register" className="text-blue-600 hover:underline">
+                  Sign up
+                </a>
+              </div>
+
+              {/* OAuth section (includes divider and buttons if enabled) */}
+              <OAuthButtons isLoading={isLoading} />
+            </>
           )}
         </form>
       </CardContent>

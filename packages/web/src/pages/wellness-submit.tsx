@@ -107,7 +107,7 @@ export default function WellnessSubmit() {
   } = useQuery<WellnessTemplate>({
     queryKey: ['wellness-template', request?.templateId],
     queryFn: async () => {
-      const res = await fetch(`${API_BASE}/api/wellness/templates/${request?.templateId}`);
+      const res = await fetch(`${API_BASE}/api/wellness/requests/by-token/${token}/template`);
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.message || 'Failed to load wellness template');

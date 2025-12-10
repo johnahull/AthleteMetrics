@@ -800,6 +800,7 @@ export class BenchmarkService extends BaseService {
     athleteValue: number | null;
     isMet: boolean;
     progress: number;
+    source: string;  // "Global" for site benchmarks, org name for custom benchmarks
   }>> {
     try {
       // Get athlete details
@@ -836,10 +837,19 @@ export class BenchmarkService extends BaseService {
         : [];
       const customBenchmarks = await this.storage.getCustomBenchmarksForOrg(organizationId);
 
-      // Combine all benchmarks
+      // Get organization name for custom benchmarks
+      const organization = await this.storage.getOrganization(organizationId);
+      const orgName = organization?.name || 'Organization';
+
+      // Combine all benchmarks with source info
+      const siteBenchmarksWithSource = siteBenchmarks.map(b => ({ ...b, source: 'Global' }));
+      const customBenchmarksWithSource = customBenchmarks
+        .filter(b => customBenchmarkIds.includes(b.id))
+        .map(b => ({ ...b, source: orgName }));
+
       const allBenchmarks = [
-        ...siteBenchmarks,
-        ...customBenchmarks.filter(b => customBenchmarkIds.includes(b.id))
+        ...siteBenchmarksWithSource,
+        ...customBenchmarksWithSource
       ];
 
       // Filter benchmarks by athlete attributes
@@ -917,6 +927,7 @@ export class BenchmarkService extends BaseService {
           athleteValue,
           isMet,
           progress,
+          source: benchmark.source,
         };
       });
 
