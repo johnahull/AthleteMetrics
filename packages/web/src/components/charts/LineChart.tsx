@@ -232,7 +232,7 @@ export function LineChart({
     };
   }, [data, highlightAthlete, selectedAthleteIdsSet, showGroupAverage]);
 
-  // Find personal bests
+  // Find personal bests - calculate actual best value based on metric type
   const personalBests = useMemo(() => {
     if (!lineData || !data) return [];
 
@@ -247,29 +247,40 @@ export function LineChart({
 
     data.forEach((trend, datasetIndex) => {
       if (highlightAthlete && trend.athleteId !== highlightAthlete) return;
+      if (trend.data.length === 0) return;
 
-      const bestPoint = trend.data.find(point => point.isPersonalBest);
-      if (bestPoint) {
-        const pointIndex = lineData.sortedDates.findIndex(dateStr => {
-          const bestPointDate = bestPoint.date instanceof Date ? bestPoint.date : new Date(bestPoint.date);
-          return bestPointDate.toISOString().split('T')[0] === dateStr;
-        });
+      // Get metric type to determine if lower or higher is better
+      const metric = trend.metric || lineData.metric;
+      const lowerIsBetter = getMetricConfig(metric)?.lowerIsBetter ?? true;
 
-        if (pointIndex >= 0) {
-          bests.push({
-            athleteId: trend.athleteId,
-            athleteName: trend.athleteName,
-            value: bestPoint.value,
-            date: bestPoint.date,
-            datasetIndex,
-            pointIndex
-          });
+      // Find the actual best point using reduce (not .find())
+      const bestPoint = trend.data.reduce((best, current) => {
+        if (lowerIsBetter) {
+          return current.value < best.value ? current : best;
+        } else {
+          return current.value > best.value ? current : best;
         }
+      });
+
+      const pointIndex = lineData.sortedDates.findIndex(dateStr => {
+        const bestPointDate = bestPoint.date instanceof Date ? bestPoint.date : new Date(bestPoint.date);
+        return bestPointDate.toISOString().split('T')[0] === dateStr;
+      });
+
+      if (pointIndex >= 0) {
+        bests.push({
+          athleteId: trend.athleteId,
+          athleteName: trend.athleteName,
+          value: bestPoint.value,
+          date: bestPoint.date instanceof Date ? bestPoint.date : new Date(bestPoint.date),
+          datasetIndex,
+          pointIndex
+        });
       }
     });
 
     return bests;
-  }, [lineData, data, highlightAthlete]);
+  }, [lineData, data, highlightAthlete, getMetricConfig]);
 
   // Chart options
   const options: ChartOptions<'line'> = {
