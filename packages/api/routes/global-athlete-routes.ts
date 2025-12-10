@@ -44,6 +44,22 @@ const emailSchema = z.string()
   .toLowerCase()
   .trim();
 
+// Privacy settings validation schema
+const privacySettingsSchema = z.object({
+  allowCrossOrgLinking: z.boolean({
+    required_error: "allowCrossOrgLinking is required",
+    invalid_type_error: "allowCrossOrgLinking must be a boolean"
+  })
+});
+
+// Sharing settings validation schema
+const sharingSettingsSchema = z.object({
+  shareMeasurements: z.boolean({
+    required_error: "shareMeasurements is required",
+    invalid_type_error: "shareMeasurements must be a boolean"
+  })
+});
+
 // Rate limiting for global athlete endpoints
 const globalAthleteLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -174,11 +190,14 @@ export function registerGlobalAthleteRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const { allowCrossOrgLinking } = req.body;
-
-      if (typeof allowCrossOrgLinking !== 'boolean') {
-        return res.status(400).json({ message: "allowCrossOrgLinking must be a boolean" });
+      // Validate request body with Zod schema
+      const validationResult = privacySettingsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errorMessage = validationResult.error.errors[0]?.message || "Invalid input";
+        return res.status(400).json({ message: errorMessage });
       }
+
+      const { allowCrossOrgLinking } = validationResult.data;
 
       // Get user's global athlete link
       const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
@@ -214,11 +233,14 @@ export function registerGlobalAthleteRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const { shareMeasurements } = req.body;
-
-      if (typeof shareMeasurements !== 'boolean') {
-        return res.status(400).json({ message: "shareMeasurements must be a boolean" });
+      // Validate request body with Zod schema
+      const validationResult = sharingSettingsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errorMessage = validationResult.error.errors[0]?.message || "Invalid input";
+        return res.status(400).json({ message: errorMessage });
       }
+
+      const { shareMeasurements } = validationResult.data;
 
       // Get user's global athlete link
       const link = await globalAthleteService.getUserGlobalAthleteLink(currentUser.id);
@@ -678,11 +700,15 @@ export function registerGlobalAthleteRoutes(app: Express) {
       }
 
       const { id } = req.params;
-      const { allowCrossOrgLinking } = req.body;
 
-      if (typeof allowCrossOrgLinking !== "boolean") {
-        return res.status(400).json({ message: "allowCrossOrgLinking must be a boolean" });
+      // Validate request body with Zod schema
+      const validationResult = privacySettingsSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errorMessage = validationResult.error.errors[0]?.message || "Invalid input";
+        return res.status(400).json({ message: errorMessage });
       }
+
+      const { allowCrossOrgLinking } = validationResult.data;
 
       await globalAthleteService.adminUpdatePrivacySettings(id, currentUser.id, {
         allowCrossOrgLinking,

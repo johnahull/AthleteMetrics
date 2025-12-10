@@ -183,6 +183,13 @@ export function registerMembershipRequestRoutes(app: Express) {
         return res.status(404).json({ message: "Membership request not found" });
       }
 
+      // Check if request has expired
+      if (request.expiresAt && new Date() > new Date(request.expiresAt)) {
+        return res.status(400).json({
+          message: "This membership request has expired. The user will need to submit a new request."
+        });
+      }
+
       // Check permissions - must be org admin or coach in the org
       const userOrgs = await storage.getUserOrganizations(userId);
       const userOrgRole = userOrgs.find(org => org.organizationId === request.organizationId);

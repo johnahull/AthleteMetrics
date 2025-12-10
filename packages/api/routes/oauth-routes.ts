@@ -105,7 +105,12 @@ export function registerOAuthRoutes(app: Express) {
           req.session.regenerate((err) => {
             if (err) {
               console.error('Session regeneration error:', err);
-              return res.redirect('/login?error=oauth_failed');
+              // SECURITY: Destroy the old session before redirecting to prevent session fixation
+              req.session.destroy(() => {
+                res.clearCookie('connect.sid');
+                return res.redirect('/login?error=oauth_failed');
+              });
+              return;
             }
 
             // Set session
@@ -218,7 +223,12 @@ export function registerOAuthRoutes(app: Express) {
           req.session.regenerate((err) => {
             if (err) {
               console.error('Session regeneration error:', err);
-              return res.redirect('/login?error=oauth_failed');
+              // SECURITY: Destroy the old session before redirecting to prevent session fixation
+              req.session.destroy(() => {
+                res.clearCookie('connect.sid');
+                return res.redirect('/login?error=oauth_failed');
+              });
+              return;
             }
 
             // Set session

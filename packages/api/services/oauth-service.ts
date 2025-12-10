@@ -43,7 +43,8 @@ export class OAuthService extends BaseService {
     }
 
     // Validate provider ID format (prevent injection attacks)
-    const providerIdRegex = /^[a-zA-Z0-9_\-]{1,255}$/;
+    // Google IDs may contain dots (e.g., numeric IDs from Google accounts)
+    const providerIdRegex = /^[a-zA-Z0-9_\-\.]{1,255}$/;
     if (!providerIdRegex.test(profile.id)) {
       console.error('[OAuth Security] Invalid provider ID format from Google:', { providerId: profile.id });
       return { success: false, error: 'Authentication failed. Please try again or contact support.' };
@@ -208,7 +209,9 @@ export class OAuthService extends BaseService {
     profile: OAuthProfile
   ): Promise<string> {
     const token = crypto.randomBytes(32).toString('hex');
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minute expiry (reduced from 1 hour)
+    // 1 hour expiry - balances security with UX (email delivery can be slow)
+    // Security: Single-use tokens + 3 failed attempt lockout provides adequate protection
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
 
     await this.storage.createAccountLinkingToken({
       userId,
