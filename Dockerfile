@@ -44,10 +44,11 @@ COPY packages/api/package.json ./packages/api/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install all production dependencies
+# Install production dependencies only (skip dev and optional)
 # Note: Migration scripts at root level need drizzle-orm and other deps
 # Web workspace dependencies will be installed but frontend is pre-built
-RUN npm ci --omit=dev
+# --omit=optional skips chartjs-node-canvas which requires native canvas compilation
+RUN npm ci --omit=dev --omit=optional
 
 # Copy built application from builder stage
 # Note: @shared code is now bundled into dist/index.js via esbuild alias
