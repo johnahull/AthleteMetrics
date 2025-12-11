@@ -4,7 +4,8 @@ import { Line } from 'react-chartjs-2';
 import type {
   TrendData,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -23,6 +24,8 @@ interface LineChartProps {
   selectedAthleteIds?: string[];
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
+  benchmarks?: BenchmarkLine[];
+  showBenchmarks?: boolean;
 }
 
 export function LineChart({
@@ -32,7 +35,9 @@ export function LineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 10
+  maxAthletes = 10,
+  benchmarks,
+  showBenchmarks = true
 }: LineChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -282,12 +287,52 @@ export function LineChart({
     return bests;
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
+  // Generate benchmark annotations for Chart.js annotation plugin
+  const benchmarkAnnotations = useMemo(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
+      return [];
+    }
+
+    return benchmarks.map((benchmark) => {
+      // Determine line style
+      let borderDash: number[] | undefined;
+      if (benchmark.lineStyle === 'dashed') {
+        borderDash = [5, 5];
+      } else if (benchmark.lineStyle === 'dotted') {
+        borderDash = [2, 2];
+      }
+
+      return {
+        type: 'line' as const,
+        yMin: benchmark.value,
+        yMax: benchmark.value,
+        borderColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+        borderWidth: 2,
+        borderDash,
+        label: {
+          display: true,
+          content: benchmark.name,
+          position: 'end' as const,
+          backgroundColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+          color: 'white',
+          padding: 4,
+          font: {
+            size: 10
+          }
+        }
+      };
+    });
+  }, [benchmarks, showBenchmarks]);
+
   // Chart options
   const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       ...config.plugins,
+      annotation: {
+        annotations: benchmarkAnnotations
+      },
       title: {
         display: true,
         text: config.title,

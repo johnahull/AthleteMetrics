@@ -52,6 +52,13 @@ export interface AnalyticsFilters {
    * @example true - Include athletes without birth dates in filtered results
    */
   includeUnknownBirthYear?: boolean;
+
+  /** Filter athletes by benchmark achievement status */
+  benchmarkFilter?: {
+    benchmarkId: string;
+    benchmarkName: string;  // For display
+    status: 'met' | 'unmet' | 'no_data';
+  };
 }
 
 // Metrics selection with priority
@@ -450,3 +457,19 @@ export const CHART_COLOR_SCHEMES = {
   secondary: ['#60A5FA', '#F87171', '#34D399', '#FBBF24', '#A78BFA', '#F472B6'],
   monochromatic: ['#1E40AF', '#3B82F6', '#60A5FA', '#93C5FD', '#DBEAFE', '#EFF6FF']
 } as const;
+
+// Benchmark overlay types for charts
+export interface BenchmarkLine {
+  id: string;
+  name: string;
+  value: number;
+  comparisonOperator: 'lte' | 'gte' | 'eq';
+  color?: string;
+  lineStyle?: 'solid' | 'dashed' | 'dotted';
+  filters?: {
+    gender?: string;
+    ageMin?: number;
+    ageMax?: number;
+    position?: string;
+  };
+}

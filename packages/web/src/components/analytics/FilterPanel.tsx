@@ -17,6 +17,7 @@ import {
 
 import { MetricsSelector } from './MetricsSelector';
 import { TimeframeSelector } from './TimeframeSelector';
+import { BenchmarkFilter } from './BenchmarkFilter';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
 
 import type {
@@ -101,7 +102,15 @@ export function FilterPanel({
     if (filters.teams && filters.teams.length > 0) count++;
     if (filters.genders && filters.genders.length > 0) count++;
     if (filters.birthYearFrom || filters.birthYearTo) count++;
+    if (filters.benchmarkFilter) count++;
     return count;
+  };
+
+  // Handle benchmark filter changes
+  const handleBenchmarkFilterChange = (
+    benchmarkFilter: { benchmarkId: string; benchmarkName: string; status: 'met' | 'unmet' | 'no_data' } | undefined
+  ) => {
+    onFiltersChange({ benchmarkFilter });
   };
 
   return (
@@ -122,6 +131,15 @@ export function FilterPanel({
           analysisType={analysisType}
         />
       </div>
+
+      {/* Benchmark Filter */}
+      {showAdvancedFilters && effectiveOrganizationId && (
+        <BenchmarkFilter
+          organizationId={effectiveOrganizationId}
+          value={filters.benchmarkFilter}
+          onChange={handleBenchmarkFilterChange}
+        />
+      )}
 
       {/* Grouping & Advanced Filters */}
       {showAdvancedFilters && (
