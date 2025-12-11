@@ -34,11 +34,10 @@ export function BenchmarkLineSelector({
   // Handle individual checkbox toggle
   const handleToggle = (benchmarkId: string) => {
     const isSelected = selectedBenchmarkIds.includes(benchmarkId);
-    if (isSelected) {
-      onSelectionChange(selectedBenchmarkIds.filter(id => id !== benchmarkId));
-    } else {
-      onSelectionChange([...selectedBenchmarkIds, benchmarkId]);
-    }
+    const newSelection = isSelected
+      ? selectedBenchmarkIds.filter(id => id !== benchmarkId)
+      : [...selectedBenchmarkIds, benchmarkId];
+    onSelectionChange(newSelection);
   };
 
   // Handle "Select All"

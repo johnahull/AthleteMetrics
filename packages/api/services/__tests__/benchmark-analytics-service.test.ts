@@ -420,10 +420,11 @@ describe('BenchmarkAnalyticsService', () => {
       expect(Array.isArray(result)).toBe(true);
       expect(result.length).toBe(1); // Only site benchmark uses FLY10_TIME
 
-      expect(result[0].benchmarkId).toBe(siteBenchmarkId);
+      expect(result[0].id).toBe(siteBenchmarkId);
       expect(result[0].name).toContain('Elite Speed Male');
-      expect(result[0].value).toBe(1.00);
-      expect(result[0].operator).toBe('lte');
+      expect(result[0].benchmarkValue).toBe(1.00);
+      expect(result[0].comparisonOperator).toBe('lte');
+      expect(result[0].metricCode).toBe('FLY10_TIME');
       expect(result[0].filters).toEqual({
         gender: 'M',
         ageMin: 20,

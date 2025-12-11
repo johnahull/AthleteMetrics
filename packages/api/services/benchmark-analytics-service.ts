@@ -36,11 +36,12 @@ export interface TeamBenchmarkAggregation {
 }
 
 export interface BenchmarkForMetric {
-  benchmarkId: string;
+  id: string;
   name: string;
-  value: number;
-  operator: 'lte' | 'gte' | 'eq';
-  filters: {
+  benchmarkValue: number;
+  comparisonOperator: 'lte' | 'gte' | 'eq';
+  metricCode: string;
+  filters?: {
     gender?: string | null;
     ageMin?: number | null;
     ageMax?: number | null;
@@ -300,13 +301,14 @@ export class BenchmarkAnalyticsService extends BaseService {
       const allBenchmarks = [...siteBenchmarksData, ...customBenchmarksData];
 
       return allBenchmarks.map((benchmark) => ({
-        benchmarkId: benchmark.id,
+        id: benchmark.id,
         name: benchmark.name,
-        value:
+        benchmarkValue:
           typeof benchmark.benchmarkValue === 'string'
             ? parseFloat(benchmark.benchmarkValue)
             : benchmark.benchmarkValue,
-        operator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+        comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+        metricCode: benchmark.metricCode,
         filters: {
           gender: benchmark.gender,
           ageMin: benchmark.ageMin,
