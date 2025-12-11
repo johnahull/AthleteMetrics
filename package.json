@@ -109,6 +109,5 @@
     "zod-validation-error": "^3.4.0"
   },
   "optionalDependencies": {
-    "chartjs-node-canvas": "^5.0.0"
   }
 }

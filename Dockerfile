@@ -7,8 +7,8 @@ FROM node:20-alpine AS builder
 # Set working directory
 WORKDIR /app
 
-# Install dependencies for native modules
-RUN apk add --no-cache python3 make g++ cairo-dev jpeg-dev pango-dev giflib-dev
+# Install dependencies for native modules (python3/make/g++ for node-gyp)
+RUN apk add --no-cache python3 make g++
 
 # Copy package files including workspace package.json files
 COPY package*.json ./
@@ -33,10 +33,7 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install runtime dependencies for tesseract OCR
-# Note: canvas/chartjs-node-canvas moved to optionalDependencies (not needed in prod)
-RUN apk add --no-cache \
-    tesseract-ocr \
-    tesseract-ocr-data-eng
+RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng
 
 # Copy package files including workspace package.json files
 COPY package*.json ./
@@ -44,11 +41,9 @@ COPY packages/api/package.json ./packages/api/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
 
-# Install production dependencies only (skip dev and optional)
-# Note: Migration scripts at root level need drizzle-orm and other deps
-# Web workspace dependencies will be installed but frontend is pre-built
-# --omit=optional skips chartjs-node-canvas which requires native canvas compilation
-RUN npm ci --omit=dev --omit=optional
+# Install production dependencies only
+# Note: Migration scripts need drizzle-orm and other deps
+RUN npm ci --omit=dev
 
 # Copy built application from builder stage
 # Note: @shared code is now bundled into dist/index.js via esbuild alias
