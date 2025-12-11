@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, useRef, useMemo, Suspense } from 'react';
+import React, { useEffect, useRef, useMemo, Suspense, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,7 +13,9 @@ import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { DateSelector } from '@/components/ui/date-selector';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { BenchmarkLineSelector } from './BenchmarkLineSelector';
 import { useToast } from '@/hooks/use-toast';
+import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
@@ -24,7 +26,7 @@ import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
 
-import type { AnalysisType, AnalyticsFilters } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters, BenchmarkLine, ChartType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
@@ -64,6 +66,21 @@ interface BaseAnalyticsViewProps {
   children?: React.ReactNode;
 }
 
+// Chart types compatible with benchmark lines (Y-axis represents metric values)
+const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
+  'line_chart',
+  'multi_line',
+  'box_plot',
+  'box_swarm_combo',
+  'violin_plot',
+  'scatter_plot',
+  'connected_scatter',
+  'bar_chart',
+  'swarm_plot',
+  'time_series_box_swarm',
+  'time_series_violin'
+];
+
 // Internal component that uses the analytics context
 function BaseAnalyticsViewContent({
   title,
@@ -85,6 +102,10 @@ function BaseAnalyticsViewContent({
   const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
   const { toast } = useToast();
   const previousAnalysisTypeRef = useRef<AnalysisType>(state.analysisType);
+  const previousMetricRef = useRef<string>(state.metrics.primary);
+
+  // Benchmark selection state
+  const [selectedBenchmarkIds, setSelectedBenchmarkIds] = useState<string[]>([]);
 
   const {
     fetchAnalyticsData,
@@ -125,6 +146,39 @@ function BaseAnalyticsViewContent({
     analyticsData: state.analyticsData,
     isMainAnalyticsLoading: state.isLoading
   });
+
+  // Fetch benchmarks for the current metric
+  const { data: benchmarksForMetric } = useBenchmarksForMetric(
+    effectiveOrganizationId || '',
+    state.metrics.primary
+  );
+
+  // Convert selected benchmark IDs to BenchmarkLine objects
+  const selectedBenchmarks = useMemo<BenchmarkLine[]>(() => {
+    if (!benchmarksForMetric || selectedBenchmarkIds.length === 0) {
+      return [];
+    }
+
+    return benchmarksForMetric
+      .filter(b => selectedBenchmarkIds.includes(b.id))
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        value: b.benchmarkValue,
+        comparisonOperator: b.comparisonOperator,
+        color: undefined, // Let chart use default colors
+        lineStyle: 'dashed' as const,
+        filters: b.filters
+      }));
+  }, [benchmarksForMetric, selectedBenchmarkIds]);
+
+  // Reset benchmark selection when primary metric changes
+  useEffect(() => {
+    if (previousMetricRef.current !== state.metrics.primary) {
+      setSelectedBenchmarkIds([]);
+      previousMetricRef.current = state.metrics.primary;
+    }
+  }, [state.metrics.primary]);
 
   // Fetch data when conditions are met
   useEffect(() => {
@@ -423,6 +477,7 @@ function BaseAnalyticsViewContent({
                   className="mb-4"
                 />
               )}
+
           </>
         )}
 
@@ -469,6 +524,20 @@ function BaseAnalyticsViewContent({
           return shouldShowChart;
         })() && (
           <>
+            {/* Benchmark Line Selector - only for compatible chart types */}
+            {BENCHMARK_COMPATIBLE_CHART_TYPES.includes(state.selectedChartType) &&
+             effectiveOrganizationId &&
+             benchmarksForMetric &&
+             benchmarksForMetric.length > 0 && (
+              <div className="mb-4">
+                <BenchmarkLineSelector
+                  organizationId={effectiveOrganizationId}
+                  metricCode={state.metrics.primary}
+                  selectedBenchmarkIds={selectedBenchmarkIds}
+                  onSelectionChange={setSelectedBenchmarkIds}
+                />
+              </div>
+            )}
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
               <div className="space-y-6">
@@ -500,6 +569,7 @@ function BaseAnalyticsViewContent({
                       metric={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.metrics.primary : undefined}
                       onExport={handleExport}
                       selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                      benchmarks={BENCHMARK_COMPATIBLE_CHART_TYPES.includes(chartType) ? selectedBenchmarks : undefined}
                     />
                   </Suspense>
                 ))}
@@ -530,6 +600,7 @@ function BaseAnalyticsViewContent({
                   metric={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.metrics.primary : undefined}
                   onExport={handleExport}
                   selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                  benchmarks={BENCHMARK_COMPATIBLE_CHART_TYPES.includes(state.selectedChartType) ? selectedBenchmarks : undefined}
                 />
               </Suspense>
             )}
