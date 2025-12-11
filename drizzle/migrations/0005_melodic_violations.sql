@@ -51,12 +51,28 @@ CREATE TABLE "user_global_athlete_links" (
 	CONSTRAINT "user_global_athlete_links_user_id_unique" UNIQUE("user_id")
 );
 --> statement-breakpoint
-ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_user_id_achievement_id_unique";--> statement-breakpoint
-ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_organization_id_organizations_id_fk";
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_achievements_user_id_achievement_id_unique') THEN
+    ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_user_id_achievement_id_unique";
+  END IF;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_achievements_organization_id_organizations_id_fk') THEN
+    ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_organization_id_organizations_id_fk";
+  END IF;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_user_id_users_id_fk";
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_achievements_user_id_users_id_fk') THEN
+    ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_user_id_users_id_fk";
+  END IF;
+END $$;
 --> statement-breakpoint
-ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_achievement_id_achievement_definitions_id_fk";
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_achievements_achievement_id_achievement_definitions_id_fk') THEN
+    ALTER TABLE "user_achievements" DROP CONSTRAINT "user_achievements_achievement_id_achievement_definitions_id_fk";
+  END IF;
+END $$;
 --> statement-breakpoint
 ALTER TABLE "site_positions" ALTER COLUMN "display_order" SET DEFAULT 999;--> statement-breakpoint
 ALTER TABLE "site_positions" ALTER COLUMN "display_order" SET NOT NULL;--> statement-breakpoint
