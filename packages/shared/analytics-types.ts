@@ -52,13 +52,6 @@ export interface AnalyticsFilters {
    * @example true - Include athletes without birth dates in filtered results
    */
   includeUnknownBirthYear?: boolean;
-
-  /** Filter athletes by benchmark achievement status */
-  benchmarkFilter?: {
-    benchmarkId: string;
-    benchmarkName: string;  // For display
-    status: 'met' | 'unmet' | 'no_data';
-  };
 }
 
 // Metrics selection with priority
