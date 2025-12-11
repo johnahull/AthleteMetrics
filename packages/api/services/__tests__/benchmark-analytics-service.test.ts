@@ -429,7 +429,7 @@ describe('BenchmarkAnalyticsService', () => {
         gender: 'M',
         ageMin: 20,
         ageMax: 25,
-        position: null,
+        position: undefined,
       });
     });
 

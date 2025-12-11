@@ -35,17 +35,27 @@ export interface TeamBenchmarkAggregation {
   averageProgress: number;
 }
 
+/**
+ * Benchmark data formatted for chart overlay display.
+ * Returned by getBenchmarksForMetric endpoint.
+ */
 export interface BenchmarkForMetric {
+  /** Unique identifier */
   id: string;
+  /** Display name for the benchmark line */
   name: string;
+  /** Target value to display as horizontal line */
   benchmarkValue: number;
+  /** Comparison operator for determining if benchmark is met */
   comparisonOperator: 'lte' | 'gte' | 'eq';
+  /** Metric code this benchmark applies to */
   metricCode: string;
+  /** Optional demographic filters for the benchmark */
   filters?: {
-    gender?: string | null;
-    ageMin?: number | null;
-    ageMax?: number | null;
-    position?: string | null;
+    gender?: string;
+    ageMin?: number;
+    ageMax?: number;
+    position?: string;
   };
 }
 
@@ -310,10 +320,10 @@ export class BenchmarkAnalyticsService extends BaseService {
         comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
         metricCode: benchmark.metricCode,
         filters: {
-          gender: benchmark.gender,
-          ageMin: benchmark.ageMin,
-          ageMax: benchmark.ageMax,
-          position: benchmark.position,
+          gender: benchmark.gender ?? undefined,
+          ageMin: benchmark.ageMin ?? undefined,
+          ageMax: benchmark.ageMax ?? undefined,
+          position: benchmark.position ?? undefined,
         },
       }));
     } catch (error) {
