@@ -1,6 +1,9 @@
 import React, { useMemo } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import { ChartErrorBoundary } from './ChartErrorBoundary';
+import { ResponsiveChartWrapper } from './responsive-chart-wrapper';
+import { CHART_CONFIG } from '@/constants/chart-config';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -41,16 +44,16 @@ export function BenchmarkProgressChart({
       {
         label: 'Achievement Rate',
         data: data.snapshots.map((s) => s.achievementRate),
-        borderColor: 'rgba(59, 130, 246, 1)', // Blue
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
-        borderWidth: 2,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: 'rgba(59, 130, 246, 1)',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2,
+        borderColor: CHART_CONFIG.COLORS.PRIMARY,
+        backgroundColor: CHART_CONFIG.COLORS.PRIMARY_LIGHT,
+        borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+        pointRadius: CHART_CONFIG.STYLING.POINT_RADIUS.SMALL,
+        pointHoverRadius: CHART_CONFIG.STYLING.POINT_HOVER_RADIUS.SMALL,
+        pointBackgroundColor: CHART_CONFIG.COLORS.PRIMARY,
+        pointBorderColor: CHART_CONFIG.COLORS.WHITE,
+        pointBorderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
         fill: true,
-        tension: 0.1,
+        tension: CHART_CONFIG.STYLING.LINE_TENSION,
       },
     ];
 
@@ -59,15 +62,15 @@ export function BenchmarkProgressChart({
       datasets.push({
         label: `Target (${targetRate}%)`,
         data: data.snapshots.map(() => targetRate),
-        borderColor: 'rgba(239, 68, 68, 1)', // Red
-        backgroundColor: 'rgba(239, 68, 68, 0.1)',
-        borderWidth: 2,
-        borderDash: [5, 5] as number[],
+        borderColor: CHART_CONFIG.COLORS.AVERAGE,
+        backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
+        borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
+        borderDash: CHART_CONFIG.STYLING.DASHED_LINE,
         pointRadius: 0,
         pointHoverRadius: 0,
-        pointBackgroundColor: 'rgba(239, 68, 68, 1)',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 1,
+        pointBackgroundColor: CHART_CONFIG.COLORS.AVERAGE,
+        pointBorderColor: CHART_CONFIG.COLORS.WHITE,
+        pointBorderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
         fill: false,
         tension: 0,
       });
@@ -171,10 +174,32 @@ export function BenchmarkProgressChart({
     );
   }
 
+  // Calculate accessibility description
+  const firstSnapshot = data.snapshots[0];
+  const lastSnapshot = data.snapshots[data.snapshots.length - 1];
+  const ariaDescription = `Line chart showing ${data.benchmarkName} achievement rate over time. ` +
+    `Starting at ${firstSnapshot.achievementRate.toFixed(1)}% on ${new Date(firstSnapshot.date).toLocaleDateString()}, ` +
+    `ending at ${lastSnapshot.achievementRate.toFixed(1)}% on ${new Date(lastSnapshot.date).toLocaleDateString()} ` +
+    `across ${data.snapshots.length} data points.`;
+
   return (
-    <div className="w-full" style={{ height: `${height}px` }}>
-      <Line data={chartData} options={options} />
-    </div>
+    <ResponsiveChartWrapper mobileHeight={300} desktopHeight={height}>
+      <ChartErrorBoundary
+        fallbackTitle="Benchmark Progress Chart Error"
+        fallbackMessage="Failed to render benchmark progress chart. Please try refreshing the page."
+      >
+        <div
+          role="img"
+          aria-label={`Benchmark progress chart: ${data.benchmarkName} achievement rate over time`}
+          aria-describedby="benchmark-progress-chart-desc"
+        >
+          <span id="benchmark-progress-chart-desc" className="sr-only">
+            {ariaDescription}
+          </span>
+          <Line data={chartData} options={options} />
+        </div>
+      </ChartErrorBoundary>
+    </ResponsiveChartWrapper>
   );
 }
 

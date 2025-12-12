@@ -16,6 +16,10 @@ import {
 } from '@shared/schema';
 import { eq, and, inArray, gte, lte, desc, sql } from 'drizzle-orm';
 
+// Query result size limits to prevent OOM errors with large datasets
+const MAX_MEASUREMENT_ROWS = 50000; // Maximum measurements to fetch per query
+const MAX_DATE_RANGE_DAYS = 365;    // Maximum date range for progress queries (1 year)
+
 export interface TeamBenchmarkAggregation {
   benchmarkId: string;
   benchmarkName: string;
@@ -166,6 +170,7 @@ export class BenchmarkAnalyticsService extends BaseService {
                 )
               )
               .orderBy(desc(measurements.date))
+              .limit(MAX_MEASUREMENT_ROWS) // Limit query result size to prevent OOM
           : [];
 
       // Group measurements by userId and metric (latest first)
@@ -406,6 +411,12 @@ export class BenchmarkAnalyticsService extends BaseService {
       const startDate = options?.startDate || new Date(endDate.getTime() - 90 * 24 * 60 * 60 * 1000);
       const interval = options?.interval || 'week';
 
+      // Validate date range to prevent excessive data queries
+      const daysDiff = Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysDiff > MAX_DATE_RANGE_DAYS) {
+        throw new Error(`Date range exceeds maximum of ${MAX_DATE_RANGE_DAYS} days. Requested: ${daysDiff} days.`);
+      }
+
       // Get all athletes in the organization
       const athletesQuery = db
         .selectDistinct({
@@ -451,6 +462,7 @@ export class BenchmarkAnalyticsService extends BaseService {
                 )
               )
               .orderBy(measurements.date)
+              .limit(MAX_MEASUREMENT_ROWS) // Limit query result size to prevent OOM
           : [];
 
       // Generate time intervals
