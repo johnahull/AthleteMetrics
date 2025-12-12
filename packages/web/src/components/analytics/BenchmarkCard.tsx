@@ -3,6 +3,7 @@
  * Displays individual benchmark achievement card with progress bar and demographic filters
  */
 
+import { useMemo } from 'react';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -35,25 +36,21 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     eq: '='
   }[comparisonOperator];
 
-  // Determine unit based on metric code
-  const getUnit = (code: string): string => {
-    if (code.includes('TIME') || code.includes('DASH')) return 's';
-    if (code.includes('JUMP') || code.includes('HEIGHT')) return 'in';
-    if (code.includes('SPEED')) return 'mph';
-    if (code.includes('WEIGHT')) return 'lbs';
+  // Memoize unit calculation to prevent recalculation on every render
+  const unit = useMemo(() => {
+    if (metricCode.includes('TIME') || metricCode.includes('DASH')) return 's';
+    if (metricCode.includes('JUMP') || metricCode.includes('HEIGHT')) return 'in';
+    if (metricCode.includes('SPEED')) return 'mph';
+    if (metricCode.includes('WEIGHT')) return 'lbs';
     return '';
-  };
-
-  const unit = getUnit(metricCode);
+  }, [metricCode]);
 
   // Determine progress bar color based on achievement rate
-  const getProgressColor = (rate: number): string => {
-    if (rate >= 75) return 'green';
-    if (rate >= 50) return 'yellow';
+  const progressColor = useMemo(() => {
+    if (achievementRate >= 75) return 'green';
+    if (achievementRate >= 50) return 'yellow';
     return 'orange';
-  };
-
-  const progressColor = getProgressColor(achievementRate);
+  }, [achievementRate]);
 
   const progressColorClass = {
     green: 'bg-green-500',
@@ -61,24 +58,28 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     orange: 'bg-orange-500'
   }[progressColor];
 
-  // Build filter badges
-  const filterBadges: string[] = [];
+  // Memoize filter badges to prevent recalculation on every render
+  const filterBadges = useMemo(() => {
+    const badges: string[] = [];
 
-  if (filters.gender) {
-    filterBadges.push(filters.gender);
-  }
+    if (filters.gender) {
+      badges.push(filters.gender);
+    }
 
-  if (filters.ageMin !== undefined && filters.ageMax !== undefined) {
-    filterBadges.push(`${filters.ageMin}-${filters.ageMax}`);
-  } else if (filters.ageMin !== undefined) {
-    filterBadges.push(`${filters.ageMin}+`);
-  } else if (filters.ageMax !== undefined) {
-    filterBadges.push(`≤${filters.ageMax}`);
-  }
+    if (filters.ageMin !== undefined && filters.ageMax !== undefined) {
+      badges.push(`${filters.ageMin}-${filters.ageMax}`);
+    } else if (filters.ageMin !== undefined) {
+      badges.push(`${filters.ageMin}+`);
+    } else if (filters.ageMax !== undefined) {
+      badges.push(`≤${filters.ageMax}`);
+    }
 
-  if (filters.position) {
-    filterBadges.push(filters.position);
-  }
+    if (filters.position) {
+      badges.push(filters.position);
+    }
+
+    return badges;
+  }, [filters.gender, filters.ageMin, filters.ageMax, filters.position]);
 
   const hasFilters = filterBadges.length > 0;
 

@@ -294,13 +294,14 @@ export function LineChart({
     }
 
     return benchmarks.map((benchmark) => {
-      // Determine line style
+      // Determine line style (WCAG compliance: combine color with line style for accessibility)
       let borderDash: number[] | undefined;
       if (benchmark.lineStyle === 'dashed') {
         borderDash = [5, 5];
       } else if (benchmark.lineStyle === 'dotted') {
         borderDash = [2, 2];
       }
+      // If lineStyle is 'solid' or undefined, borderDash remains undefined (solid line)
 
       return {
         type: 'line' as const,

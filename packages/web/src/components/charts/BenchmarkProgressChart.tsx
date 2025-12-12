@@ -62,7 +62,7 @@ export function BenchmarkProgressChart({
         borderColor: 'rgba(239, 68, 68, 1)', // Red
         backgroundColor: 'rgba(239, 68, 68, 0.1)',
         borderWidth: 2,
-        // borderDash: [5, 5], // Type issue - commented for now
+        borderDash: [5, 5] as number[],
         pointRadius: 0,
         pointHoverRadius: 0,
         pointBackgroundColor: 'rgba(239, 68, 68, 1)',
@@ -70,7 +70,7 @@ export function BenchmarkProgressChart({
         pointBorderWidth: 1,
         fill: false,
         tension: 0,
-      } as any);
+      });
     }
 
     return {
