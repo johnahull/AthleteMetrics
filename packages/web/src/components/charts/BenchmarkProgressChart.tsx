@@ -73,7 +73,7 @@ export function BenchmarkProgressChart({
         pointBorderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
         fill: false,
         tension: 0,
-      });
+      } as any); // Use any to bypass type inference from first dataset element
     }
 
     return {
