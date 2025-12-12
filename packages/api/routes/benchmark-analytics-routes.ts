@@ -9,6 +9,56 @@ import { BenchmarkAnalyticsService } from '../services/benchmark-analytics-servi
 import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
+import { db } from '../db';
+import { teams } from '@shared/schema';
+import { eq, and, inArray } from 'drizzle-orm';
+
+// Valid gender values from database schema
+const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
+
+// Birth year validation constants
+const CURRENT_YEAR = new Date().getFullYear();
+const MIN_BIRTH_YEAR = CURRENT_YEAR - 100; // Reasonable minimum (100 years old)
+const MAX_BIRTH_YEAR = CURRENT_YEAR + 10; // Reasonable maximum (10 years in future for youth)
+
+/**
+ * Validates and sanitizes gender values
+ * @param genders Array of gender strings from query params
+ * @returns Sanitized array of valid genders, or empty array if none are valid
+ */
+function validateGenders(genders: string[]): string[] {
+  return genders.filter(g => VALID_GENDERS.includes(g as any));
+}
+
+/**
+ * Validates birth year is within reasonable range
+ * @param year Birth year to validate
+ * @returns Error message if invalid, null if valid
+ */
+function validateBirthYear(year: number): string | null {
+  if (year < MIN_BIRTH_YEAR || year > MAX_BIRTH_YEAR) {
+    return `Birth year must be between ${MIN_BIRTH_YEAR} and ${MAX_BIRTH_YEAR}`;
+  }
+  return null;
+}
+
+/**
+ * Validates team IDs belong to the specified organization
+ * @param teamIds Array of team IDs to validate
+ * @param organizationId Organization ID to check against
+ * @returns True if all teams belong to organization, false otherwise
+ */
+async function validateTeamOwnership(teamIds: string[], organizationId: string): Promise<boolean> {
+  const userTeams = await db
+    .select({ id: teams.id })
+    .from(teams)
+    .where(and(
+      eq(teams.organizationId, organizationId),
+      inArray(teams.id, teamIds)
+    ));
+
+  return userTeams.length === teamIds.length;
+}
 
 // Rate limiting for analytics endpoints
 const analyticsLimiter = rateLimit({
@@ -77,8 +127,29 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         const teamIdsParam = req.query.teamIds as string | undefined;
         const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
 
+        // Validate team ownership for non-admin users
+        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
+          const isValid = await validateTeamOwnership(teamIds, organizationId);
+          if (!isValid) {
+            return res.status(403).json({
+              message: 'Access denied - one or more team IDs do not belong to your organization'
+            });
+          }
+        }
+
         const gendersParam = req.query.genders as string | undefined;
-        const genders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+        const rawGenders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+
+        // Validate and sanitize genders
+        let genders: string[] | undefined;
+        if (rawGenders && rawGenders.length > 0) {
+          genders = validateGenders(rawGenders);
+          if (genders.length === 0) {
+            return res.status(400).json({
+              message: `Invalid gender values. Must be one of: ${VALID_GENDERS.join(', ')}`
+            });
+          }
+        }
 
         const birthYearFromStr = req.query.birthYearFrom as string | undefined;
         const birthYearFrom = birthYearFromStr ? parseInt(birthYearFromStr, 10) : undefined;
@@ -98,6 +169,21 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         if (birthYearTo !== undefined && isNaN(birthYearTo)) {
           return res.status(400).json({ message: 'birthYearTo must be a valid number' });
         }
+
+        // Validate birth year bounds
+        if (birthYearFrom !== undefined) {
+          const error = validateBirthYear(birthYearFrom);
+          if (error) {
+            return res.status(400).json({ message: error });
+          }
+        }
+        if (birthYearTo !== undefined) {
+          const error = validateBirthYear(birthYearTo);
+          if (error) {
+            return res.status(400).json({ message: error });
+          }
+        }
+
         if (
           birthYearFrom !== undefined &&
           birthYearTo !== undefined &&
@@ -231,8 +317,29 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         const teamIdsParam = req.query.teamIds as string | undefined;
         const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
 
+        // Validate team ownership for non-admin users
+        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
+          const isValid = await validateTeamOwnership(teamIds, organizationId);
+          if (!isValid) {
+            return res.status(403).json({
+              message: 'Access denied - one or more team IDs do not belong to your organization'
+            });
+          }
+        }
+
         const gendersParam = req.query.genders as string | undefined;
-        const genders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+        const rawGenders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+
+        // Validate and sanitize genders
+        let genders: string[] | undefined;
+        if (rawGenders && rawGenders.length > 0) {
+          genders = validateGenders(rawGenders);
+          if (genders.length === 0) {
+            return res.status(400).json({
+              message: `Invalid gender values. Must be one of: ${VALID_GENDERS.join(', ')}`
+            });
+          }
+        }
 
         // Validate dates
         if (startDate && isNaN(startDate.getTime())) {
@@ -326,8 +433,29 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         const teamIdsParam = req.query.teamIds as string | undefined;
         const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
 
+        // Validate team ownership for non-admin users
+        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
+          const isValid = await validateTeamOwnership(teamIds, organizationId);
+          if (!isValid) {
+            return res.status(403).json({
+              message: 'Access denied - one or more team IDs do not belong to your organization'
+            });
+          }
+        }
+
         const gendersParam = req.query.genders as string | undefined;
-        const genders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+        const rawGenders = gendersParam ? gendersParam.split(',').map((g) => g.trim()) : undefined;
+
+        // Validate and sanitize genders
+        let genders: string[] | undefined;
+        if (rawGenders && rawGenders.length > 0) {
+          genders = validateGenders(rawGenders);
+          if (genders.length === 0) {
+            return res.status(400).json({
+              message: `Invalid gender values. Must be one of: ${VALID_GENDERS.join(', ')}`
+            });
+          }
+        }
 
         const birthYearFromStr = req.query.birthYearFrom as string | undefined;
         const birthYearFrom = birthYearFromStr ? parseInt(birthYearFromStr, 10) : undefined;
@@ -342,6 +470,21 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         if (birthYearTo !== undefined && isNaN(birthYearTo)) {
           return res.status(400).json({ message: 'birthYearTo must be a valid number' });
         }
+
+        // Validate birth year bounds
+        if (birthYearFrom !== undefined) {
+          const error = validateBirthYear(birthYearFrom);
+          if (error) {
+            return res.status(400).json({ message: error });
+          }
+        }
+        if (birthYearTo !== undefined) {
+          const error = validateBirthYear(birthYearTo);
+          if (error) {
+            return res.status(400).json({ message: error });
+          }
+        }
+
         if (
           birthYearFrom !== undefined &&
           birthYearTo !== undefined &&
