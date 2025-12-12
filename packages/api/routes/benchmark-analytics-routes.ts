@@ -15,6 +15,7 @@ import { eq, and, inArray } from 'drizzle-orm';
 
 // Valid gender values from database schema
 const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
+type ValidGender = typeof VALID_GENDERS[number];
 
 // Birth year validation constants
 const CURRENT_YEAR = new Date().getFullYear();
@@ -22,12 +23,19 @@ const MIN_BIRTH_YEAR = CURRENT_YEAR - 100; // Reasonable minimum (100 years old)
 const MAX_BIRTH_YEAR = CURRENT_YEAR + 10; // Reasonable maximum (10 years in future for youth)
 
 /**
+ * Type predicate to check if a string is a valid gender
+ */
+function isValidGender(g: string): g is ValidGender {
+  return (VALID_GENDERS as readonly string[]).includes(g);
+}
+
+/**
  * Validates and sanitizes gender values
  * @param genders Array of gender strings from query params
  * @returns Sanitized array of valid genders, or empty array if none are valid
  */
-function validateGenders(genders: string[]): string[] {
-  return genders.filter(g => VALID_GENDERS.includes(g as any));
+function validateGenders(genders: string[]): ValidGender[] {
+  return genders.filter(isValidGender);
 }
 
 /**
@@ -125,7 +133,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Parse optional filter parameters
         const teamIdsParam = req.query.teamIds as string | undefined;
-        const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
+        const teamIds = teamIdsParam
+          ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
+          : undefined;
 
         // Validate team ownership for non-admin users
         if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
@@ -159,7 +169,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         const benchmarkIdsParam = req.query.benchmarkIds as string | undefined;
         const benchmarkIds = benchmarkIdsParam
-          ? benchmarkIdsParam.split(',').map((id) => id.trim())
+          ? benchmarkIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
           : undefined;
 
         // Validate birth year range
@@ -315,7 +325,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         const interval = req.query.interval as 'day' | 'week' | 'month' | undefined;
 
         const teamIdsParam = req.query.teamIds as string | undefined;
-        const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
+        const teamIds = teamIdsParam
+          ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
+          : undefined;
 
         // Validate team ownership for non-admin users
         if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
@@ -431,7 +443,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Parse optional filter parameters
         const teamIdsParam = req.query.teamIds as string | undefined;
-        const teamIds = teamIdsParam ? teamIdsParam.split(',').map((id) => id.trim()) : undefined;
+        const teamIds = teamIdsParam
+          ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
+          : undefined;
 
         // Validate team ownership for non-admin users
         if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {

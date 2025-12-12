@@ -132,7 +132,9 @@ export class BenchmarkAnalyticsService extends BaseService {
             eq(teams.organizationId, organizationId),
             eq(userTeams.isActive, true),
             options?.teamIds ? inArray(teams.id, options.teamIds) : undefined,
-            options?.genders && options.genders.length > 0 ? inArray(users.gender, options.genders as any) : undefined
+            options?.genders && options.genders.length > 0
+              ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
+              : undefined
           )
         );
 
@@ -149,14 +151,20 @@ export class BenchmarkAnalyticsService extends BaseService {
         return true;
       });
 
-      // Get all measurements for these athletes
+      // Get all measurements for these athletes (filter by metric codes for efficiency)
       const athleteIds = filteredAthletes.map((a) => a.userId);
+      const metricCodes = [...new Set(allBenchmarks.map(b => b.metricCode))];
       const allMeasurements =
         athleteIds.length > 0
           ? await db
               .select()
               .from(measurements)
-              .where(inArray(measurements.userId, athleteIds))
+              .where(
+                and(
+                  inArray(measurements.userId, athleteIds),
+                  inArray(measurements.metric, metricCodes)
+                )
+              )
               .orderBy(desc(measurements.date))
           : [];
 
@@ -414,7 +422,9 @@ export class BenchmarkAnalyticsService extends BaseService {
             eq(teams.organizationId, organizationId),
             eq(userTeams.isActive, true),
             options?.teamIds ? inArray(teams.id, options.teamIds) : undefined,
-            options?.genders && options.genders.length > 0 ? inArray(users.gender, options.genders as any) : undefined
+            options?.genders && options.genders.length > 0
+              ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
+              : undefined
           )
         );
 
@@ -530,7 +540,9 @@ export class BenchmarkAnalyticsService extends BaseService {
             eq(teams.organizationId, organizationId),
             eq(userTeams.isActive, true),
             options?.teamIds ? inArray(teams.id, options.teamIds) : undefined,
-            options?.genders && options.genders.length > 0 ? inArray(users.gender, options.genders as any) : undefined
+            options?.genders && options.genders.length > 0
+              ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
+              : undefined
           )
         );
 
