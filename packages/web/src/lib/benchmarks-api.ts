@@ -611,6 +611,8 @@ export async function fetchTeamBenchmarkAggregation(
   options?: {
     teamIds?: string[];
     genders?: string[];
+    birthYearFrom?: number;
+    birthYearTo?: number;
   }
 ): Promise<TeamBenchmarkAggregation[]> {
   const params = new URLSearchParams({ organizationId });
@@ -621,6 +623,14 @@ export async function fetchTeamBenchmarkAggregation(
 
   if (options?.genders?.length) {
     options.genders.forEach(gender => params.append('genders', gender));
+  }
+
+  if (options?.birthYearFrom !== undefined) {
+    params.append('birthYearFrom', options.birthYearFrom.toString());
+  }
+
+  if (options?.birthYearTo !== undefined) {
+    params.append('birthYearTo', options.birthYearTo.toString());
   }
 
   const response = await fetch(`/api/analytics/benchmarks/aggregation?${params.toString()}`);
@@ -642,13 +652,23 @@ export function useTeamBenchmarkAggregation(
   options?: {
     teamIds?: string[];
     genders?: string[];
+    birthYearFrom?: number;
+    birthYearTo?: number;
   }
 ) {
   return useQuery({
-    queryKey: ['teamBenchmarkAggregation', organizationId, options?.teamIds, options?.genders],
+    queryKey: [
+      'teamBenchmarkAggregation',
+      organizationId,
+      options?.teamIds,
+      options?.genders,
+      options?.birthYearFrom,
+      options?.birthYearTo,
+    ],
     queryFn: () => fetchTeamBenchmarkAggregation(organizationId, options),
     enabled: !!organizationId,
-    staleTime: STALE_TIME.REALTIME, // 1 minute (more frequent updates for dashboard)
+    staleTime: STALE_TIME.STATIC, // 15 minutes - benchmarks don't change frequently
+    refetchOnWindowFocus: true, // Refetch when user returns for real-time feel
   });
 }
 
@@ -746,6 +766,7 @@ export function useBenchmarkProgressOverTime(
     queryFn: () =>
       fetchBenchmarkProgressOverTime(organizationId, benchmarkId!, options),
     enabled: !!organizationId && !!benchmarkId,
-    staleTime: STALE_TIME.REALTIME, // 1 minute (more frequent updates for progress tracking)
+    staleTime: STALE_TIME.STATIC, // 15 minutes - historical progress doesn't change frequently
+    refetchOnWindowFocus: true, // Refetch when user returns for real-time feel
   });
 }

@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTeamBenchmarkAggregation } from '@/lib/benchmarks-api';
 import { BenchmarkCard } from './BenchmarkCard';
 import { cn } from '@/lib/utils';
+import { getBenchmarkProgressColor } from '@/utils/benchmark-colors';
 
 interface BenchmarkDashboardWidgetProps {
   organizationId: string;
@@ -79,14 +80,8 @@ export function BenchmarkDashboardWidget({
     );
   }
 
-  // Determine overall progress bar color
-  const getProgressColor = (rate: number): string => {
-    if (rate >= 75) return 'bg-green-500';
-    if (rate >= 50) return 'bg-yellow-500';
-    return 'bg-orange-500';
-  };
-
-  const overallProgressColor = getProgressColor(overallAchievementRate);
+  // Determine overall progress bar color using shared utility
+  const overallProgressColor = getBenchmarkProgressColor(overallAchievementRate).bg;
 
   return (
     <Card className={cn(className)}>

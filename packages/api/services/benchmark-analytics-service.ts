@@ -737,11 +737,11 @@ export class BenchmarkAnalyticsService extends BaseService {
     }
 
     if (operator === 'lte') {
-      // Lower is better
-      return (benchmarkValue / athleteValue) * 100;
+      // Lower is better - cap at 100% for overachievement
+      return Math.min((benchmarkValue / athleteValue) * 100, 100);
     } else {
-      // gte: Higher is better
-      return (athleteValue / benchmarkValue) * 100;
+      // gte: Higher is better - cap at 100% for overachievement
+      return Math.min((athleteValue / benchmarkValue) * 100, 100);
     }
   }
 
@@ -812,36 +812,47 @@ export class BenchmarkAnalyticsService extends BaseService {
       }
     }
 
+    // Pre-sort measurements by date for efficient processing
+    // O(n log n) sorting once instead of O(n*m) nested loops
+    const sortedMeasurements = allMeasurements
+      .map(m => ({
+        ...m,
+        dateTime: new Date(m.date).getTime(),
+        numericValue: typeof m.value === 'string' ? parseFloat(m.value) : m.value,
+      }))
+      .sort((a, b) => a.dateTime - b.dateTime);
+
+    const benchmarkValue =
+      typeof benchmark.benchmarkValue === 'string'
+        ? parseFloat(benchmark.benchmarkValue)
+        : benchmark.benchmarkValue;
+    const operator = benchmark.comparisonOperator as 'lte' | 'gte' | 'eq';
+
     // For each interval, compute achievement rate
     for (const snapshotDate of intervalDates) {
+      const snapshotTime = snapshotDate.getTime();
+
       // Get best measurement for each athlete up to this date
       const bestMeasurementsByAthlete = new Map<string, number>();
 
-      for (const measurement of allMeasurements) {
-        const measurementDate = new Date(measurement.date);
-        if (measurementDate <= snapshotDate) {
-          const athleteId = measurement.userId;
-          const value =
-            typeof measurement.value === 'string'
-              ? parseFloat(measurement.value)
-              : measurement.value;
+      // Single pass through sorted measurements - break early when future dates reached
+      for (const measurement of sortedMeasurements) {
+        // Since measurements are sorted by date, we can break once we exceed snapshot date
+        if (measurement.dateTime > snapshotTime) break;
 
-          const currentBest = bestMeasurementsByAthlete.get(athleteId);
-          const benchmarkValue =
-            typeof benchmark.benchmarkValue === 'string'
-              ? parseFloat(benchmark.benchmarkValue)
-              : benchmark.benchmarkValue;
-          const operator = benchmark.comparisonOperator as 'lte' | 'gte' | 'eq';
+        const athleteId = measurement.userId;
+        const value = measurement.numericValue;
 
-          // Update if this is the first measurement or a better one
-          if (currentBest === undefined) {
+        const currentBest = bestMeasurementsByAthlete.get(athleteId);
+
+        // Update if this is the first measurement or a better one
+        if (currentBest === undefined) {
+          bestMeasurementsByAthlete.set(athleteId, value);
+        } else {
+          // Determine if new value is better
+          const isBetter = this.isBetterValue(value, currentBest, operator);
+          if (isBetter) {
             bestMeasurementsByAthlete.set(athleteId, value);
-          } else {
-            // Determine if new value is better
-            const isBetter = this.isBetterValue(value, currentBest, operator);
-            if (isBetter) {
-              bestMeasurementsByAthlete.set(athleteId, value);
-            }
           }
         }
       }
@@ -852,15 +863,10 @@ export class BenchmarkAnalyticsService extends BaseService {
       for (const athlete of applicableAthletes) {
         const bestValue = bestMeasurementsByAthlete.get(athlete.userId);
         if (bestValue !== undefined) {
-          const benchmarkValue =
-            typeof benchmark.benchmarkValue === 'string'
-              ? parseFloat(benchmark.benchmarkValue)
-              : benchmark.benchmarkValue;
-
           const isMet = this.evaluateBenchmark(
             bestValue,
             benchmarkValue,
-            benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
+            operator
           );
 
           if (isMet) {

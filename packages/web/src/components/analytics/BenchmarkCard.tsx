@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import type { TeamBenchmarkAggregation } from '@/lib/benchmarks-api';
+import { getBenchmarkProgressColorName } from '@/utils/benchmark-colors';
 
 interface BenchmarkCardProps {
   benchmark: TeamBenchmarkAggregation;
@@ -45,11 +46,9 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     return '';
   }, [metricCode]);
 
-  // Determine progress bar color based on achievement rate
+  // Determine progress bar color based on achievement rate (using shared utility)
   const progressColor = useMemo(() => {
-    if (achievementRate >= 75) return 'green';
-    if (achievementRate >= 50) return 'yellow';
-    return 'orange';
+    return getBenchmarkProgressColorName(achievementRate);
   }, [achievementRate]);
 
   const progressColorClass = {
