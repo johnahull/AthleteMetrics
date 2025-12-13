@@ -40,7 +40,24 @@ export function BenchmarkProgressChart({
       });
     });
 
-    const datasets = [
+    // Define dataset type to allow different property values between datasets
+    type DatasetConfig = {
+      label: string;
+      data: number[];
+      borderColor: string;
+      backgroundColor: string;
+      borderWidth: number;
+      pointRadius: number;
+      pointHoverRadius: number;
+      pointBackgroundColor: string;
+      pointBorderColor: string;
+      pointBorderWidth: number;
+      fill: boolean;
+      tension: number;
+      borderDash?: number[];
+    };
+
+    const datasets: DatasetConfig[] = [
       {
         label: 'Achievement Rate',
         data: data.snapshots.map((s) => s.achievementRate),
@@ -65,7 +82,7 @@ export function BenchmarkProgressChart({
         borderColor: CHART_CONFIG.COLORS.AVERAGE,
         backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
         borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
-        borderDash: CHART_CONFIG.STYLING.DASHED_LINE as number[],
+        borderDash: [...CHART_CONFIG.STYLING.DASHED_LINE],
         pointRadius: 0,
         pointHoverRadius: 0,
         pointBackgroundColor: CHART_CONFIG.COLORS.AVERAGE,
