@@ -1,12 +1,10 @@
 import React, { useMemo, useState, useRef } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
-import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import type {
   TrendData,
   ChartConfiguration,
-  StatisticalSummary,
-  BenchmarkLine
+  StatisticalSummary
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -25,8 +23,6 @@ interface LineChartProps {
   selectedAthleteIds?: string[];
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
-  benchmarks?: BenchmarkLine[];
-  showBenchmarks?: boolean;
 }
 
 export function LineChart({
@@ -36,9 +32,7 @@ export function LineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 10,
-  benchmarks,
-  showBenchmarks = true
+  maxAthletes = 10
 }: LineChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -288,53 +282,12 @@ export function LineChart({
     return bests;
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
-  // Generate benchmark annotations for Chart.js annotation plugin
-  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
-    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
-      return [];
-    }
-
-    return benchmarks.map((benchmark): AnnotationOptions => {
-      // Determine line style (WCAG compliance: combine color with line style for accessibility)
-      let borderDash: number[] | undefined;
-      if (benchmark.lineStyle === 'dashed') {
-        borderDash = [5, 5];
-      } else if (benchmark.lineStyle === 'dotted') {
-        borderDash = [2, 2];
-      }
-      // If lineStyle is 'solid' or undefined, borderDash remains undefined (solid line)
-
-      return {
-        type: 'line',
-        yMin: benchmark.value,
-        yMax: benchmark.value,
-        borderColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
-        borderWidth: 2,
-        borderDash,
-        label: {
-          display: true,
-          content: benchmark.name,
-          position: 'end',
-          backgroundColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
-          color: 'white',
-          padding: 4,
-          font: {
-            size: 10
-          }
-        }
-      };
-    });
-  }, [benchmarks, showBenchmarks]);
-
   // Chart options
   const options: ChartOptions<'line'> = {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
       ...config.plugins,
-      annotation: {
-        annotations: benchmarkAnnotations
-      },
       title: {
         display: true,
         text: config.title,
@@ -536,7 +489,19 @@ export function LineChart({
               {/* Athletes Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
                 {allAthletes.map(athlete => {
-                  const athleteColor = getAthleteColor(athlete.color);
+                  const colors = [
+                    'rgba(59, 130, 246, 1)',    // Blue
+                    'rgba(16, 185, 129, 1)',    // Green
+                    'rgba(239, 68, 68, 1)',     // Red
+                    'rgba(245, 158, 11, 1)',    // Amber
+                    'rgba(139, 92, 246, 1)',    // Purple
+                    'rgba(236, 72, 153, 1)',    // Pink
+                    'rgba(20, 184, 166, 1)',    // Teal
+                    'rgba(251, 146, 60, 1)',    // Orange
+                    'rgba(124, 58, 237, 1)',    // Violet
+                    'rgba(34, 197, 94, 1)'      // Emerald - 10th color
+                  ];
+                  const athleteColor = colors[athlete.color % colors.length];
 
                   return (
                     <div key={athlete.id} className="flex items-center space-x-2">
@@ -577,16 +542,7 @@ export function LineChart({
         </div>
       )}
 
-      <div
-        role="img"
-        aria-label={`Line chart showing ${lineData.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
-        aria-describedby="linechart-description"
-      >
-        <span id="linechart-description" className="sr-only">
-          {`Performance trend chart for ${lineData.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}
-        </span>
-        <Line data={lineData} options={options} />
-      </div>
+      <Line data={lineData} options={options} />
 
       {/* Progress indicators */}
       {highlightAthlete && personalBests.length > 0 && (
