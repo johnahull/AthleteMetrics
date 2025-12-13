@@ -588,7 +588,16 @@ export function LineChart({
         </div>
       )}
 
-      <Line data={lineData} options={options} />
+      <div
+        role="img"
+        aria-label={`Line chart showing ${config.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
+        aria-describedby="linechart-description"
+      >
+        <span id="linechart-description" className="sr-only">
+          {`Performance trend chart for ${config.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}
+        </span>
+        <Line data={lineData} options={options} />
+      </div>
 
       {/* Progress indicators */}
       {highlightAthlete && personalBests.length > 0 && (

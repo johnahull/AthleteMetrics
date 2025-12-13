@@ -618,11 +618,11 @@ export async function fetchTeamBenchmarkAggregation(
   const params = new URLSearchParams({ organizationId });
 
   if (options?.teamIds?.length) {
-    options.teamIds.forEach(id => params.append('teamIds', id));
+    params.append('teamIds', options.teamIds.join(','));
   }
 
   if (options?.genders?.length) {
-    options.genders.forEach(gender => params.append('genders', gender));
+    params.append('genders', options.genders.join(','));
   }
 
   if (options?.birthYearFrom !== undefined) {

@@ -10,17 +10,38 @@ import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
-import { teams } from '@shared/schema';
-import { eq, and, inArray } from 'drizzle-orm';
+import { teams, organizationBenchmarks, siteBenchmarks, customBenchmarks } from '@shared/schema';
+import { eq, and, inArray, or } from 'drizzle-orm';
 
 // Valid gender values from database schema
 const VALID_GENDERS = ['Male', 'Female', 'Not Specified'] as const;
 type ValidGender = typeof VALID_GENDERS[number];
 
+// Valid metric codes from database schema
+const VALID_METRIC_CODES = [
+  'FLY10_TIME',
+  'VERTICAL_JUMP',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+  'RSI',
+  'TOP_SPEED',
+  'HEIGHT',
+  'WEIGHT',
+] as const;
+type ValidMetricCode = typeof VALID_METRIC_CODES[number];
+
+// Array size limits for DoS protection
+const MAX_FILTER_IDS = 50; // Maximum number of IDs in filter arrays
+
 // Birth year validation constants
 const CURRENT_YEAR = new Date().getFullYear();
 const MIN_BIRTH_YEAR = CURRENT_YEAR - 100; // Reasonable minimum (100 years old)
 const MAX_BIRTH_YEAR = CURRENT_YEAR + 10; // Reasonable maximum (10 years in future for youth)
+
+// UUID regex for validation
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Type predicate to check if a string is a valid gender
@@ -66,6 +87,78 @@ async function validateTeamOwnership(teamIds: string[], organizationId: string):
     ));
 
   return userTeams.length === teamIds.length;
+}
+
+/**
+ * Validates that a string is a valid UUID
+ * @param value String to validate
+ * @returns True if valid UUID format, false otherwise
+ */
+function isValidUUID(value: string): boolean {
+  return UUID_REGEX.test(value);
+}
+
+/**
+ * Validates that a metric code is valid
+ * @param code Metric code to validate
+ * @returns True if valid metric code, false otherwise
+ */
+function isValidMetricCode(code: string): code is ValidMetricCode {
+  return (VALID_METRIC_CODES as readonly string[]).includes(code);
+}
+
+/**
+ * Validates array of UUIDs and returns error message if invalid
+ * @param ids Array of IDs to validate
+ * @param fieldName Name of the field (for error messages)
+ * @returns Error message if invalid, null if valid
+ */
+function validateUUIDArray(ids: string[], fieldName: string): string | null {
+  if (ids.length > MAX_FILTER_IDS) {
+    return `Too many ${fieldName}. Maximum allowed is ${MAX_FILTER_IDS}.`;
+  }
+
+  const invalidIds = ids.filter(id => !isValidUUID(id));
+  if (invalidIds.length > 0) {
+    return `Invalid ${fieldName} format. All IDs must be valid UUIDs.`;
+  }
+
+  return null;
+}
+
+/**
+ * Validates benchmark ownership for the organization
+ * @param benchmarkId Benchmark ID to validate
+ * @param organizationId Organization ID to check against
+ * @returns True if benchmark belongs to organization or is a site benchmark, false otherwise
+ */
+async function validateBenchmarkOwnership(benchmarkId: string, organizationId: string): Promise<boolean> {
+  // Check if benchmark is in organization's enabled benchmarks
+  const orgBenchmark = await db
+    .select({ id: organizationBenchmarks.id })
+    .from(organizationBenchmarks)
+    .where(and(
+      eq(organizationBenchmarks.benchmarkId, benchmarkId),
+      eq(organizationBenchmarks.organizationId, organizationId),
+      eq(organizationBenchmarks.isEnabled, true)
+    ))
+    .limit(1);
+
+  if (orgBenchmark.length > 0) {
+    return true;
+  }
+
+  // Check if it's a custom benchmark owned by the organization
+  const customBenchmark = await db
+    .select({ id: customBenchmarks.id })
+    .from(customBenchmarks)
+    .where(and(
+      eq(customBenchmarks.id, benchmarkId),
+      eq(customBenchmarks.organizationId, organizationId)
+    ))
+    .limit(1);
+
+  return customBenchmark.length > 0;
 }
 
 // Rate limiting for analytics endpoints
@@ -137,13 +230,21 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
           : undefined;
 
-        // Validate team ownership for non-admin users
-        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
-          const isValid = await validateTeamOwnership(teamIds, organizationId);
-          if (!isValid) {
-            return res.status(403).json({
-              message: 'Access denied - one or more team IDs do not belong to your organization'
-            });
+        // Validate teamIds array
+        if (teamIds && teamIds.length > 0) {
+          const validationError = validateUUIDArray(teamIds, 'team IDs');
+          if (validationError) {
+            return res.status(400).json({ message: validationError });
+          }
+
+          // Validate team ownership for non-admin users
+          if (!isSiteAdmin(user)) {
+            const isValid = await validateTeamOwnership(teamIds, organizationId);
+            if (!isValid) {
+              return res.status(403).json({
+                message: 'Access denied - one or more team IDs do not belong to your organization'
+              });
+            }
           }
         }
 
@@ -171,6 +272,14 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         const benchmarkIds = benchmarkIdsParam
           ? benchmarkIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
           : undefined;
+
+        // Validate benchmarkIds array
+        if (benchmarkIds && benchmarkIds.length > 0) {
+          const validationError = validateUUIDArray(benchmarkIds, 'benchmark IDs');
+          if (validationError) {
+            return res.status(400).json({ message: validationError });
+          }
+        }
 
         // Validate birth year range
         if (birthYearFrom !== undefined && isNaN(birthYearFrom)) {
@@ -244,6 +353,13 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'metricCode is required' });
         }
 
+        // Validate metricCode
+        if (!isValidMetricCode(metricCode)) {
+          return res.status(400).json({
+            message: `Invalid metric code. Must be one of: ${VALID_METRIC_CODES.join(', ')}`
+          });
+        }
+
         // Get organizationId from query or user's primary organization
         let organizationId = req.query.organizationId as string | undefined;
 
@@ -299,6 +415,11 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'benchmarkId is required' });
         }
 
+        // Validate benchmarkId format
+        if (!isValidUUID(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        }
+
         // Get organizationId from query or user's primary organization
         let organizationId = req.query.organizationId as string | undefined;
 
@@ -313,6 +434,16 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
           return res.status(403).json({ message: 'Access denied - organization mismatch' });
+        }
+
+        // Validate benchmark ownership (non-admin users only)
+        if (!isSiteAdmin(user)) {
+          const hasAccess = await validateBenchmarkOwnership(benchmarkId, organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: 'Access denied - benchmark does not belong to your organization'
+            });
+          }
         }
 
         // Parse optional parameters
@@ -414,6 +545,11 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'benchmarkId is required' });
         }
 
+        // Validate benchmarkId format
+        if (!isValidUUID(benchmarkId)) {
+          return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
+        }
+
         // Get organizationId from query or user's primary organization
         let organizationId = req.query.organizationId as string | undefined;
 
@@ -428,6 +564,16 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
           return res.status(403).json({ message: 'Access denied - organization mismatch' });
+        }
+
+        // Validate benchmark ownership (non-admin users only)
+        if (!isSiteAdmin(user)) {
+          const hasAccess = await validateBenchmarkOwnership(benchmarkId, organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: 'Access denied - benchmark does not belong to your organization'
+            });
+          }
         }
 
         // Validate status parameter
@@ -447,13 +593,21 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
           : undefined;
 
-        // Validate team ownership for non-admin users
-        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
-          const isValid = await validateTeamOwnership(teamIds, organizationId);
-          if (!isValid) {
-            return res.status(403).json({
-              message: 'Access denied - one or more team IDs do not belong to your organization'
-            });
+        // Validate teamIds array
+        if (teamIds && teamIds.length > 0) {
+          const validationError = validateUUIDArray(teamIds, 'team IDs');
+          if (validationError) {
+            return res.status(400).json({ message: validationError });
+          }
+
+          // Validate team ownership for non-admin users
+          if (!isSiteAdmin(user)) {
+            const isValid = await validateTeamOwnership(teamIds, organizationId);
+            if (!isValid) {
+              return res.status(403).json({
+                message: 'Access denied - one or more team IDs do not belong to your organization'
+              });
+            }
           }
         }
 

@@ -19,6 +19,7 @@ import { eq, and, inArray, gte, lte, desc, sql } from 'drizzle-orm';
 // Query result size limits to prevent OOM errors with large datasets
 const MAX_MEASUREMENT_ROWS = 50000; // Maximum measurements to fetch per query
 const MAX_DATE_RANGE_DAYS = 365;    // Maximum date range for progress queries (1 year)
+const MAX_ATHLETES_PER_QUERY = 10000; // Maximum athletes to fetch per query
 
 export interface TeamBenchmarkAggregation {
   benchmarkId: string;
@@ -140,7 +141,8 @@ export class BenchmarkAnalyticsService extends BaseService {
               ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
               : undefined
           )
-        );
+        )
+        .limit(MAX_ATHLETES_PER_QUERY);
 
       const athletes = await athletesQuery;
 
@@ -437,7 +439,8 @@ export class BenchmarkAnalyticsService extends BaseService {
               ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
               : undefined
           )
-        );
+        )
+        .limit(MAX_ATHLETES_PER_QUERY);
 
       const athletes = await athletesQuery;
 
@@ -556,7 +559,8 @@ export class BenchmarkAnalyticsService extends BaseService {
               ? inArray(users.gender, options.genders as ('Male' | 'Female' | 'Not Specified')[])
               : undefined
           )
-        );
+        )
+        .limit(MAX_ATHLETES_PER_QUERY);
 
       const athletes = await athletesQuery;
 

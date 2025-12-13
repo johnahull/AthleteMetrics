@@ -3,6 +3,9 @@
  *
  * Used across BenchmarkCard and BenchmarkDashboardWidget components
  * to ensure consistent color coding for achievement rates.
+ *
+ * WCAG Accessibility: Colors are combined with visual indicators (icons/symbols)
+ * to ensure information is conveyed through multiple channels, not color alone.
  */
 
 /**
@@ -11,6 +14,16 @@
 export const ACHIEVEMENT_RATE_THRESHOLDS = {
   EXCELLENT: 75,  // >= 75% achievement rate
   GOOD: 50,       // >= 50% achievement rate
+} as const;
+
+/**
+ * Visual indicators for achievement rates (WCAG compliance)
+ * Uses symbols that convey meaning beyond color
+ */
+export const ACHIEVEMENT_RATE_INDICATORS = {
+  EXCELLENT: '✓',  // Checkmark for excellent performance
+  GOOD: '○',       // Circle for good performance
+  NEEDS_IMPROVEMENT: '!',  // Exclamation for needs improvement
 } as const;
 
 /**
@@ -53,4 +66,38 @@ export function getBenchmarkProgressColorName(rate: number): 'green' | 'yellow' 
   if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.EXCELLENT) return 'green';
   if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.GOOD) return 'yellow';
   return 'orange';
+}
+
+/**
+ * Get visual indicator symbol based on achievement rate
+ * Used for WCAG accessibility to convey information beyond color
+ *
+ * @param rate - Achievement rate percentage (0-100)
+ * @returns Symbol character: '✓', '○', or '!'
+ */
+export function getBenchmarkProgressIndicator(rate: number): string {
+  if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.EXCELLENT) {
+    return ACHIEVEMENT_RATE_INDICATORS.EXCELLENT;
+  }
+  if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.GOOD) {
+    return ACHIEVEMENT_RATE_INDICATORS.GOOD;
+  }
+  return ACHIEVEMENT_RATE_INDICATORS.NEEDS_IMPROVEMENT;
+}
+
+/**
+ * Get accessibility label for achievement rate
+ * Provides screen reader-friendly description
+ *
+ * @param rate - Achievement rate percentage (0-100)
+ * @returns Descriptive label for screen readers
+ */
+export function getBenchmarkProgressLabel(rate: number): string {
+  if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.EXCELLENT) {
+    return 'Excellent achievement rate';
+  }
+  if (rate >= ACHIEVEMENT_RATE_THRESHOLDS.GOOD) {
+    return 'Good achievement rate';
+  }
+  return 'Needs improvement';
 }

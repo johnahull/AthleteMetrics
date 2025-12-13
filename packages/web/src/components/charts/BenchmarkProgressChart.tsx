@@ -65,7 +65,7 @@ export function BenchmarkProgressChart({
         borderColor: CHART_CONFIG.COLORS.AVERAGE,
         backgroundColor: CHART_CONFIG.COLORS.AVERAGE_ALPHA,
         borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.DEFAULT,
-        borderDash: CHART_CONFIG.STYLING.DASHED_LINE,
+        borderDash: CHART_CONFIG.STYLING.DASHED_LINE as number[],
         pointRadius: 0,
         pointHoverRadius: 0,
         pointBackgroundColor: CHART_CONFIG.COLORS.AVERAGE,
@@ -73,7 +73,7 @@ export function BenchmarkProgressChart({
         pointBorderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
         fill: false,
         tension: 0,
-      } as any); // Use any to bypass type inference from first dataset element
+      });
     }
 
     return {
