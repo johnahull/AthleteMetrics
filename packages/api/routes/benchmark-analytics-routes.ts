@@ -10,7 +10,7 @@ import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
-import { teams, organizationBenchmarks, siteBenchmarks, customBenchmarks } from '@shared/schema';
+import { teams, organizationBenchmarks, customBenchmarks } from '@shared/schema';
 import { eq, and, inArray, or } from 'drizzle-orm';
 
 // Valid gender values from database schema
@@ -221,7 +221,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied - organization mismatch' });
+          return res.status(403).json({ message: 'Access denied' });
         }
 
         // Parse optional filter parameters
@@ -242,7 +242,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
             const isValid = await validateTeamOwnership(teamIds, organizationId);
             if (!isValid) {
               return res.status(403).json({
-                message: 'Access denied - one or more team IDs do not belong to your organization'
+                message: 'Access denied'
               });
             }
           }
@@ -373,7 +373,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied - organization mismatch' });
+          return res.status(403).json({ message: 'Access denied' });
         }
 
         const result = await service.getBenchmarksForMetric(organizationId, metricCode);
@@ -433,7 +433,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied - organization mismatch' });
+          return res.status(403).json({ message: 'Access denied' });
         }
 
         // Validate benchmark ownership (non-admin users only)
@@ -441,7 +441,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           const hasAccess = await validateBenchmarkOwnership(benchmarkId, organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: 'Access denied - benchmark does not belong to your organization'
+              message: 'Access denied'
             });
           }
         }
@@ -460,13 +460,21 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           ? teamIdsParam.split(',').map((id) => id.trim()).filter(id => id.length > 0)
           : undefined;
 
-        // Validate team ownership for non-admin users
-        if (teamIds && teamIds.length > 0 && !isSiteAdmin(user)) {
-          const isValid = await validateTeamOwnership(teamIds, organizationId);
-          if (!isValid) {
-            return res.status(403).json({
-              message: 'Access denied - one or more team IDs do not belong to your organization'
-            });
+        // Validate teamIds array
+        if (teamIds && teamIds.length > 0) {
+          const validationError = validateUUIDArray(teamIds, 'team IDs');
+          if (validationError) {
+            return res.status(400).json({ message: validationError });
+          }
+
+          // Validate team ownership for non-admin users
+          if (!isSiteAdmin(user)) {
+            const isValid = await validateTeamOwnership(teamIds, organizationId);
+            if (!isValid) {
+              return res.status(403).json({
+                message: 'Access denied'
+              });
+            }
           }
         }
 
@@ -563,7 +571,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied - organization mismatch' });
+          return res.status(403).json({ message: 'Access denied' });
         }
 
         // Validate benchmark ownership (non-admin users only)
@@ -571,7 +579,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           const hasAccess = await validateBenchmarkOwnership(benchmarkId, organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: 'Access denied - benchmark does not belong to your organization'
+              message: 'Access denied'
             });
           }
         }
@@ -605,7 +613,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
             const isValid = await validateTeamOwnership(teamIds, organizationId);
             if (!isValid) {
               return res.status(403).json({
-                message: 'Access denied - one or more team IDs do not belong to your organization'
+                message: 'Access denied'
               });
             }
           }

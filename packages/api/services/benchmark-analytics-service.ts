@@ -594,6 +594,7 @@ export class BenchmarkAnalyticsService extends BaseService {
                 )
               )
               .orderBy(desc(measurements.date))
+              .limit(MAX_MEASUREMENT_ROWS)
           : [];
 
       // Get latest measurement for each athlete
@@ -754,6 +755,10 @@ export class BenchmarkAnalyticsService extends BaseService {
 
     if (operator === 'lte') {
       // Lower is better - cap at 100% for overachievement
+      // Protect against division by zero
+      if (athleteValue === 0) {
+        return 0;
+      }
       return Math.min((benchmarkValue / athleteValue) * 100, 100);
     } else {
       // gte: Higher is better - cap at 100% for overachievement
