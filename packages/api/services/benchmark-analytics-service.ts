@@ -893,6 +893,9 @@ export class BenchmarkAnalyticsService extends BaseService {
     const operator = benchmark.comparisonOperator as 'lte' | 'gte' | 'eq';
 
     // For each interval, compute achievement rate
+    // Complexity: O(intervals × measurements) worst-case, but O(intervals + measurements) average-case
+    // due to early-break optimization on line 905. Measurements are pre-sorted, so once we exceed
+    // the snapshot date, we can break early. With MAX_DATE_RANGE_DAYS=365 limit, this is efficient.
     for (const snapshotDate of intervalDates) {
       const snapshotTime = snapshotDate.getTime();
 

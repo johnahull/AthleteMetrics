@@ -69,25 +69,28 @@ test.describe('Benchmark Analytics Integration', () => {
     // Wait for benchmark selector to appear
     const benchmarkSelector = page.locator('[aria-label*="benchmark"], [data-testid*="benchmark"]').first();
 
-    // If benchmarks exist, test selection
-    if (await benchmarkSelector.isVisible({ timeout: 5000 })) {
-      // Get initial count of selected benchmarks
-      const initialCheckboxes = await page.locator('input[type="checkbox"][aria-label*="benchmark"]:checked').count();
+    // Check if benchmarks are available
+    const hasBenchmarks = await benchmarkSelector.isVisible({ timeout: 5000 }).catch(() => false);
 
-      // Click first benchmark checkbox to toggle selection
-      const firstCheckbox = page.locator('input[type="checkbox"][aria-label*="benchmark"]').first();
-      const wasChecked = await firstCheckbox.isChecked();
-      await firstCheckbox.click();
-
-      // Wait for checkbox state to change
-      await expect(firstCheckbox).toHaveAttribute('aria-checked', wasChecked ? 'false' : 'true', { timeout: 3000 });
-
-      // Verify checkbox state changed
-      const afterClickCheckboxes = await page.locator('input[type="checkbox"][aria-label*="benchmark"]:checked').count();
-      expect(afterClickCheckboxes).not.toBe(initialCheckboxes);
-    } else {
-      console.log('No benchmarks available for selection - skipping test');
+    // Explicitly skip test if preconditions are not met
+    if (!hasBenchmarks) {
+      test.skip(true, 'No benchmarks available - cannot test benchmark selection');
     }
+
+    // Get initial count of selected benchmarks
+    const initialCheckboxes = await page.locator('input[type="checkbox"][aria-label*="benchmark"]:checked').count();
+
+    // Click first benchmark checkbox to toggle selection
+    const firstCheckbox = page.locator('input[type="checkbox"][aria-label*="benchmark"]').first();
+    const wasChecked = await firstCheckbox.isChecked();
+    await firstCheckbox.click();
+
+    // Wait for checkbox state to change
+    await expect(firstCheckbox).toHaveAttribute('aria-checked', wasChecked ? 'false' : 'true', { timeout: 3000 });
+
+    // Verify checkbox state changed
+    const afterClickCheckboxes = await page.locator('input[type="checkbox"][aria-label*="benchmark"]:checked').count();
+    expect(afterClickCheckboxes).not.toBe(initialCheckboxes);
   });
 
   test('should display benchmark dashboard widget with achievement rates', async ({ page }) => {
