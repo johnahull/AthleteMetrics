@@ -50,8 +50,8 @@ test.describe('Benchmark Analytics Integration', () => {
       await page.locator('option, [role="option"]').filter({ hasText: /fly.*time|10.*yard/i }).first().click({ timeout: 5000 });
     }
 
-    // Wait for chart to render
-    await page.waitForTimeout(2000);
+    // Wait for chart canvas to render (indicates page is ready)
+    await page.waitForSelector('canvas', { timeout: 10000 });
 
     // Verify benchmark line selector is visible
     await expect(page.locator('text=/benchmark.*line|select.*benchmark/i').first()).toBeVisible({ timeout: 10000 });
@@ -76,10 +76,11 @@ test.describe('Benchmark Analytics Integration', () => {
 
       // Click first benchmark checkbox to toggle selection
       const firstCheckbox = page.locator('input[type="checkbox"][aria-label*="benchmark"]').first();
+      const wasChecked = await firstCheckbox.isChecked();
       await firstCheckbox.click();
 
-      // Wait for UI to update
-      await page.waitForTimeout(1000);
+      // Wait for checkbox state to change
+      await expect(firstCheckbox).toHaveAttribute('aria-checked', wasChecked ? 'false' : 'true', { timeout: 3000 });
 
       // Verify checkbox state changed
       const afterClickCheckboxes = await page.locator('input[type="checkbox"][aria-label*="benchmark"]:checked').count();
@@ -98,8 +99,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await page.click('button[role="tab"]:has-text("Multi-Athlete")');
     await page.waitForSelector('[data-state="active"]:has-text("Multi-Athlete")', { timeout: 5000 });
 
-    // Wait for dashboard widget to load
-    await page.waitForTimeout(2000);
+    // Wait for dashboard content to load (chart or widget)
+    await page.waitForSelector('canvas, [data-testid*="benchmark-dashboard"]', { timeout: 10000 });
 
     // Look for benchmark achievement cards or dashboard widget
     const benchmarkDashboard = page.locator('[data-testid*="benchmark-dashboard"], [aria-label*="benchmark.*dashboard"]').first();
@@ -142,8 +143,8 @@ test.describe('Benchmark Analytics Integration', () => {
       if (await metOption.isVisible({ timeout: 3000 })) {
         await metOption.click();
 
-        // Wait for filter to apply
-        await page.waitForTimeout(1500);
+        // Wait for filter to apply (athlete list updates)
+        await page.waitForLoadState('networkidle', { timeout: 5000 });
 
         // Verify filtered results (athletes list should update)
         await expect(page.locator('[data-testid*="athlete-list"], tbody').first()).toBeVisible({ timeout: 5000 });
@@ -158,8 +159,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await goToAnalytics(page);
     await page.waitForURL(/\/coach-analytics/, { timeout: 5000 });
 
-    // Wait for page to fully load
-    await page.waitForTimeout(2000);
+    // Wait for page content to load (at least one chart element)
+    await page.waitForSelector('canvas, [data-testid*="chart"]', { timeout: 10000 });
 
     // Look for benchmark progress chart component
     const progressChart = page.locator('[data-testid*="benchmark-progress"], canvas[aria-label*="benchmark.*progress"]').first();
@@ -190,8 +191,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await page.click('button[role="tab"]:has-text("Individual Athlete")');
     await page.waitForSelector('[data-state="active"]:has-text("Individual Athlete")', { timeout: 5000 });
 
-    // Wait for chart to render
-    await page.waitForTimeout(2000);
+    // Wait for chart canvas to render
+    await page.waitForSelector('canvas', { timeout: 10000 });
 
     // Get reference to chart canvas
     const chartCanvas = page.locator('canvas').first();
@@ -206,8 +207,8 @@ test.describe('Benchmark Analytics Integration', () => {
     if (await benchmarkCheckbox.isVisible({ timeout: 5000 })) {
       await benchmarkCheckbox.click();
 
-      // Wait for chart to re-render with benchmark line
-      await page.waitForTimeout(1500);
+      // Wait for chart to re-render with benchmark line (network request completes)
+      await page.waitForLoadState('networkidle', { timeout: 5000 });
 
       // Take screenshot after selecting benchmark
       const afterScreenshot = await chartCanvas.screenshot();
@@ -232,8 +233,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await page.click('button[role="tab"]:has-text("Multi-Athlete")');
     await page.waitForSelector('[data-state="active"]:has-text("Multi-Athlete")', { timeout: 5000 });
 
-    // Wait for benchmark cards to load
-    await page.waitForTimeout(2000);
+    // Wait for content to load (cards or dashboard elements)
+    await page.waitForSelector('canvas, [data-testid*="benchmark-card"], [data-testid*="dashboard"]', { timeout: 10000 });
 
     // Look for benchmark achievement cards
     const benchmarkCards = page.locator('[data-testid*="benchmark-card"]');
@@ -270,8 +271,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await page.click('button[role="tab"]:has-text("Multi-Athlete")');
     await page.waitForSelector('[data-state="active"]:has-text("Multi-Athlete")', { timeout: 5000 });
 
-    // Wait for filter panel
-    await page.waitForTimeout(2000);
+    // Wait for filter panel or content to load
+    await page.waitForSelector('[aria-label*="filter"], [data-testid*="filter"], canvas', { timeout: 10000 });
 
     // Look for benchmark filter section
     const filterSection = page.locator('[aria-label*="filter"], [data-testid*="filter"]').first();
@@ -296,8 +297,8 @@ test.describe('Benchmark Analytics Integration', () => {
     await goToAnalytics(page);
     await page.waitForURL(/\/coach-analytics/, { timeout: 5000 });
 
-    // Wait for page load
-    await page.waitForTimeout(2000);
+    // Wait for page content to load (dashboard or empty state)
+    await page.waitForSelector('h1, canvas, [data-testid*="empty-state"]', { timeout: 10000 });
 
     // Check if empty state message appears when no benchmarks configured
     const emptyState = page.locator('text=/no.*benchmark|benchmark.*not.*configured/i').first();
@@ -321,7 +322,7 @@ test.describe('Benchmark Analytics Integration', () => {
     await page.waitForSelector('[data-state="active"]:has-text("Individual Athlete")', { timeout: 5000 });
 
     // Wait for athlete selector and benchmark selector to load
-    await page.waitForTimeout(2000);
+    await page.waitForSelector('canvas, [aria-label*="benchmark"], [aria-label*="athlete"]', { timeout: 10000 });
 
     // Select a benchmark
     const benchmarkCheckbox = page.locator('input[type="checkbox"][aria-label*="benchmark"]').first();
@@ -347,8 +348,8 @@ test.describe('Benchmark Analytics Integration', () => {
           // Select second athlete
           await athleteOptions.nth(1).click();
 
-          // Wait for chart to update
-          await page.waitForTimeout(1500);
+          // Wait for chart to update (network request completes)
+          await page.waitForLoadState('networkidle', { timeout: 5000 });
 
           // Verify benchmark is still selected (should persist across athlete changes)
           await expect(benchmarkCheckbox).toBeChecked();

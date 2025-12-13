@@ -535,19 +535,7 @@ export function LineChart({
               {/* Athletes Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 mb-3">
                 {allAthletes.map(athlete => {
-                  const colors = [
-                    'rgba(59, 130, 246, 1)',    // Blue
-                    'rgba(16, 185, 129, 1)',    // Green
-                    'rgba(239, 68, 68, 1)',     // Red
-                    'rgba(245, 158, 11, 1)',    // Amber
-                    'rgba(139, 92, 246, 1)',    // Purple
-                    'rgba(236, 72, 153, 1)',    // Pink
-                    'rgba(20, 184, 166, 1)',    // Teal
-                    'rgba(251, 146, 60, 1)',    // Orange
-                    'rgba(124, 58, 237, 1)',    // Violet
-                    'rgba(34, 197, 94, 1)'      // Emerald - 10th color
-                  ];
-                  const athleteColor = colors[athlete.color % colors.length];
+                  const athleteColor = getAthleteColor(athlete.color);
 
                   return (
                     <div key={athlete.id} className="flex items-center space-x-2">
