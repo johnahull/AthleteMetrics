@@ -877,13 +877,14 @@ export class BenchmarkAnalyticsService extends BaseService {
 
     // Pre-sort measurements by date for efficient processing
     // O(n log n) sorting once instead of O(n*m) nested loops
+    // Use measurement ID as tie-breaker for deterministic ordering when timestamps match
     const sortedMeasurements = allMeasurements
       .map(m => ({
         ...m,
         dateTime: new Date(m.date).getTime(),
         numericValue: typeof m.value === 'string' ? parseFloat(m.value) : m.value,
       }))
-      .sort((a, b) => a.dateTime - b.dateTime);
+      .sort((a, b) => a.dateTime - b.dateTime || a.id.localeCompare(b.id));
 
     const benchmarkValue =
       typeof benchmark.benchmarkValue === 'string'

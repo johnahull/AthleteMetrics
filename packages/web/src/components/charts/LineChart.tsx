@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef } from 'react';
 import type { ChartOptions } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import type {
   TrendData,
   ChartConfiguration,
@@ -288,12 +289,12 @@ export function LineChart({
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
   // Generate benchmark annotations for Chart.js annotation plugin
-  const benchmarkAnnotations = useMemo(() => {
+  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
     if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
       return [];
     }
 
-    return benchmarks.map((benchmark) => {
+    return benchmarks.map((benchmark): AnnotationOptions => {
       // Determine line style (WCAG compliance: combine color with line style for accessibility)
       let borderDash: number[] | undefined;
       if (benchmark.lineStyle === 'dashed') {
@@ -304,7 +305,7 @@ export function LineChart({
       // If lineStyle is 'solid' or undefined, borderDash remains undefined (solid line)
 
       return {
-        type: 'line' as const,
+        type: 'line',
         yMin: benchmark.value,
         yMax: benchmark.value,
         borderColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
@@ -313,7 +314,7 @@ export function LineChart({
         label: {
           display: true,
           content: benchmark.name,
-          position: 'end' as const,
+          position: 'end',
           backgroundColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
           color: 'white',
           padding: 4,
