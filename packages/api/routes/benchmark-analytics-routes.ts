@@ -33,12 +33,12 @@ const VALID_METRIC_CODES = [
 type ValidMetricCode = typeof VALID_METRIC_CODES[number];
 
 // Array size limits for DoS protection
-const MAX_FILTER_IDS = 50; // Maximum number of IDs in filter arrays
+const MAX_FILTER_IDS = 50; // Prevents DoS via excessive IN clause values in database queries
 
 // Birth year validation constants
 const CURRENT_YEAR = new Date().getFullYear();
-const MIN_BIRTH_YEAR = CURRENT_YEAR - 100; // Reasonable minimum (100 years old)
-const MAX_BIRTH_YEAR = CURRENT_YEAR + 10; // Reasonable maximum (10 years in future for youth)
+const MIN_BIRTH_YEAR = CURRENT_YEAR - 100; // Allows athletes up to 100 years old
+const MAX_BIRTH_YEAR = CURRENT_YEAR + 10;  // Allows youth sports pre-registration (e.g., recruitment)
 
 // UUID regex for validation
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -96,6 +96,18 @@ async function validateTeamOwnership(teamIds: string[], organizationId: string):
  */
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
+}
+
+/**
+ * Creates an authorization error message appropriate for the environment
+ * In development: provides detailed context for debugging
+ * In production: uses generic message to prevent information disclosure
+ * @param detailedMessage Detailed message for development environments
+ * @returns Error message appropriate for current environment
+ */
+function getAuthorizationError(detailedMessage: string): string {
+  const isDevelopment = process.env.NODE_ENV !== 'production';
+  return isDevelopment ? detailedMessage : 'Access denied';
 }
 
 /**
@@ -221,7 +233,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({
+            message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
+          });
         }
 
         // Parse optional filter parameters
@@ -242,7 +256,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
             const isValid = await validateTeamOwnership(teamIds, organizationId);
             if (!isValid) {
               return res.status(403).json({
-                message: 'Access denied'
+                message: getAuthorizationError('Team access denied: one or more teams do not belong to your organization')
               });
             }
           }
@@ -373,7 +387,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({
+            message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
+          });
         }
 
         const result = await service.getBenchmarksForMetric(organizationId, metricCode);
@@ -433,7 +449,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({
+            message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
+          });
         }
 
         // Validate benchmark ownership (non-admin users only)
@@ -472,7 +490,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
             const isValid = await validateTeamOwnership(teamIds, organizationId);
             if (!isValid) {
               return res.status(403).json({
-                message: 'Access denied'
+                message: getAuthorizationError('Team access denied: one or more teams do not belong to your organization')
               });
             }
           }
@@ -571,7 +589,9 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
 
         // Permission check: non-admin users can only access their organization
         if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-          return res.status(403).json({ message: 'Access denied' });
+          return res.status(403).json({
+            message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
+          });
         }
 
         // Validate benchmark ownership (non-admin users only)
@@ -613,7 +633,7 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
             const isValid = await validateTeamOwnership(teamIds, organizationId);
             if (!isValid) {
               return res.status(403).json({
-                message: 'Access denied'
+                message: getAuthorizationError('Team access denied: one or more teams do not belong to your organization')
               });
             }
           }

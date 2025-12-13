@@ -17,9 +17,9 @@ import {
 import { eq, and, inArray, gte, lte, desc, sql } from 'drizzle-orm';
 
 // Query result size limits to prevent OOM errors with large datasets
-const MAX_MEASUREMENT_ROWS = 50000; // Maximum measurements to fetch per query
-const MAX_DATE_RANGE_DAYS = 365;    // Maximum date range for progress queries (1 year)
-const MAX_ATHLETES_PER_QUERY = 10000; // Maximum athletes to fetch per query
+const MAX_MEASUREMENT_ROWS = 50000;   // ~50MB typical payload (1KB/row) - prevents memory exhaustion
+const MAX_DATE_RANGE_DAYS = 365;      // Balances historical insight vs performance (1 year)
+const MAX_ATHLETES_PER_QUERY = 10000; // Prevents OOM on organization-wide queries
 
 export interface TeamBenchmarkAggregation {
   benchmarkId: string;
@@ -75,7 +75,17 @@ export interface AggregationOptions {
 export class BenchmarkAnalyticsService extends BaseService {
   /**
    * Get team benchmark aggregation for all enabled benchmarks
-   * Returns achievement rates and progress metrics
+   * Returns achievement rates and progress metrics for each benchmark
+   *
+   * @param organizationId - Organization ID to fetch benchmarks for
+   * @param options - Optional filters to narrow results
+   * @param options.teamIds - Filter athletes by specific teams
+   * @param options.genders - Filter athletes by gender (Male, Female, Not Specified)
+   * @param options.birthYearFrom - Minimum birth year (inclusive)
+   * @param options.birthYearTo - Maximum birth year (inclusive)
+   * @param options.benchmarkIds - Filter to specific benchmarks
+   * @returns Array of aggregated benchmark data with achievement rates
+   * @throws Error if database query fails
    */
   async getTeamBenchmarkAggregation(
     organizationId: string,
@@ -270,7 +280,12 @@ export class BenchmarkAnalyticsService extends BaseService {
 
   /**
    * Get all enabled benchmarks for a specific metric
-   * Used for chart overlay feature
+   * Used for chart overlay feature to display benchmark lines
+   *
+   * @param organizationId - Organization ID to fetch benchmarks for
+   * @param metricCode - Metric code to filter benchmarks (e.g., FLY10_TIME, VERTICAL_JUMP)
+   * @returns Array of benchmarks formatted for chart display with values and filters
+   * @throws Error if database query fails
    */
   async getBenchmarksForMetric(
     organizationId: string,
@@ -349,6 +364,17 @@ export class BenchmarkAnalyticsService extends BaseService {
   /**
    * Get benchmark progress over time
    * Returns time-series snapshots of benchmark achievement rates
+   *
+   * @param organizationId - Organization ID to fetch benchmarks for
+   * @param benchmarkId - Specific benchmark ID to track progress for
+   * @param options - Optional filters and date range configuration
+   * @param options.startDate - Start date for progress tracking (defaults to 90 days ago)
+   * @param options.endDate - End date for progress tracking (defaults to today)
+   * @param options.interval - Time interval for snapshots: 'day', 'week', or 'month' (defaults to 'week')
+   * @param options.teamIds - Filter athletes by specific teams
+   * @param options.genders - Filter athletes by gender (Male, Female, Not Specified)
+   * @returns Object containing benchmark details and time-series snapshots of achievement rates
+   * @throws Error if database query fails or date range exceeds maximum
    */
   async getBenchmarkProgressOverTime(
     organizationId: string,
@@ -496,6 +522,17 @@ export class BenchmarkAnalyticsService extends BaseService {
   /**
    * Get athletes filtered by benchmark status (met/unmet/no_data)
    * Only returns athletes matching the benchmark's demographic filters
+   *
+   * @param organizationId - Organization ID to fetch athletes for
+   * @param benchmarkId - Specific benchmark ID to filter by
+   * @param status - Filter status: 'met' (achieved benchmark), 'unmet' (not achieved), or 'no_data' (no measurements)
+   * @param options - Optional filters to narrow results
+   * @param options.teamIds - Filter athletes by specific teams
+   * @param options.genders - Filter athletes by gender (Male, Female, Not Specified)
+   * @param options.birthYearFrom - Minimum birth year (inclusive)
+   * @param options.birthYearTo - Maximum birth year (inclusive)
+   * @returns Array of athlete user IDs matching the specified status
+   * @throws Error if database query fails
    */
   async getAthletesByBenchmarkStatus(
     organizationId: string,
@@ -756,7 +793,12 @@ export class BenchmarkAnalyticsService extends BaseService {
     if (operator === 'lte') {
       // Lower is better - cap at 100% for overachievement
       // Protect against division by zero
+      if (athleteValue === 0 && benchmarkValue === 0) {
+        // Both zero: perfect match (100% progress)
+        return 100;
+      }
       if (athleteValue === 0) {
+        // Athlete has 0, benchmark is non-zero: no progress
         return 0;
       }
       return Math.min((benchmarkValue / athleteValue) * 100, 100);
