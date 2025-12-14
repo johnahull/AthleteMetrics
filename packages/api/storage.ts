@@ -1598,7 +1598,18 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
+  async acceptInvitation(
+    token: string,
+    userInfo: {
+      email: string;
+      username: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+      legalAcceptedAt?: string;
+      legalAcceptedVersion?: string;
+    }
+  ): Promise<{ user: User }> {
     // Use database transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
@@ -1618,6 +1629,12 @@ export class DatabaseStorage implements IStorage {
 
       let user;
 
+      // Prepare legal acceptance data
+      const legalData = userInfo.legalAcceptedAt ? {
+        legalAcceptedAt: new Date(userInfo.legalAcceptedAt),
+        legalAcceptedVersion: userInfo.legalAcceptedVersion || new Date().toISOString().split('T')[0]
+      } : {};
+
       // Check if invitation is linked to an existing athlete (playerId)
       if (invitation.playerId) {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
@@ -1634,7 +1651,8 @@ export class DatabaseStorage implements IStorage {
         user = await this.updateUser(invitation.playerId, {
           username: userInfo.username,
           password: userInfo.password,
-          isActive: true
+          isActive: true,
+          ...legalData
         });
 
         console.log("Updated existing athlete with credentials:", user.id);
@@ -1647,7 +1665,8 @@ export class DatabaseStorage implements IStorage {
           password: userInfo.password,
           firstName: userInfo.firstName,
           lastName: userInfo.lastName,
-          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
+          ...legalData
         };
 
         console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });

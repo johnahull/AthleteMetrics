@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'wouter';
+import { useLocation, Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
@@ -48,7 +49,8 @@ export default function AcceptInvitation() {
     lastName: '',
     username: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    termsAccepted: false
   });
   
   const [showPassword, setShowPassword] = useState(false);
@@ -102,6 +104,11 @@ export default function AcceptInvitation() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (!formData.termsAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to continue');
+      return;
+    }
+
     if (!formData.username.trim()) {
       setError('Username is required');
       return;
@@ -145,6 +152,7 @@ export default function AcceptInvitation() {
           lastName: formData.lastName,
           username: formData.username,
           password: formData.password,
+          legalAcceptedAt: new Date().toISOString(),
         }),
       });
 
@@ -439,10 +447,32 @@ export default function AcceptInvitation() {
               </Alert>
             )}
 
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="termsAccepted"
+                checked={formData.termsAccepted}
+                onCheckedChange={(checked) =>
+                  setFormData(prev => ({ ...prev, termsAccepted: checked === true }))
+                }
+                data-testid="checkbox-terms-accepted"
+                className="mt-1"
+              />
+              <Label htmlFor="termsAccepted" className="text-sm leading-relaxed cursor-pointer">
+                I am 18+ or have parental consent, and I agree to the{' '}
+                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Privacy Policy
+                </a>
+                {' '}and{' '}
+                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Terms of Service
+                </a>
+              </Label>
+            </div>
+
             <Button
               type="submit"
               className="w-full"
-              disabled={submitting}
+              disabled={submitting || !formData.termsAccepted}
               data-testid="button-accept-invitation"
             >
               {submitting ? (

@@ -761,7 +761,12 @@ export function registerInvitationRoutes(app: Express) {
   app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
     try {
       const { token } = req.params;
-      const { password, firstName, lastName, username } = req.body;
+      const { password, firstName, lastName, username, legalAcceptedAt } = req.body;
+
+      // Validate legal acceptance is provided
+      if (!legalAcceptedAt) {
+        return res.status(400).json({ message: "Terms and privacy policy acceptance is required" });
+      }
 
       // CSRF-like protection: Verify request came from same origin
       const referer = req.headers.referer || req.headers.origin;
@@ -848,7 +853,9 @@ export function registerInvitationRoutes(app: Express) {
         username,
         password,
         firstName,
-        lastName
+        lastName,
+        legalAcceptedAt,
+        legalAcceptedVersion: new Date().toISOString().split('T')[0] // Format: "2024-12-13"
       });
 
       console.log("Invitation accepted successfully, user created:", result.user.id);

@@ -111,6 +111,9 @@ export const users = pgTable("users", {
   // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
   showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
   peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
+  // Legal acceptance tracking (single timestamp since users accept both together)
+  legalAcceptedAt: timestamp("legal_accepted_at"),
+  legalAcceptedVersion: text("legal_accepted_version"), // e.g., "2024-12-13" matches LAST_UPDATED
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

@@ -56,6 +56,8 @@ const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
+const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
+const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -128,6 +130,16 @@ function Router() {
       <Route path="/verify-email">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <VerifyEmail />
+        </Suspense>
+      </Route>
+      <Route path="/privacy">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <PrivacyPolicy />
+        </Suspense>
+      </Route>
+      <Route path="/terms">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <TermsOfService />
         </Suspense>
       </Route>
       <Route path="/join/:code">
