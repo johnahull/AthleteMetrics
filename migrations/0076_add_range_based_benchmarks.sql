@@ -34,15 +34,18 @@ BEGIN
     ALTER TABLE custom_benchmarks ADD COLUMN max_value DECIMAL(10, 2);
   END IF;
 
-  -- Drop existing constraint on comparison_operator for site_benchmarks
+  -- Drop existing constraints on comparison_operator for site_benchmarks
+  -- Note: There may be duplicate constraints (_check and _valid) from different sources
   ALTER TABLE site_benchmarks DROP CONSTRAINT IF EXISTS site_benchmarks_comparison_operator_check;
+  ALTER TABLE site_benchmarks DROP CONSTRAINT IF EXISTS site_benchmarks_comparison_operator_valid;
 
   -- Add updated constraint with 'range' operator
   ALTER TABLE site_benchmarks ADD CONSTRAINT site_benchmarks_comparison_operator_check
     CHECK (comparison_operator IN ('lte', 'gte', 'eq', 'range'));
 
-  -- Drop existing constraint on comparison_operator for custom_benchmarks
+  -- Drop existing constraints on comparison_operator for custom_benchmarks
   ALTER TABLE custom_benchmarks DROP CONSTRAINT IF EXISTS custom_benchmarks_comparison_operator_check;
+  ALTER TABLE custom_benchmarks DROP CONSTRAINT IF EXISTS custom_benchmarks_comparison_operator_valid;
 
   -- Add updated constraint with 'range' operator
   ALTER TABLE custom_benchmarks ADD CONSTRAINT custom_benchmarks_comparison_operator_check
