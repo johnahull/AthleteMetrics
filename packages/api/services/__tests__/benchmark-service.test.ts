@@ -1179,4 +1179,122 @@ describe('Benchmark Service', () => {
       await db.delete(users).where(eq(users.id, athlete.id));
     });
   });
+
+  describe('Tier Benchmark Evaluation', () => {
+    // Test tier evaluation logic
+    it('should identify correct tier for athlete value within range', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete value within "Excellent" tier
+      const result = benchmarkService.evaluateTierBenchmark(4.5, tiers, true);
+
+      expect(result.tierName).toBe('Excellent');
+      expect(result.tierColor).toBe('silver');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('should calculate distance to next tier (lower-is-better metric)', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 4.5 (in Excellent tier), needs to reach 4.4 to enter Elite
+      const result = benchmarkService.evaluateTierBenchmark(4.5, tiers, true);
+
+      expect(result.nextTierName).toBe('Elite');
+      expect(result.distanceToNextTier).toBeCloseTo(0.1, 2); // 4.5 - 4.4 = 0.1
+    });
+
+    it('should calculate distance to next tier (higher-is-better metric)', () => {
+      const tiers = [
+        { minValue: 30, maxValue: 35, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 25, maxValue: 30, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 20, maxValue: 25, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 27 (in Excellent tier), needs to reach 30 to enter Elite
+      const result = benchmarkService.evaluateTierBenchmark(27, tiers, false);
+
+      expect(result.nextTierName).toBe('Elite');
+      expect(result.distanceToNextTier).toBeCloseTo(3, 2); // 30 - 27 = 3
+    });
+
+    it('should handle value at tier boundary', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+      ];
+
+      // Athlete exactly at boundary (4.4) - should be in Excellent tier
+      const result = benchmarkService.evaluateTierBenchmark(4.4, tiers, true);
+
+      expect(result.tierName).toBe('Excellent');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('should return null nextTier when at best tier', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+      ];
+
+      // Athlete at 4.3 (in Elite tier - best tier)
+      const result = benchmarkService.evaluateTierBenchmark(4.3, tiers, true);
+
+      expect(result.tierName).toBe('Elite');
+      expect(result.nextTierName).toBeNull();
+      expect(result.distanceToNextTier).toBeNull();
+    });
+
+    it('should handle value below all tiers', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 5.0 (below all tiers for lower-is-better)
+      const result = benchmarkService.evaluateTierBenchmark(5.0, tiers, true);
+
+      expect(result.tierName).toBeNull();
+      expect(result.tierOrder).toBeNull();
+      expect(result.nextTierName).toBe('Good'); // Closest tier to enter
+      expect(result.distanceToNextTier).toBeCloseTo(0.2, 2); // 5.0 - 4.8 = 0.2
+    });
+
+    it('should handle gaps between tier ranges', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        // GAP: 4.4 to 4.5
+        { minValue: 4.5, maxValue: 4.7, tierName: 'Good', tierColor: 'bronze', tierOrder: 2 },
+      ];
+
+      // Athlete at 4.45 (falls in gap between tiers)
+      const result = benchmarkService.evaluateTierBenchmark(4.45, tiers, true);
+
+      expect(result.tierName).toBeNull(); // Not in any tier
+      expect(result.nextTierName).toBe('Elite'); // Next best tier to reach
+      expect(result.distanceToNextTier).toBeCloseTo(0.05, 2); // 4.45 - 4.4 = 0.05
+    });
+
+    it('should handle value above all tiers (higher-is-better)', () => {
+      const tiers = [
+        { minValue: 30, maxValue: 35, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 25, maxValue: 30, tierName: 'Good', tierColor: 'bronze', tierOrder: 2 },
+      ];
+
+      // Athlete at 36 (above all tiers for higher-is-better) - already exceeds best tier
+      const result = benchmarkService.evaluateTierBenchmark(36, tiers, false);
+
+      expect(result.tierName).toBeNull(); // Above all defined tiers
+      expect(result.nextTierName).toBeNull(); // No next tier when already exceeding
+      expect(result.distanceToNextTier).toBeNull();
+    });
+  });
 });

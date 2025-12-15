@@ -238,6 +238,11 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   // Range-based benchmark fields (migration 0076)
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  // Tier grouping fields (migration 0077)
+  tierGroupId: varchar("tier_group_id"),
+  tierOrder: integer("tier_order"),
+  tierName: varchar("tier_name", { length: 50 }),
+  tierColor: varchar("tier_color", { length: 20 }),
   // Organization type filtering (NULL = applies to all org types)
   applicableOrgTypes: text("applicable_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Athlete attribute filters (NULL = applies to all)
@@ -291,6 +296,11 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   // Range-based benchmark fields (migration 0076)
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  // Tier grouping fields (migration 0077)
+  tierGroupId: varchar("tier_group_id"),
+  tierOrder: integer("tier_order"),
+  tierName: varchar("tier_name", { length: 50 }),
+  tierColor: varchar("tier_color", { length: 20 }),
   // Athlete attribute filters
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
@@ -1660,6 +1670,10 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1705,6 +1719,15 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
     return true;
   },
   { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
+).refine(
+  (data) => {
+    // If tierGroupId is set, tierOrder and tierName are required
+    if (data.tierGroupId !== undefined) {
+      return data.tierOrder !== undefined && data.tierName !== undefined;
+    }
+    return true;
+  },
+  { message: "Tier benchmarks require tierOrder and tierName when tierGroupId is set", path: ["tierGroupId"] }
 );
 
 export const updateSiteBenchmarkSchema = z.object({
@@ -1714,6 +1737,10 @@ export const updateSiteBenchmarkSchema = z.object({
   comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1766,6 +1793,10 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1807,6 +1838,15 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
     return true;
   },
   { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
+).refine(
+  (data) => {
+    // If tierGroupId is set, tierOrder and tierName are required
+    if (data.tierGroupId !== undefined) {
+      return data.tierOrder !== undefined && data.tierName !== undefined;
+    }
+    return true;
+  },
+  { message: "Tier benchmarks require tierOrder and tierName when tierGroupId is set", path: ["tierGroupId"] }
 );
 
 export const updateCustomBenchmarkSchema = z.object({
@@ -1816,6 +1856,10 @@ export const updateCustomBenchmarkSchema = z.object({
   comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
   minValue: z.number().optional(),
   maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),

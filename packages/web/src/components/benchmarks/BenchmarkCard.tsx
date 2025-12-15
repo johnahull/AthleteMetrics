@@ -7,8 +7,9 @@ import { useToggleSiteBenchmarkStatus, useDeleteSiteBenchmark } from "@/lib/benc
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useMetricConfig } from "@/hooks/use-metric-config";
-import { Edit, Trash2, Target } from "lucide-react";
+import { Edit, Trash2, Target, Layers } from "lucide-react";
 import { BenchmarkDeleteDialog } from "./BenchmarkDeleteDialog";
+import { TierBadgeCompact } from "./TierBadge";
 import type { SiteBenchmark } from "@shared/schema";
 
 interface BenchmarkCardProps {
@@ -76,6 +77,9 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
   // Check if this is a range benchmark
   const isRangeBenchmark = benchmark.comparisonOperator === 'range';
 
+  // Check if this is a tier benchmark
+  const isTierBenchmark = !!benchmark.tierGroupId;
+
   // Format athlete filters
   const athleteFilters: string[] = [];
   if (benchmark.gender) athleteFilters.push(`Gender: ${benchmark.gender}`);
@@ -101,13 +105,25 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
                 <Target className="h-4 w-4" />
                 {benchmark.name}
               </CardTitle>
-              <div className="flex gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant="outline">{benchmark.metricCode}</Badge>
                 <Badge variant={benchmark.isActive ? "default" : "secondary"}>
                   {benchmark.isActive ? "Active" : "Inactive"}
                 </Badge>
                 {benchmark.isSystemDefault && (
                   <Badge variant="secondary">System Default</Badge>
+                )}
+                {isTierBenchmark && benchmark.tierName && benchmark.tierColor && (
+                  <TierBadgeCompact
+                    tierName={benchmark.tierName}
+                    tierColor={benchmark.tierColor}
+                  />
+                )}
+                {isTierBenchmark && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Layers className="h-3 w-3" />
+                    Tier {benchmark.tierOrder}
+                  </Badge>
                 )}
               </div>
             </div>

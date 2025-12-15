@@ -33,6 +33,14 @@ export interface RequestContext {
   userAgent?: string;
 }
 
+export interface TierEvaluationResult {
+  tierName: string | null;
+  tierColor: string | null;
+  tierOrder: number | null;
+  nextTierName: string | null;
+  distanceToNextTier: number | null;
+}
+
 export class BenchmarkService extends BaseService {
   // ========================================================================
   // SITE BENCHMARKS (Site Admin Only)
@@ -839,6 +847,134 @@ export class BenchmarkService extends BaseService {
     const excessPercentage = ((athleteValue - maxValue) / maxValue) * 100;
     // Clamp to 0 minimum (can't have negative progress)
     return Math.max(0, 100 - excessPercentage);
+  }
+
+  /**
+   * Evaluate which tier an athlete's value falls into
+   * Cycle 23: Tier benchmark evaluation
+   *
+   * @param athleteValue - The athlete's measured value
+   * @param tiers - Array of tier definitions with ranges and metadata
+   * @param lowerIsBetter - True for metrics where lower values are better (e.g., time)
+   * @returns Tier evaluation result with current tier and distance to next tier
+   */
+  evaluateTierBenchmark(
+    athleteValue: number,
+    tiers: Array<{ minValue: number; maxValue: number; tierName: string; tierColor: string; tierOrder: number }>,
+    lowerIsBetter: boolean = true
+  ): TierEvaluationResult {
+    // Sort tiers by tierOrder (1 = best, 2 = second best, etc.)
+    const sortedTiers = [...tiers].sort((a, b) => a.tierOrder - b.tierOrder);
+
+    // Find the tier that contains the athlete's value
+    // When value is exactly at a boundary, prefer the worse tier (higher tierOrder)
+    const currentTier = sortedTiers
+      .slice()
+      .reverse()
+      .find(tier => athleteValue >= tier.minValue && athleteValue <= tier.maxValue);
+
+    if (currentTier) {
+      // Athlete is within a tier
+      const currentTierIndex = sortedTiers.indexOf(currentTier);
+
+      // Check if there's a better tier (lower tierOrder)
+      if (currentTierIndex > 0) {
+        const nextTier = sortedTiers[currentTierIndex - 1];
+        const distance = this.getDistanceToNextTier(
+          athleteValue,
+          nextTier.minValue,
+          nextTier.maxValue,
+          lowerIsBetter
+        );
+
+        return {
+          tierName: currentTier.tierName,
+          tierColor: currentTier.tierColor,
+          tierOrder: currentTier.tierOrder,
+          nextTierName: nextTier.tierName,
+          distanceToNextTier: distance,
+        };
+      } else {
+        // Already at best tier
+        return {
+          tierName: currentTier.tierName,
+          tierColor: currentTier.tierColor,
+          tierOrder: currentTier.tierOrder,
+          nextTierName: null,
+          distanceToNextTier: null,
+        };
+      }
+    } else {
+      // Athlete is not in any tier - find the next tier to reach
+      if (lowerIsBetter) {
+        // For lower-is-better metrics (e.g., time), find the worst tier they're slower than
+        const nextTier = sortedTiers
+          .slice()
+          .reverse()
+          .find(tier => athleteValue > tier.maxValue);
+
+        if (nextTier) {
+          const distance = athleteValue - nextTier.maxValue;
+          return {
+            tierName: null,
+            tierColor: null,
+            tierOrder: null,
+            nextTierName: nextTier.tierName,
+            distanceToNextTier: distance,
+          };
+        }
+      } else {
+        // For higher-is-better metrics (e.g., vertical jump), find the worst tier they're below
+        const nextTier = sortedTiers
+          .slice()
+          .reverse()
+          .find(tier => athleteValue < tier.minValue);
+
+        if (nextTier) {
+          const distance = nextTier.minValue - athleteValue;
+          return {
+            tierName: null,
+            tierColor: null,
+            tierOrder: null,
+            nextTierName: nextTier.tierName,
+            distanceToNextTier: distance,
+          };
+        }
+      }
+
+      // Value is outside all tiers (e.g., above best tier for higher-is-better)
+      return {
+        tierName: null,
+        tierColor: null,
+        tierOrder: null,
+        nextTierName: null,
+        distanceToNextTier: null,
+      };
+    }
+  }
+
+  /**
+   * Calculate distance to next tier
+   *
+   * @param athleteValue - Current athlete value
+   * @param nextTierMinValue - Next tier's minimum value
+   * @param nextTierMaxValue - Next tier's maximum value
+   * @param lowerIsBetter - True for metrics where lower values are better
+   * @returns Distance to reach the next tier
+   */
+  getDistanceToNextTier(
+    athleteValue: number,
+    nextTierMinValue: number,
+    nextTierMaxValue: number,
+    lowerIsBetter: boolean
+  ): number {
+    if (lowerIsBetter) {
+      // For lower-is-better, need to reach maxValue of next tier
+      return athleteValue - nextTierMaxValue;
+    } else {
+      // For higher-is-better, need to reach minValue of next tier
+      return nextTierMinValue - athleteValue;
+    }
   }
 
   /**
