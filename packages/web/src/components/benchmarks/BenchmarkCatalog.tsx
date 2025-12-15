@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { useSiteBenchmarks, useCustomBenchmarks, useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useSiteBenchmarksForOrg, useCustomBenchmarks, useOrganizationBenchmarks } from "@/lib/benchmarks-api";
 import { useMetricConfig } from "@/hooks/use-metric-config";
 import {
   Dialog,
@@ -26,8 +26,8 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
   const [searchQuery, setSearchQuery] = useState("");
   const { getMetricConfig } = useMetricConfig();
 
-  // Fetch all available benchmarks
-  const { data: siteBenchmarks, isLoading: loadingSite } = useSiteBenchmarks(false);
+  // Fetch site benchmarks available for this organization (filtered by org type)
+  const { data: siteBenchmarks, isLoading: loadingSite } = useSiteBenchmarksForOrg(organizationId, false);
   const { data: customBenchmarks, isLoading: loadingCustom } = useCustomBenchmarks(
     organizationId,
     false

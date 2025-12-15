@@ -44,7 +44,7 @@ export interface TeamBenchmarkAggregation {
 // ============================================================================
 
 /**
- * Fetch all site benchmarks
+ * Fetch all site benchmarks (site admin only)
  */
 export async function fetchSiteBenchmarks(includeInactive = false): Promise<SiteBenchmark[]> {
   const params = new URLSearchParams();
@@ -55,6 +55,30 @@ export async function fetchSiteBenchmarks(includeInactive = false): Promise<Site
   const response = await fetch(`/api/site-benchmarks?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site benchmarks');
+  }
+  return response.json();
+}
+
+/**
+ * Fetch site benchmarks available for an organization (org admin)
+ * Filters by organization type automatically
+ */
+export async function fetchSiteBenchmarksForOrg(
+  organizationId: string,
+  includeInactive = false
+): Promise<SiteBenchmark[]> {
+  const params = new URLSearchParams();
+  if (includeInactive) {
+    params.append('includeInactive', 'true');
+  }
+
+  const response = await fetch(`/api/benchmarks?${params.toString()}`, {
+    headers: {
+      'X-Organization-Id': organizationId,
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch site benchmarks for organization');
   }
   return response.json();
 }
@@ -319,12 +343,25 @@ export async function fetchAthleteBenchmarkStatus(
 // ============================================================================
 
 /**
- * Hook to fetch all site benchmarks
+ * Hook to fetch all site benchmarks (site admin only)
  */
 export function useSiteBenchmarks(includeInactive = false) {
   return useQuery({
     queryKey: ['siteBenchmarks', includeInactive],
     queryFn: () => fetchSiteBenchmarks(includeInactive),
+    staleTime: STALE_TIME.DEFAULT,
+  });
+}
+
+/**
+ * Hook to fetch site benchmarks for an organization (org admin)
+ * Filters by organization type automatically
+ */
+export function useSiteBenchmarksForOrg(organizationId: string, includeInactive = false) {
+  return useQuery({
+    queryKey: ['siteBenchmarksForOrg', organizationId, includeInactive],
+    queryFn: () => fetchSiteBenchmarksForOrg(organizationId, includeInactive),
+    enabled: !!organizationId,
     staleTime: STALE_TIME.DEFAULT,
   });
 }
