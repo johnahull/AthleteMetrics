@@ -212,6 +212,20 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
     }
   };
 
+  // Debug: Show validation errors when form submission fails
+  const onFormError = (errors: any) => {
+    console.log("Form validation errors:", errors);
+    // Show toast with first error
+    const firstError = Object.values(errors)[0] as any;
+    if (firstError?.message) {
+      toast({
+        title: "Validation Error",
+        description: firstError.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-2xl">
@@ -225,7 +239,18 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          <form onSubmit={form.handleSubmit(onSubmit, onFormError)} className="space-y-4">
+            {/* Form Error Summary */}
+            {Object.keys(form.formState.errors).length > 0 && (
+              <div className="bg-destructive/15 border border-destructive text-destructive px-4 py-3 rounded-md">
+                <p className="font-medium">Please fix the following errors:</p>
+                <ul className="list-disc list-inside text-sm mt-1">
+                  {Object.entries(form.formState.errors).map(([key, error]) => (
+                    <li key={key}>{(error as any)?.message || `Invalid ${key}`}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className="max-h-[60vh] overflow-y-auto pr-4">
               <div className="space-y-4">
                 {/* Metric Code */}
