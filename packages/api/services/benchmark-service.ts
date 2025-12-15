@@ -807,6 +807,11 @@ export class BenchmarkService extends BaseService {
     minValue: number,
     maxValue: number
   ): number {
+    // Validate inputs are finite numbers (guards against NaN, Infinity)
+    if (!Number.isFinite(athleteValue) || !Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+      return 0;
+    }
+
     // If within range, benchmark is met (100%)
     if (athleteValue >= minValue && athleteValue <= maxValue) {
       return 100;
@@ -820,7 +825,9 @@ export class BenchmarkService extends BaseService {
       }
       // Progress = (athleteValue / minValue) * 100
       // Example: minValue=25, athlete=20 → (20/25)*100 = 80%
-      return (athleteValue / minValue) * 100;
+      const progress = (athleteValue / minValue) * 100;
+      // Clamp to reasonable bounds (0-100) for display purposes
+      return Math.max(0, Math.min(100, progress));
     }
 
     // If above range, calculate how far above
@@ -830,6 +837,7 @@ export class BenchmarkService extends BaseService {
       return 0;
     }
     const excessPercentage = ((athleteValue - maxValue) / maxValue) * 100;
+    // Clamp to 0 minimum (can't have negative progress)
     return Math.max(0, 100 - excessPercentage);
   }
 

@@ -976,6 +976,49 @@ describe('Benchmark Service', () => {
       expect(progress).toBe(100);
     });
 
+    // Edge case: single point range (min === max)
+    it('should handle single point range (min === max)', () => {
+      // Range: 25 to 25, Athlete: 25 - should be 100%
+      const progressExact = benchmarkService.getRangeBenchmarkProgress(25, 25, 25);
+      expect(progressExact).toBe(100);
+
+      // Range: 25 to 25, Athlete: 24 - should be less than 100%
+      const progressBelow = benchmarkService.getRangeBenchmarkProgress(24, 25, 25);
+      expect(progressBelow).toBeLessThan(100);
+
+      // Range: 25 to 25, Athlete: 26 - should be less than 100%
+      const progressAbove = benchmarkService.getRangeBenchmarkProgress(26, 25, 25);
+      expect(progressAbove).toBeLessThan(100);
+    });
+
+    // Edge case: NaN and Infinity inputs
+    it('should return 0 for NaN inputs', () => {
+      expect(benchmarkService.getRangeBenchmarkProgress(NaN, 25, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, NaN, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, 25, NaN)).toBe(0);
+    });
+
+    it('should return 0 for Infinity inputs', () => {
+      expect(benchmarkService.getRangeBenchmarkProgress(Infinity, 25, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, Infinity, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, 25, Infinity)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(-Infinity, 25, 30)).toBe(0);
+    });
+
+    // Edge case: extreme deviations from range
+    it('should clamp progress for extreme values below range', () => {
+      // Athlete at 1 when min is 1000000 - should be clamped between 0-100
+      const progress = benchmarkService.getRangeBenchmarkProgress(1, 1000000, 2000000);
+      expect(progress).toBeGreaterThanOrEqual(0);
+      expect(progress).toBeLessThanOrEqual(100);
+    });
+
+    it('should clamp progress for extreme values above range', () => {
+      // Athlete at 1000000 when max is 30 - should not go below 0%
+      const progress = benchmarkService.getRangeBenchmarkProgress(1000000, 25, 30);
+      expect(progress).toBeGreaterThanOrEqual(0);
+    });
+
     // Cycle 22: getAthleteBenchmarkStatus() correctly evaluates range-based benchmarks
     it('should return benchmark status for range-based benchmarks (athlete within range)', async () => {
       // Create a site benchmark with range (minValue: 25, maxValue: 30 inches for vertical jump)

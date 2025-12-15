@@ -1732,6 +1732,24 @@ export const updateSiteBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // When switching to range mode, both min and max must be provided
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If both min and max are being updated, ensure min < max
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
 );
 
 export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).omit({
@@ -1815,6 +1833,24 @@ export const updateCustomBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // When switching to range mode, both min and max must be provided
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If both min and max are being updated, ensure min < max
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
 );
 
 export const insertOrganizationBenchmarkSchema = createInsertSchema(organizationBenchmarks).omit({

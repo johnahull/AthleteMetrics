@@ -130,7 +130,7 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
                 {isRangeBenchmark ? (
                   <>
                     <span className="text-2xl font-bold">
-                      {benchmark.minValue} – {benchmark.maxValue}
+                      {benchmark.minValue ?? '—'} – {benchmark.maxValue ?? '—'}
                     </span>
                     {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
                   </>
