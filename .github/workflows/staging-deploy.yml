@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload E2E test artifacts
         if: always() && steps.e2e-tests.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: e2e-test-results-${{ github.run_number }}
           path: |
