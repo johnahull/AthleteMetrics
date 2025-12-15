@@ -325,8 +325,10 @@ export async function fetchAthleteBenchmarkStatus(
   benchmarkId: string;
   benchmarkName: string;
   metricCode: string;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  benchmarkValue: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue?: number | null;
+  maxValue?: number | null;
   athleteValue: number | null;
   isMet: boolean;
   progress: number;
