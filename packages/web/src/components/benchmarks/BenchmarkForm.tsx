@@ -29,7 +29,6 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -227,7 +226,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <ScrollArea className="max-h-[60vh] pr-4">
+            <div className="max-h-[60vh] overflow-y-auto pr-4">
               <div className="space-y-4">
                 {/* Metric Code */}
                 <FormField
@@ -703,7 +702,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                   />
                 </div>
               </div>
-            </ScrollArea>
+            </div>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={onClose}>
