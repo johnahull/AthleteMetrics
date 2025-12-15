@@ -784,8 +784,59 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
+   * Evaluate if an athlete's value is within a range benchmark
+   * Cycle 20: Returns true when athlete value is within [minValue, maxValue] (inclusive)
+   */
+  evaluateRangeBenchmark(
+    athleteValue: number,
+    minValue: number,
+    maxValue: number
+  ): boolean {
+    return athleteValue >= minValue && athleteValue <= maxValue;
+  }
+
+  /**
+   * Calculate progress percentage for range-based benchmarks
+   * Cycle 21: Returns 100% when within range, <100% when outside range
+   * - Within range: 100% (meets benchmark)
+   * - Below range: percentage based on distance from minValue
+   * - Above range: percentage based on distance from maxValue
+   */
+  getRangeBenchmarkProgress(
+    athleteValue: number,
+    minValue: number,
+    maxValue: number
+  ): number {
+    // If within range, benchmark is met (100%)
+    if (athleteValue >= minValue && athleteValue <= maxValue) {
+      return 100;
+    }
+
+    // If below range, calculate how far below
+    if (athleteValue < minValue) {
+      // Avoid division by zero
+      if (minValue === 0) {
+        return 0;
+      }
+      // Progress = (athleteValue / minValue) * 100
+      // Example: minValue=25, athlete=20 → (20/25)*100 = 80%
+      return (athleteValue / minValue) * 100;
+    }
+
+    // If above range, calculate how far above
+    // Progress = 100 - ((athleteValue - maxValue) / maxValue * 100)
+    // Example: maxValue=30, athlete=35 → 100 - ((35-30)/30*100) = 100 - 16.67 = 83.33%
+    if (maxValue === 0) {
+      return 0;
+    }
+    const excessPercentage = ((athleteValue - maxValue) / maxValue) * 100;
+    return Math.max(0, 100 - excessPercentage);
+  }
+
+  /**
    * Get benchmark status for an athlete
    * Cycle 19: Returns met/unmet status for all applicable benchmarks
+   * Cycle 22: Now supports range-based benchmarks
    * Filters benchmarks by athlete attributes (age, gender, position, level)
    */
   async getAthleteBenchmarkStatus(
@@ -795,8 +846,10 @@ export class BenchmarkService extends BaseService {
     benchmarkId: string;
     benchmarkName: string;
     metricCode: string;
-    benchmarkValue: number;
-    comparisonOperator: 'lte' | 'gte' | 'eq';
+    benchmarkValue: number | null;
+    comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+    minValue?: number | null;
+    maxValue?: number | null;
     athleteValue: number | null;
     isMet: boolean;
     progress: number;
@@ -908,22 +961,48 @@ export class BenchmarkService extends BaseService {
         let progress = 0;
 
         if (athleteValue !== null) {
-          const benchmarkValue = typeof benchmark.benchmarkValue === 'string'
-            ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue;
+          if (benchmark.comparisonOperator === 'range') {
+            // Range-based benchmark evaluation
+            const minValue = typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue ?? 0;
+            const maxValue = typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue ?? 0;
 
-          isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
-          progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+            isMet = this.evaluateRangeBenchmark(athleteValue, minValue, maxValue);
+            progress = this.getRangeBenchmarkProgress(athleteValue, minValue, maxValue);
+          } else {
+            // Single-value benchmark evaluation (lte, gte, eq)
+            const benchmarkValue = typeof benchmark.benchmarkValue === 'string'
+              ? parseFloat(benchmark.benchmarkValue)
+              : benchmark.benchmarkValue ?? 0;
+
+            isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+            progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+          }
         }
 
         return {
           benchmarkId: benchmark.id,
           benchmarkName: benchmark.name,
           metricCode: benchmark.metricCode,
-          benchmarkValue: typeof benchmark.benchmarkValue === 'string'
-            ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue,
-          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+          benchmarkValue: benchmark.benchmarkValue
+            ? (typeof benchmark.benchmarkValue === 'string'
+              ? parseFloat(benchmark.benchmarkValue)
+              : benchmark.benchmarkValue)
+            : null,
+          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
+          minValue: benchmark.minValue
+            ? (typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue)
+            : null,
+          maxValue: benchmark.maxValue
+            ? (typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue)
+            : null,
           athleteValue,
           isMet,
           progress,

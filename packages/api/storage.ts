@@ -4266,8 +4266,10 @@ export class DatabaseStorage implements IStorage {
       .insert(siteBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric values to strings for decimal columns with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        // Convert numeric values to strings for decimal columns with proper precision
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4281,8 +4283,10 @@ export class DatabaseStorage implements IStorage {
       .update(siteBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(siteBenchmarks.id, id))
@@ -4381,8 +4385,10 @@ export class DatabaseStorage implements IStorage {
       .insert(customBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        // Convert numeric values to strings for decimal columns with proper precision
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4396,8 +4402,10 @@ export class DatabaseStorage implements IStorage {
       .update(customBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
         updatedAt: new Date(),
       })
       .where(
@@ -4473,6 +4481,8 @@ export class DatabaseStorage implements IStorage {
         description: siteBenchmarks.description,
         benchmarkValue: siteBenchmarks.benchmarkValue,
         comparisonOperator: siteBenchmarks.comparisonOperator,
+        minValue: siteBenchmarks.minValue,
+        maxValue: siteBenchmarks.maxValue,
         gender: siteBenchmarks.gender,
         ageMin: siteBenchmarks.ageMin,
         ageMax: siteBenchmarks.ageMax,
@@ -4507,6 +4517,8 @@ export class DatabaseStorage implements IStorage {
         description: customBenchmarks.description,
         benchmarkValue: customBenchmarks.benchmarkValue,
         comparisonOperator: customBenchmarks.comparisonOperator,
+        minValue: customBenchmarks.minValue,
+        maxValue: customBenchmarks.maxValue,
         gender: customBenchmarks.gender,
         ageMin: customBenchmarks.ageMin,
         ageMax: customBenchmarks.ageMax,
@@ -4528,8 +4540,10 @@ export class DatabaseStorage implements IStorage {
     // Convert to OrganizationBenchmarkWithDetails type
     return allResults.map(row => ({
       ...row,
-      benchmarkValue: Number(row.benchmarkValue),
-      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq',
+      benchmarkValue: row.benchmarkValue ? Number(row.benchmarkValue) : null,
+      minValue: row.minValue ? Number(row.minValue) : null,
+      maxValue: row.maxValue ? Number(row.maxValue) : null,
+      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
       gender: row.gender as 'Male' | 'Female' | 'Not Specified' | null,
       level: row.level as 'college' | 'high_school' | 'club' | null,
     }));

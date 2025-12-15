@@ -77,6 +77,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
       description: "",
       benchmarkValue: 0,
       comparisonOperator: "lte",
+      minValue: undefined,
+      maxValue: undefined,
       gender: undefined,
       ageMin: undefined,
       ageMax: undefined,
@@ -90,14 +92,19 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
     },
   });
 
+  // Watch comparison operator to conditionally show range fields
+  const comparisonOperator = form.watch("comparisonOperator");
+
   useEffect(() => {
     if (benchmark) {
       form.reset({
         metricCode: benchmark.metricCode,
         name: benchmark.name,
         description: benchmark.description || "",
-        benchmarkValue: parseFloat(benchmark.benchmarkValue),
-        comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+        benchmarkValue: benchmark.benchmarkValue ? parseFloat(benchmark.benchmarkValue) : undefined,
+        comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
+        minValue: benchmark.minValue ? parseFloat(benchmark.minValue) : undefined,
+        maxValue: benchmark.maxValue ? parseFloat(benchmark.maxValue) : undefined,
         gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
@@ -116,6 +123,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         description: "",
         benchmarkValue: 0,
         comparisonOperator: "lte",
+        minValue: undefined,
+        maxValue: undefined,
         gender: undefined,
         ageMin: undefined,
         ageMax: undefined,
@@ -239,8 +248,38 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                   )}
                 />
 
-                {/* Benchmark Value & Operator */}
-                <div className="grid grid-cols-2 gap-4">
+                {/* Comparison Operator */}
+                <FormField
+                  control={form.control}
+                  name="comparisonOperator"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Benchmark Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="comparison-operator-select">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="lte">≤ Lower is better (single value)</SelectItem>
+                          <SelectItem value="gte">≥ Higher is better (single value)</SelectItem>
+                          <SelectItem value="eq">= Exact match (single value)</SelectItem>
+                          <SelectItem value="range">↔ Target Range (min-max)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {comparisonOperator === 'range'
+                          ? "Athlete must fall within the specified range"
+                          : "Single threshold comparison"}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Single Value (for non-range benchmarks) */}
+                {comparisonOperator !== 'range' && (
                   <FormField
                     control={form.control}
                     name="benchmarkValue"
@@ -253,37 +292,63 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                             type="number"
                             step="0.001"
                             placeholder="1.00"
-                            onChange={(e) => field.onChange(parseFloat(e.target.value))}
+                            value={field.value ?? ''}
+                            onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
                           />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
                     )}
                   />
+                )}
 
-                  <FormField
-                    control={form.control}
-                    name="comparisonOperator"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Comparison</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                {/* Range Values (for range benchmarks) */}
+                {comparisonOperator === 'range' && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="minValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Minimum Value *</FormLabel>
                           <FormControl>
-                            <SelectTrigger data-testid="comparison-operator-select">
-                              <SelectValue />
-                            </SelectTrigger>
+                            <Input
+                              {...field}
+                              type="number"
+                              step="0.01"
+                              placeholder="4.20"
+                              value={field.value ?? ''}
+                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            />
                           </FormControl>
-                          <SelectContent>
-                            <SelectItem value="lte">≤ Lower is better</SelectItem>
-                            <SelectItem value="gte">≥ Higher is better</SelectItem>
-                            <SelectItem value="eq">= Exact match</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                          <FormDescription>Lower bound of acceptable range</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="maxValue"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum Value *</FormLabel>
+                          <FormControl>
+                            <Input
+                              {...field}
+                              type="number"
+                              step="0.01"
+                              placeholder="4.50"
+                              value={field.value ?? ''}
+                              onChange={(e) => field.onChange(e.target.value ? parseFloat(e.target.value) : undefined)}
+                            />
+                          </FormControl>
+                          <FormDescription>Upper bound of acceptable range</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
 
                 {/* Athlete Filters Section */}
                 <div className="border-t pt-4 mt-4">

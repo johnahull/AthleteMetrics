@@ -233,8 +233,11 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
-  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
+  // Range-based benchmark fields (migration 0076)
+  minValue: decimal("min_value", { precision: 10, scale: 2 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Organization type filtering (NULL = applies to all org types)
   applicableOrgTypes: text("applicable_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Athlete attribute filters (NULL = applies to all)
@@ -283,8 +286,11 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
-  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
+  // Range-based benchmark fields (migration 0076)
+  minValue: decimal("min_value", { precision: 10, scale: 2 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Athlete attribute filters
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
@@ -1650,8 +1656,10 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   metricCode: z.string().min(1, "Metric code is required").max(50),
   name: z.string().min(1, "Benchmark name is required").max(100),
   description: z.string().optional(),
-  benchmarkValue: z.number().positive("Benchmark value must be positive"),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  benchmarkValue: z.number().positive("Benchmark value must be positive").optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1670,13 +1678,42 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // If comparison operator is 'range', minValue and maxValue are required
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If comparison operator is 'range', minValue must be less than maxValue
+    if (data.comparisonOperator === 'range' && data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue for range benchmarks", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If comparison operator is NOT 'range', benchmarkValue is required
+    if (data.comparisonOperator !== 'range') {
+      return data.benchmarkValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
 );
 
 export const updateSiteBenchmarkSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1707,8 +1744,10 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   metricCode: z.string().min(1, "Metric code is required").max(50),
   name: z.string().min(1, "Benchmark name is required").max(100),
   description: z.string().optional(),
-  benchmarkValue: z.number().positive("Benchmark value must be positive"),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  benchmarkValue: z.number().positive("Benchmark value must be positive").optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1726,13 +1765,39 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator === 'range' && data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue for range benchmarks", path: ["minValue"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator !== 'range') {
+      return data.benchmarkValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
 );
 
 export const updateCustomBenchmarkSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -2018,8 +2083,10 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   name: string;
   metricCode: string;
   description: string | null;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  benchmarkValue: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue: number | null;
+  maxValue: number | null;
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;
