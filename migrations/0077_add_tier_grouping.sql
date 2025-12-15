@@ -17,13 +17,26 @@ ALTER TABLE custom_benchmarks
 
 -- Add constraint: tier benchmarks require tier_order and tier_name when tier_group_id is set
 -- This ensures data integrity for tier-grouped benchmarks
-ALTER TABLE site_benchmarks
-  ADD CONSTRAINT chk_tier_fields
-  CHECK (tier_group_id IS NULL OR (tier_order IS NOT NULL AND tier_name IS NOT NULL));
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'site_benchmarks' AND constraint_name = 'chk_tier_fields'
+  ) THEN
+    ALTER TABLE site_benchmarks
+      ADD CONSTRAINT chk_tier_fields
+      CHECK (tier_group_id IS NULL OR (tier_order IS NOT NULL AND tier_name IS NOT NULL));
+  END IF;
 
-ALTER TABLE custom_benchmarks
-  ADD CONSTRAINT chk_tier_fields_custom
-  CHECK (tier_group_id IS NULL OR (tier_order IS NOT NULL AND tier_name IS NOT NULL));
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'custom_benchmarks' AND constraint_name = 'chk_tier_fields_custom'
+  ) THEN
+    ALTER TABLE custom_benchmarks
+      ADD CONSTRAINT chk_tier_fields_custom
+      CHECK (tier_group_id IS NULL OR (tier_order IS NOT NULL AND tier_name IS NOT NULL));
+  END IF;
+END $$;
 
 -- Add indexes for tier queries (filtering/sorting by tier_group_id and tier_order)
 CREATE INDEX IF NOT EXISTS site_benchmarks_tier_group_idx

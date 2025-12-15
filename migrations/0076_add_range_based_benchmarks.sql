@@ -49,29 +49,49 @@ BEGIN
     CHECK (comparison_operator IN ('lte', 'gte', 'eq', 'range'));
 
   -- Add validation constraint: if comparison_operator is 'range', minValue and maxValue must be set
-  ALTER TABLE site_benchmarks ADD CONSTRAINT site_benchmarks_range_validation
-    CHECK (
-      (comparison_operator != 'range') OR
-      (comparison_operator = 'range' AND min_value IS NOT NULL AND max_value IS NOT NULL)
-    );
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'site_benchmarks' AND constraint_name = 'site_benchmarks_range_validation'
+  ) THEN
+    ALTER TABLE site_benchmarks ADD CONSTRAINT site_benchmarks_range_validation
+      CHECK (
+        (comparison_operator != 'range') OR
+        (comparison_operator = 'range' AND min_value IS NOT NULL AND max_value IS NOT NULL)
+      );
+  END IF;
 
-  ALTER TABLE custom_benchmarks ADD CONSTRAINT custom_benchmarks_range_validation
-    CHECK (
-      (comparison_operator != 'range') OR
-      (comparison_operator = 'range' AND min_value IS NOT NULL AND max_value IS NOT NULL)
-    );
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'custom_benchmarks' AND constraint_name = 'custom_benchmarks_range_validation'
+  ) THEN
+    ALTER TABLE custom_benchmarks ADD CONSTRAINT custom_benchmarks_range_validation
+      CHECK (
+        (comparison_operator != 'range') OR
+        (comparison_operator = 'range' AND min_value IS NOT NULL AND max_value IS NOT NULL)
+      );
+  END IF;
 
   -- Add validation constraint: minValue must be less than maxValue for range benchmarks
-  ALTER TABLE site_benchmarks ADD CONSTRAINT site_benchmarks_range_order
-    CHECK (
-      (comparison_operator != 'range') OR
-      (min_value < max_value)
-    );
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'site_benchmarks' AND constraint_name = 'site_benchmarks_range_order'
+  ) THEN
+    ALTER TABLE site_benchmarks ADD CONSTRAINT site_benchmarks_range_order
+      CHECK (
+        (comparison_operator != 'range') OR
+        (min_value < max_value)
+      );
+  END IF;
 
-  ALTER TABLE custom_benchmarks ADD CONSTRAINT custom_benchmarks_range_order
-    CHECK (
-      (comparison_operator != 'range') OR
-      (min_value < max_value)
-    );
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE table_name = 'custom_benchmarks' AND constraint_name = 'custom_benchmarks_range_order'
+  ) THEN
+    ALTER TABLE custom_benchmarks ADD CONSTRAINT custom_benchmarks_range_order
+      CHECK (
+        (comparison_operator != 'range') OR
+        (min_value < max_value)
+      );
+  END IF;
 
 END $$;
