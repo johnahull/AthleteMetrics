@@ -114,6 +114,16 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   const comparisonOperator = form.watch("comparisonOperator");
   const selectedMetricCode = form.watch("metricCode");
 
+  // Clear tier fields when tier mode is disabled or when switching away from range
+  useEffect(() => {
+    if (!isTierMode || comparisonOperator !== 'range') {
+      form.setValue("tierGroupId", undefined);
+      form.setValue("tierOrder", undefined);
+      form.setValue("tierName", undefined);
+      form.setValue("tierColor", undefined);
+    }
+  }, [isTierMode, comparisonOperator, form]);
+
   // Fetch existing tier groups for the selected metric
   const { data: tierGroups = [] } = useQuery({
     queryKey: ["/api/site-benchmarks/tier-groups", selectedMetricCode],
