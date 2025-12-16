@@ -60,7 +60,47 @@ interface AthleteData {
   metrics: Record<string, number>;
 }
 
+// Using generic array for datasets to support mixed chart types (scatter + line for regression)
+interface ScatterChartData {
+  datasets: Array<{
+    type?: 'scatter' | 'line';
+    label: string;
+    data: Array<{ x: number; y: number } | ScatterPoint>;
+    [key: string]: unknown;
+  }>;
+  xMetric: string;
+  yMetric: string;
+  xUnit: string;
+  yUnit: string;
+  xLabel: string;
+  yLabel: string;
+  points: ScatterPoint[];
+  regression: RegressionResult | null;
+  validatedStats: Record<string, Partial<StatisticalSummary>>;
+}
+
+// Type for Chart.js element with context (used for athlete name rendering)
+interface ChartElement {
+  x: number;
+  y: number;
+  $context?: {
+    raw?: ScatterPoint;
+  };
+}
+
 // Register Chart.js components
+ChartJS.register(
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ScatterController,
+  LineController,
+  Filler,
+  annotationPlugin
+);
 
 // Regression calculation helper function
 function calculateRegression(points: ScatterPoint[]): RegressionResult | null {
@@ -212,7 +252,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   const { getMetricConfig } = useMetricConfig();
 
   const monitor = usePerformanceMonitor('ScatterPlotChart');
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const namesRenderedRef = useRef<boolean>(false);
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
@@ -283,7 +323,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     if (scatterPoints.length === 0) return null;
 
     // Simple fallback: use server statistics if available, otherwise calculate from data
-    const validatedStats: Record<string, any> = {};
+    const validatedStats: Record<string, Partial<StatisticalSummary>> = {};
 
     for (const metric of [xMetric, yMetric]) {
       let stats = statistics?.[metric];
@@ -414,11 +454,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       points: scatterPoints,
       regression,
       validatedStats
-    } as any;
+    } as ScatterChartData;
     } finally {
       monitor.endTiming('dataTransformation');
     }
-  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants, localShowAthleteNames]);
+  }, [data, statistics, highlightAthlete, showRegressionLine, getMetricConfig]);
 
   // Memoize correlation coefficient calculation
   const correlation = useMemo(() => {
@@ -639,11 +679,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         callbacks: {
           title: (context) => {
             if (!context || context.length === 0) return 'Unknown';
-            const point = context[0].raw as any;
+            const point = context[0].raw as ScatterPoint | undefined;
             return point?.athleteName || 'Group Average';
           },
           label: (context) => {
-            const point = context.raw as any;
+            const point = context.raw as ScatterPoint | undefined;
             if (!point) return ['No data'];
 
             // Format x value with dual display for FLY10_TIME
@@ -664,7 +704,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             ];
           },
           afterLabel: (context) => {
-            const point = context.raw as any;
+            const point = context.raw as ScatterPoint | undefined;
             return point?.teamName ? [`Team: ${point.teamName}`] : [];
           }
         }
@@ -676,7 +716,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       annotation: (showQuadrants || Object.keys(benchmarkAnnotations).length > 0) && scatterData ? {
         annotations: (() => {
           // Start with benchmark annotations
-          const allAnnotations: Record<string, any> = { ...benchmarkAnnotations };
+          const allAnnotations: Record<string, AnnotationOptions> = { ...benchmarkAnnotations };
 
           // Add quadrant annotations if enabled
           if (showQuadrants) {
@@ -838,13 +878,14 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
               const meta = chart.getDatasetMeta(0); // Get first dataset metadata
               if (meta && meta.data) {
                 // Find the corresponding chart element for this point
-                const chartElement = meta.data.find((element: any) => {
-                  if (element && element.$context && element.$context.raw) {
-                    const rawData = element.$context.raw;
+                const chartElement = meta.data.find((element: unknown) => {
+                  const el = element as ChartElement;
+                  if (el && el.$context && el.$context.raw) {
+                    const rawData = el.$context.raw;
                     return rawData.x === point.x && rawData.y === point.y;
                   }
                   return false;
-                });
+                }) as ChartElement | undefined;
 
                 if (chartElement && point.athleteName) {
                   const x = chartElement.x + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_X;
@@ -1001,7 +1042,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
       {/* Chart */}
       <div className="h-96">
-        <Scatter ref={chartRef} data={scatterData} options={options} />
+        {/* Type assertion needed because Scatter chart supports mixed datasets (scatter + line for regression) at runtime */}
+        <Scatter ref={chartRef} data={scatterData as Parameters<typeof Scatter>[0]['data']} options={options} />
       </div>
     </div>
   );

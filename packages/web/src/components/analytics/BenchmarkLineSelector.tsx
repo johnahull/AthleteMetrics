@@ -44,6 +44,12 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     ? `${labelPrefix} Benchmarks (${metricLabel})`
     : `Benchmarks for ${metricLabel}`;
 
+  // Generate unique IDs for accessibility (supports multiple selectors on same page)
+  const selectorId = useMemo(() => {
+    const base = metricCode.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `benchmark-selector-${base}`;
+  }, [metricCode]);
+
   // Handle individual checkbox toggle - memoized for performance
   const handleToggle = useCallback((benchmarkId: string) => {
     const isSelected = selectedBenchmarkIds.includes(benchmarkId);
@@ -114,7 +120,7 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   if (isLoading) {
     return (
       <div className="space-y-2" role="status" aria-label="Loading benchmarks">
-        <div className="text-sm font-medium" id="benchmark-selector-label">{displayLabel}</div>
+        <div className="text-sm font-medium" id={selectorId}>{displayLabel}</div>
         <Skeleton className="h-10 w-full" aria-hidden="true" />
         <div className="text-sm text-muted-foreground">Loading benchmarks...</div>
       </div>
@@ -156,7 +162,7 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     <div className="space-y-3">
       {/* Header with controls */}
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium" id="benchmark-selector-label">
+        <div className="text-sm font-medium" id={selectorId}>
           {displayLabel} ({selectedCount} of {benchmarks.length} selected)
         </div>
         <div className="flex gap-2" role="group" aria-label="Benchmark selection actions">
@@ -185,10 +191,10 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
       <div
         className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-3 bg-gray-50"
         role="group"
-        aria-labelledby="benchmark-selector-label"
-        aria-describedby="benchmark-selection-hint"
+        aria-labelledby={selectorId}
+        aria-describedby={`${selectorId}-hint`}
       >
-        <span id="benchmark-selection-hint" className="sr-only">
+        <span id={`${selectorId}-hint`} className="sr-only">
           Select benchmarks to display as horizontal lines on the chart
         </span>
         {benchmarks.map((benchmark) => {

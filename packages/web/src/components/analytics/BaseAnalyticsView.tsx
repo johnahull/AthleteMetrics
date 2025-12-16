@@ -26,7 +26,7 @@ import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
 
-import type { AnalysisType, AnalyticsFilters, BenchmarkLine, ChartType } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, ChartType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
@@ -56,7 +56,7 @@ interface BaseAnalyticsViewProps {
   customToolbar?: React.ReactNode;
 
   // Callbacks
-  onAnalyticsDataChange?: (data: any) => void;
+  onAnalyticsDataChange?: (data: AnalyticsResponse | null) => void;
   onError?: (error: string) => void;
 
   // Initial state
@@ -176,9 +176,9 @@ function BaseAnalyticsViewContent({
           benchmarks.push({
             id: b.id,
             name: b.name,
-            value: b.benchmarkValue,
-            minValue: b.minValue,
-            maxValue: b.maxValue,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
             comparisonOperator: b.comparisonOperator,
             color: b.color ?? undefined,
             lineStyle: 'dashed' as const,
@@ -196,9 +196,9 @@ function BaseAnalyticsViewContent({
           benchmarks.push({
             id: b.id,
             name: b.name,
-            value: b.benchmarkValue,
-            minValue: b.minValue,
-            maxValue: b.maxValue,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
             comparisonOperator: b.comparisonOperator,
             color: b.color ?? undefined,
             lineStyle: 'dashed' as const,
