@@ -91,7 +91,8 @@ describe('BenchmarkLineSelector', () => {
       </TestWrapper>
     );
 
-    expect(screen.getByText('Benchmark Lines')).toBeInTheDocument();
+    // Component now shows "Benchmarks for {metricLabel}" format
+    expect(screen.getByText(/Benchmarks for/i)).toBeInTheDocument();
   });
 
   it('displays loading state while fetching benchmarks', () => {
