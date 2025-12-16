@@ -288,6 +288,55 @@ export function LineChart({
     return bests;
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
   // Generate benchmark annotations for Chart.js annotation plugin
   const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
     if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
@@ -297,26 +346,7 @@ export function LineChart({
     return benchmarks.map((benchmark): AnnotationOptions => {
       const defaultColor = 'rgba(255, 99, 132, 0.8)';
       const color = benchmark.color || defaultColor;
-
-      // Parse color to create semi-transparent background
-      // Handle rgba, rgb, and hex formats
-      let backgroundColor: string;
-      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
-      const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
-
-      if (rgbaMatch) {
-        backgroundColor = `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, 0.15)`;
-      } else if (hexMatch) {
-        // Convert hex to rgba with 15% opacity
-        const hex = hexMatch[1];
-        const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
-        const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
-        const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
-        backgroundColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
-      } else {
-        // Fallback for named colors or other formats
-        backgroundColor = `${color}26`;
-      }
+      const backgroundColor = parseColorToRgba(color, 0.15);
 
       // Range benchmark: render as box annotation
       if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
