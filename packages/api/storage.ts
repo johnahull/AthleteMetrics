@@ -4279,17 +4279,87 @@ export class DatabaseStorage implements IStorage {
 
   async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark> {
     const dbInstance = tx || db;
+
+    // Build insert values explicitly, only including fields with actual values
+    // This prevents Drizzle from inserting NULL for undefined/null fields
+    const insertValues: Partial<typeof siteBenchmarks.$inferInsert> = {
+      // Required fields
+      metricCode: benchmark.metricCode,
+      name: benchmark.name,
+      comparisonOperator: benchmark.comparisonOperator || 'lte',
+      // Control flags with defaults
+      isSystemDefault: benchmark.isSystemDefault ?? false,
+      isActive: benchmark.isActive ?? true,
+      displayOrder: benchmark.displayOrder ?? 999,
+      benchmarkSource: benchmark.benchmarkSource ?? 'static',
+      // Metadata
+      createdBy,
+      createdAt: new Date(),
+    };
+
+    // Optional text fields - only include if provided
+    if (benchmark.description !== undefined && benchmark.description !== null) {
+      insertValues.description = benchmark.description;
+    }
+    if (benchmark.tierGroupId !== undefined && benchmark.tierGroupId !== null) {
+      insertValues.tierGroupId = benchmark.tierGroupId;
+    }
+    if (benchmark.tierName !== undefined && benchmark.tierName !== null) {
+      insertValues.tierName = benchmark.tierName;
+    }
+    if (benchmark.tierColor !== undefined && benchmark.tierColor !== null) {
+      insertValues.tierColor = benchmark.tierColor;
+    }
+    if (benchmark.color !== undefined && benchmark.color !== null) {
+      insertValues.color = benchmark.color;
+    }
+    if (benchmark.icon !== undefined && benchmark.icon !== null) {
+      insertValues.icon = benchmark.icon;
+    }
+    if (benchmark.gender !== undefined && benchmark.gender !== null) {
+      insertValues.gender = benchmark.gender;
+    }
+    if (benchmark.position !== undefined && benchmark.position !== null) {
+      insertValues.position = benchmark.position;
+    }
+    if (benchmark.level !== undefined && benchmark.level !== null) {
+      insertValues.level = benchmark.level;
+    }
+
+    // Optional numeric fields - convert to string for decimal precision
+    if (benchmark.benchmarkValue !== undefined && benchmark.benchmarkValue !== null) {
+      insertValues.benchmarkValue = Number(benchmark.benchmarkValue).toFixed(3);
+    }
+    if (benchmark.minValue !== undefined && benchmark.minValue !== null) {
+      insertValues.minValue = Number(benchmark.minValue).toFixed(3);
+    }
+    if (benchmark.maxValue !== undefined && benchmark.maxValue !== null) {
+      insertValues.maxValue = Number(benchmark.maxValue).toFixed(3);
+    }
+    if (benchmark.tierOrder !== undefined && benchmark.tierOrder !== null) {
+      insertValues.tierOrder = benchmark.tierOrder;
+    }
+    if (benchmark.ageMin !== undefined && benchmark.ageMin !== null) {
+      insertValues.ageMin = benchmark.ageMin;
+    }
+    if (benchmark.ageMax !== undefined && benchmark.ageMax !== null) {
+      insertValues.ageMax = benchmark.ageMax;
+    }
+    if (benchmark.peerPercentileTarget !== undefined && benchmark.peerPercentileTarget !== null) {
+      insertValues.peerPercentileTarget = benchmark.peerPercentileTarget;
+    }
+
+    // Optional array/object fields
+    if (benchmark.applicableOrgTypes !== undefined && benchmark.applicableOrgTypes !== null) {
+      insertValues.applicableOrgTypes = benchmark.applicableOrgTypes;
+    }
+    if (benchmark.peerFilterCriteria !== undefined && benchmark.peerFilterCriteria !== null) {
+      insertValues.peerFilterCriteria = benchmark.peerFilterCriteria;
+    }
+
     const [created] = await dbInstance
       .insert(siteBenchmarks)
-      .values({
-        ...benchmark,
-        // Convert numeric values to strings for decimal columns with proper precision
-        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
-        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
-        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
-        createdBy,
-        createdAt: new Date(),
-      })
+      .values(insertValues as typeof siteBenchmarks.$inferInsert)
       .returning();
 
     return created;
