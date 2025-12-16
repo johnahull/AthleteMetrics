@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import {
@@ -222,11 +222,10 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
     }
   };
 
-  // Debug: Show validation errors when form submission fails
-  const onFormError = (errors: any) => {
-    console.log("Form validation errors:", errors);
+  // Show validation errors when form submission fails
+  const onFormError = (errors: FieldErrors<InsertSiteBenchmark>) => {
     // Show toast with first error
-    const firstError = Object.values(errors)[0] as any;
+    const firstError = Object.values(errors)[0];
     if (firstError?.message) {
       toast({
         title: "Validation Error",

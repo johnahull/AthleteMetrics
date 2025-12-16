@@ -9,7 +9,8 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
 import { peerComparisonService, type PeerFilterCriteria } from "../services/peer-comparison-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
-import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
+import { validateOrgTypeQuery, type OrganizationTypeRequest } from "../middleware/organization-type-middleware";
+import { z } from "zod";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
@@ -19,6 +20,15 @@ import {
 } from "@shared/schema";
 
 const benchmarkService = new BenchmarkService();
+
+// Zod schema for peer filter criteria validation
+const peerFilterSchema = z.object({
+  ageRange: z.tuple([z.number(), z.number()]).optional(),
+  gender: z.enum(['Male', 'Female']).optional(),
+  orgTypes: z.array(z.string()).optional(),
+  sports: z.array(z.string()).optional(),
+  teamIds: z.array(z.string()).optional(),
+}).strict();
 
 function sanitizeError(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;
@@ -149,7 +159,7 @@ export function registerBenchmarkRoutes(app: Express) {
       try {
         const userId = req.session.user!.id;
         const includeInactive = req.query.includeInactive === 'true';
-        const orgType = (req as any).organizationType as string | undefined; // Get validated org type from middleware
+        const orgType = (req as OrganizationTypeRequest).organizationType ?? undefined; // Get validated org type from middleware
 
         const benchmarks = await benchmarkService.getSiteBenchmarks(userId, { includeInactive, orgType });
         res.json(benchmarks);
@@ -615,12 +625,16 @@ export function registerBenchmarkRoutes(app: Express) {
         }
         const metrics = metricsParam.split(',').map(m => m.trim()).filter(m => m);
 
-        // Parse optional filters
+        // Parse and validate optional filters
         let filters: PeerFilterCriteria = {};
         if (req.query.filters) {
           try {
-            filters = JSON.parse(req.query.filters as string);
-          } catch {
+            const parsed = JSON.parse(req.query.filters as string);
+            filters = peerFilterSchema.parse(parsed);
+          } catch (parseError) {
+            if (parseError instanceof z.ZodError) {
+              return res.status(400).json({ message: "Invalid filters format", errors: parseError.errors });
+            }
             return res.status(400).json({ message: "Invalid filters JSON" });
           }
         }
@@ -656,12 +670,16 @@ export function registerBenchmarkRoutes(app: Express) {
       try {
         const { metric } = req.params;
 
-        // Parse optional filters
+        // Parse and validate optional filters
         let filters: PeerFilterCriteria = {};
         if (req.query.filters) {
           try {
-            filters = JSON.parse(req.query.filters as string);
-          } catch {
+            const parsed = JSON.parse(req.query.filters as string);
+            filters = peerFilterSchema.parse(parsed);
+          } catch (parseError) {
+            if (parseError instanceof z.ZodError) {
+              return res.status(400).json({ message: "Invalid filters format", errors: parseError.errors });
+            }
             return res.status(400).json({ message: "Invalid filters JSON" });
           }
         }

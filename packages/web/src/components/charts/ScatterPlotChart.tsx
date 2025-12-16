@@ -21,7 +21,8 @@ import { usePerformanceMonitor } from '@/utils/performance-monitor';
 import type {
   ChartDataPoint,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -195,6 +196,8 @@ interface ScatterPlotChartProps {
   config: ChartConfiguration;
   highlightAthlete?: string;
   showAthleteNames?: boolean;
+  benchmarks?: BenchmarkLine[]; // Benchmarks will be matched to X or Y metric
+  showBenchmarks?: boolean;
 }
 
 export const ScatterPlotChart = React.memo(function ScatterPlotChart({
@@ -202,7 +205,9 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   statistics,
   config,
   highlightAthlete,
-  showAthleteNames = false
+  showAthleteNames = false,
+  benchmarks,
+  showBenchmarks = true
 }: ScatterPlotChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -445,6 +450,173 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     const result = numerator / denominator;
     return isNaN(result) || !isFinite(result) ? null : result;
   }, [scatterData?.points]);
+
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
+  // Generate benchmark annotations for both X and Y axes
+  const benchmarkAnnotations = useMemo(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0 || !scatterData) {
+      return {};
+    }
+
+    const annotations: Record<string, AnnotationOptions> = {};
+
+    benchmarks.forEach((benchmark, index) => {
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+      const backgroundColor = parseColorToRgba(color, 0.15);
+
+      // Determine if this benchmark applies to X-axis or Y-axis metric
+      const isXMetric = benchmark.metricCode === scatterData.xMetric;
+      const isYMetric = benchmark.metricCode === scatterData.yMetric;
+
+      // If benchmark doesn't match either axis metric, skip it
+      if (!isXMetric && !isYMetric) {
+        return;
+      }
+
+      // Range benchmark: render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        if (isYMetric) {
+          // Y-axis range: horizontal band across full X range
+          annotations[`benchmark-y-${index}`] = {
+            type: 'box',
+            yMin: benchmark.minValue,
+            yMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            borderDash: [5, 5],
+            z: 2,
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'end',
+              color: color,
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+        if (isXMetric) {
+          // X-axis range: vertical band across full Y range
+          annotations[`benchmark-x-${index}`] = {
+            type: 'box',
+            xMin: benchmark.minValue,
+            xMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            borderDash: [5, 5],
+            z: 2,
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'start',
+              color: color,
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+      } else {
+        // Single-value benchmark: render as line annotation
+        const borderDash = benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [];
+
+        if (isYMetric) {
+          // Y-axis line: horizontal line
+          annotations[`benchmark-y-${index}`] = {
+            type: 'line',
+            yMin: benchmark.value,
+            yMax: benchmark.value,
+            borderColor: color,
+            borderWidth: 2,
+            borderDash,
+            z: 2,
+            label: {
+              display: true,
+              content: benchmark.name,
+              position: 'end',
+              backgroundColor: color,
+              color: 'white',
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+        if (isXMetric) {
+          // X-axis line: vertical line
+          annotations[`benchmark-x-${index}`] = {
+            type: 'line',
+            xMin: benchmark.value,
+            xMax: benchmark.value,
+            borderColor: color,
+            borderWidth: 2,
+            borderDash,
+            z: 2,
+            label: {
+              display: true,
+              content: benchmark.name,
+              position: 'start',
+              backgroundColor: color,
+              color: 'white',
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+      }
+    });
+
+    return annotations;
+  }, [benchmarks, showBenchmarks, scatterData]);
 
   // Chart options
   const options: ChartOptions<'scatter'> = useMemo(() => ({

@@ -516,7 +516,7 @@ function StepDefineTiers({
           const hasErrors = errors.length > 0;
 
           return (
-            <Card key={index} className={hasErrors ? 'border-amber-300' : 'border-green-300'}>
+            <Card key={`tier-${tier.tierOrder}`} className={hasErrors ? 'border-amber-300' : 'border-green-300'}>
               <CardContent className="pt-6">
                 <div className="flex items-start gap-4">
                   <div className="flex-1 space-y-4">
@@ -868,8 +868,8 @@ function StepReview({
           <CardContent className="pt-6">
             <h4 className="font-semibold mb-3">Tiers ({tiers.length})</h4>
             <div className="space-y-3">
-              {tiers.map((tier, index) => (
-                <div key={index} className="flex items-center gap-3 p-3 border rounded-lg">
+              {tiers.map((tier) => (
+                <div key={`review-tier-${tier.tierOrder}`} className="flex items-center gap-3 p-3 border rounded-lg">
                   <div className={`w-8 h-8 rounded ${getTierColorClass(tier.tierColor)} flex items-center justify-center text-white font-bold text-sm`}>
                     {tier.tierOrder}
                   </div>
