@@ -479,120 +479,169 @@ function StepDefineTiers({
   onAddTier,
   onRemoveTier,
 }: StepDefineTiersProps) {
+  // Validation helper for each tier
+  const getTierValidation = (tier: TierDefinition) => {
+    const errors: string[] = [];
+    if (!tier.tierName.trim()) errors.push('name');
+    if (comparisonOperator === 'range') {
+      if (tier.minValue === undefined) errors.push('min');
+      if (tier.maxValue === undefined) errors.push('max');
+    } else {
+      if (tier.benchmarkValue === undefined) errors.push('value');
+    }
+    return errors;
+  };
+
+  // Count total missing fields
+  const totalMissing = tiers.reduce((count, tier) => count + getTierValidation(tier).length, 0);
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">Step 2: Define Tiers</h3>
-      <p className="text-sm text-muted-foreground mb-6">
+      <p className="text-sm text-muted-foreground mb-4">
         Add 2-10 tiers with names, colors, and performance values
       </p>
 
+      {/* Validation Summary */}
+      {totalMissing > 0 && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-sm text-amber-800">
+          <strong>Missing required fields:</strong> Fill in all tier names and values to proceed.
+          {totalMissing === 1 ? ' (1 field remaining)' : ` (${totalMissing} fields remaining)`}
+        </div>
+      )}
+
       <div className="space-y-4">
-        {tiers.map((tier, index) => (
-          <Card key={index}>
-            <CardContent className="pt-6">
-              <div className="flex items-start gap-4">
-                <div className="flex-1 space-y-4">
-                  {/* Tier Name & Color */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor={`tier-name-${index}`}>Tier Name *</Label>
-                      <Input
-                        id={`tier-name-${index}`}
-                        value={tier.tierName}
-                        onChange={(e) => onUpdateTier(index, 'tierName', e.target.value)}
-                        placeholder="e.g., Elite, Good, Average"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`tier-color-${index}`}>Color</Label>
-                      <Select
-                        value={tier.tierColor}
-                        onValueChange={(value) => onUpdateTier(index, 'tierColor', value)}
-                      >
-                        <SelectTrigger id={`tier-color-${index}`} className="mt-1">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIER_COLORS.map((color) => (
-                            <SelectItem key={color.value} value={color.value}>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-4 h-4 rounded ${color.className}`} />
-                                {color.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+        {tiers.map((tier, index) => {
+          const errors = getTierValidation(tier);
+          const hasErrors = errors.length > 0;
 
-                  {/* Tier Order (auto-calculated) */}
-                  <div>
-                    <Label>Tier Rank</Label>
-                    <div className="mt-1 px-3 py-2 bg-muted rounded-md text-sm">
-                      Rank {tier.tierOrder} (1 = best tier)
-                    </div>
-                  </div>
-
-                  {/* Values (Range or Single) */}
-                  {comparisonOperator === 'range' ? (
+          return (
+            <Card key={index} className={hasErrors ? 'border-amber-300' : 'border-green-300'}>
+              <CardContent className="pt-6">
+                <div className="flex items-start gap-4">
+                  <div className="flex-1 space-y-4">
+                    {/* Tier Name & Color */}
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <Label htmlFor={`tier-min-${index}`}>Minimum Value *</Label>
+                        <Label htmlFor={`tier-name-${index}`} className={errors.includes('name') ? 'text-amber-600' : ''}>
+                          Tier Name *
+                        </Label>
                         <Input
-                          id={`tier-min-${index}`}
-                          type="number"
-                          step="0.01"
-                          value={tier.minValue ?? ''}
-                          onChange={(e) => onUpdateTier(index, 'minValue', e.target.value ? parseFloat(e.target.value) : undefined)}
-                          placeholder="0.95"
-                          className="mt-1"
+                          id={`tier-name-${index}`}
+                          value={tier.tierName}
+                          onChange={(e) => onUpdateTier(index, 'tierName', e.target.value)}
+                          placeholder="e.g., Elite, Good, Average"
+                          className={`mt-1 ${errors.includes('name') ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : ''}`}
                         />
+                        {errors.includes('name') && (
+                          <p className="text-xs text-amber-600 mt-1">Required</p>
+                        )}
                       </div>
                       <div>
-                        <Label htmlFor={`tier-max-${index}`}>Maximum Value *</Label>
-                        <Input
-                          id={`tier-max-${index}`}
-                          type="number"
-                          step="0.01"
-                          value={tier.maxValue ?? ''}
-                          onChange={(e) => onUpdateTier(index, 'maxValue', e.target.value ? parseFloat(e.target.value) : undefined)}
-                          placeholder="1.05"
-                          className="mt-1"
-                        />
+                        <Label htmlFor={`tier-color-${index}`}>Color</Label>
+                        <Select
+                          value={tier.tierColor}
+                          onValueChange={(value) => onUpdateTier(index, 'tierColor', value)}
+                        >
+                          <SelectTrigger id={`tier-color-${index}`} className="mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIER_COLORS.map((color) => (
+                              <SelectItem key={color.value} value={color.value}>
+                                <div className="flex items-center gap-2">
+                                  <div className={`w-4 h-4 rounded ${color.className}`} />
+                                  {color.label}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
-                  ) : (
-                    <div>
-                      <Label htmlFor={`tier-value-${index}`}>Threshold Value *</Label>
-                      <Input
-                        id={`tier-value-${index}`}
-                        type="number"
-                        step="0.01"
-                        value={tier.benchmarkValue ?? ''}
-                        onChange={(e) => onUpdateTier(index, 'benchmarkValue', e.target.value ? parseFloat(e.target.value) : undefined)}
-                        placeholder="1.00"
-                        className="mt-1"
-                      />
-                    </div>
-                  )}
-                </div>
 
-                {/* Remove Button */}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onRemoveTier(index)}
-                  disabled={tiers.length <= 2}
-                  className="mt-6"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                    {/* Tier Order (auto-calculated) */}
+                    <div>
+                      <Label>Tier Rank</Label>
+                      <div className="mt-1 px-3 py-2 bg-muted rounded-md text-sm">
+                        Rank {tier.tierOrder} (1 = best tier)
+                      </div>
+                    </div>
+
+                    {/* Values (Range or Single) */}
+                    {comparisonOperator === 'range' ? (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label htmlFor={`tier-min-${index}`} className={errors.includes('min') ? 'text-amber-600' : ''}>
+                            Minimum Value *
+                          </Label>
+                          <Input
+                            id={`tier-min-${index}`}
+                            type="number"
+                            step="0.01"
+                            value={tier.minValue ?? ''}
+                            onChange={(e) => onUpdateTier(index, 'minValue', e.target.value ? parseFloat(e.target.value) : undefined)}
+                            placeholder="0.95"
+                            className={`mt-1 ${errors.includes('min') ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : ''}`}
+                          />
+                          {errors.includes('min') && (
+                            <p className="text-xs text-amber-600 mt-1">Required</p>
+                          )}
+                        </div>
+                        <div>
+                          <Label htmlFor={`tier-max-${index}`} className={errors.includes('max') ? 'text-amber-600' : ''}>
+                            Maximum Value *
+                          </Label>
+                          <Input
+                            id={`tier-max-${index}`}
+                            type="number"
+                            step="0.01"
+                            value={tier.maxValue ?? ''}
+                            onChange={(e) => onUpdateTier(index, 'maxValue', e.target.value ? parseFloat(e.target.value) : undefined)}
+                            placeholder="1.05"
+                            className={`mt-1 ${errors.includes('max') ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : ''}`}
+                          />
+                          {errors.includes('max') && (
+                            <p className="text-xs text-amber-600 mt-1">Required</p>
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor={`tier-value-${index}`} className={errors.includes('value') ? 'text-amber-600' : ''}>
+                          Threshold Value *
+                        </Label>
+                        <Input
+                          id={`tier-value-${index}`}
+                          type="number"
+                          step="0.01"
+                          value={tier.benchmarkValue ?? ''}
+                          onChange={(e) => onUpdateTier(index, 'benchmarkValue', e.target.value ? parseFloat(e.target.value) : undefined)}
+                          placeholder="1.00"
+                          className={`mt-1 ${errors.includes('value') ? 'border-amber-400 focus:border-amber-500 focus:ring-amber-500' : ''}`}
+                        />
+                        {errors.includes('value') && (
+                          <p className="text-xs text-amber-600 mt-1">Required</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Remove Button */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onRemoveTier(index)}
+                    disabled={tiers.length <= 2}
+                    className="mt-6"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
 
         {/* Add Tier Button */}
         <Button
