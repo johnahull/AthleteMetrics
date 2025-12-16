@@ -1630,10 +1630,10 @@ export class DatabaseStorage implements IStorage {
       let user;
 
       // Prepare legal acceptance data
-      const { getCurrentLegalVersion } = await import('@shared/legal-acceptance');
+      const { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } = await import('@shared/legal-acceptance');
       const legalData = userInfo.legalAcceptedAt ? {
         legalAcceptedAt: new Date(userInfo.legalAcceptedAt),
-        legalAcceptedVersion: userInfo.legalAcceptedVersion || getCurrentLegalVersion()
+        legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
       } : {};
 
       // Check if invitation is linked to an existing athlete (playerId)
@@ -1720,11 +1720,11 @@ export class DatabaseStorage implements IStorage {
         try {
           await this.createAuditLog({
             userId: user.id,
-            action: 'legal_accepted',
+            action: AUDIT_ACTION_LEGAL_ACCEPTED,
             resourceType: 'user',
             resourceId: user.id,
             details: JSON.stringify({
-              version: userInfo.legalAcceptedVersion || getCurrentLegalVersion(),
+              version: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp(),
               acceptedAt: userInfo.legalAcceptedAt,
               method: 'invitation'
             }),

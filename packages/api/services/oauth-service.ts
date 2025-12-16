@@ -181,10 +181,10 @@ export class OAuthService extends BaseService {
     }
 
     // Set legal acceptance fields for new OAuth users
-    const { getCurrentLegalVersion } = await import('@shared/legal-acceptance');
+    const { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } = await import('@shared/legal-acceptance');
     const now = new Date();
     const legalAcceptedAt = now;
-    const legalAcceptedVersion = getCurrentLegalVersion(); // YYYY-MM-DD format
+    const legalAcceptedVersion = getLegalAcceptanceTimestamp(); // YYYY-MM-DD format
 
     const userData: InsertOAuthUser = {
       username,
@@ -212,7 +212,7 @@ export class OAuthService extends BaseService {
     try {
       await this.storage.createAuditLog({
         userId: newUser.id,
-        action: 'legal_accepted',
+        action: AUDIT_ACTION_LEGAL_ACCEPTED,
         resourceType: 'user',
         resourceId: newUser.id,
         details: JSON.stringify({

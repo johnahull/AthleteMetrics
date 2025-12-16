@@ -10,6 +10,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { OAuthService, type OAuthProfile } from '../../services/oauth-service';
 import { storage } from '../../storage';
+import { AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 // Mock email service to avoid resend dependency
 vi.mock('../../services/email-service', () => ({
@@ -101,7 +102,7 @@ describe('OAuth Flow - Legal Acceptance', () => {
       // Should create audit log for legal acceptance
       expect(storage.createAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'legal_accepted',
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
           userId: 'user-123',
           resourceType: 'user',
           details: expect.stringContaining('oauth'),

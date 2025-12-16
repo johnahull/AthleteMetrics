@@ -12,6 +12,7 @@ import request from 'supertest';
 import express from 'express';
 import { storage } from '../../storage';
 import { registerRegistrationRoutes } from '../../routes/registration-routes';
+import { AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 // Mock email service to avoid resend dependency
 vi.mock('../../services/email-service', () => ({
@@ -130,7 +131,7 @@ describe('Registration Flow - Legal Acceptance', () => {
       // Verify audit log was created for legal acceptance
       expect(storage.createAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
-          action: 'legal_accepted',
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
           userId: 'user-123',
           resourceType: 'user',
           details: expect.stringContaining('registration'),

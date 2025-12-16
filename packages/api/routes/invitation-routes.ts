@@ -16,9 +16,10 @@ import type { Invitation } from "@shared/schema";
 import { MAX_INVITATION_ATTEMPTS } from "../constants/invitations";
 import {
   validateLegalAcceptanceTimestamp,
-  getCurrentLegalVersion,
+  getLegalAcceptanceTimestamp,
   INVALID_TIMESTAMP_MESSAGE,
-  MISSING_ACCEPTANCE_MESSAGE
+  MISSING_ACCEPTANCE_MESSAGE,
+  AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
 
 // Rate limiting for invitation endpoints
@@ -865,7 +866,7 @@ export function registerInvitationRoutes(app: Express) {
         firstName,
         lastName,
         legalAcceptedAt,
-        legalAcceptedVersion: getCurrentLegalVersion() // Format: "2024-12-13"
+        legalAcceptedVersion: getLegalAcceptanceTimestamp() // Format: "2024-12-13"
       });
 
       console.log("Invitation accepted successfully, user created:", result.user.id);

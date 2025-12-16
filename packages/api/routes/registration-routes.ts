@@ -11,9 +11,10 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
 import {
   validateLegalAcceptanceTimestamp,
-  getCurrentLegalVersion,
+  getLegalAcceptanceTimestamp,
   INVALID_TIMESTAMP_MESSAGE,
-  MISSING_ACCEPTANCE_MESSAGE
+  MISSING_ACCEPTANCE_MESSAGE,
+  AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
@@ -125,7 +126,7 @@ export function registerRegistrationRoutes(app: Express) {
       }
 
       // Generate legal accepted version (YYYY-MM-DD format)
-      const legalAcceptedVersion = getCurrentLegalVersion();
+      const legalAcceptedVersion = getLegalAcceptanceTimestamp();
       const legalAcceptedAtDate = new Date(legalAcceptedAt);
 
       // Create user with isEmailVerified: false
@@ -191,7 +192,7 @@ export function registerRegistrationRoutes(app: Express) {
       try {
         await storage.createAuditLog({
           userId,
-          action: 'legal_accepted',
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
           resourceType: 'user',
           resourceId: userId,
           details: JSON.stringify({

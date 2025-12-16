@@ -6,15 +6,15 @@
  */
 
 /**
- * Generate the current legal version timestamp.
+ * Generate a timestamp for when legal terms were accepted.
  *
- * Note: This represents the date/time when the user accepted the terms,
+ * This represents the date/time when the user accepted the terms,
  * NOT the version of the policy document itself. For actual policy versions,
  * see LAST_UPDATED constants in privacy-policy.tsx and terms-of-service.tsx.
  *
- * @returns Current timestamp in YYYY-MM-DD format
+ * @returns Current timestamp in YYYY-MM-DD format for auditing purposes
  */
-export function getCurrentLegalVersion(): string {
+export function getLegalAcceptanceTimestamp(): string {
   return new Date().toISOString().split('T')[0];
 }
 
@@ -24,7 +24,7 @@ export function getCurrentLegalVersion(): string {
  * Checks:
  * - Timestamp is a valid ISO 8601 date string
  * - Date is not in the future
- * - Date is within the last hour (prevents backdating)
+ * - Date is within the last 5 minutes (prevents backdating and replay attacks)
  *
  * @param timestamp - ISO 8601 timestamp string
  * @returns true if valid, false otherwise
@@ -37,10 +37,10 @@ export function validateLegalAcceptanceTimestamp(timestamp: string): boolean {
   }
 
   const now = new Date();
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
 
-  // Reject future dates or dates older than 1 hour
-  if (acceptedDate > now || acceptedDate < oneHourAgo) {
+  // Reject future dates or dates older than 5 minutes
+  if (acceptedDate > now || acceptedDate < fiveMinutesAgo) {
     return false;
   }
 
@@ -56,3 +56,8 @@ export const INVALID_TIMESTAMP_MESSAGE = "Invalid legal acceptance timestamp. Pl
  * Error message for missing legal acceptance
  */
 export const MISSING_ACCEPTANCE_MESSAGE = "You must accept the Terms of Service and Privacy Policy to continue";
+
+/**
+ * Audit log action for legal acceptance tracking
+ */
+export const AUDIT_ACTION_LEGAL_ACCEPTED = 'legal_accepted' as const;

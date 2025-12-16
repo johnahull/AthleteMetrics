@@ -21,7 +21,7 @@ test.describe('Privacy Policy and Terms of Service Pages', () => {
     await page.goto(`${STAGING_URL}/privacy`);
 
     // Verify page loaded successfully
-    await expect(page).toHaveTitle(/Privacy Policy|AthleteMetrics/i);
+    await expect(page).toHaveTitle(/AthleteMetrics.*Privacy Policy|Privacy Policy.*AthleteMetrics/i);
 
     // Verify main heading exists
     await expect(page.locator('h1, [role="heading"]').filter({ hasText: /Privacy Policy/i })).toBeVisible();
@@ -42,7 +42,7 @@ test.describe('Privacy Policy and Terms of Service Pages', () => {
     await page.goto(`${STAGING_URL}/terms`);
 
     // Verify page loaded successfully
-    await expect(page).toHaveTitle(/Terms of Service|AthleteMetrics/i);
+    await expect(page).toHaveTitle(/AthleteMetrics.*Terms of Service|Terms of Service.*AthleteMetrics/i);
 
     // Verify main heading exists
     await expect(page.locator('h1, [role="heading"]').filter({ hasText: /Terms of Service/i })).toBeVisible();
