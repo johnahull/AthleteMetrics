@@ -765,7 +765,7 @@ export function registerInvitationRoutes(app: Express) {
 
       // Validate legal acceptance is provided
       if (!legalAcceptedAt) {
-        return res.status(400).json({ message: "Terms and privacy policy acceptance is required" });
+        return res.status(400).json({ message: "You must accept the Terms of Service and Privacy Policy to continue" });
       }
 
       // CSRF-like protection: Verify request came from same origin

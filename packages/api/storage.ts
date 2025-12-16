@@ -1713,6 +1713,21 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(invitations.token, token));
 
+      // Create audit log for legal acceptance (if provided)
+      if (userInfo.legalAcceptedAt) {
+        await this.createAuditLog({
+          userId: user.id,
+          action: 'legal_accepted',
+          resourceType: 'user',
+          resourceId: user.id,
+          details: JSON.stringify({
+            version: userInfo.legalAcceptedVersion || new Date().toISOString().split('T')[0],
+            acceptedAt: userInfo.legalAcceptedAt,
+            method: 'invitation'
+          }),
+        });
+      }
+
       return { user };
     });
   }

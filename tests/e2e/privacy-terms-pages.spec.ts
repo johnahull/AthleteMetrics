@@ -153,29 +153,121 @@ test.describe('Privacy Policy and Terms of Service Pages', () => {
 test.describe('Legal Acceptance on Invitation Flow', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('should show legal acceptance checkbox on invitation page', async ({ page }) => {
-    // Note: This test requires a valid invitation token to fully test
-    // For now, we'll test the page structure when accessed directly (will show error, but we can verify structure exists)
+  test('should require legal acceptance checkbox for invitation acceptance', async ({ page }) => {
+    // Login as org admin to create test invitation
+    await loginAsDefaultUser(page);
 
-    // Navigate to accept-invitation page with dummy token
-    await page.goto(`${STAGING_URL}/accept-invitation?token=test-token-12345`);
+    // Navigate to organizations page to get organization ID
+    await page.goto(`${STAGING_URL}/organizations`);
     await page.waitForLoadState('networkidle');
 
-    // The page will show an error about invalid token, but we can still verify the checkbox would exist
-    // in the form structure (or we skip this test until we have invitation creation in E2E)
+    // Get the first organization card
+    const orgCard = page.locator('[data-testid^="organization-"]:not([data-testid^="organization-link-"])').first();
+    const orgTestId = await orgCard.getAttribute('data-testid');
 
-    // For now, let's just verify the route is accessible
-    expect(page.url()).toContain('/accept-invitation');
+    if (!orgTestId) {
+      throw new Error('Could not find organization for creating test invitation');
+    }
+
+    const organizationId = orgTestId.replace('organization-', '');
+
+    // Create test invitation via API
+    const timestamp = Date.now();
+    const randomId = Math.random().toString(36).substring(2);
+    const uniqueId = `${timestamp}_${randomId}`;
+    const testEmail = `e2e_legal_test_${uniqueId}@example.com`;
+
+    const invitationResponse = await page.request.post(`${STAGING_URL}/api/organizations/${organizationId}/invitations`, {
+      data: {
+        firstName: `LegalTest_${uniqueId}`,
+        lastName: `User`,
+        email: testEmail,
+        role: 'athlete',
+        teamIds: []
+      }
+    });
+
+    expect(invitationResponse.ok()).toBeTruthy();
+    const invitation = await invitationResponse.json();
+    const invitationToken = invitation.token;
+    const invitationId = invitation.id;
+
+    try {
+      // Logout to test invitation as unauthenticated user
+      await page.goto(`${STAGING_URL}/api/auth/logout`);
+      await page.waitForLoadState('networkidle');
+
+      // Navigate to invitation acceptance page
+      await page.goto(`${STAGING_URL}/accept-invitation?token=${invitationToken}`);
+      await page.waitForLoadState('networkidle');
+
+      // Verify the page loaded successfully (not error state)
+      await expect(page.locator('h1, [role="heading"]').filter({ hasText: /Accept Invitation/i })).toBeVisible();
+
+      // Fill in the form fields
+      await page.fill('input[name="username"]', `legaltest${uniqueId}`);
+      await page.fill('input[name="password"]', 'Test123!@#Password');
+      await page.fill('input[name="confirmPassword"]', 'Test123!@#Password');
+
+      // Verify legal acceptance checkbox exists and is unchecked by default
+      const checkbox = page.locator('input[type="checkbox"]').filter({
+        has: page.locator('text=/Privacy Policy.*Terms of Service/i')
+      });
+      await expect(checkbox).toBeVisible();
+      await expect(checkbox).not.toBeChecked();
+
+      // Verify Privacy Policy and Terms links are present
+      const privacyLink = page.locator('a[href="/privacy"]');
+      const termsLink = page.locator('a[href="/terms"]');
+      await expect(privacyLink).toBeVisible();
+      await expect(termsLink).toBeVisible();
+
+      // Try to submit without checking the box (should fail validation)
+      const submitButton = page.locator('button[type="submit"]').filter({ hasText: /Accept|Submit/i });
+      await submitButton.click();
+
+      // Wait a moment for validation to trigger
+      await page.waitForTimeout(500);
+
+      // Should still be on the invitation page (submission blocked by validation)
+      expect(page.url()).toContain('/accept-invitation');
+
+      // Now check the checkbox
+      await checkbox.check();
+      await expect(checkbox).toBeChecked();
+
+      // Submit the form
+      await submitButton.click();
+
+      // Wait for successful redirect (should go to dashboard or login)
+      await page.waitForURL(url => !url.pathname.includes('/accept-invitation'), { timeout: 10000 });
+
+      // Verify user was created by trying to login
+      await page.goto(`${STAGING_URL}/login`);
+      await page.waitForLoadState('networkidle');
+
+      await page.fill('#username, input[name="username"]', `legaltest${uniqueId}`);
+      await page.fill('#password, input[name="password"]', 'Test123!@#Password');
+      await page.click('button[type="submit"]');
+
+      // Should successfully login
+      await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10000 });
+
+      // Verify we're authenticated (on dashboard or similar)
+      const currentUrl = page.url();
+      expect(currentUrl).not.toContain('/login');
+
+    } finally {
+      // Cleanup: Delete the test invitation if it still exists
+      try {
+        // Re-authenticate as admin for cleanup
+        await loginAsDefaultUser(page);
+        await page.request.delete(`${STAGING_URL}/api/invitations/${invitationId}`);
+      } catch (error) {
+        console.warn('Failed to cleanup test invitation:', error);
+      }
+    }
   });
-
-  // TODO: Add test for actual invitation flow when we have invitation creation helper
-  // This would test:
-  // 1. Create an invitation
-  // 2. Navigate to invitation link
-  // 3. Verify checkbox is visible and unchecked by default
-  // 4. Verify submit button is disabled until checkbox is checked
-  // 5. Check checkbox and verify submit button becomes enabled
-  // 6. Submit form and verify user is created with legalAcceptedAt timestamp
 });
 
 test.describe('Privacy Policy Content Navigation', () => {
