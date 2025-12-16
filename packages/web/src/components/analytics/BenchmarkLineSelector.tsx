@@ -17,6 +17,8 @@ interface BenchmarkLineSelectorProps {
   metricCode: string;
   selectedBenchmarkIds: string[];
   onSelectionChange: (benchmarkIds: string[]) => void;
+  /** Optional label prefix (e.g., "Y-Axis" or "X-Axis") */
+  labelPrefix?: string;
 }
 
 /**
@@ -27,13 +29,26 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   organizationId,
   metricCode,
   selectedBenchmarkIds,
-  onSelectionChange
+  onSelectionChange,
+  labelPrefix
 }: BenchmarkLineSelectorProps) {
   const { data: benchmarks, isLoading, error } = useBenchmarksForMetric(organizationId, metricCode);
   const { getMetricConfig } = useMetricConfig();
 
   const metricConfig = getMetricConfig(metricCode);
   const unit = metricConfig?.unit || '';
+  const metricLabel = metricConfig?.label || metricCode;
+
+  // Build the display label
+  const displayLabel = labelPrefix
+    ? `${labelPrefix} Benchmarks (${metricLabel})`
+    : `Benchmarks for ${metricLabel}`;
+
+  // Generate unique IDs for accessibility (supports multiple selectors on same page)
+  const selectorId = useMemo(() => {
+    const base = metricCode.toLowerCase().replace(/[^a-z0-9]/g, '-');
+    return `benchmark-selector-${base}`;
+  }, [metricCode]);
 
   // Handle individual checkbox toggle - memoized for performance
   const handleToggle = useCallback((benchmarkId: string) => {
@@ -44,17 +59,24 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     onSelectionChange(newSelection);
   }, [selectedBenchmarkIds, onSelectionChange]);
 
-  // Handle "Select All" - memoized for performance
+  // Handle "Select All" - adds this metric's benchmarks to existing selection
   const handleSelectAll = useCallback(() => {
     if (benchmarks) {
-      onSelectionChange(benchmarks.map(b => b.id));
+      const currentMetricIds = new Set(benchmarks.map(b => b.id));
+      // Keep existing selections from other metrics, add all from this metric
+      const existingOtherMetrics = selectedBenchmarkIds.filter(id => !currentMetricIds.has(id));
+      onSelectionChange([...existingOtherMetrics, ...benchmarks.map(b => b.id)]);
     }
-  }, [benchmarks, onSelectionChange]);
+  }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
 
-  // Handle "Clear All" - memoized for performance
+  // Handle "Clear All" - only clears this metric's benchmarks
   const handleClearAll = useCallback(() => {
-    onSelectionChange([]);
-  }, [onSelectionChange]);
+    if (benchmarks) {
+      const currentMetricIds = new Set(benchmarks.map(b => b.id));
+      // Keep selections from other metrics
+      onSelectionChange(selectedBenchmarkIds.filter(id => !currentMetricIds.has(id)));
+    }
+  }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
 
   // Format demographic filters for display - memoized for performance
   const formatFilters = useCallback((filters?: {
@@ -83,17 +105,22 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
     return badges;
   }, []);
 
-  // Memoize selection state calculations
-  const { allSelected, noneSelected } = useMemo(() => ({
-    allSelected: benchmarks ? benchmarks.length === selectedBenchmarkIds.length : false,
-    noneSelected: selectedBenchmarkIds.length === 0
-  }), [benchmarks, selectedBenchmarkIds]);
+  // Memoize selection state calculations (metric-specific)
+  const { allSelected, noneSelected } = useMemo(() => {
+    if (!benchmarks) return { allSelected: false, noneSelected: true };
+    const currentMetricIds = new Set(benchmarks.map(b => b.id));
+    const selectedFromThisMetric = selectedBenchmarkIds.filter(id => currentMetricIds.has(id));
+    return {
+      allSelected: selectedFromThisMetric.length === benchmarks.length,
+      noneSelected: selectedFromThisMetric.length === 0
+    };
+  }, [benchmarks, selectedBenchmarkIds]);
 
   // Loading state
   if (isLoading) {
     return (
       <div className="space-y-2" role="status" aria-label="Loading benchmarks">
-        <div className="text-sm font-medium" id="benchmark-selector-label">Benchmark Lines</div>
+        <div className="text-sm font-medium" id={selectorId}>{displayLabel}</div>
         <Skeleton className="h-10 w-full" aria-hidden="true" />
         <div className="text-sm text-muted-foreground">Loading benchmarks...</div>
       </div>
@@ -104,7 +131,7 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   if (error) {
     return (
       <div className="space-y-2" role="alert">
-        <div className="text-sm font-medium">Benchmark Lines</div>
+        <div className="text-sm font-medium">{displayLabel}</div>
         <Alert variant="destructive">
           <AlertDescription>
             Failed to load benchmarks: {error.message}
@@ -118,22 +145,25 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   if (!benchmarks || benchmarks.length === 0) {
     return (
       <div className="space-y-2">
-        <div className="text-sm font-medium">Benchmark Lines</div>
+        <div className="text-sm font-medium">{displayLabel}</div>
         <Alert>
           <AlertDescription>
-            No benchmarks available for this metric. Create benchmarks in the Benchmarks page.
+            No benchmarks available for {metricLabel}. Create benchmarks in the Benchmarks page.
           </AlertDescription>
         </Alert>
       </div>
     );
   }
 
+  // Count how many of this metric's benchmarks are selected
+  const selectedCount = benchmarks.filter(b => selectedBenchmarkIds.includes(b.id)).length;
+
   return (
     <div className="space-y-3">
       {/* Header with controls */}
       <div className="flex items-center justify-between">
-        <div className="text-sm font-medium" id="benchmark-selector-label">
-          Benchmark Lines ({selectedBenchmarkIds.length} of {benchmarks.length} selected)
+        <div className="text-sm font-medium" id={selectorId}>
+          {displayLabel} ({selectedCount} of {benchmarks.length} selected)
         </div>
         <div className="flex gap-2" role="group" aria-label="Benchmark selection actions">
           <Button
@@ -161,10 +191,10 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
       <div
         className="space-y-2 max-h-64 overflow-y-auto border rounded-md p-3 bg-gray-50"
         role="group"
-        aria-labelledby="benchmark-selector-label"
-        aria-describedby="benchmark-selection-hint"
+        aria-labelledby={selectorId}
+        aria-describedby={`${selectorId}-hint`}
       >
-        <span id="benchmark-selection-hint" className="sr-only">
+        <span id={`${selectorId}-hint`} className="sr-only">
           Select benchmarks to display as horizontal lines on the chart
         </span>
         {benchmarks.map((benchmark) => {
@@ -195,7 +225,10 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
                   className="flex items-center gap-2 mt-1"
                 >
                   <span className="text-sm text-muted-foreground">
-                    Target: {benchmark.benchmarkValue}{unit} ({benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})
+                    {benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined
+                      ? `Target: ${benchmark.minValue} - ${benchmark.maxValue}${unit}`
+                      : `Target: ${benchmark.benchmarkValue}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
+                    }
                   </span>
                   {filterBadges.length > 0 && (
                     <div className="flex gap-1" aria-label="Demographic filters">

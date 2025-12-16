@@ -189,10 +189,18 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                       <div>
                         <span className="font-medium">Target:</span>{" "}
                         <span className="text-muted-foreground">
-                          {benchmark.comparisonOperator === "lte" && "≤ "}
-                          {benchmark.comparisonOperator === "gte" && "≥ "}
-                          {benchmark.comparisonOperator === "eq" && "= "}
-                          {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
+                          {benchmark.comparisonOperator === "range" ? (
+                            <>
+                              ↔ {benchmark.minValue} – {benchmark.maxValue}{unit ? ` ${unit}` : ''}
+                            </>
+                          ) : (
+                            <>
+                              {benchmark.comparisonOperator === "lte" && "≤ "}
+                              {benchmark.comparisonOperator === "gte" && "≥ "}
+                              {benchmark.comparisonOperator === "eq" && "= "}
+                              {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
+                            </>
+                          )}
                         </span>
                       </div>
                       {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (

@@ -27,7 +27,7 @@ import {
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
@@ -299,7 +299,8 @@ export interface IStorage {
   getSiteBenchmarks(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteBenchmark[]>;
   getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
   getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
-  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
+  getSiteBenchmarksByTierGroup(tierGroupId: string): Promise<SiteBenchmark[]>;
+  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark>;
   updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
   toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
   deleteSiteBenchmark(id: string): Promise<void>;
@@ -307,9 +308,14 @@ export interface IStorage {
   // Custom Benchmarks (Org-specific benchmarks)
   getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]>;
   getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined>;
+  getCustomBenchmarksByTierGroup(organizationId: string, tierGroupId: string): Promise<CustomBenchmark[]>;
   createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark>;
   updateCustomBenchmark(organizationId: string, benchmarkId: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark>;
   deleteCustomBenchmark(organizationId: string, benchmarkId: string): Promise<void>;
+
+  // Tier Groups (for form dropdowns)
+  getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>>;
+  getCustomTierGroups(organizationId: string, metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>>;
 
   // Organization Benchmarks (Org-level benchmark enablement)
   getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
@@ -4261,13 +4267,26 @@ export class DatabaseStorage implements IStorage {
     return benchmarks;
   }
 
-  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
-    const [created] = await db
+  async getSiteBenchmarksByTierGroup(tierGroupId: string): Promise<SiteBenchmark[]> {
+    const benchmarks = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(eq(siteBenchmarks.tierGroupId, tierGroupId))
+      .orderBy(siteBenchmarks.tierOrder);
+
+    return benchmarks;
+  }
+
+  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark> {
+    const dbInstance = tx || db;
+    const [created] = await dbInstance
       .insert(siteBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric values to strings for decimal columns with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        // Convert numeric values to strings for decimal columns with proper precision
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4281,8 +4300,10 @@ export class DatabaseStorage implements IStorage {
       .update(siteBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(siteBenchmarks.id, id))
@@ -4376,13 +4397,30 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getCustomBenchmarksByTierGroup(organizationId: string, tierGroupId: string): Promise<CustomBenchmark[]> {
+    const benchmarks = await db
+      .select()
+      .from(customBenchmarks)
+      .where(
+        and(
+          eq(customBenchmarks.organizationId, organizationId),
+          eq(customBenchmarks.tierGroupId, tierGroupId)
+        )
+      )
+      .orderBy(customBenchmarks.tierOrder);
+
+    return benchmarks;
+  }
+
   async createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark> {
     const [created] = await db
       .insert(customBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        // Convert numeric values to strings for decimal columns with proper precision
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4396,8 +4434,10 @@ export class DatabaseStorage implements IStorage {
       .update(customBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(
@@ -4429,6 +4469,61 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
     }
+  }
+
+  // ========================================================================
+  // TIER GROUPS (for form dropdowns)
+  // ========================================================================
+
+  async getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    const conditions = [isNotNull(siteBenchmarks.tierGroupId)];
+
+    if (metricCode) {
+      conditions.push(eq(siteBenchmarks.metricCode, metricCode));
+    }
+
+    const results = await db
+      .select({
+        tierGroupId: siteBenchmarks.tierGroupId,
+        metricCode: siteBenchmarks.metricCode,
+        tierCount: sql<number>`count(*)`.as('tier_count'),
+      })
+      .from(siteBenchmarks)
+      .where(and(...conditions))
+      .groupBy(siteBenchmarks.tierGroupId, siteBenchmarks.metricCode);
+
+    return results.map(r => ({
+      tierGroupId: r.tierGroupId!,
+      metricCode: r.metricCode,
+      tierCount: Number(r.tierCount),
+    }));
+  }
+
+  async getCustomTierGroups(organizationId: string, metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    const conditions = [
+      eq(customBenchmarks.organizationId, organizationId),
+      isNotNull(customBenchmarks.tierGroupId),
+    ];
+
+    if (metricCode) {
+      conditions.push(eq(customBenchmarks.metricCode, metricCode));
+    }
+
+    const results = await db
+      .select({
+        tierGroupId: customBenchmarks.tierGroupId,
+        metricCode: customBenchmarks.metricCode,
+        tierCount: sql<number>`count(*)`.as('tier_count'),
+      })
+      .from(customBenchmarks)
+      .where(and(...conditions))
+      .groupBy(customBenchmarks.tierGroupId, customBenchmarks.metricCode);
+
+    return results.map(r => ({
+      tierGroupId: r.tierGroupId!,
+      metricCode: r.metricCode,
+      tierCount: Number(r.tierCount),
+    }));
   }
 
   // Organization Benchmarks Enablement
@@ -4473,6 +4568,8 @@ export class DatabaseStorage implements IStorage {
         description: siteBenchmarks.description,
         benchmarkValue: siteBenchmarks.benchmarkValue,
         comparisonOperator: siteBenchmarks.comparisonOperator,
+        minValue: siteBenchmarks.minValue,
+        maxValue: siteBenchmarks.maxValue,
         gender: siteBenchmarks.gender,
         ageMin: siteBenchmarks.ageMin,
         ageMax: siteBenchmarks.ageMax,
@@ -4507,6 +4604,8 @@ export class DatabaseStorage implements IStorage {
         description: customBenchmarks.description,
         benchmarkValue: customBenchmarks.benchmarkValue,
         comparisonOperator: customBenchmarks.comparisonOperator,
+        minValue: customBenchmarks.minValue,
+        maxValue: customBenchmarks.maxValue,
         gender: customBenchmarks.gender,
         ageMin: customBenchmarks.ageMin,
         ageMax: customBenchmarks.ageMax,
@@ -4528,8 +4627,10 @@ export class DatabaseStorage implements IStorage {
     // Convert to OrganizationBenchmarkWithDetails type
     return allResults.map(row => ({
       ...row,
-      benchmarkValue: Number(row.benchmarkValue),
-      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq',
+      benchmarkValue: row.benchmarkValue ? Number(row.benchmarkValue) : null,
+      minValue: row.minValue ? Number(row.minValue) : null,
+      maxValue: row.maxValue ? Number(row.maxValue) : null,
+      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
       gender: row.gender as 'Male' | 'Female' | 'Not Specified' | null,
       level: row.level as 'college' | 'high_school' | 'club' | null,
     }));

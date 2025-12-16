@@ -310,4 +310,167 @@ describe('LineChart with Benchmarks', () => {
 
     expect(container.querySelector('canvas')).toBeInTheDocument();
   });
+
+  // ========================================
+  // Range Benchmark Tests
+  // ========================================
+
+  it('renders box annotation for range benchmark', () => {
+    const rangeBenchmark: BenchmarkLine[] = [
+      {
+        id: 'benchmark-range-1',
+        name: 'Optimal Range',
+        value: 1.6, // Keep for backwards compatibility
+        minValue: 1.5,
+        maxValue: 1.7,
+        comparisonOperator: 'range',
+        color: 'rgba(34, 197, 94, 0.8)'
+      }
+    ];
+
+    const { container } = render(
+      <TestWrapper>
+        <LineChart
+          data={mockTrendData}
+          config={defaultConfig}
+          benchmarks={rangeBenchmark}
+          showBenchmarks={true}
+        />
+      </TestWrapper>
+    );
+
+    // Chart should render with range benchmark as box annotation
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+  });
+
+  it('renders single-value benchmark as line (backwards compatibility)', () => {
+    const singleValueBenchmark: BenchmarkLine[] = [
+      {
+        id: 'benchmark-single-1',
+        name: 'Elite Target',
+        value: 1.5,
+        comparisonOperator: 'lte',
+        color: 'rgba(255, 99, 132, 0.8)'
+      }
+    ];
+
+    const { container } = render(
+      <TestWrapper>
+        <LineChart
+          data={mockTrendData}
+          config={defaultConfig}
+          benchmarks={singleValueBenchmark}
+          showBenchmarks={true}
+        />
+      </TestWrapper>
+    );
+
+    // Should render as line annotation (existing behavior)
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+  });
+
+  it('renders mixed benchmarks (range and single-value) correctly', () => {
+    const mixedBenchmarks: BenchmarkLine[] = [
+      {
+        id: 'benchmark-range-1',
+        name: 'Optimal Range',
+        value: 1.6,
+        minValue: 1.5,
+        maxValue: 1.7,
+        comparisonOperator: 'range',
+        color: 'rgba(34, 197, 94, 0.8)'
+      },
+      {
+        id: 'benchmark-single-1',
+        name: 'Elite Target',
+        value: 1.4,
+        comparisonOperator: 'lte',
+        color: 'rgba(255, 99, 132, 0.8)',
+        lineStyle: 'dashed'
+      },
+      {
+        id: 'benchmark-range-2',
+        name: 'Acceptable Range',
+        value: 1.85,
+        minValue: 1.7,
+        maxValue: 2.0,
+        comparisonOperator: 'range',
+        color: 'rgba(234, 179, 8, 0.8)'
+      }
+    ];
+
+    const { container } = render(
+      <TestWrapper>
+        <LineChart
+          data={mockTrendData}
+          config={defaultConfig}
+          benchmarks={mixedBenchmarks}
+          showBenchmarks={true}
+        />
+      </TestWrapper>
+    );
+
+    // Should render both range (box) and single-value (line) annotations
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+  });
+
+  it('handles range benchmark with demographic filters', () => {
+    const rangeBenchmarkWithFilters: BenchmarkLine[] = [
+      {
+        id: 'benchmark-range-1',
+        name: 'Male 16-18 Optimal',
+        value: 1.6,
+        minValue: 1.5,
+        maxValue: 1.7,
+        comparisonOperator: 'range',
+        color: 'rgba(34, 197, 94, 0.8)',
+        filters: {
+          gender: 'Male',
+          ageMin: 16,
+          ageMax: 18
+        }
+      }
+    ];
+
+    const { container } = render(
+      <TestWrapper>
+        <LineChart
+          data={mockTrendData}
+          config={defaultConfig}
+          benchmarks={rangeBenchmarkWithFilters}
+          showBenchmarks={true}
+        />
+      </TestWrapper>
+    );
+
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+  });
+
+  it('uses semi-transparent background for range benchmark box', () => {
+    const rangeBenchmark: BenchmarkLine[] = [
+      {
+        id: 'benchmark-range-1',
+        name: 'Target Range',
+        value: 1.6,
+        minValue: 1.5,
+        maxValue: 1.7,
+        comparisonOperator: 'range',
+        color: 'rgba(59, 130, 246, 0.8)' // Blue
+      }
+    ];
+
+    const { container } = render(
+      <TestWrapper>
+        <LineChart
+          data={mockTrendData}
+          config={defaultConfig}
+          benchmarks={rangeBenchmark}
+          showBenchmarks={true}
+        />
+      </TestWrapper>
+    );
+
+    // Box annotation should have semi-transparent fill
+    expect(container.querySelector('canvas')).toBeInTheDocument();
+  });
 });

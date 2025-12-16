@@ -288,6 +288,55 @@ export function LineChart({
     return bests;
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
   // Generate benchmark annotations for Chart.js annotation plugin
   const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
     if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
@@ -295,7 +344,33 @@ export function LineChart({
     }
 
     return benchmarks.map((benchmark): AnnotationOptions => {
-      // Determine line style (WCAG compliance: combine color with line style for accessibility)
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+      const backgroundColor = parseColorToRgba(color, 0.15);
+
+      // Range benchmark: render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        return {
+          type: 'box',
+          yMin: benchmark.minValue,
+          yMax: benchmark.maxValue,
+          backgroundColor,
+          borderColor: color,
+          borderWidth: 1,
+          label: {
+            display: true,
+            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+            position: 'end',
+            color: color,
+            padding: 4,
+            font: {
+              size: 10
+            }
+          }
+        };
+      }
+
+      // Single-value benchmark: render as line annotation (backwards compatibility)
       let borderDash: number[] | undefined;
       if (benchmark.lineStyle === 'dashed') {
         borderDash = [5, 5];
@@ -308,14 +383,14 @@ export function LineChart({
         type: 'line',
         yMin: benchmark.value,
         yMax: benchmark.value,
-        borderColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+        borderColor: color,
         borderWidth: 2,
         borderDash,
         label: {
           display: true,
           content: benchmark.name,
           position: 'end',
-          backgroundColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+          backgroundColor: color,
           color: 'white',
           padding: 4,
           font: {
@@ -487,7 +562,7 @@ export function LineChart({
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col">
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
         <div className="mb-4">
@@ -581,6 +656,7 @@ export function LineChart({
         role="img"
         aria-label={`Line chart showing ${lineData.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
         aria-describedby="linechart-description"
+        className="flex-1 min-h-[300px]"
       >
         <span id="linechart-description" className="sr-only">
           {`Performance trend chart for ${lineData.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}

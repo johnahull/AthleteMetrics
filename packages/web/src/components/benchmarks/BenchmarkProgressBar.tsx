@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 interface BenchmarkProgressBarProps {
   progress: number;
   isMet: boolean;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
 }
 
 export function BenchmarkProgressBar({
@@ -30,6 +30,14 @@ export function BenchmarkProgressBar({
   const getProgressText = () => {
     if (comparisonOperator === "eq") {
       return isMet ? "Exact Match" : `${progress.toFixed(0)}% Match`;
+    }
+
+    if (comparisonOperator === "range") {
+      if (progress >= 100) {
+        return "Within Target Range";
+      } else {
+        return `${progress.toFixed(0)}% to Range`;
+      }
     }
 
     if (progress >= 100) {

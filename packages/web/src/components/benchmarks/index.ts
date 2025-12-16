@@ -3,6 +3,7 @@ export { BenchmarkList } from "./BenchmarkList";
 export { BenchmarkCard } from "./BenchmarkCard";
 export { BenchmarkForm } from "./BenchmarkForm";
 export { BenchmarkDeleteDialog } from "./BenchmarkDeleteDialog";
+export { TierGroupWizard } from "./TierGroupWizard";
 
 // Custom Benchmark Components
 export { CustomBenchmarkList } from "./CustomBenchmarkList";

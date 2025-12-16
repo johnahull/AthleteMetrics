@@ -583,6 +583,8 @@ export class ReportService extends BaseService {
       // User-defined benchmarks
       for (const benchmark of userDefinedBenchmarks) {
         if (benchmark.metricCode === metricCode) {
+          // Skip range benchmarks (they don't have a single benchmarkValue)
+          if (!benchmark.benchmarkValue) continue;
           if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
             const comparison = this.createBenchmarkComparison(
               benchmark.name,
@@ -598,6 +600,8 @@ export class ReportService extends BaseService {
       // Site benchmarks
       for (const { benchmark } of siteBenchmarksList) {
         if (benchmark.metricCode === metricCode) {
+          // Skip range benchmarks (they don't have a single benchmarkValue)
+          if (!benchmark.benchmarkValue) continue;
           if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
             const comparison = this.createBenchmarkComparison(
               benchmark.name,
@@ -613,6 +617,8 @@ export class ReportService extends BaseService {
       // Custom benchmarks
       for (const { benchmark } of customBenchmarksList) {
         if (benchmark.metricCode === metricCode) {
+          // Skip range benchmarks (they don't have a single benchmarkValue)
+          if (!benchmark.benchmarkValue) continue;
           if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
             const comparison = this.createBenchmarkComparison(
               benchmark.name,
@@ -1234,6 +1240,8 @@ export class ReportService extends BaseService {
         );
 
       for (const { benchmark } of siteBenchmarksList) {
+        // Skip range benchmarks (they don't have a single benchmarkValue)
+        if (!benchmark.benchmarkValue) continue;
         if (!benchmarksByMetric[benchmark.metricCode]) {
           benchmarksByMetric[benchmark.metricCode] = [];
         }
@@ -1269,6 +1277,8 @@ export class ReportService extends BaseService {
         );
 
       for (const { benchmark } of customBenchmarksList) {
+        // Skip range benchmarks (they don't have a single benchmarkValue)
+        if (!benchmark.benchmarkValue) continue;
         if (!benchmarksByMetric[benchmark.metricCode]) {
           benchmarksByMetric[benchmark.metricCode] = [];
         }

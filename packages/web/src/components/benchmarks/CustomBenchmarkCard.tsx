@@ -5,8 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { useDeleteCustomBenchmark } from "@/lib/benchmarks-api";
 import { useToast } from "@/hooks/use-toast";
 import { useMetricConfig } from "@/hooks/use-metric-config";
-import { Edit, Trash2, Target } from "lucide-react";
+import { Edit, Trash2, Target, Layers } from "lucide-react";
 import { CustomBenchmarkDeleteDialog } from "./CustomBenchmarkDeleteDialog";
+import { TierBadgeCompact } from "./TierBadge";
 import type { CustomBenchmark } from "@shared/schema";
 
 interface CustomBenchmarkCardProps {
@@ -55,7 +56,14 @@ export function CustomBenchmarkCard({
     lte: "≤ (Lower is better)",
     gte: "≥ (Higher is better)",
     eq: "= (Exact match)",
-  }[benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'] || benchmark.comparisonOperator;
+    range: "↔ (Target Range)",
+  }[benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range'] || benchmark.comparisonOperator;
+
+  // Check if this is a range benchmark
+  const isRangeBenchmark = benchmark.comparisonOperator === 'range';
+
+  // Check if this is a tier benchmark
+  const isTierBenchmark = !!benchmark.tierGroupId;
 
   // Format athlete filters
   const athleteFilters: string[] = [];
@@ -82,12 +90,24 @@ export function CustomBenchmarkCard({
                 <Target className="h-4 w-4" />
                 {benchmark.name}
               </CardTitle>
-              <div className="flex gap-2 mt-2">
+              <div className="flex flex-wrap gap-2 mt-2">
                 <Badge variant="outline">{benchmark.metricCode}</Badge>
                 <Badge variant="secondary">Custom</Badge>
                 <Badge variant={benchmark.isActive ? "default" : "secondary"}>
                   {benchmark.isActive ? "Active" : "Inactive"}
                 </Badge>
+                {isTierBenchmark && benchmark.tierName && benchmark.tierColor && (
+                  <TierBadgeCompact
+                    tierName={benchmark.tierName}
+                    tierColor={benchmark.tierColor}
+                  />
+                )}
+                {isTierBenchmark && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Layers className="h-3 w-3" />
+                    Tier {benchmark.tierOrder}
+                  </Badge>
+                )}
               </div>
             </div>
           </div>
@@ -101,11 +121,24 @@ export function CustomBenchmarkCard({
 
           {/* Benchmark Value & Operator */}
           <div className="bg-muted p-3 rounded-md">
-            <div className="text-sm font-medium mb-1">Target Value</div>
+            <div className="text-sm font-medium mb-1">
+              {isRangeBenchmark ? "Target Range" : "Target Value"}
+            </div>
             <div className="flex justify-between items-center">
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
-                {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                {isRangeBenchmark ? (
+                  <>
+                    <span className="text-2xl font-bold">
+                      {benchmark.minValue ?? '—'} – {benchmark.maxValue ?? '—'}
+                    </span>
+                    {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+                    {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                  </>
+                )}
               </div>
               <span className="text-xs text-muted-foreground">{operatorLabel}</span>
             </div>

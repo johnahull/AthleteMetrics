@@ -170,6 +170,8 @@ export function AthleteBenchmarkStatus({
                   <BenchmarkComparison
                     athleteValue={benchmark.athleteValue}
                     benchmarkValue={benchmark.benchmarkValue}
+                    minValue={benchmark.minValue}
+                    maxValue={benchmark.maxValue}
                     comparisonOperator={benchmark.comparisonOperator}
                     metricCode={benchmark.metricCode}
                     isMet={benchmark.isMet}

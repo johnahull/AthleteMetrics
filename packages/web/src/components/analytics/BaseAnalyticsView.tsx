@@ -26,7 +26,7 @@ import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
 
-import type { AnalysisType, AnalyticsFilters, BenchmarkLine, ChartType } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, ChartType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
@@ -56,7 +56,7 @@ interface BaseAnalyticsViewProps {
   customToolbar?: React.ReactNode;
 
   // Callbacks
-  onAnalyticsDataChange?: (data: any) => void;
+  onAnalyticsDataChange?: (data: AnalyticsResponse | null) => void;
   onError?: (error: string) => void;
 
   // Initial state
@@ -147,30 +147,69 @@ function BaseAnalyticsViewContent({
     isMainAnalyticsLoading: state.isLoading
   });
 
-  // Fetch benchmarks for the current metric
+  // Fetch benchmarks for the primary metric (Y-axis for most charts)
   const { data: benchmarksForMetric } = useBenchmarksForMetric(
     effectiveOrganizationId || '',
     state.metrics.primary
   );
 
-  // Convert selected benchmark IDs to BenchmarkLine objects
+  // Fetch benchmarks for the secondary metric (X-axis in scatter plots)
+  const secondaryMetric = state.metrics.additional?.[0];
+  const { data: benchmarksForSecondaryMetric } = useBenchmarksForMetric(
+    effectiveOrganizationId || '',
+    secondaryMetric || ''
+  );
+
+  // Convert selected benchmark IDs to BenchmarkLine objects (includes both primary and secondary metrics)
   const selectedBenchmarks = useMemo<BenchmarkLine[]>(() => {
-    if (!benchmarksForMetric || selectedBenchmarkIds.length === 0) {
+    if (selectedBenchmarkIds.length === 0) {
       return [];
     }
 
-    return benchmarksForMetric
-      .filter(b => selectedBenchmarkIds.includes(b.id))
-      .map(b => ({
-        id: b.id,
-        name: b.name,
-        value: b.benchmarkValue,
-        comparisonOperator: b.comparisonOperator,
-        color: undefined, // Let chart use default colors
-        lineStyle: 'dashed' as const,
-        filters: b.filters
-      }));
-  }, [benchmarksForMetric, selectedBenchmarkIds]);
+    const benchmarks: BenchmarkLine[] = [];
+
+    // Add primary metric benchmarks (Y-axis in scatter plots)
+    if (benchmarksForMetric) {
+      benchmarksForMetric
+        .filter(b => selectedBenchmarkIds.includes(b.id))
+        .forEach(b => {
+          benchmarks.push({
+            id: b.id,
+            name: b.name,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
+            comparisonOperator: b.comparisonOperator,
+            color: b.color ?? undefined,
+            lineStyle: 'dashed' as const,
+            metricCode: state.metrics.primary,
+            filters: b.filters
+          });
+        });
+    }
+
+    // Add secondary metric benchmarks (X-axis in scatter plots)
+    if (benchmarksForSecondaryMetric && secondaryMetric) {
+      benchmarksForSecondaryMetric
+        .filter(b => selectedBenchmarkIds.includes(b.id))
+        .forEach(b => {
+          benchmarks.push({
+            id: b.id,
+            name: b.name,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
+            comparisonOperator: b.comparisonOperator,
+            color: b.color ?? undefined,
+            lineStyle: 'dashed' as const,
+            metricCode: secondaryMetric,
+            filters: b.filters
+          });
+        });
+    }
+
+    return benchmarks;
+  }, [benchmarksForMetric, benchmarksForSecondaryMetric, selectedBenchmarkIds, state.metrics.primary, secondaryMetric]);
 
   // Reset benchmark selection when primary metric changes
   useEffect(() => {
@@ -527,15 +566,32 @@ function BaseAnalyticsViewContent({
             {/* Benchmark Line Selector - only for compatible chart types */}
             {BENCHMARK_COMPATIBLE_CHART_TYPES.includes(state.selectedChartType) &&
              effectiveOrganizationId &&
-             benchmarksForMetric &&
-             benchmarksForMetric.length > 0 && (
-              <div className="mb-4">
-                <BenchmarkLineSelector
-                  organizationId={effectiveOrganizationId}
-                  metricCode={state.metrics.primary}
-                  selectedBenchmarkIds={selectedBenchmarkIds}
-                  onSelectionChange={setSelectedBenchmarkIds}
-                />
+             ((benchmarksForMetric && benchmarksForMetric.length > 0) ||
+              (benchmarksForSecondaryMetric && benchmarksForSecondaryMetric.length > 0)) && (
+              <div className="mb-4 space-y-2">
+                {/* Primary metric benchmarks (Y-axis in scatter plots) */}
+                {benchmarksForMetric && benchmarksForMetric.length > 0 && (
+                  <BenchmarkLineSelector
+                    organizationId={effectiveOrganizationId}
+                    metricCode={state.metrics.primary}
+                    selectedBenchmarkIds={selectedBenchmarkIds}
+                    onSelectionChange={setSelectedBenchmarkIds}
+                    labelPrefix={['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) ? 'Y-Axis' : undefined}
+                  />
+                )}
+                {/* Secondary metric benchmarks (X-axis in scatter plots) */}
+                {['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) &&
+                 secondaryMetric &&
+                 benchmarksForSecondaryMetric &&
+                 benchmarksForSecondaryMetric.length > 0 && (
+                  <BenchmarkLineSelector
+                    organizationId={effectiveOrganizationId}
+                    metricCode={secondaryMetric}
+                    selectedBenchmarkIds={selectedBenchmarkIds}
+                    onSelectionChange={setSelectedBenchmarkIds}
+                    labelPrefix="X-Axis"
+                  />
+                )}
               </div>
             )}
             {state.showAllCharts ? (

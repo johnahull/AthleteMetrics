@@ -512,6 +512,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     showAllPoints={true}
                     selectedGroups={selectedGroups}
+                    benchmarks={benchmarks}
+                    showBenchmarks={!!benchmarks && benchmarks.length > 0}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart
@@ -550,6 +552,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     showAllPoints={chartType === 'box_plot' && selectedGroups && selectedGroups.length >= 2}
                     selectedGroups={selectedGroups}
+                    benchmarks={benchmarks}
+                    showBenchmarks={true}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -585,6 +589,8 @@ export function ChartContainer({
         selectedDates={selectedDates}
         metric={metric}
         selectedGroups={selectedGroups}
+        benchmarks={benchmarks}
+        showBenchmarks={!!benchmarks && benchmarks.length > 0}
       />
     </Card>
   );

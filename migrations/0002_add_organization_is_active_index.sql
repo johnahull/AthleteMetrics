@@ -2,6 +2,7 @@
 -- Purpose: Optimize queries filtering by active status and ensure data consistency
 -- Date: 2025-10-13
 -- Related PR: #118 - Organization deletion and deactivation
+-- NOTE: This migration is idempotent - safe to run multiple times
 
 -- Add partial index for active organizations (most common query pattern)
 -- Using partial index only on active=true reduces index size by ~50%
@@ -15,6 +16,8 @@ COMMENT ON INDEX organizations_is_active_idx IS
 
 -- Add consistency constraint to ensure is_active and deleted_at are in sync
 -- This prevents inconsistent state where is_active=true but deleted_at is set
+-- Using DROP IF EXISTS first for idempotency
+ALTER TABLE organizations DROP CONSTRAINT IF EXISTS check_is_active_deleted_at_consistency;
 ALTER TABLE organizations
 ADD CONSTRAINT check_is_active_deleted_at_consistency
 CHECK (

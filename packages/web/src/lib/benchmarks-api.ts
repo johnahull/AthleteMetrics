@@ -13,6 +13,7 @@ import type {
   UpdateCustomBenchmark,
   OrganizationBenchmark,
   OrganizationBenchmarkWithDetails,
+  InsertTierGroup,
 } from "@shared/schema";
 import { STALE_TIME } from "@/lib/queryClient";
 
@@ -44,7 +45,7 @@ export interface TeamBenchmarkAggregation {
 // ============================================================================
 
 /**
- * Fetch all site benchmarks
+ * Fetch all site benchmarks (site admin only)
  */
 export async function fetchSiteBenchmarks(includeInactive = false): Promise<SiteBenchmark[]> {
   const params = new URLSearchParams();
@@ -55,6 +56,30 @@ export async function fetchSiteBenchmarks(includeInactive = false): Promise<Site
   const response = await fetch(`/api/site-benchmarks?${params.toString()}`);
   if (!response.ok) {
     throw new Error('Failed to fetch site benchmarks');
+  }
+  return response.json();
+}
+
+/**
+ * Fetch site benchmarks available for an organization (org admin)
+ * Filters by organization type automatically
+ */
+export async function fetchSiteBenchmarksForOrg(
+  organizationId: string,
+  includeInactive = false
+): Promise<SiteBenchmark[]> {
+  const params = new URLSearchParams();
+  if (includeInactive) {
+    params.append('includeInactive', 'true');
+  }
+
+  const response = await fetch(`/api/benchmarks?${params.toString()}`, {
+    headers: {
+      'X-Organization-Id': organizationId,
+    },
+  });
+  if (!response.ok) {
+    throw new Error('Failed to fetch site benchmarks for organization');
   }
   return response.json();
 }
@@ -136,6 +161,25 @@ export async function deleteSiteBenchmark(id: string): Promise<void> {
     const error = await response.json();
     throw new Error(error.message || 'Failed to delete benchmark');
   }
+}
+
+/**
+ * Create a tier group with multiple benchmarks atomically (site admin only)
+ * Creates multiple benchmarks with shared tierGroupId in a single transaction
+ */
+export async function createTierGroup(data: InsertTierGroup): Promise<{ tierGroupId: string; benchmarks: SiteBenchmark[] }> {
+  const response = await fetch('/api/site-benchmarks/tier-group', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to create tier group' }));
+    throw new Error(errorData.message || 'Failed to create tier group');
+  }
+
+  return response.json();
 }
 
 // ============================================================================
@@ -301,8 +345,10 @@ export async function fetchAthleteBenchmarkStatus(
   benchmarkId: string;
   benchmarkName: string;
   metricCode: string;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  benchmarkValue: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue?: number | null;
+  maxValue?: number | null;
   athleteValue: number | null;
   isMet: boolean;
   progress: number;
@@ -319,12 +365,25 @@ export async function fetchAthleteBenchmarkStatus(
 // ============================================================================
 
 /**
- * Hook to fetch all site benchmarks
+ * Hook to fetch all site benchmarks (site admin only)
  */
 export function useSiteBenchmarks(includeInactive = false) {
   return useQuery({
     queryKey: ['siteBenchmarks', includeInactive],
     queryFn: () => fetchSiteBenchmarks(includeInactive),
+    staleTime: STALE_TIME.DEFAULT,
+  });
+}
+
+/**
+ * Hook to fetch site benchmarks for an organization (org admin)
+ * Filters by organization type automatically
+ */
+export function useSiteBenchmarksForOrg(organizationId: string, includeInactive = false) {
+  return useQuery({
+    queryKey: ['siteBenchmarksForOrg', organizationId, includeInactive],
+    queryFn: () => fetchSiteBenchmarksForOrg(organizationId, includeInactive),
+    enabled: !!organizationId,
     staleTime: STALE_TIME.DEFAULT,
   });
 }
@@ -397,6 +456,22 @@ export function useDeleteSiteBenchmark() {
     mutationFn: deleteSiteBenchmark,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['siteBenchmarks'] });
+    },
+  });
+}
+
+/**
+ * Hook to create a tier group with multiple benchmarks (site admin only)
+ * Creates multiple benchmarks atomically with shared tierGroupId
+ */
+export function useCreateTierGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createTierGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['siteBenchmarks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/site-benchmarks/tier-groups'] });
     },
   });
 }
@@ -564,8 +639,11 @@ export async function fetchBenchmarksForMetric(
   id: string;
   name: string;
   benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  minValue?: number;          // For range benchmarks
+  maxValue?: number;          // For range benchmarks
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   metricCode: string;
+  color?: string;             // Benchmark's defined color
   filters?: {
     gender?: string;
     ageMin?: number;
