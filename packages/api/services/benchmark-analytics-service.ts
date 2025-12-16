@@ -65,6 +65,8 @@ export interface BenchmarkForMetric {
   minValue?: number | null;
   /** Max value for range benchmarks */
   maxValue?: number | null;
+  /** Color for chart display (hex or rgba) */
+  color?: string | null;
   /** Optional demographic filters for the benchmark */
   filters?: {
     gender?: string;
@@ -405,6 +407,7 @@ export class BenchmarkAnalyticsService extends BaseService {
             ? parseFloat(benchmark.maxValue)
             : benchmark.maxValue)
           : null,
+        color: benchmark.tierColor ?? undefined,
         filters: {
           gender: benchmark.gender ?? undefined,
           ageMin: benchmark.ageMin ?? undefined,

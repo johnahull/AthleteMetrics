@@ -512,6 +512,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     showAllPoints={true}
                     selectedGroups={selectedGroups}
+                    benchmarks={benchmarks}
+                    showBenchmarks={!!benchmarks && benchmarks.length > 0}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart

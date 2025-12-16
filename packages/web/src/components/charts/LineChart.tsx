@@ -298,15 +298,28 @@ export function LineChart({
       const defaultColor = 'rgba(255, 99, 132, 0.8)';
       const color = benchmark.color || defaultColor;
 
+      // Parse color to create semi-transparent background
+      // Handle rgba, rgb, and hex formats
+      let backgroundColor: string;
+      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+      const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+
+      if (rgbaMatch) {
+        backgroundColor = `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, 0.15)`;
+      } else if (hexMatch) {
+        // Convert hex to rgba with 15% opacity
+        const hex = hexMatch[1];
+        const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+        const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+        const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+        backgroundColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
+      } else {
+        // Fallback for named colors or other formats
+        backgroundColor = `${color}26`;
+      }
+
       // Range benchmark: render as box annotation
       if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
-        // Convert color to hex with 15% opacity for background
-        // Extract RGB values and create semi-transparent background
-        const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
-        const backgroundColor = rgbaMatch
-          ? `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, 0.15)`
-          : `${color}26`; // Fallback to hex with 15% opacity
-
         return {
           type: 'box',
           yMin: benchmark.minValue,
@@ -519,7 +532,7 @@ export function LineChart({
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col">
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
         <div className="mb-4">
@@ -613,6 +626,7 @@ export function LineChart({
         role="img"
         aria-label={`Line chart showing ${lineData.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
         aria-describedby="linechart-description"
+        className="flex-1 min-h-[300px]"
       >
         <span id="linechart-description" className="sr-only">
           {`Performance trend chart for ${lineData.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}

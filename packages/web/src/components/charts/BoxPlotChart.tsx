@@ -12,6 +12,7 @@ import {
   ChartData,
   Filler,
 } from 'chart.js';
+import annotationPlugin, { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,8 @@ import type {
   ChartConfiguration,
   StatisticalSummary,
   BoxPlotData,
-  GroupDefinition
+  GroupDefinition,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -43,6 +45,8 @@ interface BoxPlotChartProps {
   showAllPoints?: boolean; // Option to show all data points (swarm style)
   showAthleteNames?: boolean; // Option to show athlete names next to points
   selectedGroups?: GroupDefinition[]; // For multi-group analysis
+  benchmarks?: BenchmarkLine[]; // Benchmark lines/ranges to display
+  showBenchmarks?: boolean; // Whether to show benchmarks
 }
 
 export const BoxPlotChart = React.memo(function BoxPlotChart({
@@ -53,7 +57,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   highlightAthlete,
   showAllPoints = false,
   showAthleteNames = false,
-  selectedGroups
+  selectedGroups,
+  benchmarks,
+  showBenchmarks = true
 }: BoxPlotChartProps) {
   const { getMetricConfig } = useMetricConfig();
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
@@ -967,6 +973,84 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     };
   }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames, selectedGroups]);
 
+  // Generate benchmark annotations for chart overlay
+  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
+      return [];
+    }
+
+    return benchmarks.map((benchmark): AnnotationOptions => {
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+
+      // Parse color to create semi-transparent background
+      // Handle rgba, rgb, and hex formats
+      let backgroundColor: string;
+      const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+      const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+
+      if (rgbaMatch) {
+        backgroundColor = `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, 0.15)`;
+      } else if (hexMatch) {
+        // Convert hex to rgba with 15% opacity
+        const hex = hexMatch[1];
+        const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+        const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+        const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+        backgroundColor = `rgba(${r}, ${g}, ${b}, 0.15)`;
+      } else {
+        // Fallback for named colors or other formats
+        backgroundColor = `${color}26`;
+      }
+
+      // Range benchmark - render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        return {
+          type: 'box',
+          yMin: benchmark.minValue,
+          yMax: benchmark.maxValue,
+          backgroundColor,
+          borderColor: color,
+          borderWidth: 1,
+          borderDash: [5, 5],
+          label: {
+            display: true,
+            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+            position: 'end',
+            color: color,
+            font: {
+              size: 11,
+              weight: 'bold'
+            },
+            padding: 4
+          }
+        };
+      }
+
+      // Single-value benchmark - render as line annotation
+      return {
+        type: 'line',
+        yMin: benchmark.value,
+        yMax: benchmark.value,
+        borderColor: color,
+        borderWidth: 2,
+        borderDash: benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [],
+        label: {
+          display: true,
+          content: benchmark.name,
+          position: 'end',
+          backgroundColor: color,
+          color: 'white',
+          font: {
+            size: 11,
+            weight: 'bold'
+          },
+          padding: 4
+        }
+      };
+    });
+  }, [benchmarks, showBenchmarks]);
+
   // Custom plugin for drawing team labels
   const multiGroupLabelsPlugin = {
     id: 'multiGroupLabels',
@@ -1130,6 +1214,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     },
     plugins: {
       ...config.plugins,
+      annotation: {
+        annotations: benchmarkAnnotations.reduce((acc, annotation, index) => {
+          acc[`benchmark-${index}`] = annotation;
+          return acc;
+        }, {} as Record<string, AnnotationOptions>)
+      },
       title: {
         display: true,
         text: config.title,
@@ -1470,7 +1560,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   type="scatter"
                   data={chartData}
                   options={chartOptions}
-                  plugins={[multiGroupLabelsPlugin]}
+                  plugins={[annotationPlugin as any, multiGroupLabelsPlugin]}
                   ref={chartRef}
                   key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
                 />

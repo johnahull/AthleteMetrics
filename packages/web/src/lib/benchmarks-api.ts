@@ -643,6 +643,7 @@ export async function fetchBenchmarksForMetric(
   maxValue?: number;          // For range benchmarks
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   metricCode: string;
+  color?: string;             // Benchmark's defined color
   filters?: {
     gender?: string;
     ageMin?: number;

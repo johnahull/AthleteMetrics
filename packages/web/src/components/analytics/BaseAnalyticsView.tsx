@@ -168,7 +168,7 @@ function BaseAnalyticsViewContent({
         minValue: b.minValue,  // For range benchmarks
         maxValue: b.maxValue,  // For range benchmarks
         comparisonOperator: b.comparisonOperator,
-        color: undefined, // Let chart use default colors
+        color: b.color ?? undefined, // Use benchmark's defined color
         lineStyle: 'dashed' as const,
         filters: b.filters
       }));
