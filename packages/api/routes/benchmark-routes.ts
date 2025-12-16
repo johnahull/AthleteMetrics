@@ -15,6 +15,7 @@ import {
   updateSiteBenchmarkSchema,
   insertCustomBenchmarkSchema,
   updateCustomBenchmarkSchema,
+  insertTierGroupSchema,
 } from "@shared/schema";
 
 const benchmarkService = new BenchmarkService();
@@ -55,7 +56,7 @@ function handleBenchmarkError(res: Response, error: unknown, operation: string):
   }
 
   // 404 - Not found
-  if (errorMessage.includes('not found')) {
+  if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
     res.status(404).json({ message: error.message });
     return;
   }
@@ -155,6 +156,47 @@ export function registerBenchmarkRoutes(app: Express) {
       } catch (error) {
         console.error("GET /api/site-benchmarks error:", error);
         handleBenchmarkError(res, error, "fetch site benchmarks");
+      }
+    }
+  );
+
+  // Get tier groups for site benchmarks (site admin only)
+  app.get("/api/site-benchmarks/tier-groups",
+    benchmarkReadLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req, res) => {
+      try {
+        const metricCode = req.query.metricCode as string | undefined;
+        const tierGroups = await benchmarkService.getSiteTierGroups(metricCode);
+        res.json(tierGroups);
+      } catch (error) {
+        console.error("GET /api/site-benchmarks/tier-groups error:", error);
+        handleBenchmarkError(res, error, "fetch tier groups");
+      }
+    }
+  );
+
+  // Create a tier group (batch creation of benchmarks) (site admin only)
+  app.post("/api/site-benchmarks/tier-group",
+    benchmarkCreateLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req, res) => {
+      try {
+        const userId = req.session.user!.id;
+        const validatedData = insertTierGroupSchema.parse(req.body);
+
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
+        const result = await benchmarkService.createTierGroup(validatedData, userId, context);
+        res.status(201).json(result);
+      } catch (error) {
+        console.error("POST /api/site-benchmarks/tier-group error:", error);
+        handleBenchmarkError(res, error, "create tier group");
       }
     }
   );

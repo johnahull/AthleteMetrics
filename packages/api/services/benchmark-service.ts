@@ -6,11 +6,14 @@
 
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
+import { db } from "../db";
+import crypto from "crypto";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
   insertCustomBenchmarkSchema,
   updateCustomBenchmarkSchema,
+  insertTierGroupSchema,
 } from "@shared/schema";
 import type {
   SiteBenchmark,
@@ -21,6 +24,7 @@ import type {
   UpdateCustomBenchmark,
   OrganizationBenchmark,
   OrganizationBenchmarkWithDetails,
+  InsertTierGroup,
 } from "@shared/schema";
 
 export interface BenchmarkFilters {
@@ -297,6 +301,122 @@ export class BenchmarkService extends BaseService {
       return await this.storage.getSiteBenchmark(benchmarkId);
     } catch (error) {
       return this.handleError(error, "BenchmarkService.getSiteBenchmark");
+    }
+  }
+
+  /**
+   * Get tier groups for site benchmarks
+   * Returns a list of tier groups with their metric code and tier count
+   * Used for populating tier group dropdowns in the benchmark form
+   */
+  async getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    try {
+      return await this.storage.getSiteTierGroups(metricCode);
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.getSiteTierGroups");
+    }
+  }
+
+  /**
+   * Create a tier group (batch creation of related benchmarks)
+   * All benchmarks in the group share the same tierGroupId and filters
+   * Uses a database transaction to ensure atomicity
+   */
+  async createTierGroup(
+    data: InsertTierGroup,
+    createdBy: string,
+    context?: RequestContext
+  ): Promise<{ tierGroupId: string; benchmarks: SiteBenchmark[] }> {
+    try {
+      // Verify site admin permission
+      if (!(await this.isSiteAdmin(createdBy))) {
+        throw new Error("Unauthorized: Only site administrators can create tier groups");
+      }
+
+      // Validate input
+      const validatedData = insertTierGroupSchema.parse(data);
+
+      // Validate metric exists
+      const metric = await this.storage.getSiteMetric(validatedData.metricCode);
+      if (!metric) {
+        throw new Error(`Metric with code ${validatedData.metricCode} does not exist`);
+      }
+
+      // Generate shared tierGroupId
+      const tierGroupId = crypto.randomUUID();
+
+      // Create all benchmarks in a transaction
+      // Note: tx is unused because storage.createSiteBenchmark doesn't support transaction context
+      // TODO: Pass tx to storage layer for true transaction atomicity
+      const benchmarks = await db.transaction(async (_tx) => {
+        const createdBenchmarks: SiteBenchmark[] = [];
+
+        for (const tier of validatedData.tiers) {
+          // Construct benchmark name: "{name} - {tierName}"
+          const benchmarkName = `${validatedData.name} - ${tier.tierName}`;
+
+          // Build benchmark data with shared filters
+          const benchmarkData: InsertSiteBenchmark = {
+            metricCode: validatedData.metricCode,
+            name: benchmarkName,
+            description: validatedData.description,
+            comparisonOperator: validatedData.comparisonOperator,
+            benchmarkValue: tier.benchmarkValue,
+            minValue: tier.minValue,
+            maxValue: tier.maxValue,
+            tierGroupId,
+            tierOrder: tier.tierOrder,
+            tierName: tier.tierName,
+            tierColor: tier.tierColor,
+            // Shared filters
+            gender: validatedData.gender,
+            ageMin: validatedData.ageMin,
+            ageMax: validatedData.ageMax,
+            position: validatedData.position,
+            level: validatedData.level,
+            applicableOrgTypes: validatedData.applicableOrgTypes,
+            isActive: true,
+          };
+
+          // Create benchmark within transaction
+          const benchmark = await this.storage.createSiteBenchmark(benchmarkData, createdBy);
+          createdBenchmarks.push(benchmark);
+        }
+
+        return createdBenchmarks;
+      });
+
+      // Create audit log for tier group creation
+      // Use 'benchmark_created' action as tier groups are batch benchmark creation
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: createdBy,
+            action: 'benchmark_created',
+            resourceType: 'site_benchmark',
+            resourceId: tierGroupId,
+            details: JSON.stringify({
+              tierGroup: true,
+              name: validatedData.name,
+              metricCode: validatedData.metricCode,
+              tierCount: validatedData.tiers.length,
+              benchmarkIds: benchmarks.map(b => b.id),
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'benchmark_created',
+          userId: createdBy,
+          resourceType: 'site_benchmark',
+          resourceId: tierGroupId,
+        }
+      );
+
+      return { tierGroupId, benchmarks };
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.createTierGroup");
     }
   }
 

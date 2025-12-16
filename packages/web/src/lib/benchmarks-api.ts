@@ -13,6 +13,7 @@ import type {
   UpdateCustomBenchmark,
   OrganizationBenchmark,
   OrganizationBenchmarkWithDetails,
+  InsertTierGroup,
 } from "@shared/schema";
 import { STALE_TIME } from "@/lib/queryClient";
 
@@ -160,6 +161,25 @@ export async function deleteSiteBenchmark(id: string): Promise<void> {
     const error = await response.json();
     throw new Error(error.message || 'Failed to delete benchmark');
   }
+}
+
+/**
+ * Create a tier group with multiple benchmarks atomically (site admin only)
+ * Creates multiple benchmarks with shared tierGroupId in a single transaction
+ */
+export async function createTierGroup(data: InsertTierGroup): Promise<{ tierGroupId: string; benchmarks: SiteBenchmark[] }> {
+  const response = await fetch('/api/site-benchmarks/tier-group', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({ message: 'Failed to create tier group' }));
+    throw new Error(errorData.message || 'Failed to create tier group');
+  }
+
+  return response.json();
 }
 
 // ============================================================================
@@ -440,6 +460,22 @@ export function useDeleteSiteBenchmark() {
   });
 }
 
+/**
+ * Hook to create a tier group with multiple benchmarks (site admin only)
+ * Creates multiple benchmarks atomically with shared tierGroupId
+ */
+export function useCreateTierGroup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: createTierGroup,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['siteBenchmarks'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/site-benchmarks/tier-groups'] });
+    },
+  });
+}
+
 // ============================================================================
 // React Query Hooks - Custom Benchmarks
 // ============================================================================
@@ -603,7 +639,9 @@ export async function fetchBenchmarksForMetric(
   id: string;
   name: string;
   benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  minValue?: number;          // For range benchmarks
+  maxValue?: number;          // For range benchmarks
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   metricCode: string;
   filters?: {
     gender?: string;

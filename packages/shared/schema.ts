@@ -2137,6 +2137,63 @@ export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
 export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
 export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
 
+// Tier definition for a single tier in a group
+export const tierDefinitionSchema = z.object({
+  tierName: z.string().min(1).max(50),
+  tierOrder: z.number().int().min(1),
+  tierColor: z.string().max(20).optional(),
+  // For range benchmarks
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  // For single-value benchmarks
+  benchmarkValue: z.number().optional(),
+}).refine(
+  (data) => {
+    // Validate minValue < maxValue when both are provided
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
+);
+
+export type TierDefinition = z.infer<typeof tierDefinitionSchema>;
+
+// Schema for creating a tier group (batch creation)
+export const insertTierGroupSchema = z.object({
+  metricCode: z.string().min(1).max(50),
+  name: z.string().min(1).max(100), // Base name for the group
+  description: z.string().max(1000).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']),
+  tiers: z.array(tierDefinitionSchema).min(2, "Tier group must have at least 2 tiers").max(10, "Tier group must have at most 10 tiers"),
+  // Shared filters
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
+}).refine(data => {
+  // Validate tier orders are sequential starting from 1
+  const orders = data.tiers.map(t => t.tierOrder).sort((a, b) => a - b);
+  return orders.every((o, i) => o === i + 1);
+}, { message: "Tier orders must be sequential (1, 2, 3...)" })
+.refine(data => {
+  // Validate unique tier names
+  const names = data.tiers.map(t => t.tierName.toLowerCase());
+  return new Set(names).size === names.length;
+}, { message: "Tier names must be unique within the group" })
+.refine(data => {
+  // Validate ageMin <= ageMax when both are provided
+  if (data.ageMin !== undefined && data.ageMax !== undefined) {
+    return data.ageMin <= data.ageMax;
+  }
+  return true;
+}, { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] });
+
+export type InsertTierGroup = z.infer<typeof insertTierGroupSchema>;
+
 export type InsertCustomBenchmark = z.infer<typeof insertCustomBenchmarkSchema>;
 export type CustomBenchmark = typeof customBenchmarks.$inferSelect;
 export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;

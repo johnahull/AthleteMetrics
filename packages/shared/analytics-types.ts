@@ -455,8 +455,10 @@ export const CHART_COLOR_SCHEMES = {
 export interface BenchmarkLine {
   id: string;
   name: string;
-  value: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  value: number;              // Keep for backwards compatibility (single-value benchmarks)
+  minValue?: number;          // For range benchmarks
+  maxValue?: number;          // For range benchmarks
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   color?: string;
   lineStyle?: 'solid' | 'dashed' | 'dotted';
   filters?: {

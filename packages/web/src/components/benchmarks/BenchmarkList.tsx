@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Plus, Search, Filter } from "lucide-react";
+import { Plus, Search, Filter, Layers } from "lucide-react";
 import { BenchmarkCard } from "./BenchmarkCard";
 import { BenchmarkForm } from "./BenchmarkForm";
+import { TierGroupWizard } from "./TierGroupWizard";
 import type { SiteBenchmark } from "@shared/schema";
 
 export function BenchmarkList() {
   const [showForm, setShowForm] = useState(false);
+  const [showTierGroupWizard, setShowTierGroupWizard] = useState(false);
   const [editingBenchmark, setEditingBenchmark] = useState<SiteBenchmark | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -72,10 +74,20 @@ export function BenchmarkList() {
             Manage global benchmark catalog for all organizations
           </p>
         </div>
-        <Button onClick={handleNewBenchmark} data-testid="new-benchmark-button">
-          <Plus className="mr-2 h-4 w-4" />
-          New Benchmark
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowTierGroupWizard(true)}
+            data-testid="tier-group-wizard-button"
+          >
+            <Layers className="mr-2 h-4 w-4" />
+            Create Tier Group
+          </Button>
+          <Button onClick={handleNewBenchmark} data-testid="new-benchmark-button">
+            <Plus className="mr-2 h-4 w-4" />
+            New Benchmark
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -155,6 +167,12 @@ export function BenchmarkList() {
           benchmark={editingBenchmark}
         />
       )}
+
+      {/* Tier Group Wizard Modal */}
+      <TierGroupWizard
+        open={showTierGroupWizard}
+        onClose={() => setShowTierGroupWizard(false)}
+      />
     </div>
   );
 }

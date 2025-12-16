@@ -25,8 +25,13 @@ export interface TeamBenchmarkAggregation {
   benchmarkId: string;
   benchmarkName: string;
   metricCode: string;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  /** Target value for single-value benchmarks (null for range benchmarks) */
+  benchmarkValue: number | null;
+  /** Min value for range benchmarks */
+  minValue?: number | null;
+  /** Max value for range benchmarks */
+  maxValue?: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   filters: {
     gender?: string;
     ageMin?: number;
@@ -43,18 +48,23 @@ export interface TeamBenchmarkAggregation {
 /**
  * Benchmark data formatted for chart overlay display.
  * Returned by getBenchmarksForMetric endpoint.
+ * Note: Only supports single-value benchmarks (lte/gte/eq), not range benchmarks.
  */
 export interface BenchmarkForMetric {
   /** Unique identifier */
   id: string;
   /** Display name for the benchmark line */
   name: string;
-  /** Target value to display as horizontal line */
-  benchmarkValue: number;
+  /** Target value to display as horizontal line (null for range benchmarks) */
+  benchmarkValue: number | null;
   /** Comparison operator for determining if benchmark is met */
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   /** Metric code this benchmark applies to */
   metricCode: string;
+  /** Min value for range benchmarks */
+  minValue?: number | null;
+  /** Max value for range benchmarks */
+  maxValue?: number | null;
   /** Optional demographic filters for the benchmark */
   filters?: {
     gender?: string;
@@ -220,26 +230,50 @@ export class BenchmarkAnalyticsService extends BaseService {
             athletesNoData++;
           } else {
             athletesWithData++;
-            const benchmarkValue =
-              typeof benchmark.benchmarkValue === 'string'
-                ? parseFloat(benchmark.benchmarkValue)
-                : benchmark.benchmarkValue;
 
-            const isMet = this.evaluateBenchmark(
-              athleteValue,
-              benchmarkValue,
-              benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
-            );
+            // Handle range vs single-value benchmarks
+            const isRange = benchmark.comparisonOperator === 'range';
+            let isMet = false;
+            let progress = 0;
+
+            if (isRange) {
+              // Range benchmark evaluation
+              const minValue = typeof benchmark.minValue === 'string'
+                ? parseFloat(benchmark.minValue)
+                : benchmark.minValue;
+              const maxValue = typeof benchmark.maxValue === 'string'
+                ? parseFloat(benchmark.maxValue)
+                : benchmark.maxValue;
+
+              if (minValue !== null && maxValue !== null) {
+                isMet = athleteValue >= minValue && athleteValue <= maxValue;
+                progress = this.getRangeBenchmarkProgress(athleteValue, minValue, maxValue);
+              }
+            } else {
+              // Single-value benchmark evaluation
+              const benchmarkValue =
+                typeof benchmark.benchmarkValue === 'string'
+                  ? parseFloat(benchmark.benchmarkValue)
+                  : benchmark.benchmarkValue;
+
+              if (benchmarkValue !== null) {
+                isMet = this.evaluateBenchmark(
+                  athleteValue,
+                  benchmarkValue,
+                  benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
+                );
+
+                progress = this.getBenchmarkProgress(
+                  athleteValue,
+                  benchmarkValue,
+                  benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
+                );
+              }
+            }
 
             if (isMet) {
               athletesMet++;
             }
-
-            const progress = this.getBenchmarkProgress(
-              athleteValue,
-              benchmarkValue,
-              benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
-            );
             totalProgress += progress;
           }
         }
@@ -253,11 +287,22 @@ export class BenchmarkAnalyticsService extends BaseService {
           benchmarkId: benchmark.id,
           benchmarkName: benchmark.name,
           metricCode: benchmark.metricCode,
-          benchmarkValue:
-            typeof benchmark.benchmarkValue === 'string'
+          benchmarkValue: benchmark.benchmarkValue !== null
+            ? (typeof benchmark.benchmarkValue === 'string'
               ? parseFloat(benchmark.benchmarkValue)
-              : benchmark.benchmarkValue,
-          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+              : benchmark.benchmarkValue)
+            : null,
+          minValue: benchmark.minValue !== null
+            ? (typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue)
+            : null,
+          maxValue: benchmark.maxValue !== null
+            ? (typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue)
+            : null,
+          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
           filters: {
             gender: benchmark.gender || undefined,
             ageMin: benchmark.ageMin || undefined,
@@ -343,12 +388,23 @@ export class BenchmarkAnalyticsService extends BaseService {
       return allBenchmarks.map((benchmark) => ({
         id: benchmark.id,
         name: benchmark.name,
-        benchmarkValue:
-          typeof benchmark.benchmarkValue === 'string'
+        benchmarkValue: benchmark.benchmarkValue !== null
+          ? (typeof benchmark.benchmarkValue === 'string'
             ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue,
-        comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+            : benchmark.benchmarkValue)
+          : null,
+        comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
         metricCode: benchmark.metricCode,
+        minValue: benchmark.minValue !== null
+          ? (typeof benchmark.minValue === 'string'
+            ? parseFloat(benchmark.minValue)
+            : benchmark.minValue)
+          : null,
+        maxValue: benchmark.maxValue !== null
+          ? (typeof benchmark.maxValue === 'string'
+            ? parseFloat(benchmark.maxValue)
+            : benchmark.maxValue)
+          : null,
         filters: {
           gender: benchmark.gender ?? undefined,
           ageMin: benchmark.ageMin ?? undefined,
@@ -390,7 +446,9 @@ export class BenchmarkAnalyticsService extends BaseService {
     benchmarkId: string;
     benchmarkName: string;
     metricCode: string;
-    benchmarkValue: number;
+    benchmarkValue: number | null;
+    minValue?: number | null;
+    maxValue?: number | null;
     snapshots: Array<{
       date: string;
       applicableAthletes: number;
@@ -508,10 +566,21 @@ export class BenchmarkAnalyticsService extends BaseService {
         benchmarkId: benchmark.id,
         benchmarkName: benchmark.name,
         metricCode: benchmark.metricCode,
-        benchmarkValue:
-          typeof benchmark.benchmarkValue === 'string'
+        benchmarkValue: benchmark.benchmarkValue !== null
+          ? (typeof benchmark.benchmarkValue === 'string'
             ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue,
+            : benchmark.benchmarkValue)
+          : null,
+        minValue: benchmark.minValue !== null
+          ? (typeof benchmark.minValue === 'string'
+            ? parseFloat(benchmark.minValue)
+            : benchmark.minValue)
+          : null,
+        maxValue: benchmark.maxValue !== null
+          ? (typeof benchmark.maxValue === 'string'
+            ? parseFloat(benchmark.maxValue)
+            : benchmark.maxValue)
+          : null,
         snapshots,
       };
     } catch (error) {
@@ -648,6 +717,7 @@ export class BenchmarkAnalyticsService extends BaseService {
 
       // Filter athletes by status
       const resultAthleteIds: string[] = [];
+      const isRange = benchmark.comparisonOperator === 'range';
 
       for (const athlete of applicableAthletes) {
         const athleteValue = latestMeasurementByUser.get(athlete.userId);
@@ -658,17 +728,36 @@ export class BenchmarkAnalyticsService extends BaseService {
             resultAthleteIds.push(athlete.userId);
           }
         } else {
-          // Has data
-          const benchmarkValue =
-            typeof benchmark.benchmarkValue === 'string'
-              ? parseFloat(benchmark.benchmarkValue)
-              : benchmark.benchmarkValue;
+          // Has data - evaluate benchmark
+          let isMet = false;
 
-          const isMet = this.evaluateBenchmark(
-            athleteValue,
-            benchmarkValue,
-            benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
-          );
+          if (isRange) {
+            // Range benchmark evaluation
+            const minValue = typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue;
+            const maxValue = typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue;
+
+            if (minValue !== null && maxValue !== null) {
+              isMet = athleteValue >= minValue && athleteValue <= maxValue;
+            }
+          } else {
+            // Single-value benchmark evaluation
+            const benchmarkValue =
+              typeof benchmark.benchmarkValue === 'string'
+                ? parseFloat(benchmark.benchmarkValue)
+                : benchmark.benchmarkValue;
+
+            if (benchmarkValue !== null) {
+              isMet = this.evaluateBenchmark(
+                athleteValue,
+                benchmarkValue,
+                benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'
+              );
+            }
+          }
 
           if (status === 'met' && isMet) {
             resultAthleteIds.push(athlete.userId);
@@ -809,6 +898,33 @@ export class BenchmarkAnalyticsService extends BaseService {
   }
 
   /**
+   * Calculate progress percentage for range-based benchmarks
+   * Returns 100% when within range, <100% when outside range
+   */
+  private getRangeBenchmarkProgress(
+    athleteValue: number,
+    minValue: number,
+    maxValue: number
+  ): number {
+    // If within range, benchmark is met (100%)
+    if (athleteValue >= minValue && athleteValue <= maxValue) {
+      return 100;
+    }
+
+    // If below range, calculate how far below
+    if (athleteValue < minValue) {
+      if (minValue === 0) return 0;
+      const progress = (athleteValue / minValue) * 100;
+      return Math.max(0, Math.min(100, progress));
+    }
+
+    // If above range, calculate how far above
+    if (maxValue === 0) return 0;
+    const excessPercentage = ((athleteValue - maxValue) / maxValue) * 100;
+    return Math.max(0, 100 - excessPercentage);
+  }
+
+  /**
    * Generate time snapshots for benchmark progress
    * For each interval, compute how many applicable athletes had met the benchmark by that date
    * Uses each athlete's best measurement up to that date
@@ -838,8 +954,10 @@ export class BenchmarkAnalyticsService extends BaseService {
       id: string;
       name: string;
       metricCode: string;
-      benchmarkValue: string | number;
+      benchmarkValue: string | number | null;
       comparisonOperator: string;
+      minValue?: string | number | null;
+      maxValue?: string | number | null;
       gender: string | null;
       ageMin: number | null;
       ageMax: number | null;
@@ -886,11 +1004,23 @@ export class BenchmarkAnalyticsService extends BaseService {
       }))
       .sort((a, b) => a.dateTime - b.dateTime || a.id.localeCompare(b.id));
 
-    const benchmarkValue =
-      typeof benchmark.benchmarkValue === 'string'
+    const benchmarkValue = benchmark.benchmarkValue !== null
+      ? (typeof benchmark.benchmarkValue === 'string'
         ? parseFloat(benchmark.benchmarkValue)
-        : benchmark.benchmarkValue;
-    const operator = benchmark.comparisonOperator as 'lte' | 'gte' | 'eq';
+        : benchmark.benchmarkValue)
+      : null;
+    const minValue = benchmark.minValue !== null && benchmark.minValue !== undefined
+      ? (typeof benchmark.minValue === 'string'
+        ? parseFloat(benchmark.minValue)
+        : benchmark.minValue)
+      : null;
+    const maxValue = benchmark.maxValue !== null && benchmark.maxValue !== undefined
+      ? (typeof benchmark.maxValue === 'string'
+        ? parseFloat(benchmark.maxValue)
+        : benchmark.maxValue)
+      : null;
+    const operator = benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range';
+    const isRange = operator === 'range';
 
     // For each interval, compute achievement rate
     for (const snapshotDate of intervalDates) {
@@ -927,11 +1057,19 @@ export class BenchmarkAnalyticsService extends BaseService {
       for (const athlete of applicableAthletes) {
         const bestValue = bestMeasurementsByAthlete.get(athlete.userId);
         if (bestValue !== undefined) {
-          const isMet = this.evaluateBenchmark(
-            bestValue,
-            benchmarkValue,
-            operator
-          );
+          let isMet = false;
+
+          if (isRange && minValue !== null && maxValue !== null) {
+            // Range benchmark
+            isMet = bestValue >= minValue && bestValue <= maxValue;
+          } else if (benchmarkValue !== null && operator !== 'range') {
+            // Single-value benchmark
+            isMet = this.evaluateBenchmark(
+              bestValue,
+              benchmarkValue,
+              operator as 'lte' | 'gte' | 'eq'
+            );
+          }
 
           if (isMet) {
             athletesMet++;
@@ -956,7 +1094,7 @@ export class BenchmarkAnalyticsService extends BaseService {
   /**
    * Determine if a new value is better than the current best based on operator
    */
-  private isBetterValue(newValue: number, currentBest: number, operator: 'lte' | 'gte' | 'eq'): boolean {
+  private isBetterValue(newValue: number, currentBest: number, operator: 'lte' | 'gte' | 'eq' | 'range'): boolean {
     if (operator === 'lte') {
       // Lower is better
       return newValue < currentBest;
@@ -964,7 +1102,7 @@ export class BenchmarkAnalyticsService extends BaseService {
       // Higher is better
       return newValue > currentBest;
     } else {
-      // 'eq': not really a "better" concept, but we'll keep the new value
+      // 'eq' or 'range': not really a "better" concept for these, keep the most recent value
       return true;
     }
   }

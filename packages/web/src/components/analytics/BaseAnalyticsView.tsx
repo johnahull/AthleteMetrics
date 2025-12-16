@@ -165,6 +165,8 @@ function BaseAnalyticsViewContent({
         id: b.id,
         name: b.name,
         value: b.benchmarkValue,
+        minValue: b.minValue,  // For range benchmarks
+        maxValue: b.maxValue,  // For range benchmarks
         comparisonOperator: b.comparisonOperator,
         color: undefined, // Let chart use default colors
         lineStyle: 'dashed' as const,

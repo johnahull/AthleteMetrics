@@ -295,7 +295,39 @@ export function LineChart({
     }
 
     return benchmarks.map((benchmark): AnnotationOptions => {
-      // Determine line style (WCAG compliance: combine color with line style for accessibility)
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+
+      // Range benchmark: render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        // Convert color to hex with 15% opacity for background
+        // Extract RGB values and create semi-transparent background
+        const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+        const backgroundColor = rgbaMatch
+          ? `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, 0.15)`
+          : `${color}26`; // Fallback to hex with 15% opacity
+
+        return {
+          type: 'box',
+          yMin: benchmark.minValue,
+          yMax: benchmark.maxValue,
+          backgroundColor,
+          borderColor: color,
+          borderWidth: 1,
+          label: {
+            display: true,
+            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+            position: 'end',
+            color: color,
+            padding: 4,
+            font: {
+              size: 10
+            }
+          }
+        };
+      }
+
+      // Single-value benchmark: render as line annotation (backwards compatibility)
       let borderDash: number[] | undefined;
       if (benchmark.lineStyle === 'dashed') {
         borderDash = [5, 5];
@@ -308,14 +340,14 @@ export function LineChart({
         type: 'line',
         yMin: benchmark.value,
         yMax: benchmark.value,
-        borderColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+        borderColor: color,
         borderWidth: 2,
         borderDash,
         label: {
           display: true,
           content: benchmark.name,
           position: 'end',
-          backgroundColor: benchmark.color || 'rgba(255, 99, 132, 0.8)',
+          backgroundColor: color,
           color: 'white',
           padding: 4,
           font: {
