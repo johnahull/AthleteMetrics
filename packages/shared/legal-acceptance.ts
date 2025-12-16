@@ -19,12 +19,19 @@ export function getLegalAcceptanceTimestamp(): string {
 }
 
 /**
+ * Validation window for legal acceptance timestamps (15 minutes)
+ * Allows for slow form completion, network delays, and clock skew
+ * while still preventing backdating and replay attacks
+ */
+const LEGAL_ACCEPTANCE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/**
  * Validate that a legal acceptance timestamp is valid and reasonable.
  *
  * Checks:
  * - Timestamp is a valid ISO 8601 date string
  * - Date is not in the future
- * - Date is within the last 5 minutes (prevents backdating and replay attacks)
+ * - Date is within the last 15 minutes (prevents backdating and replay attacks)
  *
  * @param timestamp - ISO 8601 timestamp string
  * @returns true if valid, false otherwise
@@ -37,10 +44,10 @@ export function validateLegalAcceptanceTimestamp(timestamp: string): boolean {
   }
 
   const now = new Date();
-  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+  const validWindowStart = new Date(now.getTime() - LEGAL_ACCEPTANCE_WINDOW_MS);
 
-  // Reject future dates or dates older than 5 minutes
-  if (acceptedDate > now || acceptedDate < fiveMinutesAgo) {
+  // Reject future dates or dates older than validation window
+  if (acceptedDate > now || acceptedDate < validWindowStart) {
     return false;
   }
 
@@ -49,8 +56,9 @@ export function validateLegalAcceptanceTimestamp(timestamp: string): boolean {
 
 /**
  * Error message for invalid legal acceptance timestamp
+ * Generic message to avoid revealing timing details for security
  */
-export const INVALID_TIMESTAMP_MESSAGE = "Invalid legal acceptance timestamp. Please try again.";
+export const INVALID_TIMESTAMP_MESSAGE = "Invalid legal acceptance. Please refresh the page and try again.";
 
 /**
  * Error message for missing legal acceptance

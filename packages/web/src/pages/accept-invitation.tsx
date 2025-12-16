@@ -456,14 +456,32 @@ export default function AcceptInvitation() {
                 }
                 data-testid="checkbox-terms-accepted"
                 className="mt-1"
+                aria-describedby="terms-description"
+                aria-required="true"
               />
-              <Label htmlFor="termsAccepted" className="text-sm leading-relaxed cursor-pointer">
+              <Label
+                htmlFor="termsAccepted"
+                id="terms-description"
+                className="text-sm leading-relaxed cursor-pointer"
+              >
                 I am 18+ or have parental consent, and I agree to the{' '}
-                <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                  aria-label="Privacy Policy (opens in new tab)"
+                >
                   Privacy Policy
                 </a>
                 {' '}and{' '}
-                <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                  aria-label="Terms of Service (opens in new tab)"
+                >
                   Terms of Service
                 </a>
               </Label>

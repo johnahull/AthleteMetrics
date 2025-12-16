@@ -161,9 +161,12 @@ export function registerRegistrationRoutes(app: Express) {
       // Log registration attempt
       console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
 
-      // Audit log for user registration (critical for compliance - must succeed)
+      // Create both audit logs (critical for compliance - must succeed atomically)
+      // If either fails, delete user and all created audit logs to maintain consistency
+      const auditLogIds: string[] = [];
       try {
-        await storage.createAuditLog({
+        // Audit log for user registration
+        const registrationLog = await storage.createAuditLog({
           userId,
           action: 'user_registered',
           resourceType: 'user',
@@ -177,20 +180,10 @@ export function registerRegistrationRoutes(app: Express) {
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
-      } catch (auditError) {
-        console.error('[CRITICAL] Failed to create user registration audit log:', auditError);
-        // For compliance, we must fail the registration if audit log fails
-        // Delete the user to maintain data consistency
-        await storage.deleteUser(userId);
-        return res.status(500).json({
-          success: false,
-          message: "Registration failed due to system error. Please try again."
-        });
-      }
+        auditLogIds.push(registrationLog.id);
 
-      // Audit log for legal acceptance (critical for compliance - must succeed)
-      try {
-        await storage.createAuditLog({
+        // Audit log for legal acceptance
+        const legalLog = await storage.createAuditLog({
           userId,
           action: AUDIT_ACTION_LEGAL_ACCEPTED,
           resourceType: 'user',
@@ -203,11 +196,17 @@ export function registerRegistrationRoutes(app: Express) {
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
+        auditLogIds.push(legalLog.id);
       } catch (auditError) {
-        console.error('[CRITICAL] Failed to create legal acceptance audit log:', auditError);
-        // For compliance, we must fail the registration if audit log fails
-        // Delete the user to maintain data consistency
-        await storage.deleteUser(userId);
+        console.error('[CRITICAL] Failed to create audit logs:', auditError);
+        // For compliance, we must fail the registration if audit logs fail
+        // Clean up user and any audit logs that were created
+        try {
+          await storage.deleteUser(userId);
+          // Note: Audit logs will be cascade deleted with the user
+        } catch (cleanupError) {
+          console.error('[CRITICAL] Failed to cleanup after audit log failure:', cleanupError);
+        }
         return res.status(500).json({
           success: false,
           message: "Registration failed due to system error. Please try again."

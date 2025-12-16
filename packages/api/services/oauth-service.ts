@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
 import type { User, InsertOAuthUser } from '@shared/schema';
+import { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 export interface OAuthProfile {
   provider: 'google' | 'apple';
@@ -181,7 +182,6 @@ export class OAuthService extends BaseService {
     }
 
     // Set legal acceptance fields for new OAuth users
-    const { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } = await import('@shared/legal-acceptance');
     const now = new Date();
     const legalAcceptedAt = now;
     const legalAcceptedVersion = getLegalAcceptanceTimestamp(); // YYYY-MM-DD format
