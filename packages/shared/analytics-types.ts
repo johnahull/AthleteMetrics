@@ -461,6 +461,7 @@ export interface BenchmarkLine {
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   color?: string;
   lineStyle?: 'solid' | 'dashed' | 'dotted';
+  metricCode?: string;        // Metric code for axis matching in scatter plots
   filters?: {
     gender?: string;
     ageMin?: number;

@@ -501,6 +501,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   };
 
   // Generate benchmark annotations for both X and Y axes
+  // Benchmarks are matched to their corresponding axis based on metricCode
   const benchmarkAnnotations = useMemo(() => {
     if (!showBenchmarks || !benchmarks || benchmarks.length === 0 || !scatterData) {
       return {};
@@ -513,18 +514,16 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       const color = benchmark.color || defaultColor;
       const backgroundColor = parseColorToRgba(color, 0.15);
 
-      // Determine if this benchmark applies to X-axis or Y-axis metric
+      // Determine which axis this benchmark belongs to based on metricCode
       const isXMetric = benchmark.metricCode === scatterData.xMetric;
       const isYMetric = benchmark.metricCode === scatterData.yMetric;
 
-      // If benchmark doesn't match either axis metric, skip it
-      if (!isXMetric && !isYMetric) {
-        return;
-      }
+      // If no metricCode or doesn't match either axis, default to Y-axis for backwards compatibility
+      const targetAxis = isXMetric ? 'x' : 'y';
 
       // Range benchmark: render as box annotation
       if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
-        if (isYMetric) {
+        if (targetAxis === 'y' || isYMetric) {
           // Y-axis range: horizontal band across full X range
           annotations[`benchmark-y-${index}`] = {
             type: 'box',
@@ -570,7 +569,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         // Single-value benchmark: render as line annotation
         const borderDash = benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [];
 
-        if (isYMetric) {
+        if (targetAxis === 'y' || isYMetric) {
           // Y-axis line: horizontal line
           annotations[`benchmark-y-${index}`] = {
             type: 'line',
@@ -674,103 +673,104 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: showQuadrants && scatterData ? {
+      annotation: (showQuadrants || Object.keys(benchmarkAnnotations).length > 0) && scatterData ? {
         annotations: (() => {
-          const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
-          const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
+          // Start with benchmark annotations
+          const allAnnotations: Record<string, any> = { ...benchmarkAnnotations };
 
-          // Calculate chart bounds for full background coverage
-          const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
-          const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
+          // Add quadrant annotations if enabled
+          if (showQuadrants) {
+            const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
+            const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
+            const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
 
-          // Safety check for empty arrays
-          if (xValues.length === 0 || yValues.length === 0) {
-            return {};
+            // Calculate chart bounds for full background coverage
+            const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
+            const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
+
+            // Safety check for empty arrays
+            if (xValues.length > 0 && yValues.length > 0) {
+              const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+
+              const colorMap = {
+                green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+                yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+                orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+                red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
+              };
+
+              // Add quadrant annotations (z: 0 so they render behind benchmarks)
+              Object.assign(allAnnotations, {
+                topRight: {
+                  type: 'box' as const,
+                  xMin: xMean,
+                  xMax: xMax,
+                  yMin: yMean,
+                  yMax: yMax,
+                  backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                topLeft: {
+                  type: 'box' as const,
+                  xMin: xMin,
+                  xMax: xMean,
+                  yMin: yMean,
+                  yMax: yMax,
+                  backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                bottomRight: {
+                  type: 'box' as const,
+                  xMin: xMean,
+                  xMax: xMax,
+                  yMin: yMin,
+                  yMax: yMean,
+                  backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                bottomLeft: {
+                  type: 'box' as const,
+                  xMin: xMin,
+                  xMax: xMean,
+                  yMin: yMin,
+                  yMax: yMean,
+                  backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                xMeanLine: {
+                  type: 'line' as const,
+                  xMin: xMean,
+                  xMax: xMean,
+                  yMin: yMin,
+                  yMax: yMax,
+                  borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+                  borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                  borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
+                  z: 1
+                },
+                yMeanLine: {
+                  type: 'line' as const,
+                  xMin: xMin,
+                  xMax: xMax,
+                  yMin: yMean,
+                  yMax: yMean,
+                  borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+                  borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                  borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
+                  z: 1
+                }
+              });
+            }
           }
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-
-          const colorMap = {
-            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
-            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
-          };
-
-          return {
-            // Top Right Quadrant
-            topRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Top Left Quadrant
-            topLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Right Quadrant
-            bottomRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Left Quadrant
-            bottomLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Vertical line at x mean
-            xMeanLine: {
-              type: 'line' as const,
-              xMin: xMean,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMax,
-              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
-              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
-              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
-              z: 1
-            },
-            // Horizontal line at y mean
-            yMeanLine: {
-              type: 'line' as const,
-              xMin: xMin,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMean,
-              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
-              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
-              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
-              z: 1
-            }
-          };
+          return allAnnotations;
         })()
       } : undefined
     },
@@ -877,7 +877,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         }
       }
     }
-  }), [scatterData, config, showQuadrants, localShowAthleteNames]);
+  }), [scatterData, config, showQuadrants, localShowAthleteNames, benchmarkAnnotations]);
 
   // Generate quadrant legend data (must be before early return to avoid hooks violation)
   const quadrantLegend = useMemo(() => {
