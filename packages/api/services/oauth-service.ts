@@ -180,6 +180,11 @@ export class OAuthService extends BaseService {
       throw new Error('Failed to generate unique username');
     }
 
+    // Set legal acceptance fields for new OAuth users
+    const now = new Date();
+    const legalAcceptedAt = now;
+    const legalAcceptedVersion = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+
     const userData: InsertOAuthUser = {
       username,
       emails: [profile.email],
@@ -195,10 +200,33 @@ export class OAuthService extends BaseService {
       lastAuthMethod: profile.provider,
       isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
       accountLinkedAt: new Date(),
+      legalAcceptedAt,
+      legalAcceptedVersion,
     };
 
     // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
-    return await this.storage.createUser(userData);
+    const newUser = await this.storage.createUser(userData);
+
+    // Create audit log for legal acceptance
+    try {
+      await this.storage.createAuditLog({
+        userId: newUser.id,
+        action: 'legal_accepted',
+        resourceType: 'user',
+        resourceId: newUser.id,
+        details: JSON.stringify({
+          version: legalAcceptedVersion,
+          acceptedAt: legalAcceptedAt.toISOString(),
+          method: 'oauth',
+          provider: profile.provider
+        }),
+      });
+    } catch (auditErr) {
+      console.error('Failed to create legal acceptance audit log for OAuth user:', auditErr);
+      // Don't fail user creation if audit log fails
+    }
+
+    return newUser;
   }
 
   /**

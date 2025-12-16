@@ -58,6 +58,8 @@ const registrationSchema = z.object({
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
     .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+  legalAcceptedAt: z.string()
+    .min(1, "You must accept the Terms of Service and Privacy Policy to continue"),
 });
 
 // Validation schema for resend verification
@@ -90,7 +92,7 @@ export function registerRegistrationRoutes(app: Express) {
         });
       }
 
-      const { firstName, lastName, email, username, password } = validationResult.data;
+      const { firstName, lastName, email, username, password, legalAcceptedAt } = validationResult.data;
 
       // Check if username is already taken
       const existingUsername = await storage.getUserByUsername(username);
@@ -112,6 +114,10 @@ export function registerRegistrationRoutes(app: Express) {
         });
       }
 
+      // Generate legal accepted version (YYYY-MM-DD format)
+      const legalAcceptedVersion = new Date().toISOString().split('T')[0];
+      const legalAcceptedAtDate = new Date(legalAcceptedAt);
+
       // Create user with isEmailVerified: false
       // User is created as an "independent athlete" with no organization
       // Note: storage.createUser handles password hashing internally
@@ -124,6 +130,8 @@ export function registerRegistrationRoutes(app: Express) {
         role: 'athlete', // Self-registered users are independent athletes
         isEmailVerified: false,
         isSiteAdmin: false,
+        legalAcceptedAt: legalAcceptedAtDate,
+        legalAcceptedVersion,
         // No organization membership - user is independent
       });
 
@@ -142,7 +150,7 @@ export function registerRegistrationRoutes(app: Express) {
       // Log registration attempt
       console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
 
-      // Audit log
+      // Audit log for user registration
       await storage.createAuditLog({
         userId,
         action: 'user_registered',
@@ -153,6 +161,21 @@ export function registerRegistrationRoutes(app: Express) {
           email,
           emailSent,
           registrationType: 'self_registration'
+        }),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      });
+
+      // Audit log for legal acceptance
+      await storage.createAuditLog({
+        userId,
+        action: 'legal_accepted',
+        resourceType: 'user',
+        resourceId: userId,
+        details: JSON.stringify({
+          version: legalAcceptedVersion,
+          acceptedAt: legalAcceptedAt,
+          method: 'registration'
         }),
         ipAddress: req.ip,
         userAgent: req.get('user-agent')
