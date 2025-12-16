@@ -587,6 +587,8 @@ export function ChartContainer({
         selectedDates={selectedDates}
         metric={metric}
         selectedGroups={selectedGroups}
+        benchmarks={benchmarks}
+        showBenchmarks={!!benchmarks && benchmarks.length > 0}
       />
     </Card>
   );

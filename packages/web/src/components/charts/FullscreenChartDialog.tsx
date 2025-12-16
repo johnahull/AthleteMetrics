@@ -16,7 +16,8 @@ import type {
   StatisticalSummary,
   TrendData,
   MultiMetricData,
-  GroupDefinition
+  GroupDefinition,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { getChartDataForType } from './chartDataUtils';
 
@@ -74,6 +75,8 @@ interface FullscreenChartDialogProps {
   selectedDates?: string[];
   metric?: string;
   selectedGroups?: GroupDefinition[];
+  benchmarks?: BenchmarkLine[];
+  showBenchmarks?: boolean;
 }
 
 export function FullscreenChartDialog({
@@ -93,7 +96,9 @@ export function FullscreenChartDialog({
   onAthleteSelectionChange,
   selectedDates,
   metric,
-  selectedGroups
+  selectedGroups,
+  benchmarks,
+  showBenchmarks = true
 }: FullscreenChartDialogProps) {
   // Ref to access chart container for zoom reset
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -187,6 +192,8 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
             showAllPoints={chartType === 'box_swarm_combo'}
             selectedGroups={selectedGroups}
+            benchmarks={benchmarks}
+            showBenchmarks={showBenchmarks && !!benchmarks && benchmarks.length > 0}
           />
         );
 
@@ -228,6 +235,8 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
             selectedAthleteIds={selectedAthleteIds}
             onAthleteSelectionChange={onAthleteSelectionChange}
+            benchmarks={benchmarks}
+            showBenchmarks={showBenchmarks && !!benchmarks && benchmarks.length > 0}
           />
         );
 
