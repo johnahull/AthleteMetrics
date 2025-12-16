@@ -9,6 +9,12 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
+import {
+  validateLegalAcceptanceTimestamp,
+  getCurrentLegalVersion,
+  INVALID_TIMESTAMP_MESSAGE,
+  MISSING_ACCEPTANCE_MESSAGE
+} from "@shared/legal-acceptance";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -59,7 +65,11 @@ const registrationSchema = z.object({
     .regex(/[0-9]/, "Password must contain at least one number")
     .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
   legalAcceptedAt: z.string()
-    .min(1, "You must accept the Terms of Service and Privacy Policy to continue"),
+    .min(1, MISSING_ACCEPTANCE_MESSAGE)
+    .refine(
+      (val) => validateLegalAcceptanceTimestamp(val),
+      INVALID_TIMESTAMP_MESSAGE
+    ),
 });
 
 // Validation schema for resend verification
@@ -115,7 +125,7 @@ export function registerRegistrationRoutes(app: Express) {
       }
 
       // Generate legal accepted version (YYYY-MM-DD format)
-      const legalAcceptedVersion = new Date().toISOString().split('T')[0];
+      const legalAcceptedVersion = getCurrentLegalVersion();
       const legalAcceptedAtDate = new Date(legalAcceptedAt);
 
       // Create user with isEmailVerified: false
@@ -150,36 +160,58 @@ export function registerRegistrationRoutes(app: Express) {
       // Log registration attempt
       console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
 
-      // Audit log for user registration
-      await storage.createAuditLog({
-        userId,
-        action: 'user_registered',
-        resourceType: 'user',
-        resourceId: userId,
-        details: JSON.stringify({
-          username,
-          email,
-          emailSent,
-          registrationType: 'self_registration'
-        }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      });
+      // Audit log for user registration (critical for compliance - must succeed)
+      try {
+        await storage.createAuditLog({
+          userId,
+          action: 'user_registered',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            username,
+            email,
+            emailSent,
+            registrationType: 'self_registration'
+          }),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        });
+      } catch (auditError) {
+        console.error('[CRITICAL] Failed to create user registration audit log:', auditError);
+        // For compliance, we must fail the registration if audit log fails
+        // Delete the user to maintain data consistency
+        await storage.deleteUser(userId);
+        return res.status(500).json({
+          success: false,
+          message: "Registration failed due to system error. Please try again."
+        });
+      }
 
-      // Audit log for legal acceptance
-      await storage.createAuditLog({
-        userId,
-        action: 'legal_accepted',
-        resourceType: 'user',
-        resourceId: userId,
-        details: JSON.stringify({
-          version: legalAcceptedVersion,
-          acceptedAt: legalAcceptedAt,
-          method: 'registration'
-        }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      });
+      // Audit log for legal acceptance (critical for compliance - must succeed)
+      try {
+        await storage.createAuditLog({
+          userId,
+          action: 'legal_accepted',
+          resourceType: 'user',
+          resourceId: userId,
+          details: JSON.stringify({
+            version: legalAcceptedVersion,
+            acceptedAt: legalAcceptedAt,
+            method: 'registration'
+          }),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        });
+      } catch (auditError) {
+        console.error('[CRITICAL] Failed to create legal acceptance audit log:', auditError);
+        // For compliance, we must fail the registration if audit log fails
+        // Delete the user to maintain data consistency
+        await storage.deleteUser(userId);
+        return res.status(500).json({
+          success: false,
+          message: "Registration failed due to system error. Please try again."
+        });
+      }
 
       return res.status(201).json({
         success: true,

@@ -14,6 +14,12 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import { emailService } from "../services/email-service";
 import type { Invitation } from "@shared/schema";
 import { MAX_INVITATION_ATTEMPTS } from "../constants/invitations";
+import {
+  validateLegalAcceptanceTimestamp,
+  getCurrentLegalVersion,
+  INVALID_TIMESTAMP_MESSAGE,
+  MISSING_ACCEPTANCE_MESSAGE
+} from "@shared/legal-acceptance";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -763,9 +769,13 @@ export function registerInvitationRoutes(app: Express) {
       const { token } = req.params;
       const { password, firstName, lastName, username, legalAcceptedAt } = req.body;
 
-      // Validate legal acceptance is provided
+      // Validate legal acceptance is provided and valid
       if (!legalAcceptedAt) {
-        return res.status(400).json({ message: "You must accept the Terms of Service and Privacy Policy to continue" });
+        return res.status(400).json({ message: MISSING_ACCEPTANCE_MESSAGE });
+      }
+
+      if (!validateLegalAcceptanceTimestamp(legalAcceptedAt)) {
+        return res.status(400).json({ message: INVALID_TIMESTAMP_MESSAGE });
       }
 
       // CSRF-like protection: Verify request came from same origin
@@ -855,7 +865,7 @@ export function registerInvitationRoutes(app: Express) {
         firstName,
         lastName,
         legalAcceptedAt,
-        legalAcceptedVersion: new Date().toISOString().split('T')[0] // Format: "2024-12-13"
+        legalAcceptedVersion: getCurrentLegalVersion() // Format: "2024-12-13"
       });
 
       console.log("Invitation accepted successfully, user created:", result.user.id);

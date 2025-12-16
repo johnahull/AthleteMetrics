@@ -181,9 +181,10 @@ export class OAuthService extends BaseService {
     }
 
     // Set legal acceptance fields for new OAuth users
+    const { getCurrentLegalVersion } = await import('@shared/legal-acceptance');
     const now = new Date();
     const legalAcceptedAt = now;
-    const legalAcceptedVersion = now.toISOString().split('T')[0]; // YYYY-MM-DD format
+    const legalAcceptedVersion = getCurrentLegalVersion(); // YYYY-MM-DD format
 
     const userData: InsertOAuthUser = {
       username,
@@ -207,7 +208,7 @@ export class OAuthService extends BaseService {
     // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
     const newUser = await this.storage.createUser(userData);
 
-    // Create audit log for legal acceptance
+    // Create audit log for legal acceptance (critical for compliance)
     try {
       await this.storage.createAuditLog({
         userId: newUser.id,
@@ -222,8 +223,11 @@ export class OAuthService extends BaseService {
         }),
       });
     } catch (auditErr) {
-      console.error('Failed to create legal acceptance audit log for OAuth user:', auditErr);
-      // Don't fail user creation if audit log fails
+      console.error('[CRITICAL] Failed to create legal acceptance audit log for OAuth user:', auditErr);
+      // For compliance, we must fail user creation if audit log fails
+      // Delete the user to maintain data consistency
+      await this.storage.deleteUser(newUser.id);
+      throw new Error('User creation failed due to audit log error');
     }
 
     return newUser;

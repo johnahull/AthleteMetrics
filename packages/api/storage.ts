@@ -1630,9 +1630,10 @@ export class DatabaseStorage implements IStorage {
       let user;
 
       // Prepare legal acceptance data
+      const { getCurrentLegalVersion } = await import('@shared/legal-acceptance');
       const legalData = userInfo.legalAcceptedAt ? {
         legalAcceptedAt: new Date(userInfo.legalAcceptedAt),
-        legalAcceptedVersion: userInfo.legalAcceptedVersion || new Date().toISOString().split('T')[0]
+        legalAcceptedVersion: userInfo.legalAcceptedVersion || getCurrentLegalVersion()
       } : {};
 
       // Check if invitation is linked to an existing athlete (playerId)
@@ -1714,18 +1715,26 @@ export class DatabaseStorage implements IStorage {
         .where(eq(invitations.token, token));
 
       // Create audit log for legal acceptance (if provided)
+      // This is critical for compliance - must succeed
       if (userInfo.legalAcceptedAt) {
-        await this.createAuditLog({
-          userId: user.id,
-          action: 'legal_accepted',
-          resourceType: 'user',
-          resourceId: user.id,
-          details: JSON.stringify({
-            version: userInfo.legalAcceptedVersion || new Date().toISOString().split('T')[0],
-            acceptedAt: userInfo.legalAcceptedAt,
-            method: 'invitation'
-          }),
-        });
+        try {
+          await this.createAuditLog({
+            userId: user.id,
+            action: 'legal_accepted',
+            resourceType: 'user',
+            resourceId: user.id,
+            details: JSON.stringify({
+              version: userInfo.legalAcceptedVersion || getCurrentLegalVersion(),
+              acceptedAt: userInfo.legalAcceptedAt,
+              method: 'invitation'
+            }),
+          });
+        } catch (auditErr) {
+          console.error('[CRITICAL] Failed to create legal acceptance audit log for invitation:', auditErr);
+          // For compliance, we must rollback the transaction if audit log fails
+          // Throw error to trigger transaction rollback
+          throw new Error('Invitation acceptance failed due to audit log error');
+        }
       }
 
       return { user };
