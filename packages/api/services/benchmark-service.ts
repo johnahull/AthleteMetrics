@@ -345,10 +345,9 @@ export class BenchmarkService extends BaseService {
       // Generate shared tierGroupId
       const tierGroupId = crypto.randomUUID();
 
-      // Create all benchmarks in a transaction
-      // Note: tx is unused because storage.createSiteBenchmark doesn't support transaction context
-      // TODO: Pass tx to storage layer for true transaction atomicity
-      const benchmarks = await db.transaction(async (_tx) => {
+      // Create all benchmarks in a transaction for atomicity
+      // If any benchmark creation fails, all will be rolled back
+      const benchmarks = await db.transaction(async (tx) => {
         const createdBenchmarks: SiteBenchmark[] = [];
 
         for (const tier of validatedData.tiers) {
@@ -379,7 +378,7 @@ export class BenchmarkService extends BaseService {
           };
 
           // Create benchmark within transaction
-          const benchmark = await this.storage.createSiteBenchmark(benchmarkData, createdBy);
+          const benchmark = await this.storage.createSiteBenchmark(benchmarkData, createdBy, tx);
           createdBenchmarks.push(benchmark);
         }
 

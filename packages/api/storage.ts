@@ -300,7 +300,7 @@ export interface IStorage {
   getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
   getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
   getSiteBenchmarksByTierGroup(tierGroupId: string): Promise<SiteBenchmark[]>;
-  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
+  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark>;
   updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
   toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
   deleteSiteBenchmark(id: string): Promise<void>;
@@ -4277,15 +4277,16 @@ export class DatabaseStorage implements IStorage {
     return benchmarks;
   }
 
-  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
-    const [created] = await db
+  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark> {
+    const dbInstance = tx || db;
+    const [created] = await dbInstance
       .insert(siteBenchmarks)
       .values({
         ...benchmark,
         // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
-        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
-        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4301,8 +4302,8 @@ export class DatabaseStorage implements IStorage {
         ...benchmark,
         // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
-        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
-        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(siteBenchmarks.id, id))
@@ -4418,8 +4419,8 @@ export class DatabaseStorage implements IStorage {
         ...benchmark,
         // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
-        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
-        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4435,8 +4436,8 @@ export class DatabaseStorage implements IStorage {
         ...benchmark,
         // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
-        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(2) : undefined,
-        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(2) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(
