@@ -150,22 +150,26 @@ export function registerMeasurementRoutes(app: Express) {
       };
 
       // Organization-based filtering
+      // SECURITY: Validate user has access to requested organization
       if (validatedParams.organizationId) {
-        // If organizationId is provided, use it (with permission check below)
-        filters.organizationId = validatedParams.organizationId;
-
-        // Security: Non-admin users can only query their own organization
-        if (!isSiteAdmin(user) && filters.organizationId !== user.primaryOrganizationId) {
-          return res.status(403).json({
-            message: "Access denied - cannot query measurements from different organization"
-          });
+        if (!isSiteAdmin(user)) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied - you don't have permission to access this organization"
+            });
+          }
         }
-      } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
-        // Non-admin users without explicit organizationId should see their organization
-        filters.organizationId = user.primaryOrganizationId;
-      } else if (!isSiteAdmin(user) && !user.primaryOrganizationId) {
-        // Users without an organization (e.g., newly self-registered) have no measurements to view
-        return res.json([]);
+        filters.organizationId = validatedParams.organizationId;
+      } else if (!isSiteAdmin(user)) {
+        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.json([]); // Users without an organization have no measurements to view
+        }
+        // Use their primary org from actual membership, not session
+        filters.organizationId = userOrgs[0].organizationId;
       }
 
       // Site admins can query across organizations, non-admins cannot

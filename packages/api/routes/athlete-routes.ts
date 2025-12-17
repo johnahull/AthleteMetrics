@@ -128,10 +128,26 @@ export function registerAthleteRoutes(app: Express) {
         primaryOrganizationId: user?.primaryOrganizationId
       });
 
+      // SECURITY: Validate user has access to requested organization
       if (validatedParams.organizationId) {
+        if (user && !isSiteAdmin(user)) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied - you don't have permission to access this organization"
+            });
+          }
+        }
         filters.organizationId = validatedParams.organizationId;
-      } else if (user && !isSiteAdmin(user) && user.primaryOrganizationId) {
-        filters.organizationId = user.primaryOrganizationId;
+      } else if (user && !isSiteAdmin(user)) {
+        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization membership" });
+        }
+        // Use their primary org from actual membership, not session
+        filters.organizationId = userOrgs[0].organizationId;
       }
 
       console.log('[GET /api/athletes] Filters:', filters);

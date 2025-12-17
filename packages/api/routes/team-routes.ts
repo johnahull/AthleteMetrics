@@ -6,6 +6,7 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { TeamService } from "../services/team-service";
+import { storage } from "../storage";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertTeamSchema, measurements, userOrganizations } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
@@ -49,17 +50,29 @@ export function registerTeamRoutes(app: Express) {
       // Get organizationId from query or user's primary organization
       let organizationId = req.query.organizationId as string | undefined;
 
-      if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+      // SECURITY: Validate user has access to requested organization
+      if (organizationId) {
+        if (!isSiteAdmin(user)) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied - you don't have permission to access this organization"
+            });
+          }
+        }
+      } else if (!isSiteAdmin(user)) {
+        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization membership" });
+        }
+        // Use their primary org from actual membership, not session
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
-      }
-
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
       }
 
       const teams = await teamService.getTeams(organizationId);
