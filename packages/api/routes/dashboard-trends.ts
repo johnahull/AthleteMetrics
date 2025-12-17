@@ -10,6 +10,7 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { hasOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
 import { users, userTeams, teams, measurements } from "@shared/schema";
 import { eq, and, sql, gte, lt, inArray } from "drizzle-orm";
@@ -147,7 +148,7 @@ export function registerDashboardTrendsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Parse optional filter parameters

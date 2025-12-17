@@ -11,6 +11,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertTeamSchema, measurements, userOrganizations } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { hasOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
@@ -58,7 +59,7 @@ export function registerTeamRoutes(app: Express) {
           const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: "Access denied - you don't have permission to access this organization"
+              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
             });
           }
         }
@@ -66,7 +67,7 @@ export function registerTeamRoutes(app: Express) {
         // SECURITY: For non-admin users, ALWAYS require org context from actual membership
         const userOrgs = await storage.getUserOrganizations(user.id);
         if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "Access denied - no organization membership" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
         }
         // Use their primary org from actual membership, not session
         organizationId = userOrgs[0].organizationId;
@@ -106,7 +107,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, team.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       res.json(team);
@@ -139,7 +140,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasMemberAccess = await hasOrganizationAccess(user, team.organization.id);
       if (!hasMemberAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // Get team members with IDOR protection at service layer
@@ -183,7 +184,7 @@ export function registerTeamRoutes(app: Express) {
         // If provided, validate user has access to that organization
         const hasCreateAccess = await hasOrganizationAccess(user, targetOrgId);
         if (!hasCreateAccess) {
-          return res.status(403).json({ message: "Access denied - cannot create team in different organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
         }
       }
 
@@ -220,7 +221,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasUpdateAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasUpdateAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // Validate request body using partial schema (for updates)
@@ -265,7 +266,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // SECURITY FIX: Measurement validation moved to service layer inside transaction
@@ -303,7 +304,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       const archiveDate = archivedAt ? new Date(archivedAt) : new Date();
@@ -339,7 +340,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       const unarchivedTeam = await teamService.unarchiveTeam(teamId);
@@ -378,7 +379,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation
@@ -419,7 +420,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation
@@ -461,7 +462,7 @@ export function registerTeamRoutes(app: Express) {
       // SECURITY: Validate user has access to team's organization via database membership
       const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - team belongs to different organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.TEAM_ORG_MISMATCH) });
       }
 
       // SECURITY FIX: Pass expectedOrganizationId to service layer for TOCTOU-safe validation

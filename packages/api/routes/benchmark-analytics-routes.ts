@@ -10,6 +10,7 @@ import { storage } from '../storage';
 import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { hasOrganizationAccess } from '../helpers/org-access';
+import { getAuthorizationError } from '../helpers/auth-errors';
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
 import { teams, organizationBenchmarks, customBenchmarks } from '@shared/schema';
@@ -98,18 +99,6 @@ async function validateTeamOwnership(teamIds: string[], organizationId: string):
  */
 function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value);
-}
-
-/**
- * Creates an authorization error message appropriate for the environment
- * In development: provides detailed context for debugging
- * In production: uses generic message to prevent information disclosure
- * @param detailedMessage Detailed message for development environments
- * @returns Error message appropriate for current environment
- */
-function getAuthorizationError(detailedMessage: string): string {
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  return isDevelopment ? detailedMessage : 'Access denied';
 }
 
 /**

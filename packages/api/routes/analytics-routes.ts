@@ -12,6 +12,7 @@ import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { hasOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
@@ -74,7 +75,7 @@ export function registerAnalyticsRoutes(app: Express) {
         // Get user's org memberships from database
         const userOrgs = await storage.getUserOrganizations(user.id);
         if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "Access denied - no organization membership" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
         }
         const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
 
@@ -92,7 +93,7 @@ export function registerAnalyticsRoutes(app: Express) {
 
         const isInOrganization = athleteTeams.some(t => userOrgIds.has(t.organizationId));
         if (!isInOrganization) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ATHLETE_ORG_MISMATCH) });
         }
       }
 
@@ -134,7 +135,7 @@ export function registerAnalyticsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       const teamStats = await analyticsService.getTeamStats(organizationId);
@@ -166,7 +167,7 @@ export function registerAnalyticsRoutes(app: Express) {
           const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: "Access denied - you don't have permission to access this organization"
+              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
             });
           }
         }
@@ -174,7 +175,7 @@ export function registerAnalyticsRoutes(app: Express) {
         // SECURITY: For non-admin users, ALWAYS require org context from actual membership
         const userOrgs = await storage.getUserOrganizations(user.id);
         if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "Access denied - no organization membership" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
         }
         // Use their primary org from actual membership, not session
         organizationId = userOrgs[0].organizationId;
@@ -319,7 +320,7 @@ export function registerAnalyticsRoutes(app: Express) {
       if (request.filters.organizationId) {
         const hasAccess = await hasOrganizationAccess(user, request.filters.organizationId);
         if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
         }
       }
 
@@ -357,7 +358,7 @@ export function registerAnalyticsRoutes(app: Express) {
         // Get user's org memberships from database
         const userOrgs = await storage.getUserOrganizations(user.id);
         if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "Access denied - no organization membership" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
         }
         const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
 
@@ -375,7 +376,7 @@ export function registerAnalyticsRoutes(app: Express) {
 
         const isInOrganization = athleteTeams.some(t => userOrgIds.has(t.organizationId));
         if (!isInOrganization) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ATHLETE_ORG_MISMATCH) });
         }
       }
 
@@ -417,7 +418,7 @@ export function registerAnalyticsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Parse dateFrom parameter (required)
@@ -528,7 +529,7 @@ export function registerAnalyticsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate required metric parameter
@@ -631,7 +632,7 @@ export function registerAnalyticsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate required metric parameter
@@ -734,7 +735,7 @@ export function registerAnalyticsRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization via database membership
       const hasAccess = await hasOrganizationAccess(user, organizationId);
       if (!hasAccess) {
-        return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate optional parameters

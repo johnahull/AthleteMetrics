@@ -11,6 +11,7 @@ import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { hasOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -158,7 +159,7 @@ export function registerMeasurementRoutes(app: Express) {
           const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: "Access denied - you don't have permission to access this organization"
+              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
             });
           }
         }
@@ -213,7 +214,7 @@ export function registerMeasurementRoutes(app: Express) {
       if (measurement.organizationId) {
         const hasAccess = await hasOrganizationAccess(user, measurement.organizationId);
         if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
         }
       }
 
@@ -552,7 +553,7 @@ export function registerMeasurementRoutes(app: Express) {
         if (existingMeasurement.organizationId) {
           const hasAccess = await hasOrganizationAccess(user, existingMeasurement.organizationId);
           if (!hasAccess) {
-            return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+            return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
           }
         }
         const userOrgs = await storage.getUserOrganizations(user.id);
