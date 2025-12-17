@@ -7,6 +7,7 @@ import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "../storage";
+import { db } from "../db";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
 import {
@@ -16,6 +17,7 @@ import {
   MISSING_ACCEPTANCE_MESSAGE,
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
+import { auditLogs } from "@shared/schema";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -129,43 +131,33 @@ export function registerRegistrationRoutes(app: Express) {
       const legalAcceptedVersion = getLegalAcceptanceTimestamp();
       const legalAcceptedAtDate = new Date(legalAcceptedAt);
 
-      // Create user with isEmailVerified: false
-      // User is created as an "independent athlete" with no organization
-      // Note: storage.createUser handles password hashing internally
-      const user = await storage.createUser({
-        username,
-        firstName,
-        lastName,
-        emails: [email],
-        password, // Will be hashed by storage.createUser
-        role: 'athlete', // Self-registered users are independent athletes
-        isEmailVerified: false,
-        isSiteAdmin: false,
-        legalAcceptedAt: legalAcceptedAtDate,
-        legalAcceptedVersion,
-        // No organization membership - user is independent
-      });
+      // Wrap user creation and audit logs in a single transaction for atomicity
+      // This ensures either everything succeeds or everything rolls back
+      const result = await db.transaction(async (tx) => {
+        // Create user with isEmailVerified: false
+        // User is created as an "independent athlete" with no organization
+        // Note: storage.createUser handles password hashing internally
+        const user = await storage.createUser({
+          username,
+          firstName,
+          lastName,
+          emails: [email],
+          password, // Will be hashed by storage.createUser
+          role: 'athlete', // Self-registered users are independent athletes
+          isEmailVerified: false,
+          isSiteAdmin: false,
+          legalAcceptedAt: legalAcceptedAtDate,
+          legalAcceptedVersion,
+          // No organization membership - user is independent
+        });
 
-      const userId = user.id;
+        const userId = user.id;
 
-      // Create email verification token
-      const { token } = await storage.createEmailVerificationToken(userId, email);
+        // Create email verification token
+        const { token: verificationToken } = await storage.createEmailVerificationToken(userId, email);
 
-      // Send verification email
-      const verificationLink = `${process.env.APP_URL}/verify-email?token=${token}`;
-      const emailSent = await emailService.sendEmailVerification(email, {
-        userName: firstName,
-        verificationLink,
-      });
-
-      // Log registration attempt
-      console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
-
-      // Create both audit logs (critical for compliance - must succeed atomically)
-      // If either fails, delete user to rollback the registration
-      try {
-        // Audit log for user registration
-        await storage.createAuditLog({
+        // Create audit log for user registration (using transaction)
+        await tx.insert(auditLogs).values({
           userId,
           action: 'user_registered',
           resourceType: 'user',
@@ -173,15 +165,14 @@ export function registerRegistrationRoutes(app: Express) {
           details: JSON.stringify({
             username,
             email,
-            emailSent,
             registrationType: 'self_registration'
           }),
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
 
-        // Audit log for legal acceptance
-        await storage.createAuditLog({
+        // Create audit log for legal acceptance (using transaction)
+        await tx.insert(auditLogs).values({
           userId,
           action: AUDIT_ACTION_LEGAL_ACCEPTED,
           resourceType: 'user',
@@ -194,20 +185,21 @@ export function registerRegistrationRoutes(app: Express) {
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
-      } catch (auditError) {
-        console.error('[CRITICAL] Failed to create audit logs:', auditError);
-        // For compliance, we must fail the registration if audit logs fail
-        // Delete user to rollback (audit logs will have userId set to null via ON DELETE SET NULL)
-        try {
-          await storage.deleteUser(userId);
-        } catch (cleanupError) {
-          console.error('[CRITICAL] Failed to cleanup after audit log failure:', cleanupError);
-        }
-        return res.status(500).json({
-          success: false,
-          message: "Registration failed due to system error. Please try again."
-        });
-      }
+
+        return { user, verificationToken };
+      });
+
+      const { user, verificationToken } = result;
+
+      // Send verification email (outside transaction - email failure shouldn't rollback registration)
+      const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
+      const emailSent = await emailService.sendEmailVerification(email, {
+        userName: firstName,
+        verificationLink,
+      });
+
+      // Log registration attempt
+      console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
 
       return res.status(201).json({
         success: true,

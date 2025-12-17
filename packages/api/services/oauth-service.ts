@@ -5,7 +5,9 @@
 import crypto from 'crypto';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
+import { db } from '../db';
 import type { User, InsertOAuthUser } from '@shared/schema';
+import { auditLogs } from '@shared/schema';
 import { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 export interface OAuthProfile {
@@ -186,35 +188,38 @@ export class OAuthService extends BaseService {
     const legalAcceptedAt = now;
     const legalAcceptedVersion = getLegalAcceptanceTimestamp(); // YYYY-MM-DD format
 
-    const userData: InsertOAuthUser = {
-      username,
-      emails: [profile.email],
-      // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
-      firstName: profile.firstName,
-      lastName: profile.lastName,
-      role: 'athlete',  // OAuth users default to athlete role
-      googleId: profile.provider === 'google' ? profile.providerId : undefined,
-      appleId: profile.provider === 'apple' ? profile.providerId : undefined,
-      oauthProvider: profile.provider,
-      oauthEmail: profile.email,
-      oauthEmailVerified: profile.emailVerified,
-      lastAuthMethod: profile.provider,
-      isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
-      accountLinkedAt: new Date(),
-      legalAcceptedAt,
-      legalAcceptedVersion,
-    };
+    // Wrap user creation and audit log in a single transaction for atomicity
+    // This ensures either everything succeeds or everything rolls back
+    const newUser = await db.transaction(async (tx) => {
+      const userData: InsertOAuthUser = {
+        username,
+        emails: [profile.email],
+        // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        role: 'athlete',  // OAuth users default to athlete role
+        googleId: profile.provider === 'google' ? profile.providerId : undefined,
+        appleId: profile.provider === 'apple' ? profile.providerId : undefined,
+        oauthProvider: profile.provider,
+        oauthEmail: profile.email,
+        oauthEmailVerified: profile.emailVerified,
+        lastAuthMethod: profile.provider,
+        isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
+        accountLinkedAt: new Date(),
+        legalAcceptedAt,
+        legalAcceptedVersion,
+      };
 
-    // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
-    const newUser = await this.storage.createUser(userData);
+      // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
+      const user = await this.storage.createUser(userData);
 
-    // Create audit log for legal acceptance (critical for compliance)
-    try {
-      await this.storage.createAuditLog({
-        userId: newUser.id,
+      // Create audit log for legal acceptance (critical for compliance)
+      // Using transaction ensures audit log is part of the atomic operation
+      await tx.insert(auditLogs).values({
+        userId: user.id,
         action: AUDIT_ACTION_LEGAL_ACCEPTED,
         resourceType: 'user',
-        resourceId: newUser.id,
+        resourceId: user.id,
         details: JSON.stringify({
           version: legalAcceptedVersion,
           acceptedAt: legalAcceptedAt.toISOString(),
@@ -222,18 +227,9 @@ export class OAuthService extends BaseService {
           provider: profile.provider
         }),
       });
-    } catch (auditError) {
-      console.error('[CRITICAL] Failed to create legal acceptance audit log for OAuth user:', auditError);
-      // For compliance, we must fail user creation if audit log fails
-      // Delete the user to maintain data consistency
-      try {
-        await this.storage.deleteUser(newUser.id);
-      } catch (deleteError) {
-        console.error('[CRITICAL] Failed to delete user after audit log error:', deleteError);
-        // Log to monitoring - data inconsistency occurred
-      }
-      throw new Error('User creation failed due to audit log error');
-    }
+
+      return user;
+    });
 
     return newUser;
   }

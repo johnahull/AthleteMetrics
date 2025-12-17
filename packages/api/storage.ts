@@ -1716,25 +1716,19 @@ export class DatabaseStorage implements IStorage {
 
       // Create audit log for legal acceptance (if provided)
       // This is critical for compliance - must succeed
+      // Use tx.insert() to ensure it's part of the transaction
       if (userInfo.legalAcceptedAt) {
-        try {
-          await this.createAuditLog({
-            userId: user.id,
-            action: AUDIT_ACTION_LEGAL_ACCEPTED,
-            resourceType: 'user',
-            resourceId: user.id,
-            details: JSON.stringify({
-              version: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp(),
-              acceptedAt: userInfo.legalAcceptedAt,
-              method: 'invitation'
-            }),
-          });
-        } catch (auditError) {
-          console.error('[CRITICAL] Failed to create legal acceptance audit log for invitation:', auditError);
-          // For compliance, we must rollback the transaction if audit log fails
-          // Re-throw original error to ensure proper transaction rollback
-          throw auditError;
-        }
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
+          resourceType: 'user',
+          resourceId: user.id,
+          details: JSON.stringify({
+            version: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp(),
+            acceptedAt: userInfo.legalAcceptedAt,
+            method: 'invitation'
+          }),
+        });
       }
 
       return { user };
