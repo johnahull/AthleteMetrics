@@ -2,7 +2,7 @@
 -- Description: Reverts site_metrics.sport_associations to use sport names (e.g., 'Soccer')
 --              instead of sport codes (e.g., 'SOCCER')
 -- Author: Claude Code
--- Date: 2025-01-17
+-- Date: 2025-12-17
 
 -- Revert all metrics back to using sport names
 UPDATE site_metrics
