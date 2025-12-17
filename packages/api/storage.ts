@@ -4348,10 +4348,11 @@ export class DatabaseStorage implements IStorage {
       name: benchmark.name,
       comparisonOperator: benchmark.comparisonOperator || 'lte',
       // Control flags with defaults
-      isSystemDefault: benchmark.isSystemDefault ?? false,
+      // isSystemDefault is omitted from InsertSiteBenchmark type - always false for user-created
+      isSystemDefault: false,
       isActive: benchmark.isActive ?? true,
       displayOrder: benchmark.displayOrder ?? 999,
-      benchmarkSource: benchmark.benchmarkSource ?? 'static',
+      benchmarkSource: 'static', // User-created benchmarks are always 'static'
       // Metadata
       createdBy,
       createdAt: new Date(),
