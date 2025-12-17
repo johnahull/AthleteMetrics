@@ -10,7 +10,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
-import { hasOrganizationAccess } from "../helpers/org-access";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
@@ -152,26 +152,23 @@ export function registerMeasurementRoutes(app: Express) {
       };
 
       // Organization-based filtering
-      // SECURITY: Validate user has access to requested organization
-      if (validatedParams.organizationId) {
-        if (!isSiteAdmin(user)) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
-            });
-          }
-        }
-        filters.organizationId = validatedParams.organizationId;
-      } else if (!isSiteAdmin(user)) {
-        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        if (userOrgs.length === 0) {
-          return res.json([]); // Users without an organization have no measurements to view
-        }
-        // Use their primary org from actual membership, not session
-        filters.organizationId = userOrgs[0].organizationId;
+      // SECURITY: Validate organization access and get effective org ID
+      const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
+
+      // For measurements endpoint, users with no org membership get empty results
+      if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
+        return res.json([]); // Users without an organization have no measurements to view
+      }
+
+      if (!orgAccessResult.allowed) {
+        return res.status(403).json({
+          message: getAuthorizationError(orgAccessResult.error!)
+        });
+      }
+
+      // Set the organization filter to the effective org ID
+      if (orgAccessResult.effectiveOrgId) {
+        filters.organizationId = orgAccessResult.effectiveOrgId;
       }
 
       // Site admins can query across organizations, non-admins cannot

@@ -25,6 +25,7 @@ import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -75,16 +76,12 @@ export function registerAthleteRoutes(app: Express) {
         }
       }
 
-      // Check organization access permission
-      const userIsSiteAdmin = isSiteAdmin(currentUser);
-      if (!userIsSiteAdmin) {
-        // Non-site-admin users can only access their own organization
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
-        const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
-
-        if (!hasOrgAccess) {
-          return res.status(403).json({ message: "Access denied - you don't have permission to access this organization" });
-        }
+      // SECURITY: Validate user has access to requested organization
+      const hasAccess = await hasOrganizationAccess(currentUser, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({
+          message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
+        });
       }
 
       // Fetch recent athletes
@@ -129,28 +126,17 @@ export function registerAthleteRoutes(app: Express) {
         primaryOrganizationId: user?.primaryOrganizationId
       });
 
-      // SECURITY: Validate user has access to requested organization
-      if (validatedParams.organizationId) {
-        if (user && !isSiteAdmin(user)) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
-            });
-          }
-        }
-        filters.organizationId = validatedParams.organizationId;
-      } else if (user && !isSiteAdmin(user)) {
-        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        if (userOrgs.length === 0) {
-          return res.status(403).json({
-            message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP)
-          });
-        }
-        // Use their primary org from actual membership, not session
-        filters.organizationId = userOrgs[0].organizationId;
+      // SECURITY: Validate organization access and get effective org ID
+      const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
+      if (!orgAccessResult.allowed) {
+        return res.status(403).json({
+          message: getAuthorizationError(orgAccessResult.error!)
+        });
+      }
+
+      // Set the organization filter to the effective org ID
+      if (orgAccessResult.effectiveOrgId) {
+        filters.organizationId = orgAccessResult.effectiveOrgId;
       }
 
       console.log('[GET /api/athletes] Filters:', filters);

@@ -15,8 +15,9 @@
  * @returns Error message appropriate for current environment
  */
 export function getAuthorizationError(detailedMessage: string): string {
-  const isDevelopment = process.env.NODE_ENV !== 'production';
-  return isDevelopment ? detailedMessage : 'Access denied';
+  const isProduction = process.env.NODE_ENV === 'production' ||
+                       process.env.RAILWAY_ENVIRONMENT === 'production';
+  return isProduction ? 'Access denied' : detailedMessage;
 }
 
 /**

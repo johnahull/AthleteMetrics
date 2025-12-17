@@ -11,7 +11,7 @@ import { storage } from "../storage";
 import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
-import { hasOrganizationAccess } from "../helpers/org-access";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
@@ -158,30 +158,18 @@ export function registerAnalyticsRoutes(app: Express) {
       }
 
       // Get organizationId from query or user's primary organization
-      let organizationId = req.query.organizationId as string | undefined;
+      const requestedOrgId = req.query.organizationId as string | undefined;
 
-      // SECURITY: Validate user has access to requested organization
-      if (organizationId) {
-        if (!isSiteAdmin(user)) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
-          const hasAccess = userOrgs.some(org => org.organizationId === organizationId);
-          if (!hasAccess) {
-            return res.status(403).json({
-              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
-            });
-          }
-        }
-      } else if (!isSiteAdmin(user)) {
-        // SECURITY: For non-admin users, ALWAYS require org context from actual membership
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        if (userOrgs.length === 0) {
-          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
-        }
-        // Use their primary org from actual membership, not session
-        organizationId = userOrgs[0].organizationId;
+      // SECURITY: Validate organization access and get effective org ID
+      const orgAccessResult = await validateOrganizationAccess(user, requestedOrgId);
+      if (!orgAccessResult.allowed) {
+        return res.status(403).json({
+          message: getAuthorizationError(orgAccessResult.error!)
+        });
       }
 
       // Site admins can view global dashboard without organizationId
+      const organizationId = orgAccessResult.effectiveOrgId;
       if (!organizationId && !isSiteAdmin(user)) {
         return res.status(400).json({ message: "organizationId is required" });
       }
