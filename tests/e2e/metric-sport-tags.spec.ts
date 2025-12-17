@@ -39,14 +39,26 @@ test.describe('Metric Sport Tags - Site Admin Form', () => {
     createdMetricCodes = [];
   });
 
-  test.afterEach(async ({ page }) => {
+  test.afterEach(async ({ page }, testInfo) => {
     // Cleanup: Delete test metrics created during test
+    const cleanupErrors: string[] = [];
     for (const code of createdMetricCodes) {
       try {
-        await page.request.delete(`${STAGING_URL}/api/metrics/${code}`);
+        const response = await page.request.delete(`${STAGING_URL}/api/metrics/${code}`);
+        if (!response.ok()) {
+          cleanupErrors.push(`Failed to cleanup metric ${code}: ${response.status()} ${response.statusText()}`);
+        }
       } catch (error) {
-        console.warn(`Failed to cleanup metric ${code}:`, error);
+        cleanupErrors.push(`Failed to cleanup metric ${code}: ${error instanceof Error ? error.message : String(error)}`);
       }
+    }
+
+    // Attach cleanup errors to test results for visibility in CI
+    if (cleanupErrors.length > 0) {
+      await testInfo.attach('cleanup-errors', {
+        body: cleanupErrors.join('\n'),
+        contentType: 'text/plain',
+      });
     }
   });
 

@@ -7,6 +7,11 @@
  * Semantics:
  * - NULL/undefined/empty array = Relevant to ALL sports (default)
  * - Non-empty array = Relevant only to those specific sports
+ *
+ * Schema Update Semantics (packages/shared/schema.ts):
+ * - Allow null to explicitly clear these array fields
+ * - undefined means "don't update" (field is omitted from PATCH)
+ * - null means "clear the field" (set to empty array/null in database)
  */
 
 import { useState } from "react";

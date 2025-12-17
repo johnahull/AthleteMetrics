@@ -31,6 +31,9 @@ import {
 import { useSports } from "@/lib/sports-api";
 import type { SiteMetric, OrganizationMetric } from "@shared/schema";
 
+// Maximum number of sport badges to display before showing "+N more"
+const MAX_VISIBLE_SPORT_BADGES = 3;
+
 interface OrganizationMetricsCardProps {
   organizationId: string;
   canEdit: boolean; // Whether current user can modify org settings
@@ -120,8 +123,8 @@ export default function OrganizationMetricsCard({
       );
     }
 
-    const visibleSports = sportCodes.slice(0, 3);
-    const remainingCount = sportCodes.length - 3;
+    const visibleSports = sportCodes.slice(0, MAX_VISIBLE_SPORT_BADGES);
+    const remainingCount = sportCodes.length - MAX_VISIBLE_SPORT_BADGES;
 
     return (
       <div className="flex gap-1 flex-wrap items-center">

@@ -2,7 +2,7 @@
 -- Description: Updates site_metrics.sport_associations to use sport codes (e.g., 'SOCCER')
 --              instead of sport names (e.g., 'Soccer')
 -- Author: Claude Code
--- Date: 2025-01-17
+-- Date: 2025-12-17
 
 -- Update all metrics that have 'Soccer' in sportAssociations to use 'SOCCER' instead
 UPDATE site_metrics
