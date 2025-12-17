@@ -6,8 +6,10 @@
 import type { Express } from 'express';
 import rateLimit from 'express-rate-limit';
 import { BenchmarkAnalyticsService } from '../services/benchmark-analytics-service';
+import { storage } from '../storage';
 import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
+import { hasOrganizationAccess } from '../helpers/org-access';
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from '../constants/rate-limits';
 import { db } from '../db';
 import { teams, organizationBenchmarks, customBenchmarks } from '@shared/schema';
@@ -220,19 +222,25 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(401).json({ message: 'User not authenticated' });
         }
 
-        // Get organizationId from query or user's primary organization
+        // SECURITY: Get organizationId from query or user's database-validated membership
         let organizationId = req.query.organizationId as string | undefined;
 
         if (!organizationId && !isSiteAdmin(user)) {
-          organizationId = user.primaryOrganizationId;
+          // Use database-validated org membership instead of session
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          if (userOrgs.length === 0) {
+            return res.status(400).json({ message: 'organizationId is required - no organization membership' });
+          }
+          organizationId = userOrgs[0].organizationId;
         }
 
         if (!organizationId) {
           return res.status(400).json({ message: 'organizationId is required' });
         }
 
-        // Permission check: non-admin users can only access their organization
-        if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        // SECURITY: Validate user has access to requested organization via database membership
+        const hasAccess = await hasOrganizationAccess(user, organizationId);
+        if (!hasAccess) {
           return res.status(403).json({
             message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
           });
@@ -374,19 +382,25 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           });
         }
 
-        // Get organizationId from query or user's primary organization
+        // SECURITY: Get organizationId from query or user's database-validated membership
         let organizationId = req.query.organizationId as string | undefined;
 
         if (!organizationId && !isSiteAdmin(user)) {
-          organizationId = user.primaryOrganizationId;
+          // Use database-validated org membership instead of session
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          if (userOrgs.length === 0) {
+            return res.status(400).json({ message: 'organizationId is required - no organization membership' });
+          }
+          organizationId = userOrgs[0].organizationId;
         }
 
         if (!organizationId) {
           return res.status(400).json({ message: 'organizationId is required' });
         }
 
-        // Permission check: non-admin users can only access their organization
-        if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        // SECURITY: Validate user has access to requested organization via database membership
+        const hasAccess = await hasOrganizationAccess(user, organizationId);
+        if (!hasAccess) {
           return res.status(403).json({
             message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
           });
@@ -436,19 +450,25 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
         }
 
-        // Get organizationId from query or user's primary organization
+        // SECURITY: Get organizationId from query or user's database-validated membership
         let organizationId = req.query.organizationId as string | undefined;
 
         if (!organizationId && !isSiteAdmin(user)) {
-          organizationId = user.primaryOrganizationId;
+          // Use database-validated org membership instead of session
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          if (userOrgs.length === 0) {
+            return res.status(400).json({ message: 'organizationId is required - no organization membership' });
+          }
+          organizationId = userOrgs[0].organizationId;
         }
 
         if (!organizationId) {
           return res.status(400).json({ message: 'organizationId is required' });
         }
 
-        // Permission check: non-admin users can only access their organization
-        if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        // SECURITY: Validate user has access to requested organization via database membership
+        const hasAccess = await hasOrganizationAccess(user, organizationId);
+        if (!hasAccess) {
           return res.status(403).json({
             message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
           });
@@ -576,19 +596,25 @@ export function registerBenchmarkAnalyticsRoutes(app: Express) {
           return res.status(400).json({ message: 'benchmarkId must be a valid UUID' });
         }
 
-        // Get organizationId from query or user's primary organization
+        // SECURITY: Get organizationId from query or user's database-validated membership
         let organizationId = req.query.organizationId as string | undefined;
 
         if (!organizationId && !isSiteAdmin(user)) {
-          organizationId = user.primaryOrganizationId;
+          // Use database-validated org membership instead of session
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          if (userOrgs.length === 0) {
+            return res.status(400).json({ message: 'organizationId is required - no organization membership' });
+          }
+          organizationId = userOrgs[0].organizationId;
         }
 
         if (!organizationId) {
           return res.status(400).json({ message: 'organizationId is required' });
         }
 
-        // Permission check: non-admin users can only access their organization
-        if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
+        // SECURITY: Validate user has access to requested organization via database membership
+        const hasAccess = await hasOrganizationAccess(user, organizationId);
+        if (!hasAccess) {
           return res.status(403).json({
             message: getAuthorizationError('Organization access denied: user does not belong to requested organization')
           });

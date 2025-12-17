@@ -10,6 +10,7 @@ import { storage } from "../storage";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertTeamSchema, measurements, userOrganizations } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { hasOrganizationAccess } from "../helpers/org-access";
 import { ZodError } from "zod";
 import { db } from "../db";
 import { eq } from "drizzle-orm";
@@ -102,8 +103,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only access their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== team.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, team.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -134,8 +136,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only access their organization's team members
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== team.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasMemberAccess = await hasOrganizationAccess(user, team.organization.id);
+      if (!hasMemberAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -167,12 +170,24 @@ export function registerTeamRoutes(app: Express) {
       // Validate request body using Zod schema
       const validatedData = insertTeamSchema.parse(req.body);
 
-      // Permission check: non-admin users can only create teams in their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== validatedData.organizationId) {
-        return res.status(403).json({ message: "Access denied - cannot create team in different organization" });
+      // SECURITY: Determine and validate organizationId
+      let targetOrgId = validatedData.organizationId;
+      if (!targetOrgId) {
+        // If not provided, use the user's org from database membership
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - user has no organization membership" });
+        }
+        targetOrgId = userOrgs[0].organizationId;
+      } else {
+        // If provided, validate user has access to that organization
+        const hasCreateAccess = await hasOrganizationAccess(user, targetOrgId);
+        if (!hasCreateAccess) {
+          return res.status(403).json({ message: "Access denied - cannot create team in different organization" });
+        }
       }
 
-      const team = await teamService.createTeam(validatedData);
+      const team = await teamService.createTeam({ ...validatedData, organizationId: targetOrgId });
       res.status(201).json(team);
     } catch (error) {
       console.error("Create team error:", error);
@@ -202,8 +217,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only update their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasUpdateAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasUpdateAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -246,8 +262,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only delete their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -283,8 +300,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only archive their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -318,8 +336,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only unarchive their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -356,8 +375,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only add members to their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -396,8 +416,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only remove members from their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
@@ -437,8 +458,9 @@ export function registerTeamRoutes(app: Express) {
         return res.status(404).json({ message: "Team not found" });
       }
 
-      // Permission check: non-admin users can only update memberships in their organization's teams
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== existingTeam.organization.id) {
+      // SECURITY: Validate user has access to team's organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, existingTeam.organization.id);
+      if (!hasAccess) {
         return res.status(403).json({ message: "Access denied - team belongs to different organization" });
       }
 
