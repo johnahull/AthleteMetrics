@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Users, TrendingUp, BarChart3 } from 'lucide-react';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
+import { Footer } from '@/components/footer';
 
 export default function Welcome() {
   const labels = useContextualLabels();
@@ -24,8 +25,9 @@ export default function Welcome() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
-      <Card className="w-full max-w-md mx-4 shadow-lg" role="main">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="flex-1 flex items-center justify-center">
+        <Card className="w-full max-w-md mx-4 shadow-lg" role="main">
         <CardContent className="pt-12 pb-8 px-8 space-y-6">
           {/* Logo/Icon */}
           <div className="flex justify-center">
@@ -107,6 +109,8 @@ export default function Welcome() {
           </div>
         </CardContent>
       </Card>
+      </div>
+      <Footer />
     </div>
   );
 }

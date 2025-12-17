@@ -20,6 +20,9 @@ vi.mock('@/lib/auth', () => ({
 
 vi.mock('wouter', () => ({
   useLocation: () => ['/', mockSetLocation],
+  Link: ({ href, children, ...props }: { href: string; children: React.ReactNode; [key: string]: unknown }) => (
+    <a href={href} {...props}>{children}</a>
+  ),
 }));
 
 describe('Welcome Page', () => {

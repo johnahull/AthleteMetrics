@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/drawer";
 import { OfflineStatusIndicator } from "./offline-status-indicator";
 import { backgroundSync } from "@/lib/background-sync";
+import { Footer } from "./footer";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
@@ -39,6 +40,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     '/reset-password',
     '/verify-email',
     '/enhanced-login',
+    '/privacy',
+    '/terms',
     '/wellness/submit',
     '/public/reports'
   ];
@@ -155,9 +158,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Main Content - Add padding bottom on mobile for bottom nav */}
+        {/* Main Content - Add padding bottom on mobile for bottom nav and footer */}
         <div className={`flex-1 overflow-auto ${isMobile ? 'pb-20' : ''}`}>
           {children}
+          <Footer className="mt-8" />
         </div>
       </main>
 

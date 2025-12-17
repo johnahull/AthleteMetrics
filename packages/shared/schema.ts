@@ -111,6 +111,25 @@ export const users = pgTable("users", {
   // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
   showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
   peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
+  /**
+   * Legal acceptance tracking
+   *
+   * legalAcceptedAt: Timestamp when user accepted Terms of Service and Privacy Policy
+   *   - NULL for grandfathered users (existed before legal acceptance requirement)
+   *   - Required for all new users (registration, invitation, OAuth signup)
+   *
+   * legalAcceptedVersion: Version identifier for accepted terms (YYYY-MM-DD format)
+   *   - Represents the date/time when user accepted, NOT the policy document version
+   *   - Used for compliance auditing and potential future re-acceptance flows
+   *   - Example: "2024-12-13"
+   *
+   * Compliance notes:
+   *   - Both fields must be set together for new users
+   *   - Audit logs are created in parallel (see audit_logs table)
+   *   - Grandfathered users (NULL values) are assumed to have implicitly accepted
+   */
+  legalAcceptedAt: timestamp("legal_accepted_at"),
+  legalAcceptedVersion: text("legal_accepted_version"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
