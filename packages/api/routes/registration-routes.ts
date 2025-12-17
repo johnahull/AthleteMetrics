@@ -7,7 +7,6 @@ import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { storage } from "../storage";
-import { db } from "../db";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
 import {
@@ -17,7 +16,6 @@ import {
   MISSING_ACCEPTANCE_MESSAGE,
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
-import { auditLogs } from "@shared/schema";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -131,65 +129,71 @@ export function registerRegistrationRoutes(app: Express) {
       const legalAcceptedVersion = getLegalAcceptanceTimestamp();
       const legalAcceptedAtDate = new Date(legalAcceptedAt);
 
-      // Wrap user creation and audit logs in a single transaction for atomicity
-      // This ensures either everything succeeds or everything rolls back
-      const result = await db.transaction(async (tx) => {
-        // Create user with isEmailVerified: false
-        // User is created as an "independent athlete" with no organization
-        // Note: storage.createUser handles password hashing internally
-        const user = await storage.createUser({
-          username,
-          firstName,
-          lastName,
-          emails: [email],
-          password, // Will be hashed by storage.createUser
-          role: 'athlete', // Self-registered users are independent athletes
-          isEmailVerified: false,
-          isSiteAdmin: false,
-          legalAcceptedAt: legalAcceptedAtDate,
-          legalAcceptedVersion,
-          // No organization membership - user is independent
-        });
+      // Create user with isEmailVerified: false
+      // User is created as an "independent athlete" with no organization
+      // Note: storage.createUser handles password hashing internally
+      const user = await storage.createUser({
+        username,
+        firstName,
+        lastName,
+        emails: [email],
+        password, // Will be hashed by storage.createUser
+        role: 'athlete', // Self-registered users are independent athletes
+        isEmailVerified: false,
+        isSiteAdmin: false,
+        legalAcceptedAt: legalAcceptedAtDate,
+        legalAcceptedVersion,
+        // No organization membership - user is independent
+      });
 
-        const userId = user.id;
+      const userId = user.id;
 
-        // Create email verification token
-        const { token: verificationToken } = await storage.createEmailVerificationToken(userId, email);
+      // Create email verification token
+      const { token: verificationToken } = await storage.createEmailVerificationToken(userId, email);
 
-        // Create audit log for user registration (using transaction)
-        await tx.insert(auditLogs).values({
-          userId,
+      // Create audit logs (critical for compliance)
+      // If audit logs fail, rollback by deleting the user
+      const auditLogBase = {
+        userId,
+        resourceType: 'user' as const,
+        resourceId: userId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      };
+
+      try {
+        await storage.createAuditLog({
+          ...auditLogBase,
           action: 'user_registered',
-          resourceType: 'user',
-          resourceId: userId,
           details: JSON.stringify({
             username,
             email,
             registrationType: 'self_registration'
           }),
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent')
         });
 
-        // Create audit log for legal acceptance (using transaction)
-        await tx.insert(auditLogs).values({
-          userId,
+        await storage.createAuditLog({
+          ...auditLogBase,
           action: AUDIT_ACTION_LEGAL_ACCEPTED,
-          resourceType: 'user',
-          resourceId: userId,
           details: JSON.stringify({
             version: legalAcceptedVersion,
             acceptedAt: legalAcceptedAt,
             method: 'registration'
           }),
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent')
         });
-
-        return { user, verificationToken };
-      });
-
-      const { user, verificationToken } = result;
+      } catch (auditError) {
+        console.error('[CRITICAL] Failed to create audit logs:', auditError);
+        // Rollback user creation for compliance
+        try {
+          await storage.deleteUser(userId);
+        } catch (cleanupError) {
+          console.error('[CRITICAL] Failed to cleanup user after audit log failure:', cleanupError);
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Registration failed due to system error. Please try again."
+        });
+      }
 
       // Send verification email (outside transaction - email failure shouldn't rollback registration)
       const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
