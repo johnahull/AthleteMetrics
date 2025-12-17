@@ -13,15 +13,33 @@
  * see LAST_UPDATED constants in privacy-policy.tsx and terms-of-service.tsx.
  *
  * @returns Current timestamp in YYYY-MM-DD format for auditing purposes
+ * @throws Error if date format generation fails
  */
 export function getLegalAcceptanceTimestamp(): string {
-  return new Date().toISOString().split('T')[0];
+  const date = new Date().toISOString().split('T')[0];
+
+  // Validate format before returning (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error('Failed to generate valid legal acceptance timestamp');
+  }
+
+  return date;
 }
 
 /**
  * Validation window for legal acceptance timestamps (15 minutes)
- * Allows for slow form completion, network delays, and clock skew
- * while still preventing backdating and replay attacks
+ *
+ * Rationale:
+ * - Allows for slow form completion (5-10 minutes)
+ * - Accounts for network delays (30-60 seconds)
+ * - Tolerates reasonable clock skew between client/server (1-2 minutes)
+ * - Still prevents replay attacks (old timestamps rejected)
+ * - Based on industry standards for form submission windows
+ *
+ * Security considerations:
+ * - Prevents backdating of legal acceptance
+ * - Mitigates replay attack vectors
+ * - Balances UX (legitimate slow users) with security (attack prevention)
  */
 const LEGAL_ACCEPTANCE_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
 

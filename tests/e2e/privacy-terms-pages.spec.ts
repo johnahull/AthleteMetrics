@@ -260,7 +260,8 @@ test.describe('Legal Acceptance on Invitation Flow', () => {
     } finally {
       // Cleanup: Delete the test invitation if it still exists
       try {
-        // Re-authenticate as admin for cleanup
+        // Force fresh login for cleanup (in case session expired)
+        await page.goto(`${STAGING_URL}/logout`);
         await loginAsDefaultUser(page);
         await page.request.delete(`${STAGING_URL}/api/invitations/${invitationId}`);
       } catch (error) {

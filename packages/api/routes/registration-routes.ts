@@ -6,9 +6,11 @@
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
+import { auditLogs } from "@shared/schema";
 import {
   validateLegalAcceptanceTimestamp,
   getLegalAcceptanceTimestamp,
@@ -202,8 +204,11 @@ export function registerRegistrationRoutes(app: Express) {
         // For compliance, we must fail the registration if audit logs fail
         // Clean up user and any audit logs that were created
         try {
+          // Delete audit logs first (they have ON DELETE SET NULL, not CASCADE)
+          for (const logId of auditLogIds) {
+            await storage.db.delete(auditLogs).where(sql`${auditLogs.id} = ${logId}`);
+          }
           await storage.deleteUser(userId);
-          // Note: Audit logs will be cascade deleted with the user
         } catch (cleanupError) {
           console.error('[CRITICAL] Failed to cleanup after audit log failure:', cleanupError);
         }

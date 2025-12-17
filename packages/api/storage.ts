@@ -1729,11 +1729,11 @@ export class DatabaseStorage implements IStorage {
               method: 'invitation'
             }),
           });
-        } catch (auditErr) {
-          console.error('[CRITICAL] Failed to create legal acceptance audit log for invitation:', auditErr);
+        } catch (auditError) {
+          console.error('[CRITICAL] Failed to create legal acceptance audit log for invitation:', auditError);
           // For compliance, we must rollback the transaction if audit log fails
-          // Throw error to trigger transaction rollback
-          throw new Error('Invitation acceptance failed due to audit log error');
+          // Re-throw original error to ensure proper transaction rollback
+          throw auditError;
         }
       }
 

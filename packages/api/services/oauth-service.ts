@@ -222,11 +222,16 @@ export class OAuthService extends BaseService {
           provider: profile.provider
         }),
       });
-    } catch (auditErr) {
-      console.error('[CRITICAL] Failed to create legal acceptance audit log for OAuth user:', auditErr);
+    } catch (auditError) {
+      console.error('[CRITICAL] Failed to create legal acceptance audit log for OAuth user:', auditError);
       // For compliance, we must fail user creation if audit log fails
       // Delete the user to maintain data consistency
-      await this.storage.deleteUser(newUser.id);
+      try {
+        await this.storage.deleteUser(newUser.id);
+      } catch (deleteError) {
+        console.error('[CRITICAL] Failed to delete user after audit log error:', deleteError);
+        // Log to monitoring - data inconsistency occurred
+      }
       throw new Error('User creation failed due to audit log error');
     }
 
