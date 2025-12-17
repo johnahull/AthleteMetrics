@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -100,14 +100,18 @@ export default function OrganizationMetricsCard({
     return orgMetric?.customLabel ?? undefined;
   };
 
+  // Memoized sport name lookup map for performance
+  const sportNameMap = useMemo(() => {
+    return new Map(sports?.map(s => [s.code, s.name]) || []);
+  }, [sports]);
+
   // Helper to get sport name from code
-  const getSportName = (code: string): string => {
-    const sport = sports?.find((s) => s.code === code);
-    return sport?.name || code;
-  };
+  const getSportName = useCallback((code: string): string => {
+    return sportNameMap.get(code) || code;
+  }, [sportNameMap]);
 
   // Helper to render sport badges
-  const renderSportBadges = (sportCodes: string[] | null | undefined) => {
+  const renderSportBadges = useCallback((sportCodes: string[] | null | undefined) => {
     if (!sportCodes || sportCodes.length === 0) {
       return (
         <Badge variant="outline" className="bg-gray-50 text-gray-600">
@@ -133,7 +137,7 @@ export default function OrganizationMetricsCard({
         )}
       </div>
     );
-  };
+  }, [getSportName]);
 
   const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
     if (!canEdit) return;

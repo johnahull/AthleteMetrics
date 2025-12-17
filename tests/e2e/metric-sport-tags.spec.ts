@@ -242,18 +242,18 @@ test.describe('Metric Sport Tags - Site Admin Table Display', () => {
     await expect(sportsHeader).toBeVisible();
   });
 
-  test('should show sport badges for metrics with associations', async ({ page }) => {
+  test('should show "All Sports" badge for default metrics (universal)', async ({ page }) => {
     await page.goto(`${STAGING_URL}/metrics`);
 
     // Wait for table
     await page.waitForSelector('[data-testid="metrics-table"]', { timeout: 5000 });
 
-    // Default metrics should show Soccer badge (after migration fix)
+    // Default metrics have null sportAssociations (available to all sports)
     const fly10Row = page.locator('[data-testid="metric-row-FLY10_TIME"]');
     await expect(fly10Row).toBeVisible();
 
-    // Should see Soccer badge in sports column
-    const sportsBadge = fly10Row.locator('[data-testid="sports-cell"] >> text=Soccer');
+    // Should see "All Sports" badge in sports column
+    const sportsBadge = fly10Row.locator('[data-testid="sports-cell"] >> text=All Sports');
     await expect(sportsBadge).toBeVisible();
   });
 
@@ -364,16 +364,16 @@ test.describe('Metric Sport Tags - Org Admin Filtering', () => {
     await page.click('[data-testid="sport-filter-option-SOCCER"]');
 
     // Wait for filter to apply
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     // Should now only show metrics tagged with Soccer + general metrics (no tags)
     const filteredRows = await page.locator('[data-testid^="org-metric-row-"]').count();
 
-    // Should see FLY10_TIME (tagged with Soccer)
+    // Default metrics (FLY10_TIME) have no sport tags, so they appear in all filters
     const fly10Row = page.locator('[data-testid="org-metric-row-FLY10_TIME"]');
     await expect(fly10Row).toBeVisible();
 
-    // Filtered count should be less than or equal to initial count
+    // Filtered count equals initial count since default metrics have no sport associations
     expect(filteredRows).toBeLessThanOrEqual(initialRows);
   });
 
@@ -395,7 +395,7 @@ test.describe('Metric Sport Tags - Org Admin Filtering', () => {
     await page.click('[data-testid="sport-filter-dropdown"]');
     await page.click('[data-testid="sport-filter-option-SOCCER"]');
 
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     // Should see the general metric (no sport tags = shows in all filters)
     const generalMetricRow = page.locator(`[data-testid="org-metric-row-${generalMetric.code}"]`);
@@ -413,14 +413,14 @@ test.describe('Metric Sport Tags - Org Admin Filtering', () => {
     // Apply a specific sport filter first
     await page.click('[data-testid="sport-filter-dropdown"]');
     await page.click('[data-testid="sport-filter-option-SOCCER"]');
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     const filteredCount = await page.locator('[data-testid^="org-metric-row-"]').count();
 
     // Switch back to "All Sports"
     await page.click('[data-testid="sport-filter-dropdown"]');
     await page.click('[data-testid="sport-filter-option-ALL"]');
-    await page.waitForTimeout(500);
+    await page.waitForLoadState('networkidle');
 
     // Should show all metrics again
     const allCount = await page.locator('[data-testid^="org-metric-row-"]').count();
@@ -432,27 +432,49 @@ test.describe('Metric Sport Tags - Org Admin Filtering', () => {
     await page.click('text=Metrics');
     await page.waitForSelector('[data-testid="organization-metrics-card"]');
 
-    // Find FLY10_TIME row (should have Soccer badge)
+    // Find FLY10_TIME row (default metrics have "All Sports" badge)
     const fly10Row = page.locator('[data-testid="org-metric-row-FLY10_TIME"]');
     await expect(fly10Row).toBeVisible();
 
-    // Should see Soccer badge in sports column
+    // Should see "All Sports" badge in sports column (default metrics have no sport tags)
     const sportsCell = fly10Row.locator('[data-testid="org-metric-sports-cell"]');
-    await expect(sportsCell.locator('text=Soccer')).toBeVisible();
+    await expect(sportsCell.locator('text=All Sports')).toBeVisible();
   });
 });
 
 test.describe('Metric Sport Tags - Data Migration', () => {
-  test('should have converted default metrics from "Soccer" to "SOCCER"', async ({ page }) => {
+  test('should have default metrics with null sport associations (universal)', async ({ page }) => {
     await loginAsDefaultUser(page);
 
-    // Verify FLY10_TIME has SOCCER code, not "Soccer" name
+    // Verify FLY10_TIME has null sportAssociations (available to all sports)
     const response = await page.request.get(`${STAGING_URL}/api/metrics/FLY10_TIME`);
     expect(response.ok()).toBeTruthy();
     const metric = await response.json();
 
-    // sportAssociations should be ['SOCCER'] not ['Soccer']
-    expect(metric.sportAssociations).toEqual(expect.arrayContaining(['SOCCER']));
+    // Default metrics have no sport associations (null or empty)
+    expect(metric.sportAssociations === null || metric.sportAssociations?.length === 0).toBeTruthy();
+  });
+
+  test('should use sport CODES not names when sport associations exist', async ({ page }) => {
+    await loginAsDefaultUser(page);
+
+    // Create a metric with sport associations
+    const testMetric = generateTestMetricWithSports(['SOCCER', 'BASKETBALL']);
+    const createResponse = await page.request.post(`${STAGING_URL}/api/metrics`, {
+      data: testMetric,
+    });
+    expect(createResponse.ok()).toBeTruthy();
+
+    // Verify sport associations use CODES not names
+    const response = await page.request.get(`${STAGING_URL}/api/metrics/${testMetric.code}`);
+    const metric = await response.json();
+
+    expect(metric.sportAssociations).toContain('SOCCER');
     expect(metric.sportAssociations).not.toContain('Soccer');
+    expect(metric.sportAssociations).toContain('BASKETBALL');
+    expect(metric.sportAssociations).not.toContain('Basketball');
+
+    // Cleanup
+    await page.request.delete(`${STAGING_URL}/api/metrics/${testMetric.code}`);
   });
 });

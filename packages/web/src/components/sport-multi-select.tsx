@@ -86,6 +86,19 @@ export function SportMultiSelect({
     return colorMap[code] || "bg-gray-100 text-gray-800 hover:bg-gray-200";
   };
 
+  // Get just the background color for the color dot indicator
+  const getDotColor = (code: string): string => {
+    const dotColorMap: Record<string, string> = {
+      SOCCER: "bg-green-400",
+      BASKETBALL: "bg-orange-400",
+      VOLLEYBALL: "bg-blue-400",
+      TENNIS: "bg-yellow-400",
+      BASEBALL: "bg-red-400",
+      FOOTBALL: "bg-purple-400",
+    };
+    return dotColorMap[code] || "bg-gray-400";
+  };
+
   if (isLoading) {
     return (
       <Button
@@ -122,9 +135,11 @@ export function SportMultiSelect({
                   className={cn("mr-1 cursor-pointer", getColorClass(code))}
                   onClick={(e) => handleRemove(e, code)}
                   data-testid={`sport-badge-${code}`}
+                  role="button"
+                  aria-label={`Remove ${getSportName(code)}`}
                 >
                   {getSportName(code)}
-                  <X className="ml-1 h-3 w-3" />
+                  <X className="ml-1 h-3 w-3" aria-hidden="true" />
                 </Badge>
               ))}
             </div>
@@ -157,7 +172,7 @@ export function SportMultiSelect({
                     <div
                       className={cn(
                         "w-2 h-2 rounded-full",
-                        getColorClass(sport.code).split(" ")[0]
+                        getDotColor(sport.code)
                       )}
                     />
                     <div className="flex flex-col">
@@ -180,6 +195,7 @@ export function SportMultiSelect({
                 size="sm"
                 className="w-full"
                 onClick={handleClear}
+                data-testid="sport-multi-select-clear-all"
               >
                 Clear all (relevant to all sports)
               </Button>
