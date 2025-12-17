@@ -1588,8 +1588,9 @@ export const updateSiteMetricSchema = z.object({
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
-  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string()).optional(),
+  // Allow null to explicitly clear these array fields (undefined means "don't update")
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
+  sportAssociations: z.array(z.string()).nullable().optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),

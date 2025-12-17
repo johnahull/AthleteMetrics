@@ -119,6 +119,7 @@ export default function MetricFormDialog({
     try {
       if (isEditMode) {
         // Update existing metric
+        // Note: Use null (not undefined) to clear array fields, as undefined means "don't update"
         await updateMetricMutation.mutateAsync({
           code: metric.code,
           data: {
@@ -127,8 +128,8 @@ export default function MetricFormDialog({
             unit: data.unit || undefined,
             description: data.description || undefined,
             metricType: data.metricType,
-            availableOrgTypes: data.availableOrgTypes || undefined,
-            sportAssociations: data.sportAssociations || undefined,
+            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : null,
+            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : null,
           },
         });
         toast({
