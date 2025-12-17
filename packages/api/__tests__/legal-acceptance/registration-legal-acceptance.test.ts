@@ -74,7 +74,8 @@ describe('Registration Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
       vi.spyOn(storage, 'createEmailVerificationToken').mockResolvedValue({ token: 'token-123', expiresAt: new Date() });
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return objects with id (implementation expects .id property)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       const legalAcceptedAt = new Date().toISOString();
       const response = await request(app)
@@ -114,7 +115,8 @@ describe('Registration Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
       vi.spyOn(storage, 'createEmailVerificationToken').mockResolvedValue({ token: 'token-123', expiresAt: new Date() });
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return objects with id (implementation expects .id property)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       const legalAcceptedAt = new Date().toISOString();
       await request(app)
@@ -153,7 +155,8 @@ describe('Registration Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
       vi.spyOn(storage, 'createEmailVerificationToken').mockResolvedValue({ token: 'token-123', expiresAt: new Date() });
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return objects with id (implementation expects .id property)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       const legalAcceptedAt = new Date().toISOString();
       await request(app)
