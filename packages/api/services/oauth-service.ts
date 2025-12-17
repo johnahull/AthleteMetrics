@@ -5,9 +5,7 @@
 import crypto from 'crypto';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
-import { db } from '../db';
 import type { User, InsertOAuthUser } from '@shared/schema';
-import { auditLogs } from '@shared/schema';
 import { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 export interface OAuthProfile {
@@ -188,34 +186,32 @@ export class OAuthService extends BaseService {
     const legalAcceptedAt = now;
     const legalAcceptedVersion = getLegalAcceptanceTimestamp(); // YYYY-MM-DD format
 
-    // Wrap user creation and audit log in a single transaction for atomicity
-    // This ensures either everything succeeds or everything rolls back
-    const newUser = await db.transaction(async (tx) => {
-      const userData: InsertOAuthUser = {
-        username,
-        emails: [profile.email],
-        // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
-        firstName: profile.firstName,
-        lastName: profile.lastName,
-        role: 'athlete',  // OAuth users default to athlete role
-        googleId: profile.provider === 'google' ? profile.providerId : undefined,
-        appleId: profile.provider === 'apple' ? profile.providerId : undefined,
-        oauthProvider: profile.provider,
-        oauthEmail: profile.email,
-        oauthEmailVerified: profile.emailVerified,
-        lastAuthMethod: profile.provider,
-        isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
-        accountLinkedAt: new Date(),
-        legalAcceptedAt,
-        legalAcceptedVersion,
-      };
+    const userData: InsertOAuthUser = {
+      username,
+      emails: [profile.email],
+      // No password for OAuth-only users - storage.createUser detects OAuth users and sets null
+      firstName: profile.firstName,
+      lastName: profile.lastName,
+      role: 'athlete',  // OAuth users default to athlete role
+      googleId: profile.provider === 'google' ? profile.providerId : undefined,
+      appleId: profile.provider === 'apple' ? profile.providerId : undefined,
+      oauthProvider: profile.provider,
+      oauthEmail: profile.email,
+      oauthEmailVerified: profile.emailVerified,
+      lastAuthMethod: profile.provider,
+      isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
+      accountLinkedAt: new Date(),
+      legalAcceptedAt,
+      legalAcceptedVersion,
+    };
 
-      // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
-      const user = await this.storage.createUser(userData);
+    // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
+    const user = await this.storage.createUser(userData);
 
-      // Create audit log for legal acceptance (critical for compliance)
-      // Using transaction ensures audit log is part of the atomic operation
-      await tx.insert(auditLogs).values({
+    // Create audit log for legal acceptance (critical for compliance)
+    // If audit log fails, rollback by deleting the user
+    try {
+      await this.storage.createAuditLog({
         userId: user.id,
         action: AUDIT_ACTION_LEGAL_ACCEPTED,
         resourceType: 'user',
@@ -227,11 +223,18 @@ export class OAuthService extends BaseService {
           provider: profile.provider
         }),
       });
+    } catch (auditError) {
+      console.error('[CRITICAL] Failed to create audit log for OAuth user:', auditError);
+      // Rollback user creation for compliance
+      try {
+        await this.storage.deleteUser(user.id);
+      } catch (cleanupError) {
+        console.error('[CRITICAL] Failed to cleanup user after audit log failure:', cleanupError);
+      }
+      throw new Error('Failed to complete OAuth registration');
+    }
 
-      return user;
-    });
-
-    return newUser;
+    return user;
   }
 
   /**

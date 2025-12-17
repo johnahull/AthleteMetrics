@@ -51,7 +51,8 @@ describe('OAuth Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'getUserByUsername').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return object with id (implementation may use it)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       const result = await oauthService.handleGoogleAuth({
         id: profile.providerId,
@@ -91,7 +92,8 @@ describe('OAuth Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'getUserByUsername').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return object with id (implementation may use it)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       await oauthService.handleGoogleAuth({
         id: profile.providerId,
@@ -133,7 +135,8 @@ describe('OAuth Flow - Legal Acceptance', () => {
       vi.spyOn(storage, 'getUserByEmail').mockResolvedValue(null);
       vi.spyOn(storage, 'getUserByUsername').mockResolvedValue(null);
       vi.spyOn(storage, 'createUser').mockResolvedValue(mockUser as any);
-      vi.spyOn(storage, 'createAuditLog').mockResolvedValue(undefined);
+      // Mock createAuditLog to return object with id (implementation may use it)
+      vi.spyOn(storage, 'createAuditLog').mockResolvedValue({ id: 'audit-log-1' } as any);
 
       await oauthService.handleAppleAuth({
         id: profile.providerId,
