@@ -24,6 +24,7 @@ import { athleteQuerySchema } from "../validation/athlete-validation";
 import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { globalAthleteService } from "../services/global-athlete-service";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -135,7 +136,7 @@ export function registerAthleteRoutes(app: Express) {
           const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
           if (!hasAccess) {
             return res.status(403).json({
-              message: "Access denied - you don't have permission to access this organization"
+              message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
             });
           }
         }
@@ -144,7 +145,9 @@ export function registerAthleteRoutes(app: Express) {
         // SECURITY: For non-admin users, ALWAYS require org context from actual membership
         const userOrgs = await storage.getUserOrganizations(user.id);
         if (userOrgs.length === 0) {
-          return res.status(403).json({ message: "Access denied - no organization membership" });
+          return res.status(403).json({
+            message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP)
+          });
         }
         // Use their primary org from actual membership, not session
         filters.organizationId = userOrgs[0].organizationId;
