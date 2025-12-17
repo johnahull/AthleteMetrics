@@ -1608,8 +1608,12 @@ export class DatabaseStorage implements IStorage {
       lastName: string;
       legalAcceptedAt?: string;
       legalAcceptedVersion?: string;
+    },
+    auditContext?: {
+      ipAddress?: string;
+      userAgent?: string;
     }
-  ): Promise<{ user: User }> {
+  ): Promise<{ user: User; invitation: Invitation }> {
     // Use database transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
@@ -1714,9 +1718,10 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(invitations.token, token));
 
-      // Create audit log for legal acceptance (if provided)
-      // This is critical for compliance - must succeed
-      // Use tx.insert() to ensure it's part of the transaction
+      // Create audit logs as part of the transaction
+      // All audit logs must be inside transaction for atomicity and consistency
+
+      // 1. Legal acceptance audit log (if provided)
       if (userInfo.legalAcceptedAt) {
         await tx.insert(auditLogs).values({
           userId: user.id,
@@ -1728,10 +1733,28 @@ export class DatabaseStorage implements IStorage {
             acceptedAt: userInfo.legalAcceptedAt,
             method: 'invitation'
           }),
+          ipAddress: auditContext?.ipAddress,
+          userAgent: auditContext?.userAgent,
         });
       }
 
-      return { user };
+      // 2. Invitation accepted audit log
+      // Note: This is separate from legal acceptance - tracks the invitation being used
+      await tx.insert(auditLogs).values({
+        userId: user.id,
+        action: 'invitation_accepted',
+        resourceType: 'invitation',
+        resourceId: invitation.id,
+        details: JSON.stringify({
+          email: invitation.email,
+          role: invitation.role,
+          organizationId: invitation.organizationId
+        }),
+        ipAddress: auditContext?.ipAddress,
+        userAgent: auditContext?.userAgent,
+      });
+
+      return { user, invitation };
     });
   }
 

@@ -859,35 +859,30 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
       }
 
-      const result = await storage.acceptInvitation(token, {
-        email: invitation.email,
-        username,
-        password,
-        firstName,
-        lastName,
-        legalAcceptedAt,
-        legalAcceptedVersion: getLegalAcceptanceTimestamp() // Format: "2024-12-13"
-      });
+      const result = await storage.acceptInvitation(
+        token,
+        {
+          email: invitation.email,
+          username,
+          password,
+          firstName,
+          lastName,
+          legalAcceptedAt,
+          legalAcceptedVersion: getLegalAcceptanceTimestamp() // Format: "2024-12-13"
+        },
+        {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      );
 
       console.log("Invitation accepted successfully, user created:", result.user.id);
 
-      // Audit log
-      await storage.createAuditLog({
-        userId: result.user.id,
-        action: 'invitation_accepted',
-        resourceType: 'invitation',
-        resourceId: invitation.id,
-        details: JSON.stringify({
-          email: invitation.email,
-          role: invitation.role,
-          organizationId: invitation.organizationId
-        }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      });
+      // Note: Audit logs (legal acceptance + invitation accepted) are created inside
+      // the acceptInvitation transaction for atomicity. No need to create them here.
 
       // Send welcome email
-      const organization = await storage.getOrganization(invitation.organizationId);
+      const organization = await storage.getOrganization(result.invitation.organizationId);
       await emailService.sendWelcome(result.user.emails[0], {
         userName: `${result.user.firstName} ${result.user.lastName}`,
         organizationName: organization?.name || 'the organization',
