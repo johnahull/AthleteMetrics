@@ -57,6 +57,7 @@ export function SportMultiSelect({
   };
 
   const handleRemove = (e: React.MouseEvent, removeCode: string) => {
+    e.preventDefault();
     e.stopPropagation();
     const newValue = selectedCodes.filter((v) => v !== removeCode);
     onChange(newValue.length > 0 ? newValue : undefined);
@@ -134,6 +135,7 @@ export function SportMultiSelect({
                   variant="secondary"
                   className={cn("mr-1 cursor-pointer", getColorClass(code))}
                   onClick={(e) => handleRemove(e, code)}
+                  onPointerDown={(e) => e.stopPropagation()}
                   data-testid={`sport-badge-${code}`}
                   role="button"
                   aria-label={`Remove ${getSportName(code)}`}

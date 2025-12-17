@@ -204,11 +204,11 @@ test.describe('Metric Sport Tags - Site Admin Form', () => {
     await page.click(`[data-testid="edit-metric-${testMetric.code}"]`);
     await page.waitForSelector('[data-testid="metric-form-dialog"]');
 
-    // Remove Soccer by clicking X on badge
-    await page.click('[data-testid="sport-badge-SOCCER"] >> text=×');
+    // Remove Soccer by clicking the badge (the whole badge is clickable)
+    await page.click('[data-testid="sport-badge-SOCCER"]');
 
     // Remove Basketball
-    await page.click('[data-testid="sport-badge-BASKETBALL"] >> text=×');
+    await page.click('[data-testid="sport-badge-BASKETBALL"]');
 
     // Should show "All Sports" placeholder again
     await expect(page.locator('[data-testid="sport-multi-select"]')).toContainText('All Sports');
