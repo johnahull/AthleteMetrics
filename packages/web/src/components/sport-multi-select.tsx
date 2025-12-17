@@ -133,15 +133,21 @@ export function SportMultiSelect({
                 <Badge
                   key={code}
                   variant="secondary"
-                  className={cn("mr-1 cursor-pointer", getColorClass(code))}
-                  onClick={(e) => handleRemove(e, code)}
-                  onPointerDown={(e) => e.stopPropagation()}
+                  className={cn("mr-1 pr-1", getColorClass(code))}
                   data-testid={`sport-badge-${code}`}
-                  role="button"
-                  aria-label={`Remove ${getSportName(code)}`}
                 >
                   {getSportName(code)}
-                  <X className="ml-1 h-3 w-3" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="ml-1 rounded-full hover:bg-black/10 p-0.5"
+                    onClick={(e) => handleRemove(e, code)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    aria-label={`Remove ${getSportName(code)}`}
+                    data-testid={`remove-sport-${code}`}
+                  >
+                    <X className="h-3 w-3" aria-hidden="true" />
+                  </button>
                 </Badge>
               ))}
             </div>
