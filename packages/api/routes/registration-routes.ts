@@ -6,11 +6,9 @@
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
-import { auditLogs } from "@shared/schema";
 import {
   validateLegalAcceptanceTimestamp,
   getLegalAcceptanceTimestamp,
@@ -164,11 +162,10 @@ export function registerRegistrationRoutes(app: Express) {
       console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
 
       // Create both audit logs (critical for compliance - must succeed atomically)
-      // If either fails, delete user and all created audit logs to maintain consistency
-      const auditLogIds: string[] = [];
+      // If either fails, delete user to rollback the registration
       try {
         // Audit log for user registration
-        const registrationLog = await storage.createAuditLog({
+        await storage.createAuditLog({
           userId,
           action: 'user_registered',
           resourceType: 'user',
@@ -182,10 +179,9 @@ export function registerRegistrationRoutes(app: Express) {
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
-        auditLogIds.push(registrationLog.id);
 
         // Audit log for legal acceptance
-        const legalLog = await storage.createAuditLog({
+        await storage.createAuditLog({
           userId,
           action: AUDIT_ACTION_LEGAL_ACCEPTED,
           resourceType: 'user',
@@ -198,16 +194,11 @@ export function registerRegistrationRoutes(app: Express) {
           ipAddress: req.ip,
           userAgent: req.get('user-agent')
         });
-        auditLogIds.push(legalLog.id);
       } catch (auditError) {
         console.error('[CRITICAL] Failed to create audit logs:', auditError);
         // For compliance, we must fail the registration if audit logs fail
-        // Clean up user and any audit logs that were created
+        // Delete user to rollback (audit logs will have userId set to null via ON DELETE SET NULL)
         try {
-          // Delete audit logs first (they have ON DELETE SET NULL, not CASCADE)
-          for (const logId of auditLogIds) {
-            await storage.db.delete(auditLogs).where(sql`${auditLogs.id} = ${logId}`);
-          }
           await storage.deleteUser(userId);
         } catch (cleanupError) {
           console.error('[CRITICAL] Failed to cleanup after audit log failure:', cleanupError);
