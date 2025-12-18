@@ -12,6 +12,7 @@ import type {
   OrganizationMetric,
   UpdateOrganizationMetric,
 } from "@shared/schema";
+import { validateFormula, detectCircularDependencies } from "./formula-service";
 
 export interface SiteMetricFilters {
   includeInactive?: boolean;
@@ -170,6 +171,48 @@ export class MetricService extends BaseService {
 
       // Validate input
       const validatedData = updateSiteMetricSchema.parse(metricData);
+
+      // DERIVED METRIC VALIDATION
+      // If metric is being marked as derived, validate formula requirements
+      if (validatedData.isDerived === true) {
+        if (!validatedData.formula || validatedData.formula.trim() === '') {
+          throw new Error("Formula is required for derived metrics");
+        }
+
+        // Get all available metric codes (excluding this one to allow self-updates)
+        const allMetrics = await this.storage.getSiteMetrics({ includeInactive: false });
+        const availableCodes = allMetrics
+          .map(m => m.code)
+          .filter(c => c !== code);
+
+        // Validate formula syntax
+        const formulaValidation = validateFormula(validatedData.formula, availableCodes);
+        if (!formulaValidation.valid) {
+          throw new Error(`Invalid formula: ${formulaValidation.errors.join(', ')}`);
+        }
+
+        // Set dependentMetrics from formula validation if not explicitly provided
+        if (validatedData.dependentMetrics === undefined) {
+          validatedData.dependentMetrics = formulaValidation.referencedMetrics;
+        }
+
+        // Check for circular dependencies
+        // Create a hypothetical metric list with the updated metric
+        const existingMetric = await this.storage.getSiteMetric(code);
+        const hypotheticalMetrics = allMetrics
+          .map(m => m.code === code ? {
+            code: code,
+            dependentMetrics: validatedData.dependentMetrics || []
+          } : {
+            code: m.code,
+            dependentMetrics: m.dependentMetrics || []
+          });
+
+        const circularCheck = detectCircularDependencies(hypotheticalMetrics);
+        if (circularCheck.hasCircular) {
+          throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
+        }
+      }
 
       // Update metric
       const metric = await this.storage.updateSiteMetric(code, validatedData);

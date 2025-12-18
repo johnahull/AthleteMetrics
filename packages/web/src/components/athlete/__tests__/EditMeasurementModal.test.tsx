@@ -32,6 +32,9 @@ const mockMeasurement: Measurement = {
   season: null,
   teamContextAuto: true,
   globalAthleteId: null,
+  isCalculated: false,
+  calculatedFromMeasurementIds: null,
+  calculationMetadata: null,
   createdAt: new Date('2024-01-15'),
 };
 

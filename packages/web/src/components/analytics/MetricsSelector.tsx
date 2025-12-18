@@ -12,21 +12,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { X, TrendingUp } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { MetricSelection, AnalysisType, DynamicMetricConfig } from '@shared/analytics-types';
 import { MetricIndicator } from './MetricIndicator';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 
 // Mutually exclusive metrics - selecting one prevents selecting the other
 // FLY10_TIME and TOP_SPEED measure the same thing (speed), just in different ways
+// Derived metrics are mutually exclusive with their source metrics
 // Using tuple approach to ensure symmetric mappings
 const MUTUALLY_EXCLUSIVE_PAIRS: Array<[string, string]> = [
   ['FLY10_TIME', 'TOP_SPEED'],
 ];
-
-// Generate symmetric mapping from pairs
-const MUTUALLY_EXCLUSIVE_METRICS: Record<string, string> = Object.fromEntries(
-  MUTUALLY_EXCLUSIVE_PAIRS.flatMap(([a, b]) => [[a, b], [b, a]])
-);
 
 interface MetricsSelectorProps {
   metrics: MetricSelection;
@@ -81,6 +83,9 @@ export function MetricsSelector({
       metricType: m.metricType,
       isActive: true, // Already filtered by hook
       isSystemDefault: false, // Not exposed by hook, but not needed for display
+      isDerived: m.isDerived,
+      formula: m.formula,
+      dependentMetrics: m.dependentMetrics,
     }));
   }, [availableMetricsList]);
 
@@ -89,6 +94,41 @@ export function MetricsSelector({
     () => Object.fromEntries(dynamicMetrics.map(m => [m.code, m])),
     [dynamicMetrics]
   );
+
+  // Build mutually exclusive metrics map including derived metrics and their sources
+  const MUTUALLY_EXCLUSIVE_METRICS = useMemo(() => {
+    const exclusions: Record<string, string[]> = {};
+
+    // Add static pairs
+    MUTUALLY_EXCLUSIVE_PAIRS.forEach(([a, b]) => {
+      if (!exclusions[a]) exclusions[a] = [];
+      if (!exclusions[b]) exclusions[b] = [];
+      exclusions[a].push(b);
+      exclusions[b].push(a);
+    });
+
+    // Add derived metrics and their dependencies
+    dynamicMetrics.forEach(metric => {
+      if (metric.isDerived && metric.dependentMetrics) {
+        if (!exclusions[metric.code]) exclusions[metric.code] = [];
+
+        metric.dependentMetrics.forEach(depCode => {
+          // Derived metric excludes its sources
+          if (!exclusions[metric.code].includes(depCode)) {
+            exclusions[metric.code].push(depCode);
+          }
+
+          // Sources exclude the derived metric
+          if (!exclusions[depCode]) exclusions[depCode] = [];
+          if (!exclusions[depCode].includes(metric.code)) {
+            exclusions[depCode].push(metric.code);
+          }
+        });
+      }
+    });
+
+    return exclusions;
+  }, [dynamicMetrics]);
 
   // Memoize multi-group check to avoid recalculating in map loop
   const isMultiGroupMode = analysisType === 'multi_group';
@@ -106,11 +146,11 @@ export function MetricsSelector({
     // Remove from additional if it was there
     let newAdditional = metrics.additional.filter(m => m !== metric);
 
-    // Check for mutually exclusive metric
-    const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
-    if (exclusiveMetric) {
-      // Remove the mutually exclusive metric from additional
-      newAdditional = newAdditional.filter(m => m !== exclusiveMetric);
+    // Check for mutually exclusive metrics
+    const exclusiveMetrics = MUTUALLY_EXCLUSIVE_METRICS[metric] || [];
+    if (exclusiveMetrics.length > 0) {
+      // Remove all mutually exclusive metrics from additional
+      newAdditional = newAdditional.filter(m => !exclusiveMetrics.includes(m));
     }
 
     onMetricsChange({
@@ -127,11 +167,12 @@ export function MetricsSelector({
       }
 
       // Check for mutual exclusion
-      const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
-      if (exclusiveMetric &&
-          (metrics.primary === exclusiveMetric ||
-           metrics.additional.includes(exclusiveMetric))) {
-        // Don't add if mutually exclusive metric is already selected
+      const exclusiveMetrics = MUTUALLY_EXCLUSIVE_METRICS[metric] || [];
+      const hasExclusiveMetric = exclusiveMetrics.some(em =>
+        metrics.primary === em || metrics.additional.includes(em)
+      );
+      if (hasExclusiveMetric) {
+        // Don't add if any mutually exclusive metric is already selected
         return;
       }
 
@@ -184,13 +225,18 @@ export function MetricsSelector({
                 const count = metricsAvailability[metric] || 0;
                 const hasData = count > 0;
 
-                return (
+                const selectItem = (
                   <SelectItem key={metric} value={metric} disabled={!hasData}>
                     <div className="flex flex-col">
-                      <span className={!hasData ? 'text-muted-foreground' : ''}>
-                        {config?.label || metric}
-                        {!hasData && <span className="text-xs ml-1">(no data)</span>}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={!hasData ? 'text-muted-foreground' : ''}>
+                          {config?.label || metric}
+                          {!hasData && <span className="text-xs ml-1">(no data)</span>}
+                        </span>
+                        {config?.isDerived && (
+                          <Badge variant="outline" className="text-xs py-0 px-1">fx</Badge>
+                        )}
+                      </div>
                       <span className="text-xs text-muted-foreground flex items-center gap-2">
                         <span>
                           {config?.unit} • {config?.metricType === 'tracking' ? 'Tracking' : config?.metricType === 'lower_is_better' ? 'Lower is better' : 'Higher is better'}
@@ -200,6 +246,27 @@ export function MetricsSelector({
                     </div>
                   </SelectItem>
                 );
+
+                // Wrap derived metrics in a tooltip
+                if (config?.isDerived && config?.formula && config?.dependentMetrics) {
+                  return (
+                    <TooltipProvider key={metric}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          {selectItem}
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="text-xs">
+                            <div>Formula: {config.formula}</div>
+                            <div>Depends on: {config.dependentMetrics.map(m => metricConfigMap[m]?.label || m).join(', ')}</div>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  );
+                }
+
+                return selectItem;
               })}
             </SelectContent>
           </Select>
@@ -268,10 +335,11 @@ export function MetricsSelector({
                 const hasData = count > 0;
 
                 // Check if this metric is mutually exclusive with a selected metric
-                const exclusiveMetric = MUTUALLY_EXCLUSIVE_METRICS[metric];
-                const isExcluded = !!(exclusiveMetric &&
-                  (metrics.primary === exclusiveMetric ||
-                   metrics.additional.includes(exclusiveMetric)));
+                const exclusiveMetrics = MUTUALLY_EXCLUSIVE_METRICS[metric] || [];
+                const conflictingMetric = exclusiveMetrics.find(em =>
+                  metrics.primary === em || metrics.additional.includes(em)
+                );
+                const isExcluded = !!conflictingMetric;
 
                 const isDisabled = !hasData ||
                                    metrics.additional.length >= maxAdditional ||
@@ -294,7 +362,7 @@ export function MetricsSelector({
                       className={`text-xs leading-tight cursor-pointer flex flex-col gap-0.5 ${
                         !hasData || isExcluded ? 'text-muted-foreground' : ''
                       }`}
-                      title={isExcluded ? `Cannot select with ${metricConfigMap[exclusiveMetric]?.label}` : !hasData ? 'No data available' : undefined}
+                      title={isExcluded && conflictingMetric ? `Cannot select with ${metricConfigMap[conflictingMetric]?.label}` : !hasData ? 'No data available' : undefined}
                     >
                       <span>
                         {config?.label || metric}

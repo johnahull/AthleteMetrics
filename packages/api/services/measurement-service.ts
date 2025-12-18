@@ -20,6 +20,7 @@ import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
+import { DerivedMetricCalculator } from './derived-metric-calculator';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -264,6 +265,11 @@ export class MeasurementService {
           isVerified,
         })
         .returning();
+
+      // DERIVED METRICS: Trigger automatic calculation of derived metrics
+      // This runs after the measurement is created and committed
+      const calculator = new DerivedMetricCalculator(db);
+      await calculator.processNewMeasurement(newMeasurement);
 
       return newMeasurement;
       });
@@ -515,6 +521,17 @@ export class MeasurementService {
           .where(eq(measurements.id, id))
           .returning();
 
+        // DERIVED METRICS: Trigger recalculation if value or date changed
+        // This ensures derived metrics stay synchronized with source changes
+        if (updateData.value !== undefined || updateData.date !== undefined) {
+          const calculator = new DerivedMetricCalculator(db);
+          await calculator.recalculateForAthlete(
+            updated.userId,
+            updated.metric,
+            updated.date
+          );
+        }
+
         return updated;
       });
     } catch (error) {
@@ -564,8 +581,16 @@ export class MeasurementService {
           throw new Error('Access denied - measurement belongs to different organization');
         }
 
+        // Store info for derived metric recalculation before deleting
+        const { userId, metric, date } = existing;
+
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
+
+        // DERIVED METRICS: Trigger recalculation after deletion
+        // This ensures derived metrics are updated when source measurements are removed
+        const calculator = new DerivedMetricCalculator(db);
+        await calculator.recalculateForAthlete(userId, metric, date);
       });
     } catch (error) {
       // Preserve error specificity
@@ -1031,6 +1056,10 @@ export class MeasurementService {
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
         globalAthleteId: measurements.globalAthleteId,
+        // Derived/calculated measurement fields
+        isCalculated: measurements.isCalculated,
+        calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+        calculationMetadata: measurements.calculationMetadata,
         // User data (athlete)
         user: sql<{
           id: string;

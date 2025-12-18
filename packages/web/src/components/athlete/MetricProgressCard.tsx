@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -24,6 +24,7 @@ import {
 } from '@/utils/metric-trend-utils';
 import { MetricContextTooltip } from './MetricContextTooltip';
 import { isLowerBetter } from '@/constants/metrics';
+import { getMetricDisplayName } from '@/lib/metrics';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -50,6 +51,8 @@ interface MetricProgressCardProps {
   units: string;
   personalRecord?: PersonalRecord | null;
   showConfetti?: boolean;
+  isDerived?: boolean;
+  dependentMetrics?: string[];
 }
 
 /**
@@ -86,6 +89,8 @@ export function MetricProgressCard({
   units,
   personalRecord,
   showConfetti = true,
+  isDerived = false,
+  dependentMetrics = [],
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
 
@@ -205,7 +210,12 @@ export function MetricProgressCard({
     >
       <CardHeader className="pb-2">
         <CardTitle className="text-lg flex items-center justify-between">
-          <span>{displayName}</span>
+          <div className="flex items-center gap-2">
+            <span>{displayName}</span>
+            {isDerived && (
+              <Badge variant="outline" className="text-xs">fx</Badge>
+            )}
+          </div>
           {trendData && (
             <Badge
               data-testid="trend-badge"
@@ -303,6 +313,11 @@ export function MetricProgressCard({
           </p>
         )}
       </CardContent>
+      {isDerived && dependentMetrics.length > 0 && (
+        <CardFooter className="pt-2 pb-3 text-xs text-muted-foreground border-t">
+          Calculated from: {dependentMetrics.map(m => getMetricDisplayName(m)).join(', ')}
+        </CardFooter>
+      )}
     </Card>
   );
 }

@@ -183,6 +183,16 @@ export const siteMetrics = pgTable("site_metrics", {
   // Display settings
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
   icon: varchar("icon", { length: 50 }), // Icon identifier
+  // Derived metrics configuration
+  isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
+  formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
+  dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
+  calculationConfig: jsonb("calculation_config").$type<{
+    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+    maxDateDifference?: number;
+    missingSourceBehavior: 'skip' | 'error';
+    constants?: Record<string, number>;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -397,6 +407,14 @@ export const measurements = pgTable("measurements", {
   teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
   // Global athlete linking for cross-org aggregation
   globalAthleteId: varchar("global_athlete_id"), // Historical reference (no FK - allows orphaned data)
+  // Derived/calculated measurement fields
+  isCalculated: boolean("is_calculated").default(false).notNull(), // Whether this measurement was auto-calculated
+  calculatedFromMeasurementIds: text("calculated_from_measurement_ids").array(), // Source measurement IDs used in calculation
+  calculationMetadata: jsonb("calculation_metadata").$type<{
+    formula: string;
+    sourceValues: Record<string, number>;
+    calculatedAt: string;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
@@ -1602,6 +1620,15 @@ export const updateSiteMetricSchema = z.object({
   decimalPrecision: z.number().int().min(0).max(10).optional(),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().optional(),
+  formula: z.string().optional(),
+  dependentMetrics: z.array(z.string()).nullable().optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).nullable().optional(),
 });
 
 export const insertOrganizationMetricSchema = createInsertSchema(organizationMetrics).omit({

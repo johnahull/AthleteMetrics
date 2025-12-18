@@ -144,6 +144,9 @@ describe('My Measurements Page', () => {
         season: null,
         teamContextAuto: false,
         globalAthleteId: null,
+        isCalculated: false,
+        calculatedFromMeasurementIds: null,
+        calculationMetadata: null,
         createdAt: new Date('2024-01-15'),
       },
       {
@@ -165,6 +168,9 @@ describe('My Measurements Page', () => {
         season: null,
         teamContextAuto: false,
         globalAthleteId: null,
+        isCalculated: false,
+        calculatedFromMeasurementIds: null,
+        calculationMetadata: null,
         createdAt: new Date('2024-01-14'),
       },
       {
@@ -186,6 +192,9 @@ describe('My Measurements Page', () => {
         season: null,
         teamContextAuto: false,
         globalAthleteId: null,
+        isCalculated: false,
+        calculatedFromMeasurementIds: null,
+        calculationMetadata: null,
         createdAt: new Date('2024-01-10'),
       },
     ];

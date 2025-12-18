@@ -12,7 +12,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, insertAthleteSchema, Gender, type InsertMeasurement, type InsertAthlete, type Team } from "@shared/schema";
-import { Save } from "lucide-react";
+import { Save, Calculator, AlertCircle } from "lucide-react";
 import { useMeasurementForm, type Athlete, type ActiveTeam } from "@/hooks/use-measurement-form";
 import { AthleteSelector } from "@/components/ui/athlete-selector";
 import { useAuth } from "@/lib/auth";
@@ -42,6 +42,7 @@ function hasBirthYearProperty(athlete: any): athlete is Athlete & { birthYear: n
 export default function MeasurementForm() {
   const labels = useContextualLabels();
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [overrideCalculated, setOverrideCalculated] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { user, organizationContext, userOrganizations } = useAuth();
@@ -127,6 +128,7 @@ export default function MeasurementForm() {
       });
       setSelectedAthlete(null);
       resetTeamState();
+      setOverrideCalculated(false);
     },
     onError: (error) => {
       console.error("Measurement creation error:", error);
@@ -173,6 +175,32 @@ export default function MeasurementForm() {
   const date = form.watch("date");
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
+  const selectedMetric = availableMetrics.find(m => m.code === metric);
+
+  // Query for calculation preview for derived metrics
+  const { data: calculationPreview } = useQuery({
+    queryKey: ['calculation-preview', selectedAthlete?.id, metric, date],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        athleteId: selectedAthlete!.id,
+        metricCode: metric,
+        date: date,
+      });
+      const res = await fetch(`/api/measurements/calculate-preview?${params.toString()}`);
+      if (!res.ok) {
+        throw new Error('Failed to fetch calculation preview');
+      }
+      return res.json() as Promise<{
+        calculatedValue: number | null;
+        sourceMetrics: Array<{ code: string; label: string; value: number; unit: string; measurementId: string }>;
+        sourceMeasurementIds?: string[];
+        missingMetrics?: string[];
+        formula: string | null;
+      }>;
+    },
+    enabled: !!selectedAthlete?.id && !!selectedMetric?.isDerived && !!date,
+    staleTime: 0, // Always refetch for real-time preview
+  });
 
   // Watch for date changes and refetch active teams
   useEffect(() => {
@@ -180,6 +208,11 @@ export default function MeasurementForm() {
       fetchActiveTeams(selectedAthlete.id, date);
     }
   }, [date, selectedAthlete, fetchActiveTeams]);
+
+  // Reset override when metric changes
+  useEffect(() => {
+    setOverrideCalculated(false);
+  }, [metric]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -196,11 +229,29 @@ export default function MeasurementForm() {
       return;
     }
 
-    // Ensure userId is set to the selected athlete
-    const measurementData = {
+    // Prepare measurement data
+    let measurementData: any = {
       ...data,
       userId: selectedAthlete.id,
     };
+
+    // For derived metrics without override, use calculated value and add metadata
+    if (selectedMetric?.isDerived && !overrideCalculated && calculationPreview?.calculatedValue !== null && calculationPreview !== undefined) {
+      measurementData = {
+        ...measurementData,
+        value: calculationPreview.calculatedValue,
+        isCalculated: true,
+        calculatedFromMeasurementIds: calculationPreview.sourceMeasurementIds || [],
+        calculationMetadata: {
+          formula: calculationPreview.formula || '',
+          sourceValues: (calculationPreview.sourceMetrics || []).reduce((acc, sm) => {
+            acc[sm.code.toLowerCase()] = sm.value;
+            return acc;
+          }, {} as Record<string, number>),
+          calculatedAt: new Date().toISOString(),
+        },
+      };
+    }
 
     console.log("Submitting measurement data:", measurementData);
     createMeasurementMutation.mutate(measurementData);
@@ -223,6 +274,7 @@ export default function MeasurementForm() {
     });
     setSelectedAthlete(null);
     resetTeamState();
+    setOverrideCalculated(false);
   };
 
   return (
@@ -327,41 +379,106 @@ export default function MeasurementForm() {
               </FormItem>
             )}
           />
+        </div>
 
-          {/* Value */}
-          <FormField
-            control={form.control}
-            name="value"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>
-                  Value <span className="text-red-500">*</span>
-                </FormLabel>
-                <div className="flex">
-                  <FormControl>
-                    <Input
-                      {...field}
-                      type="number"
-                      step="0.01"
-                      placeholder="Enter value"
-                      disabled={createMeasurementMutation.isPending}
-                      className={units ? "rounded-r-none" : ""}
-                      data-testid="measurement-value"
-                      onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                      value={field.value || ''}
-                    />
-                  </FormControl>
-                  {units && (
-                    <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                      {units}
-                    </div>
-                  )}
+        {/* Derived Metric Calculation Preview */}
+        {selectedMetric?.isDerived && selectedAthlete && date && (
+          <div className="grid grid-cols-1">
+            {calculationPreview?.calculatedValue !== null && calculationPreview?.calculatedValue !== undefined ? (
+              <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Calculator className="h-4 w-4 text-blue-600" />
+                  <span className="text-sm font-medium text-blue-800 dark:text-blue-200">
+                    This is a derived metric
+                  </span>
                 </div>
-                <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
-                <FormMessage />
-              </FormItem>
+                <p className="text-sm text-blue-700 dark:text-blue-300">
+                  Calculated value: <strong>{calculationPreview.calculatedValue.toFixed(3)} {selectedMetric.unit}</strong>
+                </p>
+                {calculationPreview.sourceMetrics && calculationPreview.sourceMetrics.length > 0 && (
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    Based on: {calculationPreview.sourceMetrics.map(m => `${m.label}: ${m.value} ${m.unit}`).join(', ')}
+                  </p>
+                )}
+                <div className="flex items-center gap-2 mt-3">
+                  <Checkbox
+                    id="override-calculated"
+                    checked={overrideCalculated}
+                    onCheckedChange={(checked) => setOverrideCalculated(checked === true)}
+                  />
+                  <label htmlFor="override-calculated" className="text-sm text-blue-700 dark:text-blue-300 cursor-pointer">
+                    Override with direct measurement
+                  </label>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                  <span className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                    Cannot calculate - missing source data
+                  </span>
+                </div>
+                {calculationPreview?.missingMetrics && calculationPreview.missingMetrics.length > 0 && (
+                  <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                    This metric requires: {calculationPreview.missingMetrics.join(', ')}
+                  </p>
+                )}
+                <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-2">
+                  You can enter a directly measured value instead.
+                </p>
+                <div className="flex items-center gap-2 mt-3">
+                  <Checkbox
+                    id="enter-direct"
+                    checked={overrideCalculated}
+                    onCheckedChange={(checked) => setOverrideCalculated(checked === true)}
+                  />
+                  <label htmlFor="enter-direct" className="text-sm text-yellow-700 dark:text-yellow-300 cursor-pointer">
+                    Enter direct measurement
+                  </label>
+                </div>
+              </div>
             )}
-          />
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Value - Only show if not a derived metric OR if override is checked */}
+          {(!selectedMetric?.isDerived || overrideCalculated || calculationPreview?.calculatedValue === null) && (
+            <FormField
+              control={form.control}
+              name="value"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>
+                    Value <span className="text-red-500">*</span>
+                  </FormLabel>
+                  <div className="flex">
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="number"
+                        step="0.01"
+                        placeholder="Enter value"
+                        disabled={createMeasurementMutation.isPending}
+                        className={units ? "rounded-r-none" : ""}
+                        data-testid="measurement-value"
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    {units && (
+                      <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
+                        {units}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           {/* Fly-In Distance (only for FLY10_TIME) */}
           {metric === "FLY10_TIME" && (

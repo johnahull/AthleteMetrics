@@ -20,6 +20,19 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { Plus, Edit, Trash2, Power, PowerOff } from "lucide-react";
@@ -40,6 +53,7 @@ export default function MetricsManagementPage() {
   const [toggleDialogOpen, setToggleDialogOpen] = useState(false);
   const [formDialogOpen, setFormDialogOpen] = useState(false);
   const [metricToEdit, setMetricToEdit] = useState<SiteMetric | null>(null);
+  const [derivedFilter, setDerivedFilter] = useState<'all' | 'derived' | 'source'>('all');
 
   // Redirect if not site admin
   if (!user?.isSiteAdmin) {
@@ -57,10 +71,24 @@ export default function MetricsManagementPage() {
     );
   }
 
-  const { data: metrics, isLoading } = useSiteMetrics(true); // Include inactive
+  const { data: allMetrics, isLoading } = useSiteMetrics(true); // Include inactive
   const { data: sports } = useSports();
   const deleteMetricMutation = useDeleteSiteMetric();
   const toggleStatusMutation = useToggleSiteMetricStatus();
+
+  // Apply derived filter
+  const metrics = useMemo(() => {
+    if (!allMetrics) return [];
+
+    switch (derivedFilter) {
+      case 'derived':
+        return allMetrics.filter(m => m.isDerived);
+      case 'source':
+        return allMetrics.filter(m => !m.isDerived);
+      default:
+        return allMetrics;
+    }
+  }, [allMetrics, derivedFilter]);
 
   // Memoized sport name lookup map for performance
   const sportNameMap = useMemo(() => {
@@ -153,16 +181,28 @@ export default function MetricsManagementPage() {
             Manage the catalog of available metrics for all organizations
           </p>
         </div>
-        <Button
-          data-testid="add-metric-button"
-          onClick={() => {
-            setMetricToEdit(null);
-            setFormDialogOpen(true);
-          }}
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Metric
-        </Button>
+        <div className="flex gap-3 items-center">
+          <Select value={derivedFilter} onValueChange={(value) => setDerivedFilter(value as 'all' | 'derived' | 'source')}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Metrics</SelectItem>
+              <SelectItem value="derived">Derived Only</SelectItem>
+              <SelectItem value="source">Source Only</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            data-testid="add-metric-button"
+            onClick={() => {
+              setMetricToEdit(null);
+              setFormDialogOpen(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Metric
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -194,7 +234,28 @@ export default function MetricsManagementPage() {
                 {metrics.map((metric) => (
                   <TableRow key={metric.code} data-testid={`metric-row-${metric.code}`}>
                     <TableCell className="font-mono text-sm">{metric.code}</TableCell>
-                    <TableCell className="font-medium">{metric.label}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {metric.label}
+                        {metric.isDerived && (
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Badge variant="outline" className="text-xs cursor-help">
+                                  fx
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-sm font-mono">{metric.formula}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Depends on: {metric.dependentMetrics?.join(', ')}
+                                </p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {metric.category && (
                         <Badge variant="outline">{metric.category}</Badge>
