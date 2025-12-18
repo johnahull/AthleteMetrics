@@ -6,6 +6,7 @@
  */
 
 import { storage } from '../storage';
+import { isIP } from 'net';
 
 /**
  * Sanitize a string field to prevent log injection attacks.
@@ -23,7 +24,7 @@ function sanitizeLogField(value: string | undefined): string | undefined {
 
 /**
  * Normalize an IP address to a consistent format.
- * Handles IPv6-mapped IPv4 addresses and validates IP format.
+ * Handles IPv6-mapped IPv4 addresses and validates IP format using Node.js built-in isIP().
  * Returns '0.0.0.0' for invalid or missing IPs to prevent log corruption.
  *
  * @param ip IP address to normalize
@@ -33,14 +34,16 @@ function normalizeIpAddress(ip: string | undefined): string {
   if (!ip) return '0.0.0.0';
 
   // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.1 -> 192.168.1.1)
-  const ipv4Mapped = ip.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/);
-  if (ipv4Mapped) return ipv4Mapped[1];
+  const ipv4Mapped = ip.match(/::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+  if (ipv4Mapped) {
+    const extractedIp = ipv4Mapped[1];
+    // Validate extracted IPv4 using isIP()
+    if (isIP(extractedIp)) return extractedIp;
+  }
 
-  // Basic validation for IPv4 and IPv6 formats
-  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
-  const ipv6Regex = /^([0-9a-fA-F]{0,4}:){7}[0-9a-fA-F]{0,4}$/;
-
-  if (ipv4Regex.test(ip) || ipv6Regex.test(ip)) return ip;
+  // Validate IPv4 and IPv6 formats using Node.js built-in isIP()
+  // isIP() returns 4 for IPv4, 6 for IPv6, 0 for invalid
+  if (isIP(ip)) return ip;
 
   console.warn('[security:audit] Invalid IP format:', ip);
   return '0.0.0.0';
@@ -107,7 +110,7 @@ export function logAuthorizationFailure(
     userId: userId ?? null,
     severity: 'warning',
     eventData: JSON.stringify(eventData),
-    ipAddress: normalizeIpAddress(context.ipAddress), // Required field, normalized and validated
+    ipAddress: normalizeIpAddress(sanitizeLogField(context.ipAddress)), // Sanitize before normalization
     userAgent: sanitizeLogField(context.userAgent) ?? null,
   }).catch(err => {
     // Log error to console but don't propagate
