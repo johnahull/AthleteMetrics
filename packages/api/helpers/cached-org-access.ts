@@ -44,7 +44,7 @@ export async function getCachedUserOrganizations(
 
   // Check if cache exists and has the result
   if (req.cache?.has(cacheKey)) {
-    return req.cache.get(cacheKey);
+    return req.cache.get(cacheKey) as UserOrganizationWithOrg[];
   }
 
   // Cache miss - fetch from storage

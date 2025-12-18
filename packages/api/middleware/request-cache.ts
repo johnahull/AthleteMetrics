@@ -23,7 +23,7 @@ export function requestCacheMiddleware(
   next: NextFunction
 ): void {
   // Attach empty cache Map to request
-  req.cache = new Map<string, any>();
+  req.cache = new Map<string, unknown>();
 
   // Continue to next middleware
   next();

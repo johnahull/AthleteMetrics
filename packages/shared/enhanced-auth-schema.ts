@@ -45,7 +45,7 @@ export const loginSessions = pgTable("login_sessions", {
 // Security events log
 export const securityEvents = pgTable("security_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   eventType: text("event_type").notNull(), // 'login_success', 'login_failed', 'password_changed', etc.
   eventData: text("event_data"), // JSON string with additional data
   ipAddress: text("ip_address").notNull(),

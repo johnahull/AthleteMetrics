@@ -87,7 +87,7 @@ declare global {
        * Request-scoped cache for storing data during a single request lifecycle
        * Attached by requestCacheMiddleware
        */
-      cache?: Map<string, any>;
+      cache?: Map<string, unknown>;
     }
   }
 }
