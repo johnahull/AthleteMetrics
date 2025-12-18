@@ -119,7 +119,7 @@ describe('logAuthorizationFailure', () => {
         action: 'delete',
         resource: 'measurement',
       }),
-      ipAddress: 'unknown', // undefined is converted to 'unknown' placeholder
+      ipAddress: '0.0.0.0', // undefined is converted to '0.0.0.0' by normalizeIpAddress()
       userAgent: null, // undefined is converted to null
     });
   });
