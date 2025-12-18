@@ -28,6 +28,7 @@ import { registerMembershipRequestRoutes } from "./membership-request-routes";
 import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
+import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
 
@@ -115,6 +116,9 @@ export function registerAllRoutes(app: Express) {
 
   // Admin utility routes (data cleanup, testing)
   registerAdminUtilityRoutes(app);
+
+  // Admin security routes (security metrics, monitoring)
+  registerAdminSecurityRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

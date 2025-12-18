@@ -6,10 +6,15 @@
  *
  * SECURITY: Session data (primaryOrganizationId) can be stale or manipulated.
  * Always validate organization access against the database.
+ *
+ * PERFORMANCE: Supports request-scoped caching when Express Request is provided.
+ * Pass req parameter to enable caching and reduce redundant DB queries.
  */
 
 import { storage } from "../storage";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { getCachedUserOrganizations } from "./cached-org-access";
+import type { Request } from "express";
 
 export interface OrgAccessResult {
   allowed: boolean;
@@ -23,16 +28,20 @@ export interface OrgAccessResult {
  *
  * @param user - The session user object
  * @param requestedOrgId - The organization ID being requested (optional)
+ * @param req - Express Request object (optional, enables caching)
  * @returns OrgAccessResult with allowed status, effective org ID, or error
  *
  * Security Logic:
  * 1. Site admins have access to all organizations
  * 2. Regular users must have actual database membership to access an org
  * 3. If no org specified, defaults to user's first org from database
+ *
+ * Performance: Pass req parameter to use request-scoped caching
  */
 export async function validateOrganizationAccess(
   user: SessionUser | undefined,
-  requestedOrgId: string | undefined
+  requestedOrgId: string | undefined,
+  req?: Request
 ): Promise<OrgAccessResult> {
   // No user = no access
   if (!user?.id) {
@@ -47,8 +56,10 @@ export async function validateOrganizationAccess(
     };
   }
 
-  // Fetch actual organization memberships from database
-  const userOrgs = await storage.getUserOrganizations(user.id);
+  // Fetch actual organization memberships from database (with caching if req provided)
+  const userOrgs = req
+    ? await getCachedUserOrganizations(req, user.id)
+    : await storage.getUserOrganizations(user.id);
 
   // Users with no org memberships have no access
   if (userOrgs.length === 0) {
@@ -89,14 +100,22 @@ export async function validateOrganizationAccess(
 /**
  * Check if user has access to a specific organization (boolean result)
  * Use this for simple access checks where you already have an org ID.
+ *
+ * @param user - The session user object
+ * @param organizationId - The organization ID to check access for
+ * @param req - Express Request object (optional, enables caching)
+ * @returns True if user has access, false otherwise
  */
 export async function hasOrganizationAccess(
   user: SessionUser | undefined,
-  organizationId: string
+  organizationId: string,
+  req?: Request
 ): Promise<boolean> {
   if (!user?.id) return false;
   if (isSiteAdmin(user)) return true;
 
-  const userOrgs = await storage.getUserOrganizations(user.id);
+  const userOrgs = req
+    ? await getCachedUserOrganizations(req, user.id)
+    : await storage.getUserOrganizations(user.id);
   return userOrgs.some(org => org.organizationId === organizationId);
 }

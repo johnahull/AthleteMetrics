@@ -24,6 +24,7 @@ import {
   type OrganizationType,
   type InsertOAuthUser
 } from "@shared/schema";
+import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
@@ -255,7 +256,7 @@ export interface IStorage {
   revokeLoginSession(token: string): Promise<void>;
   revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number>;
   updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
-  createSecurityEvent(event: any): Promise<void>;
+  createSecurityEvent(event: Omit<SecurityEvent, 'id' | 'createdAt'>): Promise<void>;
   getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
   getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]>;
   getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]>;
@@ -3607,9 +3608,8 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async createSecurityEvent(event: any): Promise<void> {
-    // Would need securityEvents table implementation
-    console.log('Creating security event:', event.eventType);
+  async createSecurityEvent(event: Omit<SecurityEvent, 'id' | 'createdAt'>): Promise<void> {
+    await db.insert(securityEvents).values(event);
   }
 
   async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {

@@ -25,6 +25,8 @@ import { ZodError } from "zod";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
+import { getCachedUserOrganizations } from "../helpers/cached-org-access";
+import { logAuthorizationFailure } from "../helpers/audit-logging";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -79,7 +81,7 @@ export function registerAthleteRoutes(app: Express) {
       const userIsSiteAdmin = isSiteAdmin(currentUser);
       if (!userIsSiteAdmin) {
         // Non-site-admin users can only access their own organization
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
         const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
 
         if (!hasOrgAccess) {
@@ -132,9 +134,18 @@ export function registerAthleteRoutes(app: Express) {
       // SECURITY: Validate user has access to requested organization
       if (validatedParams.organizationId) {
         if (user && !isSiteAdmin(user)) {
-          const userOrgs = await storage.getUserOrganizations(user.id);
+          const userOrgs = await getCachedUserOrganizations(req, user.id);
           const hasAccess = userOrgs.some(org => org.organizationId === validatedParams.organizationId);
           if (!hasAccess) {
+            // Audit log: User attempted to access org they don't belong to
+            logAuthorizationFailure(user.id, 'read', 'athletes', {
+              attemptedOrgId: validatedParams.organizationId,
+              userOrgIds: userOrgs.map(org => org.organizationId),
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+              route: req.path,
+              method: req.method,
+            });
             return res.status(403).json({
               message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED)
             });
@@ -143,7 +154,7 @@ export function registerAthleteRoutes(app: Express) {
         filters.organizationId = validatedParams.organizationId;
       } else if (user && !isSiteAdmin(user)) {
         // SECURITY: For non-admin users, ALWAYS require org context from actual membership
-        const userOrgs = await storage.getUserOrganizations(user.id);
+        const userOrgs = await getCachedUserOrganizations(req, user.id);
         if (userOrgs.length === 0) {
           return res.status(403).json({
             message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP)
@@ -227,13 +238,13 @@ export function registerAthleteRoutes(app: Express) {
       } else if (!userIsSiteAdmin) {
         // Coaches and org admins can only view athletes from their organization
         // Check if user has access to the same organization as the athlete
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
         if (userOrgs.length === 0) {
           return res.status(403).json({ message: "Access denied - no organization access" });
         }
 
         // Get the athlete's organization assignments (primary check)
-        const athleteOrgs = await storage.getUserOrganizations(athleteId);
+        const athleteOrgs = await getCachedUserOrganizations(req, athleteId);
 
         // Also check athlete's teams for backward compatibility
         const athleteTeams = await storage.getUserTeams(athleteId);
@@ -253,6 +264,15 @@ export function registerAthleteRoutes(app: Express) {
 
         const hasOrganizationAccess = allAthleteOrgIds.some(orgId => userOrgIds.includes(orgId));
         if (!hasOrganizationAccess) {
+          // Audit log: User attempted to access athlete from different org
+          logAuthorizationFailure(currentUser.id, 'read', 'athlete', {
+            attemptedOrgId: allAthleteOrgIds[0], // First org of the athlete
+            userOrgIds: userOrgIds,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            route: req.path,
+            method: req.method,
+          });
           return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
         }
       }
@@ -306,7 +326,7 @@ export function registerAthleteRoutes(app: Express) {
       const validatedData = insertAthleteSchema.parse(req.body);
 
       // Get the user's organization context to assign the athlete
-      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
 
       if (!isSiteAdmin(currentUser) && userOrgs.length === 0) {
         return res.status(403).json({ message: "No organization context found. Athletes must belong to an organization." });
@@ -448,7 +468,7 @@ export function registerAthleteRoutes(app: Express) {
       // PERFORMANCE FIX: Batch permission checks upfront to avoid N+1 queries
       if (!userIsSiteAdmin) {
         // Get user's organizations once
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
         const userOrgIds = userOrgs.map(org => org.organizationId);
 
         // Batch fetch all athletes and their organization memberships
@@ -551,10 +571,19 @@ export function registerAthleteRoutes(app: Express) {
 
       // Verify user has permission for the organization
       if (!userIsSiteAdmin) {
-        const userOrgs = await storage.getUserOrganizations(currentUser.id);
+        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
         const hasOrgAccess = userOrgs.some(org => org.organizationId === organizationId);
 
         if (!hasOrgAccess) {
+          // Audit log: User attempted to invite athletes to different org
+          logAuthorizationFailure(currentUser.id, 'invite', 'athletes', {
+            attemptedOrgId: organizationId,
+            userOrgIds: userOrgs.map(org => org.organizationId),
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            route: req.path,
+            method: req.method,
+          });
           return res.status(403).json({ message: "You don't have permission to invite athletes to this organization" });
         }
       }
@@ -569,7 +598,7 @@ export function registerAthleteRoutes(app: Express) {
           try {
             const [athlete, athleteOrgs, athleteTeams] = await Promise.all([
               storage.getAthlete(athleteId),
-              storage.getUserOrganizations(athleteId),
+              getCachedUserOrganizations(req, athleteId),
               storage.getUserTeams(athleteId)
             ]);
 
