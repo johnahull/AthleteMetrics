@@ -27,13 +27,14 @@ export function requestCacheMiddleware(
 
   // CRITICAL: Clean up cache when response finishes to prevent memory leaks
   // If request objects persist in closures or event handlers, cache would leak
-  res.on('finish', () => {
+  // Using 'once' instead of 'on' to prevent duplicate cleanup if both events fire
+  res.once('finish', () => {
     req.cache?.clear();
     req.cache = undefined;
   });
 
   // Also clean up on errors or premature close
-  res.on('close', () => {
+  res.once('close', () => {
     req.cache?.clear();
     req.cache = undefined;
   });

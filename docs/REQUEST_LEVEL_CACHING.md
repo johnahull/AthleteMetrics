@@ -34,7 +34,7 @@ Implemented a **request-scoped cache** using an Express middleware that attaches
 3. **Cached Wrapper** (`packages/api/helpers/cached-org-access.ts`)
    - `getCachedUserOrganizations(req, userId)` function
    - Checks cache first, falls back to database on miss
-   - Cache key format: `userOrgs:${userId}`
+   - Cache key format: `auth:userOrgs:${userId}` (namespaced to prevent collisions)
 
 4. **Helper Updates** (`packages/api/helpers/org-access.ts`)
    - Updated `validateOrganizationAccess()` to accept optional `req` parameter

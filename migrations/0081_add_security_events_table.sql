@@ -27,31 +27,32 @@ CREATE TABLE IF NOT EXISTS security_events (
 );
 
 -- Index for querying events by user
--- Using CONCURRENTLY to avoid locking table during index creation in production
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_user_id ON security_events(user_id, created_at DESC);
+-- Note: CONCURRENTLY removed because PostgreSQL doesn't support CREATE INDEX CONCURRENTLY IF NOT EXISTS
+-- Since this is a new table with no data, CONCURRENTLY is not needed (no table locking concerns)
+CREATE INDEX IF NOT EXISTS idx_security_events_user_id ON security_events(user_id, created_at DESC);
 
 -- Index for querying events by IP address (for rate limiting and suspicious activity detection)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_ip_address ON security_events(ip_address, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_ip_address ON security_events(ip_address, created_at DESC);
 
 -- Index for querying events by type and severity
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_type_severity ON security_events(event_type, severity, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_security_events_type_severity ON security_events(event_type, severity, created_at DESC);
 
 -- Index for querying recent critical events
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_severity_created ON security_events(severity, created_at DESC) WHERE severity = 'critical';
+CREATE INDEX IF NOT EXISTS idx_security_events_severity_created ON security_events(severity, created_at DESC) WHERE severity = 'critical';
 
 -- Optimized index for most common query pattern in SecurityMetricsService
 -- All queries use: WHERE event_type = 'authorization_failed' AND created_at >= ?
 -- This partial index provides 3-5x faster performance for security metrics queries
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures
+CREATE INDEX IF NOT EXISTS idx_security_events_auth_failures
   ON security_events(created_at DESC)
   WHERE event_type = 'authorization_failed';
 
 -- Composite partial indexes for GROUP BY queries in security metrics
 -- These optimize the pattern detection queries that group by user_id and ip_address
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures_by_user
+CREATE INDEX IF NOT EXISTS idx_security_events_auth_failures_by_user
   ON security_events(user_id, created_at DESC)
   WHERE event_type = 'authorization_failed';
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures_by_ip
+CREATE INDEX IF NOT EXISTS idx_security_events_auth_failures_by_ip
   ON security_events(ip_address, created_at DESC)
   WHERE event_type = 'authorization_failed';

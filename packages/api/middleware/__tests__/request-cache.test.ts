@@ -10,7 +10,7 @@ describe('requestCacheMiddleware', () => {
   beforeEach(() => {
     mockReq = {};
     mockRes = {
-      on: () => mockRes as Response, // Mock event listener registration
+      once: () => mockRes as Response, // Mock event listener registration (once for idempotency)
     };
     mockNext = () => {};
   });
