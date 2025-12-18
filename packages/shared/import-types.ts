@@ -334,7 +334,8 @@ export interface TemplateWizardResponse {
   csvContent: string;
   headers: string[];
   teams: WizardTeamInfo[];
-  enabledMetrics: WizardMetricInfo[];
+  /** Only present for measurement templates */
+  enabledMetrics?: WizardMetricInfo[];
   exampleRows: Record<string, string>[];
 }
 

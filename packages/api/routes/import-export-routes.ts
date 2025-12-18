@@ -15,7 +15,7 @@ import { reviewQueue } from "../review-queue";
 import { findBestAthleteMatch, type MatchingCriteria, type MatchResult } from "../athlete-matching";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { METRIC_CONFIG } from "@shared/analytics-types";
-import type { ImportResult } from "@shared/import-types";
+import { COMMON_METRICS, type ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
 import { templateGeneratorService } from "../services/template-generator-service";
@@ -1601,21 +1601,64 @@ export function registerImportExportRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid type. Must be 'athletes' or 'measurements'" });
       }
 
-      // Validate teamIds
+      // Validate teamIds - array check and size limits
+      const MAX_TEAM_SELECTION = 50;
       if (!teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
         return res.status(400).json({ message: "At least one team is required" });
       }
-
-      // Get teams
-      const teams = await storage.getTeams();
-      const selectedTeams = teams.filter(t => teamIds.includes(t.id));
-
-      if (selectedTeams.length === 0) {
-        return res.status(404).json({ message: "No valid teams found" });
+      if (teamIds.length > MAX_TEAM_SELECTION) {
+        return res.status(400).json({ message: `Maximum ${MAX_TEAM_SELECTION} teams allowed` });
       }
 
-      // Common metrics constant
-      const COMMON_METRICS = ['FLY10_TIME', 'VERTICAL_JUMP', 'DASH_40YD', 'AGILITY_505', 'TOP_SPEED'];
+      // Validate UUID format for all teamIds
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const invalidTeamIds = teamIds.filter((id: unknown) => typeof id !== 'string' || !uuidRegex.test(id));
+      if (invalidTeamIds.length > 0) {
+        return res.status(400).json({ message: "Invalid team ID format" });
+      }
+
+      // Validate metricCodes if provided
+      const MAX_METRIC_SELECTION = 100;
+      if (metricCodes !== undefined) {
+        if (!Array.isArray(metricCodes)) {
+          return res.status(400).json({ message: "metricCodes must be an array" });
+        }
+        if (metricCodes.length > MAX_METRIC_SELECTION) {
+          return res.status(400).json({ message: `Maximum ${MAX_METRIC_SELECTION} metrics allowed` });
+        }
+        // Validate metric codes are alphanumeric with underscores (max 50 chars)
+        const codeRegex = /^[A-Z0-9_]{1,50}$/i;
+        const invalidCodes = metricCodes.filter((code: unknown) =>
+          typeof code !== 'string' || !codeRegex.test(code)
+        );
+        if (invalidCodes.length > 0) {
+          return res.status(400).json({ message: "Invalid metric code format" });
+        }
+      }
+
+      // SECURITY: Get user's accessible organizations for multi-tenant filtering
+      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      const userOrgIds = new Set(userOrgs.map(uo => uo.organizationId));
+
+      // Get all teams then filter to user's accessible teams
+      const allTeams = await storage.getTeams();
+      const accessibleTeams = allTeams.filter(t =>
+        currentUser.isSiteAdmin || userOrgIds.has(t.organization?.id || '')
+      );
+
+      // Filter to selected teams that user can access
+      const selectedTeams = accessibleTeams.filter(t => teamIds.includes(t.id));
+
+      if (selectedTeams.length === 0) {
+        return res.status(404).json({ message: "No valid teams found in your organizations" });
+      }
+
+      // Verify all requested teams are accessible (detect unauthorized access attempts)
+      if (selectedTeams.length !== teamIds.length) {
+        return res.status(403).json({ message: "You do not have access to one or more selected teams" });
+      }
+
+      // Using COMMON_METRICS imported from @shared/import-types
 
       if (type === 'athletes') {
         // Generate athlete template

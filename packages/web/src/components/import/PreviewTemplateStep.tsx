@@ -3,7 +3,7 @@
  * Step 4: Preview generated template and download
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
@@ -60,14 +60,24 @@ export function PreviewTemplateStep({
     },
   });
 
+  // Track which parameters we've generated for to prevent duplicate requests
+  const generatedForRef = useRef<string | null>(null);
+
   // Generate template on mount or when parameters change
   useEffect(() => {
-    generateTemplate({
-      type: importType,
-      teamIds,
-      metricCodes: importType === 'measurements' ? metricCodes : undefined,
-      includeExamples,
-    });
+    // Create a key for current parameters
+    const key = `${importType}-${teamIds.join(',')}-${metricCodes.join(',')}-${includeExamples}`;
+
+    // Only generate if params changed
+    if (generatedForRef.current !== key) {
+      generatedForRef.current = key;
+      generateTemplate({
+        type: importType,
+        teamIds,
+        metricCodes: importType === 'measurements' ? metricCodes : undefined,
+        includeExamples,
+      });
+    }
   }, [importType, teamIds, metricCodes, includeExamples, generateTemplate]);
 
   const handleDownload = () => {
