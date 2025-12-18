@@ -780,6 +780,11 @@ export async function registerRoutes(app: Express) {
   // Apply input sanitization to all routes
   app.use(sanitizeInput);
 
+  // Request-scoped cache middleware for performance optimization
+  // Attaches a Map to req.cache for caching expensive operations within a request
+  const { requestCacheMiddleware } = await import("./middleware/request-cache");
+  app.use(requestCacheMiddleware);
+
   // Rate limiting for authentication endpoints
   const authLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
