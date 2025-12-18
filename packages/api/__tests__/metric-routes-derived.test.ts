@@ -115,7 +115,7 @@ describe('Metric Routes - Derived Metrics', () => {
       expect(response.body).toMatchObject({
         valid: true,
         errors: [],
-        referencedMetrics: ['TEST_METRIC_A'],
+        referencedMetrics: ['test_metric_a'], // Normalized to lowercase
       });
     });
 
@@ -146,7 +146,7 @@ describe('Metric Routes - Derived Metrics', () => {
       expect(response.body).toMatchObject({
         valid: false,
         errors: expect.arrayContaining([
-          expect.stringContaining('Unknown metric: UNKNOWN_METRIC'),
+          expect.stringContaining('Unknown metric: unknown_metric'), // Normalized to lowercase
         ]),
       });
     });
@@ -163,7 +163,7 @@ describe('Metric Routes - Derived Metrics', () => {
       expect(response.body).toMatchObject({
         valid: false,
         errors: expect.arrayContaining([
-          expect.stringContaining('Unknown metric: TEST_METRIC_A'),
+          expect.stringContaining('Unknown metric: test_metric_a'), // Normalized to lowercase
         ]),
       });
     });
@@ -179,7 +179,7 @@ describe('Metric Routes - Derived Metrics', () => {
       expect(response.body).toMatchObject({
         valid: true,
         errors: [],
-        referencedMetrics: expect.arrayContaining(['TEST_METRIC_B', 'TEST_METRIC_A']),
+        referencedMetrics: expect.arrayContaining(['test_metric_b', 'test_metric_a']), // Normalized to lowercase
       });
     });
   });

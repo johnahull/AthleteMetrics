@@ -452,14 +452,20 @@ export function registerMetricRoutes(app: Express) {
     try {
       const { code } = req.params;
 
+      // Validate metric code format to prevent SQL injection
+      if (!code.match(/^[A-Z0-9_]+$/)) {
+        return res.status(400).json({ message: "Invalid metric code format" });
+      }
+
       // Find what this metric depends on (if it's derived)
       const metric = await db.query.siteMetrics.findFirst({
         where: eq(siteMetrics.code, code)
       });
 
-      // Find metrics that depend on this one
+      // SECURITY FIX: Use parameterized query to prevent SQL injection
+      // Find metrics that depend on this one using array containment operator
       const dependents = await db.select().from(siteMetrics)
-        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${code}]::text[]`);
+        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${sql.raw(`'${code.replace(/'/g, "''")}'`)}]::text[]`);
 
       return res.json({
         metric: metric?.code || null,

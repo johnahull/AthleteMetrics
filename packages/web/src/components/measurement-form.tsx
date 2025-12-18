@@ -253,7 +253,8 @@ export default function MeasurementForm() {
       };
     }
 
-    console.log("Submitting measurement data:", measurementData);
+    // CODE QUALITY FIX: Remove production console.log
+    // console.log("Submitting measurement data:", measurementData);
     createMeasurementMutation.mutate(measurementData);
   };
 

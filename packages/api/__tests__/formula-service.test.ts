@@ -107,16 +107,22 @@ describe('Formula Service', () => {
       expect(result.referencedMetrics).toContain('vertical_jump');
     });
 
-    it('should be case-sensitive for metric names', () => {
-      const availableMetrics = ['fly10_time'];
+    it('should be case-insensitive for metric names', () => {
+      const availableMetrics = ['FLY10_TIME'];
 
-      // lowercase should work
+      // lowercase formula should work with uppercase available metric
       const lowercaseResult = validateFormula('fly10_time * 2', availableMetrics);
       expect(lowercaseResult.valid).toBe(true);
+      expect(lowercaseResult.referencedMetrics).toContain('fly10_time');
 
-      // uppercase should fail (not in availableMetrics)
+      // uppercase formula should also work (normalized to lowercase)
       const uppercaseResult = validateFormula('FLY10_TIME * 2', availableMetrics);
-      expect(uppercaseResult.valid).toBe(false);
+      expect(uppercaseResult.valid).toBe(true);
+      expect(uppercaseResult.referencedMetrics).toContain('fly10_time');
+
+      // mixed case should work too
+      const mixedResult = validateFormula('Fly10_Time * 2', availableMetrics);
+      expect(mixedResult.valid).toBe(true);
     });
 
     it('should handle empty formula', () => {

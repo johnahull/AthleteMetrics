@@ -39,6 +39,9 @@ import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useDebounce } from "@/hooks/useDebounce";
 
+// CODE QUALITY FIX: Extract magic number to named constant
+const DEFAULT_DECIMAL_PRECISION = 3; // Standard precision for athletic measurements
+
 // Zod schema for metric form validation
 const metricFormSchema = z.object({
   code: z
@@ -189,7 +192,8 @@ export default function MetricFormDialog({
     try {
       if (isEditMode) {
         // Update existing metric
-        // Note: Use null (not undefined) to clear array fields, as undefined means "don't update"
+        // CONSISTENCY FIX: Use undefined for all optional fields (Drizzle convention)
+        // undefined = "don't update", null = "clear field"
         await updateMetricMutation.mutateAsync({
           code: metric.code,
           data: {
@@ -198,14 +202,14 @@ export default function MetricFormDialog({
             unit: data.unit || undefined,
             description: data.description || undefined,
             metricType: data.metricType,
-            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : null,
-            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : null,
+            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : undefined,
+            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : undefined,
             isDerived: data.isDerived,
             formula: data.isDerived ? data.formula : undefined,
             dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics
               ? formulaValidation.data.dependentMetrics
-              : null,
-            calculationConfig: data.isDerived ? data.calculationConfig : null,
+              : undefined,
+            calculationConfig: data.isDerived ? data.calculationConfig : undefined,
           },
         });
         toast({
@@ -224,7 +228,7 @@ export default function MetricFormDialog({
           availableOrgTypes: data.availableOrgTypes || undefined,
           sportAssociations: data.sportAssociations || undefined,
           isActive: true,
-          decimalPrecision: 3, // Default precision for measurements
+          decimalPrecision: DEFAULT_DECIMAL_PRECISION,
           isDerived: data.isDerived,
           formula: data.isDerived ? data.formula : undefined,
           dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics

@@ -48,6 +48,13 @@ export function validateFormula(
     return { valid: false, errors, referencedMetrics };
   }
 
+  // SECURITY FIX: Prevent DoS attacks via extremely long formulas
+  const MAX_FORMULA_LENGTH = 1000;
+  if (formula.length > MAX_FORMULA_LENGTH) {
+    errors.push(`Formula exceeds maximum length of ${MAX_FORMULA_LENGTH} characters`);
+    return { valid: false, errors, referencedMetrics };
+  }
+
   try {
     // Parse the formula to check syntax
     const node = math.parse(formula);
@@ -56,21 +63,34 @@ export function validateFormula(
     const variables = new Set<string>();
     const functionsUsed = new Set<string>();
 
+    // TYPE SAFETY FIX: Add defensive checks for node structure
     node.traverse((node: any) => {
+      // Defensive programming: check node exists and has type property
+      if (!node || typeof node.type !== 'string') {
+        return;
+      }
+
       if (node.type === 'SymbolNode') {
         // Check if it's a variable (metric reference) or a function
-        if (node.name && !math[node.name as keyof typeof math]) {
+        if (node.name && typeof node.name === 'string' && !math[node.name as keyof typeof math]) {
           // Not a built-in math function, treat as metric reference
-          variables.add(node.name);
+          // CASE NORMALIZATION FIX: Store in lowercase for consistent matching
+          variables.add(node.name.toLowerCase());
         }
       } else if (node.type === 'FunctionNode') {
-        functionsUsed.add(node.fn.name || node.fn);
+        if (node.fn) {
+          const fnName = typeof node.fn === 'string' ? node.fn : (node.fn.name || String(node.fn));
+          functionsUsed.add(fnName);
+        }
       }
     });
 
-    // Check that all referenced metrics are available
+    // Check that all referenced metrics are available (case-insensitive)
+    // Convert available metrics to lowercase for comparison
+    const availableMetricsLower = new Set(availableMetrics.map(m => m.toLowerCase()));
+
     variables.forEach(varName => {
-      if (!availableMetrics.includes(varName)) {
+      if (!availableMetricsLower.has(varName)) {
         errors.push(`Unknown metric: ${varName}`);
       } else {
         referencedMetrics.push(varName);
@@ -114,37 +134,80 @@ export function evaluateFormula(
   sourceValues: Record<string, number>
 ): number | null {
   try {
-    // Parse the formula
+    // Normalize formula variable names to lowercase for case-insensitive matching
+    // This ensures FLY10_TIME in formula matches fly10_time in sourceValues
+    let normalizedFormula = formula;
     const node = math.parse(formula);
 
-    // Extract all variables needed
-    const variables = new Set<string>();
+    // Collect variable names and their positions for replacement
+    const variablesToReplace: Array<{ original: string; lowercase: string }> = [];
     node.traverse((node: any) => {
+      if (!node || typeof node.type !== 'string') {
+        return;
+      }
       if (node.type === 'SymbolNode') {
-        // Check if it's a variable (not a built-in function)
-        if (node.name && !math[node.name as keyof typeof math]) {
+        if (node.name && typeof node.name === 'string' && !math[node.name as keyof typeof math]) {
+          const lowercase = node.name.toLowerCase();
+          if (node.name !== lowercase) {
+            variablesToReplace.push({ original: node.name, lowercase });
+          }
+        }
+      }
+    });
+
+    // Replace uppercase variable names with lowercase in formula
+    // Sort by length descending to avoid partial replacements
+    variablesToReplace.sort((a, b) => b.original.length - a.original.length);
+    for (const { original, lowercase } of variablesToReplace) {
+      // Use word boundary regex to avoid partial matches
+      const regex = new RegExp(`\\b${original}\\b`, 'g');
+      normalizedFormula = normalizedFormula.replace(regex, lowercase);
+    }
+
+    // Re-parse the normalized formula
+    const normalizedNode = math.parse(normalizedFormula);
+
+    // Extract all variables needed from normalized formula
+    const variables = new Set<string>();
+    normalizedNode.traverse((node: any) => {
+      if (!node || typeof node.type !== 'string') {
+        return;
+      }
+      if (node.type === 'SymbolNode') {
+        if (node.name && typeof node.name === 'string' && !math[node.name as keyof typeof math]) {
           variables.add(node.name);
         }
       }
     });
 
+    // Normalize sourceValues keys to lowercase for case-insensitive matching
+    const normalizedSourceValues: Record<string, number> = {};
+    Object.keys(sourceValues).forEach(key => {
+      normalizedSourceValues[key.toLowerCase()] = sourceValues[key];
+    });
+
     // Check that all required variables are provided
     for (const varName of variables) {
-      if (sourceValues[varName] === undefined || sourceValues[varName] === null) {
+      if (normalizedSourceValues[varName] === undefined || normalizedSourceValues[varName] === null) {
         // Missing source value
         return null;
       }
     }
 
-    // Evaluate the formula
-    const result = node.compile().evaluate(sourceValues);
+    // Evaluate the normalized formula using normalized source values
+    const result = normalizedNode.compile().evaluate(normalizedSourceValues);
 
     // Handle special cases
     if (typeof result !== 'number' || isNaN(result)) {
       return null;
     }
 
-    // Allow Infinity (from division by zero) - let caller decide how to handle
+    // CRITICAL FIX: Reject Infinity and -Infinity (from division by zero)
+    // Infinity values corrupt the database and break analytics
+    if (!isFinite(result)) {
+      return null;
+    }
+
     return result;
   } catch (error) {
     // Invalid formula or evaluation error
