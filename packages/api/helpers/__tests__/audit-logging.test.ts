@@ -119,7 +119,7 @@ describe('logAuthorizationFailure', () => {
         action: 'delete',
         resource: 'measurement',
       }),
-      ipAddress: '0.0.0.0', // undefined is converted to '0.0.0.0' placeholder
+      ipAddress: 'unknown', // undefined is converted to 'unknown' placeholder
       userAgent: null, // undefined is converted to null
     });
   });
@@ -146,9 +146,9 @@ describe('logAuthorizationFailure', () => {
     // Wait for async error handling
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Verify error was logged to console
+    // Verify error was logged to console (prefix matches implementation)
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[AUDIT] Failed to log authorization failure:',
+      '[security:audit] Failed to log authorization failure:',
       expect.any(Error)
     );
 

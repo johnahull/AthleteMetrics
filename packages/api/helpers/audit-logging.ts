@@ -62,7 +62,7 @@ export function logAuthorizationFailure(
     userId: userId ?? null,
     severity: 'warning',
     eventData: JSON.stringify(eventData),
-    ipAddress: context.ipAddress ?? '0.0.0.0', // Required field, use placeholder if missing
+    ipAddress: context.ipAddress ?? 'unknown', // Required field, use distinguishable placeholder
     userAgent: context.userAgent ?? null,
   }).catch(err => {
     // Log error to console but don't propagate

@@ -166,13 +166,15 @@ export class SecurityMetricsService {
         });
       });
 
-    // High frequency user detection
+    // High frequency user detection (type guard ensures userId is string)
     byUser
-      .filter((r) => r.userId && r.count > PATTERN_THRESHOLDS.USER_FAILURE_THRESHOLD)
+      .filter((r): r is { userId: string; count: number } =>
+        r.userId !== null && r.count > PATTERN_THRESHOLDS.USER_FAILURE_THRESHOLD
+      )
       .forEach((r) => {
         patterns.push({
           type: 'high_frequency_user',
-          identifier: r.userId!,
+          identifier: r.userId,
           count: r.count,
           severity:
             r.count > PATTERN_THRESHOLDS.USER_HIGH_SEVERITY
