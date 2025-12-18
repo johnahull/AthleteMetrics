@@ -8,6 +8,45 @@
 import { storage } from '../storage';
 
 /**
+ * Sanitize a string field to prevent log injection attacks.
+ * Removes newlines, null bytes, and control characters that could be used
+ * to inject malicious data into JSON logs.
+ *
+ * @param value String to sanitize
+ * @returns Sanitized string or undefined if input is undefined
+ */
+function sanitizeLogField(value: string | undefined): string | undefined {
+  if (!value) return value;
+  // Remove newlines, null bytes, and all control characters (0x00-0x1F, 0x7F-0x9F)
+  return value.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+}
+
+/**
+ * Normalize an IP address to a consistent format.
+ * Handles IPv6-mapped IPv4 addresses and validates IP format.
+ * Returns '0.0.0.0' for invalid or missing IPs to prevent log corruption.
+ *
+ * @param ip IP address to normalize
+ * @returns Normalized IP address or '0.0.0.0' for invalid input
+ */
+function normalizeIpAddress(ip: string | undefined): string {
+  if (!ip) return '0.0.0.0';
+
+  // Handle IPv6-mapped IPv4 addresses (::ffff:192.168.1.1 -> 192.168.1.1)
+  const ipv4Mapped = ip.match(/::ffff:(\d+\.\d+\.\d+\.\d+)/);
+  if (ipv4Mapped) return ipv4Mapped[1];
+
+  // Basic validation for IPv4 and IPv6 formats
+  const ipv4Regex = /^(\d{1,3}\.){3}\d{1,3}$/;
+  const ipv6Regex = /^([0-9a-fA-F]{0,4}:){7}[0-9a-fA-F]{0,4}$/;
+
+  if (ipv4Regex.test(ip) || ipv6Regex.test(ip)) return ip;
+
+  console.warn('[security:audit] Invalid IP format:', ip);
+  return '0.0.0.0';
+}
+
+/**
  * Context for authorization failure events
  */
 export interface AuthorizationFailureContext {
@@ -50,10 +89,16 @@ export function logAuthorizationFailure(
   context: AuthorizationFailureContext
 ): void {
   // Build event data from action, resource, and context
+  // Apply sanitization to prevent log injection attacks
   const eventData = {
     action,
     resource,
-    ...context,
+    attemptedOrgId: context.attemptedOrgId,
+    userOrgIds: context.userOrgIds,
+    ipAddress: sanitizeLogField(context.ipAddress),
+    userAgent: sanitizeLogField(context.userAgent),
+    route: sanitizeLogField(context.route),
+    method: context.method,
   };
 
   // Fire-and-forget: Don't await, don't throw
@@ -62,8 +107,8 @@ export function logAuthorizationFailure(
     userId: userId ?? null,
     severity: 'warning',
     eventData: JSON.stringify(eventData),
-    ipAddress: context.ipAddress ?? 'unknown', // Required field, use distinguishable placeholder
-    userAgent: context.userAgent ?? null,
+    ipAddress: normalizeIpAddress(context.ipAddress), // Required field, normalized and validated
+    userAgent: sanitizeLogField(context.userAgent) ?? null,
   }).catch(err => {
     // Log error to console but don't propagate
     console.error('[security:audit] Failed to log authorization failure:', err);

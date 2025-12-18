@@ -13,13 +13,14 @@ CREATE TABLE IF NOT EXISTS security_events (
 );
 
 -- Index for querying events by user
-CREATE INDEX IF NOT EXISTS idx_security_events_user_id ON security_events(user_id, created_at DESC);
+-- Using CONCURRENTLY to avoid locking table during index creation in production
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_user_id ON security_events(user_id, created_at DESC);
 
 -- Index for querying events by IP address (for rate limiting and suspicious activity detection)
-CREATE INDEX IF NOT EXISTS idx_security_events_ip_address ON security_events(ip_address, created_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_ip_address ON security_events(ip_address, created_at DESC);
 
 -- Index for querying events by type and severity
-CREATE INDEX IF NOT EXISTS idx_security_events_type_severity ON security_events(event_type, severity, created_at DESC);
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_type_severity ON security_events(event_type, severity, created_at DESC);
 
 -- Index for querying recent critical events
-CREATE INDEX IF NOT EXISTS idx_security_events_severity_created ON security_events(severity, created_at DESC) WHERE severity = 'critical';
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_severity_created ON security_events(severity, created_at DESC) WHERE severity = 'critical';
