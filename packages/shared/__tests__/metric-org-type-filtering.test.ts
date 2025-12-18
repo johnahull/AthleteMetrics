@@ -139,11 +139,46 @@ describe('Metric Organization Type Filtering', () => {
         lowerIsBetter: true,
         availableOrgTypes: ['youth'],
         description: 'Age-appropriate endurance test for youth athletes',
-        sportAssociations: ['Soccer']
+        sportAssociations: ['SOCCER'] // Valid uppercase format
       };
 
       const result = insertSiteMetricSchema.safeParse(youthMetric);
       expect(result.success).toBe(true);
+    });
+
+    it('should accept sport associations with any valid uppercase format', () => {
+      const metricWithCustomSport = {
+        code: 'CUSTOM_SPORT_TEST',
+        label: 'Custom Sport Test',
+        category: 'agility',
+        unit: 's',
+        lowerIsBetter: true,
+        availableOrgTypes: ['youth'],
+        description: 'Test for dynamically created sports',
+        sportAssociations: ['CUSTOM_SPORT_2024', 'ESPORTS', 'TRACK_100M']
+      };
+
+      const result = insertSiteMetricSchema.safeParse(metricWithCustomSport);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.sportAssociations).toEqual(['CUSTOM_SPORT_2024', 'ESPORTS', 'TRACK_100M']);
+      }
+    });
+
+    it('should reject sport associations with invalid format', () => {
+      const metricWithInvalidSport = {
+        code: 'INVALID_FORMAT_TEST',
+        label: 'Invalid Format Test',
+        sportAssociations: ['soccer', 'BASKETBALL-5v5', 'Track 100m']
+      };
+
+      const result = insertSiteMetricSchema.safeParse(metricWithInvalidSport);
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues.some(issue =>
+          issue.path.includes('sportAssociations')
+        )).toBe(true);
+      }
     });
 
     it('should accept high school and college specific metrics', () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,8 +11,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Settings, Save, X } from "lucide-react";
+import { Settings, Save, X, Filter } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import {
   useSiteMetrics,
@@ -21,7 +28,11 @@ import {
   useDisableMetricForOrganization,
   useUpdateOrganizationMetric,
 } from "@/lib/metrics-api";
+import { useSports } from "@/lib/sports-api";
 import type { SiteMetric, OrganizationMetric } from "@shared/schema";
+
+// Maximum number of sport badges to display before showing "+N more"
+const MAX_VISIBLE_SPORT_BADGES = 3;
 
 interface OrganizationMetricsCardProps {
   organizationId: string;
@@ -35,6 +46,7 @@ export default function OrganizationMetricsCard({
   const { toast } = useToast();
   const [editingMetric, setEditingMetric] = useState<string | null>(null);
   const [customLabel, setCustomLabel] = useState("");
+  const [selectedSport, setSelectedSport] = useState<string>("ALL");
 
   // Fetch all site metrics (active only)
   // Pass organizationId to allow org admins to access metrics via /api/metrics endpoint
@@ -46,11 +58,33 @@ export default function OrganizationMetricsCard({
     false
   );
 
+  // Fetch sports for filter dropdown
+  const { data: sports } = useSports();
+
   const enableMutation = useEnableMetricForOrganization();
   const disableMutation = useDisableMetricForOrganization();
   const updateMutation = useUpdateOrganizationMetric();
 
   const isLoading = loadingSite || loadingOrg;
+
+  // Filter metrics by selected sport
+  const filteredMetrics = useMemo(() => {
+    if (!siteMetrics) return [];
+    if (selectedSport === "ALL") return siteMetrics;
+
+    // Show metrics tagged with selected sport OR metrics with no tags (general metrics)
+    return siteMetrics.filter((metric) => {
+      const sportAssociations = metric.sportAssociations;
+
+      // If no sport associations, it's a general metric (show in all filters)
+      if (!sportAssociations || sportAssociations.length === 0) {
+        return true;
+      }
+
+      // Otherwise, check if selected sport is in the associations
+      return sportAssociations.includes(selectedSport);
+    });
+  }, [siteMetrics, selectedSport]);
 
   // Get org metric data for a given site metric code
   const getOrgMetric = (code: string): OrganizationMetric | undefined => {
@@ -68,6 +102,45 @@ export default function OrganizationMetricsCard({
     const orgMetric = getOrgMetric(code);
     return orgMetric?.customLabel ?? undefined;
   };
+
+  // Memoized sport name lookup map for performance
+  const sportNameMap = useMemo(() => {
+    return new Map(sports?.map(s => [s.code, s.name]) || []);
+  }, [sports]);
+
+  // Helper to get sport name from code
+  const getSportName = useCallback((code: string): string => {
+    return sportNameMap.get(code) || code;
+  }, [sportNameMap]);
+
+  // Helper to render sport badges
+  const renderSportBadges = useCallback((sportCodes: string[] | null | undefined) => {
+    if (!sportCodes || sportCodes.length === 0) {
+      return (
+        <Badge variant="outline" className="bg-gray-50 text-gray-600">
+          All Sports
+        </Badge>
+      );
+    }
+
+    const visibleSports = sportCodes.slice(0, MAX_VISIBLE_SPORT_BADGES);
+    const remainingCount = sportCodes.length - MAX_VISIBLE_SPORT_BADGES;
+
+    return (
+      <div className="flex gap-1 flex-wrap items-center">
+        {visibleSports.map((code) => (
+          <Badge key={code} variant="outline" className="bg-blue-50 text-blue-700">
+            {getSportName(code)}
+          </Badge>
+        ))}
+        {remainingCount > 0 && (
+          <Badge variant="outline" className="bg-gray-50 text-gray-600 text-xs">
+            +{remainingCount} more
+          </Badge>
+        )}
+      </div>
+    );
+  }, [getSportName]);
 
   const handleToggle = async (metric: SiteMetric, enabled: boolean) => {
     if (!canEdit) return;
@@ -182,13 +255,41 @@ export default function OrganizationMetricsCard({
   return (
     <Card data-testid="organization-metrics-card">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          Metrics Configuration
-        </CardTitle>
-        <CardDescription>
-          Enable metrics for your organization and customize display labels
-        </CardDescription>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="flex items-center gap-2">
+              <Settings className="h-5 w-5" />
+              Metrics Configuration
+            </CardTitle>
+            <CardDescription>
+              Enable metrics for your organization and customize display labels
+            </CardDescription>
+          </div>
+
+          {/* Sport Filter Dropdown */}
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <Select value={selectedSport} onValueChange={setSelectedSport}>
+              <SelectTrigger className="w-[180px]" data-testid="sport-filter-dropdown">
+                <SelectValue placeholder="All Sports" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL" data-testid="sport-filter-option-ALL">
+                  All Sports
+                </SelectItem>
+                {sports?.map((sport) => (
+                  <SelectItem
+                    key={sport.code}
+                    value={sport.code}
+                    data-testid={`sport-filter-option-${sport.code}`}
+                  >
+                    {sport.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
       </CardHeader>
       <CardContent>
         <Table>
@@ -197,12 +298,13 @@ export default function OrganizationMetricsCard({
               <TableHead>Metric</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Unit</TableHead>
+              <TableHead>Sports</TableHead>
               <TableHead>Custom Label</TableHead>
               <TableHead className="text-right">Enabled</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {siteMetrics.map((metric) => {
+            {filteredMetrics.map((metric) => {
               const isEnabled = isMetricEnabled(metric.code);
               const customLabelValue = getCustomLabel(metric.code);
               const isEditing = editingMetric === metric.code;
@@ -229,6 +331,9 @@ export default function OrganizationMetricsCard({
                   </TableCell>
                   <TableCell>
                     {metric.unit || <span className="text-muted-foreground">-</span>}
+                  </TableCell>
+                  <TableCell data-testid="org-metric-sports-cell">
+                    {renderSportBadges(metric.sportAssociations)}
                   </TableCell>
                   <TableCell>
                     {isEditing ? (

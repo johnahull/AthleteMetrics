@@ -33,7 +33,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 1,
         description: 'Time to cover 10 yards after a flying start, measuring maximum velocity.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'blue',
         icon: 'Clock',
@@ -48,7 +48,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 2,
         description: 'Maximum vertical jump height in inches, measuring explosive leg power.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 1,
         color: 'purple',
         icon: 'ArrowUp',
@@ -63,7 +63,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 3,
         description: '5-0-5 agility test: sprint 5 yards, turn 180 degrees, sprint 5 yards back.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'green',
         icon: 'Zap',
@@ -78,7 +78,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 4,
         description: '5-10-5 agility test (Pro Agility): sprint 5 yards, turn 180, sprint 10 yards, turn 180, sprint 5 yards.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'yellow',
         icon: 'Zap',
@@ -93,7 +93,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 5,
         description: 'T-test agility drill: forward sprint, lateral shuffles, and backward sprint in T-pattern.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'red',
         icon: 'Move',
@@ -108,7 +108,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 6,
         description: 'Time to sprint 40 yards from a stationary start, measuring acceleration and top-end speed.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 3,
         color: 'indigo',
         icon: 'Timer',
@@ -123,7 +123,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 7,
         description: 'Ratio of jump height to ground contact time, measuring elastic leg power and explosiveness.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 2,
         color: 'orange',
         icon: 'TrendingUp',
@@ -138,7 +138,7 @@ async function seedMetrics() {
         isActive: true,
         displayOrder: 8,
         description: 'Maximum running velocity in miles per hour.',
-        sportAssociations: ['Soccer'],
+        sportAssociations: null, // Available to all sports
         decimalPrecision: 2,
         color: 'teal',
         icon: 'Gauge',

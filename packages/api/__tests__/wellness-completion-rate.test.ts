@@ -22,7 +22,7 @@ import {
   wellnessResponses
 } from '@shared/schema';
 import { storage } from '../storage';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 
 describe('getRequestCompletionRate', () => {
   let testOrgId: string;
@@ -33,17 +33,12 @@ describe('getRequestCompletionRate', () => {
   let athlete2Id: string;
   let athlete3Id: string;
   let templateId: string;
+  // Track all created user IDs for cleanup
+  const createdUserIds: string[] = [];
 
   beforeEach(async () => {
-    // Cleanup before each test
-    await db.delete(wellnessResponses);
-    await db.delete(wellnessRequests);
-    await db.delete(wellnessTemplates);
-    await db.delete(userTeams);
-    await db.delete(userOrganizations);
-    await db.delete(users);
-    await db.delete(teams);
-    await db.delete(organizations);
+    // Reset tracking array
+    createdUserIds.length = 0;
 
     // Create test organization
     const [org] = await db.insert(organizations).values({
@@ -68,36 +63,40 @@ describe('getRequestCompletionRate', () => {
     }).returning();
     team2Id = t2.id;
 
-    // Create athletes
+    // Create athletes with unique test identifiers
+    const testTimestamp = Date.now();
     const [a1] = await db.insert(users).values({
-      username: `athlete1_${Date.now()}`,
+      username: `wcr_athlete1_${testTimestamp}`,
       password: 'hashed_password',
       firstName: 'Athlete',
       lastName: 'One',
       fullName: 'Athlete One',
-      emails: ['athlete1@test.com'],
+      emails: [`wcr_athlete1_${testTimestamp}@test.com`],
     }).returning();
     athlete1Id = a1.id;
+    createdUserIds.push(a1.id);
 
     const [a2] = await db.insert(users).values({
-      username: `athlete2_${Date.now()}`,
+      username: `wcr_athlete2_${testTimestamp}`,
       password: 'hashed_password',
       firstName: 'Athlete',
       lastName: 'Two',
       fullName: 'Athlete Two',
-      emails: ['athlete2@test.com'],
+      emails: [`wcr_athlete2_${testTimestamp}@test.com`],
     }).returning();
     athlete2Id = a2.id;
+    createdUserIds.push(a2.id);
 
     const [a3] = await db.insert(users).values({
-      username: `athlete3_${Date.now()}`,
+      username: `wcr_athlete3_${testTimestamp}`,
       password: 'hashed_password',
       firstName: 'Athlete',
       lastName: 'Three',
       fullName: 'Athlete Three',
-      emails: ['athlete3@test.com'],
+      emails: [`wcr_athlete3_${testTimestamp}@test.com`],
     }).returning();
     athlete3Id = a3.id;
+    createdUserIds.push(a3.id);
 
     // Add athletes to organization
     await db.insert(userOrganizations).values([
@@ -149,15 +148,36 @@ describe('getRequestCompletionRate', () => {
   });
 
   afterEach(async () => {
-    // Cleanup after each test
-    await db.delete(wellnessResponses);
-    await db.delete(wellnessRequests);
-    await db.delete(wellnessTemplates);
-    await db.delete(userTeams);
-    await db.delete(userOrganizations);
-    await db.delete(users);
-    await db.delete(teams);
-    await db.delete(organizations);
+    // Cleanup only test-specific data (NEVER use blanket deletes!)
+    // Delete in correct order to respect foreign key constraints
+
+    // 1. Delete wellness responses for this org
+    await db.delete(wellnessResponses).where(eq(wellnessResponses.organizationId, testOrgId));
+
+    // 2. Delete wellness requests for this org
+    await db.delete(wellnessRequests).where(eq(wellnessRequests.organizationId, testOrgId));
+
+    // 3. Delete wellness templates for this org
+    await db.delete(wellnessTemplates).where(eq(wellnessTemplates.organizationId, testOrgId));
+
+    // 4. Delete user-team relationships for created users
+    if (createdUserIds.length > 0) {
+      await db.delete(userTeams).where(inArray(userTeams.userId, createdUserIds));
+    }
+
+    // 5. Delete user-organization relationships for this org
+    await db.delete(userOrganizations).where(eq(userOrganizations.organizationId, testOrgId));
+
+    // 6. Delete created users
+    if (createdUserIds.length > 0) {
+      await db.delete(users).where(inArray(users.id, createdUserIds));
+    }
+
+    // 7. Delete teams for this org
+    await db.delete(teams).where(eq(teams.organizationId, testOrgId));
+
+    // 8. Delete the test organization
+    await db.delete(organizations).where(eq(organizations.id, testOrgId));
   });
 
   it('should calculate 0% completion when no responses', async () => {
@@ -315,13 +335,14 @@ describe('getRequestCompletionRate', () => {
   it('should handle mixed team and athlete targets', async () => {
     // Create request with both team and individual athlete targets
     const [athlete4] = await db.insert(users).values({
-      username: `athlete4_${Date.now()}`,
+      username: `wcr_athlete4_${Date.now()}`,
       password: 'hashed_password',
       firstName: 'Athlete',
       lastName: 'Four',
       fullName: 'Athlete Four',
-      emails: ['athlete4@test.com'],
+      emails: [`wcr_athlete4_${Date.now()}@test.com`],
     }).returning();
+    createdUserIds.push(athlete4.id); // Track for cleanup
 
     await db.insert(userOrganizations).values({
       userId: athlete4.id,

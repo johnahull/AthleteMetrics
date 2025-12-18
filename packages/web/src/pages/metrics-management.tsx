@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +28,7 @@ import {
   useDeleteSiteMetric,
   useToggleSiteMetricStatus,
 } from "@/lib/metrics-api";
+import { useSports } from "@/lib/sports-api";
 import type { SiteMetric } from "@shared/schema";
 import MetricFormDialog from "@/components/metric-form-dialog";
 
@@ -57,8 +58,48 @@ export default function MetricsManagementPage() {
   }
 
   const { data: metrics, isLoading } = useSiteMetrics(true); // Include inactive
+  const { data: sports } = useSports();
   const deleteMetricMutation = useDeleteSiteMetric();
   const toggleStatusMutation = useToggleSiteMetricStatus();
+
+  // Memoized sport name lookup map for performance
+  const sportNameMap = useMemo(() => {
+    return new Map(sports?.map(s => [s.code, s.name]) || []);
+  }, [sports]);
+
+  // Helper to get sport name from code
+  const getSportName = useCallback((code: string): string => {
+    return sportNameMap.get(code) || code;
+  }, [sportNameMap]);
+
+  // Helper to render sport badges
+  const renderSportBadges = useCallback((sportCodes: string[] | null | undefined) => {
+    if (!sportCodes || sportCodes.length === 0) {
+      return (
+        <Badge variant="outline" className="bg-gray-50">
+          All Sports
+        </Badge>
+      );
+    }
+
+    const visibleSports = sportCodes.slice(0, 3);
+    const remainingCount = sportCodes.length - 3;
+
+    return (
+      <div className="flex gap-1 flex-wrap items-center">
+        {visibleSports.map((code) => (
+          <Badge key={code} variant="outline" className="bg-blue-50 text-blue-700">
+            {getSportName(code)}
+          </Badge>
+        ))}
+        {remainingCount > 0 && (
+          <Badge variant="outline" className="bg-gray-50 text-gray-600">
+            +{remainingCount} more
+          </Badge>
+        )}
+      </div>
+    );
+  }, [getSportName]);
 
   const handleDelete = async () => {
     if (!selectedMetric) return;
@@ -144,6 +185,7 @@ export default function MetricsManagementPage() {
                   <TableHead>Category</TableHead>
                   <TableHead>Unit</TableHead>
                   <TableHead>Type</TableHead>
+                  <TableHead>Sports</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -169,6 +211,9 @@ export default function MetricsManagementPage() {
                          metric.metricType === 'higher_is_better' ? 'Higher is better' :
                          'Tracking'}
                       </Badge>
+                    </TableCell>
+                    <TableCell data-testid="sports-cell">
+                      {renderSportBadges(metric.sportAssociations)}
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-2">

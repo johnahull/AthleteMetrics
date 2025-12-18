@@ -23,6 +23,12 @@ export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 
  */
 export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'] as const;
 
+/**
+ * Sport code enum for metric sport associations
+ * These codes correspond to the 'code' field in the site_sports table
+ */
+export const sportCodeEnum = ['SOCCER', 'BASKETBALL', 'VOLLEYBALL', 'TENNIS', 'BASEBALL', 'FOOTBALL', 'HOCKEY', 'LACROSSE'] as const;
+
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   name: text("name").notNull().unique(),
@@ -1572,7 +1578,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string()).optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).default(3),
@@ -1588,8 +1594,9 @@ export const updateSiteMetricSchema = z.object({
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
-  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string()).optional(),
+  // Allow null to explicitly clear these array fields (undefined means "don't update")
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
@@ -2363,6 +2370,9 @@ export const insertAthleteSchema = z.object({
 
 // Organization Type
 export type OrganizationType = (typeof organizationTypeEnum)[number];
+
+// Sport Code Type
+export type SportCode = (typeof sportCodeEnum)[number];
 
 // Legacy compatibility exports removed - use Athlete types instead
 

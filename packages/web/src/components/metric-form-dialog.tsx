@@ -32,6 +32,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
+import { SportMultiSelect } from "@/components/sport-multi-select";
 import { organizationTypeEnum, metricTypeEnum } from "@shared/schema";
 
 // Zod schema for metric form validation
@@ -50,6 +51,7 @@ const metricFormSchema = z.object({
   description: z.string().optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
+  sportAssociations: z.array(z.string()).optional(),
 });
 
 type MetricFormValues = z.infer<typeof metricFormSchema>;
@@ -81,6 +83,7 @@ export default function MetricFormDialog({
       description: "",
       metricType: 'lower_is_better',
       availableOrgTypes: undefined,
+      sportAssociations: undefined,
     },
   });
 
@@ -95,6 +98,7 @@ export default function MetricFormDialog({
         description: metric.description || "",
         metricType: metric.metricType,
         availableOrgTypes: metric.availableOrgTypes || undefined,
+        sportAssociations: metric.sportAssociations || undefined,
       });
     } else if (!open) {
       // Reset form when dialog closes
@@ -106,6 +110,7 @@ export default function MetricFormDialog({
         description: "",
         metricType: 'lower_is_better',
         availableOrgTypes: undefined,
+        sportAssociations: undefined,
       });
     }
   }, [metric, open, form]);
@@ -114,6 +119,7 @@ export default function MetricFormDialog({
     try {
       if (isEditMode) {
         // Update existing metric
+        // Note: Use null (not undefined) to clear array fields, as undefined means "don't update"
         await updateMetricMutation.mutateAsync({
           code: metric.code,
           data: {
@@ -122,7 +128,8 @@ export default function MetricFormDialog({
             unit: data.unit || undefined,
             description: data.description || undefined,
             metricType: data.metricType,
-            availableOrgTypes: data.availableOrgTypes || undefined,
+            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : null,
+            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : null,
           },
         });
         toast({
@@ -139,6 +146,7 @@ export default function MetricFormDialog({
           description: data.description || undefined,
           metricType: data.metricType,
           availableOrgTypes: data.availableOrgTypes || undefined,
+          sportAssociations: data.sportAssociations || undefined,
           isActive: true,
           decimalPrecision: 3, // Default precision for measurements
         });
@@ -334,6 +342,29 @@ export default function MetricFormDialog({
                   <FormDescription>
                     Leave empty to make this metric available to all organization types.
                     Select specific types to restrict availability.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Sport Associations field */}
+            <FormField
+              control={form.control}
+              name="sportAssociations"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Relevant Sports</FormLabel>
+                  <FormControl>
+                    <SportMultiSelect
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="All sports (default)"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Tag this metric with relevant sports to help organizations find applicable tests.
+                    Leave empty if the metric applies to all sports.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
