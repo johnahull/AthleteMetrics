@@ -8,15 +8,41 @@ import rateLimit from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
-import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema } from "@shared/schema";
+import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports } from "@shared/schema";
+import { db } from "../db";
+import { eq } from "drizzle-orm";
 
 const metricService = new MetricService();
+
+/**
+ * Validate sport associations against active sports in site_sports table
+ * @param sportCodes - Array of sport codes to validate
+ * @throws Error if any sport code is invalid or inactive
+ */
+async function validateSportAssociations(sportCodes: string[] | null | undefined): Promise<void> {
+  // Null, undefined, or empty array means "all sports" - no validation needed
+  if (!sportCodes || sportCodes.length === 0) {
+    return;
+  }
+
+  // Fetch all active sports from database
+  const validSports = await db.select({ code: siteSports.code })
+    .from(siteSports)
+    .where(eq(siteSports.isActive, true));
+
+  const validCodes = new Set(validSports.map(s => s.code));
+  const invalidCodes = sportCodes.filter(code => !validCodes.has(code));
+
+  if (invalidCodes.length > 0) {
+    throw new Error(`Invalid sport codes: ${invalidCodes.join(', ')}. Sport must exist and be active.`);
+  }
+}
 
 function sanitizeError(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active'];
+  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active', 'Invalid sport codes'];
 
   if (isProduction) {
     return safeErrors.some(safe => error.message.includes(safe)) ? error.message : fallback;
@@ -120,6 +146,9 @@ export function registerMetricRoutes(app: Express) {
       const userId = req.session.user!.id;
       const validatedData = insertSiteMetricSchema.parse(req.body);
 
+      // Validate sport associations against active sports in database
+      await validateSportAssociations(validatedData.sportAssociations);
+
       const metric = await metricService.createSiteMetric(validatedData, userId);
       res.status(201).json(metric);
     } catch (error) {
@@ -139,6 +168,12 @@ export function registerMetricRoutes(app: Express) {
       const { code } = req.params;
       const userId = req.session.user!.id;
       const validatedData = updateSiteMetricSchema.parse(req.body);
+
+      // Validate sport associations against active sports in database
+      // Note: null explicitly clears the field, undefined means "don't update"
+      if (validatedData.sportAssociations !== undefined) {
+        await validateSportAssociations(validatedData.sportAssociations);
+      }
 
       const metric = await metricService.updateSiteMetric(code, validatedData, userId);
       res.json(metric);

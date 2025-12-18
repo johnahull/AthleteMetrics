@@ -87,30 +87,31 @@ export function SportMultiSelect({
     return sportNameMap.get(code) || code;
   }, [sportNameMap]);
 
-  // Get color class for sport badge
+  // Get color class for sport badge - use dynamic color from database if available
   const getColorClass = (code: string): string => {
-    const colorMap: Record<string, string> = {
-      SOCCER: "bg-green-100 text-green-800 hover:bg-green-200",
-      BASKETBALL: "bg-orange-100 text-orange-800 hover:bg-orange-200",
-      VOLLEYBALL: "bg-blue-100 text-blue-800 hover:bg-blue-200",
-      TENNIS: "bg-yellow-100 text-yellow-800 hover:bg-yellow-200",
-      BASEBALL: "bg-red-100 text-red-800 hover:bg-red-200",
-      FOOTBALL: "bg-purple-100 text-purple-800 hover:bg-purple-200",
-    };
-    return colorMap[code] || "bg-gray-100 text-gray-800 hover:bg-gray-200";
+    const sport = sports?.find(s => s.code === code);
+    if (sport?.color) {
+      // If sport has a color field, use it (assumes Tailwind class or hex color)
+      return sport.color.includes('bg-')
+        ? sport.color
+        : "bg-gray-100 text-gray-800 hover:bg-gray-200";
+    }
+    // Fallback to default gray
+    return "bg-gray-100 text-gray-800 hover:bg-gray-200";
   };
 
-  // Get just the background color for the color dot indicator
+  // Get just the background color for the color dot indicator - use dynamic color if available
   const getDotColor = (code: string): string => {
-    const dotColorMap: Record<string, string> = {
-      SOCCER: "bg-green-400",
-      BASKETBALL: "bg-orange-400",
-      VOLLEYBALL: "bg-blue-400",
-      TENNIS: "bg-yellow-400",
-      BASEBALL: "bg-red-400",
-      FOOTBALL: "bg-purple-400",
-    };
-    return dotColorMap[code] || "bg-gray-400";
+    const sport = sports?.find(s => s.code === code);
+    if (sport?.color) {
+      // Extract background color from Tailwind class or use default
+      const bgMatch = sport.color.match(/bg-(\w+-\d+)/);
+      if (bgMatch) {
+        return `bg-${bgMatch[1]}`;
+      }
+    }
+    // Fallback to default gray
+    return "bg-gray-400";
   };
 
   if (isLoading) {
