@@ -83,6 +83,11 @@ declare global {
         original: unknown;
         normalized: OrganizationType;
       };
+      /**
+       * Request-scoped cache for storing data during a single request lifecycle
+       * Attached by requestCacheMiddleware
+       */
+      cache?: Map<string, any>;
     }
   }
 }

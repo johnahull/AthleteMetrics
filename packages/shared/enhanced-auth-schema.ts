@@ -128,7 +128,8 @@ export const createSecurityEventSchema = createInsertSchema(securityEvents).omit
     'mfa_disabled',
     'email_verified',
     'session_expired',
-    'suspicious_activity'
+    'suspicious_activity',
+    'authorization_failed'
   ]),
   severity: z.enum(['info', 'warning', 'critical']),
   ipAddress: z.string().ip("Invalid IP address"),
