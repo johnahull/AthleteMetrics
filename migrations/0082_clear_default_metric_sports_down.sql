@@ -17,6 +17,6 @@ BEGIN
     WHERE sm.id = backup.id;
 
     -- Drop the backup table after restoration
-    DROP TABLE site_metrics_sport_backup_20251217;
+    DROP TABLE IF EXISTS site_metrics_sport_backup_20251217;
   END IF;
 END $$;
