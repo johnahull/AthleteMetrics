@@ -9,7 +9,9 @@ describe('requestCacheMiddleware', () => {
 
   beforeEach(() => {
     mockReq = {};
-    mockRes = {};
+    mockRes = {
+      on: () => mockRes as Response, // Mock event listener registration
+    };
     mockNext = () => {};
   });
 

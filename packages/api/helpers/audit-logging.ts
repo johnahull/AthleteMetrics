@@ -92,16 +92,16 @@ export function logAuthorizationFailure(
   context: AuthorizationFailureContext
 ): void {
   // Build event data from action, resource, and context
-  // Apply sanitization to prevent log injection attacks
+  // Apply sanitization to ALL user-controlled fields to prevent log injection attacks
   const eventData = {
-    action,
-    resource,
-    attemptedOrgId: context.attemptedOrgId,
-    userOrgIds: context.userOrgIds,
+    action: sanitizeLogField(action),
+    resource: sanitizeLogField(resource),
+    attemptedOrgId: sanitizeLogField(context.attemptedOrgId),
+    userOrgIds: context.userOrgIds?.map(id => sanitizeLogField(id)),
     ipAddress: sanitizeLogField(context.ipAddress),
     userAgent: sanitizeLogField(context.userAgent),
     route: sanitizeLogField(context.route),
-    method: context.method,
+    method: sanitizeLogField(context.method),
   };
 
   // Fire-and-forget: Don't await, don't throw

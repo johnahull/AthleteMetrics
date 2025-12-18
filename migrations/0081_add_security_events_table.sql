@@ -1,5 +1,19 @@
 -- Migration: Add security_events table for audit logging
 -- Description: Creates security_events table to log authorization failures and other security events
+--
+-- DATA RETENTION POLICY:
+-- - Critical events: Retain for 2 years (compliance, forensics)
+-- - Warning events: Retain for 1 year (security monitoring)
+-- - Info events: Retain for 90 days (operational logging)
+--
+-- Recommended cleanup implementation (via cron job):
+-- DELETE FROM security_events
+-- WHERE (severity = 'info' AND created_at < NOW() - INTERVAL '90 days')
+--    OR (severity = 'warning' AND created_at < NOW() - INTERVAL '1 year')
+--    OR (severity = 'critical' AND created_at < NOW() - INTERVAL '2 years');
+--
+-- Estimated growth: ~500 events/day = 182K events/year = ~20MB/year
+-- Consider table partitioning by month if volume exceeds 1M events/year
 
 CREATE TABLE IF NOT EXISTS security_events (
   id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -30,4 +44,14 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_severity_created ON 
 -- This partial index provides 3-5x faster performance for security metrics queries
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures
   ON security_events(created_at DESC)
+  WHERE event_type = 'authorization_failed';
+
+-- Composite partial indexes for GROUP BY queries in security metrics
+-- These optimize the pattern detection queries that group by user_id and ip_address
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures_by_user
+  ON security_events(user_id, created_at DESC)
+  WHERE event_type = 'authorization_failed';
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_security_events_auth_failures_by_ip
+  ON security_events(ip_address, created_at DESC)
   WHERE event_type = 'authorization_failed';

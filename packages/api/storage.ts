@@ -3609,7 +3609,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSecurityEvent(event: Omit<SecurityEvent, 'id' | 'createdAt'>): Promise<void> {
-    await db.insert(securityEvents).values(event);
+    // Validate event data with Zod schema before insertion
+    // This ensures type safety and prevents invalid data from reaching the database
+    try {
+      const { createSecurityEventSchema } = await import('@shared/enhanced-auth-schema');
+      const validated = createSecurityEventSchema.parse(event);
+      await db.insert(securityEvents).values(validated);
+    } catch (error) {
+      // Log validation errors but don't propagate (fire-and-forget pattern)
+      console.error('[security:audit] Failed to create security event:', error);
+      throw error; // Re-throw to maintain error handling contract
+    }
   }
 
   async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {

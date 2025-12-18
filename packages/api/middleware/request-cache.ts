@@ -25,6 +25,19 @@ export function requestCacheMiddleware(
   // Attach empty cache Map to request
   req.cache = new Map<string, unknown>();
 
+  // CRITICAL: Clean up cache when response finishes to prevent memory leaks
+  // If request objects persist in closures or event handlers, cache would leak
+  res.on('finish', () => {
+    req.cache?.clear();
+    req.cache = undefined;
+  });
+
+  // Also clean up on errors or premature close
+  res.on('close', () => {
+    req.cache?.clear();
+    req.cache = undefined;
+  });
+
   // Continue to next middleware
   next();
 }

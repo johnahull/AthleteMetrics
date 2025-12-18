@@ -44,7 +44,16 @@ export async function getCachedUserOrganizations(
 
   // Check if cache exists and has the result
   if (req.cache?.has(cacheKey)) {
-    return req.cache.get(cacheKey) as UserOrganizationWithOrg[];
+    const cached = req.cache.get(cacheKey);
+
+    // Runtime validation before returning to prevent cache corruption issues
+    if (Array.isArray(cached)) {
+      return cached as UserOrganizationWithOrg[];
+    }
+
+    // Cache corruption detected - remove invalid entry and refetch
+    console.warn(`[cache] Invalid cache entry for ${cacheKey}, refetching from database`);
+    req.cache.delete(cacheKey);
   }
 
   // Cache miss - fetch from storage
