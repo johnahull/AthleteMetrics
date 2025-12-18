@@ -10,6 +10,26 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { SelfEntryForm } from '../SelfEntryForm';
 
+// Mock the useAvailableMetrics hook
+vi.mock('@/hooks/use-available-metrics', () => ({
+  useAvailableMetrics: () => ({
+    metrics: [
+      { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better', lowerIsBetter: false, isDerived: false },
+      { code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'AGILITY_5105', label: '5-10-5 Agility', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'T_TEST', label: 'T-Test', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'DASH_40YD', label: '40-Yard Dash', unit: 's', metricType: 'lower_is_better', lowerIsBetter: true, isDerived: false },
+      { code: 'TOP_SPEED', label: 'Top Speed', unit: 'mph', metricType: 'higher_is_better', lowerIsBetter: false, isDerived: false },
+      { code: 'RSI', label: 'Reactive Strength Index', unit: '', metricType: 'higher_is_better', lowerIsBetter: false, isDerived: false },
+      // Derived metric - should be filtered out
+      { code: 'TOP_SPEED_CALC', label: 'Top Speed (Calc)', unit: 'mph', metricType: 'higher_is_better', lowerIsBetter: false, isDerived: true },
+    ],
+    isLoading: false,
+    error: null,
+  }),
+}));
+
 describe('SelfEntryForm', () => {
   const mockOnSubmit = vi.fn();
   const mockOnCancel = vi.fn();
