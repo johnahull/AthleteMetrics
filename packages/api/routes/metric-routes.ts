@@ -18,9 +18,15 @@ const metricService = new MetricService();
  * Validate sport associations against active sports in site_sports table
  * @param sportCodes - Array of sport codes to validate
  * @throws Error if any sport code is invalid or inactive
+ *
+ * Semantics:
+ * - null/undefined: "Available to all sports" (no validation needed)
+ * - []: Empty array treated as "available to all sports" (stored as NULL in DB)
+ * - [...codes]: Specific sports (validates each code exists and is active)
  */
 async function validateSportAssociations(sportCodes: string[] | null | undefined): Promise<void> {
-  // Null, undefined, or empty array means "all sports" - no validation needed
+  // Null, undefined, or empty array all mean "available to all sports"
+  // Empty arrays are converted to null by the form before submission
   if (!sportCodes || sportCodes.length === 0) {
     return;
   }

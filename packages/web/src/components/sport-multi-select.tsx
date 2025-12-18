@@ -4,14 +4,21 @@
  * Used in:
  * - MetricFormDialog: sportAssociations (which sports this metric is relevant for)
  *
- * Semantics:
- * - NULL/undefined/empty array = Relevant to ALL sports (default)
- * - Non-empty array = Relevant only to those specific sports
+ * Display Semantics:
+ * - Empty selection = Metric is relevant to ALL sports (universal availability)
+ * - Selected sports = Metric is relevant only to those specific sports
+ *
+ * Data Flow:
+ * 1. Component displays current sportAssociations (string[] | null | undefined)
+ * 2. User selects/deselects sports via UI
+ * 3. onChange fires with string[] (selected codes) or undefined (empty selection)
+ * 4. Parent form converts empty selection (undefined) to null before API submission
+ * 5. Backend stores null in database (meaning "available to all sports")
  *
  * Schema Update Semantics (packages/shared/schema.ts):
- * - Allow null to explicitly clear these array fields
- * - undefined means "don't update" (field is omitted from PATCH)
- * - null means "clear the field" (set to empty array/null in database)
+ * - null: Explicitly clear field → "available to all sports"
+ * - undefined: Don't update field (omitted from PATCH request)
+ * - [...codes]: Set specific sports → "available only to these sports"
  */
 
 import { useState, useMemo, useCallback } from "react";

@@ -1,15 +1,22 @@
--- Migration Rollback: Clear sport associations from default system metrics
--- Description: This rollback is intentionally a no-op because we cannot restore
---              the previous sport associations without knowing what they were.
---              The forward migration cleared all sport associations for system
---              default metrics to make them available to all sports.
+-- Migration Rollback: Restore sport associations from backup
+-- Description: Restores sport associations for system default metrics from backup table
 -- Author: Claude Code
 -- Date: 2025-12-17
 
--- No-op rollback: We cannot restore unknown previous sport associations
--- If you need to restore specific sport associations, you must do so manually
--- by querying historical data or re-running any business logic that determines
--- which sports should be associated with each metric.
+-- Restore sport associations from backup table (if it exists)
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_name = 'site_metrics_sport_backup_20251217'
+  ) THEN
+    -- Restore sport associations from backup
+    UPDATE site_metrics sm
+    SET sport_associations = backup.sport_associations
+    FROM site_metrics_sport_backup_20251217 backup
+    WHERE sm.id = backup.id;
 
--- This migration intentionally does nothing to prevent accidental data changes
--- during rollback without proper context.
+    -- Drop the backup table after restoration
+    DROP TABLE site_metrics_sport_backup_20251217;
+  END IF;
+END $$;
