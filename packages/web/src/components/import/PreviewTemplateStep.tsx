@@ -249,7 +249,7 @@ export function PreviewTemplateStep({
       </Alert>
 
       {/* Navigation buttons */}
-      <div className="flex gap-2 pt-4">
+      <div className="flex flex-wrap gap-2 pt-4">
         <Button variant="outline" onClick={onBack}>
           <ChevronLeft className="h-4 w-4 mr-2" />
           Back
