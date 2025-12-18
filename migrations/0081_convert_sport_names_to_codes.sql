@@ -3,8 +3,10 @@
 --              instead of sport names (e.g., 'Soccer')
 -- Author: Claude Code
 -- Date: 2025-12-17
+-- Note: This migration explicitly handles the 6 default sports. Any additional sports
+--       added to the system should already use uppercase codes per schema validation.
 
--- Update all metrics that have 'Soccer' in sportAssociations to use 'SOCCER' instead
+-- Update all metrics that have mixed-case sport names to use uppercase codes
 UPDATE site_metrics
 SET sport_associations = ARRAY(
   SELECT CASE

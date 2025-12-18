@@ -14,7 +14,7 @@
  * - null means "clear the field" (set to empty array/null in database)
  */
 
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Check, ChevronsUpDown, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,11 +73,19 @@ export function SportMultiSelect({
     setOpen(false);
   };
 
-  // Get sport name from code
-  const getSportName = (code: string): string => {
-    const sport = sports?.find((s) => s.code === code);
-    return sport?.name || code;
-  };
+  // Memoize sport name lookup map for performance
+  const sportNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    sports?.forEach((sport) => {
+      map.set(sport.code, sport.name);
+    });
+    return map;
+  }, [sports]);
+
+  // Get sport name from code using memoized lookup
+  const getSportName = useCallback((code: string): string => {
+    return sportNameMap.get(code) || code;
+  }, [sportNameMap]);
 
   // Get color class for sport badge
   const getColorClass = (code: string): string => {
