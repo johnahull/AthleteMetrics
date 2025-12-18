@@ -10,6 +10,8 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -150,22 +152,23 @@ export function registerMeasurementRoutes(app: Express) {
       };
 
       // Organization-based filtering
-      if (validatedParams.organizationId) {
-        // If organizationId is provided, use it (with permission check below)
-        filters.organizationId = validatedParams.organizationId;
+      // SECURITY: Validate organization access and get effective org ID
+      const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
 
-        // Security: Non-admin users can only query their own organization
-        if (!isSiteAdmin(user) && filters.organizationId !== user.primaryOrganizationId) {
-          return res.status(403).json({
-            message: "Access denied - cannot query measurements from different organization"
-          });
-        }
-      } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
-        // Non-admin users without explicit organizationId should see their organization
-        filters.organizationId = user.primaryOrganizationId;
-      } else if (!isSiteAdmin(user) && !user.primaryOrganizationId) {
-        // Users without an organization (e.g., newly self-registered) have no measurements to view
-        return res.json([]);
+      // For measurements endpoint, users with no org membership get empty results
+      if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
+        return res.json([]); // Users without an organization have no measurements to view
+      }
+
+      if (!orgAccessResult.allowed) {
+        return res.status(403).json({
+          message: getAuthorizationError(orgAccessResult.error!)
+        });
+      }
+
+      // Set the organization filter to the effective org ID
+      if (orgAccessResult.effectiveOrgId) {
+        filters.organizationId = orgAccessResult.effectiveOrgId;
       }
 
       // Site admins can query across organizations, non-admins cannot
@@ -204,9 +207,12 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: non-admin users can only view measurements in their organization
-      if (!isSiteAdmin(user) && measurement.organizationId && user.primaryOrganizationId !== measurement.organizationId) {
-        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      // SECURITY: Validate user has access to measurement's organization via database membership
+      if (measurement.organizationId) {
+        const hasAccess = await hasOrganizationAccess(user, measurement.organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
+        }
       }
 
       res.json(measurement);
@@ -248,8 +254,9 @@ export function registerMeasurementRoutes(app: Express) {
           return res.status(404).json({ message: "Team not found" });
         }
 
-        // SECURITY: Non-site-admins can only assign measurements to teams in their organization
-        if (!isSiteAdmin(user) && team.organizationId !== user.primaryOrganizationId) {
+        // SECURITY: Validate user has access to team's organization via database membership
+        const hasTeamAccess = await hasOrganizationAccess(user, team.organizationId);
+        if (!hasTeamAccess) {
           return res.status(403).json({
             message: "Cannot assign measurements to teams in different organizations"
           });
@@ -272,7 +279,10 @@ export function registerMeasurementRoutes(app: Express) {
           return res.status(404).json({ message: "User not found or not on any team" });
         }
 
-        const hasOrgAccess = targetUserTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        // SECURITY: Validate user has access to at least one of the target user's organizations
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
         if (!hasOrgAccess) {
           return res.status(403).json({
             message: "Cannot create measurements for users in different organizations"
@@ -400,11 +410,18 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      // Permission check: submitter, org admins/coaches in same org, or site admins can update
+      // SECURITY: Validate user has access to measurement's organization via database membership
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
-        (user.role === 'org_admin' || user.role === 'coach') &&
-        existingMeasurement.organizationId === user.primaryOrganizationId;
+      let isOrgAdminOrCoach = false;
+      let userOrgIds: Set<string> = new Set();
+
+      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        isOrgAdminOrCoach = existingMeasurement.organizationId
+          ? userOrgIds.has(existingMeasurement.organizationId)
+          : false;
+      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
@@ -415,7 +432,16 @@ export function registerMeasurementRoutes(app: Express) {
       const validatedData = updateSchema.parse(req.body);
 
       // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      // Use first org from actual membership, not session
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (userOrgIds.size === 0) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          expectedOrganizationId = userOrgs[0]?.organizationId;
+        } else {
+          expectedOrganizationId = Array.from(userOrgIds)[0];
+        }
+      }
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
@@ -457,18 +483,34 @@ export function registerMeasurementRoutes(app: Express) {
         });
       }
 
-      // Permission check: submitter, org admins/coaches in same org, or site admins can delete
+      // SECURITY: Validate user has access to measurement's organization via database membership
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
-        (user.role === 'org_admin' || user.role === 'coach') &&
-        existingMeasurement.organizationId === user.primaryOrganizationId;
+      let isOrgAdminOrCoach = false;
+      let userOrgIds: Set<string> = new Set();
+
+      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        isOrgAdminOrCoach = existingMeasurement.organizationId
+          ? userOrgIds.has(existingMeasurement.organizationId)
+          : false;
+      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
       // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      // Use first org from actual membership, not session
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (userOrgIds.size === 0) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          expectedOrganizationId = userOrgs[0]?.organizationId;
+        } else {
+          expectedOrganizationId = Array.from(userOrgIds)[0];
+        }
+      }
       await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
       res.json({ message: "Measurement deleted successfully" });
     } catch (error) {
@@ -502,16 +544,24 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: org admins/coaches can only verify measurements in their organization
-      if (!isSiteAdmin(user) && existingMeasurement.organizationId !== user.primaryOrganizationId) {
-        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      // SECURITY: Validate user has access to measurement's organization via database membership
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (existingMeasurement.organizationId) {
+          const hasAccess = await hasOrganizationAccess(user, existingMeasurement.organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
+          }
+        }
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        expectedOrganizationId = userOrgs[0]?.organizationId;
       }
 
       // SECURITY FIX: Pass expectedOrganizationId for defense-in-depth IDOR protection
       const verifiedMeasurement = await measurementService.verifyMeasurement(
         measurementId,
         user.id,
-        isSiteAdmin(user) ? undefined : user.primaryOrganizationId
+        expectedOrganizationId
       );
       res.json(verifiedMeasurement);
     } catch (error) {
