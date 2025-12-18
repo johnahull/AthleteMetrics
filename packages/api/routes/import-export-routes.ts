@@ -20,6 +20,8 @@ import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
 import { templateGeneratorService } from "../services/template-generator-service";
 import { metricService } from "../services/metric-service";
+import { importValidationService, type ValidationContext } from "../services/import-validation-service";
+import type { SiteMetric } from "@shared/schema";
 
 // MeasurementFilters interface
 interface MeasurementFilters {
@@ -42,8 +44,14 @@ interface MeasurementFilters {
   includeUnverified?: boolean;
 }
 
-// Helper to get default unit for a metric from METRIC_CONFIG
-const getDefaultUnit = (metric: string): string => {
+// Helper to get default unit for a metric
+// Prioritizes DB-defined metrics, falls back to legacy METRIC_CONFIG for backwards compatibility
+const getDefaultUnit = (metric: string, metricsMap?: Map<string, SiteMetric>): string => {
+  if (metricsMap) {
+    const siteMetric = metricsMap.get(metric.toUpperCase());
+    if (siteMetric && siteMetric.unit !== null) return siteMetric.unit;
+  }
+  // Fallback to legacy METRIC_CONFIG for backwards compatibility
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
   // Use nullish coalescing to allow empty string units (e.g., RSI)
   return config?.unit ?? 's'; // Default to seconds if metric not found
@@ -399,7 +407,7 @@ export function registerImportExportRoutes(app: Express) {
 
       // Auto-detect column mappings
       const systemFields = type === 'athletes'
-        ? ['firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear', 'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight', 'school', 'teamName']
+        ? ['firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear', 'gender', 'emails', 'phoneNumbers', 'sports', 'position', 'height', 'weight', 'school', 'teamName']
         : ['firstName', 'lastName', 'teamName', 'date', 'age', 'metric', 'value', 'units', 'flyInDistance', 'notes', 'gender'];
 
       const suggestedMappings: any[] = [];
@@ -584,12 +592,15 @@ export function registerImportExportRoutes(app: Express) {
           ])
         );
 
+        // Load validation context for sports and position validation
+        const validationContext = await importValidationService.loadValidationContext();
+
         // Process athletes import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
           const rowNum = i + 2; // Account for header row
           try {
-            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, height, weight, school, teamName, gender } = row;
+            const { firstName, lastName, birthDate, birthYear, graduationYear, emails, phoneNumbers, sports, position, height, weight, school, teamName, gender } = row;
 
             if (!firstName || !lastName) {
               errors.push({ row: rowNum, error: "First name and last name are required" });
@@ -631,7 +642,62 @@ export function registerImportExportRoutes(app: Express) {
                 });
               });
             }
-            const sportsArray = sports ? sports.split(';').map((s: string) => s.trim()).filter(Boolean) : [];
+
+            // Validate and filter sports
+            const sportsInput = sports ? sports.split(';').map((s: string) => s.trim()).filter(Boolean) : [];
+            const validatedSports: string[] = [];
+
+            for (const sportCode of sportsInput) {
+              const validationResult = importValidationService.validateSportCode(sportCode, validationContext);
+
+              if (validationResult.valid && validationResult.value) {
+                validatedSports.push(validationResult.value.code);
+              } else if (validationResult.warning) {
+                warnings.push({
+                  row: `Row ${rowNum} (${firstName} ${lastName})`,
+                  warning: validationResult.warning
+                });
+              }
+            }
+
+            const sportsArray = validatedSports;
+
+            // Validate position against athlete's sports
+            let validatedPosition: string | undefined;
+
+            if (position && position.trim()) {
+              if (validatedSports.length === 0) {
+                warnings.push({
+                  row: `Row ${rowNum} (${firstName} ${lastName})`,
+                  warning: `Position '${position}' cannot be assigned without valid sports`
+                });
+              } else {
+                let positionValid = false;
+
+                // Check if position is valid for ANY of the athlete's sports
+                for (const sportCode of validatedSports) {
+                  const positionResult = importValidationService.validatePositionCode(
+                    sportCode,
+                    position,
+                    validationContext
+                  );
+
+                  if (positionResult.valid && positionResult.value) {
+                    validatedPosition = positionResult.value.code;
+                    positionValid = true;
+                    break;
+                  }
+                }
+
+                // If position not valid for any sport, generate warning
+                if (!positionValid) {
+                  warnings.push({
+                    row: `Row ${rowNum} (${firstName} ${lastName})`,
+                    warning: `Position '${position}' is not valid for athlete's sports (${validatedSports.join(', ')})`
+                  });
+                }
+              }
+            }
 
             // Generate username
             const baseUsername = `${firstName.toLowerCase()}${lastName.toLowerCase()}`.replace(/[^a-z0-9]/g, '');
@@ -652,6 +718,7 @@ export function registerImportExportRoutes(app: Express) {
               birthYear: birthYear && !isNaN(parseInt(birthYear)) ? parseInt(birthYear) : (birthDate ? new Date(birthDate).getFullYear() : undefined),
               graduationYear: graduationYear && !isNaN(parseInt(graduationYear)) ? parseInt(graduationYear) : undefined,
               sports: sportsArray,
+              positions: validatedPosition ? [validatedPosition] : undefined,
               height: height && !isNaN(parseInt(height)) ? parseInt(height) : undefined,
               weight: weight && !isNaN(parseInt(weight)) ? parseInt(weight) : undefined,
               school: school || undefined,
@@ -878,6 +945,9 @@ export function registerImportExportRoutes(app: Express) {
           }
         }
       } else if (type === 'measurements') {
+        // Load validation context for metric validation
+        const validationContext = await importValidationService.loadValidationContext();
+
         // Process measurements import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -889,6 +959,12 @@ export function registerImportExportRoutes(app: Express) {
             if (!firstName || !lastName || !teamName || !date || !metric || !value) {
               errors.push({ row: rowNum, error: "First name, last name, team name, date, metric, and value are required" });
               continue;
+            }
+
+            // Validate metric code (permissive mode - generate warning but continue)
+            const metricValidation = importValidationService.validateMetricCode(metric, validationContext);
+            if (!metricValidation.valid && metricValidation.warning) {
+              warnings.push(`Row ${rowNum}: ${metricValidation.warning}`);
             }
 
             // Get organization context and teamId for measurement
@@ -1077,7 +1153,7 @@ export function registerImportExportRoutes(app: Express) {
               age: age && !isNaN(parseInt(age)) ? parseInt(age) : undefined,
               metric,
               value: parseFloat(value),
-              units: units || getDefaultUnit(metric),
+              units: units || getDefaultUnit(metric, validationContext.metrics),
               flyInDistance: flyInDistance && !isNaN(parseInt(flyInDistance)) ? parseInt(flyInDistance) : undefined,
               notes: notes || undefined,
               teamId: teamId || undefined, // Pass teamId from CSV teamName lookup
@@ -1291,7 +1367,7 @@ export function registerImportExportRoutes(app: Express) {
       // Headers match client/src/pages/import-export.tsx athletesTemplate (line 689)
       const csvHeaders = [
         'firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear',
-        'gender', 'emails', 'phoneNumbers', 'sports', 'height', 'weight',
+        'gender', 'emails', 'phoneNumbers', 'sports', 'position', 'height', 'weight',
         'school', 'teamName'
       ];
 
@@ -1305,6 +1381,7 @@ export function registerImportExportRoutes(app: Express) {
         const emails = Array.isArray(athlete.emails) ? athlete.emails.join(';') : (athlete.emails || '');
         const phoneNumbers = Array.isArray(athlete.phoneNumbers) ? athlete.phoneNumbers.join(';') : (athlete.phoneNumbers || '');
         const sports = Array.isArray(athlete.sports) ? athlete.sports.join(';') : (athlete.sports || '');
+        const positions = Array.isArray(athlete.positions) ? athlete.positions.join(';') : (athlete.positions || '');
 
         return [
           athlete.firstName || '',
@@ -1316,6 +1393,7 @@ export function registerImportExportRoutes(app: Express) {
           emails,
           phoneNumbers,
           sports,
+          positions,
           athlete.height || '',
           athlete.weight || '',
           athlete.school || '',
@@ -1508,7 +1586,7 @@ export function registerImportExportRoutes(app: Express) {
     }
   });
 
-  // Template Wizard endpoint
+// Template Wizard endpoint - generates customized templates with team/metric selection
   app.post("/api/import/templates/wizard", requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
@@ -1647,6 +1725,80 @@ export function registerImportExportRoutes(app: Express) {
         message: "Failed to generate template",
         error: error instanceof Error ? error.message : String(error)
       });
+    }
+  });
+
+  // Template download endpoints - provide dynamic CSV templates with valid values
+  app.get("/api/import/templates/athletes", requireAuth, async (req, res) => {
+    try {
+      // Load validation context to get active sports
+      const validationContext = await importValidationService.loadValidationContext();
+
+      // Get valid sport codes
+      const validSports = importValidationService.getValidSportCodes(validationContext);
+
+      // CSV header row
+      const headers = [
+        'firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear',
+        'gender', 'emails', 'phoneNumbers', 'sports', 'position', 'height', 'weight',
+        'school', 'teamName'
+      ];
+
+      // Comment line showing valid sports (limit to 30 for readability in Excel/Sheets)
+      const maxToShow = 30;
+      const displaySports = validSports.slice(0, maxToShow);
+      const sportsSuffix = validSports.length > maxToShow
+        ? ` ... and ${validSports.length - maxToShow} more`
+        : '';
+      const commentLine = `# Valid sports: ${displaySports.join(', ')}${sportsSuffix}`;
+
+      // Build CSV content
+      const csvContent = `${commentLine}\n${headers.join(',')}`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="athletes-template.csv"');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error generating athletes template:", error);
+      res.status(500).json({ message: "Failed to generate athletes template" });
+    }
+  });
+
+  app.get("/api/import/templates/measurements", requireAuth, async (req, res) => {
+    try {
+      // Load validation context to get active metrics
+      const validationContext = await importValidationService.loadValidationContext();
+
+      // Get valid metrics with units
+      const validMetrics = Array.from(validationContext.metrics.values())
+        .map(metric => {
+          const unit = metric.unit || '';
+          return unit ? `${metric.code} (${unit})` : metric.code;
+        });
+
+      // CSV header row
+      const headers = [
+        'firstName', 'lastName', 'teamName', 'date', 'age',
+        'metric', 'value', 'units', 'flyInDistance', 'notes', 'gender'
+      ];
+
+      // Comment line showing valid metrics with units (limit to 30 for readability)
+      const maxToShow = 30;
+      const displayMetrics = validMetrics.slice(0, maxToShow);
+      const metricsSuffix = validMetrics.length > maxToShow
+        ? ` ... and ${validMetrics.length - maxToShow} more`
+        : '';
+      const commentLine = `# Valid metrics: ${displayMetrics.join(', ')}${metricsSuffix}`;
+
+      // Build CSV content
+      const csvContent = `${commentLine}\n${headers.join(',')}`;
+
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename="measurements-template.csv"');
+      res.send(csvContent);
+    } catch (error) {
+      console.error("Error generating measurements template:", error);
+      res.status(500).json({ message: "Failed to generate measurements template" });
     }
   });
 

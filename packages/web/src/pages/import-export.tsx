@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye, Wand2 } from "lucide-react";
+import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye, Wand2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { ImportWizard } from "@/components/import";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -39,6 +39,9 @@ import {
 } from "@shared/import-types";
 import { useAuth } from "@/lib/auth";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export default function ImportExport() {
   const labels = useContextualLabels();
@@ -118,6 +121,53 @@ export default function ImportExport() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}m ${secs}s`;
+  };
+
+  // Helper: Categorize warnings by type
+  const categorizeWarnings = (warnings: any[]): {
+    metric: any[],
+    sport: any[],
+    position: any[],
+    contact: any[],
+    gender: any[],
+    other: any[]
+  } => {
+    const categories = {
+      metric: [] as any[],
+      sport: [] as any[],
+      position: [] as any[],
+      contact: [] as any[],
+      gender: [] as any[],
+      other: [] as any[]
+    };
+
+    warnings.forEach(warning => {
+      const warningText = warning.warning || '';
+      if (warningText.includes('Metric code') || warningText.includes('metric')) {
+        categories.metric.push(warning);
+      } else if (warningText.includes('Sport code') || warningText.includes('sport')) {
+        categories.sport.push(warning);
+      } else if (warningText.includes('Position') || warningText.includes('position')) {
+        categories.position.push(warning);
+      } else if (warningText.includes('email') || warningText.includes('phone')) {
+        categories.contact.push(warning);
+      } else if (warningText.includes('gender')) {
+        categories.gender.push(warning);
+      } else {
+        categories.other.push(warning);
+      }
+    });
+
+    return categories;
+  };
+
+  // Helper: Extract valid values from warning message
+  const extractValidValues = (warningText: string): string[] => {
+    const match = warningText.match(/Valid (?:metric codes|sport codes|position codes): (.+)$/);
+    if (match && match[1]) {
+      return match[1].split(', ').filter(Boolean);
+    }
+    return [];
   };
 
   // Timer effect for elapsed time
@@ -895,6 +945,32 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
     });
   };
 
+  const handleDownloadTemplate = async (templateType: 'athletes' | 'measurements') => {
+    try {
+      const response = await fetch(`/api/import/templates/${templateType}`, {
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch ${templateType} template`);
+      }
+
+      const csvData = await response.text();
+      downloadCSV(csvData, `${templateType}-template.csv`);
+
+      toast({
+        title: "Success",
+        description: `${templateType} template downloaded successfully`,
+      });
+    } catch (error) {
+      toast({
+        title: "Download Failed",
+        description: error instanceof Error ? error.message : `Failed to download ${templateType} template`,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="max-w-4xl mx-auto">
@@ -1016,10 +1092,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   </Button>
                   <Button
                     variant="ghost"
-                    onClick={() => copyToClipboard(
-                      importType === "athletes" ? athletesTemplate : measurementsTemplate,
-                      importType === "athletes" ? "athletes" : importType
-                    )}
+                    onClick={() => handleDownloadTemplate(importType)}
                     className="text-primary hover:text-blue-700 text-sm"
                     data-testid="button-download-template"
                   >
@@ -1463,6 +1536,8 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
             {importResults && (
               <div className="mt-6 p-4 border border-gray-200 rounded-lg">
                 <h5 className="font-medium text-gray-900 mb-3">Import Results</h5>
+
+                {/* Summary Statistics */}
                 <div className={`grid gap-4 text-sm ${importResults.warnings?.length > 0 ? 'grid-cols-4' : 'grid-cols-3'}`}>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-gray-900">{importResults.totalRows}</p>
@@ -1470,7 +1545,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-green-600">{importResults.results.length}</p>
-                    <p className="text-gray-600">Valid</p>
+                    <p className="text-gray-600">Successful</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-red-600">{importResults.errors.length}</p>
@@ -1484,22 +1559,196 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   )}
                 </div>
 
-                {importResults.warnings?.length > 0 && (
-                  <div className="mt-4">
-                    <h6 className="font-medium text-yellow-800 mb-2">Smart Data Placement:</h6>
-                    <div className="max-h-48 overflow-y-auto space-y-1 border border-yellow-200 rounded p-3 bg-yellow-50">
-                      {importResults.warnings.map((warning: any, index: number) => (
-                        <p key={index} className="text-sm text-yellow-600">
-                          {warning.row}: {warning.warning}
-                        </p>
-                      ))}
-                    </div>
-                  </div>
+                {/* Success Summary */}
+                {importResults.results.length > 0 && (
+                  <Alert className="mt-4 bg-green-50 border-green-200">
+                    <AlertDescription className="text-green-800">
+                      <strong>{importResults.results.length} rows imported successfully</strong>
+                      {importResults.warnings?.length > 0 && ` (${importResults.warnings.length} with warnings)`}
+                    </AlertDescription>
+                  </Alert>
                 )}
 
+                {/* Enhanced Warnings Display */}
+                {importResults.warnings?.length > 0 && (() => {
+                  const categories = categorizeWarnings(importResults.warnings);
+                  const hasMetricWarnings = categories.metric.length > 0;
+                  const hasSportWarnings = categories.sport.length > 0;
+                  const hasPositionWarnings = categories.position.length > 0;
+                  const hasContactWarnings = categories.contact.length > 0;
+                  const hasGenderWarnings = categories.gender.length > 0;
+                  const hasOtherWarnings = categories.other.length > 0;
+
+                  return (
+                    <div className="mt-4 space-y-3">
+                      <h6 className="font-medium text-yellow-800 flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        Validation Warnings
+                      </h6>
+
+                      {/* Metric Warnings */}
+                      {hasMetricWarnings && (
+                        <Collapsible defaultOpen={true}>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                {categories.metric.length}
+                              </Badge>
+                              <span className="font-medium text-yellow-900">Invalid Metrics</span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-yellow-700" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2">
+                            {categories.metric.slice(0, 5).map((warning: any, index: number) => {
+                              const validValues = extractValidValues(warning.warning);
+                              return (
+                                <div key={index} className="text-sm">
+                                  <p className="text-yellow-800 font-medium">{warning.row}</p>
+                                  <p className="text-yellow-700">{warning.warning}</p>
+                                  {validValues.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {validValues.map((value, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">
+                                          {value}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {categories.metric.length > 5 && (
+                              <p className="text-xs text-yellow-600 italic">
+                                ...and {categories.metric.length - 5} more metric warnings
+                              </p>
+                            )}
+                            {user?.isSiteAdmin && (
+                              <div className="mt-2 pt-2 border-t border-yellow-300">
+                                <a
+                                  href="/metrics"
+                                  className="text-sm text-yellow-800 hover:text-yellow-900 font-medium flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Manage Metrics (Site Admin)
+                                </a>
+                              </div>
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+
+                      {/* Sport Warnings */}
+                      {hasSportWarnings && (
+                        <Collapsible defaultOpen={true}>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                {categories.sport.length}
+                              </Badge>
+                              <span className="font-medium text-yellow-900">Invalid Sports</span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-yellow-700" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2">
+                            {categories.sport.slice(0, 5).map((warning: any, index: number) => {
+                              const validValues = extractValidValues(warning.warning);
+                              return (
+                                <div key={index} className="text-sm">
+                                  <p className="text-yellow-800 font-medium">{warning.row}</p>
+                                  <p className="text-yellow-700">{warning.warning}</p>
+                                  {validValues.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {validValues.map((value, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">
+                                          {value}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {categories.sport.length > 5 && (
+                              <p className="text-xs text-yellow-600 italic">
+                                ...and {categories.sport.length - 5} more sport warnings
+                              </p>
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+
+                      {/* Position Warnings */}
+                      {hasPositionWarnings && (
+                        <Collapsible defaultOpen={true}>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-yellow-50 hover:bg-yellow-100 border border-yellow-200 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-300">
+                                {categories.position.length}
+                              </Badge>
+                              <span className="font-medium text-yellow-900">Invalid Positions</span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-yellow-700" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-lg space-y-2">
+                            {categories.position.slice(0, 5).map((warning: any, index: number) => {
+                              const validValues = extractValidValues(warning.warning);
+                              return (
+                                <div key={index} className="text-sm">
+                                  <p className="text-yellow-800 font-medium">{warning.row}</p>
+                                  <p className="text-yellow-700">{warning.warning}</p>
+                                  {validValues.length > 0 && (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {validValues.map((value, i) => (
+                                        <Badge key={i} variant="secondary" className="text-xs">
+                                          {value}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {categories.position.length > 5 && (
+                              <p className="text-xs text-yellow-600 italic">
+                                ...and {categories.position.length - 5} more position warnings
+                              </p>
+                            )}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+
+                      {/* Contact/Gender/Other Warnings */}
+                      {(hasContactWarnings || hasGenderWarnings || hasOtherWarnings) && (
+                        <Collapsible defaultOpen={false}>
+                          <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
+                                {categories.contact.length + categories.gender.length + categories.other.length}
+                              </Badge>
+                              <span className="font-medium text-blue-900">Smart Data Placement & Other Warnings</span>
+                            </div>
+                            <ChevronDown className="h-4 w-4 text-blue-700" />
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1">
+                            {[...categories.contact, ...categories.gender, ...categories.other].map((warning: any, index: number) => (
+                              <p key={index} className="text-sm text-blue-700">
+                                <span className="font-medium">{warning.row}:</span> {warning.warning}
+                              </p>
+                            ))}
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Errors Display */}
                 {importResults.errors.length > 0 && (
                   <div className="mt-4">
-                    <h6 className="font-medium text-red-800 mb-2">Errors:</h6>
+                    <h6 className="font-medium text-red-800 mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      Errors ({importResults.errors.length} rows failed)
+                    </h6>
                     <div className="max-h-48 overflow-y-auto space-y-1 border border-red-200 rounded p-3 bg-red-50">
                       {importResults.errors.map((error: any, index: number) => (
                         <p key={index} className="text-sm text-red-600">
