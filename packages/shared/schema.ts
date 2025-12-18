@@ -27,7 +27,7 @@ export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'
  * Sport code enum for metric sport associations
  * These codes correspond to the 'code' field in the site_sports table
  */
-export const sportCodeEnum = ['SOCCER', 'BASKETBALL', 'FOOTBALL', 'BASEBALL', 'HOCKEY', 'LACROSSE'] as const;
+export const sportCodeEnum = ['SOCCER', 'BASKETBALL', 'VOLLEYBALL', 'TENNIS', 'BASEBALL', 'FOOTBALL', 'HOCKEY', 'LACROSSE'] as const;
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
