@@ -18,6 +18,8 @@ import { METRIC_CONFIG } from "@shared/analytics-types";
 import type { ImportResult } from "@shared/import-types";
 import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
+import { templateGeneratorService } from "../services/template-generator-service";
+import { metricService } from "../services/metric-service";
 
 // MeasurementFilters interface
 interface MeasurementFilters {
@@ -1503,6 +1505,148 @@ export function registerImportExportRoutes(app: Express) {
     } catch (error) {
       console.error("Error exporting teams:", error);
       res.status(500).json({ message: "Failed to export teams" });
+    }
+  });
+
+  // Template Wizard endpoint
+  app.post("/api/import/templates/wizard", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { type, teamIds, metricCodes, includeExamples } = req.body;
+
+      // Validate type parameter
+      if (!type || (type !== 'athletes' && type !== 'measurements')) {
+        return res.status(400).json({ message: "Invalid type. Must be 'athletes' or 'measurements'" });
+      }
+
+      // Validate teamIds
+      if (!teamIds || !Array.isArray(teamIds) || teamIds.length === 0) {
+        return res.status(400).json({ message: "At least one team is required" });
+      }
+
+      // Get teams
+      const teams = await storage.getTeams();
+      const selectedTeams = teams.filter(t => teamIds.includes(t.id));
+
+      if (selectedTeams.length === 0) {
+        return res.status(404).json({ message: "No valid teams found" });
+      }
+
+      // Common metrics constant
+      const COMMON_METRICS = ['FLY10_TIME', 'VERTICAL_JUMP', 'DASH_40YD', 'AGILITY_505', 'TOP_SPEED'];
+
+      if (type === 'athletes') {
+        // Generate athlete template
+        const headers = [
+          'firstName', 'lastName', 'birthDate', 'birthYear', 'graduationYear',
+          'gender', 'emails', 'phoneNumbers', 'sports', 'position', 'height',
+          'weight', 'school', 'teamName'
+        ];
+
+        const exampleRows = includeExamples
+          ? templateGeneratorService.generateExampleRows('athletes', selectedTeams, [], 3)
+          : [];
+
+        const csvContent = templateGeneratorService.buildCsvContent(
+          headers,
+          exampleRows,
+          includeExamples ? 'Example athlete import template' : undefined
+        );
+
+        return res.json({
+          csvContent,
+          headers,
+          teams: selectedTeams.map(t => ({ id: t.id, name: t.name })),
+          exampleRows,
+        });
+
+      } else {
+        // Generate measurement template
+        // Get organization context from first team
+        const organizationId = selectedTeams[0]?.organization?.id;
+
+        // Get enabled metrics for organization
+        let enabledMetrics: any[] = [];
+
+        if (organizationId) {
+          try {
+            // Try to get organization-specific enabled metrics
+            const orgMetrics = await metricService.getOrganizationMetrics(
+              organizationId,
+              currentUser.id,
+              { enabledOnly: true }
+            );
+            enabledMetrics = orgMetrics.map(om => ({
+              code: om.siteMetric.code,
+              label: om.siteMetric.label,
+              unit: om.siteMetric.unit,
+            }));
+          } catch (error) {
+            console.warn('Could not get organization metrics, falling back to site metrics:', error);
+          }
+        }
+
+        // Fall back to site metrics if no org metrics
+        if (enabledMetrics.length === 0) {
+          const siteMetricsData = await storage.getSiteMetrics({ includeInactive: false });
+          enabledMetrics = siteMetricsData.map(sm => ({
+            code: sm.code,
+            label: sm.label,
+            unit: sm.unit,
+          }));
+        }
+
+        // Filter by requested metric codes or use common metrics
+        let metricsToUse = enabledMetrics;
+        if (metricCodes && Array.isArray(metricCodes) && metricCodes.length > 0) {
+          metricsToUse = enabledMetrics.filter(m => metricCodes.includes(m.code));
+        } else {
+          // Default to common metrics that are enabled
+          metricsToUse = enabledMetrics.filter(m => COMMON_METRICS.includes(m.code));
+          if (metricsToUse.length === 0) {
+            // If no common metrics are enabled, use all enabled metrics
+            metricsToUse = enabledMetrics;
+          }
+        }
+
+        const headers = [
+          'firstName', 'lastName', 'teamName', 'date', 'age',
+          'metric', 'value', 'units', 'flyInDistance', 'notes', 'gender'
+        ];
+
+        const exampleRows = includeExamples && metricsToUse.length > 0
+          ? templateGeneratorService.generateExampleRows(
+              'measurements',
+              selectedTeams,
+              metricsToUse.map(m => ({ code: m.code, unit: m.unit })),
+              Math.min(6, metricsToUse.length * 2)
+            )
+          : [];
+
+        const csvContent = templateGeneratorService.buildCsvContent(
+          headers,
+          exampleRows,
+          includeExamples ? 'Example measurement import template' : undefined
+        );
+
+        return res.json({
+          csvContent,
+          headers,
+          enabledMetrics: metricsToUse,
+          teams: selectedTeams.map(t => ({ id: t.id, name: t.name })),
+          exampleRows,
+        });
+      }
+    } catch (error) {
+      console.error("Template wizard error:", error);
+      res.status(500).json({
+        message: "Failed to generate template",
+        error: error instanceof Error ? error.message : String(error)
+      });
     }
   });
 

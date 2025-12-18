@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye } from "lucide-react";
+import { CloudUpload, Download, Copy, Info, AlertTriangle, Users, Eye, Wand2 } from "lucide-react";
+import { ImportWizard } from "@/components/import";
 import { useToast } from "@/hooks/use-toast";
 import {
   downloadCSV,
@@ -77,6 +78,7 @@ export default function ImportExport() {
   const [showBatchSplitDialog, setShowBatchSplitDialog] = useState(false);
   const [largeParsedFile, setLargeParsedFile] = useState<{ file: File; data: any[]; headers: string[] } | null>(null);
   const [batchProgress, setBatchProgress] = useState<{ current: number; total: number; rowsProcessed: number } | null>(null);
+  const [showImportWizard, setShowImportWizard] = useState(false);
   const { toast } = useToast();
   const { user, userOrganizations, organizationContext } = useAuth();
 
@@ -1002,7 +1004,16 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                   </div>
                 )}
 
-                <div className="mt-4">
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    variant="default"
+                    onClick={() => setShowImportWizard(true)}
+                    className="text-sm"
+                    data-testid="button-template-wizard"
+                  >
+                    <Wand2 className="h-4 w-4 mr-2" />
+                    Template Wizard
+                  </Button>
                   <Button
                     variant="ghost"
                     onClick={() => copyToClipboard(
@@ -1013,7 +1024,7 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
                     data-testid="button-download-template"
                   >
                     <Download className="h-4 w-4 mr-2" />
-                    Download {importType === "athletes" ? "athletes" : importType} template
+                    Quick template (all fields)
                   </Button>
                 </div>
               </div>
@@ -1819,6 +1830,14 @@ Avery,Smith,Female,FIERCE 08G,2025-01-12,16,TOP_SPEED,18.5,mph,,Measured with ra
           columnMappings={columnMappings}
           onConfirm={handlePreviewConfirm}
           isLoading={importMutation.isPending}
+        />
+
+        {/* Import Template Wizard */}
+        <ImportWizard
+          open={showImportWizard}
+          initialType={importType}
+          onComplete={() => setShowImportWizard(false)}
+          onCancel={() => setShowImportWizard(false)}
         />
       </div>
     </div>
