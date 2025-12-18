@@ -188,14 +188,14 @@ export function ImportWizard({
   return (
     <Dialog open={open} onOpenChange={handleCancel}>
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto"
+        className="max-h-[90vh] overflow-y-auto overflow-x-hidden"
         style={{ maxWidth: '900px', width: '95vw' }}
       >
         <DialogHeader>
           <DialogTitle>Import Wizard</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-6">
+        <div className="space-y-6 w-full overflow-hidden">
           {/* Step indicator */}
           <WizardStepIndicator
             currentStep={getStepNumber()}
