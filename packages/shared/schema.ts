@@ -1578,7 +1578,7 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string().regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).default(3),
@@ -1596,7 +1596,7 @@ export const updateSiteMetricSchema = z.object({
   description: z.string().optional(),
   // Allow null to explicitly clear these array fields (undefined means "don't update")
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
-  sportAssociations: z.array(z.string().regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),

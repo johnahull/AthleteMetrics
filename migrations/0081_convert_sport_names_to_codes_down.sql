@@ -22,5 +22,5 @@ WHERE sport_associations IS NOT NULL
   AND EXISTS (
     SELECT 1
     FROM unnest(sport_associations) AS sport
-    WHERE sport ~ '^[A-Z_]+$' -- Match uppercase codes like 'SOCCER'
+    WHERE sport ~ '^[A-Z0-9_]+$' -- Match uppercase codes like 'SOCCER' or 'BASKETBALL_5V5'
   );

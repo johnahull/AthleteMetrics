@@ -7,6 +7,7 @@
 --       added to the system should already use uppercase codes per schema validation.
 
 -- Update all metrics that have mixed-case sport names to use uppercase codes
+-- Handles known sports explicitly for clarity, with fallback for unknown mixed-case values
 UPDATE site_metrics
 SET sport_associations = ARRAY(
   SELECT CASE
@@ -16,6 +17,8 @@ SET sport_associations = ARRAY(
     WHEN unnest = 'Tennis' THEN 'TENNIS'
     WHEN unnest = 'Baseball' THEN 'BASEBALL'
     WHEN unnest = 'Football' THEN 'FOOTBALL'
+    -- Fallback: Convert any other mixed-case names to uppercase with underscores for spaces
+    WHEN unnest ~ '^[A-Z][a-z]' THEN UPPER(REPLACE(unnest, ' ', '_'))
     ELSE unnest -- Keep any codes that are already uppercase
   END
   FROM unnest(sport_associations)
@@ -24,7 +27,7 @@ WHERE sport_associations IS NOT NULL
   AND EXISTS (
     SELECT 1
     FROM unnest(sport_associations) AS sport
-    WHERE sport ~ '^[A-Z][a-z]+$' -- Match mixed-case names like 'Soccer'
+    WHERE sport ~ '^[A-Z][a-z]+' -- Match mixed-case names like 'Soccer' or 'Flag Football'
   );
 
 -- Verify the migration
