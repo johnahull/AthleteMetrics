@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, ChevronLeft, Download, Copy, CheckCircle, AlertCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/lib/api';
 import type { TemplateWizardRequest, TemplateWizardResponse } from '@shared/import-types';
 
 interface PreviewTemplateStepProps {
@@ -45,18 +46,7 @@ export function PreviewTemplateStep({
     error
   } = useMutation<TemplateWizardResponse, Error, TemplateWizardRequest>({
     mutationFn: async (request) => {
-      const response = await fetch('/api/import/templates/wizard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to generate template' }));
-        throw new Error(errorData.message || 'Failed to generate template');
-      }
-
-      return response.json();
+      return apiClient.post<TemplateWizardResponse>('/import/templates/wizard', request);
     },
   });
 
