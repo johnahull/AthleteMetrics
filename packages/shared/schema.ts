@@ -416,6 +416,12 @@ export const measurements = pgTable("measurements", {
     formula: string;
     sourceValues: Record<string, number>;
     calculatedAt: string;
+    calculationVersion?: string;  // Version of the calculator (e.g., "1.0.0")
+    triggeredBy?: {
+      event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
+      userId?: string;              // Who triggered the calculation (if applicable)
+      sourceMeasurementId?: string; // Source measurement that triggered the calculation
+    };
   }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

@@ -142,16 +142,20 @@ describe('DerivedMetricCalculator', () => {
       // Process the new measurement
       const calculatedMeasurements = await calculator.processNewMeasurement(sourceMeasurement);
 
-      // Should create TOP_SPEED_CALC measurement
-      expect(calculatedMeasurements).toHaveLength(1);
-      expect(calculatedMeasurements[0].metric).toBe('TOP_SPEED_CALC');
-      expect(calculatedMeasurements[0].isCalculated).toBe(true);
-      expect(calculatedMeasurements[0].date).toBe('2024-01-15');
-      expect(calculatedMeasurements[0].userId).toBe(testUser.id);
+      // Should create at least TOP_SPEED_CALC measurement
+      // (may create additional derived metrics if others depend on FLY10_TIME)
+      expect(calculatedMeasurements.length).toBeGreaterThanOrEqual(1);
+
+      // Find the specific TOP_SPEED_CALC measurement we're testing
+      const topSpeedCalc = calculatedMeasurements.find(m => m.metric === 'TOP_SPEED_CALC');
+      expect(topSpeedCalc).toBeDefined();
+      expect(topSpeedCalc!.isCalculated).toBe(true);
+      expect(topSpeedCalc!.date).toBe('2024-01-15');
+      expect(topSpeedCalc!.userId).toBe(testUser.id);
 
       // TOP_SPEED_CALC = 10 / 1.0 * 2.045 = 20.45 mph
-      expect(parseFloat(calculatedMeasurements[0].value)).toBeCloseTo(20.45, 2);
-      expect(calculatedMeasurements[0].units).toBe('mph');
+      expect(parseFloat(topSpeedCalc!.value)).toBeCloseTo(20.45, 2);
+      expect(topSpeedCalc!.units).toBe('mph');
     });
 
     it('should store correct calculatedFromMeasurementIds', async () => {

@@ -1,8 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   validateFormula,
   evaluateFormula,
   detectCircularDependencies,
+  clearFormulaCache,
+  getFormulaCacheSize,
   type FormulaValidationResult,
 } from '../services/formula-service';
 
@@ -414,6 +416,91 @@ describe('Formula Service', () => {
       const result = detectCircularDependencies(metrics);
 
       expect(result.hasCircular).toBe(false);
+    });
+  });
+
+  describe('formula cache', () => {
+    beforeEach(() => {
+      // Clear cache before each test to ensure isolation
+      clearFormulaCache();
+    });
+
+    it('should start with empty cache', () => {
+      expect(getFormulaCacheSize()).toBe(0);
+    });
+
+    it('should cache formulas after validation', () => {
+      const availableMetrics = ['fly10_time'];
+
+      validateFormula('fly10_time * 2', availableMetrics);
+
+      expect(getFormulaCacheSize()).toBeGreaterThan(0);
+    });
+
+    it('should cache formulas after evaluation', () => {
+      const formula = 'fly10_time + 10';
+      const sourceValues = { fly10_time: 1.5 };
+
+      evaluateFormula(formula, sourceValues);
+
+      expect(getFormulaCacheSize()).toBeGreaterThan(0);
+    });
+
+    it('should reuse cached formulas on repeated calls', () => {
+      const availableMetrics = ['fly10_time'];
+      const formula = 'fly10_time * 2';
+
+      // First call - should cache
+      validateFormula(formula, availableMetrics);
+      const sizeAfterFirst = getFormulaCacheSize();
+
+      // Second call - should reuse cache
+      validateFormula(formula, availableMetrics);
+      const sizeAfterSecond = getFormulaCacheSize();
+
+      // Cache size should not increase for same formula
+      expect(sizeAfterSecond).toBe(sizeAfterFirst);
+    });
+
+    it('should cache different formulas separately', () => {
+      const availableMetrics = ['fly10_time', 'vertical_jump'];
+
+      validateFormula('fly10_time * 2', availableMetrics);
+      const sizeAfterFirst = getFormulaCacheSize();
+
+      validateFormula('vertical_jump / 10', availableMetrics);
+      const sizeAfterSecond = getFormulaCacheSize();
+
+      // Each unique formula should be cached
+      expect(sizeAfterSecond).toBeGreaterThan(sizeAfterFirst);
+    });
+
+    it('clearFormulaCache should remove all cached entries', () => {
+      const availableMetrics = ['fly10_time'];
+
+      validateFormula('fly10_time * 2', availableMetrics);
+      validateFormula('fly10_time / 10', availableMetrics);
+
+      expect(getFormulaCacheSize()).toBeGreaterThan(0);
+
+      clearFormulaCache();
+
+      expect(getFormulaCacheSize()).toBe(0);
+    });
+
+    it('should produce consistent results with caching', () => {
+      const formula = '10 / fly10_time * 2.045';
+      const sourceValues = { fly10_time: 1.0 };
+
+      // Clear cache and evaluate
+      clearFormulaCache();
+      const result1 = evaluateFormula(formula, sourceValues);
+
+      // Evaluate again with cached formula
+      const result2 = evaluateFormula(formula, sourceValues);
+
+      expect(result1).toEqual(result2);
+      expect(result1).toBeCloseTo(20.45, 2);
     });
   });
 });

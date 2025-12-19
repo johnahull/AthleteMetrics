@@ -27,6 +27,34 @@ type DbTransaction = PgTransaction<
 >;
 import { evaluateFormula } from './formula-service';
 
+// ============================================================================
+// Types for Audit Trail and Recalculation Options
+// ============================================================================
+
+/**
+ * Context about what triggered a derived metric calculation.
+ * Used for audit trail and debugging.
+ */
+export type TriggerContext = {
+  event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
+  userId?: string;              // Who triggered the calculation (if applicable)
+  sourceMeasurementId?: string; // Source measurement that triggered the calculation
+};
+
+/**
+ * Options for the recalculateForAthlete method.
+ */
+export interface RecalculateOptions {
+  useTransaction?: boolean;     // Default: false (avoids long-running transactions)
+  triggerContext?: TriggerContext;
+}
+
+/**
+ * Current version of the calculation algorithm.
+ * Increment this when making changes to calculation logic.
+ */
+const CALCULATION_VERSION = '1.0.0';
+
 export class DerivedMetricCalculator {
   constructor(private db: typeof dbType) {}
 
@@ -37,8 +65,14 @@ export class DerivedMetricCalculator {
    *
    * RACE CONDITION FIX: Wrapped in transaction to prevent duplicate calculations
    * when multiple measurements are submitted concurrently.
+   *
+   * @param measurement - The source measurement that was created/updated
+   * @param triggerContext - Optional context about what triggered this calculation (for audit trail)
    */
-  async processNewMeasurement(measurement: Measurement): Promise<Measurement[]> {
+  async processNewMeasurement(
+    measurement: Measurement,
+    triggerContext?: TriggerContext
+  ): Promise<Measurement[]> {
     // RACE CONDITION FIX: Wrap entire operation in transaction
     return await this.db.transaction(async (tx) => {
       // Find all active derived metrics
@@ -186,6 +220,8 @@ export class DerivedMetricCalculator {
                   formula: derivedMetric.formula || '',
                   sourceValues,
                   calculatedAt: new Date().toISOString(),
+                  calculationVersion: CALCULATION_VERSION,
+                  triggeredBy: triggerContext || { event: 'measurement_insert' },
                 },
               })
               .where(eq(measurements.id, existingCalculated[0].id))
@@ -216,6 +252,8 @@ export class DerivedMetricCalculator {
                   formula: derivedMetric.formula || '',
                   sourceValues,
                   calculatedAt: new Date().toISOString(),
+                  calculationVersion: CALCULATION_VERSION,
+                  triggeredBy: triggerContext || { event: 'measurement_insert' },
                 },
               })
               .returning();
@@ -240,14 +278,44 @@ export class DerivedMetricCalculator {
   /**
    * Recalculate derived measurements for an athlete when source changes.
    * Called after measurement update or delete.
+   *
+   * @param userId - The athlete's user ID
+   * @param metricCode - The source metric code that changed
+   * @param date - Optional date filter (if omitted, recalculates all dates)
+   * @param options - Optional configuration for transaction and audit trail
+   * @param options.useTransaction - If true, wraps operation in a transaction (default: false)
+   * @param options.triggerContext - Context for audit trail
    */
   async recalculateForAthlete(
     userId: string,
     metricCode: string,
-    date?: string
+    date?: string,
+    options?: RecalculateOptions
+  ): Promise<void> {
+    const { useTransaction = false, triggerContext } = options || {};
+
+    if (useTransaction) {
+      await this.db.transaction(async (tx) => {
+        await this.recalculateForAthleteInternal(tx, userId, metricCode, date, triggerContext);
+      });
+    } else {
+      await this.recalculateForAthleteInternal(this.db, userId, metricCode, date, triggerContext);
+    }
+  }
+
+  /**
+   * Internal implementation of recalculateForAthlete that accepts a db or transaction.
+   * This allows the same logic to run inside or outside a transaction.
+   */
+  private async recalculateForAthleteInternal(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    metricCode: string,
+    date?: string,
+    triggerContext?: TriggerContext
   ): Promise<void> {
     // Find all derived metrics that depend on this source metric
-    const derivedMetrics = await this.db
+    const derivedMetrics = await dbOrTx
       .select()
       .from(siteMetrics)
       .where(
@@ -282,14 +350,15 @@ export class DerivedMetricCalculator {
           conditions.push(eq(measurements.date, date));
         }
 
-        const calculatedMeasurements = await this.db
+        const calculatedMeasurements = await dbOrTx
           .select()
           .from(measurements)
           .where(and(...conditions));
 
         for (const calculatedMeasurement of calculatedMeasurements) {
           // Try to find source measurements
-          const sourceMeasurementsMap = await this.findSourceMeasurements(
+          const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
+            dbOrTx,
             userId,
             derivedMetric.dependentMetrics || [],
             calculatedMeasurement.date,
@@ -301,7 +370,7 @@ export class DerivedMetricCalculator {
 
           if (!sourceMeasurementsMap) {
             // Source measurements no longer available - delete calculated measurement
-            await this.db
+            await dbOrTx
               .delete(measurements)
               .where(eq(measurements.id, calculatedMeasurement.id));
             continue;
@@ -324,14 +393,14 @@ export class DerivedMetricCalculator {
 
           if (calculatedValue === null || !isFinite(calculatedValue)) {
             // Formula evaluation failed - delete calculated measurement
-            await this.db
+            await dbOrTx
               .delete(measurements)
               .where(eq(measurements.id, calculatedMeasurement.id));
             continue;
           }
 
           // Update calculated measurement
-          await this.db
+          await dbOrTx
             .update(measurements)
             .set({
               value: calculatedValue.toFixed(3),
@@ -340,6 +409,8 @@ export class DerivedMetricCalculator {
                 formula: derivedMetric.formula || '',
                 sourceValues,
                 calculatedAt: new Date().toISOString(),
+                calculationVersion: CALCULATION_VERSION,
+                triggeredBy: triggerContext,
               },
             })
             .where(eq(measurements.id, calculatedMeasurement.id));
@@ -351,6 +422,118 @@ export class DerivedMetricCalculator {
         );
       }
     }
+  }
+
+  /**
+   * Find source measurements using a specific db or transaction context.
+   * Used by recalculateForAthleteInternal to support both transaction and non-transaction modes.
+   */
+  private async findSourceMeasurementsWithDb(
+    dbOrTx: typeof dbType | DbTransaction,
+    userId: string,
+    dependentMetrics: string[],
+    targetDate: string,
+    config: {
+      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+      maxDateDifference?: number;
+      missingSourceBehavior: 'skip' | 'error';
+    }
+  ): Promise<Map<string, Measurement> | null> {
+    const sourceMeasurementsMap = new Map<string, Measurement>();
+
+    for (const metricCode of dependentMetrics) {
+      let sourceMeasurement: Measurement | undefined;
+
+      switch (config.dateMatchStrategy) {
+        case 'same_date':
+          const [exactMatch] = await dbOrTx
+            .select()
+            .from(measurements)
+            .where(
+              and(
+                eq(measurements.userId, userId),
+                eq(measurements.metric, metricCode),
+                eq(measurements.date, targetDate),
+                eq(measurements.isVerified, true)
+              )
+            )
+            .orderBy(desc(measurements.createdAt))
+            .limit(1);
+          sourceMeasurement = exactMatch;
+          break;
+
+        case 'latest_before':
+          const [latestBefore] = await dbOrTx
+            .select()
+            .from(measurements)
+            .where(
+              and(
+                eq(measurements.userId, userId),
+                eq(measurements.metric, metricCode),
+                lte(measurements.date, targetDate),
+                eq(measurements.isVerified, true)
+              )
+            )
+            .orderBy(desc(measurements.date), desc(measurements.createdAt))
+            .limit(1);
+          sourceMeasurement = latestBefore;
+          break;
+
+        case 'closest':
+          const maxDays = config.maxDateDifference || 7;
+          const targetDateObj = new Date(targetDate);
+          const minDate = new Date(targetDateObj);
+          minDate.setDate(minDate.getDate() - maxDays);
+          const maxDate = new Date(targetDateObj);
+          maxDate.setDate(maxDate.getDate() + maxDays);
+
+          const candidateMeasurements = await dbOrTx
+            .select()
+            .from(measurements)
+            .where(
+              and(
+                eq(measurements.userId, userId),
+                eq(measurements.metric, metricCode),
+                gte(measurements.date, minDate.toISOString().split('T')[0]),
+                lte(measurements.date, maxDate.toISOString().split('T')[0]),
+                eq(measurements.isVerified, true)
+              )
+            )
+            .orderBy(measurements.date);
+
+          if (candidateMeasurements.length > 0) {
+            const targetTime = targetDateObj.getTime();
+            let closestMeasurement = candidateMeasurements[0];
+            let closestDiff = Math.abs(
+              new Date(closestMeasurement.date).getTime() - targetTime
+            );
+
+            for (const candidate of candidateMeasurements) {
+              const diff = Math.abs(
+                new Date(candidate.date).getTime() - targetTime
+              );
+              if (diff < closestDiff) {
+                closestDiff = diff;
+                closestMeasurement = candidate;
+              }
+            }
+            sourceMeasurement = closestMeasurement;
+          }
+          break;
+      }
+
+      if (!sourceMeasurement) {
+        if (config.missingSourceBehavior === 'skip') {
+          return null;
+        } else {
+          throw new Error(`Missing source measurement for metric: ${metricCode}`);
+        }
+      }
+
+      sourceMeasurementsMap.set(metricCode, sourceMeasurement);
+    }
+
+    return sourceMeasurementsMap;
   }
 
   /**

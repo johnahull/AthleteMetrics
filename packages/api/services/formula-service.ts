@@ -5,7 +5,7 @@
  * from source measurements. Uses mathjs for secure expression parsing without eval().
  */
 
-import { create, all, ConfigOptions } from 'mathjs';
+import { create, all, ConfigOptions, MathNode } from 'mathjs';
 
 // Create a mathjs instance with limited functionality for security
 const mathConfig: ConfigOptions = {
@@ -14,6 +14,46 @@ const mathConfig: ConfigOptions = {
 };
 
 const math = create(all, mathConfig);
+
+// ============================================================================
+// Formula Parse Cache
+// ============================================================================
+// Cache parsed mathjs AST nodes to avoid re-parsing the same formula repeatedly.
+// This is safe because formulas are immutable - the same formula string always
+// produces the same AST. The cache is a simple Map since derived metrics are
+// limited in number (typically <50 in production).
+
+const formulaParseCache = new Map<string, MathNode>();
+
+/**
+ * Get a cached parsed formula node, or parse and cache it if not found.
+ * @param formula - The formula string to parse
+ * @returns The parsed mathjs AST node
+ */
+function getCachedParsedFormula(formula: string): MathNode {
+  let node = formulaParseCache.get(formula);
+  if (!node) {
+    node = math.parse(formula);
+    formulaParseCache.set(formula, node);
+  }
+  return node;
+}
+
+/**
+ * Clear the formula parse cache.
+ * Useful for testing or when metrics are updated.
+ */
+export function clearFormulaCache(): void {
+  formulaParseCache.clear();
+}
+
+/**
+ * Get the current size of the formula parse cache.
+ * Useful for monitoring and testing.
+ */
+export function getFormulaCacheSize(): number {
+  return formulaParseCache.size;
+}
 
 // Restrict to safe functions only - no eval, no import, no system calls
 const allowedFunctions = new Set([
@@ -58,8 +98,8 @@ export function validateFormula(
   }
 
   try {
-    // Parse the formula to check syntax
-    const node = math.parse(formula);
+    // Parse the formula to check syntax (uses cache for performance)
+    const node = getCachedParsedFormula(formula);
 
     // Extract all variable names (metric references) and function calls
     const variables = new Set<string>();
@@ -202,7 +242,7 @@ export function evaluateFormula(
     // Normalize formula variable names to lowercase for case-insensitive matching
     // This ensures FLY10_TIME in formula matches fly10_time in sourceValues
     let normalizedFormula = formula;
-    const node = math.parse(formula);
+    const node = getCachedParsedFormula(formula);
 
     // Collect variable names and their positions for replacement
     const variablesToReplace: Array<{ original: string; lowercase: string }> = [];
@@ -229,8 +269,8 @@ export function evaluateFormula(
       normalizedFormula = normalizedFormula.replace(regex, lowercase);
     }
 
-    // Re-parse the normalized formula
-    const normalizedNode = math.parse(normalizedFormula);
+    // Re-parse the normalized formula (uses cache for performance)
+    const normalizedNode = getCachedParsedFormula(normalizedFormula);
 
     // Extract all variables needed from normalized formula
     const variables = new Set<string>();
