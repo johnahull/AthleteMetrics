@@ -63,10 +63,20 @@ describe('PreviewTemplateStep', () => {
       },
     });
 
-    // Mock fetch for template generation
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(mockTemplateResponse),
+    // Mock fetch for CSRF token and template generation
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      // Handle CSRF token request
+      if (url.includes('/api/csrf-token')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ csrfToken: 'test-csrf-token' }),
+        });
+      }
+      // Handle template generation request
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve(mockTemplateResponse),
+      });
     });
   });
 
@@ -127,9 +137,19 @@ describe('PreviewTemplateStep', () => {
     });
 
     it('should display metrics info for measurements', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve(mockMeasurementsTemplateResponse),
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        // Handle CSRF token request
+        if (url.includes('/api/csrf-token')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ csrfToken: 'test-csrf-token' }),
+          });
+        }
+        // Handle template generation request for measurements
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockMeasurementsTemplateResponse),
+        });
       });
 
       renderWithProviders({
@@ -212,9 +232,19 @@ describe('PreviewTemplateStep', () => {
 
   describe('Error Handling', () => {
     it('should display error message when template generation fails', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        json: () => Promise.resolve({ message: 'Server error' }),
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        // Handle CSRF token request
+        if (url.includes('/api/csrf-token')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ csrfToken: 'test-csrf-token' }),
+          });
+        }
+        // Simulate template generation failure
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ message: 'Server error' }),
+        });
       });
 
       renderWithProviders();
@@ -225,15 +255,28 @@ describe('PreviewTemplateStep', () => {
     });
 
     it('should show generic error message when response has no message', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        json: () => Promise.resolve({}),
+      global.fetch = vi.fn().mockImplementation((url: string) => {
+        // Handle CSRF token request
+        if (url.includes('/api/csrf-token')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ csrfToken: 'test-csrf-token' }),
+          });
+        }
+        // Simulate template generation failure without message
+        // The apiClient creates error message from statusText when response.json has no message
+        return Promise.resolve({
+          ok: false,
+          statusText: 'Internal Server Error',
+          json: () => Promise.resolve({}),
+        });
       });
 
       renderWithProviders();
 
+      // When response has no message, apiClient uses statusText: "API Error: Internal Server Error"
       await waitFor(() => {
-        expect(screen.getByText('Failed to generate template')).toBeInTheDocument();
+        expect(screen.getByText(/API Error.*Internal Server Error/)).toBeInTheDocument();
       });
     });
   });

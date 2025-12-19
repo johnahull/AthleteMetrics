@@ -1654,12 +1654,12 @@ export function registerImportExportRoutes(app: Express) {
       // Filter to selected teams that user can access
       const selectedTeams = accessibleTeams.filter(t => teamIds.includes(t.id));
 
-      if (selectedTeams.length === 0) {
-        return res.status(404).json({ message: "No valid teams found in your organizations" });
-      }
+      // Check if any requested teams exist but user doesn't have access
+      const existingTeamIds = allTeams.filter(t => teamIds.includes(t.id)).map(t => t.id);
+      const unauthorizedTeamIds = existingTeamIds.filter(id => !selectedTeams.some(t => t.id === id));
 
-      // Verify all requested teams are accessible (detect unauthorized access attempts)
-      if (selectedTeams.length !== teamIds.length) {
+      // SECURITY: Return 403 if user is trying to access teams they don't have permission for
+      if (unauthorizedTeamIds.length > 0) {
         // SECURITY: Log unauthorized cross-org access attempt
         const attemptedTeamIds = teamIds.filter(id => !selectedTeams.some(t => t.id === id));
 
@@ -1685,6 +1685,11 @@ export function registerImportExportRoutes(app: Express) {
         });
 
         return res.status(403).json({ message: "You do not have access to one or more selected teams" });
+      }
+
+      // 404 only when teams genuinely don't exist (not an authorization issue)
+      if (selectedTeams.length === 0) {
+        return res.status(404).json({ message: "No valid teams found in your organizations" });
       }
 
       // Using COMMON_METRICS imported from @shared/import-types
