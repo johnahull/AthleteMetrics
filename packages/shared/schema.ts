@@ -1567,7 +1567,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
+  // Accept any metric code - validation against active metrics happens at API level
+  // This allows derived metrics and custom metrics to be recorded
+  metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
