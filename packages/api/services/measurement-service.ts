@@ -21,7 +21,7 @@ import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
-import { DerivedMetricCalculator } from './derived-metric-calculator';
+import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -163,7 +163,8 @@ export class MeasurementService {
         .where(eq(siteMetrics.code, measurement.metric));
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
-      const units = metricConfig?.unit || 'in';
+      // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
+      const units = metricConfig?.unit ?? 'in';
 
       // Auto-populate team context if not explicitly provided
       let teamId = measurement.teamId;
@@ -265,7 +266,11 @@ export class MeasurementService {
       // DERIVED METRICS: Trigger automatic calculation of derived metrics
       // This runs after the measurement is created and committed
       const calculator = new DerivedMetricCalculator(db);
-      await calculator.processNewMeasurement(newMeasurement);
+      await calculator.processNewMeasurement(newMeasurement, {
+        event: 'measurement_insert',
+        userId: submittedBy,
+        sourceMeasurementId: newMeasurement.id,
+      });
 
       return newMeasurement;
       });
@@ -491,7 +496,8 @@ export class MeasurementService {
             .where(eq(siteMetrics.code, measurement.metric));
 
           // Use metric's configured unit, or default to 'in' for unknown metrics
-          updateData.units = metricConfig?.unit || 'in';
+          // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
+          updateData.units = metricConfig?.unit ?? 'in';
         }
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);
@@ -517,7 +523,13 @@ export class MeasurementService {
           await calculator.recalculateForAthlete(
             updated.userId,
             updated.metric,
-            updated.date
+            updated.date,
+            {
+              triggerContext: {
+                event: 'measurement_update',
+                sourceMeasurementId: updated.id,
+              },
+            }
           );
         }
 
@@ -571,7 +583,7 @@ export class MeasurementService {
         }
 
         // Store info for derived metric recalculation before deleting
-        const { userId, metric, date } = existing;
+        const { userId, metric, date, id: measurementId } = existing;
 
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
@@ -579,7 +591,12 @@ export class MeasurementService {
         // DERIVED METRICS: Trigger recalculation after deletion
         // This ensures derived metrics are updated when source measurements are removed
         const calculator = new DerivedMetricCalculator(db);
-        await calculator.recalculateForAthlete(userId, metric, date);
+        await calculator.recalculateForAthlete(userId, metric, date, {
+          triggerContext: {
+            event: 'measurement_delete',
+            sourceMeasurementId: measurementId,
+          },
+        });
       });
     } catch (error) {
       // Preserve error specificity
