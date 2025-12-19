@@ -118,7 +118,14 @@ describe('MeasurementService - Derived Metric Integration', () => {
       const calculatorInstance = MockedCalculator.mock.results[0]?.value;
 
       expect(MockedCalculator).toHaveBeenCalledWith(db);
-      expect(calculatorInstance.processNewMeasurement).toHaveBeenCalledWith(measurement);
+      expect(calculatorInstance.processNewMeasurement).toHaveBeenCalledWith(
+        measurement,
+        expect.objectContaining({
+          event: 'measurement_insert',
+          userId: testSubmitterId,
+          sourceMeasurementId: measurement.id,
+        })
+      );
     });
   });
 
@@ -150,7 +157,13 @@ describe('MeasurementService - Derived Metric Integration', () => {
       expect(calculatorInstance.recalculateForAthlete).toHaveBeenCalledWith(
         testUserId,
         'FLY10_TIME',
-        initialMeasurement.date
+        initialMeasurement.date,
+        expect.objectContaining({
+          triggerContext: expect.objectContaining({
+            event: 'measurement_update',
+            sourceMeasurementId: initialMeasurement.id,
+          }),
+        })
       );
     });
 
@@ -184,7 +197,13 @@ describe('MeasurementService - Derived Metric Integration', () => {
       expect(calculatorInstance.recalculateForAthlete).toHaveBeenCalledWith(
         testUserId,
         'FLY10_TIME',
-        '2024-01-20'
+        '2024-01-20',
+        expect.objectContaining({
+          triggerContext: expect.objectContaining({
+            event: 'measurement_update',
+            sourceMeasurementId: initialMeasurement.id,
+          }),
+        })
       );
     });
 
@@ -244,7 +263,13 @@ describe('MeasurementService - Derived Metric Integration', () => {
       expect(calculatorInstance.recalculateForAthlete).toHaveBeenCalledWith(
         testUserId,
         'FLY10_TIME',
-        measurement.date
+        measurement.date,
+        expect.objectContaining({
+          triggerContext: expect.objectContaining({
+            event: 'measurement_delete',
+            sourceMeasurementId: measurement.id,
+          }),
+        })
       );
     });
   });
