@@ -20,6 +20,7 @@ import { db } from '../../db';
 import { siteSports, sitePositions } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { ImportValidationService } from '../../services/import-validation-service';
+import { generateTestUniqueSuffix } from '../../../__tests__/shared-test-helpers';
 
 describe('Athletes Import - Sports and Position Validation', () => {
   let service: ImportValidationService;
@@ -39,10 +40,8 @@ describe('Athletes Import - Sports and Position Validation', () => {
 
   beforeEach(async () => {
     service = new ImportValidationService();
-    // Generate unique suffix for test data (shorter to fit varchar(20) and varchar(50) constraints)
-    const timestamp = Date.now().toString().slice(-6); // Last 6 digits
-    const randomPart = Math.random().toString(36).substring(2, 5).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    uniqueSuffix = `${timestamp}${randomPart}`; // e.g., "123456ABC"
+    // Generate unique suffix for test data (compact format to fit varchar(20) and varchar(50) constraints)
+    uniqueSuffix = generateTestUniqueSuffix({ compact: true }); // e.g., "123456ABC"
 
     // Create a test sport in the database
     const [testSport] = await db.insert(siteSports).values({
@@ -64,7 +63,7 @@ describe('Athletes Import - Sports and Position Validation', () => {
   });
 
   afterEach(async () => {
-    // Cleanup test data
+    // Cleanup test data (delete positions first due to foreign key constraint to sports)
     await db.delete(sitePositions).where(eq(sitePositions.id, testPositionId)).catch(() => {});
     await db.delete(siteSports).where(eq(siteSports.id, testSportId)).catch(() => {});
   });

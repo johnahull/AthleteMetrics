@@ -17,6 +17,7 @@ import { db } from '../../db';
 import { siteMetrics } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { ImportValidationService } from '../../services/import-validation-service';
+import { generateTestUniqueSuffix } from '../../../__tests__/shared-test-helpers';
 
 describe('Measurements Import - Metric Validation', () => {
   let service: ImportValidationService;
@@ -36,9 +37,7 @@ describe('Measurements Import - Metric Validation', () => {
   beforeEach(async () => {
     service = new ImportValidationService();
     // Generate unique suffix for test data
-    const timestamp = Date.now().toString();
-    const randomPart = Math.random().toString(36).substring(2, 8).toUpperCase().replace(/[^A-Z0-9]/g, '');
-    uniqueSuffix = `${timestamp}_${randomPart}`;
+    uniqueSuffix = generateTestUniqueSuffix(); // e.g., "123456_ABC"
 
     // Create a test metric in the database
     const [testMetric] = await db.insert(siteMetrics).values({
