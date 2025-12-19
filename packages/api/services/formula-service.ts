@@ -37,7 +37,9 @@ function getCachedParsedFormula(formula: string): MathNode {
     // LRU eviction: if cache is full, remove oldest entry (first in Map)
     if (formulaParseCache.size >= MAX_CACHE_SIZE) {
       const firstKey = formulaParseCache.keys().next().value;
-      formulaParseCache.delete(firstKey);
+      if (firstKey !== undefined) {
+        formulaParseCache.delete(firstKey);
+      }
     }
 
     node = math.parse(formula);
