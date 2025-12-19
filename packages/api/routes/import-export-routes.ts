@@ -1675,7 +1675,7 @@ export function registerImportExportRoutes(app: Express) {
         // Persist to audit log for security monitoring
         logAuthorizationFailure(currentUser.id, 'generate_template', 'team', {
           attemptedOrgId: attemptedTeamIds.join(','), // Store attempted team IDs as comma-separated string
-          userOrgIds: userOrgIds,
+          userOrgIds: Array.from(userOrgIds),
           ipAddress: req.ip || req.socket.remoteAddress,
           userAgent: req.get('user-agent'),
           route: req.path,
