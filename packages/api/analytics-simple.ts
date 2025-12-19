@@ -4,7 +4,7 @@
 
 import { eq, and, inArray, gte, lte, sql, exists } from "drizzle-orm";
 import { db } from "./db";
-import { measurements, users, userOrganizations, teams, userTeams } from "@shared/schema";
+import { measurements, users, userOrganizations, teams, userTeams, siteMetrics } from "@shared/schema";
 import { PAGINATION } from "./constants/pagination";
 import type {
   AnalyticsRequest,
@@ -407,12 +407,18 @@ export class AnalyticsService {
     // Convert to Record<string, number>
     const metricsAvailability: Record<string, number> = {};
 
-    // Initialize all metrics to 0
-    Object.keys(METRIC_CONFIG).forEach(metric => {
-      metricsAvailability[metric] = 0;
+    // Fetch all active metrics from database (includes derived metrics)
+    const activeMetrics = await db
+      .select({ code: siteMetrics.code })
+      .from(siteMetrics)
+      .where(eq(siteMetrics.isActive, true));
+
+    // Initialize all active metrics to 0
+    activeMetrics.forEach(metric => {
+      metricsAvailability[metric.code] = 0;
     });
 
-    // Fill in actual counts
+    // Fill in actual counts from measurement results
     results.forEach((row: { metric: string; count: number }) => {
       metricsAvailability[row.metric] = row.count;
     });
@@ -631,10 +637,8 @@ export class AnalyticsService {
       } catch (error) {
         console.error('ERROR in getMetricsAvailability:', error);
         metricsAvailabilityError = true;
-        // Initialize with zeros if there's an error
-        Object.keys(METRIC_CONFIG).forEach(metric => {
-          metricsAvailability[metric] = 0;
-        });
+        // If metricsAvailability fetch fails, leave it empty
+        // The UI will show "no data" for all metrics which is appropriate for an error state
       }
 
       // Calculate max count for client-side normalization
