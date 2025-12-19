@@ -51,9 +51,17 @@ test.describe('Derived Metrics - Site Admin Creation', () => {
     // Cleanup: Delete test metrics created during test
     for (const code of createdMetricCodes) {
       try {
-        await page.request.delete(`${TESTING_URL}/api/metrics/${code}`);
+        const response = await page.request.delete(`${TESTING_URL}/api/metrics/${code}`);
+        if (!response.ok()) {
+          const errorText = await response.text();
+          console.error(`CLEANUP FAILED for metric ${code}:`, {
+            status: response.status(),
+            statusText: response.statusText(),
+            body: errorText
+          });
+        }
       } catch (error) {
-        console.warn(`Failed to cleanup metric ${code}:`, error);
+        console.error(`Failed to cleanup metric ${code}:`, error);
       }
     }
   });

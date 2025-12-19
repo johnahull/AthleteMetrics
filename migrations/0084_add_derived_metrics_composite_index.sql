@@ -2,6 +2,14 @@
 -- Purpose: Optimize findSourceMeasurements queries in derived-metric-calculator.ts
 -- Date: 2025-12-19
 -- Context: PR #278 - Derived Metrics Support
+--
+-- DEPLOYMENT NOTE: This migration uses CREATE INDEX CONCURRENTLY which:
+-- 1. Does NOT block writes (safe for production - no downtime)
+-- 2. Requires autocommit mode (cannot run inside a transaction)
+-- 3. May fail if connection drops during index build
+-- 4. If your migration runner wraps migrations in transactions, run manually:
+--    psql $DATABASE_URL -f migrations/0084_add_derived_metrics_composite_index.sql
+-- 5. Verify success with: \d measurements (should show the new index)
 
 -- This index optimizes the derived metrics calculation query pattern:
 -- SELECT ... FROM measurements

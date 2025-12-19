@@ -20,20 +20,31 @@ const math = create(all, mathConfig);
 // ============================================================================
 // Cache parsed mathjs AST nodes to avoid re-parsing the same formula repeatedly.
 // This is safe because formulas are immutable - the same formula string always
-// produces the same AST. The cache is a simple Map since derived metrics are
-// limited in number (typically <50 in production).
+// produces the same AST. The cache uses LRU eviction to prevent unbounded growth.
 
+const MAX_CACHE_SIZE = 100; // Typical deployments have <50 derived metrics
 const formulaParseCache = new Map<string, MathNode>();
 
 /**
  * Get a cached parsed formula node, or parse and cache it if not found.
+ * Uses LRU eviction to keep cache size bounded.
  * @param formula - The formula string to parse
  * @returns The parsed mathjs AST node
  */
 function getCachedParsedFormula(formula: string): MathNode {
   let node = formulaParseCache.get(formula);
   if (!node) {
+    // LRU eviction: if cache is full, remove oldest entry (first in Map)
+    if (formulaParseCache.size >= MAX_CACHE_SIZE) {
+      const firstKey = formulaParseCache.keys().next().value;
+      formulaParseCache.delete(firstKey);
+    }
+
     node = math.parse(formula);
+    formulaParseCache.set(formula, node);
+  } else {
+    // LRU: Move accessed item to end by deleting and re-adding
+    formulaParseCache.delete(formula);
     formulaParseCache.set(formula, node);
   }
   return node;
@@ -196,6 +207,13 @@ export function validateFormula(
       );
     }
 
+    // Add informational warning about complexity limits
+    warnings.push(
+      `Formula complexity limits: max ${MAX_FORMULA_LENGTH} characters, ` +
+      `max ${MAX_NODES} operations, max ${MAX_DEPTH} nesting levels. ` +
+      `Current: ${formula.length} chars, ${nodeCount} operations, ${maxDepth} nesting.`
+    );
+
     return {
       valid: errors.length === 0,
       errors,
@@ -310,6 +328,7 @@ export function evaluateFormula(
     if (evalTime > MAX_EVAL_TIME_MS) {
       console.warn('[SECURITY] Formula evaluation exceeded timeout', {
         formula: normalizedFormula,
+        sourceMetrics: Object.keys(normalizedSourceValues), // Don't log values (PII)
         evalTime,
         maxTime: MAX_EVAL_TIME_MS
       });
@@ -327,7 +346,7 @@ export function evaluateFormula(
       // SECURITY: Log division-by-zero for monitoring and debugging
       console.warn('[SECURITY] Division by zero detected in formula evaluation', {
         formula: normalizedFormula,
-        sourceValues: normalizedSourceValues,
+        sourceMetrics: Object.keys(normalizedSourceValues), // Don't log values (PII)
         result
       });
       return null;
