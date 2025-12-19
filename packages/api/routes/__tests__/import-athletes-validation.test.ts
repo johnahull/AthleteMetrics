@@ -20,7 +20,7 @@ import { db } from '../../db';
 import { siteSports, sitePositions } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { ImportValidationService } from '../../services/import-validation-service';
-import { generateTestUniqueSuffix } from '../../../__tests__/shared-test-helpers';
+import { generateTestUniqueSuffix } from '../../__tests__/shared-test-helpers';
 
 describe('Athletes Import - Sports and Position Validation', () => {
   let service: ImportValidationService;

@@ -17,7 +17,7 @@ import { db } from '../../db';
 import { siteMetrics } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { ImportValidationService } from '../../services/import-validation-service';
-import { generateTestUniqueSuffix } from '../../../__tests__/shared-test-helpers';
+import { generateTestUniqueSuffix } from '../../__tests__/shared-test-helpers';
 
 describe('Measurements Import - Metric Validation', () => {
   let service: ImportValidationService;
