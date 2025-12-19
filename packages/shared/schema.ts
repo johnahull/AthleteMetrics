@@ -1602,6 +1602,41 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   decimalPrecision: z.number().int().min(0).max(10).default(3),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().default(false),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
+  dependentMetrics: z.array(z.string()).optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is true, formula is required
+  if (data.isDerived === true) {
+    if (!data.formula || data.formula.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+    if (!data.calculationConfig) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Calculation config is required when isDerived is true",
+        path: ['calculationConfig'],
+      });
+    }
+  }
+  // If isDerived is false, formula should not be set
+  if (data.isDerived === false && data.formula) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should not be set when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const updateSiteMetricSchema = z.object({
@@ -1622,13 +1657,32 @@ export const updateSiteMetricSchema = z.object({
   icon: z.string().max(50).optional(),
   // Derived metrics fields
   isDerived: z.boolean().optional(),
-  formula: z.string().optional(),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
   dependentMetrics: z.array(z.string()).nullable().optional(),
   calculationConfig: z.object({
     dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
     maxDateDifference: z.number().int().positive().optional(),
     missingSourceBehavior: z.enum(['skip', 'error']),
   }).nullable().optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is being set to true, formula should be provided
+  if (data.isDerived === true) {
+    if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+  }
+  // If isDerived is being set to false, warn if formula is still set (unless explicitly cleared)
+  if (data.isDerived === false && data.formula !== undefined && data.formula !== null && data.formula.trim() !== '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should be cleared when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const insertOrganizationMetricSchema = createInsertSchema(organizationMetrics).omit({

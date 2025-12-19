@@ -425,7 +425,7 @@ export function registerMetricRoutes(app: Express) {
   // ========================================================================
 
   // Validate formula before saving a derived metric
-  app.post("/api/metrics/validate-formula", requireAuth, requireSiteAdmin, async (req, res) => {
+  app.post("/api/metrics/validate-formula", metricModifyLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
     try {
       const { formula, excludeMetricCode } = req.body;
 
@@ -464,8 +464,9 @@ export function registerMetricRoutes(app: Express) {
 
       // SECURITY FIX: Use parameterized query to prevent SQL injection
       // Find metrics that depend on this one using array containment operator
+      // The ${code} parameter is automatically parameterized by Drizzle (no sql.raw needed)
       const dependents = await db.select().from(siteMetrics)
-        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${sql.raw(`'${code.replace(/'/g, "''")}'`)}]::text[]`);
+        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${code}]::text[]`);
 
       return res.json({
         metric: metric?.code || null,

@@ -122,6 +122,47 @@ export class MetricService extends BaseService {
         throw new Error(`Metric with code ${validatedData.code} already exists`);
       }
 
+      // DERIVED METRIC VALIDATION
+      // If metric is being created as derived, validate formula requirements
+      if (validatedData.isDerived === true) {
+        if (!validatedData.formula || validatedData.formula.trim() === '') {
+          throw new Error("Formula is required for derived metrics");
+        }
+
+        // Get all available metric codes (excluding this one since it's being created)
+        const allMetrics = await this.storage.getSiteMetrics({ includeInactive: false });
+        const availableCodes = allMetrics.map(m => m.code);
+
+        // Validate formula syntax
+        const formulaValidation = validateFormula(validatedData.formula, availableCodes);
+        if (!formulaValidation.valid) {
+          throw new Error(`Invalid formula: ${formulaValidation.errors.join(', ')}`);
+        }
+
+        // Set dependentMetrics from formula validation if not explicitly provided
+        if (!validatedData.dependentMetrics || validatedData.dependentMetrics.length === 0) {
+          validatedData.dependentMetrics = formulaValidation.referencedMetrics;
+        }
+
+        // Check for circular dependencies
+        // Create a hypothetical metric list with the new metric
+        const hypotheticalMetrics = [
+          ...allMetrics.map(m => ({
+            code: m.code,
+            dependentMetrics: m.dependentMetrics || []
+          })),
+          {
+            code: validatedData.code,
+            dependentMetrics: validatedData.dependentMetrics || []
+          }
+        ];
+
+        const circularCheck = detectCircularDependencies(hypotheticalMetrics);
+        if (circularCheck.hasCircular) {
+          throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
+        }
+      }
+
       // Create metric
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
 

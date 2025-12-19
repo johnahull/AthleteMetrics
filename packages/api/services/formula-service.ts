@@ -144,7 +144,26 @@ export function validateFormula(
       referencedMetrics: Array.from(new Set(referencedMetrics)), // Remove duplicates
     };
   } catch (error) {
-    errors.push(`Invalid formula syntax: ${(error as Error).message}`);
+    // Provide user-friendly error messages for common mathjs parsing errors
+    const errorMessage = (error as Error).message;
+    let friendlyError = 'Invalid formula syntax';
+
+    if (errorMessage.includes('Parenthesis') || errorMessage.includes('parenthesis')) {
+      friendlyError = 'Mismatched parentheses - check that all opening ( have a closing )';
+    } else if (errorMessage.includes('Unexpected')) {
+      friendlyError = `Unexpected syntax: ${errorMessage.replace('Unexpected', '').trim()}`;
+    } else if (errorMessage.includes('Value expected')) {
+      friendlyError = 'Missing value or metric name in formula';
+    } else if (errorMessage.includes('End of expression expected')) {
+      friendlyError = 'Extra characters at end of formula - check for typos';
+    } else if (errorMessage.includes('Undefined symbol')) {
+      friendlyError = 'Unknown metric or function name';
+    } else {
+      // Fall back to the original error message for unknown errors
+      friendlyError = `Invalid formula: ${errorMessage}`;
+    }
+
+    errors.push(friendlyError);
     return { valid: false, errors, warnings, referencedMetrics };
   }
 }
