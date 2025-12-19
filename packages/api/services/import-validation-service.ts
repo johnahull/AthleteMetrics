@@ -79,14 +79,15 @@ interface CacheEntry {
 }
 
 export class ImportValidationService {
-  // In-memory cache with 5-minute TTL to prevent memory leaks
+  // In-memory cache with 30-second TTL to prevent stale data during schema changes
+  // Reduced from 5 minutes to ensure recently deactivated metrics/sports are not used
   private contextCache: CacheEntry | null = null;
-  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly CACHE_TTL_MS = 30 * 1000; // 30 seconds
 
   /**
    * Load validation context from database
    * Queries all active metrics, sports, and positions and caches them in Maps
-   * Uses in-memory cache with 5-minute TTL for performance
+   * Uses in-memory cache with 30-second TTL for performance while ensuring freshness
    */
   async loadValidationContext(): Promise<ValidationContext> {
     // Check if cached context is still valid

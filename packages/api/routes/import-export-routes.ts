@@ -21,6 +21,7 @@ import { isValidEmail } from "@shared/email-validation";
 import { templateGeneratorService } from "../services/template-generator-service";
 import { metricService } from "../services/metric-service";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
+import { logAuthorizationFailure } from "../helpers/audit-logging";
 import type { SiteMetric } from "@shared/schema";
 
 // MeasurementFilters interface
@@ -1659,6 +1660,8 @@ export function registerImportExportRoutes(app: Express) {
       if (selectedTeams.length !== teamIds.length) {
         // SECURITY: Log unauthorized cross-org access attempt
         const attemptedTeamIds = teamIds.filter(id => !selectedTeams.some(t => t.id === id));
+
+        // Log to console for immediate visibility
         console.warn('[SECURITY] Unauthorized cross-org team access attempt:', {
           userId: currentUser.id,
           username: currentUser.username,
@@ -1668,6 +1671,17 @@ export function registerImportExportRoutes(app: Express) {
           ip: req.ip || req.socket.remoteAddress,
           userAgent: req.get('user-agent'),
         });
+
+        // Persist to audit log for security monitoring
+        logAuthorizationFailure(currentUser.id, 'generate_template', 'team', {
+          attemptedOrgId: attemptedTeamIds.join(','), // Store attempted team IDs as comma-separated string
+          userOrgIds: userOrgIds,
+          ipAddress: req.ip || req.socket.remoteAddress,
+          userAgent: req.get('user-agent'),
+          route: req.path,
+          method: req.method,
+        });
+
         return res.status(403).json({ message: "You do not have access to one or more selected teams" });
       }
 
