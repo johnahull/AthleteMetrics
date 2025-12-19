@@ -93,6 +93,18 @@ describe('Import Template API', () => {
     }).returning();
     testMetricIds.push(metric3[0].id);
 
+    // Create metric without unit (for testing null unit handling)
+    const metric4 = await db.insert(siteMetrics).values({
+      code: 'TEST_NO_UNIT',
+      label: 'Test No Unit',
+      unit: null,
+      category: 'other',
+      metricType: 'higher_is_better',
+      isActive: true,
+      isSystemDefault: false
+    }).returning();
+    testMetricIds.push(metric4[0].id);
+
     // Create test sports
     const sport1 = await db.insert(siteSports).values({
       code: 'TEST_SOCCER',
@@ -305,31 +317,17 @@ describe('Import Template API', () => {
     });
 
     it('should handle metrics without units gracefully', async () => {
-      // Create a metric without a unit
-      const metricNoUnit = await db.insert(siteMetrics).values({
-        code: 'TEST_NO_UNIT',
-        label: 'Test No Unit',
-        unit: null,
-        category: 'other',
-        metricType: 'higher_is_better',
-        isActive: true,
-        isSystemDefault: false
-      }).returning();
-
-      testMetricIds.push(metricNoUnit[0].id);
-
+      // TEST_NO_UNIT metric is created in beforeAll with unit: null
       const response = await request(app)
         .get('/api/import/templates/measurements')
         .expect(200);
 
       const csvText = response.text;
 
-      // Metric without unit should still appear
+      // Metric without unit should still appear (just the code, no parentheses)
       expect(csvText).toContain('TEST_NO_UNIT');
-
-      // Clean up
-      await db.delete(siteMetrics).where(eq(siteMetrics.id, metricNoUnit[0].id));
-      testMetricIds = testMetricIds.filter(id => id !== metricNoUnit[0].id);
+      // Verify it doesn't have empty parentheses
+      expect(csvText).not.toContain('TEST_NO_UNIT ()');
     });
   });
 
