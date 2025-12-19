@@ -9,20 +9,33 @@
  */
 
 import { storage } from '../storage';
-import type { Measurement, AchievementDefinition, UserAchievement } from '@shared/schema';
+import type { Measurement, AchievementDefinition, UserAchievement, siteMetrics } from '@shared/schema';
 import { startOfMonth, endOfMonth, subMonths, differenceInMonths } from 'date-fns';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
+import { siteMetrics as siteMetricsTable } from '@shared/schema';
+
+// Cache for metric types to avoid repeated DB queries
+const metricTypeCache = new Map<string, string>();
 
 // Helper to determine if lower values are better for a metric
-// Uses METRIC_CONFIG as source of truth, supports derived metrics with fallback
-function isLowerBetterMetric(metricCode: string): boolean {
-  const config = METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG];
-  if (config) {
-    return config.metricType === 'lower_is_better';
+// Queries siteMetrics table as source of truth
+async function isLowerBetterMetric(metricCode: string): Promise<boolean> {
+  // Check cache first
+  if (metricTypeCache.has(metricCode)) {
+    return metricTypeCache.get(metricCode) === 'lower_is_better';
   }
-  // Default fallback for unknown/derived metrics: assume higher is better
-  // unless the metric name contains time-related keywords
-  return metricCode.includes('TIME') || metricCode.includes('AGILITY') || metricCode.includes('DASH');
+
+  // Query database for metric type
+  const [metric] = await db
+    .select({ metricType: siteMetricsTable.metricType })
+    .from(siteMetricsTable)
+    .where(eq(siteMetricsTable.code, metricCode));
+
+  const metricType = metric?.metricType || 'higher_is_better';
+  metricTypeCache.set(metricCode, metricType);
+
+  return metricType === 'lower_is_better';
 }
 
 export class AchievementService {
@@ -75,7 +88,7 @@ export class AchievementService {
 
     // Get measurements for this specific metric
     const metricMeasurements = allMeasurements.filter(m => m.metric === metric);
-    const isLowerBetter = isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterMetric(metric);
 
     // Sort to find best value
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
@@ -222,7 +235,7 @@ export class AchievementService {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-    const isLowerBetter = isLowerBetterMetric(metric);
+    const isLowerBetter = await isLowerBetterMetric(metric);
     const latest = sorted[sorted.length - 1];
     const latestValue = parseFloat(latest.value as string);
 

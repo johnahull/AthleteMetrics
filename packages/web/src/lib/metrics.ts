@@ -20,23 +20,30 @@ export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
 
 /**
  * Get the metric type for a given metric code
- * Uses METRIC_CONFIG as source of truth, supports derived metrics with smart fallback
+ * Uses METRIC_CONFIG as static lookup for known metrics.
+ *
+ * IMPORTANT: For derived/custom metrics, prefer using the `useAvailableMetrics` hook
+ * which fetches metric types directly from the database (siteMetrics table).
+ * This function is provided for utility code that cannot use React hooks.
+ *
  * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
+ * @param metricTypeOverride - Optional override from database (useAvailableMetrics hook)
  * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
  */
-export function getMetricType(metric: string): MetricType {
+export function getMetricType(metric: string, metricTypeOverride?: MetricType): MetricType {
+  // Use override from database if provided (preferred)
+  if (metricTypeOverride) {
+    return metricTypeOverride;
+  }
+
+  // Fall back to static METRIC_CONFIG for known metrics
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
   if (config) {
     return config.metricType;
   }
-  // Smart fallback for derived/custom metrics based on naming conventions
-  if (metric.includes('TIME') || metric.includes('AGILITY') || metric.includes('DASH')) {
-    return 'lower_is_better';
-  }
-  if (metric.includes('HEIGHT') || metric.includes('WEIGHT')) {
-    return 'tracking';
-  }
-  // Default to higher_is_better for metrics like SPEED, JUMP, etc.
+
+  // Last resort fallback for unknown metrics (should rarely happen if DB is source of truth)
+  // Default to higher_is_better as most custom metrics are performance metrics
   return 'higher_is_better';
 }
 
