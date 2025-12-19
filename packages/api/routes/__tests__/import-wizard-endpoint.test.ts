@@ -363,4 +363,66 @@ describe('POST /api/import/templates/wizard', () => {
       expect(['FLY10_TIME', 'VERTICAL_JUMP']).toContain(metric);
     });
   });
+
+  it('should reject cross-org team access attempts with 403', async () => {
+    // Create a separate organization that the test user is NOT a member of
+    const uniqueId = Date.now();
+    const [otherOrg] = await db.insert(organizations).values({
+      name: `Other Org ${uniqueId}`,
+      subdomain: `other-wizard-${uniqueId}`,
+    }).returning();
+
+    const [otherTeam] = await db.insert(teams).values({
+      name: 'Other Team',
+      organizationId: otherOrg.id,
+    }).returning();
+
+    // Attempt to generate template with team from unauthorized org
+    const response = await request(app)
+      .post('/api/import/templates/wizard')
+      .send({
+        type: 'athletes',
+        teamIds: [otherTeam.id], // Team the user does not have access to
+        includeExamples: false,
+      });
+
+    // Should return 403 Forbidden
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('You do not have access');
+
+    // Cleanup
+    await db.delete(teams).where(eq(teams.id, otherTeam.id));
+    await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+  });
+
+  it('should reject mixed authorized and unauthorized teams', async () => {
+    // Create a separate organization that the test user is NOT a member of
+    const uniqueId = Date.now();
+    const [otherOrg] = await db.insert(organizations).values({
+      name: `Mixed Org ${uniqueId}`,
+      subdomain: `mixed-wizard-${uniqueId}`,
+    }).returning();
+
+    const [otherTeam] = await db.insert(teams).values({
+      name: 'Unauthorized Team',
+      organizationId: otherOrg.id,
+    }).returning();
+
+    // Mix authorized team (testTeamIds[0]) with unauthorized team (otherTeam.id)
+    const response = await request(app)
+      .post('/api/import/templates/wizard')
+      .send({
+        type: 'athletes',
+        teamIds: [testTeamIds[0], otherTeam.id], // Mix of authorized and unauthorized
+        includeExamples: false,
+      });
+
+    // Should return 403 because one or more teams are unauthorized
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('You do not have access to one or more selected teams');
+
+    // Cleanup
+    await db.delete(teams).where(eq(teams.id, otherTeam.id));
+    await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+  });
 });

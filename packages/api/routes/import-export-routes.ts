@@ -22,6 +22,7 @@ import { templateGeneratorService } from "../services/template-generator-service
 import { metricService } from "../services/metric-service";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
+import { getCachedUserOrganizations } from "../helpers/cached-org-access";
 import type { SiteMetric } from "@shared/schema";
 
 // MeasurementFilters interface
@@ -1640,7 +1641,8 @@ export function registerImportExportRoutes(app: Express) {
       }
 
       // SECURITY: Get user's accessible organizations for multi-tenant filtering
-      const userOrgs = await storage.getUserOrganizations(currentUser.id);
+      // Use cached version to reduce redundant DB queries
+      const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
       const userOrgIds = new Set(userOrgs.map(uo => uo.organizationId));
 
       // Get all teams then filter to user's accessible teams
