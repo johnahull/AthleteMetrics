@@ -10,6 +10,7 @@ import {
   organizations,
   users,
   userTeams,
+  siteMetrics,
   type Measurement,
   type InsertMeasurement,
   type Team,
@@ -155,19 +156,14 @@ export class MeasurementService {
         }
       }
 
-      // Auto-calculate units based on metric
-      const units =
-        measurement.metric === 'FLY10_TIME' ||
-        measurement.metric === 'T_TEST' ||
-        measurement.metric === 'DASH_40YD' ||
-        measurement.metric === 'AGILITY_505' ||
-        measurement.metric === 'AGILITY_5105'
-          ? 's'
-          : measurement.metric === 'TOP_SPEED'
-          ? 'mph'
-          : measurement.metric === 'RSI'
-          ? 'ratio'
-          : 'in';
+      // Get units from siteMetrics table (supports derived metrics and custom metrics)
+      const [metricConfig] = await tx
+        .select({ unit: siteMetrics.unit })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, measurement.metric));
+
+      // Use metric's configured unit, or default to 'in' for unknown metrics
+      const units = metricConfig?.unit || 'in';
 
       // Auto-populate team context if not explicitly provided
       let teamId = measurement.teamId;
@@ -488,21 +484,14 @@ export class MeasurementService {
           updateData.metric = measurement.metric;
 
           // CRITICAL: Recalculate units when metric changes
-          // Different metrics use different units (seconds, inches, ratio, mph)
-          const newUnits =
-            measurement.metric === 'FLY10_TIME' ||
-            measurement.metric === 'T_TEST' ||
-            measurement.metric === 'DASH_40YD' ||
-            measurement.metric === 'AGILITY_505' ||
-            measurement.metric === 'AGILITY_5105'
-              ? 's'
-              : measurement.metric === 'TOP_SPEED'
-              ? 'mph'
-              : measurement.metric === 'RSI'
-              ? 'ratio'
-              : 'in';
+          // Get units from siteMetrics table (supports derived metrics and custom metrics)
+          const [metricConfig] = await tx
+            .select({ unit: siteMetrics.unit })
+            .from(siteMetrics)
+            .where(eq(siteMetrics.code, measurement.metric));
 
-          updateData.units = newUnits;
+          // Use metric's configured unit, or default to 'in' for unknown metrics
+          updateData.units = metricConfig?.unit || 'in';
         }
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);

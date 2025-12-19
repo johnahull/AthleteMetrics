@@ -3,14 +3,21 @@
  * These helpers are used for PDF report generation and metric analysis
  */
 
+import { METRIC_CONFIG } from '@shared/analytics-types';
+
 /**
  * Determines if lower values are better for a given metric
+ * Uses METRIC_CONFIG as source of truth, supports derived metrics with fallback
  * @param metricCode - The metric code to check
  * @returns true if lower values are better (e.g., times), false otherwise
  */
 export function isLowerBetter(metricCode: string): boolean {
-  const lowerBetterMetrics = ['FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
-  return lowerBetterMetrics.some(metric => metricCode.includes(metric));
+  const config = METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG];
+  if (config) {
+    return config.metricType === 'lower_is_better';
+  }
+  // Fallback for derived/custom metrics: check for time-related keywords
+  return metricCode.includes('TIME') || metricCode.includes('AGILITY') || metricCode.includes('DASH');
 }
 
 /**

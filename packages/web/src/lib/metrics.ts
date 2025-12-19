@@ -20,12 +20,24 @@ export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
 
 /**
  * Get the metric type for a given metric code
- * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT')
+ * Uses METRIC_CONFIG as source of truth, supports derived metrics with smart fallback
+ * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
  * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
  */
 export function getMetricType(metric: string): MetricType {
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  return config?.metricType ?? 'lower_is_better'; // Default to lower_is_better for unknown metrics
+  if (config) {
+    return config.metricType;
+  }
+  // Smart fallback for derived/custom metrics based on naming conventions
+  if (metric.includes('TIME') || metric.includes('AGILITY') || metric.includes('DASH')) {
+    return 'lower_is_better';
+  }
+  if (metric.includes('HEIGHT') || metric.includes('WEIGHT')) {
+    return 'tracking';
+  }
+  // Default to higher_is_better for metrics like SPEED, JUMP, etc.
+  return 'higher_is_better';
 }
 
 /**

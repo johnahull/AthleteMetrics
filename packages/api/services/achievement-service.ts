@@ -11,8 +11,19 @@
 import { storage } from '../storage';
 import type { Measurement, AchievementDefinition, UserAchievement } from '@shared/schema';
 import { startOfMonth, endOfMonth, subMonths, differenceInMonths } from 'date-fns';
+import { METRIC_CONFIG } from '@shared/analytics-types';
 
-const LOWER_IS_BETTER_METRICS = ['FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
+// Helper to determine if lower values are better for a metric
+// Uses METRIC_CONFIG as source of truth, supports derived metrics with fallback
+function isLowerBetterMetric(metricCode: string): boolean {
+  const config = METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG];
+  if (config) {
+    return config.metricType === 'lower_is_better';
+  }
+  // Default fallback for unknown/derived metrics: assume higher is better
+  // unless the metric name contains time-related keywords
+  return metricCode.includes('TIME') || metricCode.includes('AGILITY') || metricCode.includes('DASH');
+}
 
 export class AchievementService {
   /**
@@ -64,7 +75,7 @@ export class AchievementService {
 
     // Get measurements for this specific metric
     const metricMeasurements = allMeasurements.filter(m => m.metric === metric);
-    const isLowerBetter = LOWER_IS_BETTER_METRICS.includes(metric);
+    const isLowerBetter = isLowerBetterMetric(metric);
 
     // Sort to find best value
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
@@ -211,7 +222,7 @@ export class AchievementService {
       return new Date(a.date).getTime() - new Date(b.date).getTime();
     });
 
-    const isLowerBetter = LOWER_IS_BETTER_METRICS.includes(metric);
+    const isLowerBetter = isLowerBetterMetric(metric);
     const latest = sorted[sorted.length - 1];
     const latestValue = parseFloat(latest.value as string);
 
