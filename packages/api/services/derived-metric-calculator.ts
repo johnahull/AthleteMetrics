@@ -439,101 +439,7 @@ export class DerivedMetricCalculator {
       missingSourceBehavior: 'skip' | 'error';
     }
   ): Promise<Map<string, Measurement> | null> {
-    const sourceMeasurementsMap = new Map<string, Measurement>();
-
-    for (const metricCode of dependentMetrics) {
-      let sourceMeasurement: Measurement | undefined;
-
-      switch (config.dateMatchStrategy) {
-        case 'same_date':
-          const [exactMatch] = await dbOrTx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                eq(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(desc(measurements.createdAt))
-            .limit(1);
-          sourceMeasurement = exactMatch;
-          break;
-
-        case 'latest_before':
-          const [latestBefore] = await dbOrTx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                lte(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(desc(measurements.date), desc(measurements.createdAt))
-            .limit(1);
-          sourceMeasurement = latestBefore;
-          break;
-
-        case 'closest':
-          const maxDays = config.maxDateDifference || 7;
-          const targetDateObj = new Date(targetDate);
-          const minDate = new Date(targetDateObj);
-          minDate.setDate(minDate.getDate() - maxDays);
-          const maxDate = new Date(targetDateObj);
-          maxDate.setDate(maxDate.getDate() + maxDays);
-
-          const candidateMeasurements = await dbOrTx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                gte(measurements.date, minDate.toISOString().split('T')[0]),
-                lte(measurements.date, maxDate.toISOString().split('T')[0]),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(measurements.date);
-
-          if (candidateMeasurements.length > 0) {
-            const targetTime = targetDateObj.getTime();
-            let closestMeasurement = candidateMeasurements[0];
-            let closestDiff = Math.abs(
-              new Date(closestMeasurement.date).getTime() - targetTime
-            );
-
-            for (const candidate of candidateMeasurements) {
-              const diff = Math.abs(
-                new Date(candidate.date).getTime() - targetTime
-              );
-              if (diff < closestDiff) {
-                closestDiff = diff;
-                closestMeasurement = candidate;
-              }
-            }
-            sourceMeasurement = closestMeasurement;
-          }
-          break;
-      }
-
-      if (!sourceMeasurement) {
-        if (config.missingSourceBehavior === 'skip') {
-          return null;
-        } else {
-          throw new Error(`Missing source measurement for metric: ${metricCode}`);
-        }
-      }
-
-      sourceMeasurementsMap.set(metricCode, sourceMeasurement);
-    }
-
-    return sourceMeasurementsMap;
+    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config);
   }
 
   /**
@@ -590,101 +496,7 @@ export class DerivedMetricCalculator {
       missingSourceBehavior: 'skip' | 'error';
     }
   ): Promise<Map<string, Measurement> | null> {
-    const sourceMeasurementsMap = new Map<string, Measurement>();
-
-    for (const metricCode of dependentMetrics) {
-      let sourceMeasurement: Measurement | undefined;
-
-      switch (config.dateMatchStrategy) {
-        case 'same_date':
-          const [exactMatch] = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                eq(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(desc(measurements.createdAt))
-            .limit(1);
-          sourceMeasurement = exactMatch;
-          break;
-
-        case 'latest_before':
-          const [latestBefore] = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                lte(measurements.date, targetDate),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(desc(measurements.date), desc(measurements.createdAt))
-            .limit(1);
-          sourceMeasurement = latestBefore;
-          break;
-
-        case 'closest':
-          const maxDays = config.maxDateDifference || 7;
-          const targetDateObj = new Date(targetDate);
-          const minDate = new Date(targetDateObj);
-          minDate.setDate(minDate.getDate() - maxDays);
-          const maxDate = new Date(targetDateObj);
-          maxDate.setDate(maxDate.getDate() + maxDays);
-
-          const candidateMeasurements = await tx
-            .select()
-            .from(measurements)
-            .where(
-              and(
-                eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
-                gte(measurements.date, minDate.toISOString().split('T')[0]),
-                lte(measurements.date, maxDate.toISOString().split('T')[0]),
-                eq(measurements.isVerified, true)
-              )
-            )
-            .orderBy(measurements.date);
-
-          if (candidateMeasurements.length > 0) {
-            const targetTime = targetDateObj.getTime();
-            let closestMeasurement = candidateMeasurements[0];
-            let closestDiff = Math.abs(
-              new Date(closestMeasurement.date).getTime() - targetTime
-            );
-
-            for (const candidate of candidateMeasurements) {
-              const diff = Math.abs(
-                new Date(candidate.date).getTime() - targetTime
-              );
-              if (diff < closestDiff) {
-                closestDiff = diff;
-                closestMeasurement = candidate;
-              }
-            }
-            sourceMeasurement = closestMeasurement;
-          }
-          break;
-      }
-
-      if (!sourceMeasurement) {
-        if (config.missingSourceBehavior === 'skip') {
-          return null;
-        } else {
-          throw new Error(`Missing source measurement for metric: ${metricCode}`);
-        }
-      }
-
-      sourceMeasurementsMap.set(metricCode, sourceMeasurement);
-    }
-
-    return sourceMeasurementsMap;
+    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config);
   }
 
   /**
@@ -692,6 +504,32 @@ export class DerivedMetricCalculator {
    * @returns Map of metric code to measurement, or null if any source is missing
    */
   private async findSourceMeasurements(
+    userId: string,
+    dependentMetrics: string[],
+    targetDate: string,
+    config: {
+      dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+      maxDateDifference?: number;
+      missingSourceBehavior: 'skip' | 'error';
+    }
+  ): Promise<Map<string, Measurement> | null> {
+    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config);
+  }
+
+  /**
+   * Core implementation for finding source measurements using date matching strategies.
+   * This method is used by all three public/private variants (findSourceMeasurements,
+   * findSourceMeasurementsInTransaction, findSourceMeasurementsWithDb) to avoid code duplication.
+   *
+   * @param dbOrTx - Database connection or transaction context
+   * @param userId - The user ID who owns the measurements
+   * @param dependentMetrics - Array of source metric codes to find
+   * @param targetDate - The target date for date matching (YYYY-MM-DD)
+   * @param config - Date matching and missing data handling configuration
+   * @returns Map of metric code to measurement, or null if any required source is missing
+   */
+  private async findSourceMeasurementsImpl(
+    dbOrTx: typeof dbType | DbTransaction,
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
@@ -709,7 +547,7 @@ export class DerivedMetricCalculator {
       switch (config.dateMatchStrategy) {
         case 'same_date':
           // Only use exact date matches
-          const [exactMatch] = await this.db
+          const [exactMatch] = await dbOrTx
             .select()
             .from(measurements)
             .where(
@@ -728,7 +566,7 @@ export class DerivedMetricCalculator {
 
         case 'latest_before':
           // Use most recent measurement on or before target date
-          const [latestBefore] = await this.db
+          const [latestBefore] = await dbOrTx
             .select()
             .from(measurements)
             .where(
@@ -757,7 +595,7 @@ export class DerivedMetricCalculator {
           maxDate.setDate(maxDate.getDate() + maxDays);
 
           // Get all measurements within range
-          const candidateMeasurements = await this.db
+          const candidateMeasurements = await dbOrTx
             .select()
             .from(measurements)
             .where(
