@@ -68,6 +68,82 @@ describe('Athletes Import - Sports and Position Validation', () => {
     await db.delete(siteSports).where(eq(siteSports.id, testSportId)).catch(() => {});
   });
 
+  /**
+   * Helper function to parse and validate sports from a CSV row
+   * Reduces duplication in workflow tests
+   */
+  function validateAndCollectSports(
+    sportsString: string | undefined,
+    context: any
+  ): { validatedSports: string[]; warnings: string[] } {
+    const sportsArray = sportsString
+      ? sportsString.split(';').map((s: string) => s.trim()).filter(Boolean)
+      : [];
+
+    const validatedSports: string[] = [];
+    const warnings: string[] = [];
+
+    for (const sportCode of sportsArray) {
+      const validationResult = service.validateSportCode(sportCode, context);
+
+      if (validationResult.valid && validationResult.value) {
+        validatedSports.push(validationResult.value.code);
+      } else if (validationResult.warning) {
+        warnings.push(validationResult.warning);
+      }
+    }
+
+    return { validatedSports, warnings };
+  }
+
+  /**
+   * Helper function to validate position against athlete's sports
+   * Reduces duplication in workflow tests
+   * Mirrors the actual import logic: checks position against ALL athlete sports
+   */
+  function validatePositionAgainstSports(
+    positionCode: string | undefined,
+    validatedSports: string[],
+    context: any
+  ): { validatedPosition: string | undefined; warning: string | undefined } {
+    if (!positionCode || !positionCode.trim()) {
+      return { validatedPosition: undefined, warning: undefined };
+    }
+
+    // Cannot assign position without sports
+    if (validatedSports.length === 0) {
+      return {
+        validatedPosition: undefined,
+        warning: `Position '${positionCode}' cannot be assigned without sports`
+      };
+    }
+
+    let validatedPosition: string | undefined;
+    let positionValid = false;
+
+    // Check if position is valid for ANY of the athlete's sports
+    for (const sportCode of validatedSports) {
+      const positionResult = service.validatePositionCode(
+        sportCode,
+        positionCode,
+        context
+      );
+
+      if (positionResult.valid && positionResult.value) {
+        validatedPosition = positionResult.value.code;
+        positionValid = true;
+        break;
+      }
+    }
+
+    // If position not valid for any sport, generate warning
+    const warning = !positionValid
+      ? `Position '${positionCode}' is not valid for athlete's sports (${validatedSports.join(', ')})`
+      : undefined;
+
+    return { validatedPosition, warning };
+  }
+
   describe('validateSportCode integration', () => {
     it('should validate sport code and return DB sport for valid code', async () => {
       const context = await service.loadValidationContext();
@@ -174,23 +250,8 @@ describe('Athletes Import - Sports and Position Validation', () => {
         sports: `TST_${uniqueSuffix}`,
       };
 
-      // Parse and validate sports
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
-
-      const validatedSports: string[] = [];
-      const warnings: string[] = [];
-
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        } else if (validationResult.warning) {
-          warnings.push(validationResult.warning);
-        }
-      }
+      // Parse and validate sports using helper
+      const { validatedSports, warnings } = validateAndCollectSports(csvRow.sports, context);
 
       expect(validatedSports).toHaveLength(1);
       expect(validatedSports[0]).toBe(`TST_${uniqueSuffix}`);
@@ -205,22 +266,8 @@ describe('Athletes Import - Sports and Position Validation', () => {
         sports: `TST_${uniqueSuffix};INVALID_SPORT;ANOTHER_INVALID`,
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
-
-      const validatedSports: string[] = [];
-      const warnings: string[] = [];
-
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        } else if (validationResult.warning) {
-          warnings.push(validationResult.warning);
-        }
-      }
+      // Parse and validate sports using helper
+      const { validatedSports, warnings } = validateAndCollectSports(csvRow.sports, context);
 
       expect(validatedSports).toHaveLength(1);
       expect(validatedSports[0]).toBe(`TST_${uniqueSuffix}`);
@@ -237,22 +284,8 @@ describe('Athletes Import - Sports and Position Validation', () => {
         sports: 'INVALID_SPORT1;INVALID_SPORT2',
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
-
-      const validatedSports: string[] = [];
-      const warnings: string[] = [];
-
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        } else if (validationResult.warning) {
-          warnings.push(validationResult.warning);
-        }
-      }
+      // Parse and validate sports using helper
+      const { validatedSports, warnings } = validateAndCollectSports(csvRow.sports, context);
 
       expect(validatedSports).toHaveLength(0);
       expect(warnings).toHaveLength(2);
@@ -266,22 +299,8 @@ describe('Athletes Import - Sports and Position Validation', () => {
         sports: `tst_${uniqueSuffix}`.toLowerCase(),
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
-
-      const validatedSports: string[] = [];
-      const warnings: string[] = [];
-
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        } else if (validationResult.warning) {
-          warnings.push(validationResult.warning);
-        }
-      }
+      // Parse and validate sports using helper
+      const { validatedSports, warnings } = validateAndCollectSports(csvRow.sports, context);
 
       expect(validatedSports).toHaveLength(1);
       expect(validatedSports[0]).toBe(`TST_${uniqueSuffix}`);
@@ -299,51 +318,18 @@ describe('Athletes Import - Sports and Position Validation', () => {
         position: `TP_${uniqueSuffix}`,
       };
 
-      // Parse and validate sports
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      // Parse and validate sports using helper
+      const { validatedSports } = validateAndCollectSports(csvRow.sports, context);
 
-      const validatedSports: string[] = [];
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        }
-      }
-
-      // Validate position against athlete's sports
-      let validatedPosition: string | undefined;
-      const positionWarnings: string[] = [];
-
-      if (csvRow.position && csvRow.position.trim()) {
-        let positionValid = false;
-
-        // Check if position is valid for ANY of the athlete's sports
-        for (const sportCode of validatedSports) {
-          const positionResult = service.validatePositionCode(
-            sportCode,
-            csvRow.position,
-            context
-          );
-
-          if (positionResult.valid && positionResult.value) {
-            validatedPosition = positionResult.value.code;
-            positionValid = true;
-            break;
-          }
-        }
-
-        // If position not valid for any sport, generate warning
-        if (!positionValid) {
-          positionWarnings.push(
-            `Position '${csvRow.position}' is not valid for athlete's sports (${validatedSports.join(', ')})`
-          );
-        }
-      }
+      // Validate position against athlete's sports using helper
+      const { validatedPosition, warning } = validatePositionAgainstSports(
+        csvRow.position,
+        validatedSports,
+        context
+      );
 
       expect(validatedPosition).toBe(`TP_${uniqueSuffix}`);
-      expect(positionWarnings).toHaveLength(0);
+      expect(warning).toBeUndefined();
     });
 
     it('should generate warning for position not matching any sport', async () => {
@@ -355,48 +341,19 @@ describe('Athletes Import - Sports and Position Validation', () => {
         position: 'INVALID_POSITION',
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      // Parse and validate sports using helper
+      const { validatedSports } = validateAndCollectSports(csvRow.sports, context);
 
-      const validatedSports: string[] = [];
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        }
-      }
-
-      let validatedPosition: string | undefined;
-      const positionWarnings: string[] = [];
-
-      if (csvRow.position && csvRow.position.trim()) {
-        let positionValid = false;
-
-        for (const sportCode of validatedSports) {
-          const positionResult = service.validatePositionCode(
-            sportCode,
-            csvRow.position,
-            context
-          );
-
-          if (positionResult.valid && positionResult.value) {
-            validatedPosition = positionResult.value.code;
-            positionValid = true;
-            break;
-          }
-        }
-
-        if (!positionValid) {
-          positionWarnings.push(
-            `Position '${csvRow.position}' is not valid for athlete's sports (${validatedSports.join(', ')})`
-          );
-        }
-      }
+      // Validate position against athlete's sports using helper
+      const { validatedPosition, warning } = validatePositionAgainstSports(
+        csvRow.position,
+        validatedSports,
+        context
+      );
 
       expect(validatedPosition).toBeUndefined();
-      expect(positionWarnings).toHaveLength(1);
-      expect(positionWarnings[0]).toContain('INVALID_POSITION');
+      expect(warning).toBeDefined();
+      expect(warning).toContain('INVALID_POSITION');
     });
 
     it('should generate warning for position with no sports', async () => {
@@ -408,53 +365,19 @@ describe('Athletes Import - Sports and Position Validation', () => {
         position: `TP_${uniqueSuffix}`,
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      // Parse and validate sports using helper
+      const { validatedSports } = validateAndCollectSports(csvRow.sports, context);
 
-      const validatedSports: string[] = [];
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        }
-      }
-
-      let validatedPosition: string | undefined;
-      const positionWarnings: string[] = [];
-
-      if (csvRow.position && csvRow.position.trim()) {
-        if (validatedSports.length === 0) {
-          positionWarnings.push(
-            `Position '${csvRow.position}' cannot be assigned without sports`
-          );
-        } else {
-          let positionValid = false;
-          for (const sportCode of validatedSports) {
-            const positionResult = service.validatePositionCode(
-              sportCode,
-              csvRow.position,
-              context
-            );
-
-            if (positionResult.valid && positionResult.value) {
-              validatedPosition = positionResult.value.code;
-              positionValid = true;
-              break;
-            }
-          }
-
-          if (!positionValid) {
-            positionWarnings.push(
-              `Position '${csvRow.position}' is not valid for athlete's sports (${validatedSports.join(', ')})`
-            );
-          }
-        }
-      }
+      // Validate position against athlete's sports using helper
+      const { validatedPosition, warning } = validatePositionAgainstSports(
+        csvRow.position,
+        validatedSports,
+        context
+      );
 
       expect(validatedPosition).toBeUndefined();
-      expect(positionWarnings).toHaveLength(1);
-      expect(positionWarnings[0]).toContain('cannot be assigned without sports');
+      expect(warning).toBeDefined();
+      expect(warning).toContain('cannot be assigned without sports');
     });
 
     it('should handle missing position column (backwards compatibility)', async () => {
@@ -466,30 +389,19 @@ describe('Athletes Import - Sports and Position Validation', () => {
         // position field is missing/undefined
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      // Parse and validate sports using helper
+      const { validatedSports } = validateAndCollectSports(csvRow.sports, context);
 
-      const validatedSports: string[] = [];
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        }
-      }
-
-      let validatedPosition: string | undefined;
-      const positionWarnings: string[] = [];
-
-      // Position validation is skipped if position is undefined/empty
-      if ((csvRow as any).position && (csvRow as any).position.trim()) {
-        // This block should not execute
-        validatedPosition = (csvRow as any).position;
-      }
+      // Validate position (should return undefined with no warning for missing position)
+      const { validatedPosition, warning } = validatePositionAgainstSports(
+        (csvRow as any).position,
+        validatedSports,
+        context
+      );
 
       expect(validatedSports).toHaveLength(1);
       expect(validatedPosition).toBeUndefined();
-      expect(positionWarnings).toHaveLength(0);
+      expect(warning).toBeUndefined();
     });
 
     it('should be case-insensitive for position validation', async () => {
@@ -501,47 +413,18 @@ describe('Athletes Import - Sports and Position Validation', () => {
         position: `tp_${uniqueSuffix}`.toLowerCase(),
       };
 
-      const sportsArray = csvRow.sports
-        ? csvRow.sports.split(';').map((s: string) => s.trim()).filter(Boolean)
-        : [];
+      // Parse and validate sports using helper
+      const { validatedSports } = validateAndCollectSports(csvRow.sports, context);
 
-      const validatedSports: string[] = [];
-      for (const sportCode of sportsArray) {
-        const validationResult = service.validateSportCode(sportCode, context);
-        if (validationResult.valid && validationResult.value) {
-          validatedSports.push(validationResult.value.code);
-        }
-      }
-
-      let validatedPosition: string | undefined;
-      const positionWarnings: string[] = [];
-
-      if (csvRow.position && csvRow.position.trim()) {
-        let positionValid = false;
-
-        for (const sportCode of validatedSports) {
-          const positionResult = service.validatePositionCode(
-            sportCode,
-            csvRow.position,
-            context
-          );
-
-          if (positionResult.valid && positionResult.value) {
-            validatedPosition = positionResult.value.code;
-            positionValid = true;
-            break;
-          }
-        }
-
-        if (!positionValid) {
-          positionWarnings.push(
-            `Position '${csvRow.position}' is not valid for athlete's sports (${validatedSports.join(', ')})`
-          );
-        }
-      }
+      // Validate position against athlete's sports using helper
+      const { validatedPosition, warning } = validatePositionAgainstSports(
+        csvRow.position,
+        validatedSports,
+        context
+      );
 
       expect(validatedPosition).toBe(`TP_${uniqueSuffix}`);
-      expect(positionWarnings).toHaveLength(0);
+      expect(warning).toBeUndefined();
     });
   });
 

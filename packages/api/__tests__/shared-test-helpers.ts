@@ -19,11 +19,18 @@
  */
 export function generateTestUniqueSuffix(options: { compact?: boolean } = {}): string {
   const timestamp = Date.now().toString().slice(-6); // Last 6 digits
-  const randomPart = Math.random()
-    .toString(36)
-    .substring(2, 5)
-    .toUpperCase()
-    .replace(/[^A-Z0-9]/g, '');
+
+  // Generate random part with guaranteed minimum length after filtering
+  let randomPart = '';
+  while (randomPart.length < 3) {
+    randomPart = Math.random()
+      .toString(36)
+      .substring(2, 8) // Get more characters to ensure we have enough after filtering
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+  }
+  // Trim to 3 characters for consistency
+  randomPart = randomPart.substring(0, 3);
 
   return options.compact
     ? `${timestamp}${randomPart}` // e.g., "123456ABC" (fits varchar(20))
