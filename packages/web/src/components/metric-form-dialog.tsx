@@ -79,9 +79,13 @@ interface MetricFormDialogProps {
   metric?: SiteMetric | null; // If provided, edit mode; otherwise create mode
 }
 
+// Formula validation debounce delay in milliseconds
+// Prevents excessive API calls while user is typing
+const FORMULA_VALIDATION_DEBOUNCE_MS = 500;
+
 // Hook for formula validation with debounce
 function useValidateFormula(formula: string, excludeCode?: string) {
-  const debouncedFormula = useDebounce(formula, 500);
+  const debouncedFormula = useDebounce(formula, FORMULA_VALIDATION_DEBOUNCE_MS);
 
   return useQuery({
     queryKey: ['validate-formula', debouncedFormula, excludeCode],

@@ -25,6 +25,7 @@ const allowedFunctions = new Set([
 export interface FormulaValidationResult {
   valid: boolean;
   errors: string[];
+  warnings: string[];
   referencedMetrics: string[];
 }
 
@@ -40,19 +41,20 @@ export function validateFormula(
   availableMetrics: string[]
 ): FormulaValidationResult {
   const errors: string[] = [];
+  const warnings: string[] = [];
   const referencedMetrics: string[] = [];
 
   // Check for empty formula
   if (!formula || formula.trim() === '') {
     errors.push('Formula cannot be empty');
-    return { valid: false, errors, referencedMetrics };
+    return { valid: false, errors, warnings, referencedMetrics };
   }
 
   // SECURITY FIX: Prevent DoS attacks via extremely long formulas
   const MAX_FORMULA_LENGTH = 1000;
   if (formula.length > MAX_FORMULA_LENGTH) {
     errors.push(`Formula exceeds maximum length of ${MAX_FORMULA_LENGTH} characters`);
-    return { valid: false, errors, referencedMetrics };
+    return { valid: false, errors, warnings, referencedMetrics };
   }
 
   try {
@@ -62,6 +64,7 @@ export function validateFormula(
     // Extract all variable names (metric references) and function calls
     const variables = new Set<string>();
     const functionsUsed = new Set<string>();
+    const metricsInDenominator = new Set<string>();
 
     // TYPE SAFETY FIX: Add defensive checks for node structure
     node.traverse((node: any) => {
@@ -81,6 +84,19 @@ export function validateFormula(
         if (node.fn) {
           const fnName = typeof node.fn === 'string' ? node.fn : (node.fn.name || String(node.fn));
           functionsUsed.add(fnName);
+        }
+      } else if (node.type === 'OperatorNode' && (node.op === '/' || node.fn === 'divide')) {
+        // Detect division operations and check if denominator contains a metric
+        // This helps warn users about potential division-by-zero
+        if (node.args && node.args[1]) {
+          node.args[1].traverse((denominatorNode: any) => {
+            if (denominatorNode?.type === 'SymbolNode' && denominatorNode.name) {
+              const metricName = denominatorNode.name.toLowerCase();
+              if (!math[denominatorNode.name as keyof typeof math]) {
+                metricsInDenominator.add(metricName);
+              }
+            }
+          });
         }
       }
     });
@@ -111,14 +127,25 @@ export function validateFormula(
       }
     });
 
+    // Warn about potential division-by-zero scenarios
+    if (metricsInDenominator.size > 0) {
+      const metricList = Array.from(metricsInDenominator).join(', ');
+      warnings.push(
+        `Formula divides by metric(s): ${metricList}. ` +
+        `Ensure measurements for these metrics never contain zero values, ` +
+        `or the calculation will fail and return null.`
+      );
+    }
+
     return {
       valid: errors.length === 0,
       errors,
+      warnings,
       referencedMetrics: Array.from(new Set(referencedMetrics)), // Remove duplicates
     };
   } catch (error) {
     errors.push(`Invalid formula syntax: ${(error as Error).message}`);
-    return { valid: false, errors, referencedMetrics };
+    return { valid: false, errors, warnings, referencedMetrics };
   }
 }
 

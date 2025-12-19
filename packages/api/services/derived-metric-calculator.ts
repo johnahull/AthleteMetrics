@@ -15,6 +15,16 @@ import {
   type SiteMetric,
 } from '@shared/schema';
 import { eq, and, gte, lte, sql, or, desc, asc } from 'drizzle-orm';
+import type { PgTransaction } from 'drizzle-orm/pg-core';
+import type { PostgresJsQueryResultHKT } from 'drizzle-orm/postgres-js';
+import type { ExtractTablesWithRelations } from 'drizzle-orm';
+
+// Type for Drizzle transaction
+type DbTransaction = PgTransaction<
+  PostgresJsQueryResultHKT,
+  typeof import('@shared/schema'),
+  ExtractTablesWithRelations<typeof import('@shared/schema')>
+>;
 import { evaluateFormula } from './formula-service';
 
 export class DerivedMetricCalculator {
@@ -56,6 +66,11 @@ export class DerivedMetricCalculator {
       const calculatedMeasurements: Measurement[] = [];
 
       // Process each derived metric
+      // NOTE: Sequential processing pattern (potential N+1 queries)
+      // For typical use cases (1-2 derived metrics per source measurement), this performs well.
+      // If scaling issues arise (many derived metrics triggered per source measurement),
+      // consider batch-fetching all source measurements upfront or implementing a calculation queue.
+      // Current implementation prioritizes code clarity and transaction safety over premature optimization.
       for (const derivedMetric of dependentDerivedMetrics) {
         try {
           // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
@@ -339,8 +354,30 @@ export class DerivedMetricCalculator {
   }
 
   /**
-   * Public method for finding source measurements (used for preview)
-   * @returns Map of metric code to measurement, or null if any source is missing
+   * Public method for finding source measurements (used for calculation preview in UI)
+   *
+   * This is a wrapper around the private findSourceMeasurements method that allows
+   * external code (e.g., API routes) to preview what source measurements would be used
+   * for a derived metric calculation without actually performing the calculation.
+   *
+   * Use this when you need to:
+   * - Show a calculation preview in the measurement form UI
+   * - Validate that source data exists before allowing derived metric creation
+   * - Debug which source measurements are being selected by date matching strategies
+   *
+   * Use the private findSourceMeasurementsInTransaction when:
+   * - Operating within an existing database transaction (e.g., during measurement creation)
+   * - You need transaction isolation to prevent race conditions
+   *
+   * @param userId - The user ID who owns the measurements
+   * @param dependentMetrics - Array of source metric codes required for calculation
+   * @param targetDate - The target date for matching source measurements (YYYY-MM-DD)
+   * @param config - Configuration for date matching and missing data handling
+   * @param config.dateMatchStrategy - How to find source measurements by date ('same_date', 'latest_before', or 'closest')
+   * @param config.maxDateDifference - For 'closest' strategy, max days difference allowed
+   * @param config.missingSourceBehavior - What to do if source data is missing ('skip' returns null, 'error' throws)
+   * @returns Map of metric code to measurement, or null if any required source is missing (when behavior is 'skip')
+   * @throws Error if required source measurements are missing and behavior is 'error'
    */
   async findSourceMeasurementsPublic(
     userId: string,
@@ -360,7 +397,7 @@ export class DerivedMetricCalculator {
    * Used within processNewMeasurement transaction to prevent deadlocks
    */
   private async findSourceMeasurementsInTransaction(
-    tx: any,
+    tx: DbTransaction,
     userId: string,
     dependentMetrics: string[],
     targetDate: string,
