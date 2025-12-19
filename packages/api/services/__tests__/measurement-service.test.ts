@@ -144,7 +144,7 @@ describe('MeasurementService', () => {
         { metric: 'DASH_40YD', expectedUnits: 's' },
         { metric: 'T_TEST', expectedUnits: 's' },
         { metric: 'VERTICAL_JUMP', expectedUnits: 'in' },
-        { metric: 'RSI', expectedUnits: 'ratio' },
+        { metric: 'RSI', expectedUnits: '' }, // RSI is a ratio and has no unit
       ];
 
       for (const { metric, expectedUnits } of testCases) {

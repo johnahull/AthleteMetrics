@@ -55,8 +55,9 @@ describe('Metric Type Helper Functions', () => {
     });
 
     describe('unknown metrics', () => {
-      it('should return lower_is_better as default for unknown metric', () => {
-        expect(getMetricType('UNKNOWN_METRIC')).toBe('lower_is_better');
+      it('should return higher_is_better as default for unknown metric', () => {
+        // Default to higher_is_better as most custom metrics are performance metrics
+        expect(getMetricType('UNKNOWN_METRIC')).toBe('higher_is_better');
       });
     });
   });
