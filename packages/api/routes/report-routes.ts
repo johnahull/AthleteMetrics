@@ -414,11 +414,12 @@ export function registerReportRoutes(app: Express) {
 
       // Metrics filter (check if config.metrics contains any of the specified metrics)
       if (metrics && typeof metrics === 'string') {
-        // Whitelist validation for metrics to prevent SQL injection
-        const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+        // Regex validation for metrics to prevent SQL injection while allowing any valid metric code
+        // Valid metric codes are uppercase letters, numbers, and underscores (e.g., FLY10_TIME, TOP_SPEED_CALC)
+        const metricCodePattern = /^[A-Z0-9_]+$/;
         const metricCodes = metrics.split(',')
           .map(m => m.trim())
-          .filter(m => validMetrics.includes(m));
+          .filter(m => metricCodePattern.test(m));
         if (metricCodes.length > 0) {
           conditions.push(
             sql`${reports.config}::jsonb->'metrics' ?| array[${sql.join(metricCodes.map(m => sql`${m}`), sql`, `)}]`

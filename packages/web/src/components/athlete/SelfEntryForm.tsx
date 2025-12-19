@@ -32,28 +32,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 // Form validation schema
+// Accept any valid metric code - actual validation happens against org-enabled metrics at API level
 const selfEntrySchema = z.object({
   metric: z
     .string({
       required_error: "Metric is required",
     })
     .min(1, "Metric is required")
-    .refine(
-      (val) =>
-        [
-          'FLY10_TIME',
-          'VERTICAL_JUMP',
-          'AGILITY_505',
-          'AGILITY_5105',
-          'T_TEST',
-          'DASH_40YD',
-          'TOP_SPEED',
-          'RSI',
-        ].includes(val),
-      {
-        message: "Invalid metric selected",
-      }
-    ),
+    .regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z
     .number({
       required_error: "Value is required",
