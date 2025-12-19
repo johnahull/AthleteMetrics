@@ -127,12 +127,10 @@ describe('Metric Routes - Derived Metrics', () => {
         });
 
       expect(response.status).toBe(200);
-      expect(response.body).toMatchObject({
-        valid: false,
-        errors: expect.arrayContaining([
-          expect.stringContaining('Invalid formula syntax'),
-        ]),
-      });
+      expect(response.body.valid).toBe(false);
+      expect(response.body.errors.length).toBeGreaterThan(0);
+      // Error message should indicate a syntax issue (format depends on mathjs error)
+      expect(response.body.errors[0]).toMatch(/syntax|parenthes|unexpected/i);
     });
 
     it('should return errors for a formula with unknown metric', async () => {
