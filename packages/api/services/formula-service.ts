@@ -66,8 +66,27 @@ export function validateFormula(
     const functionsUsed = new Set<string>();
     const metricsInDenominator = new Set<string>();
 
+    // SECURITY: Track formula complexity to prevent DoS attacks
+    let nodeCount = 0;
+    let maxDepth = 0;
+    const MAX_NODES = 1000;
+    const MAX_DEPTH = 50;
+
     // TYPE SAFETY FIX: Add defensive checks for node structure
-    node.traverse((node: any) => {
+    node.traverse((node: any, path: string) => {
+      // DoS protection: check complexity limits
+      nodeCount++;
+      if (path) {
+        const depth = path.split(',').length;
+        maxDepth = Math.max(maxDepth, depth);
+      }
+
+      if (nodeCount > MAX_NODES) {
+        throw new Error('Formula too complex (too many operations)');
+      }
+      if (maxDepth > MAX_DEPTH) {
+        throw new Error('Formula too complex (too deeply nested)');
+      }
       // Defensive programming: check node exists and has type property
       if (!node || typeof node.type !== 'string') {
         return;
@@ -241,7 +260,21 @@ export function evaluateFormula(
     }
 
     // Evaluate the normalized formula using normalized source values
+    // SECURITY: Track evaluation time for DoS detection
+    const startTime = Date.now();
     const result = normalizedNode.compile().evaluate(normalizedSourceValues);
+    const evalTime = Date.now() - startTime;
+
+    // DoS protection: Warn if evaluation takes too long (potential attack)
+    const MAX_EVAL_TIME_MS = 1000;
+    if (evalTime > MAX_EVAL_TIME_MS) {
+      console.warn('[SECURITY] Formula evaluation exceeded timeout', {
+        formula: normalizedFormula,
+        evalTime,
+        maxTime: MAX_EVAL_TIME_MS
+      });
+      return null;
+    }
 
     // Handle special cases
     if (typeof result !== 'number' || isNaN(result)) {
@@ -251,6 +284,12 @@ export function evaluateFormula(
     // CRITICAL FIX: Reject Infinity and -Infinity (from division by zero)
     // Infinity values corrupt the database and break analytics
     if (!isFinite(result)) {
+      // SECURITY: Log division-by-zero for monitoring and debugging
+      console.warn('[SECURITY] Division by zero detected in formula evaluation', {
+        formula: normalizedFormula,
+        sourceValues: normalizedSourceValues,
+        result
+      });
       return null;
     }
 
