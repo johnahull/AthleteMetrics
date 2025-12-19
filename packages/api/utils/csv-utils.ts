@@ -10,6 +10,8 @@
  *
  * SECURITY: Prevents CSV formula injection by prepending single quote to values
  * that start with formula characters (=, +, -, @, |, %, tab, carriage return)
+ *
+ * IMPORTANT: Negative numbers are allowed (e.g., -10, -5.5) and will not be sanitized
  */
 export function sanitizeCSVValue(value: string): string {
   if (!value || typeof value !== 'string') return value;
@@ -18,6 +20,12 @@ export function sanitizeCSVValue(value: string): string {
   // Formulas start with: = + - @ (and sometimes |, %, \t, \r)
   const trimmed = value.trim();
   if (trimmed.length === 0) return trimmed;
+
+  // Check if value is a negative number (starts with - followed by digits)
+  // Allow negative numbers: -10, -5.5, -0.123, etc.
+  if (/^-\d/.test(trimmed)) {
+    return trimmed;
+  }
 
   // If value starts with a formula character, prepend a single quote
   // This makes Excel/Sheets treat it as text instead of a formula
