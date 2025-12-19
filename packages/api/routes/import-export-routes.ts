@@ -1716,8 +1716,18 @@ export function registerImportExportRoutes(app: Express) {
 
       } else {
         // Generate measurement template
+        // Validate that we have teams with organization context
+        if (selectedTeams.length === 0) {
+          return res.status(400).json({ message: "No valid teams provided" });
+        }
+
         // Get organization context from first team
         const organizationId = selectedTeams[0]?.organization?.id;
+        if (!organizationId) {
+          return res.status(400).json({
+            message: "Team missing organization context. Please contact support."
+          });
+        }
 
         // Get enabled metrics for organization
         let enabledMetrics: any[] = [];
@@ -1793,9 +1803,12 @@ export function registerImportExportRoutes(app: Express) {
       }
     } catch (error) {
       console.error("Template wizard error:", error);
+      const isDevelopment = process.env.NODE_ENV !== 'production';
       res.status(500).json({
         message: "Failed to generate template",
-        error: error instanceof Error ? error.message : String(error)
+        ...(isDevelopment && {
+          error: error instanceof Error ? error.message : String(error)
+        })
       });
     }
   });

@@ -200,9 +200,13 @@ export function PreviewTemplateStep({
         <div className="space-y-2">
           <Label>CSV Preview</Label>
           <div className="relative">
-            <pre className="p-4 bg-muted rounded-lg text-xs overflow-x-auto max-h-[300px] overflow-y-auto font-mono">
-              {templateData.csvContent}
-            </pre>
+            <pre
+              className="p-4 bg-muted rounded-lg text-xs overflow-x-auto max-h-[300px] overflow-y-auto font-mono"
+              // Use textContent rendering to prevent XSS from CSV content
+              ref={(el) => {
+                if (el) el.textContent = templateData.csvContent;
+              }}
+            />
             <Button
               variant="ghost"
               size="sm"
