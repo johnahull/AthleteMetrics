@@ -202,6 +202,8 @@ export const siteMetrics = pgTable("site_metrics", {
   categoryIdx: index("site_metrics_category_idx").on(table.category),
   // Index for organization type filtering
   availableOrgTypesIdx: index("site_metrics_available_org_types_idx").on(table.availableOrgTypes),
+  // Index for querying derived metrics (partial index: WHERE is_derived = true)
+  isDerivedIdx: index("idx_site_metrics_is_derived").on(table.isDerived).where(sql`${table.isDerived} = true`),
 }));
 
 // Organization-level metric enablement (org opt-in to site metrics)
@@ -421,6 +423,13 @@ export const measurements = pgTable("measurements", {
   // Performance indexes for peer comparison queries
   metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
   userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
+  // Derived metrics indexes (partial indexes: WHERE is_calculated = true / is_verified = true)
+  isCalculatedIdx: index("idx_measurements_is_calculated").on(table.isCalculated).where(sql`${table.isCalculated} = true`),
+  // Note: idx_measurements_calculated_from is a GIN index (USING GIN) created in migration 0083
+  // for array containment queries on calculated_from_measurement_ids. Drizzle doesn't support
+  // specifying GIN index type, so this index is created manually in the migration.
+  // Index name: idx_measurements_calculated_from (partial: WHERE is_calculated = true)
+  userMetricVerifiedDateIdx: index("idx_measurements_user_metric_verified_date").on(table.userId, table.metric, table.date).where(sql`${table.isVerified} = true`),
 }));
 
 export const userOrganizations = pgTable("user_organizations", {
