@@ -52,7 +52,8 @@ const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
-  metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED']).optional(),
+  // Accept any metric code - supports derived metrics and custom metrics
+  metric: z.string().regex(/^[A-Z0-9_]+$/, "Invalid metric code format").optional(),
   teamIds: z.string().optional().refine(
     (val) => !val || val.split(',').every(id => {
       const trimmedId = id.trim();
