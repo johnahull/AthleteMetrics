@@ -3,6 +3,8 @@
  * Generates CSV import templates with realistic example data
  */
 
+import { sanitizeCSVValue } from '../utils/csv-utils';
+
 export interface MetricInfo {
   code: string;
   unit: string | null;
@@ -168,20 +170,23 @@ export class TemplateGeneratorService {
       lines.push(`# ${comment}`);
     }
 
-    // Add header line
-    lines.push(headers.join(','));
+    // Add header line (sanitize headers to prevent formula injection)
+    lines.push(headers.map(h => sanitizeCSVValue(h)).join(','));
 
     // Add data rows
     for (const row of rows) {
       const values = headers.map(header => {
         const value = row[header] || '';
 
+        // Sanitize value to prevent CSV formula injection
+        const sanitized = sanitizeCSVValue(value);
+
         // Escape values with commas, quotes, or newlines
-        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-          return `"${value.replace(/"/g, '""')}"`;
+        if (sanitized.includes(',') || sanitized.includes('"') || sanitized.includes('\n')) {
+          return `"${sanitized.replace(/"/g, '""')}"`;
         }
 
-        return value;
+        return sanitized;
       });
 
       lines.push(values.join(','));

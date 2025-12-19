@@ -34,9 +34,10 @@ import type { SiteMetric, SiteSport, SitePosition } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 /**
- * Result of a validation check
+ * Result of a code validation check (metric, sport, or position)
+ * Renamed from ValidationResult to avoid collision with import-types.ts ValidationResult
  */
-export interface ValidationResult {
+export interface CodeValidationResult {
   valid: boolean;
   value?: any; // The validated entity from DB (SiteMetric, SiteSport, or SitePosition)
   warning?: string; // For permissive mode warnings (includes suggestions)
@@ -55,19 +56,48 @@ export interface ValidationContext {
 
 /**
  * Sanitize user input for display in warning messages
- * Truncates excessively long codes to prevent log/UI issues
+ * Removes potentially dangerous characters and truncates excessively long codes
  */
 function sanitizeCode(code: string, maxLength = 50): string {
-  if (code.length <= maxLength) return code;
-  return code.slice(0, maxLength) + '...';
+  if (!code) return '';
+
+  // Remove HTML special characters and control characters
+  let sanitized = code
+    .replace(/[<>'"&]/g, '') // Remove HTML special chars
+    .replace(/[\x00-\x1F\x7F]/g, ''); // Remove control characters
+
+  if (sanitized.length <= maxLength) return sanitized;
+  return sanitized.slice(0, maxLength) + '...';
+}
+
+/**
+ * Simple cache entry for validation context
+ */
+interface CacheEntry {
+  context: ValidationContext;
+  timestamp: number;
 }
 
 export class ImportValidationService {
+  // In-memory cache with 5-minute TTL to prevent memory leaks
+  private contextCache: CacheEntry | null = null;
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
   /**
    * Load validation context from database
    * Queries all active metrics, sports, and positions and caches them in Maps
+   * Uses in-memory cache with 5-minute TTL for performance
    */
   async loadValidationContext(): Promise<ValidationContext> {
+    // Check if cached context is still valid
+    if (this.contextCache) {
+      const age = Date.now() - this.contextCache.timestamp;
+      if (age < this.CACHE_TTL_MS) {
+        return this.contextCache.context;
+      }
+      // Cache expired, clear it
+      this.contextCache = null;
+    }
     try {
       // Load all active metrics, sports, and positions in parallel
       const [activeMetrics, activeSports, activePositions] = await Promise.all([
@@ -96,11 +126,19 @@ export class ImportValidationService {
         positionsMap.set(position.sportId, sportPositions);
       });
 
-      return {
+      const context: ValidationContext = {
         metrics: metricsMap,
         sports: sportsMap,
         positions: positionsMap,
       };
+
+      // Cache the context for future requests
+      this.contextCache = {
+        context,
+        timestamp: Date.now(),
+      };
+
+      return context;
     } catch (error) {
       console.error('Failed to load validation context:', error);
       throw new Error('Unable to load validation data for import. Please try again later.');
@@ -111,7 +149,15 @@ export class ImportValidationService {
    * Validate metric code against context
    * Case-insensitive validation
    */
-  validateMetricCode(code: string, context: ValidationContext): ValidationResult {
+  validateMetricCode(code: string, context: ValidationContext): CodeValidationResult {
+    // Null/undefined guard
+    if (!code || typeof code !== 'string') {
+      return {
+        valid: false,
+        warning: 'Metric code is required and must be a string',
+      };
+    }
+
     const normalizedCode = code.toUpperCase();
     const metric = context.metrics.get(normalizedCode);
 
@@ -136,7 +182,15 @@ export class ImportValidationService {
    * Validate sport code against context
    * Case-insensitive validation
    */
-  validateSportCode(code: string, context: ValidationContext): ValidationResult {
+  validateSportCode(code: string, context: ValidationContext): CodeValidationResult {
+    // Null/undefined guard
+    if (!code || typeof code !== 'string') {
+      return {
+        valid: false,
+        warning: 'Sport code is required and must be a string',
+      };
+    }
+
     const normalizedCode = code.toUpperCase();
     const sport = context.sports.get(normalizedCode);
 
@@ -165,7 +219,21 @@ export class ImportValidationService {
     sportCode: string,
     positionCode: string,
     context: ValidationContext
-  ): ValidationResult {
+  ): CodeValidationResult {
+    // Null/undefined guards
+    if (!sportCode || typeof sportCode !== 'string') {
+      return {
+        valid: false,
+        warning: 'Sport code is required and must be a string',
+      };
+    }
+    if (!positionCode || typeof positionCode !== 'string') {
+      return {
+        valid: false,
+        warning: 'Position code is required and must be a string',
+      };
+    }
+
     const normalizedSportCode = sportCode.toUpperCase();
     const sport = context.sports.get(normalizedSportCode);
 

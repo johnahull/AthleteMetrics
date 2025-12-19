@@ -948,6 +948,9 @@ export function registerImportExportRoutes(app: Express) {
         // Load validation context for metric validation
         const validationContext = await importValidationService.loadValidationContext();
 
+        // PERFORMANCE: Load teams once before the loop to avoid N+1 queries
+        const allTeamsForMeasurements = await storage.getTeams();
+
         // Process measurements import
         for (let i = 0; i < csvData.length; i++) {
           const row = csvData[i];
@@ -972,9 +975,8 @@ export function registerImportExportRoutes(app: Express) {
             let teamId: string | undefined;
             const currentUser = req.session.user!;
             if (teamName) {
-              // Try to find the team to get organization context and teamId
-              const teams = await storage.getTeams();
-              const team = teams.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
+              // Try to find the team to get organization context and teamId (reuse loaded teams)
+              const team = allTeamsForMeasurements.find(t => t.name?.toLowerCase().trim() === teamName.toLowerCase().trim());
               organizationId = team?.organization?.id;
               teamId = team?.id; // Store teamId for measurement
             }
@@ -1587,7 +1589,7 @@ export function registerImportExportRoutes(app: Express) {
   });
 
 // Template Wizard endpoint - generates customized templates with team/metric selection
-  app.post("/api/import/templates/wizard", requireAuth, async (req, res) => {
+  app.post("/api/import/templates/wizard", uploadLimiter, requireAuth, async (req, res) => {
     try {
       const currentUser = req.session.user;
       if (!currentUser?.id) {
@@ -1655,6 +1657,17 @@ export function registerImportExportRoutes(app: Express) {
 
       // Verify all requested teams are accessible (detect unauthorized access attempts)
       if (selectedTeams.length !== teamIds.length) {
+        // SECURITY: Log unauthorized cross-org access attempt
+        const attemptedTeamIds = teamIds.filter(id => !selectedTeams.some(t => t.id === id));
+        console.warn('[SECURITY] Unauthorized cross-org team access attempt:', {
+          userId: currentUser.id,
+          username: currentUser.username,
+          attemptedTeamIds,
+          accessibleTeamIds: selectedTeams.map(t => t.id),
+          timestamp: new Date().toISOString(),
+          ip: req.ip || req.socket.remoteAddress,
+          userAgent: req.get('user-agent'),
+        });
         return res.status(403).json({ message: "You do not have access to one or more selected teams" });
       }
 
