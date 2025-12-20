@@ -32,6 +32,8 @@ import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
 import { registerPushNotificationRoutes } from "./push-notification-routes";
+import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
+import { registerOrgNotificationRoutes } from "./org-notification-routes";
 
 /**
  * Register all application routes
@@ -123,6 +125,12 @@ export function registerAllRoutes(app: Express) {
 
   // Push notification routes (Web Push subscription management)
   registerPushNotificationRoutes(app);
+
+  // Notification preferences routes (user notification settings)
+  registerNotificationPreferencesRoutes(app);
+
+  // Organization notification routes (org admin settings)
+  registerOrgNotificationRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
