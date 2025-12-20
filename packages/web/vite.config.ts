@@ -72,8 +72,6 @@ export default defineConfig({
       },
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-        // Don't use navigateFallback - let the server handle routing
-        navigateFallback: undefined,
       },
       devOptions: {
         enabled: true,
