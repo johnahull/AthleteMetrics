@@ -31,6 +31,7 @@ import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
+import { registerPushNotificationRoutes } from "./push-notification-routes";
 
 /**
  * Register all application routes
@@ -119,6 +120,9 @@ export function registerAllRoutes(app: Express) {
 
   // Admin security routes (security metrics, monitoring)
   registerAdminSecurityRoutes(app);
+
+  // Push notification routes (Web Push subscription management)
+  registerPushNotificationRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

@@ -12,8 +12,21 @@ import {
   notificationHistory,
   orgNotificationSettings,
   userTeams,
+  userOrganizations,
   NotificationType,
 } from '@shared/schema';
+
+// Web Push payload size limit (4KB as per spec)
+const MAX_PAYLOAD_SIZE = 4096;
+
+// Valid push service URL patterns (FCM, Mozilla, Apple, etc.)
+const VALID_PUSH_ENDPOINT_PATTERNS = [
+  /^https:\/\/fcm\.googleapis\.com\//,
+  /^https:\/\/updates\.push\.services\.mozilla\.com\//,
+  /^https:\/\/[a-z0-9-]+\.push\.apple\.com\//,
+  /^https:\/\/[a-z0-9-]+\.notify\.windows\.com\//,
+  /^https:\/\/push\.services\.mozilla\.org\//,
+];
 
 /**
  * Web Push Subscription object from the browser
@@ -67,6 +80,23 @@ export interface TeamSendResult {
 }
 
 /**
+ * Validate that a push endpoint URL is from a known push service
+ */
+function isValidPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    // Must be HTTPS
+    if (url.protocol !== 'https:') {
+      return false;
+    }
+    // Check against known push service patterns
+    return VALID_PUSH_ENDPOINT_PATTERNS.some(pattern => pattern.test(endpoint));
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Push Notification Service
  * Manages Web Push subscriptions and notification delivery
  */
@@ -111,6 +141,11 @@ export class PushNotificationService {
     deviceName?: string,
     userAgent?: string
   ): Promise<{ id: string; endpoint: string; deviceName?: string | null }> {
+    // Validate endpoint URL is from a known push service
+    if (!isValidPushEndpoint(subscription.endpoint)) {
+      throw new Error('Invalid push subscription endpoint');
+    }
+
     // Check if subscription already exists
     const existing = await this.db
       .select()
@@ -271,6 +306,32 @@ export class PushNotificationService {
   }
 
   /**
+   * Check if notification type is enabled at the organization level
+   */
+  private isOrgTypeEnabled(
+    orgSettings: { pushEnabled: boolean; wellnessSurveysEnabled: boolean; wellnessDigestEnabled: boolean; newMeasurementsEnabled: boolean; teamAnnouncementsEnabled: boolean } | null,
+    type: NotificationType
+  ): boolean {
+    if (!orgSettings) return true; // No org settings = allow all
+
+    // Master org push toggle
+    if (!orgSettings.pushEnabled) return false;
+
+    switch (type) {
+      case 'wellness_survey':
+        return orgSettings.wellnessSurveysEnabled;
+      case 'wellness_digest':
+        return orgSettings.wellnessDigestEnabled;
+      case 'new_measurement':
+        return orgSettings.newMeasurementsEnabled;
+      case 'team_announcement':
+        return orgSettings.teamAnnouncementsEnabled;
+      default:
+        return true;
+    }
+  }
+
+  /**
    * Send push notification to a user
    */
   async sendToUser(
@@ -278,6 +339,23 @@ export class PushNotificationService {
     notification: NotificationPayload,
     orgId?: string
   ): Promise<SendResult> {
+    // Check if VAPID is configured
+    if (!this.vapidConfigured) {
+      return { successful: 0, failed: 0, skipped: true, reason: 'vapid_not_configured' };
+    }
+
+    // Check organization-level settings if orgId provided
+    if (orgId) {
+      const orgSettings = await this.db
+        .select()
+        .from(orgNotificationSettings)
+        .where(eq(orgNotificationSettings.orgId, orgId));
+
+      if (orgSettings.length > 0 && !this.isOrgTypeEnabled(orgSettings[0], notification.type)) {
+        return { successful: 0, failed: 0, skipped: true, reason: 'org_type_disabled' };
+      }
+    }
+
     // Get user's subscriptions
     const subscriptions = await this.db
       .select()
@@ -322,6 +400,26 @@ export class PushNotificationService {
       requireInteraction: notification.requireInteraction,
     });
 
+    // Validate payload size (Web Push spec limit is 4KB)
+    if (Buffer.byteLength(payload, 'utf8') > MAX_PAYLOAD_SIZE) {
+      console.warn(`Push notification payload exceeds ${MAX_PAYLOAD_SIZE} bytes, truncating body`);
+      // Truncate body to fit within limit (leave room for other fields)
+      const truncatedBody = notification.body.slice(0, 200) + '...';
+      const truncatedPayload = JSON.stringify({
+        title: notification.title,
+        body: truncatedBody,
+        icon: notification.icon || '/icon-192.png',
+        badge: notification.badge || '/badge-72.png',
+        tag: notification.tag,
+        data: { url: notification.url || '/', type: notification.type },
+        requireInteraction: notification.requireInteraction,
+      });
+      // If still too large, this is a critical error
+      if (Buffer.byteLength(truncatedPayload, 'utf8') > MAX_PAYLOAD_SIZE) {
+        return { successful: 0, failed: 0, skipped: true, reason: 'payload_too_large' };
+      }
+    }
+
     let successful = 0;
     let failed = 0;
     let removed = 0;
@@ -361,19 +459,24 @@ export class PushNotificationService {
       }
     }
 
-    // Record in notification history
-    await this.db.insert(notificationHistory).values({
-      userId,
-      orgId,
-      type: notification.type,
-      title: notification.title,
-      body: notification.body,
-      url: notification.url,
-      data: notification.data,
-      channels: ['push'],
-      deliveryStatus: successful > 0 ? 'delivered' : 'failed',
-      deliveredAt: successful > 0 ? new Date() : undefined,
-    });
+    // Record in notification history (non-blocking, errors logged but not thrown)
+    try {
+      await this.db.insert(notificationHistory).values({
+        userId,
+        orgId,
+        type: notification.type,
+        title: notification.title,
+        body: notification.body,
+        url: notification.url,
+        data: notification.data,
+        channels: ['push'],
+        deliveryStatus: successful > 0 ? 'delivered' : 'failed',
+        deliveredAt: successful > 0 ? new Date() : undefined,
+      });
+    } catch (historyError) {
+      // Log but don't fail the notification send - history is secondary
+      console.error('Failed to record notification in history:', historyError);
+    }
 
     return { successful, failed, removed };
   }
@@ -427,9 +530,6 @@ export class PushNotificationService {
     notification: NotificationPayload,
     roleFilter?: string[]
   ): Promise<TeamSendResult> {
-    // Import here to avoid circular dependencies
-    const { userOrganizations } = await import('@shared/schema');
-
     let query = this.db
       .select({ userId: userOrganizations.userId })
       .from(userOrganizations)

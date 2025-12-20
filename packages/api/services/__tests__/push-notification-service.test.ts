@@ -15,8 +15,13 @@ vi.mock('web-push', () => ({
   },
 }));
 
-// Mock database
-const mockDb = {
+// Valid FCM endpoint for testing (matches VALID_PUSH_ENDPOINT_PATTERNS)
+const MOCK_FCM_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/mock-token-123';
+const MOCK_FCM_ENDPOINT_2 = 'https://fcm.googleapis.com/fcm/send/mock-token-456';
+const MOCK_MOZILLA_ENDPOINT = 'https://updates.push.services.mozilla.com/push/v1/mock-token';
+
+// Mock database with proper chainable methods
+const createMockDb = () => ({
   select: vi.fn().mockReturnThis(),
   from: vi.fn().mockReturnThis(),
   where: vi.fn().mockReturnThis(),
@@ -27,14 +32,28 @@ const mockDb = {
   delete: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
   set: vi.fn().mockReturnThis(),
-};
+});
+
+let mockDb = createMockDb();
+
+// Helper to configure VAPID for tests that need it
+function configureVapidForTest() {
+  process.env.VAPID_PUBLIC_KEY = 'test-public-key';
+  process.env.VAPID_PRIVATE_KEY = 'test-private-key';
+  process.env.VAPID_SUBJECT = 'mailto:test@example.com';
+}
 
 describe('PushNotificationService', () => {
   let service: PushNotificationService;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    // Create service with mock db
+    mockDb = createMockDb();
+    // Clear VAPID env vars before each test
+    delete process.env.VAPID_PUBLIC_KEY;
+    delete process.env.VAPID_PRIVATE_KEY;
+    delete process.env.VAPID_SUBJECT;
+    // Create service with mock db (VAPID not configured by default)
     service = new PushNotificationService(mockDb as any);
   });
 
@@ -90,13 +109,15 @@ describe('PushNotificationService', () => {
     it('should save a new push subscription', async () => {
       const userId = 'user-123';
       const subscription = {
-        endpoint: 'https://push.example.com/send/abc123',
+        endpoint: MOCK_FCM_ENDPOINT,
         keys: {
           p256dh: 'public-key-123',
           auth: 'auth-secret-456',
         },
       };
 
+      // First check for existing subscription returns empty
+      mockDb.where.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValue([{
         id: 'sub-1',
         userId,
@@ -115,7 +136,7 @@ describe('PushNotificationService', () => {
     it('should update lastUsedAt for existing subscription', async () => {
       const userId = 'user-123';
       const subscription = {
-        endpoint: 'https://push.example.com/existing',
+        endpoint: MOCK_FCM_ENDPOINT,
         keys: { p256dh: 'key', auth: 'auth' },
       };
 
@@ -130,16 +151,19 @@ describe('PushNotificationService', () => {
       const result = await service.subscribe(userId, subscription);
 
       expect(result).toBeDefined();
+      expect(mockDb.update).toHaveBeenCalled();
     });
 
     it('should include optional device name', async () => {
       const userId = 'user-123';
       const subscription = {
-        endpoint: 'https://push.example.com/device',
+        endpoint: MOCK_MOZILLA_ENDPOINT,
         keys: { p256dh: 'key', auth: 'auth' },
       };
       const deviceName = 'iPhone 15 Pro';
 
+      // First check for existing subscription returns empty
+      mockDb.where.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValue([{
         id: 'sub-1',
         userId,
@@ -151,23 +175,35 @@ describe('PushNotificationService', () => {
 
       expect(result.deviceName).toBe(deviceName);
     });
+
+    it('should reject invalid push endpoints', async () => {
+      const userId = 'user-123';
+      const subscription = {
+        endpoint: 'https://evil.example.com/steal-data',
+        keys: { p256dh: 'key', auth: 'auth' },
+      };
+
+      await expect(service.subscribe(userId, subscription))
+        .rejects.toThrow('Invalid push subscription endpoint');
+    });
   });
 
   describe('unsubscribe', () => {
     it('should delete subscription by endpoint', async () => {
       const userId = 'user-123';
-      const endpoint = 'https://push.example.com/send/abc123';
+      const endpoint = MOCK_FCM_ENDPOINT;
 
       mockDb.returning.mockResolvedValue([{ id: 'deleted-sub' }]);
 
-      await service.unsubscribe(userId, endpoint);
+      const result = await service.unsubscribe(userId, endpoint);
 
       expect(mockDb.delete).toHaveBeenCalled();
+      expect(result).toBe(true);
     });
 
     it('should return false if subscription not found', async () => {
       const userId = 'user-123';
-      const endpoint = 'https://push.example.com/nonexistent';
+      const endpoint = MOCK_FCM_ENDPOINT;
 
       mockDb.returning.mockResolvedValue([]);
 
@@ -181,8 +217,8 @@ describe('PushNotificationService', () => {
     it('should return all subscriptions for a user', async () => {
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/1', deviceName: 'iPhone' },
-        { id: 'sub-2', endpoint: 'https://push.example.com/2', deviceName: 'Chrome' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, deviceName: 'iPhone' },
+        { id: 'sub-2', endpoint: MOCK_MOZILLA_ENDPOINT, deviceName: 'Chrome' },
       ];
 
       mockDb.where.mockResolvedValue(subscriptions);
@@ -210,11 +246,18 @@ describe('PushNotificationService', () => {
       type: 'wellness_survey',
     };
 
+    // Helper to create a service with VAPID configured
+    function createServiceWithVapid() {
+      configureVapidForTest();
+      return new PushNotificationService(mockDb as any);
+    }
+
     it('should send notification to all user subscriptions', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/1', p256dh: 'key1', auth: 'auth1' },
-        { id: 'sub-2', endpoint: 'https://push.example.com/2', p256dh: 'key2', auth: 'auth2' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key1', auth: 'auth1' },
+        { id: 'sub-2', endpoint: MOCK_FCM_ENDPOINT_2, p256dh: 'key2', auth: 'auth2' },
       ];
 
       // Mock getUserSubscriptions
@@ -224,7 +267,7 @@ describe('PushNotificationService', () => {
       // Mock sendNotification success
       (webPush.sendNotification as any).mockResolvedValue({ statusCode: 201 });
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.successful).toBe(2);
       expect(result.failed).toBe(0);
@@ -232,9 +275,10 @@ describe('PushNotificationService', () => {
     });
 
     it('should respect user notification preferences', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/1', p256dh: 'key1', auth: 'auth1' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key1', auth: 'auth1' },
       ];
 
       // Mock getUserSubscriptions
@@ -242,7 +286,7 @@ describe('PushNotificationService', () => {
       // Mock notification preferences - push disabled
       mockDb.where.mockResolvedValueOnce([{ pushEnabled: false, pushWellnessSurveys: true }]);
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.skipped).toBe(true);
       expect(result.reason).toBe('push_disabled');
@@ -250,9 +294,10 @@ describe('PushNotificationService', () => {
     });
 
     it('should respect notification type preferences', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/1', p256dh: 'key1', auth: 'auth1' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key1', auth: 'auth1' },
       ];
 
       // Mock getUserSubscriptions
@@ -260,16 +305,17 @@ describe('PushNotificationService', () => {
       // Mock notification preferences - wellness surveys disabled
       mockDb.where.mockResolvedValueOnce([{ pushEnabled: true, pushWellnessSurveys: false }]);
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.skipped).toBe(true);
       expect(result.reason).toBe('type_disabled');
     });
 
     it('should handle subscription gone (410) by removing it', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/gone', p256dh: 'key1', auth: 'auth1' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key1', auth: 'auth1' },
       ];
 
       // Mock getUserSubscriptions
@@ -281,7 +327,7 @@ describe('PushNotificationService', () => {
       // Mock delete
       mockDb.returning.mockResolvedValue([{ id: 'sub-1' }]);
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.failed).toBe(1);
       expect(result.removed).toBe(1); // Subscription should be removed
@@ -289,21 +335,23 @@ describe('PushNotificationService', () => {
     });
 
     it('should return noSubscription if user has no push subscriptions', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-no-subs';
 
       // Mock getUserSubscriptions - empty
       mockDb.where.mockResolvedValueOnce([]);
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.noSubscription).toBe(true);
       expect(webPush.sendNotification).not.toHaveBeenCalled();
     });
 
     it('should record notification in history', async () => {
+      const svc = createServiceWithVapid();
       const userId = 'user-123';
       const subscriptions = [
-        { id: 'sub-1', endpoint: 'https://push.example.com/1', p256dh: 'key1', auth: 'auth1' },
+        { id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key1', auth: 'auth1' },
       ];
 
       // Mock getUserSubscriptions
@@ -315,10 +363,19 @@ describe('PushNotificationService', () => {
       // Mock insert for history
       mockDb.returning.mockResolvedValue([{ id: 'history-1' }]);
 
-      await service.sendToUser(userId, notification);
+      await svc.sendToUser(userId, notification);
 
       // Should have inserted into notification_history
       expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should skip sending if VAPID is not configured', async () => {
+      // Use service without VAPID configured
+      const result = await service.sendToUser('user-123', notification);
+
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toBe('vapid_not_configured');
+      expect(webPush.sendNotification).not.toHaveBeenCalled();
     });
   });
 
@@ -372,6 +429,10 @@ describe('PushNotificationService', () => {
 
   describe('quiet hours', () => {
     it('should defer notification during quiet hours', async () => {
+      // Configure VAPID first
+      configureVapidForTest();
+      const svc = new PushNotificationService(mockDb as any);
+
       const userId = 'user-quiet';
       const notification: NotificationPayload = {
         title: 'Late Night Notification',
@@ -385,7 +446,7 @@ describe('PushNotificationService', () => {
       vi.setSystemTime(now);
 
       // Mock subscriptions
-      mockDb.where.mockResolvedValueOnce([{ id: 'sub-1', endpoint: 'https://push/1', p256dh: 'key', auth: 'auth' }]);
+      mockDb.where.mockResolvedValueOnce([{ id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key', auth: 'auth' }]);
       // Mock preferences with quiet hours 10PM-7AM
       mockDb.where.mockResolvedValueOnce([{
         pushEnabled: true,
@@ -396,9 +457,59 @@ describe('PushNotificationService', () => {
         quietHoursTimezone: 'America/New_York',
       }]);
 
-      const result = await service.sendToUser(userId, notification);
+      const result = await svc.sendToUser(userId, notification);
 
       expect(result.deferred).toBe(true);
+      expect(webPush.sendNotification).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('org-level settings', () => {
+    it('should respect organization push settings', async () => {
+      configureVapidForTest();
+      const svc = new PushNotificationService(mockDb as any);
+      const userId = 'user-123';
+      const orgId = 'org-123';
+      const notification: NotificationPayload = {
+        title: 'Org Notification',
+        body: 'This should be blocked',
+        type: 'wellness_survey',
+      };
+
+      // Mock org settings - push disabled at org level
+      mockDb.where.mockResolvedValueOnce([{
+        pushEnabled: false,
+        wellnessSurveysEnabled: true,
+      }]);
+
+      const result = await svc.sendToUser(userId, notification, orgId);
+
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toBe('org_type_disabled');
+      expect(webPush.sendNotification).not.toHaveBeenCalled();
+    });
+
+    it('should respect org-level notification type settings', async () => {
+      configureVapidForTest();
+      const svc = new PushNotificationService(mockDb as any);
+      const userId = 'user-123';
+      const orgId = 'org-123';
+      const notification: NotificationPayload = {
+        title: 'Survey Notification',
+        body: 'This should be blocked',
+        type: 'wellness_survey',
+      };
+
+      // Mock org settings - wellness surveys disabled at org level
+      mockDb.where.mockResolvedValueOnce([{
+        pushEnabled: true,
+        wellnessSurveysEnabled: false,
+      }]);
+
+      const result = await svc.sendToUser(userId, notification, orgId);
+
+      expect(result.skipped).toBe(true);
+      expect(result.reason).toBe('org_type_disabled');
       expect(webPush.sendNotification).not.toHaveBeenCalled();
     });
   });
