@@ -1379,7 +1379,7 @@ export function registerWellnessRoutes(app: Express) {
         const allRequests = await storage.getWellnessRequestsByOrganizations(orgIds, { status: 'active' });
 
         // Filter requests targeted at this user
-        const myRequests = allRequests.filter(request => {
+        const targetedRequests = allRequests.filter(request => {
           // Check if user is directly targeted
           if (request.targetAthleteIds && request.targetAthleteIds.includes(userId)) {
             return true;
@@ -1393,7 +1393,16 @@ export function registerWellnessRoutes(app: Express) {
           return false;
         });
 
-        res.json(myRequests);
+        // Get user's responses to filter out already-completed requests
+        const userResponses = await storage.getWellnessResponsesByAthlete(userId);
+        const respondedRequestIds = new Set(userResponses.map(r => r.requestId));
+
+        // Filter out requests the user has already responded to
+        const pendingRequests = targetedRequests.filter(request =>
+          !respondedRequestIds.has(request.id)
+        );
+
+        res.json(pendingRequests);
       } catch (error: any) {
         console.error("Failed to fetch athlete wellness requests:", error);
         res.status(500).json(createErrorResponse("Failed to fetch wellness requests", error));

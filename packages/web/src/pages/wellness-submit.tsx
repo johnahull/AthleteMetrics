@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRoute } from 'wouter';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -67,6 +67,7 @@ export default function WellnessSubmit() {
   const [, params] = useRoute('/wellness/submit/:token');
   const token = params?.token;
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [responses, setResponses] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -189,6 +190,9 @@ export default function WellnessSubmit() {
       if (request?.id) {
         localStorage.removeItem(getAutoSaveKey(request.id));
       }
+
+      // Invalidate wellness-my-requests query to update pending tasks banner
+      queryClient.invalidateQueries({ queryKey: ['wellness-my-requests'] });
 
       toast({
         title: 'Success',
