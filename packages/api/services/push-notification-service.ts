@@ -280,6 +280,7 @@ export class PushNotificationService {
 
   /**
    * Check if current time is within quiet hours
+   * Uses user's timezone to ensure accurate quiet hours checking
    */
   private isInQuietHours(
     prefs: Awaited<ReturnType<typeof this.getUserPreferences>>
@@ -288,22 +289,36 @@ export class PushNotificationService {
       return false;
     }
 
-    const now = new Date();
-    const currentHour = now.getHours();
-    const currentMinute = now.getMinutes();
-    const currentTime = currentHour * 60 + currentMinute;
+    // Get current time in user's timezone
+    // Use user's timezone or fallback to server timezone
+    const userTimezone = prefs.quietHoursTimezone || 'America/New_York';
 
-    const [startHour, startMinute] = prefs.quietHoursStart.split(':').map(Number);
-    const [endHour, endMinute] = prefs.quietHoursEnd.split(':').map(Number);
-    const startTime = startHour * 60 + startMinute;
-    const endTime = endHour * 60 + endMinute;
+    try {
+      // Convert current UTC time to user's local time
+      const now = new Date();
+      const userLocalTime = new Date(now.toLocaleString('en-US', { timeZone: userTimezone }));
 
-    // Handle overnight quiet hours (e.g., 22:00 - 07:00)
-    if (startTime > endTime) {
-      return currentTime >= startTime || currentTime < endTime;
+      const currentHour = userLocalTime.getHours();
+      const currentMinute = userLocalTime.getMinutes();
+      const currentTime = currentHour * 60 + currentMinute;
+
+      const [startHour, startMinute] = prefs.quietHoursStart.split(':').map(Number);
+      const [endHour, endMinute] = prefs.quietHoursEnd.split(':').map(Number);
+      const startTime = startHour * 60 + startMinute;
+      const endTime = endHour * 60 + endMinute;
+
+      // Handle overnight quiet hours (e.g., 22:00 - 07:00)
+      if (startTime > endTime) {
+        return currentTime >= startTime || currentTime < endTime;
+      }
+
+      return currentTime >= startTime && currentTime < endTime;
+    } catch (error) {
+      // If timezone conversion fails, log error and assume not in quiet hours
+      // (fail open to avoid blocking all notifications)
+      console.error(`Failed to check quiet hours for timezone ${userTimezone}:`, error);
+      return false;
     }
-
-    return currentTime >= startTime && currentTime < endTime;
   }
 
   /**
