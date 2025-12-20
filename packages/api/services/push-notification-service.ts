@@ -11,6 +11,7 @@ import {
   notificationPreferences,
   notificationHistory,
   orgNotificationSettings,
+  siteSettings,
   userTeams,
   userOrganizations,
   NotificationType,
@@ -342,6 +343,12 @@ export class PushNotificationService {
     // Check if VAPID is configured
     if (!this.vapidConfigured) {
       return { successful: 0, failed: 0, skipped: true, reason: 'vapid_not_configured' };
+    }
+
+    // Check site-level global kill switch
+    const globalSettings = await this.db.select().from(siteSettings).limit(1);
+    if (globalSettings.length > 0 && !globalSettings[0].pushNotificationsEnabled) {
+      return { successful: 0, failed: 0, skipped: true, reason: 'push_globally_disabled' };
     }
 
     // Check organization-level settings if orgId provided
