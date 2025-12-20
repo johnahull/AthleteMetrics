@@ -8,9 +8,10 @@ import rateLimit from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
-import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports } from "@shared/schema";
+import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports, siteMetrics } from "@shared/schema";
 import { db } from "../db";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { validateFormula, detectCircularDependencies } from "../services/formula-service";
 
 const metricService = new MetricService();
 
@@ -418,4 +419,71 @@ export function registerMetricRoutes(app: Express) {
       }
     }
   );
+
+  // ========================================================================
+  // DERIVED METRIC ENDPOINTS (Site Admin Only)
+  // ========================================================================
+
+  // Validate formula before saving a derived metric
+  app.post("/api/metrics/validate-formula", metricModifyLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { formula, excludeMetricCode } = req.body;
+
+      if (!formula || typeof formula !== 'string') {
+        return res.status(400).json({ message: "Formula is required" });
+      }
+
+      // Get all available metric codes
+      const metrics = await db.select({ code: siteMetrics.code }).from(siteMetrics);
+      const availableCodes = metrics
+        .map(m => m.code)
+        .filter(code => code !== excludeMetricCode);
+
+      const result = validateFormula(formula, availableCodes);
+      return res.json(result);
+    } catch (error) {
+      console.error("POST /api/metrics/validate-formula error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to validate formula") });
+    }
+  });
+
+  // Get dependency graph for a metric
+  app.get("/api/metrics/:code/dependencies", requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { code } = req.params;
+
+      // Validate metric code format to prevent SQL injection
+      if (!code.match(/^[A-Z0-9_]+$/)) {
+        return res.status(400).json({ message: "Invalid metric code format" });
+      }
+
+      // Find what this metric depends on (if it's derived)
+      const metric = await db.query.siteMetrics.findFirst({
+        where: eq(siteMetrics.code, code)
+      });
+
+      // SECURITY FIX: Use parameterized query to prevent SQL injection
+      // Find metrics that depend on this one using array containment operator
+      // The ${code} parameter is automatically parameterized by Drizzle (no sql.raw needed)
+      const dependents = await db.select().from(siteMetrics)
+        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${code}]::text[]`);
+
+      return res.json({
+        metric: metric?.code || null,
+        dependsOn: metric?.dependentMetrics || [],
+        dependedOnBy: dependents.map(m => m.code)
+      });
+    } catch (error) {
+      console.error("GET /api/metrics/:code/dependencies error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch dependencies") });
+    }
+  });
+
+  // Extend PATCH /api/metrics/:code to handle derived metric validation
+  // Note: This is already handled by the existing PATCH route above,
+  // but we need to add validation logic to the MetricService.
+  // The validation logic should be added in the service layer to:
+  // 1. Check if isDerived is true, formula is required
+  // 2. Validate formula syntax and referenced metrics
+  // 3. Check for circular dependencies before saving
 }

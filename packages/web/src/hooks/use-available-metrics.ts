@@ -17,6 +17,9 @@ export interface AvailableMetric {
   lowerIsBetter: boolean; // Derived from metricType for backward compatibility
   category?: string;
   description?: string;
+  isDerived?: boolean;
+  formula?: string;
+  dependentMetrics?: string[];
 }
 
 /**
@@ -70,6 +73,9 @@ export function useAvailableMetrics(): {
     category: string | null;
     description: string | null;
     isActive: boolean;
+    isDerived?: boolean;
+    formula?: string | null;
+    dependentMetrics?: string[] | null;
   }>>({
     queryKey: ['siteMetrics', false],
     queryFn: async () => {
@@ -104,6 +110,9 @@ export function useAvailableMetrics(): {
           lowerIsBetter: om.siteMetric.metricType === 'lower_is_better',
           category: om.siteMetric.category || undefined,
           description: om.siteMetric.description || undefined,
+          isDerived: om.siteMetric.isDerived || undefined,
+          formula: om.siteMetric.formula || undefined,
+          dependentMetrics: om.siteMetric.dependentMetrics || undefined,
         }));
     }
 
@@ -119,6 +128,9 @@ export function useAvailableMetrics(): {
           lowerIsBetter: sm.metricType === 'lower_is_better',
           category: sm.category || undefined,
           description: sm.description || undefined,
+          isDerived: sm.isDerived || undefined,
+          formula: sm.formula || undefined,
+          dependentMetrics: sm.dependentMetrics || undefined,
         }));
     }
 

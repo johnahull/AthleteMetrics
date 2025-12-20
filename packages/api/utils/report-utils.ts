@@ -3,14 +3,35 @@
  * These helpers are used for PDF report generation and metric analysis
  */
 
+import { db } from '../db';
+import { eq } from 'drizzle-orm';
+import { siteMetrics } from '@shared/schema';
+
+// Cache for metric types to avoid repeated DB queries
+const metricTypeCache = new Map<string, string>();
+
 /**
  * Determines if lower values are better for a given metric
+ * Queries siteMetrics table as source of truth
  * @param metricCode - The metric code to check
  * @returns true if lower values are better (e.g., times), false otherwise
  */
-export function isLowerBetter(metricCode: string): boolean {
-  const lowerBetterMetrics = ['FLY10_TIME', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD'];
-  return lowerBetterMetrics.some(metric => metricCode.includes(metric));
+export async function isLowerBetter(metricCode: string): Promise<boolean> {
+  // Check cache first
+  if (metricTypeCache.has(metricCode)) {
+    return metricTypeCache.get(metricCode) === 'lower_is_better';
+  }
+
+  // Query database for metric type
+  const [metric] = await db
+    .select({ metricType: siteMetrics.metricType })
+    .from(siteMetrics)
+    .where(eq(siteMetrics.code, metricCode));
+
+  const metricType = metric?.metricType || 'higher_is_better';
+  metricTypeCache.set(metricCode, metricType);
+
+  return metricType === 'lower_is_better';
 }
 
 /**
@@ -19,9 +40,9 @@ export function isLowerBetter(metricCode: string): boolean {
  * @param metricCode - The metric code to sort by
  * @returns Sorted array of athletes (best to worst performance)
  */
-export function sortAthletesByMetric(athletes: any[], metricCode: string): any[] {
+export async function sortAthletesByMetric(athletes: any[], metricCode: string): Promise<any[]> {
   if (!Array.isArray(athletes)) return [];
-  const lowerIsBetter = isLowerBetter(metricCode);
+  const lowerIsBetter = await isLowerBetter(metricCode);
   return [...athletes]
     .filter(athlete => athlete?.measurements?.[metricCode] !== undefined)
     .sort((a, b) => {
@@ -38,11 +59,11 @@ export function sortAthletesByMetric(athletes: any[], metricCode: string): any[]
  * @param metricCode - The metric code to check
  * @returns The name of the highest benchmark tier met, or null if none
  */
-export function getBenchmarkLabel(athlete: any, metricCode: string): string | null {
+export async function getBenchmarkLabel(athlete: any, metricCode: string): Promise<string | null> {
   const comparisons = athlete.benchmarkComparisons?.[metricCode];
   if (!comparisons || comparisons.length === 0) return null;
 
-  const lowerIsBetter = isLowerBetter(metricCode);
+  const lowerIsBetter = await isLowerBetter(metricCode);
   const sortedComparisons = [...comparisons].sort((a: any, b: any) => {
     return lowerIsBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;
   });

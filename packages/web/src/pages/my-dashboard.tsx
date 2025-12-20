@@ -21,6 +21,7 @@ import { useAthleteDashboardData, type DashboardData } from '@/hooks/useAthleteD
 import { useAthleteProfile } from '@/hooks/useAthleteProfile';
 import { useAthleteWellnessStatus } from '@/hooks/useAthleteWellnessStatus';
 import { useActiveGoals, GoalStatus, GoalType } from '@/hooks/useGoals';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
 import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
@@ -49,6 +50,9 @@ export default function MyDashboardPage() {
 
   // Fetch active goals count for summary card
   const { data: activeGoals = [] } = useActiveGoals();
+
+  // Fetch available metrics to get isDerived and dependentMetrics info
+  const { metrics: availableMetrics } = useAvailableMetrics();
 
   // Fetch site settings to check wellness module status (public endpoint for athletes)
   const { data: siteSettings } = useQuery<SiteSettings>({
@@ -173,16 +177,21 @@ export default function MyDashboardPage() {
       {/* Performance Metrics Grid (includes PRs) */}
       {dashboardData.availableMetrics.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {dashboardData.availableMetrics.map((metric) => (
-            <MetricProgressCard
-              key={metric}
-              metric={metric}
-              displayName={getMetricDisplayName(metric)}
-              measurements={measurementsByMetric[metric] || []}
-              units={getMetricUnits(metric)}
-              personalRecord={dashboardData.personalRecords.find(pr => pr.metric === metric)}
-            />
-          ))}
+          {dashboardData.availableMetrics.map((metric) => {
+            const metricConfig = availableMetrics.find(m => m.code === metric);
+            return (
+              <MetricProgressCard
+                key={metric}
+                metric={metric}
+                displayName={getMetricDisplayName(metric)}
+                measurements={measurementsByMetric[metric] || []}
+                units={getMetricUnits(metric)}
+                personalRecord={dashboardData.personalRecords.find(pr => pr.metric === metric)}
+                isDerived={metricConfig?.isDerived}
+                dependentMetrics={metricConfig?.dependentMetrics}
+              />
+            );
+          })}
         </div>
       )}
 

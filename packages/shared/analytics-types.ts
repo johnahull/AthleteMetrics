@@ -419,6 +419,9 @@ export interface DynamicMetricConfig {
   description?: string;
   isActive: boolean;
   isSystemDefault: boolean;
+  isDerived?: boolean;
+  formula?: string;
+  dependentMetrics?: string[];
 }
 
 // Organization-specific metric configuration

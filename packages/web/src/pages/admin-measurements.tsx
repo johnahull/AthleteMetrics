@@ -16,6 +16,7 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle, User, Download, CheckSquare, XSquare, ArrowUpDown } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -166,16 +167,8 @@ const filterSchema = z.object({
 
 type FilterFormData = z.infer<typeof filterSchema>;
 
-const METRICS = [
-  { value: "FLY10_TIME", label: "10-Yard Fly Time" },
-  { value: "VERTICAL_JUMP", label: "Vertical Jump" },
-  { value: "AGILITY_505", label: "5-0-5 Agility" },
-  { value: "AGILITY_5105", label: "5-10-5 Agility" },
-  { value: "T_TEST", label: "T-Test" },
-  { value: "DASH_40YD", label: "40-Yard Dash" },
-  { value: "RSI", label: "RSI" },
-  { value: "TOP_SPEED", label: "Top Speed" },
-];
+// METRICS array is now fetched dynamically via useAvailableMetrics hook
+// This supports derived metrics and custom metrics from the database
 
 const GENDERS = [
   { value: "Male", label: "Male" },
@@ -189,6 +182,9 @@ const PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 0];
 export default function AdminMeasurementsPage() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
+
+  // Fetch available metrics from database (includes derived metrics)
+  const { metrics: availableMetrics } = useAvailableMetrics();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -481,11 +477,11 @@ export default function AdminMeasurementsPage() {
     setSelectedMeasurements(prev => prev.filter(id => measurementIds.has(id)));
   }, [measurements]);
 
-  // Format metric name for display
+  // Format metric name for display (uses available metrics from database)
   const formatMetricName = useCallback((metric: string): string => {
-    const found = METRICS.find((m) => m.value === metric);
+    const found = availableMetrics.find((m) => m.code === metric);
     return found ? found.label : metric;
-  }, []);
+  }, [availableMetrics]);
 
   // Selection functions
   const toggleMeasurementSelection = useCallback((id: string) => {
@@ -767,9 +763,9 @@ export default function AdminMeasurementsPage() {
                                 className="w-full p-2 border border-gray-300 rounded-md"
                               >
                                 <option value="">All Metrics</option>
-                                {METRICS.map((metric) => (
-                                  <option key={metric.value} value={metric.value}>
-                                    {metric.label}
+                                {availableMetrics.map((metric) => (
+                                  <option key={metric.code} value={metric.code}>
+                                    {metric.label}{metric.isDerived ? ' [calc]' : ''}
                                   </option>
                                 ))}
                               </select>

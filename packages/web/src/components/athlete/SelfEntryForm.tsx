@@ -21,6 +21,7 @@ import {
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,42 +29,17 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-
-// Metric options with display names
-const METRIC_OPTIONS = [
-  { value: 'FLY10_TIME', label: '10-Yard Fly (seconds)' },
-  { value: 'VERTICAL_JUMP', label: 'Vertical Jump (inches)' },
-  { value: 'AGILITY_505', label: '5-0-5 Agility (seconds)' },
-  { value: 'AGILITY_5105', label: '5-10-5 Agility (seconds)' },
-  { value: 'T_TEST', label: 'T-Test (seconds)' },
-  { value: 'DASH_40YD', label: '40-Yard Dash (seconds)' },
-  { value: 'TOP_SPEED', label: 'Top Speed (mph)' },
-  { value: 'RSI', label: 'Reactive Strength Index' },
-] as const;
+import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 
 // Form validation schema
+// Accept any valid metric code - actual validation happens against org-enabled metrics at API level
 const selfEntrySchema = z.object({
   metric: z
     .string({
       required_error: "Metric is required",
     })
     .min(1, "Metric is required")
-    .refine(
-      (val) =>
-        [
-          'FLY10_TIME',
-          'VERTICAL_JUMP',
-          'AGILITY_505',
-          'AGILITY_5105',
-          'T_TEST',
-          'DASH_40YD',
-          'TOP_SPEED',
-          'RSI',
-        ].includes(val),
-      {
-        message: "Invalid metric selected",
-      }
-    ),
+    .regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z
     .number({
       required_error: "Value is required",
@@ -105,6 +81,10 @@ export function SelfEntryForm({
   onCancel,
   isSubmitting = false,
 }: SelfEntryFormProps) {
+  // Get available metrics and filter out derived metrics
+  const { metrics: availableMetrics } = useAvailableMetrics();
+  const selectableMetrics = availableMetrics.filter(m => !m.isDerived);
+
   const form = useForm<SelfEntryFormData>({
     resolver: zodResolver(selfEntrySchema),
     defaultValues: {
@@ -156,13 +136,16 @@ export function SelfEntryForm({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {METRIC_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
-                        {option.label}
+                    {selectableMetrics.map((metric) => (
+                      <SelectItem key={metric.code} value={metric.code}>
+                        {metric.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <FormDescription>
+                  Enter a value for the selected metric. Some metrics (like calculated top speed) are automatically derived from your other measurements.
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}

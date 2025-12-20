@@ -414,11 +414,12 @@ export function registerReportRoutes(app: Express) {
 
       // Metrics filter (check if config.metrics contains any of the specified metrics)
       if (metrics && typeof metrics === 'string') {
-        // Whitelist validation for metrics to prevent SQL injection
-        const validMetrics = ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI'];
+        // Regex validation for metrics to prevent SQL injection while allowing any valid metric code
+        // Valid metric codes are uppercase letters, numbers, and underscores (e.g., FLY10_TIME, TOP_SPEED_CALC)
+        const metricCodePattern = /^[A-Z0-9_]+$/;
         const metricCodes = metrics.split(',')
           .map(m => m.trim())
-          .filter(m => validMetrics.includes(m));
+          .filter(m => metricCodePattern.test(m));
         if (metricCodes.length > 0) {
           conditions.push(
             sql`${reports.config}::jsonb->'metrics' ?| array[${sql.join(metricCodes.map(m => sql`${m}`), sql`, `)}]`
@@ -1025,7 +1026,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate PDF
-        const pdf = generatePDF(report, reportData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified');
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1081,7 +1082,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Generate PDF from snapshot data
-        const pdf = generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified');
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1378,7 +1379,7 @@ function addFooterToAllPages(doc: jsPDF): void {
 /**
  * Generate PDF document from report data
  */
-function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified'): jsPDF {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified'): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
@@ -1525,7 +1526,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
 
-      reportData.teamStatistics.forEach((stat: any) => {
+      for (const stat of reportData.teamStatistics) {
         // Check if we need a new page for each metric
         if (yPos > 200) {
           doc.addPage();
@@ -1539,7 +1540,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
         yPos += 6;
 
         // Sort athletes by this metric
-        const sortedAthletes = sortAthletesByMetric(reportData.athleteRankings, stat.metric);
+        const sortedAthletes = await sortAthletesByMetric(reportData.athleteRankings, stat.metric);
         const totalAthletes = sortedAthletes.length;
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
@@ -1581,7 +1582,7 @@ function generatePDF(report: any, reportData: any, format: 'visual' | 'simplifie
 
           yPos += 5; // Add spacing before next metric
         }
-      });
+      }
     }
 
     // 5. Composite Index Rankings (ONLY if enabled)

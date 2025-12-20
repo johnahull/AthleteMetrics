@@ -30,6 +30,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Fall',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-12-15'),
   },
   {
@@ -51,6 +54,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Fall',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-12-10'),
   },
   {
@@ -72,6 +78,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Fall',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-11-20'),
   },
   {
@@ -93,6 +102,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Fall',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-11-15'),
   },
 ];

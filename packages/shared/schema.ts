@@ -183,6 +183,16 @@ export const siteMetrics = pgTable("site_metrics", {
   // Display settings
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
   icon: varchar("icon", { length: 50 }), // Icon identifier
+  // Derived metrics configuration
+  isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
+  formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
+  dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
+  calculationConfig: jsonb("calculation_config").$type<{
+    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+    maxDateDifference?: number;
+    missingSourceBehavior: 'skip' | 'error';
+    constants?: Record<string, number>;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -192,6 +202,8 @@ export const siteMetrics = pgTable("site_metrics", {
   categoryIdx: index("site_metrics_category_idx").on(table.category),
   // Index for organization type filtering
   availableOrgTypesIdx: index("site_metrics_available_org_types_idx").on(table.availableOrgTypes),
+  // Index for querying derived metrics (partial index: WHERE is_derived = true)
+  isDerivedIdx: index("idx_site_metrics_is_derived").on(table.isDerived).where(sql`${table.isDerived} = true`),
 }));
 
 // Organization-level metric enablement (org opt-in to site metrics)
@@ -397,12 +409,33 @@ export const measurements = pgTable("measurements", {
   teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
   // Global athlete linking for cross-org aggregation
   globalAthleteId: varchar("global_athlete_id"), // Historical reference (no FK - allows orphaned data)
+  // Derived/calculated measurement fields
+  isCalculated: boolean("is_calculated").default(false).notNull(), // Whether this measurement was auto-calculated
+  calculatedFromMeasurementIds: text("calculated_from_measurement_ids").array(), // Source measurement IDs used in calculation
+  calculationMetadata: jsonb("calculation_metadata").$type<{
+    formula: string;
+    sourceValues: Record<string, number>;
+    calculatedAt: string;
+    calculationVersion?: string;  // Version of the calculator (e.g., "1.0.0")
+    triggeredBy?: {
+      event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
+      userId?: string;              // Who triggered the calculation (if applicable)
+      sourceMeasurementId?: string; // Source measurement that triggered the calculation
+    };
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
   // Performance indexes for peer comparison queries
   metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
   userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
+  // Derived metrics indexes (partial indexes: WHERE is_calculated = true / is_verified = true)
+  isCalculatedIdx: index("idx_measurements_is_calculated").on(table.isCalculated).where(sql`${table.isCalculated} = true`),
+  // Note: idx_measurements_calculated_from is a GIN index (USING GIN) created in migration 0083
+  // for array containment queries on calculated_from_measurement_ids. Drizzle doesn't support
+  // specifying GIN index type, so this index is created manually in the migration.
+  // Index name: idx_measurements_calculated_from (partial: WHERE is_calculated = true)
+  userMetricVerifiedDateIdx: index("idx_measurements_user_metric_verified_date").on(table.userId, table.metric, table.date).where(sql`${table.isVerified} = true`),
 }));
 
 export const userOrganizations = pgTable("user_organizations", {
@@ -1549,7 +1582,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
+  // Accept any metric code - validation against active metrics happens at API level
+  // This allows derived metrics and custom metrics to be recorded
+  metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
@@ -1584,6 +1619,41 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   decimalPrecision: z.number().int().min(0).max(10).default(3),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().default(false),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
+  dependentMetrics: z.array(z.string()).optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is true, formula is required
+  if (data.isDerived === true) {
+    if (!data.formula || data.formula.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+    if (!data.calculationConfig) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Calculation config is required when isDerived is true",
+        path: ['calculationConfig'],
+      });
+    }
+  }
+  // If isDerived is false, formula should not be set
+  if (data.isDerived === false && data.formula) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should not be set when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const updateSiteMetricSchema = z.object({
@@ -1602,6 +1672,34 @@ export const updateSiteMetricSchema = z.object({
   decimalPrecision: z.number().int().min(0).max(10).optional(),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().optional(),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
+  dependentMetrics: z.array(z.string()).nullable().optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).nullable().optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is being set to true, formula should be provided
+  if (data.isDerived === true) {
+    if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+  }
+  // If isDerived is being set to false, warn if formula is still set (unless explicitly cleared)
+  if (data.isDerived === false && data.formula !== undefined && data.formula !== null && data.formula.trim() !== '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should be cleared when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const insertOrganizationMetricSchema = createInsertSchema(organizationMetrics).omit({

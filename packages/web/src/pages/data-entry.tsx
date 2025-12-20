@@ -86,7 +86,7 @@ export default function DataEntry() {
       config.metrics.flatMap(metric =>
         Array.from({ length: config.measurementsPerAthlete }, () => ({
           athleteId: athleteId,
-          metric: metric as "FLY10_TIME" | "VERTICAL_JUMP" | "AGILITY_505" | "AGILITY_5105" | "T_TEST" | "DASH_40YD" | "RSI" | "TOP_SPEED",
+          metric: metric, // Accept any valid metric code from the selector
           date: config.date,
           value: 0,
           notes: '',
