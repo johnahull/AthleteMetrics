@@ -689,6 +689,11 @@ export class PeerComparisonService extends BaseService {
    * Store distribution in cache
    */
   private async cacheDistribution(distribution: DistributionData): Promise<void> {
+    // Don't cache if sample size is below minimum (DB constraint requires >= 10)
+    if (distribution.sampleSize < MIN_SAMPLE_SIZE) {
+      return;
+    }
+
     const filterJson = this.normalizeFilters(distribution.filterCriteria);
 
     // Upsert the cache entry
