@@ -48,6 +48,8 @@ import crypto from "crypto";
 import { emailService } from "../services/email-service";
 import { WellnessAccessService } from "../auth/wellness-access";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { getPushNotificationService } from "../services/push-notification-service";
+import type { NotificationPayload } from "../services/push-notification-service";
 
 // Helper function to check if rate limiting should be bypassed
 const shouldBypassRateLimit = (): boolean => {
@@ -557,10 +559,94 @@ export function registerWellnessRoutes(app: Express) {
           }
         }
 
-        // Include email notification status in response
+        // Send push notifications for magic link distribution
+        const pushResults = {
+          sent: 0,
+          failed: 0,
+          noSubscription: 0,
+          skipped: 0,
+          errors: [] as Array<{ athleteName: string; reason: string }>,
+        };
+
+        if (data.distributionMethod === 'magic_link') {
+          try {
+            const pushService = getPushNotificationService(db);
+            const magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
+            const template = await storage.getWellnessTemplate(data.templateId);
+            const coach = await storage.getUser(req.user!.id);
+
+            // Batch fetch all athletes
+            const athleteIds = Array.from(magicLinks.keys());
+            const athletes = await storage.getUsersByIds(athleteIds);
+            const athleteMap = new Map(athletes.map(a => [a.id, a]));
+
+            // Send push notification to each targeted athlete
+            for (const [athleteId, magicLink] of magicLinks.entries()) {
+              const athlete = athleteMap.get(athleteId);
+              if (athlete) {
+                try {
+                  const notification: NotificationPayload = {
+                    title: 'New Wellness Check',
+                    body: `${coach!.fullName} sent you a wellness questionnaire`,
+                    url: magicLink,
+                    type: 'wellness_survey',
+                    tag: `wellness-${request.id}`,
+                    data: {
+                      requestId: request.id,
+                      templateName: template!.name,
+                      coachName: coach!.fullName,
+                    },
+                    actions: [
+                      { action: 'open', title: 'Start Now' },
+                      { action: 'later', title: 'Remind Later' },
+                    ],
+                    requireInteraction: true,
+                  };
+
+                  const result = await pushService.sendToUser(
+                    athleteId,
+                    notification,
+                    organizationId
+                  );
+
+                  if (result.noSubscription) {
+                    pushResults.noSubscription++;
+                  } else if (result.skipped) {
+                    pushResults.skipped++;
+                    pushResults.errors.push({
+                      athleteName: athlete.fullName,
+                      reason: result.reason || 'skipped',
+                    });
+                  } else if (result.successful > 0) {
+                    pushResults.sent++;
+                  } else if (result.failed > 0) {
+                    pushResults.failed++;
+                    pushResults.errors.push({
+                      athleteName: athlete.fullName,
+                      reason: 'delivery_failed',
+                    });
+                  }
+                } catch (pushError) {
+                  console.error(`Failed to send push to ${athlete.fullName}:`, pushError);
+                  pushResults.failed++;
+                  pushResults.errors.push({
+                    athleteName: athlete.fullName,
+                    reason: (pushError as Error).message,
+                  });
+                }
+              }
+            }
+          } catch (pushError) {
+            console.error("Failed to send push notifications:", pushError);
+            // Don't fail the request creation if push notifications fail
+          }
+        }
+
+        // Include notification status in response
         res.status(201).json({
           ...request,
           emailNotifications: data.distributionMethod === 'magic_link' ? emailResults : undefined,
+          pushNotifications: data.distributionMethod === 'magic_link' ? pushResults : undefined,
         });
       } catch (error: any) {
         console.error("Failed to create wellness request:", error);
