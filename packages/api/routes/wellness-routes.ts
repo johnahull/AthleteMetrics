@@ -482,11 +482,9 @@ export function registerWellnessRoutes(app: Express) {
 
         const data = validation.data;
 
-        // Generate public token for magic link methods
-        let publicToken: string | undefined;
-        if (data.distributionMethod === 'magic_link' || data.distributionMethod === 'qr_code' || data.distributionMethod === 'team_link') {
-          publicToken = WellnessAccessService.generateMagicLinkToken();
-        }
+        // Generate public token for all distribution methods
+        // Token is used for navigation to submission page regardless of distribution method
+        const publicToken = WellnessAccessService.generateMagicLinkToken();
 
         // Create request
         const request = await storage.createWellnessRequest({
