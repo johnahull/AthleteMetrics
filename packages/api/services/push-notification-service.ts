@@ -408,11 +408,12 @@ export class PushNotificationService {
     });
 
     // Validate payload size (Web Push spec limit is 4KB)
+    let finalPayload = payload;
     if (Buffer.byteLength(payload, 'utf8') > MAX_PAYLOAD_SIZE) {
       console.warn(`Push notification payload exceeds ${MAX_PAYLOAD_SIZE} bytes, truncating body`);
       // Truncate body to fit within limit (leave room for other fields)
       const truncatedBody = notification.body.slice(0, 200) + '...';
-      const truncatedPayload = JSON.stringify({
+      finalPayload = JSON.stringify({
         title: notification.title,
         body: truncatedBody,
         icon: notification.icon || '/icon-192.png',
@@ -422,7 +423,7 @@ export class PushNotificationService {
         requireInteraction: notification.requireInteraction,
       });
       // If still too large, this is a critical error
-      if (Buffer.byteLength(truncatedPayload, 'utf8') > MAX_PAYLOAD_SIZE) {
+      if (Buffer.byteLength(finalPayload, 'utf8') > MAX_PAYLOAD_SIZE) {
         return { successful: 0, failed: 0, skipped: true, reason: 'payload_too_large' };
       }
     }
@@ -442,7 +443,7 @@ export class PushNotificationService {
               auth: sub.auth,
             },
           },
-          payload
+          finalPayload
         );
         successful++;
 

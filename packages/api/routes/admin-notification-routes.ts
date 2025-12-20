@@ -13,8 +13,6 @@ import {
   pushSubscriptions,
   notificationPreferences,
   orgNotificationSettings,
-  users,
-  organizations,
 } from "@shared/schema";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";

@@ -5,10 +5,19 @@
 
 import type { Express } from "express";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, and, desc } from "drizzle-orm";
+import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware";
 import { db } from "../db";
 import { notificationPreferences, notificationHistory } from "@shared/schema";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+
+// Rate limiter for notification history (read-heavy)
+const historyLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMITS.STANDARD, // Use standard limit for read operations
+  message: { message: "Too many requests. Please try again later." },
+});
 
 // Validation schema for updating preferences
 const updatePreferencesSchema = z.object({
@@ -154,7 +163,7 @@ export function registerNotificationPreferencesRoutes(app: Express) {
    * GET /api/notifications/history
    * Get notification history for the current user
    */
-  app.get("/api/notifications/history", requireAuth, async (req, res) => {
+  app.get("/api/notifications/history", historyLimiter, requireAuth, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -170,7 +179,7 @@ export function registerNotificationPreferencesRoutes(app: Express) {
         .select()
         .from(notificationHistory)
         .where(eq(notificationHistory.userId, userId))
-        .orderBy(notificationHistory.sentAt)
+        .orderBy(desc(notificationHistory.sentAt))
         .limit(limit)
         .offset(offset);
 
@@ -211,7 +220,7 @@ export function registerNotificationPreferencesRoutes(app: Express) {
    * POST /api/notifications/:id/clicked
    * Mark a notification as clicked (for analytics)
    */
-  app.post("/api/notifications/:id/clicked", requireAuth, async (req, res) => {
+  app.post("/api/notifications/:id/clicked", historyLimiter, requireAuth, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -220,20 +229,20 @@ export function registerNotificationPreferencesRoutes(app: Express) {
 
       const notificationId = req.params.id;
 
-      // Verify ownership and update
+      // Verify ownership BEFORE updating (security fix)
       const [updated] = await db
         .update(notificationHistory)
         .set({ clickedAt: new Date() })
-        .where(eq(notificationHistory.id, notificationId))
+        .where(
+          and(
+            eq(notificationHistory.id, notificationId),
+            eq(notificationHistory.userId, userId)
+          )
+        )
         .returning();
 
       if (!updated) {
-        return res.status(404).json({ message: "Notification not found" });
-      }
-
-      // Verify the notification belongs to the user
-      if (updated.userId !== userId) {
-        return res.status(403).json({ message: "Access denied" });
+        return res.status(404).json({ message: "Notification not found or access denied" });
       }
 
       res.json({ message: "Notification marked as clicked" });
