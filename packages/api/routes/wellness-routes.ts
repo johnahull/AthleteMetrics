@@ -559,7 +559,7 @@ export function registerWellnessRoutes(app: Express) {
           }
         }
 
-        // Send push notifications for magic link distribution
+        // Send push notifications for magic_link and athlete_account distribution
         const pushResults = {
           sent: 0,
           failed: 0,
@@ -568,27 +568,45 @@ export function registerWellnessRoutes(app: Express) {
           errors: [] as Array<{ athleteName: string; reason: string }>,
         };
 
-        if (data.distributionMethod === 'magic_link') {
+        const shouldSendPush = data.distributionMethod === 'magic_link' || data.distributionMethod === 'athlete_account';
+
+        if (shouldSendPush) {
           try {
             const pushService = getPushNotificationService(db);
-            const magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
             const template = await storage.getWellnessTemplate(data.templateId);
             const coach = await storage.getUser(req.user!.id);
 
-            // Batch fetch all athletes
-            const athleteIds = Array.from(magicLinks.keys());
+            // For magic_link, we have per-athlete magic links
+            // For athlete_account, we send them to their wellness requests page
+            let magicLinks: Map<string, string> | null = null;
+            if (data.distributionMethod === 'magic_link') {
+              magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
+            }
+
+            // Get athlete IDs - either from magic links or from target list
+            const athleteIds = magicLinks
+              ? Array.from(magicLinks.keys())
+              : (data.targetAthleteIds || []);
+
             const athletes = await storage.getUsersByIds(athleteIds);
             const athleteMap = new Map(athletes.map(a => [a.id, a]));
 
+            // Base URL for athlete_account distribution (their wellness requests page)
+            const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+            const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+
             // Send push notification to each targeted athlete
-            for (const [athleteId, magicLink] of magicLinks.entries()) {
+            for (const athleteId of athleteIds) {
               const athlete = athleteMap.get(athleteId);
               if (athlete) {
                 try {
+                  // Use magic link URL for magic_link, or wellness requests page for athlete_account
+                  const notificationUrl = magicLinks?.get(athleteId) || athleteAccountUrl;
+
                   const notification: NotificationPayload = {
                     title: 'New Wellness Check',
                     body: `${coach!.fullName} sent you a wellness questionnaire`,
-                    url: magicLink,
+                    url: notificationUrl,
                     type: 'wellness_survey',
                     tag: `wellness-${request.id}`,
                     data: {
@@ -646,7 +664,7 @@ export function registerWellnessRoutes(app: Express) {
         res.status(201).json({
           ...request,
           emailNotifications: data.distributionMethod === 'magic_link' ? emailResults : undefined,
-          pushNotifications: data.distributionMethod === 'magic_link' ? pushResults : undefined,
+          pushNotifications: shouldSendPush ? pushResults : undefined,
         });
       } catch (error: any) {
         console.error("Failed to create wellness request:", error);
@@ -888,6 +906,144 @@ export function registerWellnessRoutes(app: Express) {
       } catch (error: any) {
         console.error("Failed to cancel wellness request:", error);
         res.status(500).json(createErrorResponse("Failed to cancel wellness request", error));
+      }
+    }
+  );
+
+  /**
+   * POST /api/organizations/:organizationId/wellness/requests/:id/resend-notifications
+   * Resend push notifications for a wellness request
+   * Access: Coach, Org Admin
+   */
+  app.post(
+    "/api/organizations/:organizationId/wellness/requests/:id/resend-notifications",
+    batchLimiter,
+    requireAuth,
+    requireOrganizationAccess("coach"),
+    async (req: Request, res: Response) => {
+      try {
+        const { organizationId, id } = req.params;
+
+        const request = await storage.getWellnessRequest(id);
+        if (!request) {
+          return res.status(404).json({ message: "Request not found" });
+        }
+
+        if (request.status !== 'active') {
+          return res.status(400).json({ message: "Can only resend notifications for active requests" });
+        }
+
+        // Only magic_link and athlete_account support push notifications
+        if (request.distributionMethod !== 'magic_link' && request.distributionMethod !== 'athlete_account') {
+          return res.status(400).json({
+            message: "Push notifications are only available for Magic Link and Athlete Account distribution methods"
+          });
+        }
+
+        const pushResults = {
+          sent: 0,
+          failed: 0,
+          noSubscription: 0,
+          skipped: 0,
+          errors: [] as Array<{ athleteName: string; reason: string }>,
+        };
+
+        try {
+          const pushService = getPushNotificationService(db);
+          const template = await storage.getWellnessTemplate(request.templateId);
+          const coach = await storage.getUser(req.user!.id);
+
+          // For magic_link, regenerate magic links
+          let magicLinks: Map<string, string> | null = null;
+          if (request.distributionMethod === 'magic_link') {
+            magicLinks = await WellnessAccessService.generateMagicLinksForRequest(request.id);
+          }
+
+          // Get athlete IDs
+          const athleteIds = magicLinks
+            ? Array.from(magicLinks.keys())
+            : (request.targetAthleteIds || []);
+
+          const athletes = await storage.getUsersByIds(athleteIds);
+          const athleteMap = new Map(athletes.map(a => [a.id, a]));
+
+          // Base URL for athlete_account distribution
+          const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+          const athleteAccountUrl = `${appUrl}/wellness-my-requests`;
+
+          // Send push notification to each targeted athlete
+          for (const athleteId of athleteIds) {
+            const athlete = athleteMap.get(athleteId);
+            if (athlete) {
+              try {
+                const notificationUrl = magicLinks?.get(athleteId) || athleteAccountUrl;
+
+                const notification: NotificationPayload = {
+                  title: '⏰ Reminder: Wellness Check',
+                  body: `${coach!.fullName} is waiting for your wellness questionnaire`,
+                  url: notificationUrl,
+                  type: 'wellness_survey',
+                  tag: `wellness-reminder-${request.id}`,
+                  data: {
+                    requestId: request.id,
+                    templateName: template!.name,
+                    coachName: coach!.fullName,
+                    isReminder: true,
+                  },
+                  actions: [
+                    { action: 'open', title: 'Complete Now' },
+                  ],
+                  requireInteraction: true,
+                };
+
+                const result = await pushService.sendToUser(
+                  athleteId,
+                  notification,
+                  organizationId
+                );
+
+                if (result.noSubscription) {
+                  pushResults.noSubscription++;
+                } else if (result.skipped) {
+                  pushResults.skipped++;
+                  pushResults.errors.push({
+                    athleteName: athlete.fullName,
+                    reason: result.reason || 'skipped',
+                  });
+                } else if (result.successful > 0) {
+                  pushResults.sent++;
+                } else if (result.failed > 0) {
+                  pushResults.failed++;
+                  pushResults.errors.push({
+                    athleteName: athlete.fullName,
+                    reason: 'delivery_failed',
+                  });
+                }
+              } catch (pushError) {
+                console.error(`Failed to send push to ${athlete.fullName}:`, pushError);
+                pushResults.failed++;
+                pushResults.errors.push({
+                  athleteName: athlete.fullName,
+                  reason: (pushError as Error).message,
+                });
+              }
+            }
+          }
+        } catch (pushError) {
+          console.error("Failed to resend push notifications:", pushError);
+          return res.status(500).json({
+            message: "Failed to resend notifications",
+            error: (pushError as Error).message,
+          });
+        }
+
+        res.json({
+          message: "Notifications resent",
+          results: pushResults,
+        });
+      } catch (error: any) {
+        console.error("Failed to resend wellness notifications:", error);
+        res.status(500).json(createErrorResponse("Failed to resend notifications", error));
       }
     }
   );

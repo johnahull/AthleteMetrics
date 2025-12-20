@@ -1,7 +1,7 @@
 
 import React from "react";
 import { Link } from "wouter";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, Bell } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface UserProfileDisplayProps {
@@ -48,7 +48,7 @@ export function UserProfileDisplay({
             className={cn(
               "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer mt-2",
               location === "/profile"
-                ? "bg-primary text-white" 
+                ? "bg-primary text-white"
                 : "text-gray-700 hover:bg-gray-100"
             )}
             data-testid="nav-profile"
@@ -58,6 +58,22 @@ export function UserProfileDisplay({
           </div>
         </Link>
       )}
+
+      {/* Notification Settings - available to all authenticated users */}
+      <Link href="/notification-settings">
+        <div
+          className={cn(
+            "flex items-center space-x-3 px-3 py-2 rounded-lg transition-colors cursor-pointer mt-2",
+            location === "/notification-settings"
+              ? "bg-primary text-white"
+              : "text-gray-700 hover:bg-gray-100"
+          )}
+          data-testid="nav-notification-settings"
+        >
+          <Bell className="h-5 w-5" />
+          <span>Notifications</span>
+        </div>
+      </Link>
 
       <button
         onClick={onLogout}

@@ -4,9 +4,10 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Eye, X, QrCode, Trash2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Eye, X, QrCode, Trash2, Bell } from 'lucide-react';
 import type { WellnessRequest, RequestStatus } from '@shared/wellness-types';
-import { useCancelWellnessRequest, useDeleteWellnessRequest } from '@/hooks/use-wellness-requests';
+import { useCancelWellnessRequest, useDeleteWellnessRequest, useResendWellnessNotifications } from '@/hooks/use-wellness-requests';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import QRCodeGenerator from './QRCodeGenerator';
@@ -20,6 +21,7 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
   const { toast } = useToast();
   const cancelRequest = useCancelWellnessRequest(organizationId);
   const deleteRequest = useDeleteWellnessRequest(organizationId);
+  const resendNotifications = useResendWellnessNotifications(organizationId);
   const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all');
   const [viewingQRRequest, setViewingQRRequest] = useState<WellnessRequest | null>(null);
 
@@ -62,6 +64,43 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
         });
       }
     }
+  };
+
+  const handleResendNotifications = async (requestId: string) => {
+    try {
+      const result = await resendNotifications.mutateAsync(requestId);
+      const { sent, failed, noSubscription } = result.results;
+
+      if (sent > 0) {
+        toast({
+          title: 'Notifications Sent',
+          description: `Sent ${sent} notification${sent !== 1 ? 's' : ''}${noSubscription > 0 ? ` (${noSubscription} athlete${noSubscription !== 1 ? 's' : ''} have no push enabled)` : ''}`,
+        });
+      } else if (noSubscription > 0) {
+        toast({
+          title: 'No Notifications Sent',
+          description: `${noSubscription} athlete${noSubscription !== 1 ? 's' : ''} do not have push notifications enabled`,
+          variant: 'destructive',
+        });
+      } else {
+        toast({
+          title: 'No Notifications Sent',
+          description: 'No athletes to notify',
+          variant: 'destructive',
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to resend notifications',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Check if request supports push notifications
+  const supportsPushNotifications = (method: string) => {
+    return method === 'magic_link' || method === 'athlete_account';
   };
 
   const getStatusBadge = (status: RequestStatus) => {
@@ -167,37 +206,79 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
                         </p>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-1">
-                          {(request.distributionMethod === 'qr_code' || request.distributionMethod === 'team_link') && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => setViewingQRRequest(request)}
-                              data-testid={`button-view-qr-${request.id}`}
-                            >
-                              <QrCode className="h-4 w-4" />
-                            </Button>
-                          )}
-                          {request.status === 'active' && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleCancel(request.id)}
-                              data-testid={`button-cancel-request-${request.id}`}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleDelete(request.id)}
-                            data-testid={`button-delete-request-${request.id}`}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                        <TooltipProvider>
+                          <div className="flex gap-1">
+                            {/* Resend notifications button - only for active magic_link/athlete_account */}
+                            {request.status === 'active' && supportsPushNotifications(request.distributionMethod) && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleResendNotifications(request.id)}
+                                    disabled={resendNotifications.isPending}
+                                    data-testid={`button-resend-${request.id}`}
+                                  >
+                                    <Bell className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Resend notifications</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            {(request.distributionMethod === 'qr_code' || request.distributionMethod === 'team_link') && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setViewingQRRequest(request)}
+                                    data-testid={`button-view-qr-${request.id}`}
+                                  >
+                                    <QrCode className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View QR code</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            {request.status === 'active' && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleCancel(request.id)}
+                                    data-testid={`button-cancel-request-${request.id}`}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Cancel request</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDelete(request.id)}
+                                  data-testid={`button-delete-request-${request.id}`}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                <p>Delete request</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                        </TooltipProvider>
                       </TableCell>
                     </TableRow>
                   );

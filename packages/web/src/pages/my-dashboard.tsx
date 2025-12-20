@@ -25,6 +25,7 @@ import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
 import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
+import { PendingTasksBanner } from '@/components/athlete/PendingTasksBanner';
 import { MetricProgressCard } from '@/components/athlete/MetricProgressCard';
 import { AchievementsCard } from '@/components/athlete/AchievementsCard';
 import { GoalProgressCard } from '@/components/athlete/GoalProgressCard';
@@ -173,6 +174,9 @@ export default function MyDashboardPage() {
         measurementCount={dashboardData.measurementsThisMonth}
         lastMeasurementDate={dashboardData.lastMeasurementDate}
       />
+
+      {/* Pending Tasks Banner - shows wellness questionnaires to complete */}
+      {isWellnessEnabled && <PendingTasksBanner />}
 
       {/* Performance Metrics Grid (includes PRs) */}
       {dashboardData.availableMetrics.length > 0 && (

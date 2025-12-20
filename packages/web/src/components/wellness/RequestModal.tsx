@@ -124,14 +124,15 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
             <Label>Distribution Method *</Label>
             <RadioGroup value={distributionMethod} onValueChange={(value: any) => setDistributionMethod(value)}>
               <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
+                <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50 border-primary/50 bg-primary/5">
                   <RadioGroupItem value="magic_link" id="magic_link" data-testid="radio-magic-link" />
-                  <Label htmlFor="magic_link" className="cursor-pointer">
+                  <Label htmlFor="magic_link" className="cursor-pointer flex-1">
                     <div>
                       <p className="font-medium">Magic Link</p>
-                      <p className="text-xs text-gray-600">Email unique links</p>
+                      <p className="text-xs text-gray-600">Email + push notification to each athlete</p>
                     </div>
                   </Label>
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Recommended</span>
                 </div>
 
                 <div className="flex items-center space-x-2 p-4 border rounded-md cursor-pointer hover:bg-gray-50">
@@ -139,7 +140,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <Label htmlFor="athlete_account" className="cursor-pointer">
                     <div>
                       <p className="font-medium">Athlete Accounts</p>
-                      <p className="text-xs text-gray-600">Requires login</p>
+                      <p className="text-xs text-gray-600">Push notification + in-app (requires login)</p>
                     </div>
                   </Label>
                 </div>
@@ -149,7 +150,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <Label htmlFor="team_link" className="cursor-pointer">
                     <div>
                       <p className="font-medium">Team Link</p>
-                      <p className="text-xs text-gray-600">Shared link for team</p>
+                      <p className="text-xs text-gray-600">Share link manually (no notification)</p>
                     </div>
                   </Label>
                 </div>
@@ -159,7 +160,7 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                   <Label htmlFor="qr_code" className="cursor-pointer">
                     <div>
                       <p className="font-medium">QR Code</p>
-                      <p className="text-xs text-gray-600">Scan to access</p>
+                      <p className="text-xs text-gray-600">Display/print QR (no notification)</p>
                     </div>
                   </Label>
                 </div>

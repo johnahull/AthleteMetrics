@@ -160,6 +160,28 @@ export function useDeleteWellnessRequest(organizationId: string) {
 }
 
 /**
+ * Resend push notifications for a wellness request
+ */
+export function useResendWellnessNotifications(organizationId: string) {
+  return useMutation({
+    mutationFn: async (requestId: string) => {
+      const response = await apiRequest(
+        'POST',
+        `/api/organizations/${organizationId}/wellness/requests/${requestId}/resend-notifications`,
+        {}
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to resend notifications');
+      }
+
+      return response.json();
+    },
+  });
+}
+
+/**
  * Get completion rate for a wellness request
  * Returns { completed: number, total: number, rate: number }
  */
