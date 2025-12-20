@@ -271,10 +271,16 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
-    // Start wellness digest scheduled job after server is ready
+    // Start wellness digest scheduled job after server is ready (only if VAPID configured)
     try {
       const { db } = await import('./db');
-      startWellnessDigestJob(db);
+
+      // Check if VAPID keys are configured before starting push notification job
+      if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+        startWellnessDigestJob(db);
+      } else {
+        console.warn('⚠️ Wellness digest job disabled - VAPID keys not configured');
+      }
     } catch (error) {
       console.error('Failed to start wellness digest job:', error);
     }

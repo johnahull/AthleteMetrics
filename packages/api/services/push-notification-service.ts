@@ -503,14 +503,18 @@ export class PushNotificationService {
       .from(userTeams)
       .where(eq(userTeams.teamId, teamId));
 
+    // Send to all members in parallel for better performance
+    const results = await Promise.all(
+      teamMembers.map(member => this.sendToUser(member.userId, notification, orgId))
+    );
+
+    // Aggregate results
     let successful = 0;
     let failed = 0;
     let noSubscription = 0;
     let skipped = 0;
 
-    for (const member of teamMembers) {
-      const result = await this.sendToUser(member.userId, notification, orgId);
-
+    for (const result of results) {
       if (result.noSubscription) {
         noSubscription++;
       } else if (result.skipped) {
@@ -557,14 +561,18 @@ export class PushNotificationService {
 
     const orgMembers = await query;
 
+    // Send to all members in parallel for better performance
+    const results = await Promise.all(
+      orgMembers.map(member => this.sendToUser(member.userId, notification, orgId))
+    );
+
+    // Aggregate results
     let successful = 0;
     let failed = 0;
     let noSubscription = 0;
     let skipped = 0;
 
-    for (const member of orgMembers) {
-      const result = await this.sendToUser(member.userId, notification, orgId);
-
+    for (const result of results) {
       if (result.noSubscription) {
         noSubscription++;
       } else if (result.skipped) {
