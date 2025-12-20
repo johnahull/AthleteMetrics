@@ -98,6 +98,9 @@ const JoinOrganization = React.lazy(() => import("./pages/join-organization"));
 const JoinByCode = React.lazy(() => import("./pages/join-by-code"));
 const MyRequests = React.lazy(() => import("./pages/my-requests"));
 
+// Lazy load notification settings page
+const NotificationSettings = React.lazy(() => import("./pages/notification-settings"));
+
 function Router() {
   return (
     <Switch>
@@ -201,6 +204,11 @@ function Router() {
       <Route path="/my-global-profile">
         <RouteWrapper loadingText="Loading Global Profile...">
           <MyGlobalProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/notification-settings">
+        <RouteWrapper loadingText="Loading Settings...">
+          <NotificationSettings />
         </RouteWrapper>
       </Route>
       <Route path="/unified-dashboard">
