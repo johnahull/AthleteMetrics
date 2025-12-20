@@ -31,6 +31,7 @@
     "memorystore": "^1.6.7",
     "multer": "^2.0.2",
     "nanoid": "^5.1.6",
+    "node-cron": "^4.2.1",
     "otplib": "^12.0.1",
     "passport": "^0.7.0",
     "passport-apple": "^2.0.2",
@@ -47,6 +48,7 @@
     "zod-validation-error": "^3.4.0"
   },
   "devDependencies": {
+    "@types/node-cron": "^3.0.11",
     "@types/passport-apple": "^2.0.3",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/web-push": "^3.6.4"

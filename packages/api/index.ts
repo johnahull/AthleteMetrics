@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { log } from "./utils/logger.js";
 import { shutdownSecurityStore } from "./middleware/organization-type-security";
 import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware";
+import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-digest-job";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
@@ -267,8 +268,16 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
   // rather than Node.js clustering. reusePort is only useful for multiple processes
   // binding to the same port on the same machine (Linux only).
   const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen(port, "0.0.0.0", () => {
+  server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
+
+    // Start wellness digest scheduled job after server is ready
+    try {
+      const { db } = await import('./db');
+      startWellnessDigestJob(db);
+    } catch (error) {
+      console.error('Failed to start wellness digest job:', error);
+    }
   });
 
   // Assign the graceful shutdown implementation - properly close database connections on process termination
@@ -279,6 +288,10 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
       log('HTTP server closed');
 
       try {
+        // Stop scheduled jobs
+        stopWellnessDigestJob();
+        log('Scheduled jobs stopped');
+
         // Shutdown organization type singletons to prevent memory leaks
         shutdownSecurityStore();
         shutdownAuditLogQueue();
