@@ -326,6 +326,14 @@ export function usePushNotifications(): UsePushNotificationsResult {
     setError(null);
 
     try {
+      // Get subscription details BEFORE deletion to avoid race condition
+      const removedSub = subscriptions.find(s => s.id === subscriptionId);
+
+      // Get current device subscription BEFORE deletion
+      const registration = await navigator.serviceWorker.ready;
+      const currentSubscription = await registration.pushManager.getSubscription();
+
+      // Delete from server
       const response = await fetch(`/api/push/subscriptions/${subscriptionId}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -335,17 +343,19 @@ export function usePushNotifications(): UsePushNotificationsResult {
         throw new Error('Failed to remove subscription');
       }
 
+      // Refresh subscriptions list
       await refreshSubscriptions();
 
-      // Check if this was the current device's subscription
-      const registration = await navigator.serviceWorker.ready;
-      const currentSubscription = await registration.pushManager.getSubscription();
-      const removedSub = subscriptions.find(s => s.id === subscriptionId);
-
+      // Check if this was the current device's subscription and unsubscribe locally
       if (currentSubscription && removedSub?.endpoint === currentSubscription.endpoint) {
-        await currentSubscription.unsubscribe();
-        setSubscription(null);
-        setIsSubscribed(false);
+        try {
+          await currentSubscription.unsubscribe();
+          setSubscription(null);
+          setIsSubscribed(false);
+        } catch (unsubError) {
+          // Log but don't fail - subscription was already removed from server
+          console.warn('Failed to unsubscribe locally (already removed from server):', unsubError);
+        }
       }
 
       return true;

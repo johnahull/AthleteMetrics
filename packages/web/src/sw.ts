@@ -158,7 +158,8 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     (async () => {
       // Try to track the click (non-blocking)
-      if (notificationId) {
+      // Verify notificationId exists and is a valid string before attempting to track
+      if (notificationId && typeof notificationId === 'string' && notificationId.trim()) {
         try {
           await fetch(`/api/notifications/${notificationId}/clicked`, {
             method: 'POST',
