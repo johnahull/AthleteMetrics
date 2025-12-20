@@ -32,6 +32,8 @@ const createMockDb = () => ({
   delete: vi.fn().mockReturnThis(),
   update: vi.fn().mockReturnThis(),
   set: vi.fn().mockReturnThis(),
+  limit: vi.fn().mockReturnThis(),
+  orderBy: vi.fn().mockReturnThis(),
 });
 
 let mockDb = createMockDb();
