@@ -29,6 +29,10 @@ const VALID_PUSH_HOSTNAMES = new Set([
   'fcm.googleapis.com',
   'updates.push.services.mozilla.com',
   'push.services.mozilla.org',
+  'push.samsungosp.com',      // Samsung Internet
+  'updates.bravesoftware.com', // Brave Browser
+  'push.vivaldi.com',          // Vivaldi Browser
+  'push.opera.com',            // Opera Browser
   // Apple uses dynamic subdomains but always ends with .push.apple.com
   // Windows uses dynamic subdomains but always ends with .notify.windows.com
 ]);

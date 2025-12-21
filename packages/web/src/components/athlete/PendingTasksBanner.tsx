@@ -13,7 +13,7 @@
  * - Reappears after 24 hours or when new requests arrive
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'wouter';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -47,11 +47,14 @@ export function PendingTasksBanner() {
     staleTime: 30 * 1000, // Consider stale after 30 seconds
   });
 
-  // Filter to only active, non-expired requests
-  const pendingRequests = requests?.filter(r =>
-    r.status === 'active' &&
-    (!r.expiresAt || new Date(r.expiresAt) >= new Date())
-  ) || [];
+  // Filter to only active, non-expired requests (memoized to prevent re-render loops)
+  const pendingRequests = useMemo(() =>
+    requests?.filter(r =>
+      r.status === 'active' &&
+      (!r.expiresAt || new Date(r.expiresAt) >= new Date())
+    ) || [],
+    [requests]
+  );
 
   // Check if banner should be dismissed based on localStorage
   useEffect(() => {

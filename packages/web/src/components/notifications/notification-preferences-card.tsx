@@ -67,6 +67,7 @@ export function NotificationPreferencesCard() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [isSaving, setIsSaving] = useState(false);
+  const [subscribeError, setSubscribeError] = useState<string | null>(null);
 
   const {
     isSupported,
@@ -117,6 +118,7 @@ export function NotificationPreferencesCard() {
 
   const handleEnableNotifications = async () => {
     setIsSaving(true);
+    setSubscribeError(null);
     try {
       const success = await subscribe();
       if (success) {
@@ -125,11 +127,15 @@ export function NotificationPreferencesCard() {
           description: 'You will now receive push notifications.',
         });
         refreshSubscriptions();
+      } else {
+        setSubscribeError('Failed to enable notifications. Please try again.');
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to enable notifications. Please try again.';
+      setSubscribeError(errorMessage);
       toast({
         title: 'Error',
-        description: 'Failed to enable notifications. Please try again.',
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -174,8 +180,9 @@ export function NotificationPreferencesCard() {
   if (prefsLoading || pushLoading) {
     return (
       <Card>
-        <CardContent className="flex items-center justify-center py-8">
+        <CardContent className="flex items-center justify-center py-8" role="status" aria-live="polite">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <span className="sr-only">Loading notification preferences...</span>
         </CardContent>
       </Card>
     );
@@ -273,6 +280,12 @@ export function NotificationPreferencesCard() {
                   </>
                 )}
               </Button>
+              {subscribeError && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{subscribeError}</AlertDescription>
+                </Alert>
+              )}
             </div>
           ) : (
             <>
@@ -303,13 +316,16 @@ export function NotificationPreferencesCard() {
                       <Heart className="h-4 w-4 text-red-500" />
                       <div>
                         <Label>Wellness Surveys</Label>
-                        <p className="text-xs text-muted-foreground">New wellness check requests</p>
+                        <p className="text-xs text-muted-foreground" id="push-wellness-help">
+                          New wellness check requests{!prefs.pushEnabled && ' (Enable push notifications above)'}
+                        </p>
                       </div>
                     </div>
                     <Switch
                       checked={prefs.pushWellnessSurveys}
                       onCheckedChange={(checked) => handleToggle('pushWellnessSurveys', checked)}
                       disabled={!prefs.pushEnabled}
+                      aria-describedby="push-wellness-help"
                     />
                   </div>
 
@@ -318,13 +334,16 @@ export function NotificationPreferencesCard() {
                       <Clock className="h-4 w-4 text-orange-500" />
                       <div>
                         <Label>Wellness Digest</Label>
-                        <p className="text-xs text-muted-foreground">Daily wellness summary</p>
+                        <p className="text-xs text-muted-foreground" id="push-digest-help">
+                          Daily wellness summary{!prefs.pushEnabled && ' (Enable push notifications above)'}
+                        </p>
                       </div>
                     </div>
                     <Switch
                       checked={prefs.pushWellnessDigest}
                       onCheckedChange={(checked) => handleToggle('pushWellnessDigest', checked)}
                       disabled={!prefs.pushEnabled}
+                      aria-describedby="push-digest-help"
                     />
                   </div>
 
@@ -333,13 +352,16 @@ export function NotificationPreferencesCard() {
                       <TrendingUp className="h-4 w-4 text-green-500" />
                       <div>
                         <Label>New Measurements</Label>
-                        <p className="text-xs text-muted-foreground">When new data is recorded</p>
+                        <p className="text-xs text-muted-foreground" id="push-measurements-help">
+                          When new data is recorded{!prefs.pushEnabled && ' (Enable push notifications above)'}
+                        </p>
                       </div>
                     </div>
                     <Switch
                       checked={prefs.pushNewMeasurements}
                       onCheckedChange={(checked) => handleToggle('pushNewMeasurements', checked)}
                       disabled={!prefs.pushEnabled}
+                      aria-describedby="push-measurements-help"
                     />
                   </div>
 
@@ -348,13 +370,16 @@ export function NotificationPreferencesCard() {
                       <Users className="h-4 w-4 text-blue-500" />
                       <div>
                         <Label>Team Announcements</Label>
-                        <p className="text-xs text-muted-foreground">Messages from coaches</p>
+                        <p className="text-xs text-muted-foreground" id="push-announcements-help">
+                          Messages from coaches{!prefs.pushEnabled && ' (Enable push notifications above)'}
+                        </p>
                       </div>
                     </div>
                     <Switch
                       checked={prefs.pushTeamAnnouncements}
                       onCheckedChange={(checked) => handleToggle('pushTeamAnnouncements', checked)}
                       disabled={!prefs.pushEnabled}
+                      aria-describedby="push-announcements-help"
                     />
                   </div>
                 </div>
@@ -375,7 +400,7 @@ export function NotificationPreferencesCard() {
                 {subscriptions.length === 0 ? (
                   <p className="text-sm text-muted-foreground">No devices registered</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
                     {subscriptions.map((device) => (
                       <div
                         key={device.id}
@@ -396,6 +421,7 @@ export function NotificationPreferencesCard() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleRemoveDevice(device.id)}
+                          aria-label={`Remove ${device.deviceName || 'Unknown Device'}`}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
