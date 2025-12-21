@@ -298,7 +298,7 @@ describe("Push Notification API Routes", () => {
         .send(validSubscription);
 
       expect(response.status).toBe(400);
-      expect(response.body.message).toBe("Invalid push subscription endpoint");
+      expect(response.body.message).toBe("Invalid subscription data");
     });
   });
 
