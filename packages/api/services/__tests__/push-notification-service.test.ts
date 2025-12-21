@@ -434,6 +434,8 @@ describe('PushNotificationService', () => {
       // Configure VAPID first
       configureVapidForTest();
       const svc = new PushNotificationService(mockDb as any);
+      // Ensure VAPID is configured (in case env var timing issues in CI)
+      (svc as any).vapidConfigured = true;
 
       const userId = 'user-quiet';
       const notification: NotificationPayload = {
