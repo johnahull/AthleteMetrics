@@ -165,7 +165,9 @@ export function usePushNotifications(): UsePushNotificationsResult {
     } else {
       setSubscriptions([]);
     }
-  }, [user, refreshSubscriptions]);
+    // refreshSubscriptions is stable (useCallback with [user]), so only depend on user
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Request notification permission
   const requestPermission = useCallback(async (): Promise<NotificationPermission> => {

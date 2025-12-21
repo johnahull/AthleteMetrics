@@ -64,7 +64,7 @@ registerRoute(
   /\/api\/.*/i,
   new NetworkFirst({
     cacheName: 'api-cache',
-    networkTimeoutSeconds: 10,
+    networkTimeoutSeconds: 3, // Reduced from 10s for faster fallback when API is down
     plugins: [
       new ExpirationPlugin({
         maxEntries: 50,
@@ -185,7 +185,9 @@ self.addEventListener('notificationclick', (event) => {
       // Verify notificationId exists and is a valid string before attempting to track
       if (notificationId && typeof notificationId === 'string' && notificationId.trim()) {
         try {
-          await fetch(`/api/notifications/${notificationId}/clicked`, {
+          // Encode notificationId to prevent path traversal
+          const encodedId = encodeURIComponent(notificationId);
+          await fetch(`/api/notifications/${encodedId}/clicked`, {
             method: 'POST',
             credentials: 'include',
           });

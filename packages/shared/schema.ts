@@ -2706,8 +2706,8 @@ export const notificationHistory = pgTable("notification_history", {
   typeIndex: index("notification_history_type_idx").on(table.type),
   sentAtIndex: index("notification_history_sent_at_idx").on(table.sentAt),
   // Composite indexes for common query patterns
-  userSentAtIndex: index("notification_history_user_sent_idx").on(table.userId, table.sentAt),
-  orgTypeSentIndex: index("notification_history_org_type_sent_idx").on(table.orgId, table.type, table.sentAt),
+  userSentAtIndex: index("notification_history_user_sent_idx").on(table.userId, table.sentAt.desc()),
+  orgTypeSentIndex: index("notification_history_org_type_sent_idx").on(table.orgId, table.type, table.sentAt.desc()).where(sql`org_id IS NOT NULL`),
 }));
 
 /**
