@@ -96,6 +96,11 @@ export interface TeamSendResult {
  */
 function isValidPushEndpoint(endpoint: string): boolean {
   try {
+    // Enforce max URL length to prevent DoS via oversized URLs
+    if (endpoint.length > 2048) {
+      return false;
+    }
+
     const url = new URL(endpoint);
     // Must be HTTPS
     if (url.protocol !== 'https:') {
@@ -115,11 +120,13 @@ function isValidPushEndpoint(endpoint: string): boolean {
         // Extract the subdomain part (before the suffix)
         const subdomain = hostname.slice(0, -suffix.length);
         // Validate subdomain structure:
-        // - Must not be empty
+        // - Must be at least 2 characters (e.g., "ab.push.apple.com")
+        // - Must not exceed 63 characters (DNS label max length)
         // - Must not contain dots (to prevent multi-level subdomain attacks like "evil.fake.push.apple.com")
         // - Must be valid hostname characters (alphanumeric and hyphens, not starting/ending with hyphen)
         if (
-          subdomain.length > 0 &&
+          subdomain.length >= 2 &&
+          subdomain.length <= 63 &&
           !subdomain.includes('.') &&
           /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(subdomain)
         ) {
@@ -161,13 +168,15 @@ export class PushNotificationService {
     }
 
     // Validate VAPID key format
-    if (publicKey.length < 80 || !/^[A-Za-z0-9_-]+$/.test(publicKey)) {
-      console.error('⚠️ VAPID_PUBLIC_KEY appears invalid (must be 80+ base64url chars)');
+    // Public key should be exactly 87-88 chars (65 bytes base64url, with/without padding)
+    if ((publicKey.length !== 87 && publicKey.length !== 88) || !/^[A-Za-z0-9_-]+$/.test(publicKey)) {
+      console.error('⚠️ VAPID_PUBLIC_KEY appears invalid (must be exactly 87-88 base64url chars)');
       return;
     }
 
-    if (privateKey.length < 40 || !/^[A-Za-z0-9_-]+$/.test(privateKey)) {
-      console.error('⚠️ VAPID_PRIVATE_KEY appears invalid (must be 40+ base64url chars)');
+    // Private key should be exactly 43-44 chars (32 bytes base64url, with/without padding)
+    if ((privateKey.length !== 43 && privateKey.length !== 44) || !/^[A-Za-z0-9_-]+$/.test(privateKey)) {
+      console.error('⚠️ VAPID_PRIVATE_KEY appears invalid (must be exactly 43-44 base64url chars)');
       return;
     }
 
@@ -200,25 +209,34 @@ export class PushNotificationService {
       throw new Error('Invalid push subscription endpoint');
     }
 
-    // Check if subscription already exists
+    // Check if subscription already exists and atomically update if owned by this user
+    // SECURITY: Use atomic UPDATE WHERE to prevent TOCTOU race condition
+    const updated = await this.db
+      .update(pushSubscriptions)
+      .set({ lastUsedAt: new Date() })
+      .where(
+        and(
+          eq(pushSubscriptions.endpoint, subscription.endpoint),
+          eq(pushSubscriptions.userId, userId)
+        )
+      )
+      .returning();
+
+    if (updated.length > 0) {
+      // Subscription exists and belongs to this user - return updated record
+      return updated[0];
+    }
+
+    // Check if endpoint exists but belongs to different user
     const existing = await this.db
-      .select()
+      .select({ userId: pushSubscriptions.userId })
       .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
+      .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
+      .limit(1);
 
     if (existing.length > 0) {
-      // SECURITY: Verify ownership before updating
-      if (existing[0].userId !== userId) {
-        throw new Error('This device is already registered to a different user');
-      }
-
-      // Update lastUsedAt for existing subscription
-      const updated = await this.db
-        .update(pushSubscriptions)
-        .set({ lastUsedAt: new Date() })
-        .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
-        .returning();
-      return updated[0];
+      // Endpoint exists but belongs to different user
+      throw new Error('This device is already registered to a different user');
     }
 
     // Sanitize user-controlled input to prevent XSS

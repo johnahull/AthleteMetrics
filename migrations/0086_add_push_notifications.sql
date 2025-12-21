@@ -147,11 +147,26 @@ CREATE TABLE IF NOT EXISTS org_notification_settings (
 -- SITE SETTINGS - PUSH NOTIFICATION COLUMNS
 -- Global push notification configuration
 -- ============================================================================
-ALTER TABLE site_settings
-ADD COLUMN IF NOT EXISTS push_notifications_enabled BOOLEAN NOT NULL DEFAULT true;
+DO $$
+BEGIN
+  -- Add push_notifications_enabled column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'site_settings' AND column_name = 'push_notifications_enabled'
+  ) THEN
+    ALTER TABLE site_settings
+    ADD COLUMN push_notifications_enabled BOOLEAN NOT NULL DEFAULT true;
+  END IF;
 
-ALTER TABLE site_settings
-ADD COLUMN IF NOT EXISTS push_default_org_settings JSONB;
+  -- Add push_default_org_settings column if it doesn't exist
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'site_settings' AND column_name = 'push_default_org_settings'
+  ) THEN
+    ALTER TABLE site_settings
+    ADD COLUMN push_default_org_settings JSONB;
+  END IF;
+END $$;
 
 COMMENT ON COLUMN site_settings.push_notifications_enabled IS 'Global kill switch for all push notifications';
 COMMENT ON COLUMN site_settings.push_default_org_settings IS 'Default org notification settings for new organizations';
