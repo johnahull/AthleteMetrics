@@ -19,12 +19,20 @@ import express from "express";
 import type { Request, Response, NextFunction } from "express";
 import { storage } from "../../storage";
 
-// Mock the push notification service
-const mockSubscribe = vi.fn();
-const mockUnsubscribe = vi.fn();
-const mockGetUserSubscriptions = vi.fn();
-const mockGetVapidPublicKey = vi.fn();
-const mockSendToUser = vi.fn();
+// Use vi.hoisted to ensure mock functions are available when vi.mock runs (which is hoisted)
+const {
+  mockSubscribe,
+  mockUnsubscribe,
+  mockGetUserSubscriptions,
+  mockGetVapidPublicKey,
+  mockSendToUser,
+} = vi.hoisted(() => ({
+  mockSubscribe: vi.fn(),
+  mockUnsubscribe: vi.fn(),
+  mockGetUserSubscriptions: vi.fn(),
+  mockGetVapidPublicKey: vi.fn(),
+  mockSendToUser: vi.fn(),
+}));
 
 vi.mock("../../services/push-notification-service", () => ({
   getPushNotificationService: () => ({
