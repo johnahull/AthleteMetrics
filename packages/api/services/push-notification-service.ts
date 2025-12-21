@@ -20,7 +20,9 @@ import {
 } from '@shared/schema';
 
 // Web Push payload size limit (4KB as per spec)
+// Reserve 200 bytes for ECDH encryption overhead and padding
 const MAX_PAYLOAD_SIZE = 4096;
+const MAX_SAFE_PAYLOAD_SIZE = MAX_PAYLOAD_SIZE - 200;
 
 // Valid push service hostnames (exact matching to prevent subdomain attacks)
 const VALID_PUSH_HOSTNAMES = new Set([
@@ -108,11 +110,25 @@ function isValidPushEndpoint(endpoint: string): boolean {
     }
 
     // Check hostname suffix for services with dynamic subdomains
-    return VALID_PUSH_HOSTNAME_SUFFIXES.some(suffix =>
-      hostname.endsWith(suffix) &&
-      // Ensure it's actually a subdomain, not a malicious lookalike like "evilpush.apple.com"
-      hostname.length > suffix.length
-    );
+    for (const suffix of VALID_PUSH_HOSTNAME_SUFFIXES) {
+      if (hostname.endsWith(suffix)) {
+        // Extract the subdomain part (before the suffix)
+        const subdomain = hostname.slice(0, -suffix.length);
+        // Validate subdomain structure:
+        // - Must not be empty
+        // - Must not contain dots (to prevent multi-level subdomain attacks like "evil.fake.push.apple.com")
+        // - Must be valid hostname characters (alphanumeric and hyphens, not starting/ending with hyphen)
+        if (
+          subdomain.length > 0 &&
+          !subdomain.includes('.') &&
+          /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i.test(subdomain)
+        ) {
+          return true;
+        }
+      }
+    }
+
+    return false;
   } catch {
     return false;
   }
@@ -493,10 +509,10 @@ export class PushNotificationService {
       requireInteraction: notification.requireInteraction,
     });
 
-    // Validate payload size (Web Push spec limit is 4KB)
+    // Validate payload size (Web Push spec limit is 4KB, but leave room for encryption overhead)
     let finalPayload = payload;
-    if (Buffer.byteLength(payload, 'utf8') > MAX_PAYLOAD_SIZE) {
-      console.warn(`Push notification payload exceeds ${MAX_PAYLOAD_SIZE} bytes, truncating body`);
+    if (Buffer.byteLength(payload, 'utf8') > MAX_SAFE_PAYLOAD_SIZE) {
+      console.warn(`Push notification payload exceeds safe size (${MAX_SAFE_PAYLOAD_SIZE} bytes), truncating body`);
       // Truncate body to fit within limit (leave room for other fields)
       const truncatedBody = sanitizedBody.slice(0, 200) + '...';
       finalPayload = JSON.stringify({
@@ -508,8 +524,8 @@ export class PushNotificationService {
         data: { url: notification.url || '/', type: notification.type },
         requireInteraction: notification.requireInteraction,
       });
-      // If still too large, this is a critical error
-      if (Buffer.byteLength(finalPayload, 'utf8') > MAX_PAYLOAD_SIZE) {
+      // If still too large after truncation, this is a critical error
+      if (Buffer.byteLength(finalPayload, 'utf8') > MAX_SAFE_PAYLOAD_SIZE) {
         return { successful: 0, failed: 0, skipped: true, reason: 'payload_too_large' };
       }
     }

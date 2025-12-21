@@ -182,12 +182,11 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     (async () => {
       // Try to track the click (non-blocking)
-      // Verify notificationId exists and is a valid string before attempting to track
-      if (notificationId && typeof notificationId === 'string' && notificationId.trim()) {
+      // Validate notificationId is a proper UUID to prevent path traversal attacks
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (notificationId && typeof notificationId === 'string' && uuidRegex.test(notificationId)) {
         try {
-          // Encode notificationId to prevent path traversal
-          const encodedId = encodeURIComponent(notificationId);
-          await fetch(`/api/notifications/${encodedId}/clicked`, {
+          await fetch(`/api/notifications/${notificationId}/clicked`, {
             method: 'POST',
             credentials: 'include',
           });

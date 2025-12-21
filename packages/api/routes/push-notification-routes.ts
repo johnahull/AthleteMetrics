@@ -6,9 +6,11 @@
 import type { Express } from "express";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { db } from "../db";
+import { pushSubscriptions } from "@shared/schema";
 import { getPushNotificationService } from "../services/push-notification-service";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
@@ -193,21 +195,23 @@ export function registerPushNotificationRoutes(app: Express) {
 
       const subscriptionId = req.params.id;
 
-      // Get user's subscriptions to verify ownership
-      const subscriptions = await pushService.getUserSubscriptions(userId);
-      const subscription = subscriptions.find((s) => s.id === subscriptionId);
+      // Atomic delete with ownership verification to prevent race conditions
+      // This single query ensures the subscription belongs to the user before deleting
+      const deleted = await db
+        .delete(pushSubscriptions)
+        .where(
+          and(
+            eq(pushSubscriptions.id, subscriptionId),
+            eq(pushSubscriptions.userId, userId)
+          )
+        )
+        .returning();
 
-      if (!subscription) {
+      if (deleted.length === 0) {
         return res.status(404).json({ message: "Subscription not found" });
       }
 
-      const success = await pushService.unsubscribe(userId, subscription.endpoint);
-
-      if (success) {
-        res.json({ message: "Push subscription removed successfully" });
-      } else {
-        res.status(500).json({ message: "Failed to remove subscription" });
-      }
+      res.json({ message: "Push subscription removed successfully" });
     } catch (error) {
       console.error("Error removing push subscription:", error);
       res.status(500).json({ message: "Failed to remove push subscription" });

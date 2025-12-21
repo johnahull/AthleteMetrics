@@ -6,13 +6,15 @@
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { db } from "../db";
-import { eq, sql, desc, and, gte } from "drizzle-orm";
+import { eq, sql, desc, and, gte, inArray } from "drizzle-orm";
 import {
   siteSettings,
   notificationHistory,
   pushSubscriptions,
   notificationPreferences,
   orgNotificationSettings,
+  userOrganizations,
+  users,
 } from "@shared/schema";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
@@ -45,7 +47,7 @@ const updateSiteNotificationSettingsSchema = z.object({
  */
 const broadcastNotificationSchema = z.object({
   title: z.string().min(1).max(100),
-  body: z.string().min(1).max(500),
+  body: z.string().min(1).max(200), // Match service truncation limit
   url: z.string().optional(),
   urgent: z.boolean().optional().default(false),
   roleFilter: z.array(z.enum(['site_admin', 'org_admin', 'coach', 'athlete'])).optional(),
@@ -306,15 +308,44 @@ export function registerAdminNotificationRoutes(app: Express) {
         const data = validation.data;
         const pushService = getPushNotificationService(db);
 
-        // Get all users with push subscriptions
-        let query = db
-          .select({ userId: pushSubscriptions.userId })
-          .from(pushSubscriptions);
+        // Get users with push subscriptions, optionally filtered by role
+        let userSubscriptions: { userId: string }[];
 
-        // Note: roleFilter would require joining with userOrganizations
-        // For now, we send to all subscribed users
+        if (data.roleFilter && data.roleFilter.length > 0) {
+          // Filter by role - need to check both site_admin flag and org roles
+          const hasSiteAdmin = data.roleFilter.includes('site_admin');
+          const orgRoles = data.roleFilter.filter(r => r !== 'site_admin');
 
-        const userSubscriptions = await query;
+          // Get users matching the role filter
+          const matchingUserIds = new Set<string>();
+
+          // Check for site admins if requested
+          if (hasSiteAdmin) {
+            const siteAdmins = await db
+              .select({ userId: pushSubscriptions.userId })
+              .from(pushSubscriptions)
+              .innerJoin(users, eq(pushSubscriptions.userId, users.id))
+              .where(eq(users.isSiteAdmin, true));
+            siteAdmins.forEach(u => matchingUserIds.add(u.userId));
+          }
+
+          // Check for org roles if requested
+          if (orgRoles.length > 0) {
+            const orgUsers = await db
+              .select({ userId: pushSubscriptions.userId })
+              .from(pushSubscriptions)
+              .innerJoin(userOrganizations, eq(pushSubscriptions.userId, userOrganizations.userId))
+              .where(inArray(userOrganizations.role, orgRoles));
+            orgUsers.forEach(u => matchingUserIds.add(u.userId));
+          }
+
+          userSubscriptions = Array.from(matchingUserIds).map(userId => ({ userId }));
+        } else {
+          // No filter - get all users with push subscriptions
+          userSubscriptions = await db
+            .select({ userId: pushSubscriptions.userId })
+            .from(pushSubscriptions);
+        }
         const uniqueUserIds = [...new Set(userSubscriptions.map(s => s.userId))];
 
         let successful = 0;

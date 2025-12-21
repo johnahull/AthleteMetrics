@@ -19,6 +19,20 @@ const historyLimiter = rateLimit({
   message: { message: "Too many requests. Please try again later." },
 });
 
+// Rate limiter for preference mutations (more restrictive)
+const preferencesLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMITS.MUTATION, // More restrictive for write operations
+  message: { message: "Too many preference updates. Please try again later." },
+});
+
+// Rate limiter for click tracking (prevent analytics spam)
+const clickLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute window
+  max: 30, // 30 clicks per minute max
+  message: { message: "Too many click tracking requests." },
+});
+
 // Validation schema for updating preferences
 const updatePreferencesSchema = z.object({
   // Master toggles
@@ -98,7 +112,7 @@ export function registerNotificationPreferencesRoutes(app: Express) {
    * PUT /api/notifications/preferences
    * Update the current user's notification preferences
    */
-  app.put("/api/notifications/preferences", requireAuth, async (req, res) => {
+  app.put("/api/notifications/preferences", requireAuth, preferencesLimiter, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -220,7 +234,7 @@ export function registerNotificationPreferencesRoutes(app: Express) {
    * POST /api/notifications/:id/clicked
    * Mark a notification as clicked (for analytics)
    */
-  app.post("/api/notifications/:id/clicked", historyLimiter, requireAuth, async (req, res) => {
+  app.post("/api/notifications/:id/clicked", requireAuth, clickLimiter, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
