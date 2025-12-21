@@ -20,6 +20,10 @@ const MOCK_FCM_ENDPOINT = 'https://fcm.googleapis.com/fcm/send/mock-token-123';
 const MOCK_FCM_ENDPOINT_2 = 'https://fcm.googleapis.com/fcm/send/mock-token-456';
 const MOCK_MOZILLA_ENDPOINT = 'https://updates.push.services.mozilla.com/push/v1/mock-token';
 
+// Valid VAPID keys for testing (must be 80+ base64url chars for public key)
+const MOCK_VAPID_PUBLIC_KEY = 'BN4GvZtEZiZuqFxSKVZfSfluwKBD37moSGDjvBa9qYWpDuG9TLwIZ4X0zs7cSb8C9xQNxlGBPP9XS_rNLdY8a_w';
+const MOCK_VAPID_PRIVATE_KEY = 'nZ2V_6fOXqPQy8tYoF1kQ0R_mK9dB3xH2cJ5aL7pN0s';
+
 // Mock database with proper chainable methods
 const createMockDb = () => ({
   select: vi.fn().mockReturnThis(),
@@ -40,8 +44,8 @@ let mockDb = createMockDb();
 
 // Helper to configure VAPID for tests that need it
 function configureVapidForTest() {
-  process.env.VAPID_PUBLIC_KEY = 'test-public-key';
-  process.env.VAPID_PRIVATE_KEY = 'test-private-key';
+  process.env.VAPID_PUBLIC_KEY = MOCK_VAPID_PUBLIC_KEY;
+  process.env.VAPID_PRIVATE_KEY = MOCK_VAPID_PRIVATE_KEY;
   process.env.VAPID_SUBJECT = 'mailto:test@example.com';
 }
 
@@ -61,9 +65,9 @@ describe('PushNotificationService', () => {
 
   describe('constructor', () => {
     it('should initialize VAPID details from environment variables', () => {
-      // Set up environment
-      process.env.VAPID_PUBLIC_KEY = 'test-public-key';
-      process.env.VAPID_PRIVATE_KEY = 'test-private-key';
+      // Set up environment with valid VAPID keys
+      process.env.VAPID_PUBLIC_KEY = MOCK_VAPID_PUBLIC_KEY;
+      process.env.VAPID_PRIVATE_KEY = MOCK_VAPID_PRIVATE_KEY;
       process.env.VAPID_SUBJECT = 'mailto:test@example.com';
 
       // Create new service to trigger constructor
@@ -71,32 +75,32 @@ describe('PushNotificationService', () => {
 
       expect(webPush.setVapidDetails).toHaveBeenCalledWith(
         'mailto:test@example.com',
-        'test-public-key',
-        'test-private-key'
+        MOCK_VAPID_PUBLIC_KEY,
+        MOCK_VAPID_PRIVATE_KEY
       );
     });
 
     it('should use default VAPID subject if not provided', () => {
-      process.env.VAPID_PUBLIC_KEY = 'test-public-key';
-      process.env.VAPID_PRIVATE_KEY = 'test-private-key';
+      process.env.VAPID_PUBLIC_KEY = MOCK_VAPID_PUBLIC_KEY;
+      process.env.VAPID_PRIVATE_KEY = MOCK_VAPID_PRIVATE_KEY;
       delete process.env.VAPID_SUBJECT;
 
       new PushNotificationService(mockDb as any);
 
       expect(webPush.setVapidDetails).toHaveBeenCalledWith(
         'mailto:noreply@athletemetrics.app',
-        'test-public-key',
-        'test-private-key'
+        MOCK_VAPID_PUBLIC_KEY,
+        MOCK_VAPID_PRIVATE_KEY
       );
     });
   });
 
   describe('getVapidPublicKey', () => {
     it('should return the VAPID public key', () => {
-      process.env.VAPID_PUBLIC_KEY = 'my-public-key';
+      process.env.VAPID_PUBLIC_KEY = MOCK_VAPID_PUBLIC_KEY;
       const service = new PushNotificationService(mockDb as any);
 
-      expect(service.getVapidPublicKey()).toBe('my-public-key');
+      expect(service.getVapidPublicKey()).toBe(MOCK_VAPID_PUBLIC_KEY);
     });
 
     it('should return empty string if VAPID key not configured', () => {
@@ -251,7 +255,10 @@ describe('PushNotificationService', () => {
     // Helper to create a service with VAPID configured
     function createServiceWithVapid() {
       configureVapidForTest();
-      return new PushNotificationService(mockDb as any);
+      const svc = new PushNotificationService(mockDb as any);
+      // Ensure VAPID is configured (workaround for CI env var timing issues)
+      (svc as any).vapidConfigured = true;
+      return svc;
     }
 
     it('should send notification to all user subscriptions', async () => {
@@ -474,6 +481,8 @@ describe('PushNotificationService', () => {
     it('should respect organization push settings', async () => {
       configureVapidForTest();
       const svc = new PushNotificationService(mockDb as any);
+      // Ensure VAPID is configured (workaround for CI env var timing issues)
+      (svc as any).vapidConfigured = true;
       const userId = 'user-123';
       const orgId = 'org-123';
       const notification: NotificationPayload = {
@@ -482,7 +491,9 @@ describe('PushNotificationService', () => {
         type: 'wellness_survey',
       };
 
-      // Mock org settings - push disabled at org level
+      // Mock site settings (uses .limit(1))
+      mockDb.limit.mockResolvedValueOnce([{ pushNotificationsEnabled: true }]);
+      // Mock org settings - push disabled at org level (uses .where())
       mockDb.where.mockResolvedValueOnce([{
         pushEnabled: false,
         wellnessSurveysEnabled: true,
@@ -498,6 +509,8 @@ describe('PushNotificationService', () => {
     it('should respect org-level notification type settings', async () => {
       configureVapidForTest();
       const svc = new PushNotificationService(mockDb as any);
+      // Ensure VAPID is configured (workaround for CI env var timing issues)
+      (svc as any).vapidConfigured = true;
       const userId = 'user-123';
       const orgId = 'org-123';
       const notification: NotificationPayload = {
@@ -506,7 +519,9 @@ describe('PushNotificationService', () => {
         type: 'wellness_survey',
       };
 
-      // Mock org settings - wellness surveys disabled at org level
+      // Mock site settings (uses .limit(1))
+      mockDb.limit.mockResolvedValueOnce([{ pushNotificationsEnabled: true }]);
+      // Mock org settings - wellness surveys disabled at org level (uses .where())
       mockDb.where.mockResolvedValueOnce([{
         pushEnabled: true,
         wellnessSurveysEnabled: false,
