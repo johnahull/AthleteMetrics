@@ -241,9 +241,17 @@ export class PushNotificationService {
 
     // Sanitize user-controlled input to prevent XSS
     const sanitizedDeviceName = deviceName
-      ? DOMPurify.sanitize(deviceName.slice(0, 100))
+      ? DOMPurify.sanitize(deviceName.slice(0, 100), {
+          ALLOWED_TAGS: [],
+          KEEP_CONTENT: true
+        })
       : undefined;
-    const sanitizedUserAgent = userAgent?.slice(0, 500);
+    const sanitizedUserAgent = userAgent
+      ? DOMPurify.sanitize(userAgent.slice(0, 500), {
+          ALLOWED_TAGS: [],
+          KEEP_CONTENT: true
+        })
+      : undefined;
 
     // Create new subscription
     const [result] = await this.db

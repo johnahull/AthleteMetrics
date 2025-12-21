@@ -2632,7 +2632,7 @@ export const pushSubscriptions = pgTable("push_subscriptions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   // Web Push subscription data
-  endpoint: text("endpoint").notNull().unique(),
+  endpoint: varchar("endpoint", { length: 2048 }).notNull().unique(),
   p256dh: text("p256dh").notNull(),      // Public key for encryption
   auth: text("auth").notNull(),           // Auth secret for encryption
   // Device metadata

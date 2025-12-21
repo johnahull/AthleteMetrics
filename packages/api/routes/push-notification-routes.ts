@@ -116,7 +116,8 @@ export function registerPushNotificationRoutes(app: Express) {
         });
       } catch (error: any) {
         if (error.message === "Invalid push subscription endpoint") {
-          return res.status(400).json({ message: error.message });
+          // Generic error message to prevent SSRF reconnaissance
+          return res.status(400).json({ message: "Invalid subscription data" });
         }
         console.error("Error subscribing to push notifications:", error);
         res.status(500).json({ message: "Failed to register push subscription" });
