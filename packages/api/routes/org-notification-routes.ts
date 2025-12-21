@@ -6,7 +6,9 @@
 import type { Express } from "express";
 import { z } from "zod";
 import { eq, and, desc, count } from "drizzle-orm";
-import { requireAuth } from "../middleware";
+import rateLimit from "express-rate-limit";
+import { requireAuth, requireOrganizationAccess } from "../middleware";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { db } from "../db";
 import {
   orgNotificationSettings,
@@ -54,22 +56,14 @@ const DEFAULT_ORG_SETTINGS = {
   defaultEmailAnnouncements: true,
 };
 
-/**
- * Check if user is an org admin for the given organization
- */
-async function isOrgAdmin(userId: string, orgId: string): Promise<boolean> {
-  const userOrg = await db
-    .select()
-    .from(userOrganizations)
-    .where(
-      and(
-        eq(userOrganizations.userId, userId),
-        eq(userOrganizations.organizationId, orgId)
-      )
-    );
-
-  return userOrg.length > 0 && userOrg[0].role === 'org_admin';
-}
+// Rate limiter for analytics endpoints (computationally expensive)
+const analyticsLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMITS.ANALYTICS, // 50 requests per 15 minutes
+  message: { message: "Too many analytics requests. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
 
 export function registerOrgNotificationRoutes(app: Express) {
   /**
@@ -79,20 +73,10 @@ export function registerOrgNotificationRoutes(app: Express) {
   app.get(
     "/api/organizations/:orgId/notifications/settings",
     requireAuth,
+    requireOrganizationAccess("org_admin"),
     async (req, res) => {
       try {
-        const userId = req.session.user?.id;
         const { orgId } = req.params;
-
-        if (!userId) {
-          return res.status(401).json({ message: "Not authenticated" });
-        }
-
-        // Check if user is org admin
-        const isAdmin = await isOrgAdmin(userId, orgId);
-        if (!isAdmin && !req.session.user?.isSiteAdmin) {
-          return res.status(403).json({ message: "Access denied" });
-        }
 
         const settings = await db
           .select()
@@ -125,20 +109,11 @@ export function registerOrgNotificationRoutes(app: Express) {
   app.put(
     "/api/organizations/:orgId/notifications/settings",
     requireAuth,
+    requireOrganizationAccess("org_admin"),
     async (req, res) => {
       try {
-        const userId = req.session.user?.id;
+        const userId = req.session.user?.id!;
         const { orgId } = req.params;
-
-        if (!userId) {
-          return res.status(401).json({ message: "Not authenticated" });
-        }
-
-        // Check if user is org admin
-        const isAdmin = await isOrgAdmin(userId, orgId);
-        if (!isAdmin && !req.session.user?.isSiteAdmin) {
-          return res.status(403).json({ message: "Access denied" });
-        }
 
         // Validate request body
         const parseResult = updateOrgSettingsSchema.safeParse(req.body);
@@ -198,24 +173,16 @@ export function registerOrgNotificationRoutes(app: Express) {
   /**
    * GET /api/organizations/:orgId/notifications/analytics
    * Get notification analytics for an organization (org admin only)
+   * Returns aggregated statistics only (no PII like notification content)
    */
   app.get(
     "/api/organizations/:orgId/notifications/analytics",
     requireAuth,
+    requireOrganizationAccess("org_admin"),
+    analyticsLimiter,
     async (req, res) => {
       try {
-        const userId = req.session.user?.id;
         const { orgId } = req.params;
-
-        if (!userId) {
-          return res.status(401).json({ message: "Not authenticated" });
-        }
-
-        // Check if user is org admin
-        const isAdmin = await isOrgAdmin(userId, orgId);
-        if (!isAdmin && !req.session.user?.isSiteAdmin) {
-          return res.status(403).json({ message: "Access denied" });
-        }
 
         // Get date range from query params (default: last 30 days)
         const daysBack = parseInt(req.query.days as string) || 30;
@@ -256,6 +223,7 @@ export function registerOrgNotificationRoutes(app: Express) {
           return acc;
         }, {} as Record<string, { sent: number; delivered: number; clicked: number }>);
 
+        // Return only aggregated analytics (no PII like notification content)
         res.json({
           period: {
             days: daysBack,
@@ -270,6 +238,7 @@ export function registerOrgNotificationRoutes(app: Express) {
             clickRate: delivered > 0 ? (clicked / delivered * 100).toFixed(1) : '0',
           },
           byType,
+          // Note: Individual notification content (title, body, URL) excluded to protect PII
         });
       } catch (error) {
         console.error("Error getting org notification analytics:", error);

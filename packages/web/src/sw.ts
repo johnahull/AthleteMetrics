@@ -108,7 +108,13 @@ self.addEventListener('push', (event) => {
 
   try {
     const data = event.data.json();
-    console.log('[SW] Push data:', data);
+    // Log metadata only (no PII like title/body/URL)
+    console.log('[SW] Push notification received:', {
+      type: data.type,
+      tag: data.tag,
+      hasImage: !!data.image,
+      hasActions: !!(data.actions && data.actions.length > 0),
+    });
 
     const options: ExtendedNotificationOptions = {
       body: data.body || 'New notification',

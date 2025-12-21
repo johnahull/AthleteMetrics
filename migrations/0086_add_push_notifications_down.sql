@@ -13,8 +13,8 @@ DROP INDEX IF EXISTS notification_history_sent_at_idx;
 DROP INDEX IF EXISTS notification_history_type_idx;
 DROP INDEX IF EXISTS notification_history_org_idx;
 DROP INDEX IF EXISTS notification_history_user_idx;
+DROP INDEX IF EXISTS push_subscriptions_endpoint_idx;
 DROP INDEX IF EXISTS push_subscriptions_user_idx;
--- Note: push_subscriptions_endpoint_idx not created (endpoint has UNIQUE constraint with implicit index)
 
 -- Drop tables in order (respecting foreign key dependencies)
 DROP TABLE IF EXISTS org_notification_settings;

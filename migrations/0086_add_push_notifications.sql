@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 -- Indexes for push_subscriptions
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
--- Note: endpoint column has UNIQUE constraint (line 13) which creates implicit index
+CREATE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions(endpoint);
 
 -- ============================================================================
 -- NOTIFICATION PREFERENCES TABLE
