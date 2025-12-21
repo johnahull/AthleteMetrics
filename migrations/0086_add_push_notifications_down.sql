@@ -7,6 +7,8 @@ ALTER TABLE site_settings DROP COLUMN IF EXISTS push_default_org_settings;
 ALTER TABLE site_settings DROP COLUMN IF EXISTS push_notifications_enabled;
 
 -- Drop indexes
+DROP INDEX IF EXISTS notification_history_org_type_sent_idx;
+DROP INDEX IF EXISTS notification_history_user_sent_idx;
 DROP INDEX IF EXISTS notification_history_sent_at_idx;
 DROP INDEX IF EXISTS notification_history_type_idx;
 DROP INDEX IF EXISTS notification_history_org_idx;

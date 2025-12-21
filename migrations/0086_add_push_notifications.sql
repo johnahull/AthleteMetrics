@@ -86,6 +86,10 @@ CREATE INDEX IF NOT EXISTS notification_history_org_idx ON notification_history(
 CREATE INDEX IF NOT EXISTS notification_history_type_idx ON notification_history(type);
 CREATE INDEX IF NOT EXISTS notification_history_sent_at_idx ON notification_history(sent_at);
 
+-- Composite indexes for common query patterns
+CREATE INDEX IF NOT EXISTS notification_history_user_sent_idx ON notification_history(user_id, sent_at DESC);
+CREATE INDEX IF NOT EXISTS notification_history_org_type_sent_idx ON notification_history(org_id, type, sent_at DESC) WHERE org_id IS NOT NULL;
+
 -- ============================================================================
 -- ORG NOTIFICATION SETTINGS TABLE
 -- Organization-level controls set by org admins

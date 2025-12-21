@@ -7,6 +7,7 @@ import webPush from 'web-push';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import pLimit from 'p-limit';
+import DOMPurify from 'isomorphic-dompurify';
 import {
   pushSubscriptions,
   notificationPreferences,
@@ -119,11 +120,27 @@ export class PushNotificationService {
     const privateKey = process.env.VAPID_PRIVATE_KEY;
     const subject = process.env.VAPID_SUBJECT || 'mailto:noreply@athletemetrics.app';
 
-    if (publicKey && privateKey) {
+    if (!publicKey || !privateKey) {
+      console.warn('⚠️ VAPID keys not configured - push notifications disabled');
+      return;
+    }
+
+    // Validate VAPID key format
+    if (publicKey.length < 80 || !/^[A-Za-z0-9_-]+$/.test(publicKey)) {
+      console.error('⚠️ VAPID_PUBLIC_KEY appears invalid (must be 80+ base64url chars)');
+      return;
+    }
+
+    if (privateKey.length < 40 || !/^[A-Za-z0-9_-]+$/.test(privateKey)) {
+      console.error('⚠️ VAPID_PRIVATE_KEY appears invalid (must be 40+ base64url chars)');
+      return;
+    }
+
+    try {
       webPush.setVapidDetails(subject, publicKey, privateKey);
       this.vapidConfigured = true;
-    } else {
-      console.warn('⚠️ VAPID keys not configured - push notifications disabled');
+    } catch (error) {
+      console.error('⚠️ Failed to set VAPID details:', error);
     }
   }
 
@@ -169,6 +186,12 @@ export class PushNotificationService {
       return updated[0];
     }
 
+    // Sanitize user-controlled input to prevent XSS
+    const sanitizedDeviceName = deviceName
+      ? DOMPurify.sanitize(deviceName.slice(0, 100))
+      : undefined;
+    const sanitizedUserAgent = userAgent?.slice(0, 500);
+
     // Create new subscription
     const [result] = await this.db
       .insert(pushSubscriptions)
@@ -177,8 +200,8 @@ export class PushNotificationService {
         endpoint: subscription.endpoint,
         p256dh: subscription.keys.p256dh,
         auth: subscription.keys.auth,
-        deviceName,
-        userAgent,
+        deviceName: sanitizedDeviceName,
+        userAgent: sanitizedUserAgent,
       })
       .returning();
 
@@ -412,18 +435,31 @@ export class PushNotificationService {
       return { successful: 0, failed: 0, deferred: true };
     }
 
-    // Build notification payload
+    // Build notification payload with PII-safe data
+    // Only include non-PII fields to prevent leakage to push service logs
+    const safeData: Record<string, any> = {
+      url: notification.url || '/',
+      type: notification.type,
+    };
+
+    // Include specific safe fields from notification.data if present
+    if (notification.data?.notificationId) {
+      safeData.notificationId = notification.data.notificationId;
+    }
+    if (notification.data?.requestId) {
+      safeData.requestId = notification.data.requestId;
+    }
+    if (notification.data?.category) {
+      safeData.category = notification.data.category;
+    }
+
     const payload = JSON.stringify({
       title: notification.title,
       body: notification.body,
       icon: notification.icon || '/icon-192.png',
       badge: notification.badge || '/badge-72.png',
       tag: notification.tag,
-      data: {
-        url: notification.url || '/',
-        type: notification.type,
-        ...notification.data,
-      },
+      data: safeData,
       actions: notification.actions,
       requireInteraction: notification.requireInteraction,
     });

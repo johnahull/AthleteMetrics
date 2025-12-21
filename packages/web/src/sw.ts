@@ -145,6 +145,24 @@ self.addEventListener('push', (event) => {
 });
 
 /**
+ * Validate that a URL is safe to open (same-origin or relative)
+ * Prevents phishing attacks via malicious notification URLs
+ */
+function isValidUrl(url: string): boolean {
+  // Allow relative URLs
+  if (url.startsWith('/')) return true;
+
+  try {
+    const parsed = new URL(url, self.location.origin);
+    // Only allow same-origin URLs
+    return parsed.origin === self.location.origin;
+  } catch {
+    // Invalid URL format
+    return false;
+  }
+}
+
+/**
  * Handle notification click
  */
 self.addEventListener('notificationclick', (event) => {
@@ -152,8 +170,14 @@ self.addEventListener('notificationclick', (event) => {
 
   event.notification.close();
 
-  const urlToOpen = event.notification.data?.url || '/';
+  const rawUrl = event.notification.data?.url || '/';
   const notificationId = event.notification.data?.notificationId;
+
+  // Validate URL to prevent phishing attacks
+  const urlToOpen = isValidUrl(rawUrl) ? rawUrl : '/';
+  if (rawUrl !== urlToOpen) {
+    console.warn('[SW] Blocked potentially malicious notification URL:', rawUrl);
+  }
 
   event.waitUntil(
     (async () => {
