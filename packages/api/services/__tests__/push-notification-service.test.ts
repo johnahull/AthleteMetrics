@@ -122,15 +122,19 @@ describe('PushNotificationService', () => {
         },
       };
 
-      // First check for existing subscription returns empty
-      mockDb.where.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValue([{
-        id: 'sub-1',
-        userId,
-        endpoint: subscription.endpoint,
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth,
-      }]);
+      // First update().set().where().returning() returns empty (no existing subscription)
+      // Then select().from().where().limit() returns empty (no other user owns this endpoint)
+      // Then insert().values().returning() returns the new subscription
+      mockDb.returning
+        .mockResolvedValueOnce([])  // First call: update check returns empty
+        .mockResolvedValueOnce([{   // Second call: insert returns new subscription
+          id: 'sub-1',
+          userId,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+        }]);
+      mockDb.limit.mockResolvedValueOnce([]);  // No other user owns this endpoint
 
       const result = await service.subscribe(userId, subscription);
 
@@ -146,13 +150,12 @@ describe('PushNotificationService', () => {
         keys: { p256dh: 'key', auth: 'auth' },
       };
 
-      // First call returns existing subscription
-      mockDb.where.mockResolvedValueOnce([{
+      // update().set().where().returning() returns existing subscription (owned by same user)
+      mockDb.returning.mockResolvedValueOnce([{
         id: 'existing-sub',
         userId,
         endpoint: subscription.endpoint,
       }]);
-      mockDb.returning.mockResolvedValue([{ id: 'existing-sub' }]);
 
       const result = await service.subscribe(userId, subscription);
 
@@ -168,14 +171,18 @@ describe('PushNotificationService', () => {
       };
       const deviceName = 'iPhone 15 Pro';
 
-      // First check for existing subscription returns empty
-      mockDb.where.mockResolvedValueOnce([]);
-      mockDb.returning.mockResolvedValue([{
-        id: 'sub-1',
-        userId,
-        endpoint: subscription.endpoint,
-        deviceName,
-      }]);
+      // First update().set().where().returning() returns empty (no existing subscription)
+      // Then select().from().where().limit() returns empty (no other user owns this endpoint)
+      // Then insert().values().returning() returns the new subscription
+      mockDb.returning
+        .mockResolvedValueOnce([])  // First call: update check returns empty
+        .mockResolvedValueOnce([{   // Second call: insert returns new subscription
+          id: 'sub-1',
+          userId,
+          endpoint: subscription.endpoint,
+          deviceName,
+        }]);
+      mockDb.limit.mockResolvedValueOnce([]);  // No other user owns this endpoint
 
       const result = await service.subscribe(userId, subscription, deviceName);
 
@@ -478,13 +485,15 @@ describe('PushNotificationService', () => {
   });
 
   describe('org-level settings', () => {
+    // Use valid UUID format for orgId
+    const MOCK_ORG_ID = '12345678-1234-1234-1234-123456789abc';
+
     it('should respect organization push settings', async () => {
       configureVapidForTest();
       const svc = new PushNotificationService(mockDb as any);
       // Ensure VAPID is configured (workaround for CI env var timing issues)
       (svc as any).vapidConfigured = true;
       const userId = 'user-123';
-      const orgId = 'org-123';
       const notification: NotificationPayload = {
         title: 'Org Notification',
         body: 'This should be blocked',
@@ -499,7 +508,7 @@ describe('PushNotificationService', () => {
         wellnessSurveysEnabled: true,
       }]);
 
-      const result = await svc.sendToUser(userId, notification, orgId);
+      const result = await svc.sendToUser(userId, notification, MOCK_ORG_ID);
 
       expect(result.skipped).toBe(true);
       expect(result.reason).toBe('org_type_disabled');
@@ -512,7 +521,6 @@ describe('PushNotificationService', () => {
       // Ensure VAPID is configured (workaround for CI env var timing issues)
       (svc as any).vapidConfigured = true;
       const userId = 'user-123';
-      const orgId = 'org-123';
       const notification: NotificationPayload = {
         title: 'Survey Notification',
         body: 'This should be blocked',
@@ -527,7 +535,7 @@ describe('PushNotificationService', () => {
         wellnessSurveysEnabled: false,
       }]);
 
-      const result = await svc.sendToUser(userId, notification, orgId);
+      const result = await svc.sendToUser(userId, notification, MOCK_ORG_ID);
 
       expect(result.skipped).toBe(true);
       expect(result.reason).toBe('org_type_disabled');
