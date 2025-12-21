@@ -56,7 +56,8 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
     const user = req.session?.user || req.user;
     // SECURITY: Prioritize URL parameter to prevent authorization bypass via body manipulation
     // URL parameters are more trustworthy as they're part of the route definition
-    let organizationId = req.params.organizationId;
+    // Support both :organizationId and :orgId parameter names for route flexibility
+    let organizationId = req.params.organizationId || req.params.orgId;
     if (!organizationId) {
       // Fallback to query/body only if not in URL (rare case for non-RESTful endpoints)
       organizationId = req.query.organizationId as string || req.body.organizationId;

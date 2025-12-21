@@ -34,6 +34,8 @@ const { mockResults, createChainableMock } = vi.hoisted(() => {
     chain.limit = () => chain;
     chain.offset = () => chain;
     chain.from = () => chain;
+    chain.innerJoin = () => chain;
+    chain.leftJoin = () => chain;
 
     chain.then = (resolve: Function, reject?: Function) => {
       try {
@@ -48,6 +50,24 @@ const { mockResults, createChainableMock } = vi.hoisted(() => {
 
   return { mockResults, createChainableMock };
 });
+
+// Mock the cached org access helper to use our mockResults
+vi.mock("../../helpers/cached-org-access", () => ({
+  getCachedUserOrganizations: vi.fn(async (req: any, userId: string) => {
+    return mockResults.userOrganizations.map((uo: any) => ({
+      ...uo,
+      organization: { id: uo.organizationId, name: "Test Org" },
+    }));
+  }),
+  canAccessOrganization: vi.fn(async (req: any, user: any, orgId: string) => {
+    // Site admins can access any org
+    if (user.isSiteAdmin) return true;
+    // Check if user is in the org
+    return mockResults.userOrganizations.some((uo: any) =>
+      uo.userId === user.id && uo.organizationId === orgId
+    );
+  }),
+}));
 
 vi.mock("../../db", () => ({
   db: {
@@ -236,7 +256,7 @@ describe("Organization Notification Settings Routes", () => {
       );
 
       expect(response.status).toBe(403);
-      expect(response.body.message).toBe("Access denied");
+      expect(response.body.message).toBe("org_admin role required for this action");
     });
 
     it("should return 403 for coach (not org_admin)", async () => {
