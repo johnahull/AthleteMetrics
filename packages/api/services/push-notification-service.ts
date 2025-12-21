@@ -429,6 +429,12 @@ export class PushNotificationService {
       return { successful: 0, failed: 0, skipped: true, reason: 'vapid_not_configured' };
     }
 
+    // Validate orgId format if provided (UUID format)
+    if (orgId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)) {
+      console.error(`Invalid orgId format: ${orgId}`);
+      return { successful: 0, failed: 0, skipped: true, reason: 'invalid_org_id' };
+    }
+
     // Check site-level global kill switch
     const globalSettings = await this.db.select().from(siteSettings).limit(1);
     if (globalSettings.length > 0 && !globalSettings[0].pushNotificationsEnabled) {

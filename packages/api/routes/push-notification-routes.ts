@@ -196,7 +196,7 @@ export function registerPushNotificationRoutes(app: Express) {
    * DELETE /api/push/subscriptions/:id
    * Remove a specific push subscription by ID
    */
-  app.delete("/api/push/subscriptions/:id", requireAuth, async (req, res) => {
+  app.delete("/api/push/subscriptions/:id", requireAuth, pushSubscriptionLimiter, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {

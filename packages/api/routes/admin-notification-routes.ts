@@ -5,6 +5,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
+import pLimit from "p-limit";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, inArray } from "drizzle-orm";
 import {
@@ -365,19 +366,29 @@ export function registerAdminNotificationRoutes(app: Express) {
           },
         };
 
-        for (const userId of uniqueUserIds) {
-          try {
-            const result = await pushService.sendToUser(userId, notification);
+        // Use concurrency control to avoid overwhelming push services
+        const limit = pLimit(50);
+        const results = await Promise.all(
+          uniqueUserIds.map(userId =>
+            limit(async () => {
+              try {
+                const result = await pushService.sendToUser(userId, notification);
+                return result;
+              } catch (error) {
+                console.error(`Failed to send broadcast to user ${userId}:`, error);
+                return { successful: 0, failed: 1 };
+              }
+            })
+          )
+        );
 
-            if (result.noSubscription) {
-              noSubscription++;
-            } else if (result.successful > 0) {
-              successful++;
-            } else {
-              failed++;
-            }
-          } catch (error) {
-            console.error(`Failed to send broadcast to user ${userId}:`, error);
+        // Aggregate results
+        for (const result of results) {
+          if (result.noSubscription) {
+            noSubscription++;
+          } else if (result.successful > 0) {
+            successful++;
+          } else {
             failed++;
           }
         }
