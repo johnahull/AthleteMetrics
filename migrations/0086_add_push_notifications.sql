@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 
 -- Indexes for push_subscriptions
 CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS push_subscriptions_endpoint_idx ON push_subscriptions(endpoint);
+-- Note: endpoint column has UNIQUE constraint (line 13) which creates implicit index
 
 -- ============================================================================
 -- NOTIFICATION PREFERENCES TABLE
@@ -64,14 +64,14 @@ CREATE TABLE IF NOT EXISTS notification_history (
     user_id VARCHAR NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     org_id VARCHAR REFERENCES organizations(id) ON DELETE SET NULL,
     -- Notification content
-    type TEXT NOT NULL CHECK (type IN ('wellness_survey', 'wellness_digest', 'new_measurement', 'team_announcement')),
+    type TEXT NOT NULL,
     title TEXT NOT NULL,
     body TEXT NOT NULL,
     url TEXT,
     data JSONB,
     -- Delivery tracking
     channels TEXT[] NOT NULL DEFAULT ARRAY['push']::text[],
-    delivery_status TEXT NOT NULL DEFAULT 'pending' CHECK (delivery_status IN ('pending', 'delivered', 'failed', 'expired')),
+    delivery_status TEXT NOT NULL DEFAULT 'pending',
     sent_at TIMESTAMP DEFAULT NOW() NOT NULL,
     delivered_at TIMESTAMP,
     clicked_at TIMESTAMP,
@@ -79,6 +79,29 @@ CREATE TABLE IF NOT EXISTS notification_history (
     error_message TEXT,
     retry_count INTEGER DEFAULT 0
 );
+
+-- Add CHECK constraints idempotently
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'notification_history_type_check'
+  ) THEN
+    ALTER TABLE notification_history
+    ADD CONSTRAINT notification_history_type_check
+    CHECK (type IN ('wellness_survey', 'wellness_digest', 'new_measurement', 'team_announcement'));
+  END IF;
+END $$;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'notification_history_delivery_status_check'
+  ) THEN
+    ALTER TABLE notification_history
+    ADD CONSTRAINT notification_history_delivery_status_check
+    CHECK (delivery_status IN ('pending', 'delivered', 'failed', 'expired'));
+  END IF;
+END $$;
 
 -- Indexes for notification_history
 CREATE INDEX IF NOT EXISTS notification_history_user_idx ON notification_history(user_id);
