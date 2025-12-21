@@ -22,13 +22,19 @@ import {
 // Web Push payload size limit (4KB as per spec)
 const MAX_PAYLOAD_SIZE = 4096;
 
-// Valid push service URL patterns (FCM, Mozilla, Apple, etc.)
-const VALID_PUSH_ENDPOINT_PATTERNS = [
-  /^https:\/\/fcm\.googleapis\.com\//,
-  /^https:\/\/updates\.push\.services\.mozilla\.com\//,
-  /^https:\/\/[a-z0-9-]+\.push\.apple\.com\//,
-  /^https:\/\/[a-z0-9-]+\.notify\.windows\.com\//,
-  /^https:\/\/push\.services\.mozilla\.org\//,
+// Valid push service hostnames (exact matching to prevent subdomain attacks)
+const VALID_PUSH_HOSTNAMES = new Set([
+  'fcm.googleapis.com',
+  'updates.push.services.mozilla.com',
+  'push.services.mozilla.org',
+  // Apple uses dynamic subdomains but always ends with .push.apple.com
+  // Windows uses dynamic subdomains but always ends with .notify.windows.com
+]);
+
+// Valid push service hostname suffixes (for services with dynamic subdomains)
+const VALID_PUSH_HOSTNAME_SUFFIXES = [
+  '.push.apple.com',
+  '.notify.windows.com',
 ];
 
 /**
@@ -84,6 +90,7 @@ export interface TeamSendResult {
 
 /**
  * Validate that a push endpoint URL is from a known push service
+ * Uses exact hostname matching to prevent SSRF attacks via subdomain manipulation
  */
 function isValidPushEndpoint(endpoint: string): boolean {
   try {
@@ -92,8 +99,20 @@ function isValidPushEndpoint(endpoint: string): boolean {
     if (url.protocol !== 'https:') {
       return false;
     }
-    // Check against known push service patterns
-    return VALID_PUSH_ENDPOINT_PATTERNS.some(pattern => pattern.test(endpoint));
+
+    const hostname = url.hostname.toLowerCase();
+
+    // Check exact hostname match
+    if (VALID_PUSH_HOSTNAMES.has(hostname)) {
+      return true;
+    }
+
+    // Check hostname suffix for services with dynamic subdomains
+    return VALID_PUSH_HOSTNAME_SUFFIXES.some(suffix =>
+      hostname.endsWith(suffix) &&
+      // Ensure it's actually a subdomain, not a malicious lookalike like "evilpush.apple.com"
+      hostname.length > suffix.length
+    );
   } catch {
     return false;
   }
@@ -435,6 +454,16 @@ export class PushNotificationService {
       return { successful: 0, failed: 0, deferred: true };
     }
 
+    // Sanitize notification content to prevent XSS
+    const sanitizedTitle = DOMPurify.sanitize(notification.title, {
+      ALLOWED_TAGS: [], // Strip all HTML tags, notifications are plain text
+      KEEP_CONTENT: true
+    });
+    const sanitizedBody = DOMPurify.sanitize(notification.body, {
+      ALLOWED_TAGS: [],
+      KEEP_CONTENT: true
+    });
+
     // Build notification payload with PII-safe data
     // Only include non-PII fields to prevent leakage to push service logs
     const safeData: Record<string, any> = {
@@ -454,8 +483,8 @@ export class PushNotificationService {
     }
 
     const payload = JSON.stringify({
-      title: notification.title,
-      body: notification.body,
+      title: sanitizedTitle,
+      body: sanitizedBody,
       icon: notification.icon || '/icon-192.png',
       badge: notification.badge || '/badge-72.png',
       tag: notification.tag,
@@ -469,9 +498,9 @@ export class PushNotificationService {
     if (Buffer.byteLength(payload, 'utf8') > MAX_PAYLOAD_SIZE) {
       console.warn(`Push notification payload exceeds ${MAX_PAYLOAD_SIZE} bytes, truncating body`);
       // Truncate body to fit within limit (leave room for other fields)
-      const truncatedBody = notification.body.slice(0, 200) + '...';
+      const truncatedBody = sanitizedBody.slice(0, 200) + '...';
       finalPayload = JSON.stringify({
-        title: notification.title,
+        title: sanitizedTitle,
         body: truncatedBody,
         icon: notification.icon || '/icon-192.png',
         badge: notification.badge || '/badge-72.png',

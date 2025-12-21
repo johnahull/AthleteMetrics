@@ -119,6 +119,7 @@ export function registerPushNotificationRoutes(app: Express) {
   app.delete(
     "/api/push/unsubscribe",
     requireAuth,
+    pushSubscriptionLimiter,
     async (req, res) => {
       try {
         const userId = req.session.user?.id;
