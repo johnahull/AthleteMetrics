@@ -447,9 +447,11 @@ describe('PushNotificationService', () => {
       now.setHours(23, 0, 0, 0);
       vi.setSystemTime(now);
 
-      // Mock subscriptions
+      // Mock site settings (uses .limit(1))
+      mockDb.limit.mockResolvedValueOnce([{ pushNotificationsEnabled: true }]);
+      // Mock subscriptions (uses .where())
       mockDb.where.mockResolvedValueOnce([{ id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key', auth: 'auth' }]);
-      // Mock preferences with quiet hours 10PM-7AM
+      // Mock preferences with quiet hours 10PM-7AM (uses .where())
       mockDb.where.mockResolvedValueOnce([{
         pushEnabled: true,
         pushNewMeasurements: true,
