@@ -451,23 +451,23 @@ describe('PushNotificationService', () => {
         type: 'new_measurement',
       };
 
-      // Current time is 11 PM
-      const now = new Date();
-      now.setHours(23, 0, 0, 0);
-      vi.setSystemTime(now);
+      // Set system time to 11 PM UTC (23:00) - use fixed date to ensure consistent behavior
+      // Use UTC timezone in preferences to avoid CI vs local timezone differences
+      const testTime = new Date('2024-01-15T23:00:00.000Z');
+      vi.setSystemTime(testTime);
 
       // Mock site settings (uses .limit(1))
       mockDb.limit.mockResolvedValueOnce([{ pushNotificationsEnabled: true }]);
       // Mock subscriptions (uses .where())
       mockDb.where.mockResolvedValueOnce([{ id: 'sub-1', endpoint: MOCK_FCM_ENDPOINT, p256dh: 'key', auth: 'auth' }]);
-      // Mock preferences with quiet hours 10PM-7AM (uses .where())
+      // Mock preferences with quiet hours 10PM-7AM in UTC to match our test time
       mockDb.where.mockResolvedValueOnce([{
         pushEnabled: true,
         pushNewMeasurements: true,
         quietHoursEnabled: true,
         quietHoursStart: '22:00',
         quietHoursEnd: '07:00',
-        quietHoursTimezone: 'America/New_York',
+        quietHoursTimezone: 'UTC',
       }]);
 
       const result = await svc.sendToUser(userId, notification);
