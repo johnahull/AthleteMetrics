@@ -43,7 +43,7 @@ const pushSubscriptionLimiter = rateLimit({
 // Rate limiting for VAPID public key endpoint (read operation)
 const vapidPublicKeyLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
-  limit: RATE_LIMITS.READ, // Higher limit for read operations
+  limit: RATE_LIMITS.STANDARD, // Standard limit for read operations
   message: { message: "Too many requests for VAPID public key, please try again later." },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
