@@ -133,8 +133,8 @@ describe("Push Notification API Routes", () => {
   beforeEach(() => {
     // Reset mock session user before each test
     mockSessionUser = null;
-    // Reset all mocks
-    vi.clearAllMocks();
+    // Reset all mock implementations and call history for clean test isolation
+    vi.resetAllMocks();
   });
 
   describe("GET /api/push/vapid-public-key", () => {
