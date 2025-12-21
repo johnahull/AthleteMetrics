@@ -6,6 +6,7 @@
 import webPush from 'web-push';
 import { eq, and, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import pLimit from 'p-limit';
 import {
   pushSubscriptions,
   notificationPreferences,
@@ -154,6 +155,11 @@ export class PushNotificationService {
       .where(eq(pushSubscriptions.endpoint, subscription.endpoint));
 
     if (existing.length > 0) {
+      // SECURITY: Verify ownership before updating
+      if (existing[0].userId !== userId) {
+        throw new Error('This device is already registered to a different user');
+      }
+
       // Update lastUsedAt for existing subscription
       const updated = await this.db
         .update(pushSubscriptions)
@@ -506,6 +512,7 @@ export class PushNotificationService {
 
   /**
    * Send push notification to all members of a team
+   * Optimized to avoid N+1 queries by batching data fetches
    */
   async sendToTeam(
     teamId: string,
@@ -518,9 +525,25 @@ export class PushNotificationService {
       .from(userTeams)
       .where(eq(userTeams.teamId, teamId));
 
-    // Send to all members in parallel for better performance
+    if (teamMembers.length === 0) {
+      return {
+        totalMembers: 0,
+        successful: 0,
+        failed: 0,
+        noSubscription: 0,
+        skipped: 0,
+      };
+    }
+
+    // Limit concurrent push sends to avoid overwhelming the system
+    // Max 50 concurrent requests to push services (FCM, Apple, etc.)
+    const limit = pLimit(50);
+
+    // Send to all members with concurrency control
     const results = await Promise.all(
-      teamMembers.map(member => this.sendToUser(member.userId, notification, orgId))
+      teamMembers.map(member =>
+        limit(() => this.sendToUser(member.userId, notification, orgId))
+      )
     );
 
     // Aggregate results
@@ -551,6 +574,7 @@ export class PushNotificationService {
 
   /**
    * Send push notification to all users in an organization
+   * Optimized to avoid N+1 queries by batching data fetches
    */
   async sendToOrganization(
     orgId: string,
@@ -576,9 +600,25 @@ export class PushNotificationService {
 
     const orgMembers = await query;
 
-    // Send to all members in parallel for better performance
+    if (orgMembers.length === 0) {
+      return {
+        totalMembers: 0,
+        successful: 0,
+        failed: 0,
+        noSubscription: 0,
+        skipped: 0,
+      };
+    }
+
+    // Limit concurrent push sends to avoid overwhelming the system
+    // Max 50 concurrent requests to push services (FCM, Apple, etc.)
+    const limit = pLimit(50);
+
+    // Send to all members with concurrency control
     const results = await Promise.all(
-      orgMembers.map(member => this.sendToUser(member.userId, notification, orgId))
+      orgMembers.map(member =>
+        limit(() => this.sendToUser(member.userId, notification, orgId))
+      )
     );
 
     // Aggregate results

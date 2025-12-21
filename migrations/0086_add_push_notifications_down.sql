@@ -2,7 +2,11 @@
 -- Description: Rollback push notification infrastructure tables
 -- WARNING: This will delete all push notification data!
 
--- Drop indexes first
+-- Drop site_settings columns first
+ALTER TABLE site_settings DROP COLUMN IF EXISTS push_default_org_settings;
+ALTER TABLE site_settings DROP COLUMN IF EXISTS push_notifications_enabled;
+
+-- Drop indexes
 DROP INDEX IF EXISTS notification_history_sent_at_idx;
 DROP INDEX IF EXISTS notification_history_type_idx;
 DROP INDEX IF EXISTS notification_history_org_idx;
