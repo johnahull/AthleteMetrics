@@ -40,6 +40,16 @@ const pushSubscriptionLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
+// Rate limiting for VAPID public key endpoint (read operation)
+const vapidPublicKeyLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.READ, // Higher limit for read operations
+  message: { message: "Too many requests for VAPID public key, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
+
 export function registerPushNotificationRoutes(app: Express) {
   const pushService = getPushNotificationService(db);
 
@@ -47,7 +57,7 @@ export function registerPushNotificationRoutes(app: Express) {
    * GET /api/push/vapid-public-key
    * Get the VAPID public key for client-side subscription
    */
-  app.get("/api/push/vapid-public-key", requireAuth, (req, res) => {
+  app.get("/api/push/vapid-public-key", requireAuth, vapidPublicKeyLimiter, (req, res) => {
     try {
       const publicKey = pushService.getVapidPublicKey();
 

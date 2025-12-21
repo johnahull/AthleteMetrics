@@ -347,7 +347,8 @@ export class PushNotificationService {
    * Uses user's timezone to ensure accurate quiet hours checking
    */
   private isInQuietHours(
-    prefs: Awaited<ReturnType<typeof this.getUserPreferences>>
+    prefs: Awaited<ReturnType<typeof this.getUserPreferences>>,
+    userId?: string
   ): boolean {
     if (!prefs?.quietHoursEnabled || !prefs.quietHoursStart || !prefs.quietHoursEnd) {
       return false;
@@ -378,9 +379,13 @@ export class PushNotificationService {
 
       return currentTime >= startTime && currentTime < endTime;
     } catch (error) {
-      // If timezone conversion fails, log error and assume not in quiet hours
+      // If timezone conversion fails, log error with user context and assume not in quiet hours
       // (fail open to avoid blocking all notifications)
-      console.error(`Failed to check quiet hours for timezone ${userTimezone}:`, error);
+      const userContext = userId ? ` (userId: ${userId})` : '';
+      console.error(
+        `Failed to check quiet hours for timezone ${userTimezone}${userContext}:`,
+        error
+      );
       return false;
     }
   }
@@ -466,7 +471,7 @@ export class PushNotificationService {
     }
 
     // Check quiet hours
-    if (this.isInQuietHours(prefs)) {
+    if (this.isInQuietHours(prefs, userId)) {
       return { successful: 0, failed: 0, deferred: true };
     }
 
@@ -526,6 +531,11 @@ export class PushNotificationService {
       });
       // If still too large after truncation, this is a critical error
       if (Buffer.byteLength(finalPayload, 'utf8') > MAX_SAFE_PAYLOAD_SIZE) {
+        console.error(
+          `Failed to send notification to user ${userId}: payload still too large after truncation ` +
+          `(${Buffer.byteLength(finalPayload, 'utf8')} bytes > ${MAX_SAFE_PAYLOAD_SIZE} bytes). ` +
+          `Notification type: ${notification.type}, title: "${notification.title}"`
+        );
         return { successful: 0, failed: 0, skipped: true, reason: 'payload_too_large' };
       }
     }

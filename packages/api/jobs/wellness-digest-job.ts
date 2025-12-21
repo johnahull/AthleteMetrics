@@ -79,6 +79,10 @@ export function startWellnessDigestJob(
 
       console.log(`📬 Sending wellness digests to ${orgs.length} organizations...`);
 
+      // Track errors for aggregated reporting
+      const errors: Array<{ orgName: string; error: any }> = [];
+      let successCount = 0;
+
       // Process each organization
       for (const org of orgs) {
         try {
@@ -89,12 +93,25 @@ export function startWellnessDigestJob(
               `  ✅ ${org.orgName}: ${result.atRiskCount} at-risk (${result.redCount} red, ${result.yellowCount} yellow), ` +
               `sent to ${result.coachesSent} coaches, ${result.coachesFailed} failed`
             );
+            successCount++;
           } else {
             console.log(`  ✅ ${org.orgName}: No at-risk athletes, digest skipped`);
+            successCount++;
           }
         } catch (error) {
           console.error(`  ❌ Failed to send digest for ${org.orgName}:`, error);
+          errors.push({ orgName: org.orgName, error });
         }
+      }
+
+      // Log aggregated error summary
+      if (errors.length > 0) {
+        console.error(
+          `⚠️ Wellness digest job completed with errors: ${successCount}/${orgs.length} successful, ` +
+          `${errors.length} failed. Failed orgs: ${errors.map(e => e.orgName).join(', ')}`
+        );
+      } else {
+        console.log(`✅ Wellness digest job completed successfully for all ${orgs.length} organizations`);
       }
     } catch (error) {
       console.error('❌ Wellness digest job error:', error);
