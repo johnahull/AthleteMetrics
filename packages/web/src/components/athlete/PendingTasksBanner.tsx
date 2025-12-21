@@ -21,9 +21,16 @@ import { Button } from '@/components/ui/button';
 import { ClipboardCheck, ArrowRight, X } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import type { WellnessRequest } from '@shared/wellness-types';
+import { z } from 'zod';
 
 const DISMISS_KEY = 'wellness-tasks-dismissed';
 const DISMISS_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+// Zod schema for localStorage data validation (prevents XSS via malicious browser extensions)
+const dismissDataSchema = z.object({
+  dismissedAt: z.number().int().positive(),
+  requestIds: z.array(z.string().uuid()),
+});
 
 interface DismissData {
   dismissedAt: number;
@@ -70,7 +77,18 @@ export function PendingTasksBanner() {
     }
 
     try {
-      const dismissData: DismissData = JSON.parse(dismissDataStr);
+      const parsedData = JSON.parse(dismissDataStr);
+
+      // Validate with Zod schema to prevent XSS via malicious localStorage data
+      const validationResult = dismissDataSchema.safeParse(parsedData);
+      if (!validationResult.success) {
+        console.warn('Invalid dismiss data in localStorage:', validationResult.error);
+        localStorage.removeItem(DISMISS_KEY);
+        setIsDismissed(false);
+        return;
+      }
+
+      const dismissData = validationResult.data;
       const now = Date.now();
       const timeSinceDismiss = now - dismissData.dismissedAt;
 
