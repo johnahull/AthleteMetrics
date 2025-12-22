@@ -8,7 +8,8 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Heart, AlertTriangle, FileText } from "lucide-react";
+import { Sparkles, Heart, AlertTriangle, FileText, Bell } from "lucide-react";
+import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
 
 export default function AdminPage() {
   const { toast } = useToast();
@@ -250,6 +251,9 @@ export default function AdminPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Push Notification Settings */}
+      <AdminNotificationSettingsCard />
     </div>
   );
 }

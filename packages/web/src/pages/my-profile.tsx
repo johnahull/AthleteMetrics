@@ -20,7 +20,7 @@ import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle, User, Shield, Users } from 'lucide-react';
+import { Loader2, AlertCircle, User, Shield, Users, Bell, ChevronRight } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 
 export default function MyProfilePage() {
@@ -197,6 +197,28 @@ export default function MyProfilePage() {
             </p>
           )}
         </CardContent>
+      </Card>
+
+      {/* Notification Settings */}
+      <Card className="hover:bg-muted/50 transition-colors">
+        <Link href="/notification-settings">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Bell className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <h3 className="font-medium">Notification Settings</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Manage push notifications and email preferences
+                  </p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Link>
       </Card>
 
       {/* Tips Card */}
