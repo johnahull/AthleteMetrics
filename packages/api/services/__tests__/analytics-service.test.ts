@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { AnalyticsService } from '../analytics-service';
 import { db } from '../../db';
-import { measurements, teams, organizations, users, userTeams, INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, organizationMetrics, siteMetrics, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('AnalyticsService', () => {
@@ -91,6 +91,7 @@ describe('AnalyticsService', () => {
       await db.delete(measurements).where(eq(measurements.userId, testUserId2));
       await db.delete(userTeams).where(eq(userTeams.userId, testUserId1));
       await db.delete(userTeams).where(eq(userTeams.userId, testUserId2));
+      await db.delete(organizationMetrics).where(eq(organizationMetrics.organizationId, testOrgId));
       await db.delete(teams).where(eq(teams.organizationId, testOrgId));
       await db.delete(users).where(eq(users.id, testUserId1));
       await db.delete(users).where(eq(users.id, testUserId2));
@@ -261,6 +262,14 @@ describe('AnalyticsService', () => {
 
   describe('getDashboardStats', () => {
     beforeEach(async () => {
+      // Enable system metrics for the test organization
+      // This is required because getDashboardStats now uses dynamic org-enabled metrics
+      // Note: We use ON CONFLICT to handle potential duplicate entries
+      await db.insert(organizationMetrics).values([
+        { organizationId: testOrgId, metricCode: 'FLY10_TIME', isEnabled: true },
+        { organizationId: testOrgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
+      ]).onConflictDoNothing();
+
       // Create recent measurements (within last 30 days)
       const recentDate = new Date();
       recentDate.setDate(recentDate.getDate() - 5); // 5 days ago
@@ -436,6 +445,226 @@ describe('AnalyticsService', () => {
       expect(result.bestWEIGHTLast30Days).toBeUndefined();
 
       // Performance metrics should still work
+      expect(result.bestFLY10_TIMELast30Days).toBeDefined();
+      expect(result.bestVERTICAL_JUMPLast30Days).toBeDefined();
+    });
+
+    it('should include organization-enabled custom metrics in dashboard stats', async () => {
+      // Ensure custom metrics exist in site_metrics (CI test DB may not have them from migrations)
+      await db.insert(siteMetrics).values([
+        {
+          code: 'APPROACH_REACH',
+          label: 'Approach Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+        {
+          code: 'BLOCK_REACH',
+          label: 'Block Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+      ]).onConflictDoNothing();
+
+      // Enable custom metrics for this organization
+      await db.insert(organizationMetrics).values([
+        {
+          organizationId: testOrgId,
+          metricCode: 'APPROACH_REACH',
+          isEnabled: true,
+        },
+        {
+          organizationId: testOrgId,
+          metricCode: 'BLOCK_REACH',
+          isEnabled: true,
+        },
+      ]).onConflictDoNothing();
+
+      // Create measurements for custom metrics
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 5); // 5 days ago
+
+      await db.insert(measurements).values([
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'APPROACH_REACH',
+          value: '120.5',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+        {
+          userId: testUserId2,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'APPROACH_REACH',
+          value: '115.0',
+          units: 'in',
+          age: 25,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'BLOCK_REACH',
+          value: '110.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+        {
+          userId: testUserId2,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'BLOCK_REACH',
+          value: '108.5',
+          units: 'in',
+          age: 25,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+      ]);
+
+      const result = await analyticsService.getDashboardStats(testOrgId);
+
+      // Custom metrics should appear in dashboard stats (higher_is_better)
+      expect(result.bestAPPROACH_REACHLast30Days).toBeDefined();
+      expect(result.bestAPPROACH_REACHLast30Days?.value).toBe(120.5); // John Doe has best
+      expect(result.bestAPPROACH_REACHLast30Days?.userName).toBe('John Doe');
+
+      expect(result.bestBLOCK_REACHLast30Days).toBeDefined();
+      expect(result.bestBLOCK_REACHLast30Days?.value).toBe(110.0); // John Doe has best
+      expect(result.bestBLOCK_REACHLast30Days?.userName).toBe('John Doe');
+
+      // System metrics should still work
+      expect(result.bestFLY10_TIMELast30Days).toBeDefined();
+      expect(result.bestVERTICAL_JUMPLast30Days).toBeDefined();
+    });
+
+    it('should not include disabled organization metrics in dashboard stats', async () => {
+      // Ensure custom metrics exist in site_metrics (CI test DB may not have them from migrations)
+      await db.insert(siteMetrics).values([
+        {
+          code: 'APPROACH_REACH',
+          label: 'Approach Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+        {
+          code: 'BLOCK_REACH',
+          label: 'Block Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+      ]).onConflictDoNothing();
+
+      // Enable one metric, disable another
+      await db.insert(organizationMetrics).values([
+        {
+          organizationId: testOrgId,
+          metricCode: 'APPROACH_REACH',
+          isEnabled: true,
+        },
+        {
+          organizationId: testOrgId,
+          metricCode: 'BLOCK_REACH',
+          isEnabled: false, // Disabled
+        },
+      ]).onConflictDoNothing();
+
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 5);
+
+      await db.insert(measurements).values([
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'APPROACH_REACH',
+          value: '120.5',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'BLOCK_REACH',
+          value: '110.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrgId,
+        },
+      ]);
+
+      const result = await analyticsService.getDashboardStats(testOrgId);
+
+      // Enabled metric should appear
+      expect(result.bestAPPROACH_REACHLast30Days).toBeDefined();
+
+      // Disabled metric should NOT appear
+      expect(result.bestBLOCK_REACHLast30Days).toBeUndefined();
+    });
+
+    it('should use all active site metrics when no organizationId (site admin case)', async () => {
+      // Test site admin scenario - no org filter, should see all active metrics from site_metrics
+      // This test ensures the fallback to site_metrics.isActive works
+
+      const recentDate = new Date();
+      recentDate.setDate(recentDate.getDate() - 5);
+
+      await db.insert(measurements).values([
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'FLY10_TIME',
+          value: '1.40',
+          units: 's',
+          age: 24,
+          isVerified: true,
+        },
+        {
+          userId: testUserId1,
+          submittedBy: testSubmitterId,
+          date: recentDate.toISOString(),
+          metric: 'VERTICAL_JUMP',
+          value: '34.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+        },
+      ]);
+
+      // Call without organizationId (site admin)
+      const result = await analyticsService.getDashboardStats();
+
+      // Should return best metrics from all athletes
       expect(result.bestFLY10_TIMELast30Days).toBeDefined();
       expect(result.bestVERTICAL_JUMPLast30Days).toBeDefined();
     });

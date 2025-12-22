@@ -200,7 +200,7 @@ describe('DerivedMetricCalculator', () => {
 
       expect(metadata).toBeDefined();
       expect(metadata?.formula).toBe('10 / FLY10_TIME * 2.045');
-      expect(metadata?.sourceValues).toEqual({ FLY10_TIME: 1.0 });
+      expect(metadata?.sourceValues).toEqual({ fly10_time: 1.0 }); // Normalized to lowercase
       expect(metadata?.calculatedAt).toBeDefined();
       expect(new Date(metadata!.calculatedAt).getTime()).toBeGreaterThan(Date.now() - 5000); // Within last 5 seconds
     });
@@ -912,6 +912,210 @@ describe('DerivedMetricCalculator', () => {
           )
         );
       expect(finalTopSpeed).toHaveLength(1);
+    });
+  });
+
+  describe('Best Value Selection with Multiple Trials', () => {
+    it('should use best (max) value when metricType=higher_is_better and multiple trials exist', async () => {
+      // Create a derived metric that depends on VERTICAL_JUMP (higher_is_better=true)
+      // Create or get VERTICAL_JUMP metric
+      let [vjMetric] = await db
+        .select()
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, 'VERTICAL_JUMP'));
+
+      if (!vjMetric) {
+        [vjMetric] = await db
+          .insert(siteMetrics)
+          .values({
+            code: 'VERTICAL_JUMP',
+            label: 'Vertical Jump',
+            category: 'power',
+            unit: 'in',
+            metricType: 'higher_is_better',
+            isSystemDefault: true,
+            isActive: true,
+            isDerived: false,
+          })
+          .returning();
+      }
+
+      // Create derived metric that depends on VERTICAL_JUMP
+      const [derivedVJ] = await db
+        .insert(siteMetrics)
+        .values({
+          code: 'VJ_POWER_INDEX',
+          label: 'Vertical Jump Power Index',
+          category: 'power',
+          unit: 'ratio',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: true,
+          formula: 'VERTICAL_JUMP * 1.5',
+          dependentMetrics: ['VERTICAL_JUMP'],
+          calculationConfig: {
+            dateMatchStrategy: 'same_date',
+            missingSourceBehavior: 'skip',
+          },
+        })
+        .returning();
+
+      // Create multiple source measurements with different values on the same date
+      // Values: 20, 25, 22 (best is 25)
+      await db.insert(measurements).values([
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'VERTICAL_JUMP',
+          value: '20.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'VERTICAL_JUMP',
+          value: '22.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+      ]);
+
+      // Trigger calculation with a third measurement (value: 25 - this is the best)
+      const [triggerMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'VERTICAL_JUMP',
+          value: '25.0',
+          units: 'in',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      const calculatedMeasurements = await calculator.processNewMeasurement(triggerMeasurement);
+
+      // Should create VJ_POWER_INDEX measurement using the best (max) value: 25.0
+      const vjPowerIndex = calculatedMeasurements.find(m => m.metric === 'VJ_POWER_INDEX');
+      expect(vjPowerIndex).toBeDefined();
+      // VJ_POWER_INDEX = 25.0 * 1.5 = 37.5
+      expect(parseFloat(vjPowerIndex!.value)).toBeCloseTo(37.5, 2);
+
+      // Cleanup
+      await db.delete(siteMetrics).where(eq(siteMetrics.code, 'VJ_POWER_INDEX'));
+    });
+
+    it('should use best (min) value when metricType=lower_is_better and multiple trials exist', async () => {
+      // FLY10_TIME is already set up with metricType='lower_is_better'
+      // Create multiple source measurements with different values on the same date
+      // Values: 1.2, 1.0, 1.1 (best is 1.0 - lowest)
+      await db.insert(measurements).values([
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.2',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.1',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+      ]);
+
+      // Trigger calculation with a third measurement (value: 1.0 - this is the best)
+      const [triggerMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.0',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      const calculatedMeasurements = await calculator.processNewMeasurement(triggerMeasurement);
+
+      // Should create TOP_SPEED_CALC measurement using the best (min) value: 1.0
+      const topSpeedCalc = calculatedMeasurements.find(m => m.metric === 'TOP_SPEED_CALC');
+      expect(topSpeedCalc).toBeDefined();
+      // TOP_SPEED_CALC = 10 / 1.0 * 2.045 = 20.45 mph
+      expect(parseFloat(topSpeedCalc!.value)).toBeCloseTo(20.45, 2);
+    });
+
+    it('should use best value from multiple trials (lower_is_better metric)', async () => {
+      // Create multiple source measurements with different values
+      // Tests that the calculator selects the best value, not just the most recent
+      const [firstMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.01', // Slightly worse (higher is worse for lower_is_better)
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      // Create second measurement with better value
+      const [secondMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.0', // Better value (lower is better)
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      // Process the second measurement (should use the best value measurement)
+      const calculatedMeasurements = await calculator.processNewMeasurement(secondMeasurement);
+
+      const topSpeedCalc = calculatedMeasurements.find(m => m.metric === 'TOP_SPEED_CALC');
+      expect(topSpeedCalc).toBeDefined();
+
+      // The calculated measurement should reference the best (second) source measurement
+      expect(topSpeedCalc!.calculatedFromMeasurementIds).toContain(secondMeasurement.id);
+
+      // Should still calculate correctly using best value (1.0s)
+      // TOP_SPEED_CALC = 10 / 1.0 * 2.045 = 20.45 mph
+      expect(parseFloat(topSpeedCalc!.value)).toBeCloseTo(20.45, 2);
     });
   });
 

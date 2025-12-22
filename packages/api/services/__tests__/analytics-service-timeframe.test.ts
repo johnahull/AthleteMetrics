@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { AnalyticsService } from '../analytics-service';
 import { db } from '../../db';
-import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, organizationMetrics } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('AnalyticsService - Date Range Filtering', () => {
@@ -91,6 +91,12 @@ describe('AnalyticsService - Date Range Filtering', () => {
       { userId: testUserId1, teamId: testTeamId, isActive: true },
       { userId: testUserId2, teamId: testTeamId, isActive: true },
     ]);
+
+    // Enable metrics for this organization (required for getDashboardStats to return metric stats)
+    await db.insert(organizationMetrics).values([
+      { organizationId: testOrgId, metricCode: 'FLY10_TIME', isEnabled: true },
+      { organizationId: testOrgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
+    ]).onConflictDoNothing();
   });
 
   afterEach(async () => {
@@ -100,6 +106,7 @@ describe('AnalyticsService - Date Range Filtering', () => {
       await db.delete(measurements).where(eq(measurements.userId, testUserId2));
       await db.delete(userTeams).where(eq(userTeams.userId, testUserId1));
       await db.delete(userTeams).where(eq(userTeams.userId, testUserId2));
+      await db.delete(organizationMetrics).where(eq(organizationMetrics.organizationId, testOrgId));
       await db.delete(teams).where(eq(teams.organizationId, testOrgId));
       await db.delete(users).where(eq(users.id, testUserId1));
       await db.delete(users).where(eq(users.id, testUserId2));

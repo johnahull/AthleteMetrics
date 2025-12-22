@@ -28,6 +28,134 @@ type DbTransaction = PgTransaction<
 import { evaluateFormula } from './formula-service';
 
 // ============================================================================
+// Metric Config Cache - Performance Optimization
+// ============================================================================
+
+/**
+ * In-memory cache for metric configurations to avoid repeated database queries.
+ *
+ * **Performance Impact:**
+ * - Without cache: Bulk CSV import with 1000 measurements = 1000 DB queries = 10-50s overhead
+ * - With cache: After warmup, queries reduced to ~0ms (95%+ cache hit rate expected)
+ *
+ * **Cache Strategy:**
+ * - TTL: 5 minutes (metric configs rarely change)
+ * - Invalidation: Manual via invalidate() method when metrics are updated
+ * - Warmup: Pre-populate cache on server startup for best performance
+ */
+class MetricConfigCache {
+  private cache = new Map<string, { higherIsBetter: boolean; cachedAt: number }>();
+  private readonly TTL = 5 * 60 * 1000; // 5 minutes
+
+  /**
+   * Get metric configurations from cache or database.
+   *
+   * @param metricCodes - Array of metric codes to fetch (will be normalized to uppercase)
+   * @param db - Database connection or transaction
+   * @returns Map of uppercase metric codes to { higherIsBetter: boolean }
+   */
+  async get(
+    metricCodes: string[],
+    db: typeof dbType | DbTransaction
+  ): Promise<Map<string, { higherIsBetter: boolean }>> {
+    const now = Date.now();
+    const result = new Map<string, { higherIsBetter: boolean }>();
+    const missing: string[] = [];
+
+    // Check cache first
+    for (const code of metricCodes) {
+      const upperCode = code.toUpperCase();
+      const cached = this.cache.get(upperCode);
+
+      if (cached && now - cached.cachedAt < this.TTL) {
+        // Cache hit - use cached value
+        result.set(upperCode, { higherIsBetter: cached.higherIsBetter });
+      } else {
+        // Cache miss or expired - need to fetch from DB
+        missing.push(upperCode);
+      }
+    }
+
+    // Fetch missing metric configs from database
+    if (missing.length > 0) {
+      const metricConfigs = await db
+        .select({
+          code: siteMetrics.code,
+          metricType: siteMetrics.metricType,
+        })
+        .from(siteMetrics)
+        .where(
+          sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(
+            missing.map(code => sql`${code}`),
+            sql`, `
+          )}]::text[])`
+        );
+
+      // Update cache and result
+      for (const config of metricConfigs) {
+        const upperCode = config.code.toUpperCase();
+        const higherIsBetter = config.metricType === 'higher_is_better';
+
+        // Store in cache with timestamp
+        this.cache.set(upperCode, {
+          higherIsBetter,
+          cachedAt: now,
+        });
+
+        // Add to result
+        result.set(upperCode, { higherIsBetter });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Invalidate cached metric configuration.
+   * Call this when metrics are created, updated, or deleted.
+   *
+   * @param metricCode - Optional specific metric code to invalidate. If omitted, clears entire cache.
+   */
+  invalidate(metricCode?: string): void {
+    if (metricCode) {
+      this.cache.delete(metricCode.toUpperCase());
+    } else {
+      this.cache.clear();
+    }
+  }
+
+  /**
+   * Pre-warm the cache with all active metrics.
+   * Call this on server startup for optimal performance.
+   *
+   * @param db - Database connection
+   */
+  async warmup(db: typeof dbType): Promise<void> {
+    try {
+      const allMetrics = await db
+        .select({
+          code: siteMetrics.code,
+          metricType: siteMetrics.metricType,
+        })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.isActive, true));
+
+      const now = Date.now();
+      for (const metric of allMetrics) {
+        this.cache.set(metric.code.toUpperCase(), {
+          higherIsBetter: metric.metricType === 'higher_is_better',
+          cachedAt: now,
+        });
+      }
+
+      console.log(`✅ MetricConfigCache warmed up with ${allMetrics.length} metrics`);
+    } catch (error) {
+      console.error('Failed to warmup MetricConfigCache:', error);
+    }
+  }
+}
+
+// ============================================================================
 // Types for Audit Trail and Recalculation Options
 // ============================================================================
 
@@ -56,7 +184,29 @@ export interface RecalculateOptions {
 const CALCULATION_VERSION = '1.0.0';
 
 export class DerivedMetricCalculator {
-  constructor(private db: typeof dbType) {}
+  private metricConfigCache: MetricConfigCache;
+
+  constructor(private db: typeof dbType) {
+    this.metricConfigCache = new MetricConfigCache();
+  }
+
+  /**
+   * Warm up the metric config cache with all active metrics.
+   * Call this on server startup for optimal performance.
+   */
+  async warmupCache(): Promise<void> {
+    await this.metricConfigCache.warmup(this.db);
+  }
+
+  /**
+   * Invalidate the metric config cache.
+   * Call this when metrics are created, updated, or deleted.
+   *
+   * @param metricCode - Optional specific metric code to invalidate
+   */
+  invalidateCache(metricCode?: string): void {
+    this.metricConfigCache.invalidate(metricCode);
+  }
 
   /**
    * Called after a measurement is created/updated.
@@ -101,6 +251,19 @@ export class DerivedMetricCalculator {
 
       const calculatedMeasurements: Measurement[] = [];
 
+      // Fetch metric configurations for all dependent metrics to enable best value selection
+      // Build a Map of metric code -> { higherIsBetter }
+      const allDependentMetrics = new Set<string>();
+      for (const derivedMetric of dependentDerivedMetrics) {
+        for (const depMetric of (derivedMetric.dependentMetrics || [])) {
+          allDependentMetrics.add(depMetric.toUpperCase());
+        }
+      }
+
+      // Fetch metric configurations for best value selection
+      const metricCodes = Array.from(allDependentMetrics);
+      const metricConfigsMap = await this.fetchMetricConfigs(tx, metricCodes);
+
       // Process each derived metric
       // NOTE: Sequential processing pattern (potential N+1 queries)
       // For typical use cases (1-2 derived metrics per source measurement), this performs well.
@@ -137,7 +300,8 @@ export class DerivedMetricCalculator {
             derivedMetric.calculationConfig || {
               dateMatchStrategy: 'same_date',
               missingSourceBehavior: 'skip',
-            }
+            },
+            metricConfigsMap
           );
 
           if (!sourceMeasurementsMap) {
@@ -279,6 +443,28 @@ export class DerivedMetricCalculator {
   }
 
   /**
+   * Fetch metric configurations for dependent metrics to enable best value selection.
+   * Returns a map of metric codes (uppercase) to their metricType configuration.
+   *
+   * Uses MetricConfigCache for performance optimization during bulk operations.
+   *
+   * @param dbOrTx - Database connection or transaction
+   * @param metricCodes - Array of metric codes to fetch configs for (will be normalized to uppercase)
+   * @returns Map of uppercase metric codes to { higherIsBetter: boolean }
+   */
+  private async fetchMetricConfigs(
+    dbOrTx: typeof dbType | DbTransaction,
+    metricCodes: string[]
+  ): Promise<Map<string, { higherIsBetter: boolean }>> {
+    if (metricCodes.length === 0) {
+      return new Map<string, { higherIsBetter: boolean }>();
+    }
+
+    // Use cache for performance optimization
+    return await this.metricConfigCache.get(metricCodes, dbOrTx);
+  }
+
+  /**
    * Recalculate derived measurements for an athlete when source changes.
    * Called after measurement update or delete.
    *
@@ -340,6 +526,18 @@ export class DerivedMetricCalculator {
       return;
     }
 
+    // Fetch metric configurations for all dependent metrics to enable best value selection
+    const allDependentMetrics = new Set<string>();
+    for (const derivedMetric of dependentDerivedMetrics) {
+      for (const depMetric of (derivedMetric.dependentMetrics || [])) {
+        allDependentMetrics.add(depMetric.toUpperCase());
+      }
+    }
+
+    // Fetch metric configurations for best value selection
+    const metricCodes = Array.from(allDependentMetrics);
+    const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes);
+
     // For each derived metric, recalculate or delete calculated measurements
     for (const derivedMetric of dependentDerivedMetrics) {
       try {
@@ -370,7 +568,8 @@ export class DerivedMetricCalculator {
             derivedMetric.calculationConfig || {
               dateMatchStrategy: 'same_date',
               missingSourceBehavior: 'skip',
-            }
+            },
+            metricConfigsMap
           );
 
           if (!sourceMeasurementsMap) {
@@ -443,9 +642,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -482,9 +682,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -500,9 +701,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -517,9 +719,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -543,7 +746,8 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
@@ -552,9 +756,14 @@ export class DerivedMetricCalculator {
       const normalizedMetricCode = metricCode.toUpperCase();
       let sourceMeasurement: Measurement | undefined;
 
+      // Determine if this metric prefers higher values (for sorting best value first)
+      // Default to true (higher is better) if not specified
+      const higherIsBetter = metricConfigs?.get(normalizedMetricCode)?.higherIsBetter ?? true;
+
       switch (config.dateMatchStrategy) {
         case 'same_date':
           // Only use exact date matches
+          // Order by best value (based on higherIsBetter), then by most recent as tie-breaker
           const [exactMatch] = await dbOrTx
             .select()
             .from(measurements)
@@ -566,7 +775,10 @@ export class DerivedMetricCalculator {
                 eq(measurements.isVerified, true)
               )
             )
-            .orderBy(desc(measurements.createdAt))
+            .orderBy(
+              higherIsBetter ? desc(measurements.value) : asc(measurements.value),
+              desc(measurements.createdAt)
+            )
             .limit(1);
 
           sourceMeasurement = exactMatch;
@@ -574,6 +786,7 @@ export class DerivedMetricCalculator {
 
         case 'latest_before':
           // Use most recent measurement on or before target date
+          // First priority: date (most recent), then best value, then created time
           const [latestBefore] = await dbOrTx
             .select()
             .from(measurements)
@@ -585,7 +798,11 @@ export class DerivedMetricCalculator {
                 eq(measurements.isVerified, true)
               )
             )
-            .orderBy(desc(measurements.date), desc(measurements.createdAt))
+            .orderBy(
+              desc(measurements.date),
+              higherIsBetter ? desc(measurements.value) : asc(measurements.value),
+              desc(measurements.createdAt)
+            )
             .limit(1);
 
           sourceMeasurement = latestBefore;
@@ -618,6 +835,7 @@ export class DerivedMetricCalculator {
             .orderBy(measurements.date);
 
           // Find closest by calculating absolute date difference
+          // When multiple measurements are equally close, pick the best value
           if (candidateMeasurements.length > 0) {
             const targetTime = targetDateObj.getTime();
             let closestMeasurement = candidateMeasurements[0];
@@ -632,6 +850,13 @@ export class DerivedMetricCalculator {
               if (diff < closestDiff) {
                 closestDiff = diff;
                 closestMeasurement = candidate;
+              } else if (diff === closestDiff) {
+                // Same date distance - pick the better value
+                const currentValue = parseFloat(closestMeasurement.value);
+                const candidateValue = parseFloat(candidate.value);
+                if (higherIsBetter ? candidateValue > currentValue : candidateValue < currentValue) {
+                  closestMeasurement = candidate;
+                }
               }
             }
 
@@ -681,4 +906,234 @@ export class DerivedMetricCalculator {
 
     return !!directMeasurement;
   }
+
+  /**
+   * Recalculate all derived metrics, optionally filtered by organization or metric code.
+   * This is useful for bulk recalculation after fixing calculation logic.
+   *
+   * **Performance Optimization:**
+   * - Uses transaction batching to prevent memory exhaustion and connection pool issues
+   * - Default batch size: 500 measurements per transaction
+   * - Event loop yielding between batches prevents blocking
+   * - Estimated performance: 150K measurements: 30-60 min → 5-10 min with batching
+   *
+   * @param options - Filter options
+   * @param options.organizationId - Only recalculate for this organization
+   * @param options.metricCode - Only recalculate this specific derived metric
+   * @param options.dryRun - If true, return what would be recalculated without making changes
+   * @param options.batchSize - Number of measurements to process per transaction (default: 500)
+   * @returns Summary of recalculation results
+   */
+  async recalculateAllDerivedMetrics(options?: {
+    organizationId?: string;
+    metricCode?: string;
+    dryRun?: boolean;
+    batchSize?: number;
+  }): Promise<{
+    total: number;
+    recalculated: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const { organizationId, metricCode, dryRun = false, batchSize = 500 } = options || {};
+
+    const result = {
+      total: 0,
+      recalculated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    // Find all active derived metrics (optionally filtered by code)
+    const derivedMetricsQuery = this.db
+      .select()
+      .from(siteMetrics)
+      .where(
+        and(
+          eq(siteMetrics.isDerived, true),
+          eq(siteMetrics.isActive, true),
+          metricCode ? eq(siteMetrics.code, metricCode) : undefined
+        )
+      );
+
+    const derivedMetrics = await derivedMetricsQuery;
+
+    if (derivedMetrics.length === 0) {
+      return result;
+    }
+
+    // Build metric configs map for best value selection
+    const allMetricCodes = new Set<string>();
+    for (const dm of derivedMetrics) {
+      if (dm.dependentMetrics) {
+        for (const dep of dm.dependentMetrics) {
+          allMetricCodes.add(dep.toUpperCase());
+        }
+      }
+    }
+
+    const metricConfigsArray = await this.db
+      .select({
+        code: siteMetrics.code,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(
+        Array.from(allMetricCodes).map(c => sql`${c}`),
+        sql`, `
+      )}]::text[])`);
+
+    const metricConfigs = new Map<string, { higherIsBetter: boolean }>();
+    for (const mc of metricConfigsArray) {
+      metricConfigs.set(mc.code.toUpperCase(), {
+        higherIsBetter: mc.metricType === 'higher_is_better',
+      });
+    }
+
+    // For each derived metric, find all calculated measurements
+    for (const derivedMetric of derivedMetrics) {
+      // Build conditions for finding calculated measurements
+      const conditions = [
+        eq(measurements.metric, derivedMetric.code),
+        eq(measurements.isCalculated, true),
+      ];
+
+      if (organizationId) {
+        conditions.push(eq(measurements.organizationId, organizationId));
+      }
+
+      const calculatedMeasurements = await this.db
+        .select({
+          id: measurements.id,
+          userId: measurements.userId,
+          date: measurements.date,
+          value: measurements.value,
+        })
+        .from(measurements)
+        .where(and(...conditions));
+
+      result.total += calculatedMeasurements.length;
+
+      // Process in batches with transaction wrapping
+      // This prevents memory exhaustion and connection pool issues for large datasets
+      for (let i = 0; i < calculatedMeasurements.length; i += batchSize) {
+        const batch = calculatedMeasurements.slice(i, i + batchSize);
+
+        if (dryRun) {
+          // In dry run mode, just count what would be recalculated
+          result.recalculated += batch.length;
+          continue;
+        }
+
+        // Process batch in a transaction for atomicity
+        await this.db.transaction(async (tx) => {
+          for (const calcMeasurement of batch) {
+            try {
+              // Find source measurements using the new best-value logic
+              const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
+                tx,
+                calcMeasurement.userId,
+                derivedMetric.dependentMetrics || [],
+                calcMeasurement.date,
+                derivedMetric.calculationConfig || {
+                  dateMatchStrategy: 'same_date',
+                  missingSourceBehavior: 'skip',
+                },
+                metricConfigs
+              );
+
+              if (!sourceMeasurementsMap) {
+                // Source measurements no longer available - skip
+                result.skipped++;
+                continue;
+              }
+
+              // Build source values for formula evaluation
+              const sourceValues: Record<string, number> = {};
+              const sourceMeasurementIds: string[] = [];
+
+              for (const [code, sourceMeasurement] of sourceMeasurementsMap.entries()) {
+                sourceValues[code.toLowerCase()] = parseFloat(sourceMeasurement.value);
+                sourceMeasurementIds.push(sourceMeasurement.id);
+              }
+
+              // Evaluate the formula
+              const calculatedValue = evaluateFormula(
+                derivedMetric.formula || '',
+                sourceValues
+              );
+
+              if (calculatedValue === null || !isFinite(calculatedValue)) {
+                result.skipped++;
+                continue;
+              }
+
+              // Update the measurement
+              await tx
+                .update(measurements)
+                .set({
+                  value: calculatedValue.toFixed(3),
+                  calculatedFromMeasurementIds: sourceMeasurementIds,
+                  calculationMetadata: {
+                    formula: derivedMetric.formula || '',
+                    sourceValues,
+                    calculatedAt: new Date().toISOString(),
+                    calculationVersion: CALCULATION_VERSION,
+                    triggeredBy: { event: 'manual_recalculation' as const },
+                  },
+                })
+                .where(eq(measurements.id, calcMeasurement.id));
+
+              result.recalculated++;
+            } catch (error) {
+              const errorMsg = `Error recalculating ${derivedMetric.code} for user ${calcMeasurement.userId} on ${calcMeasurement.date}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+              result.errors.push(errorMsg);
+              console.error(errorMsg);
+            }
+          }
+        });
+
+        // Yield to event loop between batches to prevent blocking
+        await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+
+    return result;
+  }
+}
+
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
+/**
+ * Shared singleton instance to ensure MetricConfigCache is shared across all calculator instances.
+ * This is critical for cache invalidation to work correctly - all parts of the application
+ * must use the same cache instance.
+ */
+let singletonCache: MetricConfigCache | null = null;
+
+/**
+ * Get the shared MetricConfigCache instance.
+ * Used internally by getDerivedMetricCalculator().
+ */
+function getSharedCache(): MetricConfigCache {
+  if (!singletonCache) {
+    singletonCache = new MetricConfigCache();
+  }
+  return singletonCache;
+}
+
+/**
+ * Get a DerivedMetricCalculator instance with the shared cache.
+ * This ensures cache invalidation works across all calculator instances.
+ *
+ * @param db - Database connection
+ * @returns DerivedMetricCalculator instance with shared cache
+ */
+export function getDerivedMetricCalculator(db: typeof dbType): DerivedMetricCalculator {
+  const calculator = new DerivedMetricCalculator(db);
+  // Replace the instance's cache with the shared singleton
+  (calculator as any).metricConfigCache = getSharedCache();
+  return calculator;
 }

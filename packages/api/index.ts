@@ -281,6 +281,16 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
   server.listen(port, "0.0.0.0", async () => {
     log(`serving on port ${port}`);
 
+    // Warm up metric config cache for optimal performance
+    try {
+      const { db } = await import('./db');
+      const { getDerivedMetricCalculator } = await import('./services/derived-metric-calculator');
+      const calculator = getDerivedMetricCalculator(db);
+      await calculator.warmupCache();
+    } catch (error) {
+      console.error('Failed to warmup metric config cache:', error);
+    }
+
     // Start wellness digest scheduled job after server is ready (only if VAPID configured)
     try {
       const { db } = await import('./db');
