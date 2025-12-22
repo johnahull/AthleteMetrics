@@ -187,8 +187,11 @@ export class PushNotificationService {
     try {
       webPush.setVapidDetails(subject, publicKey, privateKey);
       this.vapidConfigured = true;
+      console.log('✅ VAPID keys configured successfully');
     } catch (error) {
-      console.error('⚠️ Failed to set VAPID details:', error);
+      console.error('⚠️ CRITICAL: Failed to set VAPID details:', error);
+      console.error('Push notifications will be disabled. Please check your VAPID configuration.');
+      this.vapidConfigured = false;
     }
   }
 
@@ -231,18 +234,6 @@ export class PushNotificationService {
       return updated[0];
     }
 
-    // Check if endpoint exists but belongs to different user
-    const existing = await this.db
-      .select({ userId: pushSubscriptions.userId })
-      .from(pushSubscriptions)
-      .where(eq(pushSubscriptions.endpoint, subscription.endpoint))
-      .limit(1);
-
-    if (existing.length > 0) {
-      // Endpoint exists but belongs to different user
-      throw new Error('This device is already registered to a different user');
-    }
-
     // Sanitize user-controlled input to prevent XSS
     const sanitizedDeviceName = deviceName
       ? DOMPurify.sanitize(deviceName.slice(0, 100), {
@@ -257,20 +248,31 @@ export class PushNotificationService {
         })
       : undefined;
 
-    // Create new subscription
-    const [result] = await this.db
-      .insert(pushSubscriptions)
-      .values({
-        userId,
-        endpoint: subscription.endpoint,
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth,
-        deviceName: sanitizedDeviceName,
-        userAgent: sanitizedUserAgent,
-      })
-      .returning();
+    // Try to insert new subscription
+    // Use try-catch to handle unique constraint violation if endpoint exists for different user
+    try {
+      const [result] = await this.db
+        .insert(pushSubscriptions)
+        .values({
+          userId,
+          endpoint: subscription.endpoint,
+          p256dh: subscription.keys.p256dh,
+          auth: subscription.keys.auth,
+          deviceName: sanitizedDeviceName,
+          userAgent: sanitizedUserAgent,
+        })
+        .returning();
 
-    return result;
+      return result;
+    } catch (error: any) {
+      // Check if error is unique constraint violation (PostgreSQL error code 23505)
+      if (error.code === '23505' && error.constraint === 'push_subscriptions_endpoint_unique') {
+        // Endpoint already exists - must belong to different user
+        throw new Error('This device is already registered to a different user');
+      }
+      // Re-throw other errors
+      throw error;
+    }
   }
 
   /**

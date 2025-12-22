@@ -169,7 +169,7 @@ export function registerPushNotificationRoutes(app: Express) {
    * GET /api/push/subscriptions
    * Get all push subscriptions for the current user
    */
-  app.get("/api/push/subscriptions", requireAuth, async (req, res) => {
+  app.get("/api/push/subscriptions", requireAuth, vapidPublicKeyLimiter, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
