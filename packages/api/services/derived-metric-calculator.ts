@@ -87,10 +87,12 @@ export class DerivedMetricCalculator {
         );
 
       // Filter to only those that depend on this measurement's metric
+      // Case-insensitive comparison to handle mixed-case dependent_metrics config
+      const measurementMetricUpper = measurement.metric.toUpperCase();
       const dependentDerivedMetrics = derivedMetrics.filter(
         (metric: SiteMetric) =>
           metric.dependentMetrics &&
-          metric.dependentMetrics.includes(measurement.metric)
+          metric.dependentMetrics.some(dep => dep.toUpperCase() === measurementMetricUpper)
       );
 
       if (dependentDerivedMetrics.length === 0) {
@@ -144,11 +146,12 @@ export class DerivedMetricCalculator {
           }
 
           // Build source values for formula evaluation
+          // Keys are normalized to lowercase to match formula service's variable normalization
           const sourceValues: Record<string, number> = {};
           const sourceMeasurementIds: string[] = [];
 
           for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
-            sourceValues[metricCode] = parseFloat(sourceMeasurement.value);
+            sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
             sourceMeasurementIds.push(sourceMeasurement.id);
           }
 
@@ -325,10 +328,12 @@ export class DerivedMetricCalculator {
         )
       );
 
+    // Case-insensitive comparison to handle mixed-case dependent_metrics config
+    const metricCodeUpper = metricCode.toUpperCase();
     const dependentDerivedMetrics = derivedMetrics.filter(
       (metric: SiteMetric) =>
         metric.dependentMetrics &&
-        metric.dependentMetrics.includes(metricCode)
+        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
     );
 
     if (dependentDerivedMetrics.length === 0) {
@@ -377,11 +382,12 @@ export class DerivedMetricCalculator {
           }
 
           // Build source values for formula evaluation
+          // Keys are normalized to lowercase to match formula service's variable normalization
           const sourceValues: Record<string, number> = {};
           const sourceMeasurementIds: string[] = [];
 
           for (const [metricCode, sourceMeasurement] of sourceMeasurementsMap.entries()) {
-            sourceValues[metricCode] = parseFloat(sourceMeasurement.value);
+            sourceValues[metricCode.toLowerCase()] = parseFloat(sourceMeasurement.value);
             sourceMeasurementIds.push(sourceMeasurement.id);
           }
 
@@ -542,6 +548,8 @@ export class DerivedMetricCalculator {
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
     for (const metricCode of dependentMetrics) {
+      // Normalize metric code to uppercase to match database convention
+      const normalizedMetricCode = metricCode.toUpperCase();
       let sourceMeasurement: Measurement | undefined;
 
       switch (config.dateMatchStrategy) {
@@ -553,7 +561,7 @@ export class DerivedMetricCalculator {
             .where(
               and(
                 eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
+                eq(measurements.metric, normalizedMetricCode),
                 eq(measurements.date, targetDate),
                 eq(measurements.isVerified, true)
               )
@@ -572,7 +580,7 @@ export class DerivedMetricCalculator {
             .where(
               and(
                 eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
+                eq(measurements.metric, normalizedMetricCode),
                 lte(measurements.date, targetDate),
                 eq(measurements.isVerified, true)
               )
@@ -601,7 +609,7 @@ export class DerivedMetricCalculator {
             .where(
               and(
                 eq(measurements.userId, userId),
-                eq(measurements.metric, metricCode),
+                eq(measurements.metric, normalizedMetricCode),
                 gte(measurements.date, minDate.toISOString().split('T')[0]),
                 lte(measurements.date, maxDate.toISOString().split('T')[0]),
                 eq(measurements.isVerified, true)
