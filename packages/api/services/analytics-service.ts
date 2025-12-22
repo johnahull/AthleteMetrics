@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { measurements, teams, organizations, users, userTeams, siteMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, siteMetrics, organizationMetrics, VALID_METRICS, INVITATION_PENDING_PASSWORD } from '@shared/schema';
 import { eq, and, gte, lte, lt, ne, desc, inArray, sql } from 'drizzle-orm';
 import { getAthleteIdsForScope } from '../utils/athlete-filters';
 
@@ -401,6 +401,44 @@ export class AnalyticsService {
       return bestMetrics as DashboardStats;
     }
 
+    // DYNAMIC METRICS: Query enabled metrics for this organization or all active metrics for site admin
+    // This replaces the hardcoded VALID_METRICS list to support custom metrics per organization
+    let enabledMetrics: Array<{ code: string; metricType: string }>;
+
+    if (organizationId) {
+      // Organization scope: Get metrics enabled for this org from organization_metrics
+      enabledMetrics = await db
+        .select({
+          code: siteMetrics.code,
+          metricType: siteMetrics.metricType,
+        })
+        .from(organizationMetrics)
+        .innerJoin(siteMetrics, eq(organizationMetrics.metricCode, siteMetrics.code))
+        .where(
+          and(
+            eq(organizationMetrics.organizationId, organizationId),
+            eq(organizationMetrics.isEnabled, true),
+            eq(siteMetrics.isActive, true)
+          )
+        );
+    } else {
+      // Site admin scope: Get all active metrics from site_metrics
+      enabledMetrics = await db
+        .select({
+          code: siteMetrics.code,
+          metricType: siteMetrics.metricType,
+        })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.isActive, true));
+    }
+
+    // If no metrics are enabled, return early with just counts
+    if (enabledMetrics.length === 0) {
+      return bestMetrics as DashboardStats;
+    }
+
+    const enabledMetricCodes = enabledMetrics.map(m => m.code);
+
     // Optimized: Single query for all metrics using CASE WHEN with dynamic metric_type lookup
     // This eliminates N+1 query pattern (7 queries -> 1 query)
     // Database Index: idx_measurements_org_date_metric_verified (organization_id, date DESC, metric, is_verified)
@@ -427,7 +465,7 @@ export class AnalyticsService {
       .where(
         and(
           ...measurementConditions,
-          inArray(measurements.metric, VALID_METRICS.map(m => m.key)),
+          inArray(measurements.metric, enabledMetricCodes),
           // Safe: Early return above guarantees cachedAthleteIds has items when organizationId is set
           ...(organizationId && cachedAthleteIds
             ? [inArray(measurements.userId, cachedAthleteIds)]
@@ -437,8 +475,9 @@ export class AnalyticsService {
       .groupBy(measurements.metric, users.id, users.fullName, siteMetrics.metricType);
 
     // Post-process: find best for each metric
+    // Build dynamic metricMap from enabled metrics instead of hardcoded VALID_METRICS
     const metricMap = new Map<string, { metricType: string }>();
-    VALID_METRICS.forEach(m => metricMap.set(m.key, { metricType: m.metricType }));
+    enabledMetrics.forEach(m => metricMap.set(m.code, { metricType: m.metricType }));
 
     const bestByMetric = new Map<string, { value: number; userName: string }>();
 
