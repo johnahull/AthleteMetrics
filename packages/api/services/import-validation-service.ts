@@ -213,8 +213,9 @@ export class ImportValidationService {
   }
 
   /**
-   * Validate position code against sport + context
-   * Case-insensitive validation for both sport and position codes
+   * Validate position against sport + context
+   * Accepts position code, name, or shortName (case-insensitive)
+   * Priority order: code > name > shortName
    */
   validatePositionCode(
     sportCode: string,
@@ -252,10 +253,26 @@ export class ImportValidationService {
     const sportPositions = context.positions.get(sport.id) || [];
 
     // Case-insensitive search for position by code, name, or shortName (priority order: code > name > shortName)
-    const normalizedPositionCode = positionCode.toUpperCase();
-    const position = sportPositions.find(p => p.code.toUpperCase() === normalizedPositionCode)
-      || sportPositions.find(p => p.name.toUpperCase() === normalizedPositionCode)
-      || sportPositions.find(p => p.shortName?.toUpperCase() === normalizedPositionCode);
+    // Single-pass lookup with priority tracking for O(n) performance
+    const normalizedInput = positionCode.toUpperCase();
+    let position: typeof sportPositions[0] | undefined;
+    let nameMatch: typeof sportPositions[0] | undefined;
+    let shortNameMatch: typeof sportPositions[0] | undefined;
+
+    for (const p of sportPositions) {
+      if (p.code.toUpperCase() === normalizedInput) {
+        position = p; // Code match - highest priority, stop immediately
+        break;
+      }
+      if (!nameMatch && p.name.toUpperCase() === normalizedInput) {
+        nameMatch = p; // First name match
+      }
+      if (!shortNameMatch && p.shortName?.toUpperCase() === normalizedInput) {
+        shortNameMatch = p; // First shortName match
+      }
+    }
+    // Apply priority: code > name > shortName
+    position = position || nameMatch || shortNameMatch;
 
     if (position) {
       return {
@@ -274,7 +291,7 @@ export class ImportValidationService {
     });
     return {
       valid: false,
-      warning: `Position code '${sanitizeCode(positionCode)}' not found for sport '${sanitizeCode(sportCode)}'. Valid positions: ${validPositionFormats.join(', ')}`,
+      warning: `Position '${sanitizeCode(positionCode)}' not found for sport '${sanitizeCode(sportCode)}'. Valid positions: ${validPositionFormats.join(', ')}`,
     };
   }
 
