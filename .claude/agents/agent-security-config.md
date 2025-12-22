@@ -1,3 +1,8 @@
+---
+name: agent-security-config
+description: Security guardrails and configuration for agent orchestration
+---
+
 # Agent Security Configuration & Guardrails
 
 ## Security Guardrails
