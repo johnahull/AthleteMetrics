@@ -101,6 +101,35 @@ export class DerivedMetricCalculator {
 
       const calculatedMeasurements: Measurement[] = [];
 
+      // Fetch metric configurations for all dependent metrics to enable best value selection
+      // Build a Map of metric code -> { higherIsBetter }
+      const allDependentMetrics = new Set<string>();
+      for (const derivedMetric of dependentDerivedMetrics) {
+        for (const depMetric of (derivedMetric.dependentMetrics || [])) {
+          allDependentMetrics.add(depMetric.toUpperCase());
+        }
+      }
+
+      const metricConfigsMap = new Map<string, { higherIsBetter: boolean }>();
+      if (allDependentMetrics.size > 0) {
+        const metricCodes = Array.from(allDependentMetrics);
+        const metricConfigs = await tx
+          .select({
+            code: siteMetrics.code,
+            metricType: siteMetrics.metricType,
+          })
+          .from(siteMetrics)
+          .where(
+            sql`${siteMetrics.code} = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}])`
+          );
+
+        for (const config of metricConfigs) {
+          metricConfigsMap.set(config.code, {
+            higherIsBetter: config.metricType === 'higher_is_better',
+          });
+        }
+      }
+
       // Process each derived metric
       // NOTE: Sequential processing pattern (potential N+1 queries)
       // For typical use cases (1-2 derived metrics per source measurement), this performs well.
@@ -137,7 +166,8 @@ export class DerivedMetricCalculator {
             derivedMetric.calculationConfig || {
               dateMatchStrategy: 'same_date',
               missingSourceBehavior: 'skip',
-            }
+            },
+            metricConfigsMap
           );
 
           if (!sourceMeasurementsMap) {
@@ -340,6 +370,34 @@ export class DerivedMetricCalculator {
       return;
     }
 
+    // Fetch metric configurations for all dependent metrics to enable best value selection
+    const allDependentMetrics = new Set<string>();
+    for (const derivedMetric of dependentDerivedMetrics) {
+      for (const depMetric of (derivedMetric.dependentMetrics || [])) {
+        allDependentMetrics.add(depMetric.toUpperCase());
+      }
+    }
+
+    const metricConfigsMap = new Map<string, { higherIsBetter: boolean }>();
+    if (allDependentMetrics.size > 0) {
+      const metricCodes = Array.from(allDependentMetrics);
+      const metricConfigs = await dbOrTx
+        .select({
+          code: siteMetrics.code,
+          metricType: siteMetrics.metricType,
+        })
+        .from(siteMetrics)
+        .where(
+          sql`${siteMetrics.code} = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}])`
+        );
+
+      for (const config of metricConfigs) {
+        metricConfigsMap.set(config.code, {
+          higherIsBetter: config.metricType === 'higher_is_better',
+        });
+      }
+    }
+
     // For each derived metric, recalculate or delete calculated measurements
     for (const derivedMetric of dependentDerivedMetrics) {
       try {
@@ -370,7 +428,8 @@ export class DerivedMetricCalculator {
             derivedMetric.calculationConfig || {
               dateMatchStrategy: 'same_date',
               missingSourceBehavior: 'skip',
-            }
+            },
+            metricConfigsMap
           );
 
           if (!sourceMeasurementsMap) {
@@ -443,9 +502,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(dbOrTx, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -482,9 +542,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurements(userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -500,9 +561,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(tx, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -517,9 +579,10 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
-    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config);
+    return this.findSourceMeasurementsImpl(this.db, userId, dependentMetrics, targetDate, config, metricConfigs);
   }
 
   /**
@@ -543,7 +606,8 @@ export class DerivedMetricCalculator {
       dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
       maxDateDifference?: number;
       missingSourceBehavior: 'skip' | 'error';
-    }
+    },
+    metricConfigs?: Map<string, { higherIsBetter: boolean }>
   ): Promise<Map<string, Measurement> | null> {
     const sourceMeasurementsMap = new Map<string, Measurement>();
 
@@ -552,9 +616,14 @@ export class DerivedMetricCalculator {
       const normalizedMetricCode = metricCode.toUpperCase();
       let sourceMeasurement: Measurement | undefined;
 
+      // Determine if this metric prefers higher values (for sorting best value first)
+      // Default to true (higher is better) if not specified
+      const higherIsBetter = metricConfigs?.get(normalizedMetricCode)?.higherIsBetter ?? true;
+
       switch (config.dateMatchStrategy) {
         case 'same_date':
           // Only use exact date matches
+          // Order by best value (based on higherIsBetter), then by most recent as tie-breaker
           const [exactMatch] = await dbOrTx
             .select()
             .from(measurements)
@@ -566,7 +635,10 @@ export class DerivedMetricCalculator {
                 eq(measurements.isVerified, true)
               )
             )
-            .orderBy(desc(measurements.createdAt))
+            .orderBy(
+              higherIsBetter ? desc(measurements.value) : asc(measurements.value),
+              desc(measurements.createdAt)
+            )
             .limit(1);
 
           sourceMeasurement = exactMatch;
@@ -574,6 +646,7 @@ export class DerivedMetricCalculator {
 
         case 'latest_before':
           // Use most recent measurement on or before target date
+          // First priority: date (most recent), then best value, then created time
           const [latestBefore] = await dbOrTx
             .select()
             .from(measurements)
@@ -585,7 +658,11 @@ export class DerivedMetricCalculator {
                 eq(measurements.isVerified, true)
               )
             )
-            .orderBy(desc(measurements.date), desc(measurements.createdAt))
+            .orderBy(
+              desc(measurements.date),
+              higherIsBetter ? desc(measurements.value) : asc(measurements.value),
+              desc(measurements.createdAt)
+            )
             .limit(1);
 
           sourceMeasurement = latestBefore;
@@ -618,6 +695,7 @@ export class DerivedMetricCalculator {
             .orderBy(measurements.date);
 
           // Find closest by calculating absolute date difference
+          // When multiple measurements are equally close, pick the best value
           if (candidateMeasurements.length > 0) {
             const targetTime = targetDateObj.getTime();
             let closestMeasurement = candidateMeasurements[0];
@@ -632,6 +710,13 @@ export class DerivedMetricCalculator {
               if (diff < closestDiff) {
                 closestDiff = diff;
                 closestMeasurement = candidate;
+              } else if (diff === closestDiff) {
+                // Same date distance - pick the better value
+                const currentValue = parseFloat(closestMeasurement.value);
+                const candidateValue = parseFloat(candidate.value);
+                if (higherIsBetter ? candidateValue > currentValue : candidateValue < currentValue) {
+                  closestMeasurement = candidate;
+                }
               }
             }
 
@@ -680,5 +765,179 @@ export class DerivedMetricCalculator {
       .limit(1);
 
     return !!directMeasurement;
+  }
+
+  /**
+   * Recalculate all derived metrics, optionally filtered by organization or metric code.
+   * This is useful for bulk recalculation after fixing calculation logic.
+   *
+   * @param options - Filter options
+   * @param options.organizationId - Only recalculate for this organization
+   * @param options.metricCode - Only recalculate this specific derived metric
+   * @param options.dryRun - If true, return what would be recalculated without making changes
+   * @returns Summary of recalculation results
+   */
+  async recalculateAllDerivedMetrics(options?: {
+    organizationId?: string;
+    metricCode?: string;
+    dryRun?: boolean;
+  }): Promise<{
+    total: number;
+    recalculated: number;
+    skipped: number;
+    errors: string[];
+  }> {
+    const { organizationId, metricCode, dryRun = false } = options || {};
+
+    const result = {
+      total: 0,
+      recalculated: 0,
+      skipped: 0,
+      errors: [] as string[],
+    };
+
+    // Find all active derived metrics (optionally filtered by code)
+    const derivedMetricsQuery = this.db
+      .select()
+      .from(siteMetrics)
+      .where(
+        and(
+          eq(siteMetrics.isDerived, true),
+          eq(siteMetrics.isActive, true),
+          metricCode ? eq(siteMetrics.code, metricCode) : undefined
+        )
+      );
+
+    const derivedMetrics = await derivedMetricsQuery;
+
+    if (derivedMetrics.length === 0) {
+      return result;
+    }
+
+    // Build metric configs map for best value selection
+    const allMetricCodes = new Set<string>();
+    for (const dm of derivedMetrics) {
+      if (dm.dependentMetrics) {
+        for (const dep of dm.dependentMetrics) {
+          allMetricCodes.add(dep.toUpperCase());
+        }
+      }
+    }
+
+    const metricConfigsArray = await this.db
+      .select({
+        code: siteMetrics.code,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(
+        Array.from(allMetricCodes).map(c => sql`${c}`),
+        sql`, `
+      )}]::text[])`);
+
+    const metricConfigs = new Map<string, { higherIsBetter: boolean }>();
+    for (const mc of metricConfigsArray) {
+      metricConfigs.set(mc.code.toUpperCase(), {
+        higherIsBetter: mc.metricType === 'higher_is_better',
+      });
+    }
+
+    // For each derived metric, find all calculated measurements
+    for (const derivedMetric of derivedMetrics) {
+      // Build conditions for finding calculated measurements
+      const conditions = [
+        eq(measurements.metric, derivedMetric.code),
+        eq(measurements.isCalculated, true),
+      ];
+
+      if (organizationId) {
+        conditions.push(eq(measurements.organizationId, organizationId));
+      }
+
+      const calculatedMeasurements = await this.db
+        .select({
+          id: measurements.id,
+          userId: measurements.userId,
+          date: measurements.date,
+          value: measurements.value,
+        })
+        .from(measurements)
+        .where(and(...conditions));
+
+      result.total += calculatedMeasurements.length;
+
+      // Recalculate each measurement
+      for (const calcMeasurement of calculatedMeasurements) {
+        try {
+          if (dryRun) {
+            result.recalculated++;
+            continue;
+          }
+
+          // Find source measurements using the new best-value logic
+          const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
+            this.db,
+            calcMeasurement.userId,
+            derivedMetric.dependentMetrics || [],
+            calcMeasurement.date,
+            derivedMetric.calculationConfig || {
+              dateMatchStrategy: 'same_date',
+              missingSourceBehavior: 'skip',
+            },
+            metricConfigs
+          );
+
+          if (!sourceMeasurementsMap) {
+            // Source measurements no longer available - skip
+            result.skipped++;
+            continue;
+          }
+
+          // Build source values for formula evaluation
+          const sourceValues: Record<string, number> = {};
+          const sourceMeasurementIds: string[] = [];
+
+          for (const [code, sourceMeasurement] of sourceMeasurementsMap.entries()) {
+            sourceValues[code.toLowerCase()] = parseFloat(sourceMeasurement.value);
+            sourceMeasurementIds.push(sourceMeasurement.id);
+          }
+
+          // Evaluate the formula
+          const calculatedValue = evaluateFormula(
+            derivedMetric.formula || '',
+            sourceValues
+          );
+
+          if (calculatedValue === null || !isFinite(calculatedValue)) {
+            result.skipped++;
+            continue;
+          }
+
+          // Update the measurement
+          await this.db
+            .update(measurements)
+            .set({
+              value: calculatedValue.toFixed(3),
+              calculatedFromMeasurementIds: sourceMeasurementIds,
+              calculationMetadata: {
+                formula: derivedMetric.formula || '',
+                sourceValues,
+                calculatedAt: new Date().toISOString(),
+                calculationVersion: CALCULATION_VERSION,
+                triggeredBy: { event: 'manual_recalculation' as const },
+              },
+            })
+            .where(eq(measurements.id, calcMeasurement.id));
+
+          result.recalculated++;
+        } catch (error) {
+          const errorMsg = `Error recalculating ${derivedMetric.code} for user ${calcMeasurement.userId} on ${calcMeasurement.date}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+          result.errors.push(errorMsg);
+          console.error(errorMsg);
+        }
+      }
+    }
+
+    return result;
   }
 }
