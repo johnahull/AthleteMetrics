@@ -1101,3 +1101,39 @@ export class DerivedMetricCalculator {
     return result;
   }
 }
+
+// ============================================================================
+// Singleton Instance
+// ============================================================================
+
+/**
+ * Shared singleton instance to ensure MetricConfigCache is shared across all calculator instances.
+ * This is critical for cache invalidation to work correctly - all parts of the application
+ * must use the same cache instance.
+ */
+let singletonCache: MetricConfigCache | null = null;
+
+/**
+ * Get the shared MetricConfigCache instance.
+ * Used internally by getDerivedMetricCalculator().
+ */
+function getSharedCache(): MetricConfigCache {
+  if (!singletonCache) {
+    singletonCache = new MetricConfigCache();
+  }
+  return singletonCache;
+}
+
+/**
+ * Get a DerivedMetricCalculator instance with the shared cache.
+ * This ensures cache invalidation works across all calculator instances.
+ *
+ * @param db - Database connection
+ * @returns DerivedMetricCalculator instance with shared cache
+ */
+export function getDerivedMetricCalculator(db: typeof dbType): DerivedMetricCalculator {
+  const calculator = new DerivedMetricCalculator(db);
+  // Replace the instance's cache with the shared singleton
+  (calculator as any).metricConfigCache = getSharedCache();
+  return calculator;
+}

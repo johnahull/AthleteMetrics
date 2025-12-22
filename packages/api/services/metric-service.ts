@@ -13,6 +13,8 @@ import type {
   UpdateOrganizationMetric,
 } from "@shared/schema";
 import { validateFormula, detectCircularDependencies } from "./formula-service";
+import { getDerivedMetricCalculator } from "./derived-metric-calculator";
+import { db } from "../db";
 
 export interface SiteMetricFilters {
   includeInactive?: boolean;
@@ -166,6 +168,10 @@ export class MetricService extends BaseService {
       // Create metric
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
 
+      // Invalidate metric config cache so new metric is picked up immediately
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(metric.code);
+
       // Audit log
       try {
         await this.storage.createAuditLog({
@@ -258,6 +264,11 @@ export class MetricService extends BaseService {
       // Update metric
       const metric = await this.storage.updateSiteMetric(code, validatedData);
 
+      // Invalidate metric config cache to ensure updates are reflected immediately
+      // This is critical if metricType (higher_is_better vs lower_is_better) changed
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(metric.code);
+
       // Audit log
       try {
         await this.storage.createAuditLog({
@@ -309,6 +320,11 @@ export class MetricService extends BaseService {
       // Update status
       const updated = await this.storage.toggleSiteMetricStatus(code, isActive);
 
+      // Invalidate metric config cache when status changes
+      // Inactive metrics should not be cached
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(code);
+
       // Audit log
       try {
         await this.storage.createAuditLog({
@@ -358,6 +374,10 @@ export class MetricService extends BaseService {
 
       // Delete metric (storage layer handles validation)
       await this.storage.deleteSiteMetric(code);
+
+      // Invalidate metric config cache after deletion
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(code);
 
       // Audit log
       try {
