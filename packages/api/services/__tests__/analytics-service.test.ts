@@ -264,12 +264,11 @@ describe('AnalyticsService', () => {
     beforeEach(async () => {
       // Enable system metrics for the test organization
       // This is required because getDashboardStats now uses dynamic org-enabled metrics
+      // Note: We use ON CONFLICT to handle potential duplicate entries
       await db.insert(organizationMetrics).values([
         { organizationId: testOrgId, metricCode: 'FLY10_TIME', isEnabled: true },
         { organizationId: testOrgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
-        { organizationId: testOrgId, metricCode: 'HEIGHT_IN', isEnabled: true },
-        { organizationId: testOrgId, metricCode: 'WEIGHT_LBS', isEnabled: true },
-      ]);
+      ]).onConflictDoNothing();
 
       // Create recent measurements (within last 30 days)
       const recentDate = new Date();
