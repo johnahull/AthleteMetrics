@@ -481,6 +481,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 24,
           isVerified: true,
+          organizationId: testOrgId,
         },
         {
           userId: testUserId2,
@@ -491,6 +492,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 25,
           isVerified: true,
+          organizationId: testOrgId,
         },
         {
           userId: testUserId1,
@@ -501,6 +503,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 24,
           isVerified: true,
+          organizationId: testOrgId,
         },
         {
           userId: testUserId2,
@@ -511,6 +514,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 25,
           isVerified: true,
+          organizationId: testOrgId,
         },
       ]);
 
@@ -558,6 +562,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 24,
           isVerified: true,
+          organizationId: testOrgId,
         },
         {
           userId: testUserId1,
@@ -568,6 +573,7 @@ describe('AnalyticsService', () => {
           units: 'in',
           age: 24,
           isVerified: true,
+          organizationId: testOrgId,
         },
       ]);
 

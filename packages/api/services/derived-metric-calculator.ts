@@ -110,26 +110,9 @@ export class DerivedMetricCalculator {
         }
       }
 
-      const metricConfigsMap = new Map<string, { higherIsBetter: boolean }>();
-      if (allDependentMetrics.size > 0) {
-        const metricCodes = Array.from(allDependentMetrics);
-        const metricConfigs = await tx
-          .select({
-            code: siteMetrics.code,
-            metricType: siteMetrics.metricType,
-          })
-          .from(siteMetrics)
-          .where(
-            sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}]::text[])`
-          );
-
-        for (const config of metricConfigs) {
-          // Use uppercase key for consistent lookups with normalizedMetricCode
-          metricConfigsMap.set(config.code.toUpperCase(), {
-            higherIsBetter: config.metricType === 'higher_is_better',
-          });
-        }
-      }
+      // Fetch metric configurations for best value selection
+      const metricCodes = Array.from(allDependentMetrics);
+      const metricConfigsMap = await this.fetchMetricConfigs(tx, metricCodes);
 
       // Process each derived metric
       // NOTE: Sequential processing pattern (potential N+1 queries)
@@ -310,6 +293,44 @@ export class DerivedMetricCalculator {
   }
 
   /**
+   * Fetch metric configurations for dependent metrics to enable best value selection.
+   * Returns a map of metric codes (uppercase) to their metricType configuration.
+   *
+   * @param dbOrTx - Database connection or transaction
+   * @param metricCodes - Array of metric codes to fetch configs for (will be normalized to uppercase)
+   * @returns Map of uppercase metric codes to { higherIsBetter: boolean }
+   */
+  private async fetchMetricConfigs(
+    dbOrTx: typeof dbType | DbTransaction,
+    metricCodes: string[]
+  ): Promise<Map<string, { higherIsBetter: boolean }>> {
+    const metricConfigsMap = new Map<string, { higherIsBetter: boolean }>();
+
+    if (metricCodes.length === 0) {
+      return metricConfigsMap;
+    }
+
+    const metricConfigs = await dbOrTx
+      .select({
+        code: siteMetrics.code,
+        metricType: siteMetrics.metricType,
+      })
+      .from(siteMetrics)
+      .where(
+        sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}]::text[])`
+      );
+
+    for (const config of metricConfigs) {
+      // Use uppercase key for consistent lookups with normalizedMetricCode
+      metricConfigsMap.set(config.code.toUpperCase(), {
+        higherIsBetter: config.metricType === 'higher_is_better',
+      });
+    }
+
+    return metricConfigsMap;
+  }
+
+  /**
    * Recalculate derived measurements for an athlete when source changes.
    * Called after measurement update or delete.
    *
@@ -379,26 +400,9 @@ export class DerivedMetricCalculator {
       }
     }
 
-    const metricConfigsMap = new Map<string, { higherIsBetter: boolean }>();
-    if (allDependentMetrics.size > 0) {
-      const metricCodes = Array.from(allDependentMetrics);
-      const metricConfigs = await dbOrTx
-        .select({
-          code: siteMetrics.code,
-          metricType: siteMetrics.metricType,
-        })
-        .from(siteMetrics)
-        .where(
-          sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}]::text[])`
-        );
-
-      for (const config of metricConfigs) {
-        // Use uppercase key for consistent lookups with normalizedMetricCode
-        metricConfigsMap.set(config.code.toUpperCase(), {
-          higherIsBetter: config.metricType === 'higher_is_better',
-        });
-      }
-    }
+    // Fetch metric configurations for best value selection
+    const metricCodes = Array.from(allDependentMetrics);
+    const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes);
 
     // For each derived metric, recalculate or delete calculated measurements
     for (const derivedMetric of dependentDerivedMetrics) {
