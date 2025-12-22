@@ -297,6 +297,215 @@ describe('ImportValidationService', () => {
       expect(upperResult.valid).toBe(true);
       expect(lowerResult.value?.code).toBe(upperResult.value?.code);
     });
+
+    // NEW TDD TESTS: Position matching by name and shortName
+    describe('TDD: Enhanced position matching by name and shortName', () => {
+      let enhancedTestSportId: string;
+      let enhancedTestPositionId: string;
+
+      beforeEach(async () => {
+        // Create a sport with positions that have name and shortName
+        const [enhancedSport] = await db.insert(siteSports).values({
+          code: `ENHANCED_SPORT_${uniqueSuffix}`,
+          name: 'Enhanced Sport',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+        enhancedTestSportId = enhancedSport.id;
+
+        // Create position with code="F", name="Forward", shortName="FW"
+        const [enhancedPosition] = await db.insert(sitePositions).values({
+          sportId: enhancedTestSportId,
+          code: 'F',
+          name: 'Forward',
+          shortName: 'FW',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+        enhancedTestPositionId = enhancedPosition.id;
+      });
+
+      afterEach(async () => {
+        // Cleanup in reverse dependency order
+        await db.delete(sitePositions).where(eq(sitePositions.id, enhancedTestPositionId)).catch(() => {});
+        await db.delete(siteSports).where(eq(siteSports.id, enhancedTestSportId)).catch(() => {});
+      });
+
+      it('should match position by code (existing behavior)', async () => {
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'F', context);
+
+        expect(result.valid).toBe(true);
+        expect(result.value).toBeDefined();
+        expect(result.value?.code).toBe('F');
+        expect(result.value?.name).toBe('Forward');
+        expect(result.value?.shortName).toBe('FW');
+      });
+
+      it('should match position by name (e.g., "Forward")', async () => {
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'Forward', context);
+
+        expect(result.valid).toBe(true);
+        expect(result.value).toBeDefined();
+        expect(result.value?.code).toBe('F');
+        expect(result.value?.name).toBe('Forward');
+        expect(result.value?.shortName).toBe('FW');
+      });
+
+      it('should match position by shortName (e.g., "FW")', async () => {
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'FW', context);
+
+        expect(result.valid).toBe(true);
+        expect(result.value).toBeDefined();
+        expect(result.value?.code).toBe('F');
+        expect(result.value?.name).toBe('Forward');
+        expect(result.value?.shortName).toBe('FW');
+      });
+
+      it('should be case-insensitive for name matching', async () => {
+        const context = await service.loadValidationContext();
+        const lowerResult = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'forward', context);
+        const upperResult = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'FORWARD', context);
+        const mixedResult = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'FoRwArD', context);
+
+        expect(lowerResult.valid).toBe(true);
+        expect(upperResult.valid).toBe(true);
+        expect(mixedResult.valid).toBe(true);
+        expect(lowerResult.value?.code).toBe('F');
+        expect(upperResult.value?.code).toBe('F');
+        expect(mixedResult.value?.code).toBe('F');
+      });
+
+      it('should be case-insensitive for shortName matching', async () => {
+        const context = await service.loadValidationContext();
+        const lowerResult = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'fw', context);
+        const upperResult = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'FW', context);
+
+        expect(lowerResult.valid).toBe(true);
+        expect(upperResult.valid).toBe(true);
+        expect(lowerResult.value?.code).toBe('F');
+        expect(upperResult.value?.code).toBe('F');
+      });
+
+      it('should prioritize code match over name/shortName when same value matches multiple fields', async () => {
+        // Create a position where code="FW", name="Forward Wing", shortName="FW"
+        // Then test that searching "FW" returns the position with code="FW", not the one with shortName="FW"
+        const [prioritySport] = await db.insert(siteSports).values({
+          code: `PRIORITY_SPORT_${uniqueSuffix}`,
+          name: 'Priority Sport',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const [codeMatchPosition] = await db.insert(sitePositions).values({
+          sportId: prioritySport.id,
+          code: 'FW',
+          name: 'Forward Wing',
+          shortName: 'FWING',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const [shortNameMatchPosition] = await db.insert(sitePositions).values({
+          sportId: prioritySport.id,
+          code: 'F',
+          name: 'Forward',
+          shortName: 'FW',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`PRIORITY_SPORT_${uniqueSuffix}`, 'FW', context);
+
+        // Should match by code="FW" first, not shortName="FW"
+        expect(result.valid).toBe(true);
+        expect(result.value?.code).toBe('FW');
+        expect(result.value?.name).toBe('Forward Wing');
+
+        // Cleanup
+        await db.delete(sitePositions).where(eq(sitePositions.id, codeMatchPosition.id));
+        await db.delete(sitePositions).where(eq(sitePositions.id, shortNameMatchPosition.id));
+        await db.delete(siteSports).where(eq(siteSports.id, prioritySport.id));
+      });
+
+      it('should handle positions with null shortName gracefully', async () => {
+        // Create position without shortName
+        const [nullShortNameSport] = await db.insert(siteSports).values({
+          code: `NULL_SHORT_SPORT_${uniqueSuffix}`,
+          name: 'Null Short Sport',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const [nullShortNamePosition] = await db.insert(sitePositions).values({
+          sportId: nullShortNameSport.id,
+          code: 'NS',
+          name: 'No Short',
+          shortName: null,
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const context = await service.loadValidationContext();
+
+        // Should still match by code and name
+        const codeResult = service.validatePositionCode(`NULL_SHORT_SPORT_${uniqueSuffix}`, 'NS', context);
+        expect(codeResult.valid).toBe(true);
+        expect(codeResult.value?.code).toBe('NS');
+
+        const nameResult = service.validatePositionCode(`NULL_SHORT_SPORT_${uniqueSuffix}`, 'No Short', context);
+        expect(nameResult.valid).toBe(true);
+        expect(nameResult.value?.code).toBe('NS');
+
+        // Cleanup
+        await db.delete(sitePositions).where(eq(sitePositions.id, nullShortNamePosition.id));
+        await db.delete(siteSports).where(eq(siteSports.id, nullShortNameSport.id));
+      });
+
+      it('should include all accepted formats in warning message (code/name/shortName)', async () => {
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`ENHANCED_SPORT_${uniqueSuffix}`, 'INVALID_POS', context);
+
+        expect(result.valid).toBe(false);
+        expect(result.warning).toBeDefined();
+        // Warning should show: "Valid positions: F/Forward/FW"
+        expect(result.warning).toMatch(/F\/Forward\/FW/);
+      });
+
+      it('should show code/name format when shortName is null', async () => {
+        // Create position without shortName
+        const [noShortSport] = await db.insert(siteSports).values({
+          code: `NO_SHORT_SPORT_${uniqueSuffix}`,
+          name: 'No Short Sport',
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const [noShortPosition] = await db.insert(sitePositions).values({
+          sportId: noShortSport.id,
+          code: 'NS',
+          name: 'No Short Name',
+          shortName: null,
+          isActive: true,
+          isSystemDefault: false,
+        }).returning();
+
+        const context = await service.loadValidationContext();
+        const result = service.validatePositionCode(`NO_SHORT_SPORT_${uniqueSuffix}`, 'INVALID', context);
+
+        expect(result.valid).toBe(false);
+        expect(result.warning).toBeDefined();
+        // Should show "NS/No Short Name" (no shortName since it's null)
+        expect(result.warning).toMatch(/NS\/No Short Name(?!\/)/); // Should NOT have third slash
+
+        // Cleanup
+        await db.delete(sitePositions).where(eq(sitePositions.id, noShortPosition.id));
+        await db.delete(siteSports).where(eq(siteSports.id, noShortSport.id));
+      });
+    });
   });
 
   describe('getValidMetricCodes', () => {

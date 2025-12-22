@@ -1,3 +1,8 @@
+---
+name: athletemetrics-orchestrator-enhanced
+description: Production-ready agent coordination with safety, monitoring, and resource management
+---
+
 # Enhanced Agent Orchestrator with Safety & Monitoring
 
 **Agent Type**: athletemetrics-orchestrator-enhanced
