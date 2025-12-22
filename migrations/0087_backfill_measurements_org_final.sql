@@ -1,6 +1,11 @@
 -- Migration: Final backfill of organization_id for measurements with NULL values
 -- Purpose: Complete multi-tenant isolation by ensuring all measurements have organization_id
 --
+-- IDEMPOTENT: Yes - safe to run multiple times
+--   - All UPDATE statements only target rows WHERE organization_id IS NULL
+--   - After first run, updated rows no longer match this condition
+--   - Re-runs will process 0 rows and report current state
+--
 -- CONTEXT:
 -- The getMeasurements() query in measurement-service.ts includes:
 --   or(eq(organizationId, X), isNull(organizationId))
@@ -11,6 +16,11 @@
 -- 1. Backfill organization_id from teams (primary source)
 -- 2. Backfill from user_organizations (fallback for measurements without teams)
 -- 3. Report orphaned measurements for manual handling
+--
+-- DATA MODEL NOTE:
+-- - Athletes are stored in the 'users' table (not a separate 'players' table)
+-- - Measurements link to athletes via 'user_id' (not 'player_id')
+-- - Team membership provides the most authoritative organization assignment
 --
 -- After this migration, the code change to remove isNull() can be deployed.
 --
@@ -131,43 +141,15 @@ BEGIN
 END $$;
 
 -- ============================================================================
--- STEP 4: Backfill from player's organization (fallback)
--- For measurements where user has no org but player does
+-- STEP 4: REMOVED - players table does not exist
+-- Athletes are stored in the users table, which is already handled in Step 3
+-- via user_organizations lookup. No separate player organization backfill needed.
 -- ============================================================================
 
 DO $$
-DECLARE
-  rows_updated INTEGER := 1;
-  total_updated INTEGER := 0;
 BEGIN
-  RAISE NOTICE 'Starting backfill from players...';
-
-  WHILE rows_updated > 0 LOOP
-    WITH batch AS (
-      SELECT m.id
-      FROM measurements m
-      INNER JOIN players p ON m.player_id = p.id
-      WHERE m.organization_id IS NULL
-        AND p.organization_id IS NOT NULL
-      LIMIT 1000
-    )
-    UPDATE measurements m
-    SET organization_id = p.organization_id
-    FROM players p, batch
-    WHERE m.id = batch.id
-      AND m.player_id = p.id;
-
-    GET DIAGNOSTICS rows_updated = ROW_COUNT;
-    total_updated := total_updated + rows_updated;
-
-    IF rows_updated > 0 THEN
-      RAISE NOTICE 'Backfilled % measurements from players (batch total: %)', rows_updated, total_updated;
-    END IF;
-
-    PERFORM pg_sleep(0.05);
-  END LOOP;
-
-  RAISE NOTICE 'Players backfill complete: % measurements updated', total_updated;
+  RAISE NOTICE 'Step 4 skipped: Athletes are users in AthleteMetrics (no separate players table)';
+  RAISE NOTICE 'User organization backfill in Step 3 handles all athlete-based backfills';
 END $$;
 
 -- ============================================================================
@@ -180,12 +162,11 @@ DECLARE
   orphaned_no_user INTEGER;
   orphaned_no_team INTEGER;
   orphaned_no_org INTEGER;
-  orphaned_no_player INTEGER;
 BEGIN
   SELECT COUNT(*) INTO remaining_null
   FROM measurements WHERE organization_id IS NULL;
 
-  -- Measurements with no user
+  -- Measurements with no user (user was deleted)
   SELECT COUNT(*) INTO orphaned_no_user
   FROM measurements m
   WHERE m.organization_id IS NULL
@@ -198,22 +179,12 @@ BEGIN
     AND m.team_id IS NOT NULL
     AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id = m.team_id);
 
-  -- Measurements where user exists but has no organization
+  -- Measurements where user exists but has no organization membership
   SELECT COUNT(*) INTO orphaned_no_org
   FROM measurements m
   WHERE m.organization_id IS NULL
     AND EXISTS (SELECT 1 FROM users u WHERE u.id = m.user_id)
     AND NOT EXISTS (SELECT 1 FROM user_organizations uo WHERE uo.user_id = m.user_id);
-
-  -- Measurements where player has no organization
-  SELECT COUNT(*) INTO orphaned_no_player
-  FROM measurements m
-  WHERE m.organization_id IS NULL
-    AND m.player_id IS NOT NULL
-    AND (
-      NOT EXISTS (SELECT 1 FROM players p WHERE p.id = m.player_id)
-      OR EXISTS (SELECT 1 FROM players p WHERE p.id = m.player_id AND p.organization_id IS NULL)
-    );
 
   RAISE NOTICE '======================================';
   RAISE NOTICE 'BACKFILL COMPLETE: Post-check';
@@ -221,8 +192,7 @@ BEGIN
   RAISE NOTICE 'Remaining NULL org_id measurements: %', remaining_null;
   RAISE NOTICE '  - Orphaned (no user): %', orphaned_no_user;
   RAISE NOTICE '  - Orphaned (deleted team): %', orphaned_no_team;
-  RAISE NOTICE '  - User has no org: %', orphaned_no_org;
-  RAISE NOTICE '  - Player has no org: %', orphaned_no_player;
+  RAISE NOTICE '  - User has no org membership: %', orphaned_no_org;
   RAISE NOTICE '======================================';
 
   IF remaining_null > 0 THEN
