@@ -393,6 +393,14 @@ export class AnalyticsService {
       totalTeams,
     };
 
+    // SECURITY FIX: If organization has no athletes, return early with just the counts
+    // Previously, when cachedAthleteIds was empty, the query would run without
+    // an athlete filter, returning measurements from ALL organizations.
+    // This was a multi-tenant data isolation bug.
+    if (organizationId && (!cachedAthleteIds || cachedAthleteIds.length === 0)) {
+      return bestMetrics as DashboardStats;
+    }
+
     // Optimized: Single query for all metrics using CASE WHEN with dynamic metric_type lookup
     // This eliminates N+1 query pattern (7 queries -> 1 query)
     // Database Index: idx_measurements_org_date_metric_verified (organization_id, date DESC, metric, is_verified)
@@ -420,7 +428,8 @@ export class AnalyticsService {
         and(
           ...measurementConditions,
           inArray(measurements.metric, VALID_METRICS.map(m => m.key)),
-          ...(organizationId && cachedAthleteIds && cachedAthleteIds.length > 0
+          // Safe: Early return above guarantees cachedAthleteIds has items when organizationId is set
+          ...(organizationId && cachedAthleteIds
             ? [inArray(measurements.userId, cachedAthleteIds)]
             : [])
         )

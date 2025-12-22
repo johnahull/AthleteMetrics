@@ -898,29 +898,23 @@ export class MeasurementService {
     }
 
     if (filters?.organizationId) {
-      // LEGACY DATA HANDLING:
-      // Include measurements with matching organizationId OR NULL organizationId.
-      // NULL organization IDs represent legacy measurements before organization tracking was implemented.
+      // STRICT ORGANIZATION ISOLATION (SECURITY FIX - 2025-12-22)
+      // Only include measurements that explicitly belong to the specified organization.
       //
-      // SECURITY CONSIDERATION:
-      // This means ALL organizations can see legacy (NULL) measurements. This is intentional for
-      // backward compatibility, as legacy measurements were created before multi-tenant isolation.
+      // HISTORICAL NOTE:
+      // Previously, this code included `isNull(measurements.organizationId)` to show
+      // legacy measurements (with NULL organization_id) to all organizations.
+      // This was a multi-tenant data isolation vulnerability.
       //
-      // FUTURE IMPROVEMENT:
-      // Consider backfilling organizationId for legacy measurements by associating them with
-      // their team's organization. Once backfilled, remove the NULL check for stricter isolation.
-      // See: docs/LEGACY_DATA_MIGRATION.md (if exists) or create a ticket for data migration.
+      // Migration 0087_backfill_measurements_org_final.sql backfills organization_id
+      // for legacy measurements. After backfill, measurements with NULL organization_id
+      // are considered orphaned and should NOT be visible to any organization.
       //
       // CURRENT BEHAVIOR:
-      // - Organization A sees: measurements with org_id = A + measurements with org_id = NULL
-      // - Organization B sees: measurements with org_id = B + measurements with org_id = NULL
+      // - Organization A sees: ONLY measurements with org_id = A
+      // - Measurements with NULL org_id are invisible (orphaned data)
       // - Site admins see: all measurements (allowCrossOrganization = true bypasses this filter)
-      conditions.push(
-        or(
-          eq(measurements.organizationId, filters.organizationId),
-          isNull(measurements.organizationId)
-        )!
-      );
+      conditions.push(eq(measurements.organizationId, filters.organizationId));
     }
 
     if (filters?.dateFrom) {
