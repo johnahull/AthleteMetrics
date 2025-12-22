@@ -24,6 +24,8 @@ import { importValidationService, type ValidationContext } from "../services/imp
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
 import type { SiteMetric } from "@shared/schema";
+import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
+import { db } from "../db";
 
 // MeasurementFilters interface
 interface MeasurementFilters {
@@ -329,6 +331,18 @@ export function registerImportExportRoutes(app: Express) {
 
           // Create the measurement
           const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+
+          // DERIVED METRICS: Trigger automatic calculation of derived metrics
+          try {
+            const calculator = new DerivedMetricCalculator(db);
+            await calculator.processNewMeasurement(measurement, {
+              event: 'bulk_import',
+              userId: currentUser.id,
+              sourceMeasurementId: measurement.id,
+            });
+          } catch (derivedError) {
+            console.warn(`[OCR IMPORT] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
+          }
 
           processedData.push({
             measurement,
@@ -1166,6 +1180,20 @@ export function registerImportExportRoutes(app: Express) {
 
             const measurement = await storage.createMeasurement(measurementData, req.session.user!.id);
 
+            // DERIVED METRICS: Trigger automatic calculation of derived metrics
+            // This ensures metrics like BLOCK_REACH (=BLOCK_JUMP + STANDING_REACH) get calculated on import
+            try {
+              const calculator = new DerivedMetricCalculator(db);
+              await calculator.processNewMeasurement(measurement, {
+                event: 'bulk_import',
+                userId: req.session.user!.id,
+                sourceMeasurementId: measurement.id,
+              });
+            } catch (derivedError) {
+              // Log but don't fail the import if derived metric calculation fails
+              console.warn(`[CSV IMPORT] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
+            }
+
             results.push({
               action: 'created',
               measurement: {
@@ -1301,6 +1329,18 @@ export function registerImportExportRoutes(app: Express) {
             };
 
             const measurement = await storage.createMeasurement(measurementData, currentUser.id);
+
+            // DERIVED METRICS: Trigger automatic calculation of derived metrics
+            try {
+              const calculator = new DerivedMetricCalculator(db);
+              await calculator.processNewMeasurement(measurement, {
+                event: 'bulk_import',
+                userId: currentUser.id,
+                sourceMeasurementId: measurement.id,
+              });
+            } catch (derivedError) {
+              console.warn(`[REVIEW QUEUE] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
+            }
 
             res.json({
               success: true,
