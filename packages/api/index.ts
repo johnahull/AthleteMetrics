@@ -196,6 +196,24 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
 
+    // Always log full error details server-side for debugging
+    console.error(`[${status}] Application error:`, {
+      message: err.message,
+      stack: err.stack,
+      path: _req.path,
+      method: _req.method
+    });
+
+    // CRITICAL: Check if headers already sent to prevent ERR_HTTP_HEADERS_SENT
+    // This can happen when async middleware/handlers throw errors after response
+    if (res.headersSent) {
+      // Response already sent, just log and return - don't throw in production
+      if (process.env.NODE_ENV !== 'production') {
+        throw err;
+      }
+      return;
+    }
+
     // In production, sanitize ALL error messages to prevent information disclosure
     let message = err.message || "Internal Server Error";
     if (process.env.NODE_ENV === 'production') {
@@ -214,14 +232,6 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
     }
 
     res.status(status).json({ message });
-
-    // Always log full error details server-side for debugging
-    console.error(`[${status}] Application error:`, {
-      message: err.message,
-      stack: err.stack,
-      path: _req.path,
-      method: _req.method
-    });
 
     // In development, also throw for easier debugging
     if (process.env.NODE_ENV !== 'production') {
