@@ -1070,8 +1070,9 @@ describe('DerivedMetricCalculator', () => {
       expect(parseFloat(topSpeedCalc!.value)).toBeCloseTo(20.45, 2);
     });
 
-    it('should use most recent when values are equal (tie-breaker)', async () => {
-      // Create multiple source measurements with the same value
+    it('should use best value from multiple trials (lower_is_better metric)', async () => {
+      // Create multiple source measurements with different values
+      // Tests that the calculator selects the best value, not just the most recent
       const [firstMeasurement] = await db
         .insert(measurements)
         .values({
@@ -1079,7 +1080,7 @@ describe('DerivedMetricCalculator', () => {
           submittedBy: testUser.id,
           date: '2024-01-15',
           metric: 'FLY10_TIME',
-          value: '1.0',
+          value: '1.01', // Slightly worse (higher is worse for lower_is_better)
           units: 's',
           age: 24,
           isVerified: true,
@@ -1087,9 +1088,7 @@ describe('DerivedMetricCalculator', () => {
         })
         .returning();
 
-      // Wait a tiny bit to ensure different timestamps
-      await new Promise(resolve => setTimeout(resolve, 10));
-
+      // Create second measurement with better value
       const [secondMeasurement] = await db
         .insert(measurements)
         .values({
@@ -1097,7 +1096,7 @@ describe('DerivedMetricCalculator', () => {
           submittedBy: testUser.id,
           date: '2024-01-15',
           metric: 'FLY10_TIME',
-          value: '1.0',
+          value: '1.0', // Better value (lower is better)
           units: 's',
           age: 24,
           isVerified: true,
@@ -1105,16 +1104,17 @@ describe('DerivedMetricCalculator', () => {
         })
         .returning();
 
-      // Process the second measurement (should use the most recent one when tied)
+      // Process the second measurement (should use the best value measurement)
       const calculatedMeasurements = await calculator.processNewMeasurement(secondMeasurement);
 
       const topSpeedCalc = calculatedMeasurements.find(m => m.metric === 'TOP_SPEED_CALC');
       expect(topSpeedCalc).toBeDefined();
 
-      // The calculated measurement should reference the most recent source measurement
+      // The calculated measurement should reference the best (second) source measurement
       expect(topSpeedCalc!.calculatedFromMeasurementIds).toContain(secondMeasurement.id);
 
-      // Should still calculate correctly
+      // Should still calculate correctly using best value (1.0s)
+      // TOP_SPEED_CALC = 10 / 1.0 * 2.045 = 20.45 mph
       expect(parseFloat(topSpeedCalc!.value)).toBeCloseTo(20.45, 2);
     });
   });

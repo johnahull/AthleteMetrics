@@ -450,8 +450,29 @@ describe('AnalyticsService', () => {
     });
 
     it('should include organization-enabled custom metrics in dashboard stats', async () => {
-      // Create custom metrics in site_metrics (simulating that they already exist)
-      // Note: APPROACH_REACH and BLOCK_REACH should already exist in site_metrics from migration
+      // Ensure custom metrics exist in site_metrics (CI test DB may not have them from migrations)
+      await db.insert(siteMetrics).values([
+        {
+          code: 'APPROACH_REACH',
+          label: 'Approach Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+        {
+          code: 'BLOCK_REACH',
+          label: 'Block Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+      ]).onConflictDoNothing();
 
       // Enable custom metrics for this organization
       await db.insert(organizationMetrics).values([
@@ -465,7 +486,7 @@ describe('AnalyticsService', () => {
           metricCode: 'BLOCK_REACH',
           isEnabled: true,
         },
-      ]);
+      ]).onConflictDoNothing();
 
       // Create measurements for custom metrics
       const recentDate = new Date();
@@ -535,6 +556,30 @@ describe('AnalyticsService', () => {
     });
 
     it('should not include disabled organization metrics in dashboard stats', async () => {
+      // Ensure custom metrics exist in site_metrics (CI test DB may not have them from migrations)
+      await db.insert(siteMetrics).values([
+        {
+          code: 'APPROACH_REACH',
+          label: 'Approach Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+        {
+          code: 'BLOCK_REACH',
+          label: 'Block Reach',
+          category: 'volleyball',
+          unit: 'in',
+          metricType: 'higher_is_better',
+          isSystemDefault: false,
+          isActive: true,
+          isDerived: false,
+        },
+      ]).onConflictDoNothing();
+
       // Enable one metric, disable another
       await db.insert(organizationMetrics).values([
         {
@@ -547,7 +592,7 @@ describe('AnalyticsService', () => {
           metricCode: 'BLOCK_REACH',
           isEnabled: false, // Disabled
         },
-      ]);
+      ]).onConflictDoNothing();
 
       const recentDate = new Date();
       recentDate.setDate(recentDate.getDate() - 5);
