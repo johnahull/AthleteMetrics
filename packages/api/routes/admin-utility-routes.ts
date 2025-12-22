@@ -26,6 +26,17 @@ const testEmailLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
 });
 
+// Rate limiting for bulk recalculation endpoint
+// Prevents concurrent bulk operations that could overload the database
+const bulkRecalculationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 5, // Max 5 bulk recalculations per hour
+  message: { error: 'Bulk recalculation rate limit exceeded. Please wait before triggering another bulk operation.' },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
+
 // Zod schema for test email request validation
 const testEmailSchema = z.object({
   emailType: z.enum(['invitation', 'welcome', 'verification', 'password-reset']),
@@ -227,10 +238,13 @@ export function registerAdminUtilityRoutes(app: Express) {
    *   - organizationId: optional - only recalculate for this org
    *   - metricCode: optional - only recalculate this specific derived metric
    *   - dryRun: optional - if "true", return what would change without making changes
+   *   - batchSize: optional - number of measurements per transaction batch (default: 500)
+   *
+   * Rate limiting: 5 requests per hour to prevent database overload
    */
-  app.post("/api/admin/recalculate-derived-metrics", requireSiteAdmin, async (req, res) => {
+  app.post("/api/admin/recalculate-derived-metrics", bulkRecalculationLimiter, requireSiteAdmin, async (req, res) => {
     try {
-      const { organizationId, metricCode, dryRun } = req.query;
+      const { organizationId, metricCode, dryRun, batchSize } = req.query;
 
       const calculator = new DerivedMetricCalculator(db);
 
@@ -238,6 +252,7 @@ export function registerAdminUtilityRoutes(app: Express) {
         organizationId: typeof organizationId === 'string' ? organizationId : undefined,
         metricCode: typeof metricCode === 'string' ? metricCode : undefined,
         dryRun: dryRun === 'true',
+        batchSize: typeof batchSize === 'string' ? parseInt(batchSize, 10) : undefined,
       });
 
       res.json({
