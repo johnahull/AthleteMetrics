@@ -251,9 +251,11 @@ export class ImportValidationService {
     // Get positions for this sport
     const sportPositions = context.positions.get(sport.id) || [];
 
-    // Case-insensitive search for position code
+    // Case-insensitive search for position by code, name, or shortName (priority order: code > name > shortName)
     const normalizedPositionCode = positionCode.toUpperCase();
-    const position = sportPositions.find(p => p.code.toUpperCase() === normalizedPositionCode);
+    const position = sportPositions.find(p => p.code.toUpperCase() === normalizedPositionCode)
+      || sportPositions.find(p => p.name.toUpperCase() === normalizedPositionCode)
+      || sportPositions.find(p => p.shortName?.toUpperCase() === normalizedPositionCode);
 
     if (position) {
       return {
@@ -262,11 +264,17 @@ export class ImportValidationService {
       };
     }
 
-    // Generate warning with list of valid positions for this sport
-    const validPositionCodes = sportPositions.map(p => p.code);
+    // Generate warning with list of valid positions for this sport (code/name/shortName format)
+    const validPositionFormats = sportPositions.map(p => {
+      const formats = [p.code, p.name];
+      if (p.shortName) {
+        formats.push(p.shortName);
+      }
+      return formats.join('/');
+    });
     return {
       valid: false,
-      warning: `Position code '${sanitizeCode(positionCode)}' not found for sport '${sanitizeCode(sportCode)}'. Valid position codes: ${validPositionCodes.join(', ')}`,
+      warning: `Position code '${sanitizeCode(positionCode)}' not found for sport '${sanitizeCode(sportCode)}'. Valid positions: ${validPositionFormats.join(', ')}`,
     };
   }
 
