@@ -120,11 +120,12 @@ export class DerivedMetricCalculator {
           })
           .from(siteMetrics)
           .where(
-            sql`${siteMetrics.code} = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}])`
+            sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}]::text[])`
           );
 
         for (const config of metricConfigs) {
-          metricConfigsMap.set(config.code, {
+          // Use uppercase key for consistent lookups with normalizedMetricCode
+          metricConfigsMap.set(config.code.toUpperCase(), {
             higherIsBetter: config.metricType === 'higher_is_better',
           });
         }
@@ -388,11 +389,12 @@ export class DerivedMetricCalculator {
         })
         .from(siteMetrics)
         .where(
-          sql`${siteMetrics.code} = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}])`
+          sql`UPPER(${siteMetrics.code}) = ANY(ARRAY[${sql.join(metricCodes.map(code => sql`${code}`), sql`, `)}]::text[])`
         );
 
       for (const config of metricConfigs) {
-        metricConfigsMap.set(config.code, {
+        // Use uppercase key for consistent lookups with normalizedMetricCode
+        metricConfigsMap.set(config.code.toUpperCase(), {
           higherIsBetter: config.metricType === 'higher_is_better',
         });
       }
