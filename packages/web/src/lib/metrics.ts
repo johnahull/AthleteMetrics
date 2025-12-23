@@ -1,5 +1,5 @@
 // Utility functions for measurement metrics
-import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp, Gauge } from "lucide-react";
+import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
 import { METRIC_CONFIG, type MetricType } from "@shared/analytics-types";
 
@@ -82,8 +82,6 @@ export function getMetricDisplayName(metric: string): string {
       return "40yd Dash";
     case "RSI":
       return "RSI";
-    case "TOP_SPEED":
-      return "Top Speed";
     default:
       return metric;
   }
@@ -104,8 +102,6 @@ export function getMetricBadgeVariant(metric: string): "default" | "secondary" |
       return "default";
     case "RSI":
       return "outline";
-    case "TOP_SPEED":
-      return "default";
     default:
       return "secondary";
   }
@@ -127,8 +123,6 @@ export function getMetricColor(metric: string): string {
       return "bg-indigo-100 text-indigo-800";
     case "RSI":
       return "bg-orange-100 text-orange-800";
-    case "TOP_SPEED":
-      return "bg-teal-100 text-teal-800";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -146,8 +140,6 @@ export function getMetricUnits(metric: string): string {
       return "in";
     case "RSI":
       return "";
-    case "TOP_SPEED":
-      return "mph";
     default:
       return "";
   }
@@ -168,8 +160,6 @@ export function getMetricIcon(metric: string) {
       return Timer;
     case "RSI":
       return TrendingUp;
-    case "TOP_SPEED":
-      return Gauge;
     default:
       return Clock;
   }
@@ -183,8 +173,6 @@ export function formatMetricValue(metric: string, value: number): string {
       return `${value}in`;
     case "RSI":
       return `${value}`;
-    case "TOP_SPEED":
-      return `${value} mph`;
     default:
       return `${value}s`;
   }

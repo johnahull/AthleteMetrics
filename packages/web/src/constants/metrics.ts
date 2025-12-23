@@ -19,7 +19,6 @@ export const METRIC_DISPLAY_NAMES: Record<string, string> = {
   AGILITY_5105: '5-10-5 Agility',
   T_TEST: 'T-Test',
   DASH_40YD: '40-Yard Dash',
-  TOP_SPEED: 'Top Speed',
   RSI: 'Reactive Strength Index',
 };
 
@@ -37,7 +36,6 @@ export const METRIC_UNITS: Record<string, string> = {
   AGILITY_5105: 'seconds',
   T_TEST: 'seconds',
   DASH_40YD: 'seconds',
-  TOP_SPEED: 'mph',
   RSI: '',
 };
 
@@ -51,7 +49,6 @@ export const METRIC_UNIT_ABBREVIATIONS: Record<string, string> = {
   AGILITY_5105: 's',
   T_TEST: 's',
   DASH_40YD: 's',
-  TOP_SPEED: 'mph',
   RSI: '',
 };
 
@@ -70,7 +67,6 @@ export const METRIC_LOWER_IS_BETTER: Record<string, boolean> = {
   AGILITY_5105: true,    // Faster time = better
   T_TEST: true,          // Faster time = better
   DASH_40YD: true,       // Faster time = better
-  TOP_SPEED: false,      // Higher speed = better
   RSI: false,            // Higher RSI = better
 };
 

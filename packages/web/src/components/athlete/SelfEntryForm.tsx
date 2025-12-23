@@ -5,7 +5,7 @@
  * These measurements are marked as unverified and not included in peer comparisons
  */
 
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AlertCircle } from "lucide-react";
@@ -95,6 +95,10 @@ export function SelfEntryForm({
     },
   });
 
+  // Watch metric field outside render to avoid unnecessary re-renders
+  const selectedMetricCode = useWatch({ control: form.control, name: 'metric' });
+  const selectedMetric = selectableMetrics.find(m => m.code === selectedMetricCode);
+
   const handleSubmit = async (data: SelfEntryFormData) => {
     await onSubmit({
       metric: data.metric,
@@ -155,31 +159,28 @@ export function SelfEntryForm({
           <FormField
             control={form.control}
             name="value"
-            render={({ field }) => {
-              const selectedMetric = selectableMetrics.find(m => m.code === form.watch('metric'));
-              return (
-                <FormItem>
-                  <FormLabel>
-                    Value{selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
-                  </FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder={selectedMetric?.unit ? `Enter value in ${selectedMetric.unit}` : 'Enter value'}
-                      disabled={isSubmitting}
-                      {...field}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : parseFloat(value));
-                      }}
-                      value={field.value ?? ''}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              );
-            }}
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  Value{selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
+                </FormLabel>
+                <FormControl>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    placeholder={selectedMetric?.unit ? `Enter value in ${selectedMetric.unit}` : 'Enter value'}
+                    disabled={isSubmitting}
+                    {...field}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      field.onChange(value === '' ? undefined : parseFloat(value));
+                    }}
+                    value={field.value ?? ''}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
           />
 
           {/* Date Input */}
