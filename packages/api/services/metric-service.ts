@@ -160,7 +160,9 @@ export class MetricService extends BaseService {
         ];
 
         const circularCheck = detectCircularDependencies(hypotheticalMetrics);
-        if (circularCheck.hasCircular) {
+        // Only block if THIS metric is involved in the circular dependency
+        // Pre-existing circular dependencies in other metrics shouldn't block unrelated creates
+        if (circularCheck.hasCircular && circularCheck.cycle?.includes(validatedData.code)) {
           throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
         }
       }
@@ -256,7 +258,9 @@ export class MetricService extends BaseService {
           });
 
         const circularCheck = detectCircularDependencies(hypotheticalMetrics);
-        if (circularCheck.hasCircular) {
+        // Only block if THIS metric is involved in the circular dependency
+        // Pre-existing circular dependencies in other metrics shouldn't block unrelated updates
+        if (circularCheck.hasCircular && circularCheck.cycle?.includes(code)) {
           throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
         }
       }
