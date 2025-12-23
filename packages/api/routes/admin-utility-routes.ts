@@ -234,16 +234,20 @@ export function registerAdminUtilityRoutes(app: Express) {
    * Allows org admins to recalculate derived metrics for their organization's athletes
    *
    * POST /api/organizations/:organizationId/recalculate-derived-metrics
+   * Query params:
+   *   - metricCode: optional - only recalculate this specific derived metric
    * Rate limiting: 5 requests per hour to prevent database overload
    */
   app.post("/api/organizations/:organizationId/recalculate-derived-metrics", bulkRecalculationLimiter, requireOrganizationAccess('org_admin'), async (req, res) => {
     try {
       const { organizationId } = req.params;
+      const { metricCode } = req.query;
 
       const calculator = new DerivedMetricCalculator(db);
 
       const result = await calculator.recalculateAllDerivedMetrics({
         organizationId,
+        metricCode: typeof metricCode === 'string' ? metricCode : undefined,
       });
 
       res.json({

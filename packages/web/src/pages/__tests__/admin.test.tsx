@@ -11,9 +11,10 @@ import { render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import AdminPage from '../admin';
+import type { EnhancedUser } from '@/lib/types/user';
 
 // Mock state that can be changed per test
-let mockUser: any = null;
+let mockUser: EnhancedUser | null = null;
 let mockIsLoading = false;
 let mockSetLocation = vi.fn();
 
@@ -66,6 +67,9 @@ describe('AdminPage Authorization', () => {
       mockUser = {
         id: 'user-1',
         username: 'orgadmin',
+        email: 'orgadmin@example.com',
+        firstName: 'Org',
+        lastName: 'Admin',
         role: 'org_admin',
         isSiteAdmin: false,
       };
@@ -82,6 +86,9 @@ describe('AdminPage Authorization', () => {
       mockUser = {
         id: 'user-2',
         username: 'coach',
+        email: 'coach@example.com',
+        firstName: 'Test',
+        lastName: 'Coach',
         role: 'coach',
         isSiteAdmin: false,
       };
@@ -98,6 +105,9 @@ describe('AdminPage Authorization', () => {
       mockUser = {
         id: 'user-3',
         username: 'athlete',
+        email: 'athlete@example.com',
+        firstName: 'Test',
+        lastName: 'Athlete',
         role: 'athlete',
         isSiteAdmin: false,
       };
@@ -116,6 +126,9 @@ describe('AdminPage Authorization', () => {
       mockUser = {
         id: 'user-4',
         username: 'siteadmin',
+        email: 'siteadmin@example.com',
+        firstName: 'Site',
+        lastName: 'Admin',
         role: 'site_admin',
         isSiteAdmin: true,
       };
