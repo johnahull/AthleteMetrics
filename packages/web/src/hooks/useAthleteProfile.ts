@@ -58,7 +58,7 @@ export function useAthleteTeamsData(
   return useQuery({
     queryKey: ['athlete', athleteId, 'teams'],
     queryFn: async () => {
-      // First fetch the athlete to get their team IDs
+      // Fetch the athlete - teams are included in the response
       const athleteResponse = await fetch(`/api/athletes/${athleteId}`, {
         credentials: 'include',
       });
@@ -67,24 +67,9 @@ export function useAthleteTeamsData(
       }
       const athlete = await athleteResponse.json();
 
-      // If no team assignments, return empty array
-      if (!athlete.teamIds || athlete.teamIds.length === 0) {
-        return [];
-      }
-
-      // Fetch teams - use the teams endpoint and filter
-      const teamsResponse = await fetch('/api/teams', {
-        credentials: 'include',
-      });
-      if (!teamsResponse.ok) {
-        throw new Error('Failed to fetch teams');
-      }
-      const allTeams = await teamsResponse.json();
-
-      // Filter to only teams the athlete belongs to
-      return allTeams.filter((team: Team) =>
-        athlete.teamIds?.includes(team.id)
-      );
+      // The API returns teams array directly (not teamIds)
+      // Return the teams array, or empty array if none
+      return athlete.teams || [];
     },
     enabled: !!athleteId && enabled,
     staleTime: 5 * 60 * 1000,
