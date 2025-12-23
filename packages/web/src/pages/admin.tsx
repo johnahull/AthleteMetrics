@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
@@ -14,14 +15,24 @@ import { AdminNotificationSettingsCard } from "@/components/notifications/admin-
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
-  // Site Settings
+  // Site Settings - hooks must be called unconditionally (React Rules of Hooks)
   const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean }>({
     queryKey: ["/api/site-settings"],
+    enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
   const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
+
+  // Redirect non-site-admins to home
+  useEffect(() => {
+    if (user && !user.isSiteAdmin) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
 
   useEffect(() => {
     if (siteSettings?.aiModel) {
@@ -92,6 +103,11 @@ export default function AdminPage() {
       });
     },
   });
+
+  // Don't render anything while checking authorization or if not authorized
+  if (!user?.isSiteAdmin) {
+    return null;
+  }
 
   // AI Model pricing data
   const aiModels = [
