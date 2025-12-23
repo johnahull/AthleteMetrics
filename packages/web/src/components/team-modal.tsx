@@ -123,7 +123,7 @@ export default function TeamModal({ isOpen, onClose, team, organizationId }: Tea
         return;
       }
 
-      const response = await apiRequest("PATCH", `/api/teams/${team!.id}`, updateData);
+      const response = await apiRequest("PUT", `/api/teams/${team!.id}`, updateData);
       if (!response.ok) {
         const error = await response.json();
         // Check for specific error codes to provide targeted feedback
