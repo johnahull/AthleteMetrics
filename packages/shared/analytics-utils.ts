@@ -4,20 +4,7 @@
  */
 
 import type { StatisticalSummary, ChartDataPoint, MetricType } from './analytics-types';
-import { METRIC_CONFIG } from './analytics-types';
-
-/**
- * Known time-based metrics where lower values indicate better performance
- * This list is used as a fallback when METRIC_CONFIG is empty (database is source of truth)
- */
-const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-  'DASH_10YD',
-] as const;
+import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS } from './analytics-types';
 
 /**
  * Get the metric type for a given metric code

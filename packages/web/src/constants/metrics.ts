@@ -5,6 +5,8 @@
  * units, and helper functions. This eliminates duplication across components.
  */
 
+import { LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
+
 // =============================================================================
 // METRIC DISPLAY NAMES
 // =============================================================================
@@ -41,19 +43,6 @@ export const METRIC_UNIT_ABBREVIATIONS: Record<string, string> = {};
  * @deprecated Use database (site_metrics table) via useMetricConfig hook
  */
 export const METRIC_LOWER_IS_BETTER: Record<string, boolean> = {};
-
-/**
- * Known time-based metrics where lower values indicate better performance.
- * Used as fallback when database config is not available.
- */
-const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-  'DASH_10YD',
-] as const;
 
 // =============================================================================
 // HELPER FUNCTIONS

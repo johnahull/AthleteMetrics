@@ -7,21 +7,8 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration, MetricType } from '@shared/analytics-types';
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
-
-/**
- * Known time-based metrics where lower values indicate better performance.
- * Used as fallback when METRIC_CONFIG is empty (database is source of truth).
- */
-const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-  'DASH_10YD',
-] as const;
 
 /**
  * Helper to get metric type with fallback to known lower-is-better metrics

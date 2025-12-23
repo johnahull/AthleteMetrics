@@ -1,21 +1,9 @@
 // Utility functions for measurement metrics
 import { Clock } from "lucide-react";
-import { METRIC_CONFIG, type MetricType } from "@shared/analytics-types";
+import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS, type MetricType, type LowerIsBetterMetric } from "@shared/analytics-types";
 
-/**
- * Metrics where lower values indicate better performance (time-based metrics)
- * Used for trend calculations and comparison logic
- * @deprecated Use getMetricType() instead
- */
-export const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-] as const;
-
-export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+// Re-export for backwards compatibility
+export { LOWER_IS_BETTER_METRICS, type LowerIsBetterMetric };
 
 /**
  * Get the metric type for a given metric code

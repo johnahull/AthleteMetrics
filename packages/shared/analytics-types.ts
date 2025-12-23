@@ -436,6 +436,24 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
 // Use useMetricConfig hook to fetch metric configuration
 export const METRIC_CONFIG: Record<string, { label: string; unit: string; metricType: MetricType }> = {};
 
+/**
+ * Canonical list of time-based metrics where lower values indicate better performance.
+ * Used as fallback when database config is not available.
+ *
+ * IMPORTANT: This is the SINGLE SOURCE OF TRUTH for this list.
+ * All other files should import from here to avoid duplication.
+ */
+export const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+  'DASH_10YD',
+] as const;
+
+export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+
 // Color schemes for charts
 export const CHART_COLOR_SCHEMES = {
   primary: ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'],
