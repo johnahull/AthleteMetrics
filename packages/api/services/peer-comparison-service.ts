@@ -328,10 +328,9 @@ export class PeerComparisonService extends BaseService {
   ): Promise<{ userId: string; value: number }[]> {
     const info = metricInfo || await this.getMetricInfo(metric);
 
-    // Build filter conditions for users - all active users are included
-    const userConditions: any[] = [
-      eq(users.isActive, true),
-    ];
+    // Build filter conditions for users - include all users (active and inactive)
+    // Inactive users' historical measurements are still valid for peer comparisons
+    const userConditions: any[] = [];
 
     // Gender filter
     if (filters.gender) {
@@ -406,11 +405,14 @@ export class PeerComparisonService extends BaseService {
         );
       eligibleUserIds = eligibleUsers.map(u => u.userId);
     } else {
-      // No team or org filter - include all active users
-      const eligibleUsers = await db
+      // No team or org filter - include all users matching filter criteria
+      const query = db
         .select({ id: users.id })
-        .from(users)
-        .where(and(...userConditions));
+        .from(users);
+
+      const eligibleUsers = userConditions.length > 0
+        ? await query.where(and(...userConditions))
+        : await query;
       eligibleUserIds = eligibleUsers.map(u => u.id);
     }
 
