@@ -137,6 +137,30 @@
   background: hsl(var(--muted-foreground));
 }
 
+/* Force scrollbar to always be visible for horizontal scroll containers */
+.scrollbar-always-visible {
+  scrollbar-width: auto; /* Firefox - ensures standard scrollbar */
+}
+
+.scrollbar-always-visible::-webkit-scrollbar {
+  height: 10px; /* Larger than default 6px for better visibility */
+}
+
+.scrollbar-always-visible::-webkit-scrollbar-track {
+  background: hsl(var(--muted));
+  border-radius: 5px;
+}
+
+.scrollbar-always-visible::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 5px;
+  border: 2px solid hsl(var(--muted));
+}
+
+.scrollbar-always-visible::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}
+
 /* Loading animations */
 @keyframes spin {
   from {

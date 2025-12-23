@@ -299,7 +299,7 @@ export function TeamHeatmap({ responses, template, filters }: TeamHeatmapProps) 
       )}
 
       {/* Heatmap Grid (scrollable) - Hidden on mobile when cards view is active */}
-      <div className={`overflow-x-auto -mx-6 px-6 ${viewMode === 'cards' ? 'hidden md:block' : ''}`}>
+      <div className={`overflow-x-scroll scrollbar-always-visible -mx-6 px-6 ${viewMode === 'cards' ? 'hidden md:block' : ''}`}>
         <div data-testid="heatmap-grid" className="inline-block min-w-full">
           <table className="border-collapse">
             <thead>
