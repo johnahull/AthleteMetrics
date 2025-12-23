@@ -908,6 +908,45 @@ export class DerivedMetricCalculator {
   }
 
   /**
+   * Detect circular dependencies between derived metrics.
+   * A circular dependency exists when metric A depends on metric B AND metric B depends on metric A.
+   *
+   * For example:
+   * - APPROACH_REACH depends on APPROACH_JUMP
+   * - APPROACH_JUMP depends on APPROACH_REACH
+   *
+   * @param derivedMetrics - Array of derived metric definitions
+   * @returns Map where key is metric code and value is the metric it's mutually dependent with
+   */
+  private detectCircularDependencies(derivedMetrics: SiteMetric[]): Map<string, string> {
+    const circularPairs = new Map<string, string>();
+
+    for (const metricA of derivedMetrics) {
+      for (const metricB of derivedMetrics) {
+        if (metricA.code === metricB.code) continue;
+
+        // Check if A depends on B AND B depends on A
+        const aDependsOnB = metricA.dependentMetrics?.some(
+          dep => dep.toUpperCase() === metricB.code.toUpperCase()
+        );
+        const bDependsOnA = metricB.dependentMetrics?.some(
+          dep => dep.toUpperCase() === metricA.code.toUpperCase()
+        );
+
+        if (aDependsOnB && bDependsOnA) {
+          // Only add if not already tracked (to avoid duplicates)
+          if (!circularPairs.has(metricA.code)) {
+            circularPairs.set(metricA.code, metricB.code);
+            circularPairs.set(metricB.code, metricA.code);
+          }
+        }
+      }
+    }
+
+    return circularPairs;
+  }
+
+  /**
    * Recalculate all derived metrics, optionally filtered by organization or metric code.
    * This is useful for bulk recalculation after fixing calculation logic.
    *
@@ -916,6 +955,11 @@ export class DerivedMetricCalculator {
    * - Default batch size: 500 measurements per transaction
    * - Event loop yielding between batches prevents blocking
    * - Estimated performance: 150K measurements: 30-60 min → 5-10 min with batching
+   *
+   * **Circular Dependency Handling:**
+   * - Detects metrics that mutually depend on each other (e.g., APPROACH_JUMP ↔ APPROACH_REACH)
+   * - Only calculates the metric if the user has a DIRECT measurement for the partner metric
+   * - Prevents redundant calculated entries for circular pairs
    *
    * @param options - Filter options
    * @param options.organizationId - Only recalculate for this organization
@@ -965,6 +1009,13 @@ export class DerivedMetricCalculator {
     if (derivedMetrics.length === 0) {
       return result;
     }
+
+    // Detect circular dependencies (e.g., APPROACH_JUMP ↔ APPROACH_REACH)
+    // We need to fetch ALL derived metrics for circular detection, not just the filtered ones
+    const allDerivedMetrics = metricCode
+      ? await this.db.select().from(siteMetrics).where(and(eq(siteMetrics.isDerived, true), eq(siteMetrics.isActive, true)))
+      : derivedMetrics;
+    const circularPairs = this.detectCircularDependencies(allDerivedMetrics);
 
     // Build metric configs map for best value selection
     const allMetricCodes = new Set<string>();
@@ -1033,6 +1084,30 @@ export class DerivedMetricCalculator {
         await this.db.transaction(async (tx) => {
           for (const calcMeasurement of batch) {
             try {
+              // Check for circular dependency - skip if partner metric doesn't have a direct entry
+              const circularPartner = circularPairs.get(derivedMetric.code);
+              if (circularPartner) {
+                // Check if user has a direct measurement for the partner metric on this date
+                const [directPartner] = await tx
+                  .select()
+                  .from(measurements)
+                  .where(
+                    and(
+                      eq(measurements.userId, calcMeasurement.userId),
+                      eq(measurements.metric, circularPartner),
+                      eq(measurements.date, calcMeasurement.date),
+                      eq(measurements.isCalculated, false)
+                    )
+                  )
+                  .limit(1);
+
+                // If no direct partner exists, skip - let the partner metric handle this
+                if (!directPartner) {
+                  result.skipped++;
+                  continue;
+                }
+              }
+
               // Find source measurements using the new best-value logic
               const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
                 tx,
@@ -1193,6 +1268,31 @@ export class DerivedMetricCalculator {
           await this.db.transaction(async (tx) => {
             for (const source of batch) {
               try {
+                // Check for circular dependency - skip if partner metric doesn't have a direct entry
+                const circularPartner = circularPairs.get(derivedMetric.code);
+                if (circularPartner) {
+                  // Check if user has a direct measurement for the partner metric on this date
+                  const [directPartner] = await tx
+                    .select()
+                    .from(measurements)
+                    .where(
+                      and(
+                        eq(measurements.userId, source.userId),
+                        eq(measurements.metric, circularPartner),
+                        eq(measurements.date, source.date),
+                        eq(measurements.isCalculated, false)
+                      )
+                    )
+                    .limit(1);
+
+                  // If no direct partner exists, skip - let the partner metric handle this
+                  if (!directPartner) {
+                    result.skipped++;
+                    result.total++;
+                    continue;
+                  }
+                }
+
                 // Find all required source measurements for this (user, date)
                 const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
                   tx,
