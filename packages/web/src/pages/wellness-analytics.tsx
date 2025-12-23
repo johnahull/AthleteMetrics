@@ -204,7 +204,7 @@ export default function WellnessAnalytics() {
                       <p className="text-sm text-gray-600 mt-1">{template.description}</p>
                     )}
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="overflow-hidden">
                     <TeamHeatmap
                       responses={templateResponses}
                       template={template}
