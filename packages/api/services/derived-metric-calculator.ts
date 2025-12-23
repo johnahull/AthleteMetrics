@@ -922,6 +922,7 @@ export class DerivedMetricCalculator {
    * @param options.metricCode - Only recalculate this specific derived metric
    * @param options.dryRun - If true, return what would be recalculated without making changes
    * @param options.batchSize - Number of measurements to process per transaction (default: 500)
+   * @param options.createMissing - If true, also create derived measurements that don't exist yet (default: true)
    * @returns Summary of recalculation results
    */
   async recalculateAllDerivedMetrics(options?: {
@@ -929,17 +930,20 @@ export class DerivedMetricCalculator {
     metricCode?: string;
     dryRun?: boolean;
     batchSize?: number;
+    createMissing?: boolean;
   }): Promise<{
     total: number;
     recalculated: number;
+    created: number;
     skipped: number;
     errors: string[];
   }> {
-    const { organizationId, metricCode, dryRun = false, batchSize = 500 } = options || {};
+    const { organizationId, metricCode, dryRun = false, batchSize = 500, createMissing = true } = options || {};
 
     const result = {
       total: 0,
       recalculated: 0,
+      created: 0,
       skipped: 0,
       errors: [] as string[],
     };
@@ -1095,6 +1099,210 @@ export class DerivedMetricCalculator {
 
         // Yield to event loop between batches to prevent blocking
         await new Promise(resolve => setImmediate(resolve));
+      }
+    }
+
+    // Phase 2: Create missing derived measurements (if createMissing is enabled)
+    if (createMissing) {
+      for (const derivedMetric of derivedMetrics) {
+        // Skip if metricCode filter is specified and doesn't match
+        if (metricCode && derivedMetric.code !== metricCode) {
+          continue;
+        }
+
+        if (!derivedMetric.dependentMetrics || derivedMetric.dependentMetrics.length === 0) {
+          continue;
+        }
+
+        // Get the primary dependent metric (first one) to find potential source data
+        // Normalize to uppercase to match database metric codes
+        const primaryDepMetric = derivedMetric.dependentMetrics[0].toUpperCase();
+
+        // Find all unique (userId, date) combinations with the primary source metric
+        // that don't already have a derived measurement
+        const sourceConditions = [
+          eq(measurements.metric, primaryDepMetric),
+          eq(measurements.isVerified, true),
+          eq(measurements.isCalculated, false), // Only use non-calculated source data
+        ];
+
+        if (organizationId) {
+          sourceConditions.push(eq(measurements.organizationId, organizationId));
+        }
+
+        // Get distinct (userId, date, organizationId) combinations with source data
+        const potentialSources = await this.db
+          .selectDistinct({
+            userId: measurements.userId,
+            date: measurements.date,
+            organizationId: measurements.organizationId,
+          })
+          .from(measurements)
+          .where(and(...sourceConditions));
+
+        if (potentialSources.length === 0) {
+          continue;
+        }
+
+        // Find existing derived measurements to exclude
+        const existingConditions = [
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.isCalculated, true),
+        ];
+
+        if (organizationId) {
+          existingConditions.push(eq(measurements.organizationId, organizationId));
+        }
+
+        const existingDerived = await this.db
+          .select({
+            userId: measurements.userId,
+            date: measurements.date,
+            organizationId: measurements.organizationId,
+          })
+          .from(measurements)
+          .where(and(...existingConditions));
+
+        // Create a Set of existing (userId, date, organizationId) combinations for fast lookup
+        // Including organizationId prevents cross-org matching issues
+        const existingSet = new Set(
+          existingDerived.map(e => `${e.userId}|${e.date}|${e.organizationId}`)
+        );
+
+        // Filter to only sources that don't have a derived measurement yet
+        const missingSources = potentialSources.filter(
+          s => !existingSet.has(`${s.userId}|${s.date}|${s.organizationId}`)
+        );
+
+        if (missingSources.length === 0) {
+          continue;
+        }
+
+        // Process in batches
+        for (let i = 0; i < missingSources.length; i += batchSize) {
+          const batch = missingSources.slice(i, i + batchSize);
+
+          if (dryRun) {
+            // In dry run mode, just count what would be created
+            result.created += batch.length;
+            result.total += batch.length;
+            continue;
+          }
+
+          // Process batch in a transaction
+          await this.db.transaction(async (tx) => {
+            for (const source of batch) {
+              try {
+                // Find all required source measurements for this (user, date)
+                const sourceMeasurementsMap = await this.findSourceMeasurementsWithDb(
+                  tx,
+                  source.userId,
+                  derivedMetric.dependentMetrics || [],
+                  source.date,
+                  derivedMetric.calculationConfig || {
+                    dateMatchStrategy: 'same_date',
+                    missingSourceBehavior: 'skip',
+                  },
+                  metricConfigs
+                );
+
+                if (!sourceMeasurementsMap) {
+                  // Not all required source measurements are available
+                  result.skipped++;
+                  result.total++;
+                  continue;
+                }
+
+                // Build source values for formula evaluation
+                const sourceValues: Record<string, number> = {};
+                const sourceMeasurementIds: string[] = [];
+                let referenceMeasurement: Measurement | undefined;
+
+                for (const [code, sourceMeasurement] of sourceMeasurementsMap.entries()) {
+                  sourceValues[code.toLowerCase()] = parseFloat(sourceMeasurement.value);
+                  sourceMeasurementIds.push(sourceMeasurement.id);
+                  // Use the first source measurement as reference for metadata
+                  if (!referenceMeasurement) {
+                    referenceMeasurement = sourceMeasurement;
+                  }
+                }
+
+                if (!referenceMeasurement) {
+                  result.skipped++;
+                  result.total++;
+                  continue;
+                }
+
+                // Evaluate the formula
+                const calculatedValue = evaluateFormula(
+                  derivedMetric.formula || '',
+                  sourceValues
+                );
+
+                if (calculatedValue === null || !isFinite(calculatedValue)) {
+                  result.skipped++;
+                  result.total++;
+                  continue;
+                }
+
+                // Calculate age from user's birth date if available
+                let age: number = 0;
+                const [userRecord] = await tx
+                  .select({ birthDate: users.birthDate })
+                  .from(users)
+                  .where(eq(users.id, source.userId))
+                  .limit(1);
+
+                if (userRecord?.birthDate) {
+                  const birthDate = new Date(userRecord.birthDate);
+                  const measurementDate = new Date(source.date);
+                  age = measurementDate.getFullYear() - birthDate.getFullYear();
+                  // Adjust if birthday hasn't occurred yet in measurement year
+                  if (measurementDate < new Date(measurementDate.getFullYear(), birthDate.getMonth(), birthDate.getDate())) {
+                    age--;
+                  }
+                }
+
+                // Create the derived measurement using reference measurement for metadata
+                await tx.insert(measurements).values({
+                  userId: source.userId,
+                  submittedBy: referenceMeasurement.submittedBy,
+                  organizationId: source.organizationId,
+                  metric: derivedMetric.code,
+                  value: calculatedValue.toFixed(3),
+                  units: derivedMetric.unit || '',
+                  age,
+                  date: source.date,
+                  isVerified: true,
+                  isCalculated: true,
+                  teamId: referenceMeasurement.teamId,
+                  season: referenceMeasurement.season,
+                  teamContextAuto: referenceMeasurement.teamContextAuto,
+                  teamNameSnapshot: referenceMeasurement.teamNameSnapshot,
+                  calculatedFromMeasurementIds: sourceMeasurementIds,
+                  calculationMetadata: {
+                    formula: derivedMetric.formula || '',
+                    sourceValues,
+                    calculatedAt: new Date().toISOString(),
+                    calculationVersion: CALCULATION_VERSION,
+                    triggeredBy: { event: 'manual_recalculation' as const },
+                  },
+                });
+
+                result.created++;
+                result.total++;
+              } catch (error) {
+                const errorMsg = `Error creating ${derivedMetric.code} for user ${source.userId} on ${source.date}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+                result.errors.push(errorMsg);
+                console.error(errorMsg);
+                result.total++;
+              }
+            }
+          });
+
+          // Yield to event loop between batches
+          await new Promise(resolve => setImmediate(resolve));
+        }
       }
     }
 

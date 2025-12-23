@@ -236,25 +236,40 @@ export function registerAdminUtilityRoutes(app: Express) {
    * POST /api/organizations/:organizationId/recalculate-derived-metrics
    * Query params:
    *   - metricCode: optional - only recalculate this specific derived metric
+   *   - createMissing: optional - if "false", only update existing (default: true)
    * Rate limiting: 5 requests per hour to prevent database overload
    */
   app.post("/api/organizations/:organizationId/recalculate-derived-metrics", bulkRecalculationLimiter, requireOrganizationAccess('org_admin'), async (req, res) => {
     try {
       const { organizationId } = req.params;
-      const { metricCode } = req.query;
+      const { metricCode, createMissing } = req.query;
 
       const calculator = new DerivedMetricCalculator(db);
 
       const result = await calculator.recalculateAllDerivedMetrics({
         organizationId,
         metricCode: typeof metricCode === 'string' ? metricCode : undefined,
+        createMissing: createMissing !== 'false', // Default to true
       });
+
+      // Build message parts
+      const messageParts = [];
+      if (result.recalculated > 0) {
+        messageParts.push(`updated ${result.recalculated}`);
+      }
+      if (result.created > 0) {
+        messageParts.push(`created ${result.created}`);
+      }
+      if (messageParts.length === 0) {
+        messageParts.push('no changes made');
+      }
 
       res.json({
         success: true,
-        message: `Recalculation complete. Updated ${result.recalculated} of ${result.total} derived measurements.`,
+        message: `Recalculation complete: ${messageParts.join(', ')} (${result.total} total processed).`,
         total: result.total,
         recalculated: result.recalculated,
+        created: result.created,
         skipped: result.skipped,
         errors: result.errors,
       });
@@ -279,12 +294,13 @@ export function registerAdminUtilityRoutes(app: Express) {
    *   - metricCode: optional - only recalculate this specific derived metric
    *   - dryRun: optional - if "true", return what would change without making changes
    *   - batchSize: optional - number of measurements per transaction batch (default: 500)
+   *   - createMissing: optional - if "false", only update existing (default: true)
    *
    * Rate limiting: 5 requests per hour to prevent database overload
    */
   app.post("/api/admin/recalculate-derived-metrics", bulkRecalculationLimiter, requireSiteAdmin, async (req, res) => {
     try {
-      const { organizationId, metricCode, dryRun, batchSize } = req.query;
+      const { organizationId, metricCode, dryRun, batchSize, createMissing } = req.query;
 
       const calculator = new DerivedMetricCalculator(db);
 
@@ -293,13 +309,27 @@ export function registerAdminUtilityRoutes(app: Express) {
         metricCode: typeof metricCode === 'string' ? metricCode : undefined,
         dryRun: dryRun === 'true',
         batchSize: typeof batchSize === 'string' ? parseInt(batchSize, 10) : undefined,
+        createMissing: createMissing !== 'false', // Default to true
       });
 
+      // Build message parts
+      const messageParts = [];
+      if (result.recalculated > 0) {
+        messageParts.push(`updated ${result.recalculated}`);
+      }
+      if (result.created > 0) {
+        messageParts.push(`created ${result.created}`);
+      }
+      if (messageParts.length === 0) {
+        messageParts.push('no changes');
+      }
+
+      const isDryRun = dryRun === 'true';
       res.json({
         success: true,
-        message: dryRun === 'true'
-          ? `Dry run complete. Would recalculate ${result.recalculated} of ${result.total} derived measurements.`
-          : `Recalculation complete. Updated ${result.recalculated} of ${result.total} derived measurements.`,
+        message: isDryRun
+          ? `Dry run complete: would ${messageParts.join(', ')} (${result.total} total).`
+          : `Recalculation complete: ${messageParts.join(', ')} (${result.total} total processed).`,
         ...result,
       });
 
