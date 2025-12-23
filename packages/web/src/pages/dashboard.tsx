@@ -462,8 +462,10 @@ export default function Dashboard() {
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show for org/team view */}
       {effectiveOrganizationId && scope.view !== 'athlete' && (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
-        {/* Dynamic metric cards for organization-enabled metrics only */}
-        {!metricsLoading && availableMetrics.map((metric) => {
+        {/* Dynamic metric cards for organization-enabled metrics only (exclude tracking metrics) */}
+        {!metricsLoading && availableMetrics
+          .filter((metric) => metric.metricType !== 'tracking')
+          .map((metric) => {
           const metricCode = metric.code;
           const bestResult = stats[`best${metricCode}Last30Days`];
           const MetricIcon = getMetricIcon(metricCode);
