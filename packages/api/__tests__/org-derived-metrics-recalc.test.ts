@@ -320,33 +320,33 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
 
   afterEach(async () => {
     // Clean up test data in reverse order of dependencies
-    if (athlete1Org1) {
+    if (athlete1Org1?.id) {
       await db.delete(measurements).where(eq(measurements.userId, athlete1Org1.id));
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete1Org1.id));
       await db.delete(users).where(eq(users.id, athlete1Org1.id));
     }
-    if (athlete2Org1) {
+    if (athlete2Org1?.id) {
       await db.delete(measurements).where(eq(measurements.userId, athlete2Org1.id));
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete2Org1.id));
       await db.delete(users).where(eq(users.id, athlete2Org1.id));
     }
-    if (athlete1Org2) {
+    if (athlete1Org2?.id) {
       await db.delete(measurements).where(eq(measurements.userId, athlete1Org2.id));
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, athlete1Org2.id));
       await db.delete(users).where(eq(users.id, athlete1Org2.id));
     }
-    if (orgAdmin1User) {
+    if (orgAdmin1User?.id) {
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, orgAdmin1User.id));
       await db.delete(users).where(eq(users.id, orgAdmin1User.id));
     }
-    if (orgAdmin2User) {
+    if (orgAdmin2User?.id) {
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, orgAdmin2User.id));
       await db.delete(users).where(eq(users.id, orgAdmin2User.id));
     }
-    if (testOrg1) {
+    if (testOrg1?.id) {
       await db.delete(organizations).where(eq(organizations.id, testOrg1.id));
     }
-    if (testOrg2) {
+    if (testOrg2?.id) {
       await db.delete(organizations).where(eq(organizations.id, testOrg2.id));
     }
   });
@@ -458,6 +458,45 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
 
     for (const measurement of org1Measurements) {
       expect(measurement.value).toBe('0.000'); // Still has wrong value
+    }
+  });
+
+  it('should only recalculate specific metric when metricCode provided', async () => {
+    // Reset all derived measurements to 0
+    await db
+      .update(measurements)
+      .set({ value: '0.000' })
+      .where(
+        and(
+          eq(measurements.organizationId, testOrg1.id),
+          eq(measurements.metric, derivedMetric.code),
+          eq(measurements.isCalculated, true)
+        )
+      );
+
+    // Recalculate only the TOP_SPEED_CALC metric for Org1
+    const result = await calculator.recalculateAllDerivedMetrics({
+      organizationId: testOrg1.id,
+      metricCode: 'TOP_SPEED_CALC',
+    });
+
+    // Should have recalculated measurements
+    expect(result.recalculated).toBeGreaterThan(0);
+
+    // Verify Org1 measurements for TOP_SPEED_CALC were updated
+    const updatedMeasurements = await db
+      .select()
+      .from(measurements)
+      .where(
+        and(
+          eq(measurements.organizationId, testOrg1.id),
+          eq(measurements.metric, 'TOP_SPEED_CALC'),
+          eq(measurements.isCalculated, true)
+        )
+      );
+
+    for (const measurement of updatedMeasurements) {
+      expect(parseFloat(measurement.value)).toBeGreaterThan(0);
     }
   });
 });

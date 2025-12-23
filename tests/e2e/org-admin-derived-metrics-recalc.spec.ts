@@ -260,9 +260,18 @@ test.describe('Org Admin Derived Metrics Recalculation - Site Admin Access', () 
     // Site admin should see the recalculation card
     await expect(page.locator('text=Derived Metrics Recalculation')).toBeVisible();
 
+    // Before clicking the button, listen for the API call
+    const responsePromise = page.waitForResponse(
+      response => response.url().includes('/recalculate-derived-metrics') && response.request().method() === 'POST'
+    );
+
     // Perform recalculation
     await page.click('button:has-text("Recalculate")');
     await page.click('[role="dialog"] button:has-text("Recalculate")');
+
+    // Verify API response is successful
+    const response = await responsePromise;
+    expect(response.ok()).toBeTruthy();
 
     // Wait for success
     await expect(page.locator('text=Recalculation complete')).toBeVisible({ timeout: 15000 });
