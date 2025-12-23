@@ -15,6 +15,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Search, Target } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
+import { getMetricDisplayName } from "@/constants/metrics";
 
 interface BenchmarkCatalogProps {
   open: boolean;
@@ -127,7 +128,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           <div className="flex items-center gap-2 mb-2">
                             <Target className="h-4 w-4" />
                             <h4 className="font-semibold">{benchmark.name}</h4>
-                            <Badge variant="outline">{benchmark.metricCode}</Badge>
+                            <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
                           </div>
                           {benchmark.description && (
                             <p className="text-sm text-muted-foreground mb-2">
@@ -187,7 +188,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           <div className="flex items-center gap-2 mb-2">
                             <Target className="h-4 w-4" />
                             <h4 className="font-semibold">{benchmark.name}</h4>
-                            <Badge variant="outline">{benchmark.metricCode}</Badge>
+                            <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
                             <Badge variant="secondary">Custom</Badge>
                           </div>
                           {benchmark.description && (

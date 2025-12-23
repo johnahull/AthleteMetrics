@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { getMetricDisplayName } from "@/constants/metrics";
 
 interface AthleteBenchmarkStatusProps {
   organizationId: string;
@@ -153,7 +154,7 @@ export function AthleteBenchmarkStatus({
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-semibold">{benchmark.benchmarkName}</h4>
-                        <Badge variant="outline">{benchmark.metricCode}</Badge>
+                        <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
                       </div>
                     </div>
                     <BenchmarkBadge isMet={benchmark.isMet} progress={benchmark.progress} />
