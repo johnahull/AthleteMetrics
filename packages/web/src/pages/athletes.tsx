@@ -619,9 +619,9 @@ export default function Athletes() {
           aValue = a.gender?.toLowerCase() || 'zzz';
           bValue = b.gender?.toLowerCase() || 'zzz';
           break;
-        case 'school':
-          aValue = a.school?.toLowerCase() || 'zzz';
-          bValue = b.school?.toLowerCase() || 'zzz';
+        case 'position':
+          aValue = (a.positions && a.positions.length > 0) ? a.positions[0].toLowerCase() : 'zzz';
+          bValue = (b.positions && b.positions.length > 0) ? b.positions[0].toLowerCase() : 'zzz';
           break;
         case 'sport':
           aValue = a.sports && a.sports.length > 0 ? a.sports[0].toLowerCase() : 'zzz';
@@ -1114,13 +1114,13 @@ export default function Athletes() {
                     </th>
                     <th
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('school')}
-                      data-testid="sort-header-school"
-                      aria-sort={sortColumn === 'school' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      onClick={() => handleSort('position')}
+                      data-testid="sort-header-position"
+                      aria-sort={sortColumn === 'position' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
-                        School
-                        {sortColumn === 'school' ? (
+                        Position(s)
+                        {sortColumn === 'position' ? (
                           sortDirection === 'asc' ? (
                             <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
                           ) : (
@@ -1212,7 +1212,14 @@ export default function Athletes() {
                       </td>
                       <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
                       <td className="px-6 py-4 text-gray-600">{athlete.gender || "Not Specified"}</td>
-                      <td className="px-6 py-4 text-gray-600">{athlete.school || "N/A"}</td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {athlete.positions && athlete.positions.length > 0
+                          ? athlete.positions.length > 1
+                            ? `${athlete.positions[0]} (+${athlete.positions.length - 1} more)`
+                            : athlete.positions[0]
+                          : "N/A"
+                        }
+                      </td>
                       <td className="px-6 py-4 text-gray-600">
                         {athlete.sports && athlete.sports.length > 0 
                           ? athlete.sports.length > 1 
