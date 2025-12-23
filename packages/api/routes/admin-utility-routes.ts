@@ -7,7 +7,7 @@ import type { Express } from "express";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
-import { requireSiteAdmin } from "../middleware";
+import { requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { generateInvitationLink, getBaseUrl } from "../utils/url-utils";
 import { emailService } from "../services/email-service";
@@ -230,7 +230,43 @@ export function registerAdminUtilityRoutes(app: Express) {
   });
 
   /**
-   * Recalculate all derived metrics
+   * Recalculate derived metrics for a specific organization (org-scoped)
+   * Allows org admins to recalculate derived metrics for their organization's athletes
+   *
+   * POST /api/organizations/:organizationId/recalculate-derived-metrics
+   * Rate limiting: 5 requests per hour to prevent database overload
+   */
+  app.post("/api/organizations/:organizationId/recalculate-derived-metrics", bulkRecalculationLimiter, requireOrganizationAccess('org_admin'), async (req, res) => {
+    try {
+      const { organizationId } = req.params;
+
+      const calculator = new DerivedMetricCalculator(db);
+
+      const result = await calculator.recalculateAllDerivedMetrics({
+        organizationId,
+      });
+
+      res.json({
+        success: true,
+        message: `Recalculation complete. Updated ${result.recalculated} of ${result.total} derived measurements.`,
+        total: result.total,
+        recalculated: result.recalculated,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+
+    } catch (error) {
+      console.error('Error recalculating derived metrics:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to recalculate derived metrics',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  /**
+   * Recalculate all derived metrics (site-admin only)
    * Used after fixing calculation logic to update existing values
    *
    * POST /api/admin/recalculate-derived-metrics
