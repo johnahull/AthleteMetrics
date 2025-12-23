@@ -22,6 +22,7 @@ import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
+import { AchievementService } from './achievement-service';
 
 export interface MeasurementFilters {
   userId?: string;
@@ -271,6 +272,22 @@ export class MeasurementService {
         userId: submittedBy,
         sourceMeasurementId: newMeasurement.id,
       });
+
+      // ACHIEVEMENTS: Check for newly unlocked achievements
+      // Only check if measurement has an organization context
+      if (newMeasurement.organizationId) {
+        try {
+          const achievementService = new AchievementService();
+          await achievementService.checkAchievements(
+            newMeasurement.userId,
+            newMeasurement.organizationId,
+            newMeasurement
+          );
+        } catch (achievementError) {
+          // Log but don't fail the measurement creation if achievement check fails
+          console.error('Achievement check failed:', achievementError);
+        }
+      }
 
       return newMeasurement;
       });
