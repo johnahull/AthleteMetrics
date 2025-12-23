@@ -24,6 +24,9 @@ import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
 import { AchievementService } from './achievement-service';
 
+// Singleton achievement service instance for performance
+const achievementService = new AchievementService();
+
 export interface MeasurementFilters {
   userId?: string;
   athleteId?: string;
@@ -129,8 +132,10 @@ export class MeasurementService {
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
+    let newMeasurement: Measurement;
+
     try {
-      return await db.transaction(async (tx) => {
+      newMeasurement = await db.transaction(async (tx) => {
       // Get user info for age calculation
       const [user] = await tx
         .select()
@@ -243,7 +248,7 @@ export class MeasurementService {
                         submitterRole === 'site_admin';
 
       // Create measurement
-      const [newMeasurement] = await tx
+      const [txMeasurement] = await tx
         .insert(measurements)
         .values({
           userId: measurement.userId,
@@ -267,29 +272,13 @@ export class MeasurementService {
       // DERIVED METRICS: Trigger automatic calculation of derived metrics
       // This runs after the measurement is created and committed
       const calculator = new DerivedMetricCalculator(db);
-      await calculator.processNewMeasurement(newMeasurement, {
+      await calculator.processNewMeasurement(txMeasurement, {
         event: 'measurement_insert',
         userId: submittedBy,
-        sourceMeasurementId: newMeasurement.id,
+        sourceMeasurementId: txMeasurement.id,
       });
 
-      // ACHIEVEMENTS: Check for newly unlocked achievements
-      // Only check if measurement has an organization context
-      if (newMeasurement.organizationId) {
-        try {
-          const achievementService = new AchievementService();
-          await achievementService.checkAchievements(
-            newMeasurement.userId,
-            newMeasurement.organizationId,
-            newMeasurement
-          );
-        } catch (achievementError) {
-          // Log but don't fail the measurement creation if achievement check fails
-          console.error('Achievement check failed:', achievementError);
-        }
-      }
-
-      return newMeasurement;
+      return txMeasurement;
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
@@ -318,6 +307,24 @@ export class MeasurementService {
       // Unknown error type - wrap with context
       throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
     }
+
+    // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
+    // This ensures measurement data is persisted before checking achievements
+    // Wrapped in try/catch so achievement failures don't affect measurement creation
+    if (newMeasurement.organizationId) {
+      try {
+        await achievementService.checkAchievements(
+          newMeasurement.userId,
+          newMeasurement.organizationId,
+          newMeasurement
+        );
+      } catch (achievementError) {
+        // Log but don't fail - measurement was already created successfully
+        console.error('Achievement check failed:', achievementError);
+      }
+    }
+
+    return newMeasurement;
   }
 
   /**
