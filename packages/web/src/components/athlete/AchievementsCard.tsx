@@ -13,10 +13,16 @@
  * - Progress toward total achievements
  */
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Trophy,
   Zap,
@@ -184,6 +190,8 @@ function AchievementsSkeleton() {
  * Main AchievementsCard component
  */
 export function AchievementsCard({ userId, organizationId, compact = false }: AchievementsCardProps) {
+  const [showFullView, setShowFullView] = useState(false);
+
   // Fetch data
   const {
     data: userAchievements,
@@ -343,9 +351,12 @@ export function AchievementsCard({ userId, organizationId, compact = false }: Ac
             </div>
             {totalCount > 8 && (
               <div className="text-center pt-2 border-t border-gray-100 mt-2">
-                <span className="text-xs text-blue-600 cursor-pointer hover:underline">
+                <button
+                  onClick={() => setShowFullView(true)}
+                  className="text-xs text-blue-600 cursor-pointer hover:underline"
+                >
                   View all {totalCount} achievements
-                </span>
+                </button>
               </div>
             )}
           </>
@@ -399,6 +410,58 @@ export function AchievementsCard({ userId, organizationId, compact = false }: Ac
           </>
         )}
       </CardContent>
+
+      {/* Full view dialog for compact mode */}
+      {compact && (
+        <Dialog open={showFullView} onOpenChange={setShowFullView}>
+          <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-yellow-500" />
+                All Achievements ({unlockedCount}/{totalCount})
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              {categoryOrder.map((category) => {
+                const categoryData = byCategory[category];
+                if (!categoryData) return null;
+
+                const { unlocked, locked } = categoryData;
+                if (unlocked.length === 0 && locked.length === 0) return null;
+
+                const config = CATEGORY_CONFIG[category as keyof typeof CATEGORY_CONFIG];
+                const CategoryIcon = getIconComponent(config?.icon ?? null);
+
+                return (
+                  <div key={category}>
+                    <h3 className={`text-sm font-medium mb-2 flex items-center gap-1.5 ${config?.color ?? 'text-gray-600'}`}>
+                      <CategoryIcon className="h-4 w-4" />
+                      {config?.label ?? category}
+                    </h3>
+                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                      {unlocked.map((ua) => (
+                        <AchievementBadgeDisplay
+                          key={ua.id}
+                          achievement={ua.achievement}
+                          isUnlocked={true}
+                          unlockedAt={ua.unlockedAt}
+                        />
+                      ))}
+                      {locked.map((def) => (
+                        <AchievementBadgeDisplay
+                          key={def.id}
+                          achievement={def}
+                          isUnlocked={false}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Card>
   );
 }
