@@ -251,7 +251,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
 
   const updateAthleteMutation = useMutation({
     mutationFn: async (data: InsertAthlete) => {
-      const response = await apiRequest("PATCH", `/api/athletes/${athlete!.id}`, data);
+      const response = await apiRequest("PUT", `/api/athletes/${athlete!.id}`, data);
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.message || "Failed to update athlete");
