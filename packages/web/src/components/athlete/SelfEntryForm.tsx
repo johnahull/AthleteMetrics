@@ -138,7 +138,7 @@ export function SelfEntryForm({
                   <SelectContent>
                     {selectableMetrics.map((metric) => (
                       <SelectItem key={metric.code} value={metric.code}>
-                        {metric.label}
+                        {metric.label}{metric.unit ? ` (${metric.unit})` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -155,26 +155,31 @@ export function SelfEntryForm({
           <FormField
             control={form.control}
             name="value"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Value</FormLabel>
-                <FormControl>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    placeholder="Enter value"
-                    disabled={isSubmitting}
-                    {...field}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      field.onChange(value === '' ? undefined : parseFloat(value));
-                    }}
-                    value={field.value ?? ''}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
+            render={({ field }) => {
+              const selectedMetric = selectableMetrics.find(m => m.code === form.watch('metric'));
+              return (
+                <FormItem>
+                  <FormLabel>
+                    Value{selectedMetric?.unit ? ` (${selectedMetric.unit})` : ''}
+                  </FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder={selectedMetric?.unit ? `Enter value in ${selectedMetric.unit}` : 'Enter value'}
+                      disabled={isSubmitting}
+                      {...field}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        field.onChange(value === '' ? undefined : parseFloat(value));
+                      }}
+                      value={field.value ?? ''}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              );
+            }}
           />
 
           {/* Date Input */}

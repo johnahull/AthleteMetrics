@@ -130,6 +130,34 @@ export function registerMetricRoutes(app: Express) {
     }
   );
 
+  // Get active site metrics (any authenticated user)
+  // Used by independent athletes without org context to see available metrics
+  app.get("/api/metrics/active", requireAuth, async (req, res) => {
+    try {
+      // Fetch only active metrics - no admin check needed
+      const metrics = await db.select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        unit: siteMetrics.unit,
+        metricType: siteMetrics.metricType,
+        category: siteMetrics.category,
+        description: siteMetrics.description,
+        isActive: siteMetrics.isActive,
+        isDerived: siteMetrics.isDerived,
+        formula: siteMetrics.formula,
+        dependentMetrics: siteMetrics.dependentMetrics,
+      })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.isActive, true))
+        .orderBy(siteMetrics.category, siteMetrics.label);
+
+      res.json(metrics);
+    } catch (error) {
+      console.error("GET /api/metrics/active error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch active metrics") });
+    }
+  });
+
   // Get specific site metric
   app.get("/api/metrics/:code", requireAuth, async (req, res) => {
     try {

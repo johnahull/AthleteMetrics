@@ -59,8 +59,8 @@ export function useAvailableMetrics(): {
     true // enabledOnly - only get org-enabled metrics
   );
 
-  // Fallback to site metrics ONLY for site admins without org context
-  // Regular users (org admins, coaches) should NOT access site metrics endpoint
+  // Fallback to site metrics for users without org context
+  // This allows independent athletes to add measurements using all active site metrics
   const {
     data: siteMetrics,
     isLoading: loadingSite,
@@ -77,17 +77,15 @@ export function useAvailableMetrics(): {
     formula?: string | null;
     dependentMetrics?: string[] | null;
   }>>({
-    queryKey: ['siteMetrics', false],
+    queryKey: ['activeMetrics'],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      params.append('includeInactive', 'false');
-      const response = await fetch(`/api/site-metrics?${params.toString()}`);
+      const response = await fetch('/api/metrics/active');
       if (!response.ok) {
-        throw new Error('Failed to fetch site metrics');
+        throw new Error('Failed to fetch active metrics');
       }
       return response.json();
     },
-    enabled: user?.isSiteAdmin === true && !currentOrgId, // Only fetch if site admin AND no org context
+    enabled: !!user && !currentOrgId, // Fetch if logged in AND no org context
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
@@ -116,7 +114,7 @@ export function useAvailableMetrics(): {
         }));
     }
 
-    // Fallback to active site metrics (for site admins without org context)
+    // Fallback to active site metrics (for users without org context, e.g., independent athletes)
     if (siteMetrics) {
       return siteMetrics
         .filter(sm => sm.isActive) // Only active metrics
