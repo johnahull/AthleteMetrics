@@ -3,8 +3,41 @@
  * Robust statistical calculations with proper error handling and validation
  */
 
-import type { StatisticalSummary, ChartDataPoint } from './analytics-types';
+import type { StatisticalSummary, ChartDataPoint, MetricType } from './analytics-types';
 import { METRIC_CONFIG } from './analytics-types';
+
+/**
+ * Known time-based metrics where lower values indicate better performance
+ * This list is used as a fallback when METRIC_CONFIG is empty (database is source of truth)
+ */
+const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+  'DASH_10YD',
+] as const;
+
+/**
+ * Get the metric type for a given metric code
+ * Falls back to checking known lower-is-better metrics when METRIC_CONFIG is empty
+ */
+function getMetricTypeFromConfig(metric: string): MetricType {
+  // Try METRIC_CONFIG first
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  if (config?.metricType) {
+    return config.metricType;
+  }
+
+  // Fall back to known lower-is-better metrics
+  if (LOWER_IS_BETTER_METRICS.includes(metric as any)) {
+    return 'lower_is_better';
+  }
+
+  // Default to higher_is_better (most performance metrics)
+  return 'higher_is_better';
+}
 
 /**
  * Validates that input values are valid numbers
@@ -128,8 +161,7 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
 export function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
   if (stats.count === 0) return 0;
 
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  const metricType = metricConfig?.metricType ?? 'lower_is_better';
+  const metricType = getMetricTypeFromConfig(metric);
 
   // For tracking metrics, use max as proxy for latest value
   // For lower_is_better, use min; for higher_is_better, use max
@@ -154,8 +186,7 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
     if (athleteMetricData.length === 0) return athleteMetricData[0]; // Should not happen
 
     const metric = athleteMetricData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const metricType = metricConfig?.metricType ?? 'lower_is_better';
+    const metricType = getMetricTypeFromConfig(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, find the most recent measurement by date
@@ -197,8 +228,7 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
     if (athleteMetricDateData.length === 0) return athleteMetricDateData[0]; // Should not happen
 
     const metric = athleteMetricDateData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const metricType = metricConfig?.metricType ?? 'lower_is_better';
+    const metricType = getMetricTypeFromConfig(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, all values on same date are equally valid, return first

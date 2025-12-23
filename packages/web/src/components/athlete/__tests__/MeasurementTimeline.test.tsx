@@ -147,21 +147,27 @@ describe('MeasurementTimeline', () => {
 
   describe('Measurement card content', () => {
     it('should display metric name in human-readable format', () => {
+      // NOTE: getMetricDisplayName now returns metric codes as fallback.
+      // In production, labels come from database via useMetricConfig hook.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      expect(screen.getByText('10-Yard Fly')).toBeInTheDocument();
-      expect(screen.getByText('Vertical Jump')).toBeInTheDocument();
-      expect(screen.getByText('40-Yard Dash')).toBeInTheDocument();
-      expect(screen.getByText('T-Test')).toBeInTheDocument();
+      // Now displays metric codes (fallback behavior)
+      expect(screen.getByText('FLY10_TIME')).toBeInTheDocument();
+      expect(screen.getByText('VERTICAL_JUMP')).toBeInTheDocument();
+      expect(screen.getByText('DASH_40YD')).toBeInTheDocument();
+      expect(screen.getByText('T_TEST')).toBeInTheDocument();
     });
 
     it('should display value with units', () => {
+      // NOTE: formatMetricValue now returns raw values as fallback.
+      // Unit formatting should come from API response in production.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      expect(screen.getByText('1.52s')).toBeInTheDocument();
-      expect(screen.getByText('28.5in')).toBeInTheDocument();
-      expect(screen.getByText('4.85s')).toBeInTheDocument();
-      expect(screen.getByText('9.32s')).toBeInTheDocument();
+      // Raw values displayed (formatMetricValue returns value without unit)
+      expect(screen.getByText('1.52')).toBeInTheDocument();
+      expect(screen.getByText('28.5')).toBeInTheDocument();
+      expect(screen.getByText('4.85')).toBeInTheDocument();
+      expect(screen.getByText('9.32')).toBeInTheDocument();
     });
 
     it('should display date in day format', () => {

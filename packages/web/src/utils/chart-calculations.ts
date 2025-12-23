@@ -6,9 +6,38 @@
  * that can be easily memoized and tested.
  */
 
-import type { TrendData, StatisticalSummary, ChartConfiguration } from '@shared/analytics-types';
+import type { TrendData, StatisticalSummary, ChartConfiguration, MetricType } from '@shared/analytics-types';
 import { METRIC_CONFIG } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
+
+/**
+ * Known time-based metrics where lower values indicate better performance.
+ * Used as fallback when METRIC_CONFIG is empty (database is source of truth).
+ */
+const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+  'DASH_10YD',
+] as const;
+
+/**
+ * Helper to get metric type with fallback to known lower-is-better metrics
+ */
+function getMetricTypeFromConfigOrFallback(metric: string): MetricType {
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  if (config?.metricType) {
+    return config.metricType;
+  }
+  // Fall back to known lower-is-better metrics
+  if (LOWER_IS_BETTER_METRICS.includes(metric as typeof LOWER_IS_BETTER_METRICS[number])) {
+    return 'lower_is_better';
+  }
+  // Default to higher_is_better (most performance metrics)
+  return 'higher_is_better';
+}
 import type {
   ChartPoint,
   ChartDataset,
@@ -35,14 +64,19 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
   const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
   const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-  const xIsTracking = xConfig?.metricType === 'tracking';
-  const yIsTracking = yConfig?.metricType === 'tracking';
-  const xLowerIsBetter = xConfig?.metricType === 'lower_is_better';
-  const yLowerIsBetter = yConfig?.metricType === 'lower_is_better';
+
+  // Use helper function with fallback for metric types
+  const xMetricType = getMetricTypeFromConfigOrFallback(xMetric);
+  const yMetricType = getMetricTypeFromConfigOrFallback(yMetric);
+
+  const xIsTracking = xMetricType === 'tracking';
+  const yIsTracking = yMetricType === 'tracking';
+  const xLowerIsBetter = xMetricType === 'lower_is_better';
+  const yLowerIsBetter = yMetricType === 'lower_is_better';
 
   // Get clean metric names (remove common suffixes)
-  const xName = xConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
-  const yName = yConfig?.label.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+  const xName = xConfig?.label?.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
+  const yName = yConfig?.label?.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
 
   // If both metrics are tracking, use neutral labels
   if (xIsTracking && yIsTracking) {

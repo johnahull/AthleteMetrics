@@ -89,6 +89,8 @@ describe('EditMeasurementModal', () => {
     });
 
     it('should display metric name in title or description', () => {
+      // NOTE: getMetricDisplayName now returns metric codes as fallback.
+      // In production, labels come from database via useMetricConfig hook.
       render(
         <EditMeasurementModal
           open={true}
@@ -98,8 +100,8 @@ describe('EditMeasurementModal', () => {
         />
       );
 
-      // Should show the metric display name somewhere
-      expect(screen.getByText(/10-yard fly/i)).toBeInTheDocument();
+      // Now displays metric code (fallback behavior)
+      expect(screen.getByText(/FLY10_TIME/i)).toBeInTheDocument();
     });
   });
 

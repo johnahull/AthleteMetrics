@@ -432,20 +432,9 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
 }
 
 // Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
-// Kept for backward compatibility during migration
-// TODO: Remove after all components updated to use dynamic metrics
-export const METRIC_CONFIG = {
-  FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', metricType: 'lower_is_better' as MetricType },
-  VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better' as MetricType },
-  AGILITY_505: { label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  AGILITY_5105: { label: '5-10-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  T_TEST: { label: 'T-Test Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  DASH_40YD: { label: '40-Yard Dash', unit: 's', metricType: 'lower_is_better' as MetricType },
-  RSI: { label: 'Reactive Strength Index', unit: '', metricType: 'higher_is_better' as MetricType },
-  TOP_SPEED: { label: 'Top Speed', unit: 'mph', metricType: 'higher_is_better' as MetricType },
-  HEIGHT: { label: 'Height', unit: 'in', metricType: 'tracking' as MetricType },
-  WEIGHT: { label: 'Weight', unit: 'lbs', metricType: 'tracking' as MetricType }
-} as const;
+// Database (site_metrics table) is now the single source of truth
+// Use useMetricConfig hook to fetch metric configuration
+export const METRIC_CONFIG: Record<string, { label: string; unit: string; metricType: MetricType }> = {};
 
 // Color schemes for charts
 export const CHART_COLOR_SCHEMES = {

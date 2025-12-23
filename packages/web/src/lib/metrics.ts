@@ -1,6 +1,5 @@
 // Utility functions for measurement metrics
-import { Clock, ArrowUp, Zap, Move, Timer, TrendingUp } from "lucide-react";
-import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
+import { Clock } from "lucide-react";
 import { METRIC_CONFIG, type MetricType } from "@shared/analytics-types";
 
 /**
@@ -20,7 +19,7 @@ export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
 
 /**
  * Get the metric type for a given metric code
- * Uses METRIC_CONFIG as static lookup for known metrics.
+ * Uses LOWER_IS_BETTER_METRICS list for known time-based metrics.
  *
  * IMPORTANT: For derived/custom metrics, prefer using the `useAvailableMetrics` hook
  * which fetches metric types directly from the database (siteMetrics table).
@@ -36,14 +35,18 @@ export function getMetricType(metric: string, metricTypeOverride?: MetricType): 
     return metricTypeOverride;
   }
 
-  // Fall back to static METRIC_CONFIG for known metrics
+  // Check METRIC_CONFIG first (may be empty, but kept for compatibility)
   const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  if (config) {
+  if (config?.metricType) {
     return config.metricType;
   }
 
-  // Last resort fallback for unknown metrics (should rarely happen if DB is source of truth)
-  // Default to higher_is_better as most custom metrics are performance metrics
+  // Fall back to known lower-is-better metrics
+  if (LOWER_IS_BETTER_METRICS.includes(metric as any)) {
+    return 'lower_is_better';
+  }
+
+  // Default to higher_is_better as most performance metrics are higher-is-better
   return 'higher_is_better';
 }
 
@@ -66,114 +69,63 @@ export function isLowerIsBetter(metric: string): boolean {
   return getMetricType(metric) === 'lower_is_better';
 }
 
+/**
+ * Get the display name for a metric
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @returns The metric code (fallback behavior after removing hardcoded definitions)
+ */
 export function getMetricDisplayName(metric: string): string {
-  switch (metric) {
-    case "FLY10_TIME":
-      return "Fly-10";
-    case "VERTICAL_JUMP":
-      return "Vertical Jump";
-    case "AGILITY_505":
-      return "5-0-5";
-    case "AGILITY_5105":
-      return "5-10-5";
-    case "T_TEST":
-      return "T-Test";
-    case "DASH_40YD":
-      return "40yd Dash";
-    case "RSI":
-      return "RSI";
-    default:
-      return metric;
-  }
+  return metric;
 }
 
+/**
+ * Get the badge variant for a metric
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @returns "secondary" (fallback behavior after removing hardcoded definitions)
+ */
 export function getMetricBadgeVariant(metric: string): "default" | "secondary" | "destructive" | "outline" {
-  switch (metric) {
-    case "FLY10_TIME":
-      return "default";
-    case "VERTICAL_JUMP":
-      return "secondary";
-    case "AGILITY_505":
-    case "AGILITY_5105":
-      return "outline";
-    case "T_TEST":
-      return "destructive";
-    case "DASH_40YD":
-      return "default";
-    case "RSI":
-      return "outline";
-    default:
-      return "secondary";
-  }
+  return "secondary";
 }
 
+/**
+ * Get the color class for a metric
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @returns "bg-gray-100 text-gray-800" (fallback behavior after removing hardcoded definitions)
+ */
 export function getMetricColor(metric: string): string {
-  switch (metric) {
-    case "FLY10_TIME":
-      return "bg-blue-100 text-blue-800";
-    case "VERTICAL_JUMP":
-      return "bg-purple-100 text-purple-800";
-    case "AGILITY_505":
-      return "bg-green-100 text-green-800";
-    case "AGILITY_5105":
-      return "bg-yellow-100 text-yellow-800";
-    case "T_TEST":
-      return "bg-red-100 text-red-800";
-    case "DASH_40YD":
-      return "bg-indigo-100 text-indigo-800";
-    case "RSI":
-      return "bg-orange-100 text-orange-800";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
+  return "bg-gray-100 text-gray-800";
 }
 
+/**
+ * Get the units for a metric
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @returns Empty string (fallback behavior after removing hardcoded definitions)
+ */
 export function getMetricUnits(metric: string): string {
-  switch (metric) {
-    case "FLY10_TIME":
-    case "AGILITY_505":
-    case "AGILITY_5105":
-    case "T_TEST":
-    case "DASH_40YD":
-      return "s";
-    case "VERTICAL_JUMP":
-      return "in";
-    case "RSI":
-      return "";
-    default:
-      return "";
-  }
+  return "";
 }
 
+/**
+ * Get the icon for a metric
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @returns Clock icon (fallback behavior after removing hardcoded definitions)
+ */
 export function getMetricIcon(metric: string) {
-  switch (metric) {
-    case "FLY10_TIME":
-      return Clock;
-    case "VERTICAL_JUMP":
-      return ArrowUp;
-    case "AGILITY_505":
-    case "AGILITY_5105":
-      return Zap;
-    case "T_TEST":
-      return Move;
-    case "DASH_40YD":
-      return Timer;
-    case "RSI":
-      return TrendingUp;
-    default:
-      return Clock;
-  }
+  return Clock;
 }
 
+/**
+ * Format a metric value
+ * @deprecated Use database (site_metrics table) via useMetricConfig hook
+ * @param metric - Metric code
+ * @param value - The value to format
+ * @returns Plain number string (fallback behavior after removing hardcoded definitions)
+ */
 export function formatMetricValue(metric: string, value: number): string {
-  switch (metric) {
-    case "FLY10_TIME":
-      return formatFly10TimeWithSpeed(value);
-    case "VERTICAL_JUMP":
-      return `${value}in`;
-    case "RSI":
-      return `${value}`;
-    default:
-      return `${value}s`;
-  }
+  return `${value}`;
 }

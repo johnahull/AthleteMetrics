@@ -37,7 +37,9 @@ describe('measurementsToCSVString', () => {
     expect(lines[1]).toContain('2024-01-15');
   });
 
-  it('should use human-readable metric names', () => {
+  it('should use metric codes (database labels injected by caller in production)', () => {
+    // NOTE: getMetricDisplayName now returns metric codes directly.
+    // In production, labels come from useMetricConfig hook via database.
     const measurements: Partial<Measurement>[] = [
       {
         id: '1',
@@ -65,8 +67,9 @@ describe('measurementsToCSVString', () => {
 
     const csv = measurementsToCSVString(measurements as Measurement[]);
 
-    expect(csv).toContain('10-Yard Fly');
-    expect(csv).toContain('Vertical Jump');
+    // Now returns metric codes (fallback behavior)
+    expect(csv).toContain('FLY10_TIME');
+    expect(csv).toContain('VERTICAL_JUMP');
   });
 
   it('should show "Verified" or "Unverified" for status', () => {
@@ -185,7 +188,9 @@ describe('measurementsToCSVString', () => {
     expect(csv).toContain('Varsity Football');
   });
 
-  it('should handle all metric types', () => {
+  it('should handle all metric types (outputs metric codes)', () => {
+    // NOTE: getMetricDisplayName now returns metric codes directly.
+    // In production, labels come from useMetricConfig hook via database.
     const metricTypes = [
       'FLY10_TIME',
       'VERTICAL_JUMP',
@@ -211,15 +216,15 @@ describe('measurementsToCSVString', () => {
 
     const csv = measurementsToCSVString(measurements as Measurement[]);
 
-    // Should contain all human-readable names
-    expect(csv).toContain('10-Yard Fly');
-    expect(csv).toContain('Vertical Jump');
-    expect(csv).toContain('5-0-5 Agility');
-    expect(csv).toContain('5-10-5 Agility');
-    expect(csv).toContain('T-Test');
-    expect(csv).toContain('40-Yard Dash');
-    expect(csv).toContain('Top Speed');
-    expect(csv).toContain('Reactive Strength Index');
+    // Now outputs metric codes (fallback behavior - labels come from database in production)
+    expect(csv).toContain('FLY10_TIME');
+    expect(csv).toContain('VERTICAL_JUMP');
+    expect(csv).toContain('AGILITY_505');
+    expect(csv).toContain('AGILITY_5105');
+    expect(csv).toContain('T_TEST');
+    expect(csv).toContain('DASH_40YD');
+    expect(csv).toContain('TOP_SPEED');
+    expect(csv).toContain('RSI');
   });
 });
 
