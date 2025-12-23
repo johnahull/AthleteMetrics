@@ -124,13 +124,14 @@ describe('MeasurementTimeline', () => {
 
       const measurementCards = screen.getAllByTestId(/^measurement-card-/);
 
-      // First card should be the most recent (Dec 15)
-      expect(within(measurementCards[0]).getByText('10-Yard Fly')).toBeInTheDocument();
-      expect(within(measurementCards[0]).getByText('1.52s')).toBeInTheDocument();
+      // First card should be the most recent (Dec 15) - now shows raw metric codes
+      expect(within(measurementCards[0]).getByText('FLY10_TIME')).toBeInTheDocument();
+      // Value and unit are separate text nodes in the component
+      expect(within(measurementCards[0]).getByText('1.52', { exact: false })).toBeInTheDocument();
 
       // Second card should be Dec 10
-      expect(within(measurementCards[1]).getByText('Vertical Jump')).toBeInTheDocument();
-      expect(within(measurementCards[1]).getByText('28.5in')).toBeInTheDocument();
+      expect(within(measurementCards[1]).getByText('VERTICAL_JUMP')).toBeInTheDocument();
+      expect(within(measurementCards[1]).getByText('28.5', { exact: false })).toBeInTheDocument();
     });
 
     it('should show month/year headers as timeline markers', () => {
@@ -163,11 +164,11 @@ describe('MeasurementTimeline', () => {
       // Unit formatting should come from API response in production.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      // Raw values displayed (formatMetricValue returns value without unit)
-      expect(screen.getByText('1.52')).toBeInTheDocument();
-      expect(screen.getByText('28.5')).toBeInTheDocument();
-      expect(screen.getByText('4.85')).toBeInTheDocument();
-      expect(screen.getByText('9.32')).toBeInTheDocument();
+      // Values displayed - use exact: false because value and unit are separate text nodes
+      expect(screen.getByText('1.52', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('28.5', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('4.85', { exact: false })).toBeInTheDocument();
+      expect(screen.getByText('9.32', { exact: false })).toBeInTheDocument();
     });
 
     it('should display date in day format', () => {

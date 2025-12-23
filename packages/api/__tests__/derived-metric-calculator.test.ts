@@ -199,7 +199,8 @@ describe('DerivedMetricCalculator', () => {
       const metadata = calculatedMeasurements[0].calculationMetadata;
 
       expect(metadata).toBeDefined();
-      expect(metadata?.formula).toBe('10 / FLY10_TIME * 2.045');
+      // Formula is normalized to lowercase when stored by the calculator
+      expect(metadata?.formula).toBe('10 / fly10_time * 2.04545');
       expect(metadata?.sourceValues).toEqual({ fly10_time: 1.0 }); // Normalized to lowercase
       expect(metadata?.calculatedAt).toBeDefined();
       expect(new Date(metadata!.calculatedAt).getTime()).toBeGreaterThan(Date.now() - 5000); // Within last 5 seconds
