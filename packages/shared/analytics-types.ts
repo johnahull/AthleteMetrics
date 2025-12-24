@@ -454,6 +454,38 @@ export const LOWER_IS_BETTER_METRICS = [
 
 export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
 
+/**
+ * Type-safe check if a metric code is in the LOWER_IS_BETTER_METRICS list
+ * @param metric - Metric code to check
+ * @returns true if metric is a lower-is-better metric
+ */
+export function isLowerIsBetterMetric(metric: string): metric is LowerIsBetterMetric {
+  return (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
+}
+
+/**
+ * Get the metric type with fallback to LOWER_IS_BETTER_METRICS list
+ * This is the canonical implementation used across the codebase.
+ *
+ * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
+ * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
+ */
+export function getMetricTypeWithFallback(metric: string): MetricType {
+  // Check METRIC_CONFIG first (may be empty after static metric removal)
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  if (config?.metricType) {
+    return config.metricType;
+  }
+
+  // Fall back to known lower-is-better metrics using type-safe check
+  if (isLowerIsBetterMetric(metric)) {
+    return 'lower_is_better';
+  }
+
+  // Default to higher_is_better (most performance metrics)
+  return 'higher_is_better';
+}
+
 // Color schemes for charts
 export const CHART_COLOR_SCHEMES = {
   primary: ['#3B82F6', '#EF4444', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'],

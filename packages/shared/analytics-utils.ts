@@ -4,27 +4,7 @@
  */
 
 import type { StatisticalSummary, ChartDataPoint, MetricType } from './analytics-types';
-import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS } from './analytics-types';
-
-/**
- * Get the metric type for a given metric code
- * Falls back to checking known lower-is-better metrics when METRIC_CONFIG is empty
- */
-function getMetricTypeFromConfig(metric: string): MetricType {
-  // Try METRIC_CONFIG first
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  if (config?.metricType) {
-    return config.metricType;
-  }
-
-  // Fall back to known lower-is-better metrics
-  if (LOWER_IS_BETTER_METRICS.includes(metric as any)) {
-    return 'lower_is_better';
-  }
-
-  // Default to higher_is_better (most performance metrics)
-  return 'higher_is_better';
-}
+import { getMetricTypeWithFallback } from './analytics-types';
 
 /**
  * Validates that input values are valid numbers
@@ -148,7 +128,7 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
 export function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
   if (stats.count === 0) return 0;
 
-  const metricType = getMetricTypeFromConfig(metric);
+  const metricType = getMetricTypeWithFallback(metric);
 
   // For tracking metrics, use max as proxy for latest value
   // For lower_is_better, use min; for higher_is_better, use max
@@ -173,7 +153,7 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
     if (athleteMetricData.length === 0) return athleteMetricData[0]; // Should not happen
 
     const metric = athleteMetricData[0].metric;
-    const metricType = getMetricTypeFromConfig(metric);
+    const metricType = getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, find the most recent measurement by date
@@ -215,7 +195,7 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
     if (athleteMetricDateData.length === 0) return athleteMetricDateData[0]; // Should not happen
 
     const metric = athleteMetricDateData[0].metric;
-    const metricType = getMetricTypeFromConfig(metric);
+    const metricType = getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, all values on same date are equally valid, return first

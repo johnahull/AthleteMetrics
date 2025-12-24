@@ -1,6 +1,11 @@
 // Utility functions for measurement metrics
 import { Clock } from "lucide-react";
-import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS, type MetricType, type LowerIsBetterMetric } from "@shared/analytics-types";
+import {
+  LOWER_IS_BETTER_METRICS,
+  getMetricTypeWithFallback,
+  type MetricType,
+  type LowerIsBetterMetric
+} from "@shared/analytics-types";
 
 // Re-export for backwards compatibility
 export { LOWER_IS_BETTER_METRICS, type LowerIsBetterMetric };
@@ -23,19 +28,8 @@ export function getMetricType(metric: string, metricTypeOverride?: MetricType): 
     return metricTypeOverride;
   }
 
-  // Check METRIC_CONFIG first (may be empty, but kept for compatibility)
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  if (config?.metricType) {
-    return config.metricType;
-  }
-
-  // Fall back to known lower-is-better metrics
-  if (LOWER_IS_BETTER_METRICS.includes(metric as any)) {
-    return 'lower_is_better';
-  }
-
-  // Default to higher_is_better as most performance metrics are higher-is-better
-  return 'higher_is_better';
+  // Use shared fallback logic from analytics-types
+  return getMetricTypeWithFallback(metric);
 }
 
 /**

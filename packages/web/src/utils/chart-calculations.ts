@@ -7,24 +7,8 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration, MetricType } from '@shared/analytics-types';
-import { METRIC_CONFIG, LOWER_IS_BETTER_METRICS } from '@shared/analytics-types';
+import { METRIC_CONFIG, getMetricTypeWithFallback } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
-
-/**
- * Helper to get metric type with fallback to known lower-is-better metrics
- */
-function getMetricTypeFromConfigOrFallback(metric: string): MetricType {
-  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  if (config?.metricType) {
-    return config.metricType;
-  }
-  // Fall back to known lower-is-better metrics
-  if (LOWER_IS_BETTER_METRICS.includes(metric as typeof LOWER_IS_BETTER_METRICS[number])) {
-    return 'lower_is_better';
-  }
-  // Default to higher_is_better (most performance metrics)
-  return 'higher_is_better';
-}
 import type {
   ChartPoint,
   ChartDataset,
@@ -52,9 +36,9 @@ export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): 
   const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
   const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
 
-  // Use helper function with fallback for metric types
-  const xMetricType = getMetricTypeFromConfigOrFallback(xMetric);
-  const yMetricType = getMetricTypeFromConfigOrFallback(yMetric);
+  // Use shared fallback logic for metric types
+  const xMetricType = getMetricTypeWithFallback(xMetric);
+  const yMetricType = getMetricTypeWithFallback(yMetric);
 
   const xIsTracking = xMetricType === 'tracking';
   const yIsTracking = yMetricType === 'tracking';
