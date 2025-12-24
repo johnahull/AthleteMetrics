@@ -432,20 +432,101 @@ export interface OrganizationMetricConfig extends DynamicMetricConfig {
 }
 
 // Legacy: Metric units and labels (DEPRECATED - use API-fetched metrics instead)
-// Kept for backward compatibility during migration
-// TODO: Remove after all components updated to use dynamic metrics
-export const METRIC_CONFIG = {
-  FLY10_TIME: { label: '10-Yard Fly Time', unit: 's', metricType: 'lower_is_better' as MetricType },
-  VERTICAL_JUMP: { label: 'Vertical Jump', unit: 'in', metricType: 'higher_is_better' as MetricType },
-  AGILITY_505: { label: '5-0-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  AGILITY_5105: { label: '5-10-5 Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  T_TEST: { label: 'T-Test Agility', unit: 's', metricType: 'lower_is_better' as MetricType },
-  DASH_40YD: { label: '40-Yard Dash', unit: 's', metricType: 'lower_is_better' as MetricType },
-  RSI: { label: 'Reactive Strength Index', unit: '', metricType: 'higher_is_better' as MetricType },
-  TOP_SPEED: { label: 'Top Speed', unit: 'mph', metricType: 'higher_is_better' as MetricType },
-  HEIGHT: { label: 'Height', unit: 'in', metricType: 'tracking' as MetricType },
-  WEIGHT: { label: 'Weight', unit: 'lbs', metricType: 'tracking' as MetricType }
-} as const;
+// Database (site_metrics table) is now the single source of truth
+// Use useMetricConfig hook to fetch metric configuration
+export const METRIC_CONFIG: Record<string, { label: string; unit: string; metricType: MetricType }> = {};
+
+/**
+ * Canonical list of time-based metrics where lower values indicate better performance.
+ * Used as fallback when database config is not available.
+ *
+ * IMPORTANT: This is the SINGLE SOURCE OF TRUTH for this list.
+ * All other files should import from here to avoid duplication.
+ */
+export const LOWER_IS_BETTER_METRICS = [
+  'FLY10_TIME',
+  'AGILITY_505',
+  'AGILITY_5105',
+  'T_TEST',
+  'DASH_40YD',
+  'DASH_10YD',
+] as const;
+
+export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
+
+/**
+ * Type-safe check if a metric code is in the LOWER_IS_BETTER_METRICS list
+ *
+ * This is a type guard that narrows the type to LowerIsBetterMetric.
+ * For general metric type detection, prefer getMetricTypeWithFallback() which
+ * also checks METRIC_CONFIG and provides default behavior.
+ *
+ * @param metric - Metric code to check (e.g., 'FLY10_TIME', 'DASH_40YD')
+ * @returns true if metric is in the LOWER_IS_BETTER_METRICS list
+ *
+ * @example
+ * ```typescript
+ * if (isLowerIsBetterMetric('FLY10_TIME')) {
+ *   // TypeScript knows metric is LowerIsBetterMetric here
+ *   console.log('Lower is better for this metric');
+ * }
+ * ```
+ */
+export function isLowerIsBetterMetric(metric: string): metric is LowerIsBetterMetric {
+  return (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
+}
+
+/**
+ * Get the metric type with fallback to LOWER_IS_BETTER_METRICS list
+ *
+ * This is the canonical implementation used across the codebase for determining
+ * metric types when database configuration is unavailable. It provides a robust
+ * fallback chain to ensure consistent behavior.
+ *
+ * **Fallback chain:**
+ * 1. Check METRIC_CONFIG (static definitions, may be empty after database migration)
+ * 2. Check LOWER_IS_BETTER_METRICS list (time-based metrics)
+ * 3. Default to 'higher_is_better' (most performance metrics)
+ *
+ * **Note:** For React components, prefer using the `useMetricConfig` hook to fetch
+ * metric types directly from the database (site_metrics table). This function is
+ * provided for utility code that cannot use React hooks.
+ *
+ * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
+ * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
+ *
+ * @example
+ * ```typescript
+ * // In utility functions (non-React code)
+ * const metricType = getMetricTypeWithFallback('FLY10_TIME');
+ * // Returns 'lower_is_better'
+ *
+ * const shouldSortAscending = metricType === 'lower_is_better';
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // In React components, prefer using the hook:
+ * const { data: metrics } = useMetricConfig();
+ * const metricConfig = metrics?.find(m => m.code === 'FLY10_TIME');
+ * const metricType = metricConfig?.metricType ?? getMetricTypeWithFallback('FLY10_TIME');
+ * ```
+ */
+export function getMetricTypeWithFallback(metric: string): MetricType {
+  // Check METRIC_CONFIG first (may be empty after static metric removal)
+  const config = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
+  if (config?.metricType) {
+    return config.metricType;
+  }
+
+  // Fall back to known lower-is-better metrics using type-safe check
+  if (isLowerIsBetterMetric(metric)) {
+    return 'lower_is_better';
+  }
+
+  // Default to higher_is_better (most performance metrics)
+  return 'higher_is_better';
+}
 
 // Color schemes for charts
 export const CHART_COLOR_SCHEMES = {

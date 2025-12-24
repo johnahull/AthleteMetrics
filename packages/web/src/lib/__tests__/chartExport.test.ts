@@ -68,13 +68,15 @@ describe('Chart Export Utilities - TDD', () => {
 
   describe('generateExportFilename', () => {
     it('should generate CSV filename with correct format', () => {
+      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
       const filename = generateExportFilename(
         'box_plot',
         { primary: 'FLY10_TIME', additional: [] },
         'csv'
       );
 
-      expect(filename).toMatch(/^analytics_box-plot_10-Yard_Fly_Time_chart_\d{4}-\d{2}-\d{2}\.csv$/);
+      // Without metricLabelMap, falls back to metric code
+      expect(filename).toMatch(/^analytics_box-plot_FLY10_TIME_chart_\d{4}-\d{2}-\d{2}\.csv$/);
     });
 
     it('should generate PNG filename', () => {
@@ -88,15 +90,17 @@ describe('Chart Export Utilities - TDD', () => {
     });
 
     it('should handle multiple metrics in filename', () => {
+      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
       const filename = generateExportFilename(
         'multi_line',
         { primary: 'FLY10_TIME', additional: ['VERTICAL_JUMP', 'RSI'] },
         'csv'
       );
 
-      expect(filename).toContain('10-Yard_Fly');
-      expect(filename).toContain('Vertical_Jump');
-      expect(filename).toContain('Reactive_Strength_Index');
+      // Without metricLabelMap, falls back to metric codes
+      expect(filename).toContain('FLY10_TIME');
+      expect(filename).toContain('VERTICAL_JUMP');
+      expect(filename).toContain('RSI');
     });
 
     describe('Security: Filename Sanitization', () => {
@@ -329,6 +333,7 @@ describe('Chart Export Utilities - TDD', () => {
     });
 
     it('should export MultiMetricData[] as CSV', () => {
+      // NOTE: METRIC_CONFIG is now empty - labels come from database via metricLabelMap parameter
       const mockMultiMetric: MultiMetricData[] = [
         {
           athleteId: 'athlete-1',
@@ -361,9 +366,10 @@ describe('Chart Export Utilities - TDD', () => {
       expect(downloadCSV).toHaveBeenCalledTimes(1);
       const csvContent = (downloadCSV as any).mock.calls[0][0];
       expect(csvContent).toContain('Athlete ID');
-      expect(csvContent).toContain('10-Yard Fly');
-      expect(csvContent).toContain('Vertical Jump');
-      expect(csvContent).toContain('Reactive Strength Index');
+      // Without metricLabelMap, falls back to metric codes
+      expect(csvContent).toContain('FLY10_TIME');
+      expect(csvContent).toContain('VERTICAL_JUMP');
+      expect(csvContent).toContain('RSI');
     });
 
     it('should handle empty data gracefully', () => {

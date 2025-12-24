@@ -67,6 +67,18 @@ vi.mock('@/hooks/use-toast', () => ({
   })),
 }));
 
+// Mock useAvailableMetrics hook to avoid QueryClient requirement
+vi.mock('@/hooks/use-available-metrics', () => ({
+  useAvailableMetrics: vi.fn(() => ({
+    metrics: [
+      { code: 'FLY10_TIME', label: '10-Yard Fly', unit: 's' },
+      { code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' },
+      { code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's' },
+    ],
+    isLoading: false,
+  })),
+}));
+
 // Mock MeasurementHistoryTable component
 vi.mock('@/components/athlete/MeasurementHistoryTable', () => ({
   MeasurementHistoryTable: ({ measurements, isLoading }: { measurements: Measurement[]; isLoading: boolean }) => (

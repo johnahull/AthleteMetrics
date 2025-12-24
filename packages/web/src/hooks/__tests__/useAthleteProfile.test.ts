@@ -133,23 +133,18 @@ describe('useAthleteProfile Hook', () => {
   });
 
   describe('useAthleteTeamsData', () => {
-    it('should fetch athlete and then their teams', async () => {
-      const mockAthlete = createMockAthlete({ teamIds: ['team-1', 'team-2'] });
+    it('should fetch athlete and return their teams', async () => {
+      // The API returns teams directly in the athlete response, not as teamIds
       const mockTeams = [
         { id: 'team-1', name: 'Varsity Soccer' },
         { id: 'team-2', name: 'JV Soccer' },
-        { id: 'team-3', name: 'Other Team' },
       ];
+      const mockAthlete = createMockAthlete({ teams: mockTeams });
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAthlete,
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockTeams,
-        });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockAthlete,
+      });
 
       const { result } = renderHook(
         () => useAthleteTeamsData('athlete-123'),
@@ -160,15 +155,12 @@ describe('useAthleteProfile Hook', () => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Should only return teams the athlete belongs to
-      expect(result.current.data).toEqual([
-        { id: 'team-1', name: 'Varsity Soccer' },
-        { id: 'team-2', name: 'JV Soccer' },
-      ]);
+      // Should return teams from the athlete response
+      expect(result.current.data).toEqual(mockTeams);
     });
 
     it('should return empty array when athlete has no team assignments', async () => {
-      const mockAthlete = createMockAthlete({ teamIds: [] });
+      const mockAthlete = createMockAthlete({ teams: [] });
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -190,24 +182,20 @@ describe('useAthleteProfile Hook', () => {
 
   describe('useAthleteProfileComplete', () => {
     it('should combine athlete and teams data', async () => {
-      const mockAthlete = createMockAthlete({ teamIds: ['team-1'] });
+      // Teams are returned directly in the athlete response
       const mockTeams = [{ id: 'team-1', name: 'Varsity Soccer' }];
+      const mockAthlete = createMockAthlete({ teams: mockTeams });
 
       mockFetch
-        // First call for athlete profile
+        // First call for athlete profile query
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockAthlete,
         })
-        // Second call for athlete in teams query
+        // Second call for teams query (also fetches athlete)
         .mockResolvedValueOnce({
           ok: true,
           json: async () => mockAthlete,
-        })
-        // Third call for teams
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockTeams,
         });
 
       const { result } = renderHook(

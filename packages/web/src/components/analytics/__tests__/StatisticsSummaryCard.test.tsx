@@ -185,8 +185,8 @@ describe('StatisticsSummaryCard', () => {
       expect(screen.getByText('Count (N)')).toBeInTheDocument();
       const allOnes = screen.getAllByText('1');
       expect(allOnes.length).toBeGreaterThan(0); // Count
-      // Mean, Median, Q1, Q3 all same with units
-      const allThirty = screen.getAllByText('30in');
+      // Mean, Median, Q1, Q3 all same - value and units may be separate text nodes
+      const allThirty = screen.getAllByText('30', { exact: false });
       expect(allThirty.length).toBeGreaterThan(0);
     });
 
@@ -247,8 +247,8 @@ describe('StatisticsSummaryCard', () => {
         />
       );
 
-      // Standard deviation and IQR should be 0 with units
-      const allZeros = screen.getAllByText('0.00in');
+      // Standard deviation and IQR should be 0 - value and units may be separate text nodes
+      const allZeros = screen.getAllByText('0.00', { exact: false });
       expect(allZeros.length).toBeGreaterThanOrEqual(2); // StdDev and IQR
     });
   });

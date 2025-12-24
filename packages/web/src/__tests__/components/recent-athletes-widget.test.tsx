@@ -177,10 +177,10 @@ describe("RecentAthletesWidget", () => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
       });
 
-      // Check measurement types are displayed
-      expect(screen.getByText(/Fly-10/i)).toBeInTheDocument();
-      expect(screen.getByText(/Vertical Jump/i)).toBeInTheDocument();
-      expect(screen.getByText(/40yd Dash/i)).toBeInTheDocument();
+      // Check measurement types are displayed (now as raw metric codes - fallback behavior)
+      expect(screen.getByText("FLY10_TIME")).toBeInTheDocument();
+      expect(screen.getByText("VERTICAL_JUMP")).toBeInTheDocument();
+      expect(screen.getByText("DASH_40YD")).toBeInTheDocument();
 
       // Check dates are formatted and displayed
       const dates = screen.getAllByText(/Nov \d{1,2}/i);
