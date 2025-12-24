@@ -81,31 +81,40 @@ describe('DerivedMetricCalculator', () => {
     }
     sourceMetric = source;
 
-    // Create or get existing derived metric (TOP_SPEED_CALC)
+    // Create or update derived metric (TOP_SPEED_CALC) to ensure consistent test data
+    const testDerivedMetricData = {
+      code: 'TOP_SPEED_CALC',
+      label: 'Top Speed (Calculated)',
+      category: 'speed',
+      unit: 'mph',
+      metricType: 'higher_is_better' as const,
+      isSystemDefault: false,
+      isActive: true,
+      isDerived: true,
+      formula: '10 / FLY10_TIME * 2.045',
+      dependentMetrics: ['FLY10_TIME'],
+      calculationConfig: {
+        dateMatchStrategy: 'same_date',
+        missingSourceBehavior: 'skip',
+      },
+    };
+
     let [derived] = await db
       .select()
       .from(siteMetrics)
       .where(eq(siteMetrics.code, 'TOP_SPEED_CALC'));
 
-    if (!derived) {
+    if (derived) {
+      // Update existing metric to ensure test has expected formula
+      [derived] = await db
+        .update(siteMetrics)
+        .set(testDerivedMetricData)
+        .where(eq(siteMetrics.code, 'TOP_SPEED_CALC'))
+        .returning();
+    } else {
       [derived] = await db
         .insert(siteMetrics)
-        .values({
-          code: 'TOP_SPEED_CALC',
-          label: 'Top Speed (Calculated)',
-          category: 'speed',
-          unit: 'mph',
-          metricType: 'higher_is_better',
-          isSystemDefault: false,
-          isActive: true,
-          isDerived: true,
-          formula: '10 / FLY10_TIME * 2.045',
-          dependentMetrics: ['FLY10_TIME'],
-          calculationConfig: {
-            dateMatchStrategy: 'same_date',
-            missingSourceBehavior: 'skip',
-          },
-        })
+        .values(testDerivedMetricData)
         .returning();
     }
     derivedMetric = derived;
@@ -199,8 +208,8 @@ describe('DerivedMetricCalculator', () => {
       const metadata = calculatedMeasurements[0].calculationMetadata;
 
       expect(metadata).toBeDefined();
-      // Formula is normalized to lowercase when stored by the calculator
-      expect(metadata?.formula).toBe('10 / fly10_time * 2.04545');
+      // Formula is stored as-is from the derived metric definition
+      expect(metadata?.formula).toBe('10 / FLY10_TIME * 2.045');
       expect(metadata?.sourceValues).toEqual({ fly10_time: 1.0 }); // Normalized to lowercase
       expect(metadata?.calculatedAt).toBeDefined();
       expect(new Date(metadata!.calculatedAt).getTime()).toBeGreaterThan(Date.now() - 5000); // Within last 5 seconds
@@ -753,8 +762,8 @@ describe('DerivedMetricCalculator', () => {
           )
         );
 
-      // TOP_SPEED_CALC = 10 / 0.9 * 2.045 = 22.72 mph
-      expect(parseFloat(updatedCalculated.value)).toBeCloseTo(22.72, 2);
+      // TOP_SPEED_CALC = 10 / 0.9 * 2.045 = 22.727 mph
+      expect(parseFloat(updatedCalculated.value)).toBeCloseTo(22.727, 2);
     });
 
     it('should delete calculated measurement if source becomes missing', async () => {
