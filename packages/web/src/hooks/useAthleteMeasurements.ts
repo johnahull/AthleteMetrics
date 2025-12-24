@@ -9,7 +9,6 @@
 
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
 import type { Measurement } from '@shared/schema';
-import { useAthleteOrg } from '@/lib/athlete-org-context';
 import { useContext } from 'react';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 
