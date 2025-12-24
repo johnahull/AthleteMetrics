@@ -456,8 +456,21 @@ export type LowerIsBetterMetric = typeof LOWER_IS_BETTER_METRICS[number];
 
 /**
  * Type-safe check if a metric code is in the LOWER_IS_BETTER_METRICS list
- * @param metric - Metric code to check
- * @returns true if metric is a lower-is-better metric
+ *
+ * This is a type guard that narrows the type to LowerIsBetterMetric.
+ * For general metric type detection, prefer getMetricTypeWithFallback() which
+ * also checks METRIC_CONFIG and provides default behavior.
+ *
+ * @param metric - Metric code to check (e.g., 'FLY10_TIME', 'DASH_40YD')
+ * @returns true if metric is in the LOWER_IS_BETTER_METRICS list
+ *
+ * @example
+ * ```typescript
+ * if (isLowerIsBetterMetric('FLY10_TIME')) {
+ *   // TypeScript knows metric is LowerIsBetterMetric here
+ *   console.log('Lower is better for this metric');
+ * }
+ * ```
  */
 export function isLowerIsBetterMetric(metric: string): metric is LowerIsBetterMetric {
   return (LOWER_IS_BETTER_METRICS as readonly string[]).includes(metric);
@@ -465,10 +478,39 @@ export function isLowerIsBetterMetric(metric: string): metric is LowerIsBetterMe
 
 /**
  * Get the metric type with fallback to LOWER_IS_BETTER_METRICS list
- * This is the canonical implementation used across the codebase.
+ *
+ * This is the canonical implementation used across the codebase for determining
+ * metric types when database configuration is unavailable. It provides a robust
+ * fallback chain to ensure consistent behavior.
+ *
+ * **Fallback chain:**
+ * 1. Check METRIC_CONFIG (static definitions, may be empty after database migration)
+ * 2. Check LOWER_IS_BETTER_METRICS list (time-based metrics)
+ * 3. Default to 'higher_is_better' (most performance metrics)
+ *
+ * **Note:** For React components, prefer using the `useMetricConfig` hook to fetch
+ * metric types directly from the database (site_metrics table). This function is
+ * provided for utility code that cannot use React hooks.
  *
  * @param metric - Metric code (e.g., 'FLY10_TIME', 'HEIGHT', 'TOP_SPEED_CALC')
  * @returns MetricType - 'lower_is_better', 'higher_is_better', or 'tracking'
+ *
+ * @example
+ * ```typescript
+ * // In utility functions (non-React code)
+ * const metricType = getMetricTypeWithFallback('FLY10_TIME');
+ * // Returns 'lower_is_better'
+ *
+ * const shouldSortAscending = metricType === 'lower_is_better';
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // In React components, prefer using the hook:
+ * const { data: metrics } = useMetricConfig();
+ * const metricConfig = metrics?.find(m => m.code === 'FLY10_TIME');
+ * const metricType = metricConfig?.metricType ?? getMetricTypeWithFallback('FLY10_TIME');
+ * ```
  */
 export function getMetricTypeWithFallback(metric: string): MetricType {
   // Check METRIC_CONFIG first (may be empty after static metric removal)
