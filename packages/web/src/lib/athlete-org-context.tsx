@@ -3,14 +3,14 @@
  * Provides organization filter state with localStorage persistence
  */
 
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from './auth';
 import { getAthleteOrgFilter, setAthleteOrgFilter } from './athlete-org-storage';
 
 /**
  * Filter mode types:
  * - 'all': Show all organizations
- * - 'personal': Show only personal/independent data
+ * - 'personal': Show only personal data (no organization)
  * - string (org ID): Show specific organization
  */
 export type FilterMode = 'all' | 'personal' | string;
@@ -37,6 +37,9 @@ export const AthleteOrgContext = createContext<AthleteOrgContextType | undefined
 export function AthleteOrgProvider({ children }: { children: React.ReactNode }) {
   const { user, userOrganizations } = useAuth();
   const [filterMode, setFilterModeState] = useState<FilterMode>('all');
+
+  // Track previous organizations to prevent unnecessary re-validation
+  const prevOrgsRef = useRef<OrganizationOption[]>([]);
 
   // Convert userOrganizations to OrganizationOption array
   const organizations = useMemo<OrganizationOption[]>(() => {
@@ -81,9 +84,21 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
     }
   }, [user?.id, organizations]);
 
-  // Re-validate filter when organizations change
+  // Re-validate filter when organizations change (only if they actually changed)
   useEffect(() => {
     if (!user?.id) return;
+
+    // Check if organizations actually changed (deep equality by comparing IDs)
+    const prevOrgIds = prevOrgsRef.current.map(org => org.id).sort().join(',');
+    const currentOrgIds = organizations.map(org => org.id).sort().join(',');
+
+    if (prevOrgIds === currentOrgIds) {
+      // Organizations haven't changed, skip re-validation
+      return;
+    }
+
+    // Update the ref with current organizations
+    prevOrgsRef.current = organizations;
 
     // If current filter is an org ID, check if it still exists
     if (filterMode !== 'all' && filterMode !== 'personal') {
@@ -135,8 +150,33 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
 }
 
 /**
- * Hook to access athlete organization context
- * @throws Error if used outside AthleteOrgProvider
+ * Hook to access athlete organization filter context
+ *
+ * Provides current filter mode, organization list, and methods to change filter mode.
+ * The filter mode controls which measurements are displayed:
+ * - 'all': All organizations plus personal measurements
+ * - 'personal': Only self-entered measurements (no organization)
+ * - string (org ID): Measurements from a specific organization
+ *
+ * Filter selection is automatically persisted to localStorage and restored
+ * across sessions and navigation.
+ *
+ * @example
+ * ```tsx
+ * const { filterMode, setFilterMode, organizations } = useAthleteOrg();
+ *
+ * // Switch to personal only view
+ * setFilterMode('personal');
+ *
+ * // Switch to specific organization
+ * setFilterMode(organizations[0].id);
+ *
+ * // Switch to all organizations
+ * setFilterMode('all');
+ * ```
+ *
+ * @returns {AthleteOrgContextType} Context value with filterMode, setFilterMode, and organizations
+ * @throws {Error} If used outside AthleteOrgProvider
  */
 export function useAthleteOrg() {
   const context = useContext(AthleteOrgContext);

@@ -17,7 +17,7 @@ import type { FilterMode } from '@/lib/athlete-org-context';
  *
  * Allows athletes to switch between:
  * - "All Organizations" - Show data from all their organizations
- * - "Personal Only" - Show only independent/personal data
+ * - "Personal Only" - Show only personal data (no organization)
  * - Specific organization - Show data from a single organization
  *
  * Uses AthleteOrgContext for state management and localStorage persistence.
