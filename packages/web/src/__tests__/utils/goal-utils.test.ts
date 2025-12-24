@@ -371,6 +371,7 @@ describe('goal-utils', () => {
 
     it('should return 0 for today', () => {
       // Use local date format to match the function's parsing (not UTC from toISOString)
+      // This avoids timezone-dependent test failures when local date differs from UTC date
       const now = new Date();
       const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       expect(getDaysRemaining(today)).toBe(0);

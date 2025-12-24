@@ -2,8 +2,9 @@
  * Tests for server/routes.ts helper functions
  *
  * NOTE: METRIC_CONFIG is now empty - units should come from the database
- * via the site_metrics table. The getDefaultUnit function now returns 's'
- * as a fallback for all metrics.
+ * via the site_metrics table. The getDefaultUnit function returns 's' (seconds)
+ * as a fallback when a metric is not found in METRIC_CONFIG (which is always
+ * the case now since METRIC_CONFIG is empty).
  */
 
 import { describe, it, expect } from 'vitest';
