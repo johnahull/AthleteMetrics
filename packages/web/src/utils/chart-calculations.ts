@@ -7,7 +7,7 @@
  */
 
 import type { TrendData, StatisticalSummary, ChartConfiguration, MetricType } from '@shared/analytics-types';
-import { METRIC_CONFIG, getMetricTypeWithFallback } from '@shared/analytics-types';
+import { getMetricTypeWithFallback } from '@shared/analytics-types';
 import type { ChartOptions } from 'chart.js';
 import type {
   ChartPoint,
@@ -33,9 +33,6 @@ import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
  * @returns Object with quadrant labels and colors based on metric interpretation
  */
 export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): PerformanceQuadrantLabels {
-  const xConfig = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG];
-  const yConfig = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG];
-
   // Use shared fallback logic for metric types
   const xMetricType = getMetricTypeWithFallback(xMetric);
   const yMetricType = getMetricTypeWithFallback(yMetric);
@@ -45,9 +42,9 @@ export function getPerformanceQuadrantLabels(xMetric: string, yMetric: string): 
   const xLowerIsBetter = xMetricType === 'lower_is_better';
   const yLowerIsBetter = yMetricType === 'lower_is_better';
 
-  // Get clean metric names (remove common suffixes)
-  const xName = xConfig?.label?.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || xMetric;
-  const yName = yConfig?.label?.replace(/ (Time|Test|Jump|Dash|Index)$/, '') || yMetric;
+  // Use metric codes directly as fallback (labels will be provided by components using database config)
+  const xName = xMetric;
+  const yName = yMetric;
 
   // If both metrics are tracking, use neutral labels
   if (xIsTracking && yIsTracking) {
@@ -1011,11 +1008,12 @@ export function processScatterData(params: {
     }
   }
 
-  // Get metric configuration
-  const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-  const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-  const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
-  const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+  // Metric configuration should be provided by the caller (use useMetricConfig hook in React components)
+  // Fallback to metric codes for label display
+  const xUnit = '';
+  const yUnit = '';
+  const xLabel = xMetric;
+  const yLabel = yMetric;
 
   const athleteTrends = optimizedAthletes.reduce((acc: any, athlete: any) => {
     acc[athlete.athleteId] = athlete;
