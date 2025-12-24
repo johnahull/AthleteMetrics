@@ -47,6 +47,8 @@ export interface MeasurementFilters {
   includeUnknownBirthYear?: boolean;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export interface PaginatedMeasurements {
@@ -901,8 +903,9 @@ export class MeasurementService {
     allowCrossOrganization: boolean = false
   ): Promise<PaginatedMeasurements> {
     // Defense-in-depth: Enforce organizationId requirement for non-site-admin contexts
+    // Exception: filterMode queries bypass this requirement (they have their own filtering logic)
     // This prevents accidental data leakage if route-layer authorization is bypassed
-    if (!filters?.organizationId && !allowCrossOrganization) {
+    if (!filters?.organizationId && !allowCrossOrganization && !filters?.filterMode) {
       throw new Error('organizationId is required for organization-scoped queries');
     }
 
@@ -921,7 +924,31 @@ export class MeasurementService {
       conditions.push(eq(measurements.metric, filters.metric));
     }
 
-    if (filters?.organizationId) {
+    // CROSS-ORG MEASUREMENT QUERIES (filterMode parameter)
+    // Handle new filter modes: 'personal', 'all', 'org'
+    if (filters?.filterMode === 'personal') {
+      // Only self-entered measurements (organizationId IS NULL)
+      conditions.push(isNull(measurements.organizationId));
+    } else if (filters?.filterMode === 'all') {
+      // Measurements from any of specified org IDs OR personal (NULL)
+      const orgIdArray = filters.orgIds
+        ? filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '')
+        : [];
+
+      if (orgIdArray.length > 0) {
+        // Include measurements from specified orgs OR personal measurements (NULL)
+        conditions.push(
+          or(
+            inArray(measurements.organizationId, orgIdArray),
+            isNull(measurements.organizationId)
+          )!
+        );
+      } else {
+        // Empty orgIds = only personal measurements
+        conditions.push(isNull(measurements.organizationId));
+      }
+    } else if (filters?.organizationId) {
+      // Default 'org' mode: existing organizationId filter
       // STRICT ORGANIZATION ISOLATION (SECURITY FIX - 2025-12-22)
       // Only include measurements that explicitly belong to the specified organization.
       //

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { RouteWrapper } from "./components/RouteWrapper";
 import { AuthProvider } from "./lib/auth";
+import { AthleteOrgProvider } from "./lib/athlete-org-context";
 import Layout from "./components/layout";
 import Login from "./pages/login";
 import NotFound from "@/pages/not-found";
@@ -453,9 +454,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <CommandPaletteProvider>
-            <AppContent />
-          </CommandPaletteProvider>
+          <AthleteOrgProvider>
+            <CommandPaletteProvider>
+              <AppContent />
+            </CommandPaletteProvider>
+          </AthleteOrgProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

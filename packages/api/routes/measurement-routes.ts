@@ -83,6 +83,16 @@ const measurementQuerySchema = z.object({
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
   limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).optional(),
   offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
+  // Cross-org measurement query parameters
+  filterMode: z.enum(['all', 'personal', 'org']).optional(),
+  orgIds: z.string().optional().refine(
+    (val) => !val || val.split(',').every(id => {
+      const trimmedId = id.trim();
+      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      return uuidPattern.test(trimmedId);
+    }),
+    { message: "orgIds must be comma-separated valid UUIDs" }
+  ),
 }).refine(
   (data) => {
     if (data.birthYearFrom !== undefined && data.birthYearTo !== undefined) {
@@ -114,6 +124,8 @@ interface MeasurementFilters {
   organizationId?: string;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -150,26 +162,50 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.ageTo !== undefined && { ageTo: validatedParams.ageTo }),
         ...(validatedParams.limit !== undefined && { limit: validatedParams.limit }),
         ...(validatedParams.offset !== undefined && { offset: validatedParams.offset }),
+        ...(validatedParams.filterMode && { filterMode: validatedParams.filterMode }),
+        ...(validatedParams.orgIds && { orgIds: validatedParams.orgIds }),
       };
 
-      // Organization-based filtering
+      // SECURITY: Validate orgIds if provided (non-site-admins only)
+      // Site admins can query any org, non-admins must belong to all specified orgs
+      if (filters.orgIds && !isSiteAdmin(user)) {
+        const requestedOrgIds = filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '');
+
+        if (requestedOrgIds.length > 0) {
+          // Get user's organizations
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+
+          // Check if all requested orgIds belong to the user
+          const unauthorizedOrgs = requestedOrgIds.filter(orgId => !userOrgIds.has(orgId));
+          if (unauthorizedOrgs.length > 0) {
+            return res.status(403).json({
+              message: "Access denied - you are not authorized to access the specified organizations"
+            });
+          }
+        }
+      }
+
+      // Organization-based filtering (existing logic for non-filterMode queries)
       // SECURITY: Validate organization access and get effective org ID
-      const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
+      if (!filters.filterMode || filters.filterMode === 'org') {
+        const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
 
-      // For measurements endpoint, users with no org membership get empty results
-      if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
-        return res.json([]); // Users without an organization have no measurements to view
-      }
+        // For measurements endpoint, users with no org membership get empty results
+        if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
+          return res.json([]); // Users without an organization have no measurements to view
+        }
 
-      if (!orgAccessResult.allowed) {
-        return res.status(403).json({
-          message: getAuthorizationError(orgAccessResult.error!)
-        });
-      }
+        if (!orgAccessResult.allowed) {
+          return res.status(403).json({
+            message: getAuthorizationError(orgAccessResult.error!)
+          });
+        }
 
-      // Set the organization filter to the effective org ID
-      if (orgAccessResult.effectiveOrgId) {
-        filters.organizationId = orgAccessResult.effectiveOrgId;
+        // Set the organization filter to the effective org ID
+        if (orgAccessResult.effectiveOrgId) {
+          filters.organizationId = orgAccessResult.effectiveOrgId;
+        }
       }
 
       // Site admins can query across organizations, non-admins cannot
