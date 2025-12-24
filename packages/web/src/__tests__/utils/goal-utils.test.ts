@@ -370,7 +370,9 @@ describe('goal-utils', () => {
     });
 
     it('should return 0 for today', () => {
-      const today = new Date().toISOString().split('T')[0];
+      // Use local date format to match the function's parsing (not UTC from toISOString)
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
       expect(getDaysRemaining(today)).toBe(0);
     });
 
