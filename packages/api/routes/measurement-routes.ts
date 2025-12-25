@@ -4,7 +4,7 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { type Options } from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
@@ -54,7 +54,12 @@ const orgSpecificLimiter = rateLimit({
   limit: 10, // 10 queries per org combination per 15 minutes
   keyGenerator: (req) => {
     const orgIds = (req.query.orgIds as string) || '';
-    return `${req.ip}:${orgIds}`; // Rate limit by IP + orgIds combination
+    // Use X-Forwarded-For for proxied requests, fallback to direct IP, then to empty string
+    const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()
+      || req.ip
+      || req.socket?.remoteAddress
+      || '';
+    return `${clientIp}:${orgIds}`; // Rate limit by IP + orgIds combination
   },
   message: { message: "Too many queries for this organization combination. Please try again later." },
   standardHeaders: 'draft-7',
@@ -62,7 +67,9 @@ const orgSpecificLimiter = rateLimit({
   skip: (req) => {
     // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
     return !req.query.orgIds;
-  }
+  },
+  // Disable IPv6 key generator validation since we handle IP extraction manually
+  validate: { keyGeneratorIpFallback: false },
 });
 
 // Query parameter validation schema

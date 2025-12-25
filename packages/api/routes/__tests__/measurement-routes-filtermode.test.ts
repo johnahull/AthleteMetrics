@@ -20,12 +20,31 @@ import { eq, and, inArray } from 'drizzle-orm';
  * - Empty/invalid orgIds handling
  */
 describe('Measurement Routes - filterMode Authorization', () => {
-  let app: express.Express;
+  let athleteApp: express.Express;
+  let siteAdminApp: express.Express;
   let siteAdminUserId: string;
   let athleteUserId: string;
   let org1Id: string;
   let org2Id: string;
   let org3Id: string; // Org the athlete does NOT belong to
+
+  // Helper to create an Express app with injected session user
+  function createAppWithUser(user: { id: string; username: string; role: string; isSiteAdmin: boolean }) {
+    const app = express();
+    app.use(express.json());
+    app.use(session({
+      secret: 'test-secret',
+      resave: false,
+      saveUninitialized: false,
+    }));
+    // Inject session user via middleware BEFORE routes
+    app.use((req, _res, next) => {
+      req.session.user = user;
+      next();
+    });
+    registerMeasurementRoutes(app);
+    return app;
+  }
 
   beforeAll(async () => {
     // Safety check: prevent running tests against production database
@@ -38,17 +57,6 @@ describe('Measurement Routes - filterMode Authorization', () => {
   });
 
   beforeEach(async () => {
-    // Create Express app with session middleware
-    app = express();
-    app.use(express.json());
-    app.use(session({
-      secret: 'test-secret',
-      resave: false,
-      saveUninitialized: false,
-    }));
-
-    // Register measurement routes
-    registerMeasurementRoutes(app);
 
     // Create test data with unique identifiers to avoid conflicts
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
@@ -112,6 +120,8 @@ describe('Measurement Routes - filterMode Authorization', () => {
     ]);
 
     // Create test measurements
+    // Note: isVerified must be true for measurements to appear in query results
+    // (by default, the measurement query filters out unverified measurements)
     await db.insert(measurements).values([
       // Org1 measurements
       {
@@ -121,7 +131,9 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.50',
         units: 's',
         date: '2024-01-01',
+        age: 24, // Required field - athlete born 2000, measurement 2024
         submittedBy: siteAdminUserId,
+        isVerified: true,
       },
       // Org2 measurements
       {
@@ -131,7 +143,9 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.45',
         units: 's',
         date: '2024-01-02',
+        age: 24,
         submittedBy: siteAdminUserId,
+        isVerified: true,
       },
       // Org3 measurements (athlete NOT authorized)
       {
@@ -141,7 +155,9 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.40',
         units: 's',
         date: '2024-01-03',
+        age: 24,
         submittedBy: siteAdminUserId,
+        isVerified: true,
       },
       // Personal measurement (NULL organizationId)
       {
@@ -151,9 +167,26 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.55',
         units: 's',
         date: '2024-01-04',
+        age: 24,
         submittedBy: athleteUserId,
+        isVerified: true,
       },
     ]);
+
+    // Create apps with appropriate user sessions
+    athleteApp = createAppWithUser({
+      id: athleteUserId,
+      username: 'athlete',
+      role: 'athlete',
+      isSiteAdmin: false,
+    });
+
+    siteAdminApp = createAppWithUser({
+      id: siteAdminUserId,
+      username: 'siteadmin',
+      role: 'admin',
+      isSiteAdmin: true,
+    });
   });
 
   afterEach(async () => {
@@ -164,49 +197,15 @@ describe('Measurement Routes - filterMode Authorization', () => {
     await db.delete(organizations).where(inArray(organizations.id, [org1Id, org2Id, org3Id]));
   });
 
-  // Helper function to create authenticated request
-  function createAuthenticatedAgent(userId: string, role: string = 'athlete', isSiteAdmin: boolean = false) {
-    const agent = request.agent(app);
-
-    // Simulate authenticated session
-    return agent
-      .get('/api/measurements')
-      .set('Cookie', [`connect.sid=test-session-${userId}`])
-      .query({ athleteId: athleteUserId })
-      .use((req: any) => {
-        // Inject session user for testing
-        (req as any).session = {
-          user: {
-            id: userId,
-            username: isSiteAdmin ? 'siteadmin' : 'athlete',
-            role: role,
-            isSiteAdmin: isSiteAdmin,
-          }
-        };
-      });
-  }
-
   describe('Non-Admin Authorization', () => {
     it('should reject non-admin querying unauthorized orgIds (403)', async () => {
       // Athlete tries to query org3 (which they do NOT belong to)
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: org3Id, // Unauthorized org
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(403);
@@ -215,24 +214,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
 
     it('should reject non-admin querying mix of authorized and unauthorized orgIds', async () => {
       // Athlete tries to query org1 (authorized) + org3 (unauthorized)
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `${org1Id},${org3Id}`, // Mix of authorized and unauthorized
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(403);
@@ -241,24 +228,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
 
     it('should allow non-admin querying only their own orgIds', async () => {
       // Athlete queries org1 and org2 (both authorized)
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `${org1Id},${org2Id}`, // Both authorized
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(200);
@@ -274,24 +249,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
   describe('Site Admin Bypass', () => {
     it('should allow site admin to query any orgIds (including unauthorized)', async () => {
       // Site admin queries all orgs (including org3)
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(siteAdminApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `${org1Id},${org2Id},${org3Id}`, // All orgs
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: siteAdminUserId,
-              username: 'siteadmin',
-              role: 'site_admin',
-              isSiteAdmin: true,
-            }
-          };
         });
 
       expect(response.status).toBe(200);
@@ -306,23 +269,11 @@ describe('Measurement Routes - filterMode Authorization', () => {
 
   describe('filterMode=personal', () => {
     it('should return only personal measurements (NULL organizationId)', async () => {
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'personal',
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(200);
@@ -336,24 +287,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
 
   describe('Edge Cases', () => {
     it('should handle empty orgIds string (returns empty result for non-admins)', async () => {
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: '', // Empty string
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       // Empty orgIds should be handled gracefully
@@ -361,24 +300,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
     });
 
     it('should handle whitespace in orgIds', async () => {
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `  ${org1Id}  ,  ${org2Id}  `, // Whitespace around UUIDs
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(200);
@@ -386,24 +313,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
     });
 
     it('should reject invalid UUID format in orgIds', async () => {
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: 'invalid-uuid,another-invalid',
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       // Should fail Zod validation
@@ -414,24 +329,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
 
   describe('filterMode=all Integration', () => {
     it('should combine multiple orgs + personal measurements', async () => {
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `${org1Id},${org2Id}`, // Athlete's authorized orgs
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       expect(response.status).toBe(200);
@@ -454,31 +357,20 @@ describe('Measurement Routes - filterMode Authorization', () => {
       // Actual rate limit testing would require making 10+ requests rapidly
       // which is beyond the scope of this integration test
 
-      const agent = request.agent(app);
-
-      const response = await agent
+      const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
           orgIds: `${org1Id},${org2Id}`,
-        })
-        .use((req: any) => {
-          (req as any).session = {
-            user: {
-              id: athleteUserId,
-              username: 'athlete',
-              role: 'athlete',
-              isSiteAdmin: false,
-            }
-          };
         });
 
       // First request should succeed
       expect(response.status).toBe(200);
 
-      // Verify rate limit headers are present (express-rate-limit sets these)
-      expect(response.headers['ratelimit-limit']).toBeDefined();
+      // Verify rate limit headers are present (express-rate-limit with draft-7 uses 'ratelimit' header)
+      // Draft-7 format: RateLimit: limit=10, remaining=9, reset=900
+      expect(response.headers['ratelimit']).toBeDefined();
     });
   });
 });
