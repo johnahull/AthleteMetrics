@@ -198,7 +198,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
   });
 
   describe('Non-Admin Authorization', () => {
-    it('should reject non-admin querying unauthorized orgIds (403)', async () => {
+    it('should return 403 when non-admin queries organization they do not belong to', async () => {
       // Athlete tries to query org3 (which they do NOT belong to)
       const response = await request(athleteApp)
         .get('/api/measurements')

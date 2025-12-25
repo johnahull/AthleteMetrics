@@ -109,12 +109,12 @@ export function registerAuthRoutes(app: Express) {
       // Transform to match frontend UserOrganization interface
       // Backend returns: { organizationId, role, organization: { id, name, ... } }
       // Frontend expects: { organizationId, organizationName, role, createdAt }
-      // Filter out deleted organizations (where organization.name is null)
+      // Filter out deleted organizations (where organization or organization.name is null)
       const organizations = rawOrganizations
-        .filter((org) => org.organization?.name) // Exclude deleted orgs
+        .filter((org) => org.organization && org.organization.name) // Exclude deleted orgs
         .map((org) => ({
           organizationId: org.organizationId,
-          organizationName: org.organization.name,
+          organizationName: org.organization!.name, // Safe due to filter above
           role: org.role,
           createdAt: org.createdAt,
         }));

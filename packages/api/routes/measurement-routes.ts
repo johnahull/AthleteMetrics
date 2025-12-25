@@ -51,14 +51,12 @@ const measurementBatchLimiter = rateLimit({
 // Prevents rapid data extraction across multiple organization combinations
 const orgSpecificLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
-  limit: 10, // 10 queries per org combination per 15 minutes
+  limit: RATE_LIMITS.CROSS_ORG_QUERY,
   keyGenerator: (req) => {
     const orgIds = (req.query.orgIds as string) || '';
-    // Use X-Forwarded-For for proxied requests, fallback to direct IP, then to empty string
-    const clientIp = req.headers['x-forwarded-for']?.toString().split(',')[0]?.trim()
-      || req.ip
-      || req.socket?.remoteAddress
-      || '';
+    // Use req.ip (Express handles X-Forwarded-For when 'trust proxy' is configured)
+    // Fallback to socket address if req.ip is unavailable
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
     return `${clientIp}:${orgIds}`; // Rate limit by IP + orgIds combination
   },
   message: { message: "Too many queries for this organization combination. Please try again later." },
@@ -161,6 +159,7 @@ export function registerMeasurementRoutes(app: Express) {
    *
    * @param {string} [filterMode=org] - Filter mode: 'all' (cross-org), 'personal' (no org), 'org' (single org)
    * @param {string} [orgIds] - Comma-separated org UUIDs for filterMode='all' (max 100 orgs)
+   *   Example: "uuid1,uuid2,uuid3" queries measurements from 3 organizations plus personal measurements
    * @param {string} [organizationId] - Single organization ID for filterMode='org'
    * @param {string} [athleteId] - Filter by athlete/user ID
    * @param {string} [metric] - Filter by metric code (e.g., 'FLY10_TIME', 'VERTICAL_JUMP')
@@ -231,7 +230,7 @@ export function registerMeasurementRoutes(app: Express) {
           const unauthorizedOrgs = requestedOrgIds.filter(orgId => !userOrgIds.has(orgId));
           if (unauthorizedOrgs.length > 0) {
             return res.status(403).json({
-              message: "Access denied - you are not authorized to access the specified organizations"
+              message: `Access denied - you are not authorized to access organizations: ${unauthorizedOrgs.join(', ')}`
             });
           }
         }

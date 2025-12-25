@@ -41,6 +41,9 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
   // Track previous organizations to prevent unnecessary re-validation
   const prevOrgsRef = useRef<OrganizationOption[]>([]);
 
+  // Track if we've initialized from localStorage for this user
+  const isInitializedRef = useRef<string | null>(null);
+
   // Convert userOrganizations to OrganizationOption array
   const organizations = useMemo<OrganizationOption[]>(() => {
     if (!userOrganizations || userOrganizations.length === 0) {
@@ -54,69 +57,72 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
       }));
   }, [userOrganizations]);
 
-  // Initialize from localStorage on mount and when user changes
+  // Combined effect: Initialize from localStorage and handle organization changes
+  // This prevents race conditions between two separate effects
   useEffect(() => {
     if (!user?.id) {
-      // User logged out, reset to 'all'
+      // User logged out, reset state
       setFilterModeState('all');
+      isInitializedRef.current = null;
+      prevOrgsRef.current = [];
       return;
     }
-
-    // Edge case: If user has 0 organizations, auto-select "personal"
-    if (organizations.length === 0) {
-      setFilterModeState('personal');
-      setAthleteOrgFilter(user.id, 'personal');
-      return;
-    }
-
-    const storedFilter = getAthleteOrgFilter(user.id);
-
-    // Validate stored filter
-    if (storedFilter === 'all' || storedFilter === 'personal') {
-      setFilterModeState(storedFilter);
-    } else if (storedFilter) {
-      // Check if stored org ID exists in user's organizations
-      const orgExists = organizations.some(org => org.id === storedFilter);
-      if (orgExists) {
-        setFilterModeState(storedFilter);
-      } else {
-        // Invalid org ID, reset to 'all' and persist
-        setFilterModeState('all');
-        setAthleteOrgFilter(user.id, 'all');
-      }
-    } else {
-      // No stored filter - default to 'all' and persist it
-      setFilterModeState('all');
-      setAthleteOrgFilter(user.id, 'all');
-    }
-  }, [user?.id, organizations]);
-
-  // Re-validate filter when organizations change (only if they actually changed)
-  useEffect(() => {
-    if (!user?.id) return;
 
     // Check if organizations actually changed (deep equality by comparing IDs)
     const prevOrgIds = prevOrgsRef.current.map(org => org.id).sort().join(',');
     const currentOrgIds = organizations.map(org => org.id).sort().join(',');
+    const orgsChanged = prevOrgIds !== currentOrgIds;
 
-    if (prevOrgIds === currentOrgIds) {
-      // Organizations haven't changed, skip re-validation
-      return;
-    }
+    // Determine if this is the first initialization for this user
+    const isFirstInit = isInitializedRef.current !== user.id;
 
-    // Update the ref with current organizations
-    prevOrgsRef.current = organizations;
+    if (isFirstInit) {
+      // First initialization for this user - load from localStorage
+      isInitializedRef.current = user.id;
+      prevOrgsRef.current = organizations;
 
-    // If current filter is an org ID, check if it still exists
-    if (filterMode !== 'all' && filterMode !== 'personal') {
-      const orgExists = organizations.some(org => org.id === filterMode);
-      if (!orgExists) {
-        // Org no longer exists, reset to 'all'
+      // Edge case: If user has 0 organizations, auto-select "personal"
+      if (organizations.length === 0) {
+        setFilterModeState('personal');
+        setAthleteOrgFilter(user.id, 'personal');
+        return;
+      }
+
+      const storedFilter = getAthleteOrgFilter(user.id);
+
+      // Validate stored filter
+      if (storedFilter === 'all' || storedFilter === 'personal') {
+        setFilterModeState(storedFilter);
+      } else if (storedFilter) {
+        // Check if stored org ID exists in user's organizations
+        const orgExists = organizations.some(org => org.id === storedFilter);
+        if (orgExists) {
+          setFilterModeState(storedFilter);
+        } else {
+          // Invalid org ID, reset to 'all' and persist
+          setFilterModeState('all');
+          setAthleteOrgFilter(user.id, 'all');
+        }
+      } else {
+        // No stored filter - default to 'all' and persist it
         setFilterModeState('all');
         setAthleteOrgFilter(user.id, 'all');
       }
+    } else if (orgsChanged) {
+      // Organizations changed after initialization - re-validate current filter
+      prevOrgsRef.current = organizations;
+
+      // If current filter is an org ID, check if it still exists
+      if (filterMode !== 'all' && filterMode !== 'personal') {
+        const orgExists = organizations.some(org => org.id === filterMode);
+        if (!orgExists) {
+          // Org no longer exists, reset to 'all'
+          setFilterModeState('all');
+          setAthleteOrgFilter(user.id, 'all');
+        }
+      }
     }
-  }, [organizations, filterMode, user?.id]);
+  }, [user?.id, organizations, filterMode]);
 
   /**
    * Set filter mode with validation and persistence
