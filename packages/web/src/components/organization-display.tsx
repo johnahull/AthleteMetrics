@@ -59,7 +59,7 @@ export function OrganizationDisplay({ organizationId, userOrganizations, isSiteA
                 onClick={() => setLocation(`/organizations/${userOrg.organizationId}`)}
                 className="block text-left text-blue-600 hover:text-blue-800 text-xs"
               >
-                {userOrg.organization.name}
+                {userOrg.organizationName || userOrg.organization?.name || 'Unknown'}
               </button>
             ))}
           </div>
