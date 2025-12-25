@@ -38,6 +38,8 @@ describe('Measurement Routes - filterMode Authorization', () => {
   function createAppWithUser(user: { id: string; username: string; role: string; isSiteAdmin: boolean }) {
     const app = express();
     app.use(express.json());
+    // Enable trust proxy for req.ip to work correctly (matches production config)
+    app.set('trust proxy', 1);
     app.use(session({
       secret: 'test-secret',
       resave: false,

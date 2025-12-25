@@ -944,6 +944,12 @@ export class MeasurementService {
         ? filters.orgIds.split(',').map(id => id.trim()).filter(Boolean)
         : [];
 
+      // Defensive check: enforce MAX_ORG_IDS limit even if route validation is bypassed
+      // Route layer validates this via Zod schema, but defense-in-depth requires service-layer check
+      if (orgIdArray.length > 100) {
+        throw new Error('orgIds cannot exceed 100 organizations');
+      }
+
       if (orgIdArray.length > 0) {
         // Include measurements from specified orgs OR personal measurements (NULL)
         // NOTE: The OR isNull() pattern is suboptimal for index usage, but required for functionality.
