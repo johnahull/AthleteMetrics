@@ -47,6 +47,24 @@ const measurementBatchLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-organization rate limiting for cross-org queries
+// Prevents rapid data extraction across multiple organization combinations
+const orgSpecificLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 10, // 10 queries per org combination per 15 minutes
+  keyGenerator: (req) => {
+    const orgIds = (req.query.orgIds as string) || '';
+    return `${req.ip}:${orgIds}`; // Rate limit by IP + orgIds combination
+  },
+  message: { message: "Too many queries for this organization combination. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
+    return !req.query.orgIds;
+  }
+});
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -134,7 +152,7 @@ export function registerMeasurementRoutes(app: Express) {
   /**
    * Get measurements with optional filters
    */
-  app.get("/api/measurements", measurementLimiter, requireAuth, async (req, res) => {
+  app.get("/api/measurements", measurementLimiter, orgSpecificLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {

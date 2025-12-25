@@ -109,14 +109,16 @@ export function registerAuthRoutes(app: Express) {
       // Transform to match frontend UserOrganization interface
       // Backend returns: { organizationId, role, organization: { id, name, ... } }
       // Frontend expects: { organizationId, organizationName, role, createdAt }
-      const organizations = rawOrganizations.map((org: any) => ({
-        organizationId: org.organizationId,
-        organizationName: org.organization?.name || 'Unknown Organization',
-        role: org.role,
-        createdAt: org.createdAt,
-      }));
+      // Filter out deleted organizations (where organization.name is null)
+      const organizations = rawOrganizations
+        .filter((org) => org.organization?.name) // Exclude deleted orgs
+        .map((org) => ({
+          organizationId: org.organizationId,
+          organizationName: org.organization.name,
+          role: org.role,
+          createdAt: org.createdAt,
+        }));
 
-      console.log('[auth-routes] /api/auth/me/organizations response for user', req.session.user.id, ':', organizations);
       res.json(organizations);
     } catch (error) {
       console.error("Get organizations error:", error);
