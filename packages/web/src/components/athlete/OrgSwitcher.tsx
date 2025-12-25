@@ -17,7 +17,7 @@ import type { FilterMode } from '@/lib/athlete-org-context';
  *
  * Allows athletes to switch between:
  * - "All Organizations" - Show data from all their organizations
- * - "Personal Only" - Show only personal data (no organization)
+ * - "Self-entered" - Show only self-entered data (no organization)
  * - Specific organization - Show data from a single organization
  *
  * Uses AthleteOrgContext for state management and localStorage persistence.
@@ -35,7 +35,7 @@ export function OrgSwitcher() {
       return 'All Organizations';
     }
     if (filterMode === 'personal') {
-      return 'Personal Only';
+      return 'Self-entered';
     }
     // Find org name by ID
     const org = organizations.find(o => o.id === filterMode);
@@ -62,7 +62,7 @@ export function OrgSwitcher() {
     );
   }
 
-  // Edge case: If user has 0 organizations, only show "Personal Only" option
+  // Edge case: If user has 0 organizations, only show "Self-entered" option
   const hasOrganizations = organizations.length > 0;
 
   return (
@@ -95,15 +95,15 @@ export function OrgSwitcher() {
           </DropdownMenuCheckboxItem>
         )}
 
-        {/* "Personal Only" option - always show */}
+        {/* "Self-entered" option - always show */}
         <DropdownMenuCheckboxItem
           checked={filterMode === 'personal'}
           onCheckedChange={() => setFilterMode('personal')}
-          aria-label="Personal Only"
+          aria-label="Self-entered"
         >
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
-            <span>Personal Only</span>
+            <span>Self-entered</span>
           </div>
           {filterMode === 'personal' && <Check className="h-4 w-4 ml-auto" />}
         </DropdownMenuCheckboxItem>

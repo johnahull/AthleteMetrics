@@ -172,7 +172,7 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
  * ```tsx
  * const { filterMode, setFilterMode, organizations } = useAthleteOrg();
  *
- * // Switch to personal only view
+ * // Switch to self-entered only view
  * setFilterMode('personal');
  *
  * // Switch to specific organization

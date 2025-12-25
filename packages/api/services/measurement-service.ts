@@ -181,46 +181,55 @@ export class MeasurementService {
       let teamNameSnapshot: string | null = null;
       let organizationId: string | null = null;
 
-      if (!teamId || teamId.trim() === '') {
-        // Get athlete's active teams at measurement date (within transaction)
-        // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
-        // See: migrations/0018_add_org_query_composite_indexes.sql
-        const activeTeams = await tx
-          .select({
-            teamId: teams.id,
-            teamName: teams.name,
-            season: teams.season,
-            organizationId: teams.organizationId,
-            organizationName: organizations.name,
-          })
-          .from(userTeams)
-          .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-          .where(
-            and(
-              eq(userTeams.userId, measurement.userId),
-              lte(userTeams.joinedAt, measurementDate),
-              or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
-              eq(userTeams.isActive, true),
-              eq(teams.isArchived, false)
-            )
-          )
-          .for('update'); // Prevent race condition with row-level lock
+      // Check if this is athlete self-entry (personal measurement)
+      const isAthleteSelfEntry = submitterRole === 'athlete' && measurement.userId === submittedBy;
 
-        if (activeTeams.length === 1) {
-          // Single team - auto-assign
-          teamId = activeTeams[0].teamId;
-          // Use undefined for optional fields per TypeScript schema
-          season = activeTeams[0].season ?? undefined;
-          teamContextAuto = true;
-          // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
-        } else if (activeTeams.length > 1) {
-          // Multiple teams - cannot auto-assign
-          // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+      if (!teamId || teamId.trim() === '') {
+        // For athlete self-entry without explicit team, keep as personal (no org assignment)
+        if (isAthleteSelfEntry) {
+          // Personal measurement - no team or organization context
           teamContextAuto = false;
         } else {
-          // No active teams - measurement without team context
-          teamContextAuto = false;
+          // Get athlete's active teams at measurement date (within transaction)
+          // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
+          // See: migrations/0018_add_org_query_composite_indexes.sql
+          const activeTeams = await tx
+            .select({
+              teamId: teams.id,
+              teamName: teams.name,
+              season: teams.season,
+              organizationId: teams.organizationId,
+              organizationName: organizations.name,
+            })
+            .from(userTeams)
+            .innerJoin(teams, eq(userTeams.teamId, teams.id))
+            .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+            .where(
+              and(
+                eq(userTeams.userId, measurement.userId),
+                lte(userTeams.joinedAt, measurementDate),
+                or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+                eq(userTeams.isActive, true),
+                eq(teams.isArchived, false)
+              )
+            )
+            .for('update'); // Prevent race condition with row-level lock
+
+          if (activeTeams.length === 1) {
+            // Single team - auto-assign
+            teamId = activeTeams[0].teamId;
+            // Use undefined for optional fields per TypeScript schema
+            season = activeTeams[0].season ?? undefined;
+            teamContextAuto = true;
+            // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
+          } else if (activeTeams.length > 1) {
+            // Multiple teams - cannot auto-assign
+            // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+            teamContextAuto = false;
+          } else {
+            // No active teams - measurement without team context
+            teamContextAuto = false;
+          }
         }
       } else {
         // teamId was explicitly provided

@@ -95,7 +95,7 @@ export function PersonalBadge({ className, size = 'sm' }: PersonalBadgeProps) {
       )}
     >
       <User className={iconSizes[size]} />
-      <span>Personal</span>
+      <span>Self-entered</span>
     </span>
   );
 }

@@ -67,19 +67,19 @@ describe('OrgSwitcher', () => {
       expect(screen.getByText('All Organizations')).toBeInTheDocument();
     });
 
-    it('should render "Personal Only" label when filter mode is "personal"', async () => {
+    it('should render "Self-entered" label when filter mode is "personal"', async () => {
       const user = userEvent.setup();
       render(<OrgSwitcher />, { wrapper: createWrapper() });
 
-      // Open dropdown and select "Personal Only"
+      // Open dropdown and select "Self-entered"
       const trigger = screen.getByRole('combobox', { name: /organization filter/i });
       await user.click(trigger);
 
-      const personalOption = screen.getByRole('menuitemcheckbox', { name: /personal only/i });
+      const personalOption = screen.getByRole('menuitemcheckbox', { name: /self-entered/i });
       await user.click(personalOption);
 
       await waitFor(() => {
-        expect(screen.getByText('Personal Only')).toBeInTheDocument();
+        expect(screen.getByText('Self-entered')).toBeInTheDocument();
       });
     });
 
@@ -107,15 +107,15 @@ describe('OrgSwitcher', () => {
       // "All Organizations" should show Globe icon (initial state)
       expect(container.querySelector('svg[data-icon="globe"]')).toBeInTheDocument();
 
-      // Switch to "Personal Only"
+      // Switch to "Self-entered"
       const trigger = screen.getByRole('combobox', { name: /organization filter/i });
       await user.click(trigger);
-      const personalOption = screen.getByRole('menuitemcheckbox', { name: /personal only/i });
+      const personalOption = screen.getByRole('menuitemcheckbox', { name: /self-entered/i });
       await user.click(personalOption);
 
       // Wait for dropdown to close and state to update
       await waitFor(() => {
-        expect(screen.getByText('Personal Only')).toBeInTheDocument();
+        expect(screen.getByText('Self-entered')).toBeInTheDocument();
       });
 
       // Personal should show User icon
@@ -134,8 +134,8 @@ describe('OrgSwitcher', () => {
       // Should show "All Organizations" (menuitemcheckbox, not menuitem)
       expect(screen.getByRole('menuitemcheckbox', { name: /all organizations/i })).toBeInTheDocument();
 
-      // Should show "Personal Only"
-      expect(screen.getByRole('menuitemcheckbox', { name: /personal only/i })).toBeInTheDocument();
+      // Should show "Self-entered"
+      expect(screen.getByRole('menuitemcheckbox', { name: /self-entered/i })).toBeInTheDocument();
 
       // Should show all organizations
       expect(screen.getByRole('menuitemcheckbox', { name: /college athletics/i })).toBeInTheDocument();
@@ -176,12 +176,12 @@ describe('OrgSwitcher', () => {
       const trigger = screen.getByRole('combobox', { name: /organization filter/i });
       await user.click(trigger);
 
-      const personalOption = screen.getByRole('menuitemcheckbox', { name: /personal only/i });
+      const personalOption = screen.getByRole('menuitemcheckbox', { name: /self-entered/i });
       await user.click(personalOption);
 
       // Verify state changed by checking displayed text
       await waitFor(() => {
-        expect(screen.getByText('Personal Only')).toBeInTheDocument();
+        expect(screen.getByText('Self-entered')).toBeInTheDocument();
       });
     });
 
@@ -193,14 +193,14 @@ describe('OrgSwitcher', () => {
       await user.click(trigger);
 
       // Verify dropdown is open
-      expect(screen.getByRole('menuitemcheckbox', { name: /personal only/i })).toBeInTheDocument();
+      expect(screen.getByRole('menuitemcheckbox', { name: /self-entered/i })).toBeInTheDocument();
 
-      const personalOption = screen.getByRole('menuitemcheckbox', { name: /personal only/i });
+      const personalOption = screen.getByRole('menuitemcheckbox', { name: /self-entered/i });
       await user.click(personalOption);
 
       // Dropdown should close
       await waitFor(() => {
-        expect(screen.queryByRole('menuitemcheckbox', { name: /personal only/i })).not.toBeInTheDocument();
+        expect(screen.queryByRole('menuitemcheckbox', { name: /self-entered/i })).not.toBeInTheDocument();
       });
     });
 
@@ -226,7 +226,7 @@ describe('OrgSwitcher', () => {
   });
 
   describe('Edge cases', () => {
-    it('should only show "Personal Only" option when user has 0 organizations', async () => {
+    it('should only show "Self-entered" option when user has 0 organizations', async () => {
       const user = userEvent.setup();
       render(<OrgSwitcher />, {
         wrapper: createWrapper({ userOrganizations: [] }),
@@ -235,8 +235,8 @@ describe('OrgSwitcher', () => {
       const trigger = screen.getByRole('combobox', { name: /organization filter/i });
       await user.click(trigger);
 
-      // Should show "Personal Only"
-      expect(screen.getByRole('menuitemcheckbox', { name: /personal only/i })).toBeInTheDocument();
+      // Should show "Self-entered"
+      expect(screen.getByRole('menuitemcheckbox', { name: /self-entered/i })).toBeInTheDocument();
 
       // Should NOT show "All Organizations" or any org options
       expect(screen.queryByRole('menuitemcheckbox', { name: /all organizations/i })).not.toBeInTheDocument();
@@ -248,8 +248,8 @@ describe('OrgSwitcher', () => {
         wrapper: createWrapper({ userOrganizations: [] }),
       });
 
-      // Should display "Personal Only" immediately
-      expect(screen.getByText('Personal Only')).toBeInTheDocument();
+      // Should display "Self-entered" immediately
+      expect(screen.getByText('Self-entered')).toBeInTheDocument();
     });
 
     it('should show loading skeleton when auth is loading', () => {
@@ -280,7 +280,7 @@ describe('OrgSwitcher', () => {
 
       // All options should be available
       expect(screen.getByRole('menuitemcheckbox', { name: /all organizations/i })).toBeInTheDocument();
-      expect(screen.getByRole('menuitemcheckbox', { name: /personal only/i })).toBeInTheDocument();
+      expect(screen.getByRole('menuitemcheckbox', { name: /self-entered/i })).toBeInTheDocument();
       expect(screen.getByRole('menuitemcheckbox', { name: /single org/i })).toBeInTheDocument();
     });
   });
@@ -321,7 +321,7 @@ describe('OrgSwitcher', () => {
 
       // Each menu item should have descriptive text
       expect(screen.getByRole('menuitemcheckbox', { name: /all organizations/i })).toHaveAccessibleName();
-      expect(screen.getByRole('menuitemcheckbox', { name: /personal only/i })).toHaveAccessibleName();
+      expect(screen.getByRole('menuitemcheckbox', { name: /self-entered/i })).toHaveAccessibleName();
     });
   });
 
