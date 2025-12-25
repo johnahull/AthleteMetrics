@@ -941,7 +941,7 @@ export class MeasurementService {
     } else if (filters?.filterMode === 'all') {
       // Measurements from any of specified org IDs OR personal (NULL)
       const orgIdArray = filters.orgIds
-        ? filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '')
+        ? filters.orgIds.split(',').map(id => id.trim()).filter(Boolean)
         : [];
 
       if (orgIdArray.length > 0) {

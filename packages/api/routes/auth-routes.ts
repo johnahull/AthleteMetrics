@@ -112,12 +112,18 @@ export function registerAuthRoutes(app: Express) {
       // Filter out deleted organizations (where organization or organization.name is null)
       const organizations = rawOrganizations
         .filter((org) => org.organization && org.organization.name) // Exclude deleted orgs
-        .map((org) => ({
-          organizationId: org.organizationId,
-          organizationName: org.organization!.name, // Safe due to filter above
-          role: org.role,
-          createdAt: org.createdAt,
-        }));
+        .map((org) => {
+          // Runtime assertion for type safety - should never fail due to filter above
+          if (!org.organization?.name) {
+            throw new Error(`Organization data incomplete for ID ${org.organizationId}`);
+          }
+          return {
+            organizationId: org.organizationId,
+            organizationName: org.organization.name,
+            role: org.role,
+            createdAt: org.createdAt,
+          };
+        });
 
       res.json(organizations);
     } catch (error) {

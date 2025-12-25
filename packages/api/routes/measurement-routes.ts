@@ -66,7 +66,10 @@ const orgSpecificLimiter = rateLimit({
     // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
     return !req.query.orgIds;
   },
-  // Disable IPv6 key generator validation since we handle IP extraction manually
+  // SECURITY NOTE: IPv6 validation disabled because we use req.ip directly,
+  // which already handles X-Forwarded-For when 'trust proxy' is configured.
+  // If 'trust proxy' is not configured in Express, IPv6 addresses may not be
+  // rate-limited correctly. Verify Express app.set('trust proxy', true) is set.
   validate: { keyGeneratorIpFallback: false },
 });
 

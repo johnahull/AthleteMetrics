@@ -19,6 +19,12 @@ import { eq, and, inArray } from 'drizzle-orm';
  * - filterMode='personal' returns only personal measurements
  * - Empty/invalid orgIds handling
  */
+
+// Test data constants
+const ATHLETE_BIRTH_YEAR = 2000;
+const MEASUREMENT_YEAR = 2024;
+const ATHLETE_AGE = MEASUREMENT_YEAR - ATHLETE_BIRTH_YEAR; // 24
+
 describe('Measurement Routes - filterMode Authorization', () => {
   let athleteApp: express.Express;
   let siteAdminApp: express.Express;
@@ -131,7 +137,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.50',
         units: 's',
         date: '2024-01-01',
-        age: 24, // Required field - athlete born 2000, measurement 2024
+        age: ATHLETE_AGE,
         submittedBy: siteAdminUserId,
         isVerified: true,
       },
@@ -143,7 +149,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.45',
         units: 's',
         date: '2024-01-02',
-        age: 24,
+        age: ATHLETE_AGE,
         submittedBy: siteAdminUserId,
         isVerified: true,
       },
@@ -155,7 +161,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.40',
         units: 's',
         date: '2024-01-03',
-        age: 24,
+        age: ATHLETE_AGE,
         submittedBy: siteAdminUserId,
         isVerified: true,
       },
@@ -167,7 +173,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
         value: '1.55',
         units: 's',
         date: '2024-01-04',
-        age: 24,
+        age: ATHLETE_AGE,
         submittedBy: athleteUserId,
         isVerified: true,
       },
@@ -198,18 +204,20 @@ describe('Measurement Routes - filterMode Authorization', () => {
   });
 
   describe('Non-Admin Authorization', () => {
-    it('should return 403 when non-admin queries organization they do not belong to', async () => {
+    it('should return 403 when non-admin queries organization they do not belong to (all unauthorized)', async () => {
       // Athlete tries to query org3 (which they do NOT belong to)
+      // This tests the case where ALL orgIds are unauthorized
       const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
           athleteId: athleteUserId,
           filterMode: 'all',
-          orgIds: org3Id, // Unauthorized org
+          orgIds: org3Id, // All orgIds unauthorized
         });
 
       expect(response.status).toBe(403);
       expect(response.body.message).toContain('not authorized');
+      expect(response.body.message).toContain(org3Id); // Should mention specific org ID
     });
 
     it('should reject non-admin querying mix of authorized and unauthorized orgIds', async () => {
@@ -286,7 +294,7 @@ describe('Measurement Routes - filterMode Authorization', () => {
   });
 
   describe('Edge Cases', () => {
-    it('should handle empty orgIds string (returns empty result for non-admins)', async () => {
+    it('should handle empty orgIds string (returns only personal measurements)', async () => {
       const response = await request(athleteApp)
         .get('/api/measurements')
         .query({
@@ -295,8 +303,12 @@ describe('Measurement Routes - filterMode Authorization', () => {
           orgIds: '', // Empty string
         });
 
-      // Empty orgIds should be handled gracefully
+      // Empty orgIds should return only personal measurements
       expect(response.status).toBe(200);
+      expect(Array.isArray(response.body)).toBe(true);
+      // All measurements should have NULL organizationId (personal only)
+      const allPersonal = response.body.every((m: any) => m.organizationId === null);
+      expect(allPersonal).toBe(true);
     });
 
     it('should handle whitespace in orgIds', async () => {
