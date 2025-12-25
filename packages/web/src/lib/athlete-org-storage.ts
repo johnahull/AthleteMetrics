@@ -3,13 +3,14 @@
  * Provides type-safe storage with error handling for quota and disabled localStorage
  */
 
-const STORAGE_PREFIX = 'athlete-org-filter';
+/** Storage key prefix for athlete organization filter - exported for testing/reference */
+export const ATHLETE_ORG_FILTER_STORAGE_KEY = 'athlete-org-filter' as const;
 
 /**
  * Generate user-scoped storage key
  */
 function getScopedKey(userId: string): string {
-  return `${STORAGE_PREFIX}-${userId}`;
+  return `${ATHLETE_ORG_FILTER_STORAGE_KEY}-${userId}`;
 }
 
 /**

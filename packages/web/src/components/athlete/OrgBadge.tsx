@@ -43,7 +43,17 @@ const orgColorPalette = [
 
 /**
  * Get consistent color for an organization based on its ID.
- * Uses a simple hash to ensure the same org always gets the same color.
+ * Uses a simple character code sum hash to ensure the same org always gets the same color.
+ *
+ * Note: This is a non-cryptographic hash for UI color assignment only.
+ * Collisions are acceptable - multiple orgs may share the same color, which is fine
+ * for visual distinction purposes. The color palette has 8 options.
+ *
+ * @param orgId - Organization UUID (optional). If not provided, returns default blue.
+ * @returns Color object with `bg` (background) and `text` (foreground) Tailwind classes
+ * @example
+ * const colors = getOrgColor('abc-123');
+ * // Returns: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-300' }
  */
 function getOrgColor(orgId?: string): typeof orgColorPalette[number] {
   if (!orgId) {

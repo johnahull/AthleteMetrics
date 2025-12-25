@@ -1166,11 +1166,14 @@ export class MeasurementService {
           'lastName', ${verifierUser.lastName},
           'fullName', ${verifierUser.fullName}
         ) ELSE NULL END`,
+        // Organization name (prevents N+1 queries for org badge display)
+        organizationName: organizations.name,
       })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
         .leftJoin(submitterUser, eq(measurements.submittedBy, submitterUser.id))
         .leftJoin(verifierUser, eq(measurements.verifiedBy, verifierUser.id))
+        .leftJoin(organizations, eq(measurements.organizationId, organizations.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)
