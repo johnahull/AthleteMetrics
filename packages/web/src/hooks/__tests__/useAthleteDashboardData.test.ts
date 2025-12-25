@@ -10,10 +10,17 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { useAthleteDashboardData } from '../useAthleteDashboardData';
+import { AthleteOrgProvider } from '@/lib/athlete-org-context';
 
 // Mock global fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
+
+// Mock useAuth
+const mockUseAuth = vi.fn();
+vi.mock('@/lib/auth', () => ({
+  useAuth: () => mockUseAuth(),
+}));
 
 // Mock the utility functions
 vi.mock('@/utils/athlete-dashboard-utils', () => ({
@@ -57,8 +64,21 @@ describe('useAthleteDashboardData Hook', () => {
       },
     });
 
+    // Setup default auth mock
+    mockUseAuth.mockReturnValue({
+      user: { id: 'user-123', isSiteAdmin: false },
+      userOrganizations: [
+        { organizationId: 'org-1', organizationName: 'Organization 1' },
+        { organizationId: 'org-2', organizationName: 'Organization 2' },
+      ],
+    });
+
     wrapper = ({ children }: { children: React.ReactNode }) =>
-      React.createElement(QueryClientProvider, { client: queryClient }, children);
+      React.createElement(
+        QueryClientProvider,
+        { client: queryClient },
+        React.createElement(AthleteOrgProvider, null, children)
+      );
 
     vi.clearAllMocks();
   });
@@ -208,6 +228,56 @@ describe('useAthleteDashboardData Hook', () => {
       });
 
       expect(result.current.data?.lastMeasurementDate).toEqual(new Date('2024-01-15'));
+    });
+  });
+
+  describe('AthleteOrgContext integration', () => {
+    it('should pass filterMode context to useAthleteMeasurements hook', async () => {
+      const mockAthlete = createMockAthlete();
+      const mockMeasurements = [createMockMeasurement()];
+
+      setupSuccessfulFetches(mockAthlete, mockMeasurements);
+
+      const { result } = renderHook(
+        () => useAthleteDashboardData('athlete-123'),
+        { wrapper }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      // Verify measurements endpoint was called with filterMode params
+      const measurementsCall = mockFetch.mock.calls.find(call =>
+        typeof call[0] === 'string' && call[0].includes('/api/measurements')
+      );
+      expect(measurementsCall).toBeDefined();
+      const url = measurementsCall?.[0] as string;
+      expect(url).toContain('athleteId=athlete-123');
+      expect(url).toContain('filterMode=all');
+    });
+
+    it('should work without AthleteOrgContext provider', async () => {
+      const mockAthlete = createMockAthlete();
+      const mockMeasurements = [createMockMeasurement()];
+
+      setupSuccessfulFetches(mockAthlete, mockMeasurements);
+
+      // Create wrapper WITHOUT AthleteOrgProvider
+      const wrapperWithoutContext = ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: queryClient }, children);
+
+      const { result } = renderHook(
+        () => useAthleteDashboardData('athlete-123'),
+        { wrapper: wrapperWithoutContext }
+      );
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.data).not.toBeNull();
+      expect(result.current.data?.athleteName).toBe('John');
     });
   });
 

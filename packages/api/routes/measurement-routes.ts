@@ -4,7 +4,7 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { type Options } from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
@@ -47,6 +47,36 @@ const measurementBatchLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-organization rate limiting for cross-org queries
+// Prevents rapid data extraction across multiple organization combinations
+const orgSpecificLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.CROSS_ORG_QUERY,
+  keyGenerator: (req) => {
+    const orgIds = (req.query.orgIds as string) || '';
+    // Use req.ip (Express handles X-Forwarded-For when 'trust proxy' is configured)
+    // Fallback to socket address if req.ip is unavailable
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
+    return `${clientIp}:${orgIds}`; // Rate limit by IP + orgIds combination
+  },
+  message: { message: "Too many queries for this organization combination. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
+    return !req.query.orgIds;
+  },
+  // NOTE: Using default validation (IPv6 support enabled)
+  // req.ip is used for IP extraction, which handles X-Forwarded-For when 'trust proxy' is configured.
+  // Ensure Express app.set('trust proxy', true) is configured for proper IP detection behind proxies.
+});
+
+// Shared UUID validation pattern (RFC 4122 format: 8-4-4-4-12 hex pattern)
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Maximum number of organizations that can be queried in a single request
+const MAX_ORG_IDS = 100;
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -55,14 +85,7 @@ const measurementQuerySchema = z.object({
   // Accept any metric code - supports derived metrics and custom metrics
   metric: z.string().regex(/^[A-Z0-9_]+$/, "Invalid metric code format").optional(),
   teamIds: z.string().optional().refine(
-    (val) => !val || val.split(',').every(id => {
-      const trimmedId = id.trim();
-      // UUID format validation (8-4-4-4-12 hex pattern)
-      // Accepts all RFC 4122 UUIDs including nil UUID (00000000-0000-0000-0000-000000000000)
-      // Security: Database foreign key validation is the primary security boundary
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidPattern.test(trimmedId);
-    }),
+    (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
     { message: "teamIds must be comma-separated valid UUIDs" }
   ), // Comma-separated UUIDs
   sport: z.string().min(1).max(100).optional(),
@@ -83,6 +106,17 @@ const measurementQuerySchema = z.object({
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
   limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).optional(),
   offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
+  // Cross-org measurement query parameters
+  filterMode: z.enum(['all', 'personal', 'org']).optional(),
+  orgIds: z.string().optional()
+    .refine(
+      (val) => !val || val.split(',').length <= MAX_ORG_IDS,
+      { message: `orgIds cannot exceed ${MAX_ORG_IDS} organizations` }
+    )
+    .refine(
+      (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
+      { message: "orgIds must be comma-separated valid UUIDs" }
+    ),
 }).refine(
   (data) => {
     if (data.birthYearFrom !== undefined && data.birthYearTo !== undefined) {
@@ -114,6 +148,8 @@ interface MeasurementFilters {
   organizationId?: string;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -121,8 +157,35 @@ export function registerMeasurementRoutes(app: Express) {
 
   /**
    * Get measurements with optional filters
+   *
+   * @param {string} [filterMode=org] - Filter mode: 'all' (cross-org), 'personal' (no org), 'org' (single org)
+   * @param {string} [orgIds] - Comma-separated org UUIDs for filterMode='all' (max 100 orgs)
+   *   Example: "uuid1,uuid2,uuid3" queries measurements from 3 organizations plus personal measurements
+   * @param {string} [organizationId] - Single organization ID for filterMode='org'
+   * @param {string} [athleteId] - Filter by athlete/user ID
+   * @param {string} [metric] - Filter by metric code (e.g., 'FLY10_TIME', 'VERTICAL_JUMP')
+   * @param {string} [teamIds] - Comma-separated team UUIDs
+   * @param {string} [sport] - Filter by sport name
+   * @param {string} [gender] - Filter by gender ('Male', 'Female', 'Not Specified')
+   * @param {string} [dateFrom] - Filter measurements from this date (ISO 8601 or YYYY-MM-DD)
+   * @param {string} [dateTo] - Filter measurements to this date (ISO 8601 or YYYY-MM-DD)
+   * @param {boolean} [includeUnverified=false] - Include unverified measurements
+   * @param {number} [birthYearFrom] - Filter by birth year range (1900-2100)
+   * @param {number} [birthYearTo] - Filter by birth year range (1900-2100)
+   * @param {number} [ageFrom] - Filter by age range (0-120)
+   * @param {number} [ageTo] - Filter by age range (0-120)
+   * @param {number} [limit] - Maximum results to return (default varies by role)
+   * @param {number} [offset] - Pagination offset
+   *
+   * @rateLimit 200 req/15min (general), 10 req/15min per orgIds combination (cross-org)
+   * @security Non-admins can only query organizations they belong to
+   * @returns {Measurement[]} Array of measurement objects
    */
-  app.get("/api/measurements", measurementLimiter, requireAuth, async (req, res) => {
+  // Two-tier rate limiting strategy:
+  // 1. measurementLimiter (200 req/15min) - General protection against high-volume queries
+  // 2. orgSpecificLimiter (10 req/15min) - Stricter limit per orgIds combination to prevent cross-org data extraction
+  // Order matters: General limiter first provides base protection, stricter limiter second provides targeted security
+  app.get("/api/measurements", measurementLimiter, orgSpecificLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -150,26 +213,50 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.ageTo !== undefined && { ageTo: validatedParams.ageTo }),
         ...(validatedParams.limit !== undefined && { limit: validatedParams.limit }),
         ...(validatedParams.offset !== undefined && { offset: validatedParams.offset }),
+        ...(validatedParams.filterMode && { filterMode: validatedParams.filterMode }),
+        ...(validatedParams.orgIds && { orgIds: validatedParams.orgIds }),
       };
 
-      // Organization-based filtering
+      // SECURITY: Validate orgIds if provided (non-site-admins only)
+      // Site admins can query any org, non-admins must belong to all specified orgs
+      if (filters.orgIds && !isSiteAdmin(user)) {
+        const requestedOrgIds = filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '');
+
+        if (requestedOrgIds.length > 0) {
+          // Get user's organizations
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+
+          // Check if all requested orgIds belong to the user
+          const unauthorizedOrgs = requestedOrgIds.filter(orgId => !userOrgIds.has(orgId));
+          if (unauthorizedOrgs.length > 0) {
+            return res.status(403).json({
+              message: `Access denied - you are not authorized to access organizations: ${unauthorizedOrgs.join(', ')}`
+            });
+          }
+        }
+      }
+
+      // Organization-based filtering (existing logic for non-filterMode queries)
       // SECURITY: Validate organization access and get effective org ID
-      const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
+      if (!filters.filterMode || filters.filterMode === 'org') {
+        const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
 
-      // For measurements endpoint, users with no org membership get empty results
-      if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
-        return res.json([]); // Users without an organization have no measurements to view
-      }
+        // For measurements endpoint, users with no org membership get empty results
+        if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
+          return res.json([]); // Users without an organization have no measurements to view
+        }
 
-      if (!orgAccessResult.allowed) {
-        return res.status(403).json({
-          message: getAuthorizationError(orgAccessResult.error!)
-        });
-      }
+        if (!orgAccessResult.allowed) {
+          return res.status(403).json({
+            message: getAuthorizationError(orgAccessResult.error!)
+          });
+        }
 
-      // Set the organization filter to the effective org ID
-      if (orgAccessResult.effectiveOrgId) {
-        filters.organizationId = orgAccessResult.effectiveOrgId;
+        // Set the organization filter to the effective org ID
+        if (orgAccessResult.effectiveOrgId) {
+          filters.organizationId = orgAccessResult.effectiveOrgId;
+        }
       }
 
       // Site admins can query across organizations, non-admins cannot

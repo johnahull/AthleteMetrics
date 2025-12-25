@@ -3,13 +3,16 @@
  *
  * Displays a badge indicating which organization a measurement came from.
  * Used in unified cross-organization views to distinguish data sources.
+ * Supports consistent color coding per organization using hash-based colors.
  */
 
 import { cn } from "@/lib/utils";
-import { Building2 } from "lucide-react";
+import { Building2, User } from "lucide-react";
 
 interface OrgBadgeProps {
   organizationName: string;
+  /** Optional org ID for consistent color assignment */
+  organizationId?: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';
 }
@@ -26,12 +29,49 @@ const iconSizes = {
   lg: 'h-4 w-4',
 };
 
-export function OrgBadge({ organizationName, className, size = 'sm' }: OrgBadgeProps) {
+// Color palette for organization badges (consistent with design system)
+const orgColorPalette = [
+  { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-300' },
+  { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-800 dark:text-green-300' },
+  { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-300' },
+  { bg: 'bg-orange-100 dark:bg-orange-900/30', text: 'text-orange-800 dark:text-orange-300' },
+  { bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-800 dark:text-pink-300' },
+  { bg: 'bg-cyan-100 dark:bg-cyan-900/30', text: 'text-cyan-800 dark:text-cyan-300' },
+  { bg: 'bg-yellow-100 dark:bg-yellow-900/30', text: 'text-yellow-800 dark:text-yellow-300' },
+  { bg: 'bg-indigo-100 dark:bg-indigo-900/30', text: 'text-indigo-800 dark:text-indigo-300' },
+];
+
+/**
+ * Get consistent color for an organization based on its ID.
+ * Uses a simple character code sum hash to ensure the same org always gets the same color.
+ *
+ * Note: This is a non-cryptographic hash for UI color assignment only.
+ * Collisions are acceptable - multiple orgs may share the same color, which is fine
+ * for visual distinction purposes. The color palette has 8 options.
+ *
+ * @param orgId - Organization UUID (optional). If not provided, returns default blue.
+ * @returns Color object with `bg` (background) and `text` (foreground) Tailwind classes
+ * @example
+ * const colors = getOrgColor('abc-123');
+ * // Returns: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-800 dark:text-purple-300' }
+ */
+function getOrgColor(orgId?: string): typeof orgColorPalette[number] {
+  if (!orgId) {
+    return orgColorPalette[0]; // Default to blue
+  }
+  const hash = orgId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+  return orgColorPalette[hash % orgColorPalette.length];
+}
+
+export function OrgBadge({ organizationName, organizationId, className, size = 'sm' }: OrgBadgeProps) {
+  const colors = getOrgColor(organizationId);
+
   return (
     <span
       className={cn(
         "inline-flex items-center gap-1 rounded-full font-medium",
-        "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+        colors.bg,
+        colors.text,
         sizeClasses[size],
         className
       )}
@@ -40,6 +80,32 @@ export function OrgBadge({ organizationName, className, size = 'sm' }: OrgBadgeP
       <span className="truncate max-w-[120px]" title={organizationName}>
         {organizationName}
       </span>
+    </span>
+  );
+}
+
+/**
+ * PersonalBadge Component
+ *
+ * Displays a badge for self-entered/personal measurements (no organization).
+ */
+interface PersonalBadgeProps {
+  className?: string;
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export function PersonalBadge({ className, size = 'sm' }: PersonalBadgeProps) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full font-medium",
+        "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300",
+        sizeClasses[size],
+        className
+      )}
+    >
+      <User className={iconSizes[size]} />
+      <span>Self-entered</span>
     </span>
   );
 }

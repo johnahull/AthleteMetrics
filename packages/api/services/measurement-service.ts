@@ -47,6 +47,8 @@ export interface MeasurementFilters {
   includeUnknownBirthYear?: boolean;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export interface PaginatedMeasurements {
@@ -179,46 +181,55 @@ export class MeasurementService {
       let teamNameSnapshot: string | null = null;
       let organizationId: string | null = null;
 
-      if (!teamId || teamId.trim() === '') {
-        // Get athlete's active teams at measurement date (within transaction)
-        // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
-        // See: migrations/0018_add_org_query_composite_indexes.sql
-        const activeTeams = await tx
-          .select({
-            teamId: teams.id,
-            teamName: teams.name,
-            season: teams.season,
-            organizationId: teams.organizationId,
-            organizationName: organizations.name,
-          })
-          .from(userTeams)
-          .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-          .where(
-            and(
-              eq(userTeams.userId, measurement.userId),
-              lte(userTeams.joinedAt, measurementDate),
-              or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
-              eq(userTeams.isActive, true),
-              eq(teams.isArchived, false)
-            )
-          )
-          .for('update'); // Prevent race condition with row-level lock
+      // Check if this is athlete self-entry (personal measurement)
+      const isAthleteSelfEntry = submitterRole === 'athlete' && measurement.userId === submittedBy;
 
-        if (activeTeams.length === 1) {
-          // Single team - auto-assign
-          teamId = activeTeams[0].teamId;
-          // Use undefined for optional fields per TypeScript schema
-          season = activeTeams[0].season ?? undefined;
-          teamContextAuto = true;
-          // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
-        } else if (activeTeams.length > 1) {
-          // Multiple teams - cannot auto-assign
-          // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+      if (!teamId || teamId.trim() === '') {
+        // For athlete self-entry without explicit team, keep as personal (no org assignment)
+        if (isAthleteSelfEntry) {
+          // Personal measurement - no team or organization context
           teamContextAuto = false;
         } else {
-          // No active teams - measurement without team context
-          teamContextAuto = false;
+          // Get athlete's active teams at measurement date (within transaction)
+          // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
+          // See: migrations/0018_add_org_query_composite_indexes.sql
+          const activeTeams = await tx
+            .select({
+              teamId: teams.id,
+              teamName: teams.name,
+              season: teams.season,
+              organizationId: teams.organizationId,
+              organizationName: organizations.name,
+            })
+            .from(userTeams)
+            .innerJoin(teams, eq(userTeams.teamId, teams.id))
+            .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+            .where(
+              and(
+                eq(userTeams.userId, measurement.userId),
+                lte(userTeams.joinedAt, measurementDate),
+                or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+                eq(userTeams.isActive, true),
+                eq(teams.isArchived, false)
+              )
+            )
+            .for('update'); // Prevent race condition with row-level lock
+
+          if (activeTeams.length === 1) {
+            // Single team - auto-assign
+            teamId = activeTeams[0].teamId;
+            // Use undefined for optional fields per TypeScript schema
+            season = activeTeams[0].season ?? undefined;
+            teamContextAuto = true;
+            // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
+          } else if (activeTeams.length > 1) {
+            // Multiple teams - cannot auto-assign
+            // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+            teamContextAuto = false;
+          } else {
+            // No active teams - measurement without team context
+            teamContextAuto = false;
+          }
         }
       } else {
         // teamId was explicitly provided
@@ -901,8 +912,9 @@ export class MeasurementService {
     allowCrossOrganization: boolean = false
   ): Promise<PaginatedMeasurements> {
     // Defense-in-depth: Enforce organizationId requirement for non-site-admin contexts
+    // Exception: filterMode queries bypass this requirement (they have their own filtering logic)
     // This prevents accidental data leakage if route-layer authorization is bypassed
-    if (!filters?.organizationId && !allowCrossOrganization) {
+    if (!filters?.organizationId && !allowCrossOrganization && !filters?.filterMode) {
       throw new Error('organizationId is required for organization-scoped queries');
     }
 
@@ -921,7 +933,43 @@ export class MeasurementService {
       conditions.push(eq(measurements.metric, filters.metric));
     }
 
-    if (filters?.organizationId) {
+    // CROSS-ORG MEASUREMENT QUERIES (filterMode parameter)
+    // Handle new filter modes: 'personal', 'all', 'org'
+    if (filters?.filterMode === 'personal') {
+      // Only self-entered measurements (organizationId IS NULL)
+      conditions.push(isNull(measurements.organizationId));
+    } else if (filters?.filterMode === 'all') {
+      // Measurements from any of specified org IDs OR personal (NULL)
+      const orgIdArray = filters.orgIds
+        ? filters.orgIds.split(',').map(id => id.trim()).filter(Boolean)
+        : [];
+
+      // Defensive check: enforce MAX_ORG_IDS limit even if route validation is bypassed
+      // Route layer validates this via Zod schema, but defense-in-depth requires service-layer check
+      if (orgIdArray.length > 100) {
+        throw new Error('orgIds cannot exceed 100 organizations');
+      }
+
+      if (orgIdArray.length > 0) {
+        // Include measurements from specified orgs OR personal measurements (NULL)
+        // NOTE: The OR isNull() pattern is suboptimal for index usage, but required for functionality.
+        // The composite index (user_id, organization_id, date DESC) WITH WHERE is_verified=true
+        // helps PostgreSQL use index scans more efficiently than before.
+        // For maximum performance (3-10x faster), consider refactoring to UNION ALL:
+        //   SELECT ... WHERE org_id IN (orgIds) UNION ALL SELECT ... WHERE org_id IS NULL
+        // However, this requires significant query restructuring and is deferred for now.
+        conditions.push(
+          or(
+            inArray(measurements.organizationId, orgIdArray),
+            isNull(measurements.organizationId)
+          )!
+        );
+      } else {
+        // Empty orgIds = only personal measurements
+        conditions.push(isNull(measurements.organizationId));
+      }
+    } else if (filters?.organizationId) {
+      // Default 'org' mode: existing organizationId filter
       // STRICT ORGANIZATION ISOLATION (SECURITY FIX - 2025-12-22)
       // Only include measurements that explicitly belong to the specified organization.
       //
@@ -1130,11 +1178,14 @@ export class MeasurementService {
           'lastName', ${verifierUser.lastName},
           'fullName', ${verifierUser.fullName}
         ) ELSE NULL END`,
+        // Organization name (prevents N+1 queries for org badge display)
+        organizationName: organizations.name,
       })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
         .leftJoin(submitterUser, eq(measurements.submittedBy, submitterUser.id))
         .leftJoin(verifierUser, eq(measurements.verifiedBy, verifierUser.id))
+        .leftJoin(organizations, eq(measurements.organizationId, organizations.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)
