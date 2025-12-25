@@ -104,7 +104,18 @@ export function registerAuthRoutes(app: Express) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const organizations = await authService.getUserOrganizations(req.session.user.id);
+      const rawOrganizations = await authService.getUserOrganizations(req.session.user.id);
+
+      // Transform to match frontend UserOrganization interface
+      // Backend returns: { organizationId, role, organization: { id, name, ... } }
+      // Frontend expects: { organizationId, organizationName, role, createdAt }
+      const organizations = rawOrganizations.map((org: any) => ({
+        organizationId: org.organizationId,
+        organizationName: org.organization?.name || 'Unknown Organization',
+        role: org.role,
+        createdAt: org.createdAt,
+      }));
+
       console.log('[auth-routes] /api/auth/me/organizations response for user', req.session.user.id, ':', organizations);
       res.json(organizations);
     } catch (error) {
