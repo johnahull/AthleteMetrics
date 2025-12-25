@@ -30,6 +30,11 @@ import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
+import { registerEventRoutes } from "./event-routes";
+import { registerEventMetricsRoutes } from "./event-metrics-routes";
+import { registerEventMeasurementsRoutes } from "./event-measurements-routes";
+import { registerEventResultsRoutes } from "./event-results-routes";
+import { registerEventReportRoutes } from "./event-report-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
 import { registerPushNotificationRoutes } from "./push-notification-routes";
 import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
@@ -135,6 +140,21 @@ export function registerAllRoutes(app: Express) {
 
   // Site admin notification routes (global settings and analytics)
   registerAdminNotificationRoutes(app);
+
+  // Event management routes (combines, camps, testing days)
+  registerEventRoutes(app);
+
+  // Event metrics configuration routes
+  registerEventMetricsRoutes(app);
+
+  // Event measurements routes (measurements linked to events)
+  registerEventMeasurementsRoutes(app);
+
+  // Event results routes (results visibility and publishing)
+  registerEventResultsRoutes(app);
+
+  // Event report routes (event-specific reports with event percentiles)
+  registerEventReportRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

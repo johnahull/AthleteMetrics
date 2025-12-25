@@ -1,0 +1,631 @@
+/**
+ * Event Detail/Manage Page - Coach/Org Admin view
+ * Tabs: Overview, Registrations, Check-In, Metrics, Results, Settings
+ */
+
+import { useState } from "react";
+import { useParams, Link } from "wouter";
+import { useAuth } from "@/lib/auth";
+import {
+  useEvent,
+  useEventRegistrations,
+  useFreezeEvent,
+  useUnfreezeEvent,
+  useApproveRegistration,
+  useDeclineRegistration,
+} from "@/lib/events-api";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab } from "@/components/events";
+import {
+  ArrowLeft,
+  Calendar,
+  MapPin,
+  Users,
+  Clock,
+  Copy,
+  Lock,
+  Unlock,
+  Settings,
+  ClipboardList,
+  BarChart3,
+  CheckCircle,
+  Edit,
+  ExternalLink,
+} from "lucide-react";
+import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
+import type { EventRegistration } from "@shared/schema";
+
+type TabValue = "overview" | "registrations" | "checkin" | "metrics" | "results" | "reports" | "settings";
+
+// Extended registration type with user data
+interface RegistrationWithUser extends EventRegistration {
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+export default function EventDetail() {
+  const { eventId } = useParams();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
+
+  // Fetch event data
+  const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
+
+  // Fetch registrations
+  const { data: registrations, isLoading: registrationsLoading } = useEventRegistrations(eventId);
+
+  // Mutations
+  const freezeMutation = useFreezeEvent();
+  const unfreezeMutation = useUnfreezeEvent();
+  const approveMutation = useApproveRegistration();
+  const declineMutation = useDeclineRegistration();
+
+  // Handle approve registration
+  const handleApprove = async (registrationId: string) => {
+    if (!eventId) return;
+    try {
+      await approveMutation.mutateAsync({ eventId, registrationId });
+      toast({
+        title: "Registration Approved",
+        description: "Athlete has been approved for this event.",
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to approve registration.",
+      });
+    }
+  };
+
+  // Handle decline registration
+  const handleDecline = async (registrationId: string) => {
+    if (!eventId) return;
+    try {
+      await declineMutation.mutateAsync({ eventId, registrationId, reason: "Declined by admin" });
+      toast({
+        title: "Registration Declined",
+        description: "Registration has been declined.",
+      });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to decline registration.",
+      });
+    }
+  };
+
+  // Handle invite athletes (placeholder)
+  const handleInviteAthletes = () => {
+    toast({
+      title: "Coming Soon",
+      description: "Athlete invitation feature is in development.",
+    });
+  };
+
+  // Handle edit event (placeholder)
+  const handleEditEvent = () => {
+    toast({
+      title: "Coming Soon",
+      description: "Event editing feature is in development.",
+    });
+  };
+
+  // Calculate stats
+  const typedRegistrations = (registrations as RegistrationWithUser[]) || [];
+  const approvedCount = typedRegistrations.filter((r) => r.status === "approved" || r.status === "checked_in").length;
+  const checkedInCount = typedRegistrations.filter((r) => r.status === "checked_in").length;
+  const waitlistCount = typedRegistrations.filter((r) => r.status === "waitlisted").length;
+  const pendingCount = typedRegistrations.filter((r) => r.status === "pending").length;
+
+  // Copy event code to clipboard
+  const copyEventCode = () => {
+    if (event?.eventCode) {
+      navigator.clipboard.writeText(event.eventCode);
+      toast({
+        title: "Copied!",
+        description: "Event code copied to clipboard",
+      });
+    }
+  };
+
+  // Copy join link to clipboard
+  const copyJoinLink = () => {
+    if (event?.eventCode) {
+      const link = `${window.location.origin}/events/join/${event.eventCode}`;
+      navigator.clipboard.writeText(link);
+      toast({
+        title: "Copied!",
+        description: "Join link copied to clipboard",
+      });
+    }
+  };
+
+  // Handle freeze/unfreeze
+  const handleToggleFreeze = async () => {
+    if (!eventId) return;
+
+    try {
+      if (event?.isFrozen) {
+        await unfreezeMutation.mutateAsync(eventId);
+        toast({
+          title: "Event Unfrozen",
+          description: "Event has been unfrozen and can now be edited.",
+        });
+      } else {
+        await freezeMutation.mutateAsync({ eventId, reason: "Manual freeze by admin" });
+        toast({
+          title: "Event Frozen",
+          description: "Event has been frozen. No changes can be made until unfrozen.",
+        });
+      }
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update event freeze status.",
+      });
+    }
+  };
+
+  // Format date range
+  const formatDateRange = () => {
+    if (!event) return "";
+    const startDate = new Date(event.startDate);
+    const endDate = event.endDate ? new Date(event.endDate) : null;
+
+    if (!endDate || format(startDate, "yyyy-MM-dd") === format(endDate, "yyyy-MM-dd")) {
+      return format(startDate, "EEEE, MMMM d, yyyy");
+    }
+    return `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`;
+  };
+
+  // Time status
+  const getTimeStatus = () => {
+    if (!event) return null;
+    const startDate = new Date(event.startDate);
+    const endDate = event.endDate ? new Date(event.endDate) : startDate;
+
+    if (isPast(endDate)) return { label: "Completed", variant: "secondary" as const };
+    if (isFuture(startDate)) return { label: `In ${formatDistanceToNow(startDate)}`, variant: "default" as const };
+    return { label: "In Progress", variant: "default" as const };
+  };
+
+  if (eventLoading) {
+    return (
+      <div className="p-6 space-y-6">
+        <Skeleton className="h-10 w-48" />
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (eventError || !event) {
+    return (
+      <div className="p-6">
+        <Card className="bg-red-50 border-red-200">
+          <CardContent className="pt-6">
+            <p className="text-red-800">Event not found or you don't have permission to view it.</p>
+            <Link href="/events">
+              <Button variant="outline" className="mt-4">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Events
+              </Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const timeStatus = getTimeStatus();
+
+  return (
+    <div className="p-6">
+      {/* Header */}
+      <div className="mb-6">
+        <Link href="/events">
+          <Button variant="ghost" size="sm" className="mb-4">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Events
+          </Button>
+        </Link>
+
+        <div className="flex items-start justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-gray-900">{event.name}</h1>
+            <div className="flex items-center gap-3 mt-2">
+              <EventStatusBadge status={event.status} />
+              {event.isFrozen && (
+                <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                  <Lock className="h-3 w-3 mr-1" />
+                  Frozen
+                </Badge>
+              )}
+              {timeStatus && (
+                <Badge variant={timeStatus.variant}>
+                  <Clock className="h-3 w-3 mr-1" />
+                  {timeStatus.label}
+                </Badge>
+              )}
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleToggleFreeze} disabled={freezeMutation.isPending || unfreezeMutation.isPending}>
+              {event.isFrozen ? (
+                <>
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Unfreeze
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 mr-2" />
+                  Freeze
+                </>
+              )}
+            </Button>
+            <Button onClick={handleEditEvent}>
+              <Edit className="h-4 w-4 mr-2" />
+              Edit Event
+            </Button>
+          </div>
+        </div>
+
+        {/* Event info bar */}
+        <div className="flex flex-wrap gap-4 mt-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Calendar className="h-4 w-4" />
+            <span>{formatDateRange()}</span>
+          </div>
+          {event.location && (
+            <div className="flex items-center gap-1">
+              <MapPin className="h-4 w-4" />
+              <span>{event.location}</span>
+            </div>
+          )}
+          {event.eventCode && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono bg-muted px-2 py-0.5 rounded">
+                Code: {event.eventCode}
+              </span>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={copyEventCode}>
+                <Copy className="h-3 w-3" />
+              </Button>
+              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={copyJoinLink}>
+                <ExternalLink className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <Tabs value={selectedTab} onValueChange={(v) => setSelectedTab(v as TabValue)} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="overview" data-testid="tab-overview">
+            Overview
+          </TabsTrigger>
+          <TabsTrigger value="registrations" data-testid="tab-registrations">
+            Registrations ({approvedCount + pendingCount})
+          </TabsTrigger>
+          <TabsTrigger value="checkin" data-testid="tab-checkin">
+            Check-In ({checkedInCount}/{approvedCount})
+          </TabsTrigger>
+          <TabsTrigger value="metrics" data-testid="tab-metrics">
+            Metrics
+          </TabsTrigger>
+          <TabsTrigger value="results" data-testid="tab-results">
+            Results
+          </TabsTrigger>
+          <TabsTrigger value="reports" data-testid="tab-reports">
+            Reports
+          </TabsTrigger>
+          <TabsTrigger value="settings" data-testid="tab-settings">
+            Settings
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview">
+          <div className="space-y-6">
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-green-100 rounded-lg">
+                      <Users className="h-5 w-5 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{approvedCount}</p>
+                      <p className="text-sm text-muted-foreground">
+                        Registered
+                        {event.maxRegistrations && ` / ${event.maxRegistrations}`}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <CheckCircle className="h-5 w-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{checkedInCount}</p>
+                      <p className="text-sm text-muted-foreground">Checked In</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-yellow-100 rounded-lg">
+                      <Clock className="h-5 w-5 text-yellow-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{pendingCount}</p>
+                      <p className="text-sm text-muted-foreground">Pending</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-orange-100 rounded-lg">
+                      <ClipboardList className="h-5 w-5 text-orange-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{waitlistCount}</p>
+                      <p className="text-sm text-muted-foreground">Waitlisted</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Description */}
+            {event.description && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>About This Event</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-muted-foreground whitespace-pre-wrap">{event.description}</p>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Quick Actions */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Quick Actions</CardTitle>
+                <CardDescription>Common tasks for managing this event</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-wrap gap-3">
+                <Button variant="outline" onClick={() => setSelectedTab("registrations")}>
+                  <Users className="h-4 w-4 mr-2" />
+                  View Registrations
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedTab("checkin")}>
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Start Check-In
+                </Button>
+                <Button variant="outline" onClick={() => setSelectedTab("metrics")}>
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Configure Metrics
+                </Button>
+                <Button variant="outline" onClick={copyJoinLink}>
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy Join Link
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Registrations Tab */}
+        <TabsContent value="registrations">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Registrations</CardTitle>
+                  <CardDescription>
+                    {approvedCount + pendingCount + waitlistCount} total registrations
+                  </CardDescription>
+                </div>
+                <Button onClick={handleInviteAthletes}>Invite Athletes</Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {registrationsLoading ? (
+                <div className="space-y-2">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : typedRegistrations.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No registrations yet</p>
+                  <p className="text-sm mt-1">Share the event code to get athletes registered</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {typedRegistrations.map((reg) => (
+                    <div
+                      key={reg.id}
+                      className="flex items-center justify-between p-3 border rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-medium">
+                            {reg.userFullNameSnapshot?.charAt(0) || "?"}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{reg.userFullNameSnapshot}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {reg.organizationNameSnapshot || "Independent"}
+                            {reg.registrationNumber && ` • #${reg.registrationNumber}`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            reg.status === "approved"
+                              ? "bg-green-100 text-green-700"
+                              : reg.status === "pending"
+                              ? "bg-yellow-100 text-yellow-700"
+                              : reg.status === "waitlisted"
+                              ? "bg-orange-100 text-orange-700"
+                              : reg.status === "checked_in"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-gray-100 text-gray-700"
+                          }
+                        >
+                          {reg.status}
+                        </Badge>
+                        {reg.status === "pending" && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => handleApprove(reg.id)}
+                              disabled={approveMutation.isPending}
+                            >
+                              Approve
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDecline(reg.id)}
+                              disabled={declineMutation.isPending}
+                            >
+                              Decline
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Check-In Tab */}
+        <TabsContent value="checkin">
+          <Card>
+            <CardHeader>
+              <CardTitle>Check-In</CardTitle>
+              <CardDescription>
+                {checkedInCount} of {approvedCount} athletes checked in
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="text-center py-8 text-muted-foreground">
+                <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Check-in functionality coming soon</p>
+                <p className="text-sm mt-1">Search and check in athletes as they arrive</p>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Metrics Tab */}
+        <TabsContent value="metrics">
+          <EventMetricsTab
+            eventId={eventId!}
+            organizationId={event.organizationId || undefined}
+            isFrozen={event.isFrozen}
+          />
+        </TabsContent>
+
+        {/* Results Tab */}
+        <TabsContent value="results">
+          <EventResultsTab
+            eventId={eventId!}
+            isFrozen={event.isFrozen}
+            eventStatus={event.status}
+            resultsPublishedAt={event.resultsPublishedAt}
+          />
+        </TabsContent>
+
+        {/* Reports Tab */}
+        <TabsContent value="reports">
+          <EventReportsTab
+            eventId={eventId!}
+            eventName={event.name}
+            isFrozen={event.isFrozen}
+          />
+        </TabsContent>
+
+        {/* Settings Tab */}
+        <TabsContent value="settings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Event Settings</CardTitle>
+              <CardDescription>Configure event details and options</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm font-medium">Visibility</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {event.visibility?.replace("_", " ") || "Organization Only"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Registration Mode</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {event.registrationMode?.replace("_", " ") || "Open"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Max Capacity</p>
+                    <p className="text-sm text-muted-foreground">
+                      {event.maxRegistrations || "Unlimited"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Results Visibility</p>
+                    <p className="text-sm text-muted-foreground capitalize">
+                      {event.resultsVisibility?.replace("_", " ") || "After Event"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t">
+                  <Button variant="outline">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Edit Settings
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
