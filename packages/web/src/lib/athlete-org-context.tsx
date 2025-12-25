@@ -46,10 +46,12 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
     if (!userOrganizations || userOrganizations.length === 0) {
       return [];
     }
-    return userOrganizations.map(org => ({
-      id: org.organizationId,
-      name: org.organizationName,
-    }));
+    return userOrganizations
+      .filter(org => org && org.organizationId) // Filter out invalid entries
+      .map(org => ({
+        id: org.organizationId,
+        name: org.organizationName || 'Unknown Organization',
+      }));
   }, [userOrganizations]);
 
   // Initialize from localStorage on mount and when user changes
