@@ -72,6 +72,12 @@ const orgSpecificLimiter = rateLimit({
   validate: { keyGeneratorIpFallback: false },
 });
 
+// Shared UUID validation pattern (RFC 4122 format: 8-4-4-4-12 hex pattern)
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Maximum number of organizations that can be queried in a single request
+const MAX_ORG_IDS = 100;
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
@@ -80,14 +86,7 @@ const measurementQuerySchema = z.object({
   // Accept any metric code - supports derived metrics and custom metrics
   metric: z.string().regex(/^[A-Z0-9_]+$/, "Invalid metric code format").optional(),
   teamIds: z.string().optional().refine(
-    (val) => !val || val.split(',').every(id => {
-      const trimmedId = id.trim();
-      // UUID format validation (8-4-4-4-12 hex pattern)
-      // Accepts all RFC 4122 UUIDs including nil UUID (00000000-0000-0000-0000-000000000000)
-      // Security: Database foreign key validation is the primary security boundary
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidPattern.test(trimmedId);
-    }),
+    (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
     { message: "teamIds must be comma-separated valid UUIDs" }
   ), // Comma-separated UUIDs
   sport: z.string().min(1).max(100).optional(),
@@ -110,14 +109,15 @@ const measurementQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
   // Cross-org measurement query parameters
   filterMode: z.enum(['all', 'personal', 'org']).optional(),
-  orgIds: z.string().optional().refine(
-    (val) => !val || val.split(',').every(id => {
-      const trimmedId = id.trim();
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidPattern.test(trimmedId);
-    }),
-    { message: "orgIds must be comma-separated valid UUIDs" }
-  ),
+  orgIds: z.string().optional()
+    .refine(
+      (val) => !val || val.split(',').length <= MAX_ORG_IDS,
+      { message: `orgIds cannot exceed ${MAX_ORG_IDS} organizations` }
+    )
+    .refine(
+      (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
+      { message: "orgIds must be comma-separated valid UUIDs" }
+    ),
 }).refine(
   (data) => {
     if (data.birthYearFrom !== undefined && data.birthYearTo !== undefined) {
@@ -158,7 +158,33 @@ export function registerMeasurementRoutes(app: Express) {
 
   /**
    * Get measurements with optional filters
+   *
+   * @param {string} [filterMode=org] - Filter mode: 'all' (cross-org), 'personal' (no org), 'org' (single org)
+   * @param {string} [orgIds] - Comma-separated org UUIDs for filterMode='all' (max 100 orgs)
+   * @param {string} [organizationId] - Single organization ID for filterMode='org'
+   * @param {string} [athleteId] - Filter by athlete/user ID
+   * @param {string} [metric] - Filter by metric code (e.g., 'FLY10_TIME', 'VERTICAL_JUMP')
+   * @param {string} [teamIds] - Comma-separated team UUIDs
+   * @param {string} [sport] - Filter by sport name
+   * @param {string} [gender] - Filter by gender ('Male', 'Female', 'Not Specified')
+   * @param {string} [dateFrom] - Filter measurements from this date (ISO 8601 or YYYY-MM-DD)
+   * @param {string} [dateTo] - Filter measurements to this date (ISO 8601 or YYYY-MM-DD)
+   * @param {boolean} [includeUnverified=false] - Include unverified measurements
+   * @param {number} [birthYearFrom] - Filter by birth year range (1900-2100)
+   * @param {number} [birthYearTo] - Filter by birth year range (1900-2100)
+   * @param {number} [ageFrom] - Filter by age range (0-120)
+   * @param {number} [ageTo] - Filter by age range (0-120)
+   * @param {number} [limit] - Maximum results to return (default varies by role)
+   * @param {number} [offset] - Pagination offset
+   *
+   * @rateLimit 200 req/15min (general), 10 req/15min per orgIds combination (cross-org)
+   * @security Non-admins can only query organizations they belong to
+   * @returns {Measurement[]} Array of measurement objects
    */
+  // Two-tier rate limiting strategy:
+  // 1. measurementLimiter (200 req/15min) - General protection against high-volume queries
+  // 2. orgSpecificLimiter (10 req/15min) - Stricter limit per orgIds combination to prevent cross-org data extraction
+  // Order matters: General limiter first provides base protection, stricter limiter second provides targeted security
   app.get("/api/measurements", measurementLimiter, orgSpecificLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
