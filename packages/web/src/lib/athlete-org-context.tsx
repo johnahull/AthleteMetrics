@@ -72,15 +72,20 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
     // Validate stored filter
     if (storedFilter === 'all' || storedFilter === 'personal') {
       setFilterModeState(storedFilter);
-    } else {
+    } else if (storedFilter) {
       // Check if stored org ID exists in user's organizations
       const orgExists = organizations.some(org => org.id === storedFilter);
       if (orgExists) {
         setFilterModeState(storedFilter);
       } else {
-        // Invalid org ID, reset to 'all'
+        // Invalid org ID, reset to 'all' and persist
         setFilterModeState('all');
+        setAthleteOrgFilter(user.id, 'all');
       }
+    } else {
+      // No stored filter - default to 'all' and persist it
+      setFilterModeState('all');
+      setAthleteOrgFilter(user.id, 'all');
     }
   }, [user?.id, organizations]);
 
