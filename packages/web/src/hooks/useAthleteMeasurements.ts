@@ -88,6 +88,9 @@ export function useAthleteMeasurements(
     enabled: !!athleteId && enabled,
     staleTime,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    // Prevent unnecessary refetches - filterMode change already triggers new query via queryKey
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 

@@ -66,11 +66,9 @@ const orgSpecificLimiter = rateLimit({
     // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
     return !req.query.orgIds;
   },
-  // SECURITY NOTE: IPv6 validation disabled because we use req.ip directly,
-  // which already handles X-Forwarded-For when 'trust proxy' is configured.
-  // If 'trust proxy' is not configured in Express, IPv6 addresses may not be
-  // rate-limited correctly. Verify Express app.set('trust proxy', true) is set.
-  validate: { keyGeneratorIpFallback: false },
+  // NOTE: Using default validation (IPv6 support enabled)
+  // req.ip is used for IP extraction, which handles X-Forwarded-For when 'trust proxy' is configured.
+  // Ensure Express app.set('trust proxy', true) is configured for proper IP detection behind proxies.
 });
 
 // Shared UUID validation pattern (RFC 4122 format: 8-4-4-4-12 hex pattern)

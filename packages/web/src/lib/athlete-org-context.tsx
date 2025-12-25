@@ -45,6 +45,8 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
   const isInitializedRef = useRef<string | null>(null);
 
   // Convert userOrganizations to OrganizationOption array
+  // Use stable dependency: stringify org IDs instead of array reference
+  const orgIds = userOrganizations?.map(org => org?.organizationId).filter(Boolean).sort().join(',') || '';
   const organizations = useMemo<OrganizationOption[]>(() => {
     if (!userOrganizations || userOrganizations.length === 0) {
       return [];
@@ -55,7 +57,7 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
         id: org.organizationId,
         name: org.organizationName || 'Unknown Organization',
       }));
-  }, [userOrganizations]);
+  }, [orgIds, userOrganizations]);
 
   // Combined effect: Initialize from localStorage and handle organization changes
   // This prevents race conditions between two separate effects

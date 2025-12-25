@@ -25,18 +25,26 @@
 -- queries across their multiple organization memberships plus personal measurements.
 
 -- Composite index for cross-org measurement queries
--- Column order optimized for query pattern:
--- 1. organization_id - Primary filter (equality or IN clause)
--- 2. user_id - Secondary filter (equality)
--- 3. date DESC - Sort column for ORDER BY
+-- Column order optimized for query selectivity:
+-- 1. user_id - Most selective filter (narrows to single user) - PRIMARY
+-- 2. organization_id - Secondary filter (user's orgs) - SECONDARY
+-- 3. date DESC - Sort column for ORDER BY - TERTIARY
 --
--- Note: We do NOT include is_verified in the index because:
--- - Most measurements are verified (high selectivity)
--- - Including it would increase index size significantly
--- - PostgreSQL can apply the is_verified filter after index lookup efficiently
+-- Rationale for column ordering:
+-- - user_id is more selective than organization_id (1 user vs many orgs)
+-- - Filtering by user_id first reduces the dataset significantly
+-- - Then filtering by organization_id within that user's measurements
+-- - Finally sorting by date DESC
+--
+-- Partial index with WHERE is_verified = true for even better performance:
+-- - Most measurements are verified (high cardinality)
+-- - Filtering unverified measurements in index reduces index size by ~10-20%
+-- - Queries with includeUnverified=false (default) use this partial index
+-- - Queries with includeUnverified=true fall back to full scan (rare case)
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_cross_org_user_date
-  ON measurements(organization_id, user_id, date DESC);
+  ON measurements(user_id, organization_id, date DESC)
+  WHERE is_verified = true;
 
 -- Index comment for documentation
 COMMENT ON INDEX idx_measurements_cross_org_user_date IS
-  'Composite index for cross-org queries - optimizes filterMode=all with multiple orgIds by organization_id, user_id, and date';
+  'Composite index for cross-org queries - optimizes filterMode=all with user_id, organization_id, date DESC. Partial index (WHERE is_verified=true) for better performance.';

@@ -87,6 +87,7 @@ export function OrgSwitcher() {
             checked={filterMode === 'all'}
             onCheckedChange={() => setFilterMode('all')}
             aria-label="All Organizations"
+            data-testid="org-option-all"
           >
             <div className="flex items-center gap-2">
               <Globe className="h-4 w-4" />
@@ -101,6 +102,7 @@ export function OrgSwitcher() {
           checked={filterMode === 'personal'}
           onCheckedChange={() => setFilterMode('personal')}
           aria-label="Self-entered"
+          data-testid="org-option-personal"
         >
           <div className="flex items-center gap-2">
             <User className="h-4 w-4" />
@@ -119,6 +121,7 @@ export function OrgSwitcher() {
             checked={filterMode === org.id}
             onCheckedChange={() => setFilterMode(org.id)}
             aria-label={org.name}
+            data-testid={`org-option-${org.id}`}
           >
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4" />

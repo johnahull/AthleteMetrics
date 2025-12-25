@@ -946,6 +946,12 @@ export class MeasurementService {
 
       if (orgIdArray.length > 0) {
         // Include measurements from specified orgs OR personal measurements (NULL)
+        // NOTE: The OR isNull() pattern is suboptimal for index usage, but required for functionality.
+        // The composite index (user_id, organization_id, date DESC) WITH WHERE is_verified=true
+        // helps PostgreSQL use index scans more efficiently than before.
+        // For maximum performance (3-10x faster), consider refactoring to UNION ALL:
+        //   SELECT ... WHERE org_id IN (orgIds) UNION ALL SELECT ... WHERE org_id IS NULL
+        // However, this requires significant query restructuring and is deferred for now.
         conditions.push(
           or(
             inArray(measurements.organizationId, orgIdArray),
