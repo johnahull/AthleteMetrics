@@ -10,7 +10,7 @@ import type {
   EventRegistration,
   EventInvitation,
   EventMetric,
-  UpdateEventSchema,
+  UpdateEvent,
   Measurement,
 } from "@shared/schema";
 import { STALE_TIME } from "@/lib/queryClient";
@@ -139,7 +139,7 @@ export async function createEvent(data: InsertEvent): Promise<Event> {
 /**
  * Update an event
  */
-export async function updateEvent(eventId: string, data: Partial<UpdateEventSchema>): Promise<Event> {
+export async function updateEvent(eventId: string, data: Partial<UpdateEvent>): Promise<Event> {
   const response = await fetch(`/api/events/${eventId}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -671,7 +671,7 @@ export function useUpdateEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ eventId, data }: { eventId: string; data: Partial<UpdateEventSchema> }) =>
+    mutationFn: ({ eventId, data }: { eventId: string; data: Partial<UpdateEvent> }) =>
       updateEvent(eventId, data),
     onSuccess: (event, { eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['events'] });

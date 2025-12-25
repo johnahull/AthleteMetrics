@@ -7,6 +7,7 @@ import {
   goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
   membershipRequests,
+  events,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -20,6 +21,7 @@ import {
   type Goal, type InsertGoal, type UpdateGoal,
   type AchievementDefinition, type UserAchievement,
   type MembershipRequest,
+  type Event, type InsertEvent,
   insertUserSchema,
   type OrganizationType,
   type InsertOAuthUser
@@ -135,6 +137,14 @@ export interface IStorage {
   rejectMembershipRequest(id: string, processedBy: string, reason?: string): Promise<MembershipRequest>;
   cancelMembershipRequest(id: string): Promise<void>;
   hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
+
+  // Events
+  getEvent(id: string): Promise<Event | null>;
+  updateEvent(id: string, data: Partial<Event>): Promise<Event>;
+  createEvent(data: InsertEvent): Promise<Event>;
+  deleteEvent(id: string): Promise<void>;
+  listEvents(filters: { organizationId?: string; status?: string; visibility?: string }): Promise<Event[]>;
+  getEventByCode(code: string): Promise<Event | null>;
 
   // Public Organization Directory
   getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
@@ -2289,6 +2299,46 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated;
+  }
+
+  // Events
+  async getEvent(id: string): Promise<Event | null> {
+    const result = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    return result[0] || null;
+  }
+
+  async updateEvent(id: string, data: Partial<Event>): Promise<Event> {
+    const result = await db.update(events)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(events.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event ${id} not found`);
+    return result[0];
+  }
+
+  async createEvent(data: InsertEvent): Promise<Event> {
+    const result = await db.insert(events).values(data).returning();
+    return result[0];
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    await db.delete(events).where(eq(events.id, id));
+  }
+
+  async listEvents(filters: { organizationId?: string; status?: string; visibility?: string } = {}): Promise<Event[]> {
+    const conditions = [];
+    if (filters.organizationId) conditions.push(eq(events.organizationId, filters.organizationId));
+    if (filters.status) conditions.push(eq(events.status, filters.status as any));
+    if (filters.visibility) conditions.push(eq(events.visibility, filters.visibility as any));
+
+    return db.select().from(events)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(events.startDate));
+  }
+
+  async getEventByCode(code: string): Promise<Event | null> {
+    const result = await db.select().from(events).where(eq(events.eventCode, code)).limit(1);
+    return result[0] || null;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers

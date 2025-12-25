@@ -50,6 +50,8 @@ export const organizations = pgTable("organizations", {
   isPublicDirectory: boolean("is_public_directory").default(false).notNull(),
   allowMembershipRequests: boolean("allow_membership_requests").default(true).notNull(),
   autoApproveRequests: boolean("auto_approve_requests").default(false).notNull(),
+  // Events module feature flag (added in migration 0079)
+  eventsEnabled: boolean("events_enabled").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -423,6 +425,10 @@ export const measurements = pgTable("measurements", {
       sourceMeasurementId?: string; // Source measurement that triggered the calculation
     };
   }>(),
+  // Event context - immutable snapshot at measurement time (no FK - historical reference)
+  eventId: varchar("event_id"), // Event ID when measurement was taken at an event
+  eventNameSnapshot: text("event_name_snapshot"), // Event name at time of measurement
+  eventDateSnapshot: timestamp("event_date_snapshot"), // Event date at time of measurement
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
@@ -1400,6 +1406,7 @@ export const updateOrganizationSchema = z.object({
   aiEnabledBySiteAdmin: z.boolean().optional(), // Only site admin can set this
   aiEnabled: z.boolean().optional(), // Org admin can set this
   wellnessEnabled: z.boolean().optional(), // Org admin can set this (only effective when site wellness enabled)
+  eventsEnabled: z.boolean().optional(), // Org admin can enable/disable events module
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
@@ -2625,6 +2632,36 @@ export const notificationDeliveryStatusEnum = ['pending', 'delivered', 'failed',
 export const notificationChannelEnum = ['push', 'email'] as const;
 
 /**
+ * Event visibility enum
+ */
+export const eventVisibilityEnum = ['org_private', 'public', 'invite_only'] as const;
+
+/**
+ * Event status enum
+ */
+export const eventStatusEnum = ['draft', 'published', 'active', 'completed', 'cancelled'] as const;
+
+/**
+ * Registration mode enum
+ */
+export const registrationModeEnum = ['open', 'request_approval', 'invitation_only'] as const;
+
+/**
+ * Results visibility enum
+ */
+export const resultsVisibilityEnum = ['immediate', 'after_event', 'manual'] as const;
+
+/**
+ * Registration status enum
+ */
+export const registrationStatusEnum = ['pending', 'approved', 'waitlisted', 'declined', 'cancelled', 'checked_in', 'completed'] as const;
+
+/**
+ * Event invitation status enum
+ */
+export const eventInvitationStatusEnum = ['pending', 'accepted', 'declined', 'expired', 'cancelled'] as const;
+
+/**
  * Push Subscriptions - stores Web Push subscriptions per device
  * One user can have multiple subscriptions (multiple devices)
  */
@@ -2740,6 +2777,171 @@ export const orgNotificationSettings = pgTable("org_notification_settings", {
   updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
 });
 
+/**
+ * Events - combines, camps, testing days
+ */
+export const events = pgTable("events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Event details
+  name: varchar("name", { length: 200 }).notNull(),
+  description: text("description"),
+  location: text("location"),
+  eventType: varchar("event_type", { length: 50 }),
+
+  // Scheduling
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  timezone: varchar("timezone", { length: 50 }).default("America/New_York").notNull(),
+
+  // Visibility and registration
+  visibility: text("visibility", { enum: eventVisibilityEnum }).default("org_private").notNull(),
+  registrationMode: text("registration_mode", { enum: registrationModeEnum }).default("open").notNull(),
+  status: text("status", { enum: eventStatusEnum }).default("draft").notNull(),
+
+  // Registration settings
+  registrationOpensAt: timestamp("registration_opens_at"),
+  registrationClosesAt: timestamp("registration_closes_at"),
+  maxRegistrations: integer("max_registrations"),
+  eventCode: varchar("event_code", { length: 20 }).unique(),
+
+  // Results publishing
+  resultsVisibility: text("results_visibility", { enum: resultsVisibilityEnum }).default("after_event").notNull(),
+  resultsPublishedAt: timestamp("results_published_at"),
+  resultsPublishedBy: varchar("results_published_by").references(() => users.id, { onDelete: 'set null' }),
+
+  // Freeze mechanism
+  isFrozen: boolean("is_frozen").default(false).notNull(),
+  frozenAt: timestamp("frozen_at"),
+  frozenBy: varchar("frozen_by").references(() => users.id, { onDelete: 'set null' }),
+  frozenReason: text("frozen_reason"),
+
+  // Audit
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("events_org_idx").on(table.organizationId),
+  statusIdx: index("events_status_idx").on(table.status),
+  visibilityIdx: index("events_visibility_idx").on(table.visibility),
+  startDateIdx: index("events_start_date_idx").on(table.startDate),
+  codeIdx: index("events_code_idx").on(table.eventCode),
+  orgStatusIdx: index("events_org_status_idx").on(table.organizationId, table.status),
+}));
+
+/**
+ * Event Registrations - historical snapshot approach like measurements
+ */
+export const eventRegistrations = pgTable("event_registrations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: 'cascade' }),
+
+  // Historical snapshot (no FK for user - like measurements)
+  userId: varchar("user_id").notNull(),
+  userFullNameSnapshot: text("user_full_name_snapshot").notNull(),
+  organizationIdSnapshot: varchar("organization_id_snapshot"),
+  organizationNameSnapshot: text("organization_name_snapshot"),
+
+  // Registration details
+  status: text("status", { enum: registrationStatusEnum }).default("pending").notNull(),
+  registrationNumber: integer("registration_number"),
+  discoveryMethod: text("discovery_method"),
+  waitlistPosition: integer("waitlist_position"),
+
+  // Workflow timestamps
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: 'set null' }),
+  declinedAt: timestamp("declined_at"),
+  declinedBy: varchar("declined_by").references(() => users.id, { onDelete: 'set null' }),
+  declineReason: text("decline_reason"),
+
+  // Check-in tracking
+  checkedInAt: timestamp("checked_in_at"),
+  checkedInBy: varchar("checked_in_by").references(() => users.id, { onDelete: 'set null' }),
+  completedAt: timestamp("completed_at"),
+
+  // Notes
+  athleteNotes: text("athlete_notes"),
+  adminNotes: text("admin_notes"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueUserPerEvent: unique("event_registrations_event_user_unique").on(table.eventId, table.userId),
+  eventIdx: index("event_registrations_event_idx").on(table.eventId),
+  userIdx: index("event_registrations_user_idx").on(table.userId),
+  statusIdx: index("event_registrations_status_idx").on(table.status),
+  eventStatusIdx: index("event_registrations_event_status_idx").on(table.eventId, table.status),
+  waitlistIdx: index("event_registrations_waitlist_idx").on(table.eventId, table.waitlistPosition),
+}));
+
+/**
+ * Event Invitations - token-based invitations
+ */
+export const eventInvitations = pgTable("event_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  email: text("email"),
+  token: text("token").notNull().unique(),
+  status: text("status", { enum: eventInvitationStatusEnum }).default("pending").notNull(),
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelledBy: varchar("cancelled_by").references(() => users.id, { onDelete: 'set null' }),
+  emailSent: boolean("email_sent").default(false).notNull(),
+  emailSentAt: timestamp("email_sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("event_invitations_event_idx").on(table.eventId),
+  userIdx: index("event_invitations_user_idx").on(table.userId),
+  tokenIdx: index("event_invitations_token_idx").on(table.token),
+  emailIdx: index("event_invitations_email_idx").on(table.email),
+  statusIdx: index("event_invitations_status_idx").on(table.status),
+}));
+
+/**
+ * Event Metrics - which metrics are required for an event
+ */
+export const eventMetrics = pgTable("event_metrics", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: 'cascade' }),
+  metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
+  displayOrder: integer("display_order").default(999).notNull(),
+  isRequired: boolean("is_required").default(false).notNull(),
+  customLabel: varchar("custom_label", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  uniqueMetricPerEvent: unique("event_metrics_event_metric_unique").on(table.eventId, table.metricCode),
+  eventIdx: index("event_metrics_event_idx").on(table.eventId),
+  displayOrderIdx: index("event_metrics_display_order_idx").on(table.eventId, table.displayOrder),
+}));
+
+/**
+ * Event Freeze Overrides - audit log for frozen event modifications
+ */
+export const eventFreezeOverrides = pgTable("event_freeze_overrides", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  eventId: varchar("event_id").notNull().references(() => events.id, { onDelete: 'cascade' }),
+  action: text("action").notNull(),
+  resourceType: text("resource_type"),
+  resourceId: varchar("resource_id"),
+  overriddenBy: varchar("overridden_by").notNull().references(() => users.id, { onDelete: 'set null' }),
+  justification: text("justification"),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: varchar("user_agent", { length: 500 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdx: index("event_freeze_overrides_event_idx").on(table.eventId),
+  actionIdx: index("event_freeze_overrides_action_idx").on(table.action),
+  userIdx: index("event_freeze_overrides_user_idx").on(table.overriddenBy),
+}));
+
 // Push Notification Relations
 export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
   user: one(users, {
@@ -2777,6 +2979,90 @@ export const orgNotificationSettingsRelations = relations(orgNotificationSetting
   }),
 }));
 
+// Event Relations
+export const eventsRelations = relations(events, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [events.organizationId],
+    references: [organizations.id],
+  }),
+  createdByUser: one(users, {
+    fields: [events.createdBy],
+    references: [users.id],
+  }),
+  resultsPublishedByUser: one(users, {
+    fields: [events.resultsPublishedBy],
+    references: [users.id],
+  }),
+  frozenByUser: one(users, {
+    fields: [events.frozenBy],
+    references: [users.id],
+  }),
+  registrations: many(eventRegistrations),
+  invitations: many(eventInvitations),
+  metrics: many(eventMetrics),
+  freezeOverrides: many(eventFreezeOverrides),
+}));
+
+export const eventRegistrationsRelations = relations(eventRegistrations, ({ one }) => ({
+  event: one(events, {
+    fields: [eventRegistrations.eventId],
+    references: [events.id],
+  }),
+  approvedByUser: one(users, {
+    fields: [eventRegistrations.approvedBy],
+    references: [users.id],
+  }),
+  declinedByUser: one(users, {
+    fields: [eventRegistrations.declinedBy],
+    references: [users.id],
+  }),
+  checkedInByUser: one(users, {
+    fields: [eventRegistrations.checkedInBy],
+    references: [users.id],
+  }),
+}));
+
+export const eventInvitationsRelations = relations(eventInvitations, ({ one }) => ({
+  event: one(events, {
+    fields: [eventInvitations.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventInvitations.userId],
+    references: [users.id],
+  }),
+  invitedByUser: one(users, {
+    fields: [eventInvitations.invitedBy],
+    references: [users.id],
+  }),
+  cancelledByUser: one(users, {
+    fields: [eventInvitations.cancelledBy],
+    references: [users.id],
+  }),
+}));
+
+export const eventMetricsRelations = relations(eventMetrics, ({ one }) => ({
+  event: one(events, {
+    fields: [eventMetrics.eventId],
+    references: [events.id],
+  }),
+  metric: one(siteMetrics, {
+    fields: [eventMetrics.metricCode],
+    references: [siteMetrics.code],
+  }),
+}));
+
+export const eventFreezeOverridesRelations = relations(eventFreezeOverrides, ({ one }) => ({
+  event: one(events, {
+    fields: [eventFreezeOverrides.eventId],
+    references: [events.id],
+  }),
+  overriddenByUser: one(users, {
+    fields: [eventFreezeOverrides.overriddenBy],
+    references: [users.id],
+  }),
+}));
+
 // Push Notification Type Exports
 export type PushSubscriptionRecord = typeof pushSubscriptions.$inferSelect;
 export type NotificationPreferencesRecord = typeof notificationPreferences.$inferSelect;
@@ -2785,6 +3071,38 @@ export type OrgNotificationSettingsRecord = typeof orgNotificationSettings.$infe
 export type NotificationType = (typeof notificationTypeEnum)[number];
 export type NotificationDeliveryStatus = (typeof notificationDeliveryStatusEnum)[number];
 export type NotificationChannel = (typeof notificationChannelEnum)[number];
+
+// Event Type Exports
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = z.infer<typeof insertEventSchema>;
+export type UpdateEvent = z.infer<typeof updateEventSchema>;
+export type EventRegistration = typeof eventRegistrations.$inferSelect;
+export type InsertEventRegistration = z.infer<typeof insertEventRegistrationSchema>;
+export type UpdateEventRegistration = z.infer<typeof updateEventRegistrationSchema>;
+export type EventInvitation = typeof eventInvitations.$inferSelect;
+export type InsertEventInvitation = z.infer<typeof insertEventInvitationSchema>;
+export type EventMetric = typeof eventMetrics.$inferSelect;
+export type InsertEventMetric = z.infer<typeof insertEventMetricSchema>;
+export type EventFreezeOverride = typeof eventFreezeOverrides.$inferSelect;
+export type EventVisibility = (typeof eventVisibilityEnum)[number];
+export type EventStatus = (typeof eventStatusEnum)[number];
+export type RegistrationMode = (typeof registrationModeEnum)[number];
+export type ResultsVisibility = (typeof resultsVisibilityEnum)[number];
+export type RegistrationStatus = (typeof registrationStatusEnum)[number];
+export type EventInvitationStatus = (typeof eventInvitationStatusEnum)[number];
+
+// Event helper types
+export type EventWithCounts = Event & {
+  registrationCount: number;
+  approvedCount: number;
+  waitlistCount: number;
+};
+
+export type EventMetricWithDetails = EventMetric & {
+  metricLabel: string;
+  metricType: string;
+  units: string;
+};
 
 // Push Subscription Insert Schema
 export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
@@ -2837,3 +3155,172 @@ export const updateOrgNotificationSettingsSchema = z.object({
 export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
 export type UpdateNotificationPreferences = z.infer<typeof updateNotificationPreferencesSchema>;
 export type UpdateOrgNotificationSettings = z.infer<typeof updateOrgNotificationSettingsSchema>;
+
+// Event Validation Schemas
+const baseEventSchema = createInsertSchema(events).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  resultsPublishedAt: true,
+  resultsPublishedBy: true,
+  isFrozen: true,
+  frozenAt: true,
+  frozenBy: true,
+  frozenReason: true,
+}).extend({
+  name: z.string().min(1, "Event name is required"),
+  description: z.string().optional(),
+  location: z.string().optional(),
+  eventType: z.string().optional(),
+  startDate: z.date({
+    required_error: "Start date is required",
+    invalid_type_error: "Start date must be a valid date",
+  }),
+  endDate: z.date().optional().nullable(),
+  timezone: z.string().default("America/New_York"),
+  organizationId: z.string().optional(),
+  visibility: z.enum(eventVisibilityEnum).default("org_private"),
+  registrationMode: z.enum(registrationModeEnum).default("open"),
+  status: z.enum(eventStatusEnum).default("draft"),
+  registrationOpensAt: z.date().optional().nullable(),
+  registrationClosesAt: z.date().optional().nullable(),
+  maxRegistrations: z.number().int().positive().optional().nullable(),
+  eventCode: z.string().optional().nullable(),
+  resultsVisibility: z.enum(resultsVisibilityEnum).default("after_event"),
+  createdBy: z.string().optional(),
+});
+
+export const insertEventSchema = baseEventSchema.refine((data) => {
+  // If endDate exists, it must be >= startDate
+  if (data.endDate && data.startDate) {
+    return data.endDate >= data.startDate;
+  }
+  return true;
+}, {
+  message: "End date must be equal to or after start date",
+  path: ["endDate"],
+}).refine((data) => {
+  // If registrationClosesAt exists and registrationOpensAt exists,
+  // registrationClosesAt must be >= registrationOpensAt
+  if (data.registrationClosesAt && data.registrationOpensAt) {
+    return data.registrationClosesAt >= data.registrationOpensAt;
+  }
+  return true;
+}, {
+  message: "Registration close date must be equal to or after registration open date",
+  path: ["registrationClosesAt"],
+});
+
+export const updateEventSchema = baseEventSchema.partial().extend({
+  description: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  endDate: z.date().nullable().optional(),
+  // Freeze-related fields for updates
+  isFrozen: z.boolean().optional(),
+  frozenAt: z.date().nullable().optional(),
+  frozenBy: z.string().nullable().optional(),
+  frozenReason: z.string().nullable().optional(),
+  // Results publishing fields
+  resultsPublishedAt: z.date().nullable().optional(),
+  resultsPublishedBy: z.string().nullable().optional(),
+  // Audit fields
+  updatedAt: z.date().nullable().optional(),
+});
+
+export const insertEventRegistrationSchema = createInsertSchema(eventRegistrations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  requestedAt: true,
+}).extend({
+  eventId: z.string({
+    required_error: "Event ID is required",
+  }),
+  userId: z.string({
+    required_error: "User ID is required",
+  }),
+  userFullNameSnapshot: z.string({
+    required_error: "User full name is required",
+  }),
+  organizationIdSnapshot: z.string().optional().nullable(),
+  organizationNameSnapshot: z.string().optional().nullable(),
+  status: z.enum(registrationStatusEnum).default("pending"),
+  discoveryMethod: z.string().optional().nullable(),
+  athleteNotes: z.string().optional().nullable(),
+  adminNotes: z.string().optional().nullable(),
+});
+
+// Update schema for event registrations - includes workflow fields
+export const updateEventRegistrationSchema = z.object({
+  status: z.enum(registrationStatusEnum).optional(),
+  registrationNumber: z.number().int().positive().optional().nullable(),
+  waitlistPosition: z.number().int().positive().optional().nullable(),
+  // Approval workflow
+  approvedAt: z.date().nullable().optional(),
+  approvedBy: z.string().nullable().optional(),
+  // Decline workflow
+  declinedAt: z.date().nullable().optional(),
+  declinedBy: z.string().nullable().optional(),
+  declineReason: z.string().nullable().optional(),
+  // Check-in workflow
+  checkedInAt: z.date().nullable().optional(),
+  checkedInBy: z.string().nullable().optional(),
+  completedAt: z.date().nullable().optional(),
+  // Notes
+  athleteNotes: z.string().nullable().optional(),
+  adminNotes: z.string().nullable().optional(),
+  // Audit
+  updatedAt: z.date().nullable().optional(),
+});
+
+export const insertEventInvitationSchema = createInsertSchema(eventInvitations).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  eventId: z.string({
+    required_error: "Event ID is required",
+  }),
+  userId: z.string().optional().nullable(),
+  email: z.string().email().optional().nullable(),
+  token: z.string({
+    required_error: "Invitation token is required",
+  }),
+  status: z.enum(eventInvitationStatusEnum).optional(),
+  invitedBy: z.string().optional().nullable(),
+  expiresAt: z.date({
+    required_error: "Expiration date is required",
+  }),
+  // Workflow fields - can be set during creation
+  emailSent: z.boolean().optional(),
+  emailSentAt: z.date().nullable().optional(),
+  acceptedAt: z.date().nullable().optional(),
+  declinedAt: z.date().nullable().optional(),
+  cancelledAt: z.date().nullable().optional(),
+  cancelledBy: z.string().nullable().optional(),
+});
+
+// Update schema for event invitations
+export const updateEventInvitationSchema = z.object({
+  status: z.enum(eventInvitationStatusEnum).optional(),
+  emailSent: z.boolean().optional(),
+  emailSentAt: z.date().nullable().optional(),
+  acceptedAt: z.date().nullable().optional(),
+  declinedAt: z.date().nullable().optional(),
+  cancelledAt: z.date().nullable().optional(),
+  cancelledBy: z.string().nullable().optional(),
+});
+
+export const insertEventMetricSchema = createInsertSchema(eventMetrics).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  eventId: z.string({
+    required_error: "Event ID is required",
+  }),
+  metricCode: z.string({
+    required_error: "Metric code is required",
+  }),
+  displayOrder: z.number().int().optional(),
+  isRequired: z.boolean().optional(),
+  customLabel: z.string().optional().nullable(),
+});
