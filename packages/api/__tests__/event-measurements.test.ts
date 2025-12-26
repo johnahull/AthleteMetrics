@@ -78,6 +78,19 @@ class EventMeasurementsService {
     }
 
     // Create measurement with event context
+    // Debug: check what event.startDate is
+    console.log("event.startDate value:", event.startDate);
+    console.log("event.startDate type:", typeof event.startDate);
+    console.log("event.startDate instanceof Date:", event.startDate instanceof Date);
+
+    // Convert event date to string format 'YYYY-MM-DD' for Drizzle's date() type
+    const eventDate = event.startDate instanceof Date
+      ? event.startDate
+      : new Date(event.startDate!);
+    const eventDateString = eventDate.toISOString().split('T')[0];
+    console.log("eventDate after conversion:", eventDate);
+    console.log("eventDateString for DB:", eventDateString);
+
     const measurement = await this.storage.createMeasurement(
       {
         userId: data.userId,
@@ -90,7 +103,7 @@ class EventMeasurementsService {
       {
         eventId: eventId,
         eventNameSnapshot: event.name,
-        eventDateSnapshot: event.startDate!,
+        eventDateSnapshot: eventDateString,
       }
     );
 
@@ -123,6 +136,12 @@ class EventMeasurementsService {
     const created: any[] = [];
     const errors: Array<{ index: number; error: string }> = [];
 
+    // Convert event date to string format 'YYYY-MM-DD' for Drizzle's date() type
+    const eventDate = event.startDate instanceof Date
+      ? event.startDate
+      : new Date(event.startDate!);
+    const eventDateString = eventDate.toISOString().split('T')[0];
+
     for (let i = 0; i < measurementsData.length; i++) {
       try {
         const m = measurementsData[i];
@@ -138,7 +157,7 @@ class EventMeasurementsService {
           {
             eventId: eventId,
             eventNameSnapshot: event.name,
-            eventDateSnapshot: event.startDate!,
+            eventDateSnapshot: eventDateString,
           }
         );
         created.push(measurement);
@@ -308,8 +327,16 @@ describe("Event Measurements Service", () => {
       );
 
       expect(measurement.eventDateSnapshot).toBeDefined();
+      // Debug: log the actual value to understand its format
+      console.log("eventDateSnapshot value:", measurement.eventDateSnapshot);
+      console.log("eventDateSnapshot type:", typeof measurement.eventDateSnapshot);
+      console.log("is Date?:", measurement.eventDateSnapshot instanceof Date);
       // Event startDate is 2025-06-01
-      expect(new Date(measurement.eventDateSnapshot).toISOString().slice(0, 10)).toBe("2025-06-01");
+      // Handle both Date object and string representations
+      const dateSnapshot = measurement.eventDateSnapshot instanceof Date
+        ? measurement.eventDateSnapshot
+        : new Date(measurement.eventDateSnapshot);
+      expect(dateSnapshot.toISOString().slice(0, 10)).toBe("2025-06-01");
     });
 
     it("should reject measurement creation for frozen event", async () => {

@@ -3,11 +3,13 @@
  * Allows creating team/individual reports with event percentiles and AI insights
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import {
   useEventReports,
+  useEventRegistrations,
   useGenerateQuickEventReport,
+  useCreateEventReport,
   useExportEventReportPDF,
   type EventReport,
 } from "@/lib/events-api";
@@ -15,6 +17,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
@@ -54,12 +59,29 @@ export function EventReportsTab({
   const { toast } = useToast();
   const [showCreateModal, setShowCreateModal] = useState(false);
 
+  // Individual report dialog state
+  const [selectedAthletes, setSelectedAthletes] = useState<string[]>([]);
+  const [includeEventPercentiles, setIncludeEventPercentiles] = useState(true);
+  const [generateAiInsights, setGenerateAiInsights] = useState(false);
+
   // Fetch existing reports for this event
   const { data: reports, isLoading } = useEventReports(eventId);
 
+  // Fetch registrations for athlete selection
+  const { data: registrations } = useEventRegistrations(eventId);
+
   // Quick report generation
   const generateQuickReport = useGenerateQuickEventReport();
+  const createReport = useCreateEventReport();
   const exportPDF = useExportEventReportPDF();
+
+  // Filter registrations to approved/checked-in athletes
+  const eligibleAthletes = useMemo(() => {
+    if (!registrations) return [];
+    return registrations.filter(
+      (r) => r.status === 'approved' || r.status === 'checked_in'
+    );
+  }, [registrations]);
 
   // Handle quick team report
   const handleQuickTeamReport = async () => {
@@ -86,6 +108,57 @@ export function EventReportsTab({
     setShowCreateModal(true);
   };
 
+  // Handle generating individual reports for selected athletes
+  const handleGenerateIndividualReports = async () => {
+    if (selectedAthletes.length === 0) return;
+
+    try {
+      await createReport.mutateAsync({
+        eventId,
+        data: {
+          name: `${eventName} - Individual Reports`,
+          reportType: 'individual',
+          athleteIds: selectedAthletes,
+          includeEventPercentiles,
+          generateAiInsights,
+        },
+      });
+
+      toast({
+        title: "Reports Generated",
+        description: `${selectedAthletes.length} individual report(s) have been created.`,
+      });
+
+      // Reset and close
+      setSelectedAthletes([]);
+      setShowCreateModal(false);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message || "Failed to generate reports.",
+      });
+    }
+  };
+
+  // Toggle athlete selection
+  const toggleAthleteSelection = (userId: string) => {
+    setSelectedAthletes((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId]
+    );
+  };
+
+  // Select/deselect all athletes
+  const toggleSelectAll = () => {
+    if (selectedAthletes.length === eligibleAthletes.length) {
+      setSelectedAthletes([]);
+    } else {
+      setSelectedAthletes(eligibleAthletes.map((r) => r.userId));
+    }
+  };
+
   // Handle PDF export
   const handleExportPDF = async (reportId: string, reportName: string) => {
     try {
@@ -108,6 +181,26 @@ export function EventReportsTab({
         variant: "destructive",
         title: "Error",
         description: error.message || "Failed to export PDF.",
+      });
+    }
+  };
+
+  // Handle report sharing - copy link to clipboard
+  const handleShareReport = async (reportId: string, reportName: string) => {
+    const shareUrl = `${window.location.origin}/reports/${reportId}`;
+
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({
+        title: "Link Copied",
+        description: `Share link for "${reportName}" copied to clipboard.`,
+      });
+    } catch {
+      // Fallback for browsers without clipboard API
+      toast({
+        variant: "destructive",
+        title: "Copy Failed",
+        description: "Unable to copy link. Please copy manually: " + shareUrl,
       });
     }
   };
@@ -200,16 +293,107 @@ export function EventReportsTab({
                   </span>
                 </button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                   <DialogTitle>Create Individual Reports</DialogTitle>
                   <DialogDescription>
-                    Coming soon: Select specific athletes to generate individual reports with event percentiles.
+                    Select athletes to generate individual reports with event percentiles.
                   </DialogDescription>
                 </DialogHeader>
+
+                {/* Athlete Selection */}
+                <div className="space-y-4">
+                  {/* Select All */}
+                  <div className="flex items-center space-x-2 pb-2 border-b">
+                    <Checkbox
+                      id="select-all"
+                      checked={selectedAthletes.length === eligibleAthletes.length && eligibleAthletes.length > 0}
+                      onCheckedChange={toggleSelectAll}
+                      aria-label="Select all athletes"
+                    />
+                    <Label htmlFor="select-all" className="font-medium">
+                      Select All ({eligibleAthletes.length} athletes)
+                    </Label>
+                  </div>
+
+                  {/* Athlete List */}
+                  <ScrollArea className="h-[200px] pr-4">
+                    <div className="space-y-2">
+                      {eligibleAthletes.map((registration) => (
+                        <div
+                          key={registration.id}
+                          className="flex items-center justify-between py-2 border-b last:border-b-0"
+                        >
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`athlete-${registration.userId}`}
+                              checked={selectedAthletes.includes(registration.userId)}
+                              onCheckedChange={() => toggleAthleteSelection(registration.userId)}
+                              aria-label={`Remove ${registration.userFullNameSnapshot}`}
+                            />
+                            <Label
+                              htmlFor={`athlete-${registration.userId}`}
+                              className="cursor-pointer"
+                            >
+                              {registration.userFullNameSnapshot}
+                            </Label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+
+                  {/* Selection Count */}
+                  {selectedAthletes.length > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      {selectedAthletes.length} selected
+                    </p>
+                  )}
+
+                  {/* Options */}
+                  <div className="space-y-3 pt-2 border-t">
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="event-percentiles"
+                        checked={includeEventPercentiles}
+                        onCheckedChange={(checked) => setIncludeEventPercentiles(checked === true)}
+                        aria-label="Include Event Percentiles"
+                      />
+                      <Label htmlFor="event-percentiles">
+                        Include Event Percentiles
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="ai-insights"
+                        checked={generateAiInsights}
+                        onCheckedChange={(checked) => setGenerateAiInsights(checked === true)}
+                        aria-label="Include AI Coaching Insights"
+                      />
+                      <Label htmlFor="ai-insights">
+                        Include AI Coaching Insights
+                      </Label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
                 <div className="flex justify-end gap-2 mt-4">
                   <Button variant="outline" onClick={() => setShowCreateModal(false)}>
-                    Close
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleGenerateIndividualReports}
+                    disabled={selectedAthletes.length === 0 || createReport.isPending}
+                  >
+                    {createReport.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Generating...
+                      </>
+                    ) : (
+                      `Generate ${selectedAthletes.length || ''} Report${selectedAthletes.length !== 1 ? 's' : ''}`
+                    )}
                   </Button>
                 </div>
               </DialogContent>
@@ -275,6 +459,7 @@ export function EventReportsTab({
                   key={report.id}
                   report={report}
                   onExportPDF={() => handleExportPDF(report.id, report.name)}
+                  onShare={() => handleShareReport(report.id, report.name)}
                   isPDFExporting={exportPDF.isPending}
                 />
               ))}
@@ -292,10 +477,11 @@ export function EventReportsTab({
 interface ReportCardProps {
   report: EventReport;
   onExportPDF: () => void;
+  onShare: () => void;
   isPDFExporting: boolean;
 }
 
-function ReportCard({ report, onExportPDF, isPDFExporting }: ReportCardProps) {
+function ReportCard({ report, onExportPDF, onShare, isPDFExporting }: ReportCardProps) {
   const isTeamReport = report.reportType === 'team';
   const hasAiInsights = !!report.coachingInsights;
 
@@ -349,7 +535,12 @@ function ReportCard({ report, onExportPDF, isPDFExporting }: ReportCardProps) {
             <Download className="h-4 w-4" />
           )}
         </Button>
-        <Button variant="ghost" size="sm">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onShare}
+          aria-label={`Share ${report.name}`}
+        >
           <Share2 className="h-4 w-4" />
         </Button>
       </div>

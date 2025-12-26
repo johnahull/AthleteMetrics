@@ -17,6 +17,7 @@ import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, For
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { Calendar, Users, Settings, Check, ArrowLeft, ArrowRight } from "lucide-react";
+import { MetricsSelector, type SelectedMetric } from "./MetricsSelector";
 import type { InsertEvent, EventVisibility, RegistrationMode, ResultsVisibility } from "@shared/schema";
 
 // Form validation schema
@@ -44,11 +45,19 @@ const eventFormSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventFormSchema>;
 
+// Extended form data that includes selected metrics
+export interface EventFormData extends EventFormValues {
+  selectedMetrics: SelectedMetric[];
+}
+
 interface EventFormProps {
   initialData?: Partial<InsertEvent>;
-  onSubmit: (data: EventFormValues, isDraft: boolean) => void;
+  onSubmit: (data: EventFormData, isDraft: boolean) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
+  organizationId?: string;
+  /** Mode: "create" for new events, "edit" for editing existing events */
+  mode?: "create" | "edit";
 }
 
 const eventTypes = [
@@ -66,8 +75,11 @@ const steps = [
   { id: 4, title: "Results", icon: Check },
 ];
 
-export function EventForm({ initialData, onSubmit, onCancel, isSubmitting }: EventFormProps) {
+export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organizationId, mode = "create" }: EventFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const [selectedMetrics, setSelectedMetrics] = useState<SelectedMetric[]>([]);
+
+  const isEditMode = mode === "edit";
 
   // Build default values with proper type handling
   const getDefaultEventType = (): EventFormValues["eventType"] => {
@@ -114,7 +126,14 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting }: Eve
   };
 
   const handleSubmit = (isDraft: boolean) => {
-    form.handleSubmit((data) => onSubmit(data, isDraft))();
+    form.handleSubmit((data) => {
+      // Combine form data with selected metrics
+      const formData: EventFormData = {
+        ...data,
+        selectedMetrics,
+      };
+      onSubmit(formData, isDraft);
+    })();
   };
 
   return (
@@ -412,17 +431,15 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting }: Eve
             <CardHeader>
               <CardTitle>Event Metrics</CardTitle>
               <CardDescription>
-                Select which tests will be conducted at this event
+                Select which tests will be conducted at this event. You can also configure metrics after creating the event.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <Settings className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Metric selection coming soon</p>
-                <p className="text-sm mt-1">
-                  You'll be able to select metrics after creating the event
-                </p>
-              </div>
+              <MetricsSelector
+                selectedMetrics={selectedMetrics}
+                onMetricsChange={setSelectedMetrics}
+                organizationId={organizationId}
+              />
             </CardContent>
           </Card>
         )}
@@ -516,15 +533,19 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting }: Eve
         <div className="flex gap-2">
           {currentStep === steps.length ? (
             <>
-              <Button
-                variant="outline"
-                onClick={() => handleSubmit(true)}
-                disabled={isSubmitting}
-              >
-                Save as Draft
-              </Button>
+              {!isEditMode && (
+                <Button
+                  variant="outline"
+                  onClick={() => handleSubmit(true)}
+                  disabled={isSubmitting}
+                >
+                  Save as Draft
+                </Button>
+              )}
               <Button onClick={() => handleSubmit(false)} disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Publish Event"}
+                {isSubmitting
+                  ? isEditMode ? "Saving..." : "Creating..."
+                  : isEditMode ? "Save Changes" : "Publish Event"}
               </Button>
             </>
           ) : (

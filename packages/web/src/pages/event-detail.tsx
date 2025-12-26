@@ -4,7 +4,7 @@
  */
 
 import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import {
   useEvent,
@@ -19,8 +19,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab } from "@/components/events";
+import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, CheckInTab, InviteAthletesModal } from "@/components/events";
 import {
   ArrowLeft,
   Calendar,
@@ -53,9 +62,13 @@ interface RegistrationWithUser extends EventRegistration {
 
 export default function EventDetail() {
   const { eventId } = useParams();
+  const [, navigate] = useLocation();
   const { user } = useAuth();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
+  const [declineReason, setDeclineReason] = useState("");
 
   // Fetch event data
   const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
@@ -87,15 +100,27 @@ export default function EventDetail() {
     }
   };
 
-  // Handle decline registration
-  const handleDecline = async (registrationId: string) => {
-    if (!eventId) return;
+  // Handle decline registration - open dialog for reason
+  const handleDecline = (registrationId: string) => {
+    setDeclineDialog({ open: true, registrationId });
+    setDeclineReason("");
+  };
+
+  // Confirm decline with reason
+  const confirmDecline = async () => {
+    if (!eventId || !declineDialog.registrationId) return;
     try {
-      await declineMutation.mutateAsync({ eventId, registrationId, reason: "Declined by admin" });
+      await declineMutation.mutateAsync({
+        eventId,
+        registrationId: declineDialog.registrationId,
+        reason: declineReason.trim() || "Declined by admin",
+      });
       toast({
         title: "Registration Declined",
         description: "Registration has been declined.",
       });
+      setDeclineDialog({ open: false, registrationId: null });
+      setDeclineReason("");
     } catch {
       toast({
         variant: "destructive",
@@ -107,18 +132,12 @@ export default function EventDetail() {
 
   // Handle invite athletes (placeholder)
   const handleInviteAthletes = () => {
-    toast({
-      title: "Coming Soon",
-      description: "Athlete invitation feature is in development.",
-    });
+    setInviteModalOpen(true);
   };
 
-  // Handle edit event (placeholder)
+  // Handle edit event - navigate to edit page
   const handleEditEvent = () => {
-    toast({
-      title: "Coming Soon",
-      description: "Event editing feature is in development.",
-    });
+    navigate(`/events/${eventId}/edit`);
   };
 
   // Calculate stats
@@ -534,21 +553,10 @@ export default function EventDetail() {
 
         {/* Check-In Tab */}
         <TabsContent value="checkin">
-          <Card>
-            <CardHeader>
-              <CardTitle>Check-In</CardTitle>
-              <CardDescription>
-                {checkedInCount} of {approvedCount} athletes checked in
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center py-8 text-muted-foreground">
-                <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Check-in functionality coming soon</p>
-                <p className="text-sm mt-1">Search and check in athletes as they arrive</p>
-              </div>
-            </CardContent>
-          </Card>
+          <CheckInTab
+            eventId={eventId!}
+            registrations={typedRegistrations}
+          />
         </TabsContent>
 
         {/* Metrics Tab */}
@@ -626,6 +634,58 @@ export default function EventDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Invite Athletes Modal */}
+      <InviteAthletesModal
+        eventId={eventId!}
+        eventName={event.name}
+        isOpen={inviteModalOpen}
+        onClose={() => setInviteModalOpen(false)}
+      />
+
+      {/* Decline Reason Dialog */}
+      <Dialog
+        open={declineDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeclineDialog({ open: false, registrationId: null });
+            setDeclineReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Decline Registration</DialogTitle>
+            <DialogDescription>
+              Provide an optional reason for declining this registration. The athlete will be notified.
+            </DialogDescription>
+          </DialogHeader>
+          <Textarea
+            placeholder="Reason for declining (optional)"
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            rows={3}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeclineDialog({ open: false, registrationId: null });
+                setDeclineReason("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDecline}
+              disabled={declineMutation.isPending}
+            >
+              {declineMutation.isPending ? "Declining..." : "Decline Registration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

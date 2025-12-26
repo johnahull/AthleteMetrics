@@ -7,7 +7,7 @@ import {
   goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
   membershipRequests,
-  events, eventRegistrations, eventInvitations,
+  events, eventRegistrations, eventInvitations, eventMetrics,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -24,6 +24,7 @@ import {
   type Event, type InsertEvent,
   type EventRegistration, type InsertEventRegistration, type RegistrationStatus,
   type EventInvitation, type InsertEventInvitation, type EventInvitationStatus,
+  type EventMetric, type InsertEventMetric,
   insertUserSchema,
   type OrganizationType,
   type InsertOAuthUser
@@ -245,7 +246,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement>;
+  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -2361,7 +2362,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEventByCode(code: string): Promise<Event | null> {
-    const result = await db.select().from(events).where(eq(events.eventCode, code)).limit(1);
+    // Case-insensitive lookup using UPPER() on both sides
+    const result = await db.select().from(events)
+      .where(sql`UPPER(${events.eventCode}) = UPPER(${code})`)
+      .limit(1);
     return result[0] || null;
   }
 
@@ -3190,6 +3194,10 @@ export class DatabaseStorage implements IStorage {
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
       createdAt: measurements.createdAt,
+      // Event context fields
+      eventId: measurements.eventId,
+      eventNameSnapshot: measurements.eventNameSnapshot,
+      eventDateSnapshot: measurements.eventDateSnapshot,
       // User data WITHOUT teams for now
       user: sql<any>`jsonb_build_object(
         'id', ${users.id},
@@ -3461,7 +3469,15 @@ export class DatabaseStorage implements IStorage {
     return activeTeams;
   }
 
-  async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
+  async createMeasurement(
+    measurement: InsertMeasurement,
+    submittedBy: string,
+    eventContext?: {
+      eventId: string;
+      eventNameSnapshot: string;
+      eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
+    }
+  ): Promise<Measurement> {
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -3558,7 +3574,11 @@ export class DatabaseStorage implements IStorage {
       teamNameSnapshot: teamNameSnapshot || null,
       organizationId: organizationId || null,
       season: season || null,
-      teamContextAuto: teamContextAuto
+      teamContextAuto: teamContextAuto,
+      // Event context (for measurements taken at events)
+      eventId: eventContext?.eventId ?? null,
+      eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
+      eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
     }).returning();
 
     return newMeasurement;
@@ -5703,6 +5723,106 @@ export class DatabaseStorage implements IStorage {
     }
 
     return newAchievement;
+  }
+
+  // ============================================================
+  // Event Metrics Methods
+  // ============================================================
+
+  /**
+   * Get a site metric by code (alias for getSiteMetric, returns null instead of undefined)
+   */
+  async getSiteMetricByCode(code: string): Promise<SiteMetric | null> {
+    const metric = await this.getSiteMetric(code);
+    return metric ?? null;
+  }
+
+  /**
+   * Create an event metric (add a metric to an event)
+   */
+  async createEventMetric(data: InsertEventMetric): Promise<EventMetric> {
+    const [metric] = await db
+      .insert(eventMetrics)
+      .values({
+        ...data,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return metric;
+  }
+
+  /**
+   * Get a specific event metric
+   */
+  async getEventMetric(eventId: string, metricCode: string): Promise<EventMetric | null> {
+    const [metric] = await db
+      .select()
+      .from(eventMetrics)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ))
+      .limit(1);
+
+    return metric ?? null;
+  }
+
+  /**
+   * Update an event metric
+   */
+  async updateEventMetric(eventId: string, metricCode: string, data: Partial<InsertEventMetric>): Promise<EventMetric> {
+    const [metric] = await db
+      .update(eventMetrics)
+      .set(data)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ))
+      .returning();
+
+    if (!metric) {
+      throw new Error(`Event metric ${metricCode} not found for event ${eventId}`);
+    }
+
+    return metric;
+  }
+
+  /**
+   * Delete an event metric
+   */
+  async deleteEventMetric(eventId: string, metricCode: string): Promise<void> {
+    await db
+      .delete(eventMetrics)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ));
+  }
+
+  /**
+   * List all metrics for an event
+   */
+  async listEventMetrics(eventId: string): Promise<EventMetric[]> {
+    const metrics = await db
+      .select()
+      .from(eventMetrics)
+      .where(eq(eventMetrics.eventId, eventId))
+      .orderBy(asc(eventMetrics.displayOrder));
+
+    return metrics;
+  }
+
+  /**
+   * Get the maximum display order for event metrics
+   */
+  async getMaxDisplayOrder(eventId: string): Promise<number> {
+    const [result] = await db
+      .select({ maxOrder: sql<number>`COALESCE(MAX(${eventMetrics.displayOrder}), 0)` })
+      .from(eventMetrics)
+      .where(eq(eventMetrics.eventId, eventId));
+
+    return result?.maxOrder ?? 0;
   }
 }
 

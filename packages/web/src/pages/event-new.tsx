@@ -5,13 +5,14 @@
 
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useCreateEvent } from "@/lib/events-api";
+import { useCreateEvent, addEventMetric } from "@/lib/events-api";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { EventForm } from "@/components/events";
+import { EventForm, type EventFormData } from "@/components/events";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import type { EventStatus } from "@shared/schema";
 
 export default function EventNew() {
   const [, navigate] = useLocation();
@@ -45,26 +46,49 @@ export default function EventNew() {
     );
   }
 
-  const handleSubmit = async (data: any, isDraft: boolean) => {
+  const handleSubmit = async (data: EventFormData, isDraft: boolean) => {
     try {
+      // Extract selectedMetrics from form data
+      const { selectedMetrics, ...formData } = data;
+
+      const status: EventStatus = isDraft ? "draft" : "published";
       const eventData = {
-        ...data,
+        ...formData,
         organizationId: effectiveOrganizationId,
-        status: isDraft ? "draft" : "published",
+        status,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, // Default to browser timezone
         // Convert date strings to Date objects
-        startDate: new Date(data.startDate),
-        endDate: data.endDate ? new Date(data.endDate) : null,
-        registrationOpensAt: data.registrationOpensAt ? new Date(data.registrationOpensAt) : null,
-        registrationClosesAt: data.registrationClosesAt ? new Date(data.registrationClosesAt) : null,
+        startDate: new Date(formData.startDate),
+        endDate: formData.endDate ? new Date(formData.endDate) : null,
+        registrationOpensAt: formData.registrationOpensAt ? new Date(formData.registrationOpensAt) : null,
+        registrationClosesAt: formData.registrationClosesAt ? new Date(formData.registrationClosesAt) : null,
       };
 
+      // Create the event first
       const event = await createMutation.mutateAsync(eventData);
+
+      // Then add the selected metrics (if any) in order
+      if (selectedMetrics && selectedMetrics.length > 0) {
+        for (let i = 0; i < selectedMetrics.length; i++) {
+          const metric = selectedMetrics[i];
+          try {
+            await addEventMetric(event.id, {
+              metricCode: metric.code,
+              displayOrder: i,
+              isRequired: metric.isRequired,
+            });
+          } catch (metricError) {
+            console.error(`Failed to add metric ${metric.code}:`, metricError);
+            // Continue adding other metrics even if one fails
+          }
+        }
+      }
 
       toast({
         title: isDraft ? "Draft Saved" : "Event Created",
         description: isDraft
           ? "Your event has been saved as a draft."
-          : "Your event has been published and is now live.",
+          : `Your event has been ${selectedMetrics?.length ? `created with ${selectedMetrics.length} metrics` : "published"}.`,
       });
 
       // Navigate to the event detail page
@@ -103,6 +127,7 @@ export default function EventNew() {
         onSubmit={handleSubmit}
         onCancel={handleCancel}
         isSubmitting={createMutation.isPending}
+        organizationId={effectiveOrganizationId}
       />
     </div>
   );

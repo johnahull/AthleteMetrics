@@ -428,7 +428,7 @@ export const measurements = pgTable("measurements", {
   // Event context - immutable snapshot at measurement time (no FK - historical reference)
   eventId: varchar("event_id"), // Event ID when measurement was taken at an event
   eventNameSnapshot: text("event_name_snapshot"), // Event name at time of measurement
-  eventDateSnapshot: timestamp("event_date_snapshot"), // Event date at time of measurement
+  eventDateSnapshot: date("event_date_snapshot"), // Event date at time of measurement
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),

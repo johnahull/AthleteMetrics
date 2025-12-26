@@ -49,6 +49,42 @@ export default function EventJoin() {
   // Registration mutation
   const registerMutation = useRegisterForEvent();
 
+  // Generate ICS file for calendar
+  const generateICSFile = () => {
+    if (!event) return;
+
+    const formatICSDate = (date: Date) => {
+      return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    };
+
+    const startDate = new Date(event.startDate);
+    const endDate = event.endDate ? new Date(event.endDate) : new Date(startDate.getTime() + 2 * 60 * 60 * 1000); // Default 2 hours
+
+    const icsContent = `BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//AthleteMetrics//Event//EN
+BEGIN:VEVENT
+UID:${event.id}@athletemetrics.app
+DTSTART:${formatICSDate(startDate)}
+DTEND:${formatICSDate(endDate)}
+SUMMARY:${event.name}
+LOCATION:${event.location || ""}
+DESCRIPTION:${event.description?.replace(/\n/g, "\\n") || ""}
+STATUS:CONFIRMED
+END:VEVENT
+END:VCALENDAR`;
+
+    const blob = new Blob([icsContent], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${event.name.replace(/[^a-zA-Z0-9]/g, "-")}.ics`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // Handle code lookup
   const handleLookup = () => {
     if (eventCode.trim()) {
@@ -220,7 +256,7 @@ export default function EventJoin() {
               {event.registrationMode === "request_approval" ? "Pending Approval" : "Confirmed"}
             </Badge>
             <div className="space-y-2 mt-6">
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={generateICSFile}>
                 <CalendarPlus className="h-4 w-4 mr-2" />
                 Add to Calendar
               </Button>

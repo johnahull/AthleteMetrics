@@ -351,6 +351,27 @@ export async function declineInvitation(token: string): Promise<{ success: boole
   return response.json();
 }
 
+/**
+ * Create an invitation for an event
+ */
+export async function createEventInvitation(
+  eventId: string,
+  data: { userId?: string; email?: string; expiresAt?: string }
+): Promise<EventInvitation> {
+  const response = await fetch(`/api/events/${eventId}/invitations`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to create invitation');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // API Client Functions - Event Metrics
 // ============================================================================
@@ -856,6 +877,22 @@ export function useDeclineInvitation() {
     mutationFn: declineInvitation,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['event-invitations'] });
+    },
+  });
+}
+
+/**
+ * Hook to create event invitation
+ */
+export function useCreateEventInvitation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, data }: { eventId: string; data: { userId?: string; email?: string; expiresAt?: string } }) =>
+      createEventInvitation(eventId, data),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'invitations'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
     },
   });
 }

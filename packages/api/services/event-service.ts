@@ -111,7 +111,7 @@ export class EventService {
       registrationClosesAt: data.registrationClosesAt ?? undefined,
       maxRegistrations: data.maxRegistrations ?? undefined,
       resultsVisibility: data.resultsVisibility || 'after_event',
-      organizationId: data.organizationId ?? undefined,
+      organizationId: data.organizationId ?? null,
       eventCode,
       createdBy,
     };

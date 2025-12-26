@@ -4,7 +4,7 @@
  */
 
 import { Link } from "wouter";
-import { useMyEvents } from "@/lib/events-api";
+import { useMyEvents, useCancelRegistration } from "@/lib/events-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -65,7 +65,7 @@ const statusConfig: Record<string, { label: string; icon: typeof CheckCircle; cl
   },
 };
 
-function RegistrationCard({ registration, onCancel }: { registration: RegistrationWithEvent; onCancel?: () => void }) {
+function RegistrationCard({ registration, onCancel }: { registration: RegistrationWithEvent; onCancel?: (eventId: string) => void }) {
   const event = registration.event;
   if (!event) return null;
 
@@ -141,7 +141,7 @@ function RegistrationCard({ registration, onCancel }: { registration: Registrati
               variant="ghost"
               size="sm"
               className="text-red-600 hover:text-red-700"
-              onClick={onCancel}
+              onClick={() => onCancel(event.id)}
             >
               Cancel Registration
             </Button>
@@ -155,13 +155,27 @@ function RegistrationCard({ registration, onCancel }: { registration: Registrati
 export default function MyEvents() {
   const { data: registrations, isLoading } = useMyEvents();
   const { toast } = useToast();
+  const cancelMutation = useCancelRegistration();
 
-  // Handle cancel registration (placeholder)
-  const handleCancelRegistration = () => {
-    toast({
-      title: "Coming Soon",
-      description: "Registration cancellation feature is in development.",
-    });
+  // Handle cancel registration
+  const handleCancelRegistration = async (eventId: string) => {
+    if (!window.confirm("Are you sure you want to cancel your registration?")) {
+      return;
+    }
+
+    try {
+      await cancelMutation.mutateAsync(eventId);
+      toast({
+        title: "Registration Cancelled",
+        description: "Your registration has been cancelled.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to cancel registration",
+      });
+    }
   };
 
   // Type cast and filter registrations
