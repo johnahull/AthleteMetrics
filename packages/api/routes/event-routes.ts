@@ -59,10 +59,11 @@ async function isOrgMember(userId: string, organizationId: string): Promise<bool
 }
 
 /**
- * Validate event code format (8 alphanumeric characters)
+ * Validate event code format (6-12 alphanumeric characters)
+ * Generated codes are 8 chars, but allow flexibility for custom codes
  */
 function isValidEventCode(code: string): boolean {
-  return /^[A-Za-z0-9]{1,20}$/.test(code);
+  return /^[A-Za-z0-9]{6,12}$/.test(code);
 }
 
 export function registerEventRoutes(app: Express) {
@@ -332,9 +333,9 @@ export function registerEventRoutes(app: Express) {
 
   /**
    * Update an event
-   * PUT /api/events/:eventId
+   * PATCH /api/events/:eventId
    */
-  app.put("/api/events/:eventId", eventMutationLimiter, requireAuth, async (req: Request, res: Response) => {
+  app.patch("/api/events/:eventId", eventMutationLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const user = req.session.user;
       if (!user?.id) {

@@ -7,7 +7,7 @@ import {
   goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
   membershipRequests,
-  events,
+  events, eventRegistrations, eventInvitations,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -22,6 +22,8 @@ import {
   type AchievementDefinition, type UserAchievement,
   type MembershipRequest,
   type Event, type InsertEvent,
+  type EventRegistration, type InsertEventRegistration, type RegistrationStatus,
+  type EventInvitation, type InsertEventInvitation, type EventInvitationStatus,
   insertUserSchema,
   type OrganizationType,
   type InsertOAuthUser
@@ -145,6 +147,28 @@ export interface IStorage {
   deleteEvent(id: string): Promise<void>;
   listEvents(filters: { organizationId?: string; status?: string; visibility?: string }): Promise<Event[]>;
   getEventByCode(code: string): Promise<Event | null>;
+
+  // Event Registrations
+  createEventRegistration(data: InsertEventRegistration): Promise<EventRegistration>;
+  getEventRegistration(eventId: string, userId: string): Promise<EventRegistration | null>;
+  getEventRegistrationById(id: string): Promise<EventRegistration | null>;
+  updateEventRegistration(id: string, data: Partial<InsertEventRegistration>): Promise<EventRegistration>;
+  deleteEventRegistration(id: string): Promise<void>;
+  listEventRegistrations(eventId: string, filters?: { status?: RegistrationStatus; limit?: number; offset?: number }): Promise<EventRegistration[]>;
+  countEventRegistrations(eventId: string, excludeStatuses?: RegistrationStatus[]): Promise<number>;
+  getNextRegistrationNumber(eventId: string): Promise<number>;
+  getNextWaitlistPosition(eventId: string): Promise<number>;
+  getFirstWaitlistedRegistration(eventId: string): Promise<EventRegistration | null>;
+  getUserEventRegistrations(userId: string): Promise<(EventRegistration & { event: Event })[]>;
+
+  // Event Invitations
+  createEventInvitation(data: InsertEventInvitation): Promise<EventInvitation>;
+  getEventInvitation(id: string): Promise<EventInvitation | null>;
+  getEventInvitationByToken(token: string): Promise<EventInvitation | null>;
+  getEventInvitationByUserAndEvent(eventId: string, userId: string): Promise<EventInvitation | null>;
+  getEventInvitationByEmailAndEvent(eventId: string, email: string): Promise<EventInvitation | null>;
+  updateEventInvitation(id: string, data: Partial<InsertEventInvitation>): Promise<EventInvitation>;
+  listEventInvitations(eventId: string, filters?: { status?: EventInvitationStatus; limit?: number; offset?: number }): Promise<EventInvitation[]>;
 
   // Public Organization Directory
   getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
@@ -2339,6 +2363,191 @@ export class DatabaseStorage implements IStorage {
   async getEventByCode(code: string): Promise<Event | null> {
     const result = await db.select().from(events).where(eq(events.eventCode, code)).limit(1);
     return result[0] || null;
+  }
+
+  // Event Registrations
+
+  async createEventRegistration(data: InsertEventRegistration): Promise<EventRegistration> {
+    const result = await db.insert(eventRegistrations).values(data).returning();
+    return result[0];
+  }
+
+  async getEventRegistration(eventId: string, userId: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.userId, userId)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventRegistrationById(id: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(eq(eventRegistrations.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateEventRegistration(id: string, data: Partial<InsertEventRegistration>): Promise<EventRegistration> {
+    const result = await db.update(eventRegistrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(eventRegistrations.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event registration ${id} not found`);
+    return result[0];
+  }
+
+  async deleteEventRegistration(id: string): Promise<void> {
+    await db.delete(eventRegistrations).where(eq(eventRegistrations.id, id));
+  }
+
+  async listEventRegistrations(eventId: string, filters?: { status?: RegistrationStatus; limit?: number; offset?: number }): Promise<EventRegistration[]> {
+    const conditions = [eq(eventRegistrations.eventId, eventId)];
+    if (filters?.status) {
+      conditions.push(eq(eventRegistrations.status, filters.status));
+    }
+
+    let query = db.select().from(eventRegistrations)
+      .where(and(...conditions))
+      .orderBy(asc(eventRegistrations.registrationNumber));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    return query;
+  }
+
+  async countEventRegistrations(eventId: string, excludeStatuses?: RegistrationStatus[]): Promise<number> {
+    const conditions = [eq(eventRegistrations.eventId, eventId)];
+    if (excludeStatuses && excludeStatuses.length > 0) {
+      for (const status of excludeStatuses) {
+        conditions.push(ne(eventRegistrations.status, status));
+      }
+    }
+
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(eventRegistrations)
+      .where(and(...conditions));
+    return Number(result[0]?.count || 0);
+  }
+
+  async getNextRegistrationNumber(eventId: string): Promise<number> {
+    const result = await db.select({ max: sql<number>`coalesce(max(${eventRegistrations.registrationNumber}), 0)` })
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.eventId, eventId));
+    return (result[0]?.max || 0) + 1;
+  }
+
+  async getNextWaitlistPosition(eventId: string): Promise<number> {
+    const result = await db.select({ max: sql<number>`coalesce(max(${eventRegistrations.waitlistPosition}), 0)` })
+      .from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.status, 'waitlisted')
+      ));
+    return (result[0]?.max || 0) + 1;
+  }
+
+  async getFirstWaitlistedRegistration(eventId: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.status, 'waitlisted')
+      ))
+      .orderBy(asc(eventRegistrations.waitlistPosition))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getUserEventRegistrations(userId: string): Promise<(EventRegistration & { event: Event })[]> {
+    const result = await db.select({
+      registration: eventRegistrations,
+      event: events,
+    })
+      .from(eventRegistrations)
+      .innerJoin(events, eq(eventRegistrations.eventId, events.id))
+      .where(eq(eventRegistrations.userId, userId))
+      .orderBy(desc(events.startDate));
+
+    return result.map(row => ({
+      ...row.registration,
+      event: row.event,
+    }));
+  }
+
+  // Event Invitations
+
+  async createEventInvitation(data: InsertEventInvitation): Promise<EventInvitation> {
+    const result = await db.insert(eventInvitations).values(data).returning();
+    return result[0];
+  }
+
+  async getEventInvitation(id: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(eq(eventInvitations.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByToken(token: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(eq(eventInvitations.token, token))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByUserAndEvent(eventId: string, userId: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(and(
+        eq(eventInvitations.eventId, eventId),
+        eq(eventInvitations.userId, userId)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByEmailAndEvent(eventId: string, email: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(and(
+        eq(eventInvitations.eventId, eventId),
+        eq(eventInvitations.email, email)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateEventInvitation(id: string, data: Partial<InsertEventInvitation>): Promise<EventInvitation> {
+    const result = await db.update(eventInvitations)
+      .set(data)
+      .where(eq(eventInvitations.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event invitation ${id} not found`);
+    return result[0];
+  }
+
+  async listEventInvitations(eventId: string, filters?: { status?: EventInvitationStatus; limit?: number; offset?: number }): Promise<EventInvitation[]> {
+    const conditions = [eq(eventInvitations.eventId, eventId)];
+    if (filters?.status) {
+      conditions.push(eq(eventInvitations.status, filters.status));
+    }
+
+    let query = db.select().from(eventInvitations)
+      .where(and(...conditions))
+      .orderBy(desc(eventInvitations.createdAt));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    return query;
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers

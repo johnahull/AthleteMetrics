@@ -31,6 +31,8 @@ import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import { registerEventRoutes } from "./event-routes";
+import { registerEventRegistrationRoutes } from "./event-registration-routes";
+import { registerEventInvitationRoutes } from "./event-invitation-routes";
 import { registerEventMetricsRoutes } from "./event-metrics-routes";
 import { registerEventMeasurementsRoutes } from "./event-measurements-routes";
 import { registerEventResultsRoutes } from "./event-results-routes";
@@ -143,6 +145,13 @@ export function registerAllRoutes(app: Express) {
 
   // Event management routes (combines, camps, testing days)
   registerEventRoutes(app);
+
+  // Event registration routes (self-registration, approval, check-in)
+  // IMPORTANT: Must be after registerEventRoutes to avoid route conflicts
+  registerEventRegistrationRoutes(app);
+
+  // Event invitation routes (token-based invitations)
+  registerEventInvitationRoutes(app);
 
   // Event metrics configuration routes
   registerEventMetricsRoutes(app);
