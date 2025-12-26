@@ -624,7 +624,7 @@ export default function EventDetail() {
                 </div>
 
                 <div className="pt-4 border-t">
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={handleEditEvent}>
                     <Settings className="h-4 w-4 mr-2" />
                     Edit Settings
                   </Button>
