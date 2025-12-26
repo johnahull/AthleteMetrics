@@ -60,7 +60,7 @@ export interface RegisterForEventParams {
  * Fetch events for an organization
  */
 export async function fetchEvents(organizationId: string): Promise<EventWithCounts[]> {
-  const response = await fetch(`/api/organizations/${organizationId}/events`);
+  const response = await fetch(`/api/events?organizationId=${encodeURIComponent(organizationId)}`);
   if (!response.ok) {
     const message = await getErrorMessage(response, 'Failed to fetch events');
     throw new Error(message);
