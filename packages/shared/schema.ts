@@ -3172,18 +3172,18 @@ const baseEventSchema = createInsertSchema(events).omit({
   description: z.string().optional(),
   location: z.string().optional(),
   eventType: z.string().optional(),
-  startDate: z.date({
+  startDate: z.coerce.date({
     required_error: "Start date is required",
     invalid_type_error: "Start date must be a valid date",
   }),
-  endDate: z.date().optional().nullable(),
+  endDate: z.coerce.date().optional().nullable(),
   timezone: z.string().default("America/New_York"),
   organizationId: z.string().optional(),
   visibility: z.enum(eventVisibilityEnum).default("org_private"),
   registrationMode: z.enum(registrationModeEnum).default("open"),
   status: z.enum(eventStatusEnum).default("draft"),
-  registrationOpensAt: z.date().optional().nullable(),
-  registrationClosesAt: z.date().optional().nullable(),
+  registrationOpensAt: z.coerce.date().optional().nullable(),
+  registrationClosesAt: z.coerce.date().optional().nullable(),
   maxRegistrations: z.number().int().positive().optional().nullable(),
   eventCode: z.string().optional().nullable(),
   resultsVisibility: z.enum(resultsVisibilityEnum).default("after_event"),
@@ -3214,17 +3214,17 @@ export const insertEventSchema = baseEventSchema.refine((data) => {
 export const updateEventSchema = baseEventSchema.partial().extend({
   description: z.string().nullable().optional(),
   location: z.string().nullable().optional(),
-  endDate: z.date().nullable().optional(),
+  endDate: z.coerce.date().nullable().optional(),
   // Freeze-related fields for updates
   isFrozen: z.boolean().optional(),
-  frozenAt: z.date().nullable().optional(),
+  frozenAt: z.coerce.date().nullable().optional(),
   frozenBy: z.string().nullable().optional(),
   frozenReason: z.string().nullable().optional(),
   // Results publishing fields
-  resultsPublishedAt: z.date().nullable().optional(),
+  resultsPublishedAt: z.coerce.date().nullable().optional(),
   resultsPublishedBy: z.string().nullable().optional(),
   // Audit fields
-  updatedAt: z.date().nullable().optional(),
+  updatedAt: z.coerce.date().nullable().optional(),
 });
 
 export const insertEventRegistrationSchema = createInsertSchema(eventRegistrations).omit({
@@ -3256,21 +3256,21 @@ export const updateEventRegistrationSchema = z.object({
   registrationNumber: z.number().int().positive().optional().nullable(),
   waitlistPosition: z.number().int().positive().optional().nullable(),
   // Approval workflow
-  approvedAt: z.date().nullable().optional(),
+  approvedAt: z.coerce.date().nullable().optional(),
   approvedBy: z.string().nullable().optional(),
   // Decline workflow
-  declinedAt: z.date().nullable().optional(),
+  declinedAt: z.coerce.date().nullable().optional(),
   declinedBy: z.string().nullable().optional(),
   declineReason: z.string().nullable().optional(),
   // Check-in workflow
-  checkedInAt: z.date().nullable().optional(),
+  checkedInAt: z.coerce.date().nullable().optional(),
   checkedInBy: z.string().nullable().optional(),
-  completedAt: z.date().nullable().optional(),
+  completedAt: z.coerce.date().nullable().optional(),
   // Notes
   athleteNotes: z.string().nullable().optional(),
   adminNotes: z.string().nullable().optional(),
   // Audit
-  updatedAt: z.date().nullable().optional(),
+  updatedAt: z.coerce.date().nullable().optional(),
 });
 
 export const insertEventInvitationSchema = createInsertSchema(eventInvitations).omit({
@@ -3287,15 +3287,15 @@ export const insertEventInvitationSchema = createInsertSchema(eventInvitations).
   }),
   status: z.enum(eventInvitationStatusEnum).optional(),
   invitedBy: z.string().optional().nullable(),
-  expiresAt: z.date({
+  expiresAt: z.coerce.date({
     required_error: "Expiration date is required",
   }),
   // Workflow fields - can be set during creation
   emailSent: z.boolean().optional(),
-  emailSentAt: z.date().nullable().optional(),
-  acceptedAt: z.date().nullable().optional(),
-  declinedAt: z.date().nullable().optional(),
-  cancelledAt: z.date().nullable().optional(),
+  emailSentAt: z.coerce.date().nullable().optional(),
+  acceptedAt: z.coerce.date().nullable().optional(),
+  declinedAt: z.coerce.date().nullable().optional(),
+  cancelledAt: z.coerce.date().nullable().optional(),
   cancelledBy: z.string().nullable().optional(),
 });
 
@@ -3303,10 +3303,10 @@ export const insertEventInvitationSchema = createInsertSchema(eventInvitations).
 export const updateEventInvitationSchema = z.object({
   status: z.enum(eventInvitationStatusEnum).optional(),
   emailSent: z.boolean().optional(),
-  emailSentAt: z.date().nullable().optional(),
-  acceptedAt: z.date().nullable().optional(),
-  declinedAt: z.date().nullable().optional(),
-  cancelledAt: z.date().nullable().optional(),
+  emailSentAt: z.coerce.date().nullable().optional(),
+  acceptedAt: z.coerce.date().nullable().optional(),
+  declinedAt: z.coerce.date().nullable().optional(),
+  cancelledAt: z.coerce.date().nullable().optional(),
   cancelledBy: z.string().nullable().optional(),
 });
 
