@@ -105,6 +105,7 @@ const NotificationSettings = React.lazy(() => import("./pages/notification-setti
 // Lazy load event pages
 const Events = React.lazy(() => import("./pages/events"));
 const MyEvents = React.lazy(() => import("./pages/my-events"));
+const EventNew = React.lazy(() => import("./pages/event-new"));
 const EventDetail = React.lazy(() => import("./pages/event-detail"));
 const EventJoin = React.lazy(() => import("./pages/event-join"));
 const EventInvite = React.lazy(() => import("./pages/event-invite"));
@@ -419,6 +420,11 @@ function Router() {
       <Route path="/events/invite/:token">
         <RouteWrapper loadingText="Loading Invitation...">
           <EventInvite />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/new">
+        <RouteWrapper loadingText="Loading Event Form...">
+          <EventNew />
         </RouteWrapper>
       </Route>
       <Route path="/events/:eventId/data-entry">
