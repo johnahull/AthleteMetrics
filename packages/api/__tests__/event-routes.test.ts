@@ -293,6 +293,112 @@ describe("Event Routes", () => {
         expect(event).toBeDefined();
       });
     });
+
+    describe("setting combinations", () => {
+      const visibilityOptions = ["org_private", "public", "invite_only"] as const;
+      const registrationModeOptions = ["open", "request_approval", "invitation_only"] as const;
+      const resultsVisibilityOptions = ["immediate", "after_event", "manual"] as const;
+
+      describe("visibility options", () => {
+        it.each(visibilityOptions)("should create event with visibility: %s", async (visibility) => {
+          const event = await eventService.createEvent({
+            name: `Event with ${visibility} visibility`,
+            startDate: new Date("2025-05-01T09:00:00Z"),
+            organizationId: testOrgId,
+            visibility,
+          }, testOrgAdminId);
+
+          expect(event.visibility).toBe(visibility);
+        });
+      });
+
+      describe("registration mode options", () => {
+        it.each(registrationModeOptions)("should create event with registrationMode: %s", async (registrationMode) => {
+          const event = await eventService.createEvent({
+            name: `Event with ${registrationMode} registration`,
+            startDate: new Date("2025-05-01T09:00:00Z"),
+            organizationId: testOrgId,
+            registrationMode,
+          }, testOrgAdminId);
+
+          expect(event.registrationMode).toBe(registrationMode);
+        });
+      });
+
+      describe("results visibility options", () => {
+        it.each(resultsVisibilityOptions)("should create event with resultsVisibility: %s", async (resultsVisibility) => {
+          const event = await eventService.createEvent({
+            name: `Event with ${resultsVisibility} results`,
+            startDate: new Date("2025-05-01T09:00:00Z"),
+            organizationId: testOrgId,
+            resultsVisibility,
+          }, testOrgAdminId);
+
+          expect(event.resultsVisibility).toBe(resultsVisibility);
+        });
+      });
+
+      describe("combined setting scenarios", () => {
+        it("should create public event with open registration and immediate results", async () => {
+          const event = await eventService.createEvent({
+            name: "Open Testing Day",
+            startDate: new Date("2025-05-01T09:00:00Z"),
+            organizationId: testOrgId,
+            visibility: "public",
+            registrationMode: "open",
+            resultsVisibility: "immediate",
+          }, testOrgAdminId);
+
+          expect(event.visibility).toBe("public");
+          expect(event.registrationMode).toBe("open");
+          expect(event.resultsVisibility).toBe("immediate");
+        });
+
+        it("should create org_private event with approval and after_event results", async () => {
+          const event = await eventService.createEvent({
+            name: "Team Combine",
+            startDate: new Date("2025-05-02T09:00:00Z"),
+            organizationId: testOrgId,
+            visibility: "org_private",
+            registrationMode: "request_approval",
+            resultsVisibility: "after_event",
+          }, testOrgAdminId);
+
+          expect(event.visibility).toBe("org_private");
+          expect(event.registrationMode).toBe("request_approval");
+          expect(event.resultsVisibility).toBe("after_event");
+        });
+
+        it("should create invite_only event with invitation_only registration and manual results", async () => {
+          const event = await eventService.createEvent({
+            name: "Exclusive Tryout",
+            startDate: new Date("2025-05-03T09:00:00Z"),
+            organizationId: testOrgId,
+            visibility: "invite_only",
+            registrationMode: "invitation_only",
+            resultsVisibility: "manual",
+          }, testOrgAdminId);
+
+          expect(event.visibility).toBe("invite_only");
+          expect(event.registrationMode).toBe("invitation_only");
+          expect(event.resultsVisibility).toBe("manual");
+        });
+
+        it("should create public event with invitation_only registration", async () => {
+          const event = await eventService.createEvent({
+            name: "Public Invite-Only Camp",
+            startDate: new Date("2025-05-04T09:00:00Z"),
+            organizationId: testOrgId,
+            visibility: "public",
+            registrationMode: "invitation_only",
+            resultsVisibility: "after_event",
+          }, testOrgAdminId);
+
+          expect(event.visibility).toBe("public");
+          expect(event.registrationMode).toBe("invitation_only");
+        });
+      });
+    });
   });
 
   describe("GET /api/events/:eventId (getEvent)", () => {
