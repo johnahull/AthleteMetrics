@@ -48,6 +48,20 @@ vi.mock('@/lib/events-api', () => ({
     isLoading: false,
     error: null,
   })),
+  useEventRegistrations: vi.fn(() => ({
+    data: [],
+    isLoading: false,
+  })),
+}));
+
+// Mock the athletes query
+vi.mock('@/lib/api', () => ({
+  queries: {
+    athletes: () => ({
+      queryKey: ['athletes', { organizationId: 'org-123' }],
+      queryFn: () => Promise.resolve({ athletes: [] }),
+    }),
+  },
 }));
 
 // Create wrapper with providers
@@ -62,6 +76,13 @@ function createWrapper() {
       {children}
     </QueryClientProvider>
   );
+}
+
+// Helper to switch to email tab (since org tab is default now)
+async function switchToEmailTab() {
+  const user = userEvent.setup();
+  const emailTab = screen.getByRole('tab', { name: /email/i });
+  await user.click(emailTab);
 }
 
 describe('InviteAthletesModal', () => {
@@ -79,6 +100,7 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
@@ -93,6 +115,7 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={false}
           onClose={mockOnClose}
         />,
@@ -107,6 +130,7 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
@@ -118,17 +142,19 @@ describe('InviteAthletesModal', () => {
   });
 
   describe('Email Input', () => {
-    it('should have an email input field', () => {
+    it('should have an email input field', async () => {
       render(
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       expect(screen.getByPlaceholderText(/email/i)).toBeInTheDocument();
     });
 
@@ -137,12 +163,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
       await user.type(emailInput, 'invalid-email');
@@ -161,12 +189,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -184,12 +214,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -213,12 +245,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -250,12 +284,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -274,12 +310,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -297,12 +335,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -319,12 +359,14 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,
         { wrapper: createWrapper() }
       );
 
+      await switchToEmailTab();
       const user = userEvent.setup();
       const emailInput = screen.getByPlaceholderText(/email/i);
 
@@ -342,6 +384,7 @@ describe('InviteAthletesModal', () => {
         <InviteAthletesModal
           eventId="event-123"
           eventName="Spring Combine 2025"
+          organizationId="org-123"
           isOpen={true}
           onClose={mockOnClose}
         />,

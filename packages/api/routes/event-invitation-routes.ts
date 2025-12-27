@@ -393,5 +393,25 @@ export function registerEventInvitationRoutes(app: Express) {
     }
   });
 
+  /**
+   * Get pending invitations for the authenticated user
+   * GET /api/my/event-invitations
+   */
+  app.get("/api/my/event-invitations", invitationLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const invitations = await storage.getUserPendingInvitations(user.id);
+      res.json(invitations);
+    } catch (error) {
+      console.error("Get my event invitations error:", error);
+      const message = error instanceof Error ? error.message : "Failed to get invitations";
+      res.status(500).json({ message });
+    }
+  });
+
   console.log("  ✓ Event invitation routes registered");
 }

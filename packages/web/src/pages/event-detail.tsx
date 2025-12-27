@@ -639,6 +639,7 @@ export default function EventDetail() {
       <InviteAthletesModal
         eventId={eventId!}
         eventName={event.name}
+        organizationId={event.organizationId || ""}
         isOpen={inviteModalOpen}
         onClose={() => setInviteModalOpen(false)}
       />

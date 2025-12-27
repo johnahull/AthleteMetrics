@@ -4,15 +4,16 @@
  */
 
 import { Link } from "wouter";
-import { useMyEvents, useCancelRegistration } from "@/lib/events-api";
+import { useMyEvents, useCancelRegistration, useMyPendingInvitations, useDeclineInvitation } from "@/lib/events-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Calendar, MapPin, Clock, Search, CheckCircle, XCircle, AlertCircle } from "lucide-react";
+import { Calendar, MapPin, Clock, Search, CheckCircle, XCircle, AlertCircle, Mail } from "lucide-react";
 import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
 import type { EventRegistration } from "@shared/schema";
+import { InvitationCard } from "@/components/events/InvitationCard";
 
 // Extended registration type with event data
 interface RegistrationWithEvent extends EventRegistration {
@@ -154,8 +155,27 @@ function RegistrationCard({ registration, onCancel }: { registration: Registrati
 
 export default function MyEvents() {
   const { data: registrations, isLoading } = useMyEvents();
+  const { data: pendingInvitations, isLoading: isLoadingInvitations } = useMyPendingInvitations();
   const { toast } = useToast();
   const cancelMutation = useCancelRegistration();
+  const declineInvitationMutation = useDeclineInvitation();
+
+  // Handle decline invitation
+  const handleDeclineInvitation = async (token: string) => {
+    try {
+      await declineInvitationMutation.mutateAsync(token);
+      toast({
+        title: "Invitation Declined",
+        description: "The event invitation has been declined.",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to decline invitation",
+      });
+    }
+  };
 
   // Handle cancel registration
   const handleCancelRegistration = async (eventId: string) => {
@@ -215,7 +235,7 @@ export default function MyEvents() {
         </Link>
       </div>
 
-      {isLoading ? (
+      {isLoading || isLoadingInvitations ? (
         <div className="space-y-4">
           {[...Array(3)].map((_, i) => (
             <Skeleton key={i} className="h-40" />
@@ -223,6 +243,26 @@ export default function MyEvents() {
         </div>
       ) : (
         <div className="space-y-8">
+          {/* Pending Invitations */}
+          {pendingInvitations && pendingInvitations.length > 0 && (
+            <section>
+              <h2 className="text-lg font-medium mb-4 flex items-center gap-2">
+                <Mail className="h-5 w-5 text-amber-500" />
+                Pending Invitations ({pendingInvitations.length})
+              </h2>
+              <div className="grid gap-4">
+                {pendingInvitations.map((invitation) => (
+                  <InvitationCard
+                    key={invitation.id}
+                    invitation={invitation}
+                    onDecline={handleDeclineInvitation}
+                    isDeclineLoading={declineInvitationMutation.isPending}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Pending Registrations */}
           {pendingRegistrations.length > 0 && (
             <section>

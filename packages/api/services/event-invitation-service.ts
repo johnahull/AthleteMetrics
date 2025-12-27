@@ -14,6 +14,7 @@ import {
 } from '@shared/schema';
 import crypto from 'crypto';
 import type { IStorage } from '../storage';
+import { emailService } from './email-service';
 
 export interface CreateInvitationOptions {
   userId?: string;
@@ -123,6 +124,75 @@ export class EventInvitationService {
 
     const invitation = await this.storage.createEventInvitation(invitationData);
 
+    // Send invitation email
+    let emailSent = false;
+    let emailSentAt: Date | null = null;
+
+    try {
+      // Get inviter details
+      const inviter = await this.storage.getUser(invitedBy);
+      const inviterName = inviter ? inviter.fullName || `${inviter.firstName} ${inviter.lastName}` : 'Event Organizer';
+
+      // Get organization details if event has an org
+      let organizationName: string | undefined;
+      if (event.organizationId) {
+        const org = await this.storage.getOrganization(event.organizationId);
+        organizationName = org?.name;
+      }
+
+      // Determine recipient email and name
+      let recipientEmail: string;
+      let recipientName: string | undefined;
+
+      if (options.email) {
+        // External user invited by email
+        recipientEmail = options.email;
+      } else if (options.userId) {
+        // Org member invited by userId
+        const user = await this.storage.getUser(options.userId);
+        if (!user) {
+          throw new Error('Invited user not found');
+        }
+        recipientEmail = user.emails[0];
+        recipientName = user.fullName || `${user.firstName} ${user.lastName}`;
+      } else {
+        throw new Error('Either userId or email must be provided');
+      }
+
+      // Construct accept URL
+      const acceptUrl = `${process.env.APP_URL || 'http://localhost:5000'}/events/invite/${token}`;
+
+      // Send the email
+      const sendResult = await emailService.sendEventInvitation({
+        to: recipientEmail,
+        recipientName,
+        eventName: event.name,
+        eventDate: event.startDate,
+        eventLocation: event.location || undefined,
+        inviterName,
+        organizationName,
+        acceptUrl,
+        expiresAt,
+      });
+
+      if (sendResult) {
+        emailSent = true;
+        emailSentAt = new Date();
+      }
+    } catch (error) {
+      // Log error but don't fail the invitation creation
+      console.error(`Failed to send invitation email for invitation ${invitation.id}:`, error);
+    }
+
+    // Update invitation with email status if email was sent
+    let finalInvitation = invitation;
+    if (emailSent && emailSentAt) {
+      finalInvitation = await this.storage.updateEventInvitation(invitation.id, {
+        emailSent: true,
+        emailSentAt,
+      });
+    }
+
     // Create audit log
     await this.storage.createAuditLog({
       userId: invitedBy,
@@ -134,10 +204,11 @@ export class EventInvitationService {
         invitationId: invitation.id,
         invitedUserId: options.userId,
         invitedEmail: options.email,
+        emailSent,
       }),
     });
 
-    return invitation;
+    return finalInvitation;
   }
 
   /**

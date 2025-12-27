@@ -33,7 +33,7 @@ import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
@@ -170,6 +170,7 @@ export interface IStorage {
   getEventInvitationByEmailAndEvent(eventId: string, email: string): Promise<EventInvitation | null>;
   updateEventInvitation(id: string, data: Partial<InsertEventInvitation>): Promise<EventInvitation>;
   listEventInvitations(eventId: string, filters?: { status?: EventInvitationStatus; limit?: number; offset?: number }): Promise<EventInvitation[]>;
+  getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>>;
 
   // Public Organization Directory
   getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
@@ -2552,6 +2553,28 @@ export class DatabaseStorage implements IStorage {
     }
 
     return query;
+  }
+
+  async getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>> {
+    const now = new Date();
+
+    const result = await db.select({
+      invitation: eventInvitations,
+      event: events,
+    })
+      .from(eventInvitations)
+      .innerJoin(events, eq(eventInvitations.eventId, events.id))
+      .where(and(
+        eq(eventInvitations.userId, userId),
+        eq(eventInvitations.status, 'pending'),
+        gt(eventInvitations.expiresAt, now)
+      ))
+      .orderBy(events.startDate);
+
+    return result.map(row => ({
+      ...row.invitation,
+      event: row.event,
+    }));
   }
 
   // Athletes (users with athlete role) - consolidated from legacy getPlayers

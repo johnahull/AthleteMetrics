@@ -47,6 +47,10 @@ export interface EventRegistrationWithUser extends EventRegistration {
   userEmail?: string;
 }
 
+export interface EventInvitationWithEvent extends EventInvitation {
+  event: Event;
+}
+
 export interface RegisterForEventParams {
   eventId: string;
   athleteNotes?: string;
@@ -75,6 +79,18 @@ export async function fetchMyEvents(): Promise<EventRegistration[]> {
   const response = await fetch('/api/events/my-registrations');
   if (!response.ok) {
     const message = await getErrorMessage(response, 'Failed to fetch my events');
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/**
+ * Fetch athlete's pending event invitations
+ */
+export async function fetchMyPendingInvitations(): Promise<EventInvitationWithEvent[]> {
+  const response = await fetch('/api/my/event-invitations');
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to fetch pending invitations');
     throw new Error(message);
   }
   return response.json();
@@ -630,6 +646,17 @@ export function useMyEvents() {
     queryKey: ['events', 'my-registrations'],
     queryFn: fetchMyEvents,
     staleTime: STALE_TIME.DEFAULT,
+  });
+}
+
+/**
+ * Hook to fetch athlete's pending event invitations
+ */
+export function useMyPendingInvitations() {
+  return useQuery({
+    queryKey: ['event-invitations', 'my-pending'],
+    queryFn: fetchMyPendingInvitations,
+    staleTime: STALE_TIME.REALTIME, // 1 minute - invitations need to be fresh
   });
 }
 
