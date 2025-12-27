@@ -18,29 +18,6 @@ import type {
 import { STALE_TIME } from "@/lib/queryClient";
 
 // ============================================================================
-// Types - Team Benchmark Aggregation
-// ============================================================================
-
-export interface TeamBenchmarkAggregation {
-  benchmarkId: string;
-  benchmarkName: string;
-  metricCode: string;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
-  filters: {
-    gender?: string;
-    ageMin?: number;
-    ageMax?: number;
-    position?: string;
-  };
-  applicableAthletes: number;
-  athletesMet: number;
-  athletesNoData: number;
-  achievementRate: number;
-  averageProgress: number;
-}
-
-// ============================================================================
 // API Client Functions - Site Benchmarks
 // ============================================================================
 

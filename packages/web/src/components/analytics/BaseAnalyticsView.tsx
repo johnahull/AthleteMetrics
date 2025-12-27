@@ -3,7 +3,7 @@
  * Abstract composition component providing common analytics functionality
  */
 
-import React, { useEffect, useRef, useMemo, Suspense, useState } from 'react';
+import React, { useEffect, useRef, useMemo, Suspense } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,9 +13,7 @@ import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { DateSelector } from '@/components/ui/date-selector';
 import { ChartContainer } from '@/components/charts/ChartContainer';
-import { BenchmarkLineSelector } from './BenchmarkLineSelector';
 import { useToast } from '@/hooks/use-toast';
-import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
@@ -66,21 +64,6 @@ interface BaseAnalyticsViewProps {
   children?: React.ReactNode;
 }
 
-// Chart types compatible with benchmark lines (Y-axis represents metric values)
-const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
-  'line_chart',
-  'multi_line',
-  'box_plot',
-  'box_swarm_combo',
-  'violin_plot',
-  'scatter_plot',
-  'connected_scatter',
-  'bar_chart',
-  'swarm_plot',
-  'time_series_box_swarm',
-  'time_series_violin'
-];
-
 // Internal component that uses the analytics context
 function BaseAnalyticsViewContent({
   title,
@@ -102,10 +85,6 @@ function BaseAnalyticsViewContent({
   const { state, isDataReady, shouldFetchData, chartData: memoizedChartData } = useAnalyticsContext();
   const { toast } = useToast();
   const previousAnalysisTypeRef = useRef<AnalysisType>(state.analysisType);
-  const previousMetricRef = useRef<string>(state.metrics.primary);
-
-  // Benchmark selection state
-  const [selectedBenchmarkIds, setSelectedBenchmarkIds] = useState<string[]>([]);
 
   const {
     fetchAnalyticsData,
@@ -516,7 +495,6 @@ function BaseAnalyticsViewContent({
                   className="mb-4"
                 />
               )}
-
           </>
         )}
 
@@ -625,7 +603,6 @@ function BaseAnalyticsViewContent({
                       metric={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.metrics.primary : undefined}
                       onExport={handleExport}
                       selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
-                      benchmarks={BENCHMARK_COMPATIBLE_CHART_TYPES.includes(chartType) ? selectedBenchmarks : undefined}
                     />
                   </Suspense>
                 ))}
@@ -656,7 +633,6 @@ function BaseAnalyticsViewContent({
                   metric={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.metrics.primary : undefined}
                   onExport={handleExport}
                   selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
-                  benchmarks={BENCHMARK_COMPATIBLE_CHART_TYPES.includes(state.selectedChartType) ? selectedBenchmarks : undefined}
                 />
               </Suspense>
             )}
