@@ -388,6 +388,22 @@ export async function createEventInvitation(
   return response.json();
 }
 
+/**
+ * Cancel an invitation
+ */
+export async function cancelInvitation(eventId: string, invitationId: string): Promise<EventInvitation> {
+  const response = await fetch(`/api/events/${eventId}/invitations/${invitationId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to cancel invitation');
+    throw new Error(message);
+  }
+
+  return response.json();
+}
+
 // ============================================================================
 // API Client Functions - Event Metrics
 // ============================================================================
@@ -917,6 +933,22 @@ export function useCreateEventInvitation() {
   return useMutation({
     mutationFn: ({ eventId, data }: { eventId: string; data: { userId?: string; email?: string; expiresAt?: string } }) =>
       createEventInvitation(eventId, data),
+    onSuccess: (_, { eventId }) => {
+      queryClient.invalidateQueries({ queryKey: ['events', eventId, 'invitations'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+    },
+  });
+}
+
+/**
+ * Hook to cancel event invitation
+ */
+export function useCancelInvitation() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ eventId, invitationId }: { eventId: string; invitationId: string }) =>
+      cancelInvitation(eventId, invitationId),
     onSuccess: (_, { eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'invitations'] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId] });

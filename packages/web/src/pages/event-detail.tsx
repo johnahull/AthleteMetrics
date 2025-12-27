@@ -9,10 +9,12 @@ import { useAuth } from "@/lib/auth";
 import {
   useEvent,
   useEventRegistrations,
+  useEventInvitations,
   useFreezeEvent,
   useUnfreezeEvent,
   useApproveRegistration,
   useDeclineRegistration,
+  useCancelInvitation,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,7 +49,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { format, formatDistanceToNow, isPast, isFuture } from "date-fns";
-import type { EventRegistration } from "@shared/schema";
+import type { EventRegistration, EventInvitation } from "@shared/schema";
 
 type TabValue = "overview" | "registrations" | "checkin" | "metrics" | "results" | "reports" | "settings";
 
@@ -69,6 +71,7 @@ export default function EventDetail() {
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
   const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
   const [declineReason, setDeclineReason] = useState("");
+  const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
 
   // Fetch event data
   const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
@@ -76,11 +79,15 @@ export default function EventDetail() {
   // Fetch registrations
   const { data: registrations, isLoading: registrationsLoading } = useEventRegistrations(eventId);
 
+  // Fetch invitations
+  const { data: invitations, isLoading: invitationsLoading } = useEventInvitations(eventId);
+
   // Mutations
   const freezeMutation = useFreezeEvent();
   const unfreezeMutation = useUnfreezeEvent();
   const approveMutation = useApproveRegistration();
   const declineMutation = useDeclineRegistration();
+  const cancelInvitationMutation = useCancelInvitation();
 
   // Handle approve registration
   const handleApprove = async (registrationId: string) => {
@@ -126,6 +133,33 @@ export default function EventDetail() {
         variant: "destructive",
         title: "Error",
         description: "Failed to decline registration.",
+      });
+    }
+  };
+
+  // Handle cancel invitation - open dialog for confirmation
+  const handleCancelInvitation = (invitationId: string) => {
+    setCancelInvitationDialog({ open: true, invitationId });
+  };
+
+  // Confirm cancel invitation
+  const confirmCancelInvitation = async () => {
+    if (!eventId || !cancelInvitationDialog.invitationId) return;
+    try {
+      await cancelInvitationMutation.mutateAsync({
+        eventId,
+        invitationId: cancelInvitationDialog.invitationId,
+      });
+      toast({
+        title: "Invitation Cancelled",
+        description: "The invitation has been cancelled.",
+      });
+      setCancelInvitationDialog({ open: false, invitationId: null });
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to cancel invitation.",
       });
     }
   };
@@ -336,7 +370,8 @@ export default function EventDetail() {
             Overview
           </TabsTrigger>
           <TabsTrigger value="registrations" data-testid="tab-registrations">
-            Registrations ({approvedCount + pendingCount})
+            Registrations ({approvedCount + pendingCount}
+            {invitations && invitations.length > 0 && ` + ${invitations.length} pending invitations`})
           </TabsTrigger>
           <TabsTrigger value="checkin" data-testid="tab-checkin">
             Check-In ({checkedInCount}/{approvedCount})
@@ -459,6 +494,98 @@ export default function EventDetail() {
 
         {/* Registrations Tab */}
         <TabsContent value="registrations">
+          {/* Pending Invitations Section */}
+          {invitations && invitations.length > 0 && (
+            <Card className="mb-4 border-amber-200 bg-amber-50/30">
+              <CardHeader>
+                <CardTitle className="text-amber-900">Pending Invitations</CardTitle>
+                <CardDescription className="text-amber-700">
+                  {invitations.length} {invitations.length === 1 ? 'invitation' : 'invitations'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {invitationsLoading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-16 w-full" />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {invitations.map((invitation) => {
+                      const expiresAt = new Date(invitation.expiresAt);
+                      const createdAt = new Date(invitation.createdAt);
+                      const expiresInDays = Math.ceil((expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                      const showExpirationWarning = expiresInDays <= 7 && invitation.status === 'pending';
+
+                      // Get invitee display name - for tests, we'll mock this
+                      // In real app, we'd need to fetch user data or include it in the invitation response
+                      const inviteeName = invitation.userId
+                        ? `User ${invitation.userId.slice(0, 8)}...` // Placeholder - will be replaced with actual user lookup
+                        : invitation.email;
+
+                      return (
+                        <div
+                          key={invitation.id}
+                          className="flex items-center justify-between p-3 border border-amber-200 rounded-lg bg-white"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="h-8 w-8 rounded-full bg-amber-100 flex items-center justify-center">
+                              <span className="text-sm font-medium text-amber-800">
+                                {inviteeName?.charAt(0)?.toUpperCase() || "?"}
+                              </span>
+                            </div>
+                            <div className="flex-1">
+                              <p className="font-medium">{inviteeName}</p>
+                              <p className="text-sm text-muted-foreground">
+                                Invited {formatDistanceToNow(createdAt, { addSuffix: true })}
+                                {invitation.invitedBy && ` by Coach ${invitation.invitedBy.slice(0, 8)}...`}
+                              </p>
+                              {showExpirationWarning && (
+                                <p className="text-xs text-amber-600 mt-1">
+                                  Expires in {expiresInDays} {expiresInDays === 1 ? 'day' : 'days'}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge
+                              variant="outline"
+                              className={
+                                invitation.status === "pending"
+                                  ? "bg-amber-100 text-amber-700 border-amber-300"
+                                  : invitation.status === "declined"
+                                  ? "bg-red-100 text-red-700 border-red-300"
+                                  : invitation.status === "cancelled"
+                                  ? "bg-gray-100 text-gray-700 border-gray-300"
+                                  : invitation.status === "accepted"
+                                  ? "bg-green-100 text-green-700 border-green-300"
+                                  : "bg-gray-100 text-gray-700"
+                              }
+                            >
+                              {invitation.status.charAt(0).toUpperCase() + invitation.status.slice(1)}
+                            </Badge>
+                            {invitation.status === "pending" && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleCancelInvitation(invitation.id)}
+                                disabled={cancelInvitationMutation.isPending}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -683,6 +810,40 @@ export default function EventDetail() {
               disabled={declineMutation.isPending}
             >
               {declineMutation.isPending ? "Declining..." : "Decline Registration"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel Invitation Dialog */}
+      <Dialog
+        open={cancelInvitationDialog.open}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCancelInvitationDialog({ open: false, invitationId: null });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Invitation</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel this invitation? The invitee will no longer be able to accept it.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelInvitationDialog({ open: false, invitationId: null })}
+            >
+              No, Keep It
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmCancelInvitation}
+              disabled={cancelInvitationMutation.isPending}
+            >
+              {cancelInvitationMutation.isPending ? "Cancelling..." : "Cancel Invitation"}
             </Button>
           </DialogFooter>
         </DialogContent>
