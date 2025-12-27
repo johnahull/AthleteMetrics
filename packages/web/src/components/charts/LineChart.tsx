@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useRef } from 'react';
 import type { ChartOptions } from 'chart.js';
+import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
 import type {
   TrendData,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -23,6 +25,8 @@ interface LineChartProps {
   selectedAthleteIds?: string[];
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
+  benchmarks?: BenchmarkLine[];
+  showBenchmarks?: boolean;
 }
 
 export function LineChart({
@@ -32,7 +36,9 @@ export function LineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 10
+  maxAthletes = 10,
+  benchmarks,
+  showBenchmarks = true
 }: LineChartProps) {
   const { getMetricConfig } = useMetricConfig();
 

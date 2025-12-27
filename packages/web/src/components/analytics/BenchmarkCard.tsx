@@ -24,18 +24,20 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     metricCode,
     benchmarkValue,
     comparisonOperator,
-    filters,
+    filters = {},
     applicableAthletes,
     athletesMet,
     achievementRate,
   } = benchmark;
 
   // Determine operator symbol
-  const operatorSymbol = {
+  const operatorSymbols: Record<string, string> = {
     lte: '≤',
     gte: '≥',
-    eq: '='
-  }[comparisonOperator];
+    eq: '=',
+    range: '↔'
+  };
+  const operatorSymbol = operatorSymbols[comparisonOperator] || '=';
 
   // Memoize unit calculation to prevent recalculation on every render
   const unit = useMemo(() => {

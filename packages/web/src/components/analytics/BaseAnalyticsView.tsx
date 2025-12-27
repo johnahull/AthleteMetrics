@@ -23,10 +23,21 @@ import { MetricsSelector } from './MetricsSelector';
 import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
+import { BenchmarkLineSelector } from './BenchmarkLineSelector';
+import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
 import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, ChartType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
+
+// Chart types that support benchmark line overlays
+const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
+  'line_chart',
+  'box_plot',
+  'scatter_plot',
+  'connected_scatter',
+  'time_series_box_swarm',
+];
 
 interface BaseAnalyticsViewProps {
   // Required props
@@ -125,6 +136,10 @@ function BaseAnalyticsViewContent({
     analyticsData: state.analyticsData,
     isMainAnalyticsLoading: state.isLoading
   });
+
+  // State for benchmark selection
+  const [selectedBenchmarkIds, setSelectedBenchmarkIds] = React.useState<string[]>([]);
+  const previousMetricRef = useRef<string>(state.metrics.primary);
 
   // Fetch benchmarks for the primary metric (Y-axis for most charts)
   const { data: benchmarksForMetric } = useBenchmarksForMetric(

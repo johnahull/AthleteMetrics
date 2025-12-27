@@ -18,6 +18,34 @@ import type {
 import { STALE_TIME } from "@/lib/queryClient";
 
 // ============================================================================
+// Type Definitions
+// ============================================================================
+
+/**
+ * Team benchmark aggregation data for dashboard widgets
+ */
+export interface TeamBenchmarkAggregation {
+  benchmarkId: string;
+  benchmarkName: string;
+  metricCode: string;
+  benchmarkValue: number;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue?: number;
+  maxValue?: number;
+  applicableAthletes: number;
+  athletesMet: number;
+  athletesNoData?: number;
+  achievementRate: number;
+  averageProgress: number;
+  filters?: {
+    gender?: string;
+    ageMin?: number;
+    ageMax?: number;
+    position?: string;
+  };
+}
+
+// ============================================================================
 // API Client Functions - Site Benchmarks
 // ============================================================================
 
