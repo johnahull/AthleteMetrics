@@ -23,6 +23,8 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     benchmarkName,
     metricCode,
     benchmarkValue,
+    minValue,
+    maxValue,
     comparisonOperator,
     filters = {},
     applicableAthletes,
@@ -47,6 +49,14 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
     if (metricCode.includes('WEIGHT')) return 'lbs';
     return '';
   }, [metricCode]);
+
+  // Memoize benchmark value display - handle range benchmarks differently
+  const benchmarkValueDisplay = useMemo(() => {
+    if (comparisonOperator === 'range' && minValue !== undefined && maxValue !== undefined) {
+      return `${minValue}${unit} - ${maxValue}${unit}`;
+    }
+    return `${operatorSymbol} ${benchmarkValue}${unit}`;
+  }, [comparisonOperator, minValue, maxValue, benchmarkValue, operatorSymbol, unit]);
 
   // Determine progress bar color based on achievement rate (using shared utility)
   const progressColor = useMemo(() => {
@@ -89,7 +99,7 @@ export function BenchmarkCard({ benchmark, onBenchmarkClick, className }: Benchm
       <CardHeader>
         <CardTitle className="text-lg">{benchmarkName}</CardTitle>
         <div className="text-sm text-muted-foreground">
-          {metricCode} {operatorSymbol} {benchmarkValue}{unit}
+          {metricCode} {benchmarkValueDisplay}
         </div>
         <div className="flex flex-wrap gap-1 mt-2">
           {hasFilters ? (

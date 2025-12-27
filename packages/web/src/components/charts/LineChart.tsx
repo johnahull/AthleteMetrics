@@ -453,7 +453,14 @@ export function LineChart({
       legend: {
         display: config.showLegend,
         position: 'top' as const
-      }
+      },
+      // Benchmark line/box annotations from chartjs-plugin-annotation
+      annotation: benchmarkAnnotations.length > 0 ? {
+        annotations: benchmarkAnnotations.reduce((acc, annotation, index) => {
+          acc[`benchmark-${index}`] = annotation;
+          return acc;
+        }, {} as Record<string, AnnotationOptions>)
+      } : undefined
     },
     scales: {
       x: {

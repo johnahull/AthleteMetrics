@@ -618,6 +618,7 @@ function BaseAnalyticsViewContent({
                       metric={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.metrics.primary : undefined}
                       onExport={handleExport}
                       selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                      benchmarks={selectedBenchmarks}
                     />
                   </Suspense>
                 ))}
@@ -648,6 +649,7 @@ function BaseAnalyticsViewContent({
                   metric={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.metrics.primary : undefined}
                   onExport={handleExport}
                   selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                  benchmarks={selectedBenchmarks}
                 />
               </Suspense>
             )}
