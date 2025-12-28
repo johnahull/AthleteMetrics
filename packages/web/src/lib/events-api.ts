@@ -291,10 +291,10 @@ export async function declineRegistration(
 }
 
 /**
- * Check in a registration
+ * Check in a registration by user ID
  */
-export async function checkInRegistration(eventId: string, registrationId: string): Promise<EventRegistration> {
-  const response = await fetch(`/api/events/${eventId}/registrations/${registrationId}/check-in`, {
+export async function checkInRegistration(eventId: string, userId: string): Promise<EventRegistration> {
+  const response = await fetch(`/api/events/${eventId}/registrations/${userId}/check-in`, {
     method: 'POST',
   });
 
@@ -858,8 +858,8 @@ export function useCheckInRegistration() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ eventId, registrationId }: { eventId: string; registrationId: string }) =>
-      checkInRegistration(eventId, registrationId),
+    mutationFn: ({ eventId, userId }: { eventId: string; userId: string }) =>
+      checkInRegistration(eventId, userId),
     onSuccess: (_, { eventId }) => {
       queryClient.invalidateQueries({ queryKey: ['events', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events', eventId, 'registrations'] });

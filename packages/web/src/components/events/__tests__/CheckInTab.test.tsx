@@ -261,7 +261,7 @@ describe('CheckInTab', () => {
       await waitFor(() => {
         expect(mockCheckInMutation.mutateAsync).toHaveBeenCalledWith({
           eventId: 'event-123',
-          registrationId: 'reg-1',
+          userId: 'user-1',
         });
       });
     });

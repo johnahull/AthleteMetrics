@@ -80,9 +80,9 @@ export function CheckInTab({ eventId, registrations }: CheckInTabProps) {
     return result;
   }, [eligibleRegistrations, filter, searchQuery]);
 
-  const handleCheckIn = async (registrationId: string) => {
+  const handleCheckIn = async (userId: string) => {
     try {
-      await checkInMutation.mutateAsync({ eventId, registrationId });
+      await checkInMutation.mutateAsync({ eventId, userId });
       toast({
         title: "Checked In",
         description: "Athlete has been checked in successfully.",
@@ -214,7 +214,7 @@ export function CheckInTab({ eventId, registrations }: CheckInTabProps) {
                   ) : (
                     <Button
                       size="sm"
-                      onClick={() => handleCheckIn(reg.id)}
+                      onClick={() => handleCheckIn(reg.userId)}
                       disabled={checkInMutation.isPending}
                     >
                       {checkInMutation.isPending ? "..." : "Check In"}
