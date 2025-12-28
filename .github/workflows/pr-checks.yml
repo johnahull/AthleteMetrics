@@ -313,6 +313,13 @@ jobs:
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
 
+      - name: Create admin user for E2E tests
+        run: npx tsx scripts/ci-create-admin.ts
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER || 'postgres' }}:${{ secrets.CI_POSTGRES_PASSWORD || 'postgres' }}@localhost:5432/${{ secrets.CI_POSTGRES_DB || 'test_db' }}
+          ADMIN_USER: admin
+          ADMIN_PASSWORD: TestPassword123!
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
