@@ -3,9 +3,10 @@
  * Tabs: Overview, Registrations, Check-In, Metrics, Results, Settings
  */
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useParams, Link, useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
+import { Eye } from "lucide-react";
 import {
   useEvent,
   useEventRegistrations,
@@ -65,7 +66,7 @@ interface RegistrationWithUser extends EventRegistration {
 export default function EventDetail() {
   const { eventId } = useParams();
   const [, navigate] = useLocation();
-  const { user } = useAuth();
+  const { user, userOrganizations } = useAuth();
   const { toast } = useToast();
   const [selectedTab, setSelectedTab] = useState<TabValue>("overview");
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -180,6 +181,18 @@ export default function EventDetail() {
   const checkedInCount = typedRegistrations.filter((r) => r.status === "checked_in").length;
   const waitlistCount = typedRegistrations.filter((r) => r.status === "waitlisted").length;
   const pendingCount = typedRegistrations.filter((r) => r.status === "pending").length;
+
+  // Determine if user can manage this event (coach, org_admin, or site_admin)
+  const canManageEvent = useMemo(() => {
+    if (!event || !user) return false;
+    if (user.isSiteAdmin) return true;
+    if (!event.organizationId) return false;
+
+    return userOrganizations?.some(
+      (org) => org.organizationId === event.organizationId &&
+               (org.role === "org_admin" || org.role === "coach")
+    ) ?? false;
+  }, [event, user, userOrganizations]);
 
   // Copy event code to clipboard
   const copyEventCode = () => {
@@ -314,25 +327,27 @@ export default function EventDetail() {
               )}
             </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleToggleFreeze} disabled={freezeMutation.isPending || unfreezeMutation.isPending}>
-              {event.isFrozen ? (
-                <>
-                  <Unlock className="h-4 w-4 mr-2" />
-                  Unfreeze
-                </>
-              ) : (
-                <>
-                  <Lock className="h-4 w-4 mr-2" />
-                  Freeze
-                </>
-              )}
-            </Button>
-            <Button onClick={handleEditEvent}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Event
-            </Button>
-          </div>
+          {canManageEvent && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleToggleFreeze} disabled={freezeMutation.isPending || unfreezeMutation.isPending}>
+                {event.isFrozen ? (
+                  <>
+                    <Unlock className="h-4 w-4 mr-2" />
+                    Unfreeze
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-4 w-4 mr-2" />
+                    Freeze
+                  </>
+                )}
+              </Button>
+              <Button onClick={handleEditEvent}>
+                <Edit className="h-4 w-4 mr-2" />
+                Edit Event
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Event info bar */}
@@ -369,25 +384,29 @@ export default function EventDetail() {
           <TabsTrigger value="overview" data-testid="tab-overview">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="registrations" data-testid="tab-registrations">
-            Registrations ({approvedCount + pendingCount}
-            {invitations && invitations.length > 0 && ` + ${invitations.length} pending invitations`})
-          </TabsTrigger>
-          <TabsTrigger value="checkin" data-testid="tab-checkin">
-            Check-In ({checkedInCount}/{approvedCount})
-          </TabsTrigger>
-          <TabsTrigger value="metrics" data-testid="tab-metrics">
-            Metrics
-          </TabsTrigger>
-          <TabsTrigger value="results" data-testid="tab-results">
-            Results
-          </TabsTrigger>
-          <TabsTrigger value="reports" data-testid="tab-reports">
-            Reports
-          </TabsTrigger>
-          <TabsTrigger value="settings" data-testid="tab-settings">
-            Settings
-          </TabsTrigger>
+          {canManageEvent && (
+            <>
+              <TabsTrigger value="registrations" data-testid="tab-registrations">
+                Registrations ({approvedCount + pendingCount}
+                {invitations && invitations.length > 0 && ` + ${invitations.length} pending invitations`})
+              </TabsTrigger>
+              <TabsTrigger value="checkin" data-testid="tab-checkin">
+                Check-In ({checkedInCount}/{approvedCount})
+              </TabsTrigger>
+              <TabsTrigger value="metrics" data-testid="tab-metrics">
+                Metrics
+              </TabsTrigger>
+              <TabsTrigger value="results" data-testid="tab-results">
+                Results
+              </TabsTrigger>
+              <TabsTrigger value="reports" data-testid="tab-reports">
+                Reports
+              </TabsTrigger>
+              <TabsTrigger value="settings" data-testid="tab-settings">
+                Settings
+              </TabsTrigger>
+            </>
+          )}
         </TabsList>
 
         {/* Overview Tab */}
@@ -464,35 +483,56 @@ export default function EventDetail() {
               </Card>
             )}
 
-            {/* Quick Actions */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Common tasks for managing this event</CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-wrap gap-3">
-                <Button variant="outline" onClick={() => setSelectedTab("registrations")}>
-                  <Users className="h-4 w-4 mr-2" />
-                  View Registrations
-                </Button>
-                <Button variant="outline" onClick={() => setSelectedTab("checkin")}>
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Start Check-In
-                </Button>
-                <Button variant="outline" onClick={() => setSelectedTab("metrics")}>
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Configure Metrics
-                </Button>
-                <Button variant="outline" onClick={copyJoinLink}>
-                  <Copy className="h-4 w-4 mr-2" />
-                  Copy Join Link
-                </Button>
-              </CardContent>
-            </Card>
+            {/* Quick Actions - for coaches/admins */}
+            {canManageEvent && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Quick Actions</CardTitle>
+                  <CardDescription>Common tasks for managing this event</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-wrap gap-3">
+                  <Button variant="outline" onClick={() => setSelectedTab("registrations")}>
+                    <Users className="h-4 w-4 mr-2" />
+                    View Registrations
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedTab("checkin")}>
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Start Check-In
+                  </Button>
+                  <Button variant="outline" onClick={() => setSelectedTab("metrics")}>
+                    <BarChart3 className="h-4 w-4 mr-2" />
+                    Configure Metrics
+                  </Button>
+                  <Button variant="outline" onClick={copyJoinLink}>
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copy Join Link
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Athlete Actions - for non-managers */}
+            {!canManageEvent && event.resultsPublishedAt && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Results</CardTitle>
+                  <CardDescription>View your performance data from this event</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Link href={`/events/${eventId}/results`}>
+                    <Button>
+                      <Eye className="h-4 w-4 mr-2" />
+                      View My Results
+                    </Button>
+                  </Link>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
-        {/* Registrations Tab */}
+        {/* Registrations Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="registrations">
           {/* Pending Invitations Section */}
           {invitations && invitations.length > 0 && (
@@ -677,16 +717,20 @@ export default function EventDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
 
-        {/* Check-In Tab */}
+        {/* Check-In Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="checkin">
           <CheckInTab
             eventId={eventId!}
             registrations={typedRegistrations}
           />
         </TabsContent>
+        )}
 
-        {/* Metrics Tab */}
+        {/* Metrics Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="metrics">
           <EventMetricsTab
             eventId={eventId!}
@@ -694,8 +738,10 @@ export default function EventDetail() {
             isFrozen={event.isFrozen}
           />
         </TabsContent>
+        )}
 
-        {/* Results Tab */}
+        {/* Results Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="results">
           <EventResultsTab
             eventId={eventId!}
@@ -704,8 +750,10 @@ export default function EventDetail() {
             resultsPublishedAt={event.resultsPublishedAt}
           />
         </TabsContent>
+        )}
 
-        {/* Reports Tab */}
+        {/* Reports Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="reports">
           <EventReportsTab
             eventId={eventId!}
@@ -713,8 +761,10 @@ export default function EventDetail() {
             isFrozen={event.isFrozen}
           />
         </TabsContent>
+        )}
 
-        {/* Settings Tab */}
+        {/* Settings Tab - Admin Only */}
+        {canManageEvent && (
         <TabsContent value="settings">
           <Card>
             <CardHeader>
@@ -760,6 +810,7 @@ export default function EventDetail() {
             </CardContent>
           </Card>
         </TabsContent>
+        )}
       </Tabs>
 
       {/* Invite Athletes Modal */}
