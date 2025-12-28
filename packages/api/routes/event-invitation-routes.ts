@@ -86,13 +86,10 @@ export function registerEventInvitationRoutes(app: Express) {
         return res.status(404).json({ message: "Event not found" });
       }
 
-      // Return invitation with event details
+      // Return invitation with embedded event details
+      // Frontend expects: { ...invitationFields, event: {...} }
       res.json({
-        invitation: {
-          id: invitation.id,
-          status: invitation.status,
-          expiresAt: invitation.expiresAt,
-        },
+        ...invitation,
         event: {
           id: event.id,
           name: event.name,
