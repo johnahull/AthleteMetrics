@@ -83,13 +83,6 @@ export function AthleteOrgProvider({ children }: { children: React.ReactNode }) 
       isInitializedRef.current = user.id;
       prevOrgsRef.current = organizations;
 
-      // Edge case: If user has 0 organizations, auto-select "personal"
-      if (organizations.length === 0) {
-        setFilterModeState('personal');
-        setAthleteOrgFilter(user.id, 'personal');
-        return;
-      }
-
       const storedFilter = getAthleteOrgFilter(user.id);
 
       // Validate stored filter
