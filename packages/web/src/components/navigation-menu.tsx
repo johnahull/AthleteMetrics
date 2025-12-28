@@ -3,11 +3,12 @@ import React from "react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 
-interface NavigationItem {
+export interface NavigationItem {
   name: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
   testId?: string; // Optional custom test ID
+  badge?: number; // Optional badge count
 }
 
 interface NavigationMenuProps {
@@ -35,6 +36,11 @@ export function NavigationMenu({ navigation, currentLocation, onNavigate }: Navi
             >
               <item.icon className="h-5 w-5" />
               <span>{item.name}</span>
+              {item.badge !== undefined && item.badge > 0 && (
+                <span className="ml-auto bg-amber-500 text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                  {item.badge}
+                </span>
+              )}
             </div>
           </Link>
         );

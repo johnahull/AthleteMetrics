@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { Calendar, MapPin, Clock, Search, CheckCircle, XCircle, AlertCircle, Mail } from "lucide-react";
 import { format, formatDistanceToNow, isFuture, isPast } from "date-fns";
@@ -224,6 +225,19 @@ export default function MyEvents() {
 
   return (
     <div className="p-6">
+      {/* Pending Invitations Alert Banner */}
+      {pendingInvitations && pendingInvitations.length > 0 && (
+        <Alert className="mb-6 bg-amber-50 border-amber-300">
+          <Mail className="h-4 w-4 text-amber-600" />
+          <AlertTitle className="text-amber-900">
+            You have {pendingInvitations.length} pending invitation{pendingInvitations.length === 1 ? '' : 's'}!
+          </AlertTitle>
+          <AlertDescription className="text-amber-800">
+            Review and respond to your invitations below.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">My Events</h1>
