@@ -143,12 +143,13 @@ export function registerAllRoutes(app: Express) {
   // Site admin notification routes (global settings and analytics)
   registerAdminNotificationRoutes(app);
 
+  // Event registration routes (self-registration, approval, check-in)
+  // IMPORTANT: Must be BEFORE registerEventRoutes because /api/events/my-registrations
+  // must match before the parameterized /api/events/:eventId route
+  registerEventRegistrationRoutes(app);
+
   // Event management routes (combines, camps, testing days)
   registerEventRoutes(app);
-
-  // Event registration routes (self-registration, approval, check-in)
-  // IMPORTANT: Must be after registerEventRoutes to avoid route conflicts
-  registerEventRegistrationRoutes(app);
 
   // Event invitation routes (token-based invitations)
   registerEventInvitationRoutes(app);
