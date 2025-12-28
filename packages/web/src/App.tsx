@@ -111,6 +111,7 @@ const EventDetail = React.lazy(() => import("./pages/event-detail"));
 const EventJoin = React.lazy(() => import("./pages/event-join"));
 const EventInvite = React.lazy(() => import("./pages/event-invite"));
 const EventDataEntry = React.lazy(() => import("./pages/event-data-entry"));
+const EventResults = React.lazy(() => import("./pages/event-results"));
 
 function Router() {
   return (
@@ -431,6 +432,11 @@ function Router() {
       <Route path="/events/:eventId/data-entry">
         <RouteWrapper loadingText="Loading Data Entry...">
           <EventDataEntry />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/:eventId/results">
+        <RouteWrapper loadingText="Loading Results...">
+          <EventResults />
         </RouteWrapper>
       </Route>
       <Route path="/events/:eventId/edit">

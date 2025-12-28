@@ -20,10 +20,12 @@ import { VerificationBadge } from './VerificationBadge';
 import { OrgBadge, PersonalBadge } from './OrgBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ChevronUp, Download, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getMetricDisplayName } from '@/constants/metrics';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
+import { Link } from 'wouter';
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -35,6 +37,8 @@ export interface MeasurementHistoryTableProps {
   onDelete?: (measurement: Measurement) => void;
   /** Map of organization IDs to names for displaying badges */
   organizationNames?: Record<string, string>;
+  /** Force display of source column (event/org badges) regardless of context */
+  showSourceColumn?: boolean;
 }
 
 type SortField = 'date' | 'metric' | 'value';
@@ -56,12 +60,13 @@ export function MeasurementHistoryTable({
   onEdit,
   onDelete,
   organizationNames = {},
+  showSourceColumn = false,
 }: MeasurementHistoryTableProps) {
   const showActions = Boolean(onEdit || onDelete);
 
   // Try to get filter mode from context to determine if we should show org column
   const athleteOrgContext = useContext(AthleteOrgContext);
-  const showOrgColumn = athleteOrgContext?.filterMode === 'all';
+  const showOrgColumn = showSourceColumn || athleteOrgContext?.filterMode === 'all';
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -270,7 +275,16 @@ export function MeasurementHistoryTable({
                   </TableCell>
                   {showOrgColumn && (
                     <TableCell>
-                      {measurement.organizationId ? (
+                      {measurement.eventId && measurement.eventNameSnapshot ? (
+                        <Link href={`/events/${measurement.eventId}/results`}>
+                          <Badge
+                            variant="outline"
+                            className="cursor-pointer hover:bg-blue-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+                          >
+                            {measurement.eventNameSnapshot}
+                          </Badge>
+                        </Link>
+                      ) : measurement.organizationId ? (
                         <OrgBadge
                           organizationName={organizationNames[measurement.organizationId] || 'Unknown'}
                           organizationId={measurement.organizationId}
