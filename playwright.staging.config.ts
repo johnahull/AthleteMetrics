@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import { existsSync } from 'fs';
 
 /**
  * Playwright Configuration for Staging Environment Testing
@@ -69,17 +68,24 @@ export default defineConfig({
   // Configure projects for different browsers
   // CI: Only test chromium for speed (8-10 min vs 45 min with all browsers)
   // Local: Test full browser matrix including mobile viewports
+  // Projects configuration
+  // IMPORTANT: storageState must be set unconditionally here.
+  // The existsSync check was causing auth failures because:
+  // 1. Config loads BEFORE globalSetup runs
+  // 2. File doesn't exist yet at config load time
+  // 3. existsSync returns false, so storageState was never set
+  // 4. globalSetup creates the file, but config was already evaluated
+  // 5. Tests ran without auth state
+  //
+  // Playwright only reads storageState when creating browser contexts (AFTER globalSetup),
+  // so it's safe to reference the file path even before it exists.
   projects: process.env.CI ? [
     {
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        // Reuse authentication state to avoid rate limiting
-        // Only use storageState if it exists (created by global-setup.ts)
-        // This prevents errors on first CI run before global-setup completes
-        ...(existsSync('./playwright/.auth/user.json') && {
-          storageState: './playwright/.auth/user.json',
-        }),
+        // Reuse authentication state created by global-setup.ts
+        storageState: './playwright/.auth/user.json',
       },
     },
   ] : [
@@ -87,9 +93,7 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        ...(existsSync('./playwright/.auth/user.json') && {
-          storageState: './playwright/.auth/user.json',
-        }),
+        storageState: './playwright/.auth/user.json',
       },
     },
 
@@ -108,18 +112,14 @@ export default defineConfig({
       name: 'Mobile Chrome',
       use: {
         ...devices['Pixel 5'],
-        ...(existsSync('./playwright/.auth/user.json') && {
-          storageState: './playwright/.auth/user.json',
-        }),
+        storageState: './playwright/.auth/user.json',
       },
     },
     {
       name: 'Mobile Safari',
       use: {
         ...devices['iPhone 12'],
-        ...(existsSync('./playwright/.auth/user.json') && {
-          storageState: './playwright/.auth/user.json',
-        }),
+        storageState: './playwright/.auth/user.json',
       },
     },
   ],
