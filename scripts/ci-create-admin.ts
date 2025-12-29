@@ -70,8 +70,7 @@ async function createAdmin() {
         UPDATE users
         SET password = ${hashedPassword},
             is_site_admin = true,
-            is_active = true,
-            updated_at = NOW()
+            is_active = true
         WHERE username = ${username}
       `;
       console.log('✅ Admin user password updated');
@@ -93,8 +92,7 @@ async function createAdmin() {
           is_site_admin,
           is_active,
           is_email_verified,
-          created_at,
-          updated_at
+          created_at
         ) VALUES (
           ${userId},
           ${username},
@@ -106,7 +104,6 @@ async function createAdmin() {
           true,
           true,
           true,
-          NOW(),
           NOW()
         )
       `;
