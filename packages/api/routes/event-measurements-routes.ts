@@ -56,6 +56,10 @@ export function registerEventMeasurementsRoutes(app: Express) {
   /**
    * List all measurements for an event
    * GET /api/events/:eventId/measurements
+   *
+   * Access rules:
+   * - Coaches/Org Admins/Site Admins: Can view all measurements
+   * - Athletes: Can view ONLY their own measurements if results are published
    */
   app.get(
     "/api/events/:eventId/measurements",
@@ -65,6 +69,7 @@ export function registerEventMeasurementsRoutes(app: Express) {
       try {
         const { eventId } = req.params;
         const user = req.user as SessionUser;
+        const requestedUserId = req.query.userId as string | undefined;
 
         // Get the event to check permissions
         const event = await storage.getEvent(eventId);
@@ -72,14 +77,27 @@ export function registerEventMeasurementsRoutes(app: Express) {
           return res.status(404).json({ error: "Event not found" });
         }
 
-        // Check if user has access
-        const hasAccess = await canManageEventMeasurements(user, eventId);
-        if (!hasAccess) {
+        // Check if user has management access (coach/org_admin/site_admin)
+        const hasManagementAccess = await canManageEventMeasurements(user, eventId);
+
+        // Athletes can only view their own measurements if results are published
+        const isViewingOwnData = requestedUserId === user.id;
+        const resultsPublished = !!event.resultsPublishedAt;
+        const athleteCanViewOwn = isViewingOwnData && resultsPublished;
+
+        if (!hasManagementAccess && !athleteCanViewOwn) {
+          // If not a manager and either not requesting own data or results not published
+          if (!resultsPublished) {
+            return res.status(403).json({ error: "Results have not been published yet" });
+          }
           return res.status(403).json({ error: "Access denied" });
         }
 
+        // If athlete viewing own data, force the userId filter to their own ID
+        const effectiveUserId = hasManagementAccess ? requestedUserId : user.id;
+
         const measurements = await eventMeasurementsService.getEventMeasurements(eventId, {
-          userId: req.query.userId as string | undefined,
+          userId: effectiveUserId,
           metricCode: req.query.metricCode as string | undefined,
         });
 
