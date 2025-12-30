@@ -80,9 +80,7 @@ CREATE TABLE IF NOT EXISTS event_registrations (
   admin_notes TEXT,
 
   created_at TIMESTAMP DEFAULT NOW() NOT NULL,
-  updated_at TIMESTAMP,
-
-  UNIQUE(event_id, user_id)
+  updated_at TIMESTAMP
 );
 
 -- Create event_invitations table
@@ -147,6 +145,11 @@ CREATE INDEX IF NOT EXISTS event_registrations_status_idx ON event_registrations
 CREATE INDEX IF NOT EXISTS event_registrations_event_status_idx ON event_registrations(event_id, status);
 CREATE INDEX IF NOT EXISTS event_registrations_waitlist_idx ON event_registrations(event_id, waitlist_position);
 
+-- Partial UNIQUE index: Prevents duplicate active registrations but allows re-registration after cancellation
+CREATE UNIQUE INDEX IF NOT EXISTS event_registrations_user_active_unique
+  ON event_registrations(event_id, user_id)
+  WHERE status NOT IN ('cancelled', 'declined');
+
 -- Create indexes for event_invitations table
 CREATE INDEX IF NOT EXISTS event_invitations_event_idx ON event_invitations(event_id);
 CREATE INDEX IF NOT EXISTS event_invitations_user_idx ON event_invitations(user_id);
@@ -163,21 +166,51 @@ CREATE INDEX IF NOT EXISTS event_freeze_overrides_event_idx ON event_freeze_over
 CREATE INDEX IF NOT EXISTS event_freeze_overrides_action_idx ON event_freeze_overrides(action);
 CREATE INDEX IF NOT EXISTS event_freeze_overrides_user_idx ON event_freeze_overrides(overridden_by);
 
--- Add CHECK constraints for enums
-ALTER TABLE events ADD CONSTRAINT events_visibility_check
-  CHECK (visibility IN ('org_private', 'public', 'invite_only'));
-ALTER TABLE events ADD CONSTRAINT events_status_check
-  CHECK (status IN ('draft', 'published', 'active', 'completed', 'cancelled'));
-ALTER TABLE events ADD CONSTRAINT events_registration_mode_check
-  CHECK (registration_mode IN ('open', 'request_approval', 'invitation_only'));
-ALTER TABLE events ADD CONSTRAINT events_results_visibility_check
-  CHECK (results_visibility IN ('immediate', 'after_event', 'manual'));
+-- Add CHECK constraints for enums (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'events_visibility_check'
+  ) THEN
+    ALTER TABLE events ADD CONSTRAINT events_visibility_check
+      CHECK (visibility IN ('org_private', 'public', 'invite_only'));
+  END IF;
 
-ALTER TABLE event_registrations ADD CONSTRAINT event_registrations_status_check
-  CHECK (status IN ('pending', 'approved', 'waitlisted', 'declined', 'cancelled', 'checked_in', 'completed'));
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'events_status_check'
+  ) THEN
+    ALTER TABLE events ADD CONSTRAINT events_status_check
+      CHECK (status IN ('draft', 'published', 'active', 'completed', 'cancelled'));
+  END IF;
 
-ALTER TABLE event_invitations ADD CONSTRAINT event_invitations_status_check
-  CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'cancelled'));
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'events_registration_mode_check'
+  ) THEN
+    ALTER TABLE events ADD CONSTRAINT events_registration_mode_check
+      CHECK (registration_mode IN ('open', 'request_approval', 'invitation_only'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'events_results_visibility_check'
+  ) THEN
+    ALTER TABLE events ADD CONSTRAINT events_results_visibility_check
+      CHECK (results_visibility IN ('immediate', 'after_event', 'manual'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'event_registrations_status_check'
+  ) THEN
+    ALTER TABLE event_registrations ADD CONSTRAINT event_registrations_status_check
+      CHECK (status IN ('pending', 'approved', 'waitlisted', 'declined', 'cancelled', 'checked_in', 'completed'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'event_invitations_status_check'
+  ) THEN
+    ALTER TABLE event_invitations ADD CONSTRAINT event_invitations_status_check
+      CHECK (status IN ('pending', 'accepted', 'declined', 'expired', 'cancelled'));
+  END IF;
+END $$;
 
 -- Add event resource type to audit_logs if not exists
 DO $$

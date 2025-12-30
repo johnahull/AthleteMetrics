@@ -19,12 +19,12 @@
 
 -- Add event context columns to measurements table
 ALTER TABLE measurements
-  ADD COLUMN event_id VARCHAR,
-  ADD COLUMN event_name_snapshot TEXT,
-  ADD COLUMN event_date_snapshot DATE;
+  ADD COLUMN IF NOT EXISTS event_id VARCHAR,
+  ADD COLUMN IF NOT EXISTS event_name_snapshot TEXT,
+  ADD COLUMN IF NOT EXISTS event_date_snapshot DATE;
 
 -- Add performance index for event-based measurement queries
-CREATE INDEX measurements_event_idx ON measurements(event_id, date);
+CREATE INDEX IF NOT EXISTS measurements_event_idx ON measurements(event_id, date);
 
 -- Add comment for documentation
 COMMENT ON COLUMN measurements.event_id IS 'Event ID at time of measurement (historical reference, no FK)';

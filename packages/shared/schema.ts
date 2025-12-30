@@ -435,6 +435,8 @@ export const measurements = pgTable("measurements", {
   // Performance indexes for peer comparison queries
   metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
   userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
+  // Event-based measurement queries (added in migration 0081)
+  eventIdx: index("measurements_event_idx").on(table.eventId, table.date),
   // Derived metrics indexes (partial indexes: WHERE is_calculated = true / is_verified = true)
   isCalculatedIdx: index("idx_measurements_is_calculated").on(table.isCalculated).where(sql`${table.isCalculated} = true`),
   // Note: idx_measurements_calculated_from is a GIN index (USING GIN) created in migration 0083
