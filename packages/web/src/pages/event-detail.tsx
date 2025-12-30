@@ -176,7 +176,7 @@ export default function EventDetail() {
   const handleCancelMyRegistration = async () => {
     if (!eventId || !myRegistration) return;
     try {
-      await cancelRegistrationMutation.mutateAsync({ eventId });
+      await cancelRegistrationMutation.mutateAsync(eventId);
       toast({
         title: "Registration Cancelled",
         description: "You have cancelled your registration for this event.",

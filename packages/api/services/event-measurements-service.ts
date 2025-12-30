@@ -81,7 +81,7 @@ export class EventMeasurementsService {
         notes: data.notes,
         eventId: eventId,
         eventNameSnapshot: event.name,
-        eventDateSnapshot: event.startDate!,
+        eventDateSnapshot: event.startDate!.toISOString().split('T')[0],
       },
       createdBy
     );
@@ -121,7 +121,7 @@ export class EventMeasurementsService {
             notes: m.notes,
             eventId: eventId,
             eventNameSnapshot: event.name,
-            eventDateSnapshot: event.startDate!,
+            eventDateSnapshot: event.startDate!.toISOString().split('T')[0],
           },
           createdBy
         );

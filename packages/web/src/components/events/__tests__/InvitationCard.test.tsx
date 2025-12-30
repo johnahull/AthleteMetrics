@@ -137,7 +137,7 @@ describe('InvitationCard', () => {
     it('should display formatted event date', () => {
       const futureDate = new Date('2025-06-15T12:00:00Z');
       const invitation = createMockInvitation();
-      invitation.event.startDate = futureDate.toISOString();
+      invitation.event.startDate = futureDate;
       render(<InvitationCard invitation={invitation} />);
 
       // Should show the formatted date
@@ -159,7 +159,7 @@ describe('InvitationCard', () => {
   describe('Expiration Warning', () => {
     it('should display expiration warning when expires in 7 days or less', () => {
       const invitation = createMockInvitation();
-      invitation.expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(); // 3 days
+      invitation.expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000); // 3 days
       render(<InvitationCard invitation={invitation} />);
 
       expect(screen.getByText(/Expires in 3 days/)).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe('InvitationCard', () => {
 
     it('should show singular "day" when expiring tomorrow', () => {
       const invitation = createMockInvitation();
-      invitation.expiresAt = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000).toISOString(); // 1 day
+      invitation.expiresAt = new Date(Date.now() + 1 * 24 * 60 * 60 * 1000); // 1 day
       render(<InvitationCard invitation={invitation} />);
 
       expect(screen.getByText(/Expires in 1 day/)).toBeInTheDocument();

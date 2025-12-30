@@ -17,22 +17,31 @@ function createMockEvent(overrides: Partial<EventWithCounts> = {}): EventWithCou
     name: 'Spring Combine 2025',
     eventType: 'combine',
     status: 'published',
-    startDate: new Date('2025-03-15').toISOString(),
+    startDate: new Date('2025-03-15'),
     endDate: null,
     location: 'Main Stadium',
     description: 'Annual spring combine event for athletes.',
-    visibility: 'organization_only',
+    visibility: 'org_private',
     registrationMode: 'open',
     maxRegistrations: 50,
     registrationCount: 25,
     waitlistCount: 0,
     checkedInCount: 0,
     organizationId: 'org-123',
-    createdById: 'user-123',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdBy: 'user-123',
+    createdAt: new Date(),
+    updatedAt: null,
     isFrozen: false,
     eventCode: 'SC2025',
+    timezone: 'America/New_York',
+    resultsVisibility: 'after_event',
+    registrationOpensAt: null,
+    registrationClosesAt: null,
+    resultsPublishedAt: null,
+    resultsPublishedBy: null,
+    frozenAt: null,
+    frozenBy: null,
+    frozenReason: null,
     ...overrides,
   };
 }
@@ -87,7 +96,7 @@ describe('EventCard', () => {
       futureDate.setFullYear(futureDate.getFullYear() + 1);
       render(<EventCard event={createMockEvent({
         status: 'completed',
-        startDate: futureDate.toISOString(),
+        startDate: futureDate,
       })} />);
       expect(screen.getByText('Completed')).toBeInTheDocument();
     });
@@ -97,7 +106,7 @@ describe('EventCard', () => {
     it('should display formatted single date', () => {
       // Use explicit time to avoid timezone issues
       render(<EventCard event={createMockEvent({
-        startDate: '2025-03-15T12:00:00Z',
+        startDate: new Date('2025-03-15T12:00:00Z'),
         endDate: null,
       })} />);
       expect(screen.getByText('Mar 15, 2025')).toBeInTheDocument();
@@ -105,16 +114,16 @@ describe('EventCard', () => {
 
     it('should display date range for multi-day event in same month', () => {
       render(<EventCard event={createMockEvent({
-        startDate: '2025-03-15T12:00:00Z',
-        endDate: '2025-03-17T12:00:00Z',
+        startDate: new Date('2025-03-15T12:00:00Z'),
+        endDate: new Date('2025-03-17T12:00:00Z'),
       })} />);
       expect(screen.getByText('Mar 15-17, 2025')).toBeInTheDocument();
     });
 
     it('should display date range for multi-day event across months', () => {
       render(<EventCard event={createMockEvent({
-        startDate: '2025-03-28T12:00:00Z',
-        endDate: '2025-04-02T12:00:00Z',
+        startDate: new Date('2025-03-28T12:00:00Z'),
+        endDate: new Date('2025-04-02T12:00:00Z'),
       })} />);
       expect(screen.getByText('Mar 28 - Apr 2, 2025')).toBeInTheDocument();
     });
@@ -125,8 +134,8 @@ describe('EventCard', () => {
       // Use a non-completed status so time label is the only "Completed" text
       render(<EventCard event={createMockEvent({
         status: 'published',
-        startDate: '2020-01-01T12:00:00Z',
-        endDate: '2020-01-02T12:00:00Z',
+        startDate: new Date('2020-01-01T12:00:00Z'),
+        endDate: new Date('2020-01-02T12:00:00Z'),
       })} />);
       expect(screen.getByText('Completed')).toBeInTheDocument();
     });
@@ -139,8 +148,8 @@ describe('EventCard', () => {
       tomorrow.setDate(tomorrow.getDate() + 1);
 
       render(<EventCard event={createMockEvent({
-        startDate: yesterday.toISOString(),
-        endDate: tomorrow.toISOString(),
+        startDate: yesterday,
+        endDate: tomorrow,
       })} />);
       expect(screen.getByText('In Progress')).toBeInTheDocument();
     });
@@ -150,7 +159,7 @@ describe('EventCard', () => {
       futureDate.setMonth(futureDate.getMonth() + 2);
 
       render(<EventCard event={createMockEvent({
-        startDate: futureDate.toISOString(),
+        startDate: futureDate,
         endDate: null,
       })} />);
       // Should contain "In" followed by time distance
