@@ -1,6 +1,6 @@
 import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
 import { getCachedUserOrganizations } from "./helpers/cached-org-access";
 import { logAuthorizationFailure } from "./helpers/audit-logging";
 
@@ -8,7 +8,38 @@ import { logAuthorizationFailure } from "./helpers/audit-logging";
 // since we've augmented the Express.Request interface globally in types/session.d.ts
 export type AuthenticatedRequest = Request;
 
-const canAccessOrganization = async (req: Request, user: any, organizationId: string): Promise<boolean> => {
+/**
+ * Session user type from session data
+ * Matches the SessionData.user structure in types/session.d.ts
+ */
+type SessionUser = {
+  id: string;
+  username?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  athleteId?: string;
+  isSiteAdmin?: boolean;
+  primaryOrganizationId?: string;
+  emailVerified?: boolean;
+  admin?: true; // Legacy admin flag for backward compatibility
+};
+
+/**
+ * Legacy admin user object for backward compatibility with old session format
+ * Used when req.session.admin is true but req.session.user is not set
+ */
+const LEGACY_ADMIN_USER: Express.User = {
+  id: 'admin',
+  email: 'admin@system',
+  firstName: 'System',
+  lastName: 'Admin',
+  role: 'site_admin',
+  isSiteAdmin: true,
+};
+
+const canAccessOrganization = async (req: Request, user: SessionUser, organizationId: string): Promise<boolean> => {
   if (!user?.id || !organizationId) return false;
   if (isSiteAdmin(user)) return true;
 
@@ -17,18 +48,20 @@ const canAccessOrganization = async (req: Request, user: any, organizationId: st
 };
 
 // Base authentication middleware
-export const requireAuth = (req: any, res: Response, next: NextFunction) => {
-  const user = req.session.user || (req.session.admin ? { admin: true } : null);
+export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  const sessionUser = req.session?.user;
+  const user: SessionUser | null = sessionUser || (req.session?.admin ? LEGACY_ADMIN_USER : null);
   if (!user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  req.user = user;
+  req.user = user as Express.User;
   next();
 };
 
 // Site admin only middleware
-export const requireSiteAdmin = async (req: any, res: Response, next: NextFunction) => {
-  const user = req.session.user || (req.session.admin ? { admin: true } : null);
+export const requireSiteAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  const sessionUser = req.session?.user;
+  const user: SessionUser | null = sessionUser || (req.session?.admin ? LEGACY_ADMIN_USER : null);
 
   // Check authentication first (return 401 if not authenticated)
   if (!user) {
@@ -46,7 +79,7 @@ export const requireSiteAdmin = async (req: any, res: Response, next: NextFuncti
     return res.status(403).json({ message: "Site admin access required" });
   }
 
-  req.user = user;
+  req.user = user as Express.User;
   next();
 };
 
@@ -381,7 +414,7 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
         const athleteTeams = await storage.getUserTeams(athleteId);
         const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
-        isTargetedViaTeam = wellnessRequest.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+        isTargetedViaTeam = wellnessRequest.targetTeamIds.some((teamId: string) => athleteTeamIds.includes(teamId));
       }
 
       if (!isTargetedDirectly && !isTargetedViaTeam) {

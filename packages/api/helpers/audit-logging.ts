@@ -105,15 +105,26 @@ export function logAuthorizationFailure(
   };
 
   // Fire-and-forget: Don't await, don't throw
-  storage.createSecurityEvent({
-    eventType: 'authorization_failed',
+  // For critical security events, we log to console as a fallback if DB fails
+  const securityEvent = {
+    eventType: 'authorization_failed' as const,
     userId: userId ?? null,
-    severity: 'warning',
+    severity: 'warning' as const,
     eventData: JSON.stringify(eventData),
-    ipAddress: normalizeIpAddress(sanitizeLogField(context.ipAddress)), // Sanitize before normalization
+    ipAddress: normalizeIpAddress(sanitizeLogField(context.ipAddress)),
     userAgent: sanitizeLogField(context.userAgent) ?? null,
-  }).catch(err => {
-    // Log error to console but don't propagate
-    console.error('[security:audit] Failed to log authorization failure:', err);
+    timestamp: new Date().toISOString(),
+  };
+
+  storage.createSecurityEvent(securityEvent).catch(err => {
+    // Primary storage failed - use fallback console logging
+    // This ensures security events are captured even when DB is unavailable
+    console.error('[security:audit] CRITICAL: Failed to persist security event to database');
+    console.error('[security:audit] Database error:', err instanceof Error ? err.message : err);
+    // Log the event to console as fallback (structured for log aggregation tools)
+    console.warn('[security:audit:fallback]', JSON.stringify({
+      ...securityEvent,
+      fallbackReason: 'database_write_failed',
+    }));
   });
 }

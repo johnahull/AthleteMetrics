@@ -66,10 +66,16 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_team_id_temp
 
 DO $$
 DECLARE
+  -- Batch size constant: Controls how many rows are processed per iteration
+  -- 1000 rows provides a good balance between:
+  --   - Efficiency: Large enough to minimize loop overhead
+  --   - Lock contention: Small enough to avoid long-held locks
+  --   - Memory usage: Prevents excessive memory consumption
+  BATCH_SIZE CONSTANT INTEGER := 1000;
   rows_updated INTEGER := 1;
   total_updated INTEGER := 0;
 BEGIN
-  RAISE NOTICE 'Starting backfill from teams...';
+  RAISE NOTICE 'Starting backfill from teams (batch size: %)...', BATCH_SIZE;
 
   WHILE rows_updated > 0 LOOP
     WITH batch AS (
@@ -78,7 +84,7 @@ BEGIN
       INNER JOIN teams t ON m.team_id = t.id
       WHERE m.organization_id IS NULL
         AND t.organization_id IS NOT NULL
-      LIMIT 1000
+      LIMIT BATCH_SIZE
     )
     UPDATE measurements m
     SET organization_id = t.organization_id
@@ -107,10 +113,16 @@ END $$;
 
 DO $$
 DECLARE
+  -- Batch size constant: Controls how many rows are processed per iteration
+  -- 1000 rows provides a good balance between:
+  --   - Efficiency: Large enough to minimize loop overhead
+  --   - Lock contention: Small enough to avoid long-held locks
+  --   - Memory usage: Prevents excessive memory consumption
+  BATCH_SIZE CONSTANT INTEGER := 1000;
   rows_updated INTEGER := 1;
   total_updated INTEGER := 0;
 BEGIN
-  RAISE NOTICE 'Starting backfill from user_organizations...';
+  RAISE NOTICE 'Starting backfill from user_organizations (batch size: %)...', BATCH_SIZE;
 
   WHILE rows_updated > 0 LOOP
     WITH batch AS (
@@ -122,7 +134,7 @@ BEGIN
           SELECT 1 FROM user_organizations uo
           WHERE uo.user_id = m.user_id
         )
-      LIMIT 1000
+      LIMIT BATCH_SIZE
     ),
     user_org_lookup AS (
       SELECT DISTINCT ON (uo.user_id)
