@@ -5,7 +5,9 @@
 -- Date: 2025-12-17
 
 -- Create backup table before clearing (enables rollback)
-CREATE TABLE IF NOT EXISTS site_metrics_sport_backup_20251217 AS
+-- Drop and recreate to ensure it's populated on every run (idempotent)
+DROP TABLE IF EXISTS site_metrics_sport_backup_20251217;
+CREATE TABLE site_metrics_sport_backup_20251217 AS
 SELECT id, code, sport_associations, updated_at
 FROM site_metrics
 WHERE is_system_default = true AND sport_associations IS NOT NULL;

@@ -80,6 +80,31 @@ CREATE TABLE IF NOT EXISTS notification_history (
     retry_count INTEGER DEFAULT 0
 );
 
+-- Validate existing data before adding CHECK constraints
+DO $$
+DECLARE
+  invalid_type_count INTEGER;
+  invalid_status_count INTEGER;
+BEGIN
+  -- Check for invalid type values
+  SELECT COUNT(*) INTO invalid_type_count
+  FROM notification_history
+  WHERE type NOT IN ('wellness_survey', 'wellness_digest', 'new_measurement', 'team_announcement');
+
+  IF invalid_type_count > 0 THEN
+    RAISE EXCEPTION 'Found % invalid type values in notification_history - clean up before migration', invalid_type_count;
+  END IF;
+
+  -- Check for invalid delivery_status values
+  SELECT COUNT(*) INTO invalid_status_count
+  FROM notification_history
+  WHERE delivery_status NOT IN ('pending', 'delivered', 'failed', 'expired');
+
+  IF invalid_status_count > 0 THEN
+    RAISE EXCEPTION 'Found % invalid delivery_status values in notification_history - clean up before migration', invalid_status_count;
+  END IF;
+END $$;
+
 -- Add CHECK constraints idempotently
 DO $$
 BEGIN

@@ -50,6 +50,16 @@ BEGIN
 END $$;
 
 -- ============================================================================
+-- STEP 1.5: Create temporary index for performance
+-- Index on measurements.team_id WHERE organization_id IS NULL
+-- This speeds up the JOIN in Step 2 significantly (from 5-10s to milliseconds per batch)
+-- ============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_measurements_team_id_temp
+  ON measurements(team_id)
+  WHERE organization_id IS NULL;
+
+-- ============================================================================
 -- STEP 2: Backfill from teams table (measurements with team_id)
 -- This is the most accurate source - team explicitly defines the organization
 -- ============================================================================
@@ -206,3 +216,9 @@ BEGIN
     RAISE NOTICE '✅ SUCCESS: All measurements have organization_id set';
   END IF;
 END $$;
+
+-- ============================================================================
+-- STEP 6: Clean up temporary index
+-- ============================================================================
+
+DROP INDEX CONCURRENTLY IF EXISTS idx_measurements_team_id_temp;
