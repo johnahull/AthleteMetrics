@@ -73,6 +73,7 @@ vi.mock('@/lib/events-api', () => ({
   useApproveRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeclineRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useCancelInvitation: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
+  useCancelRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 
 // Mock toast

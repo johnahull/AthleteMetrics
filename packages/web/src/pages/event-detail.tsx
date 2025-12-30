@@ -16,6 +16,7 @@ import {
   useApproveRegistration,
   useDeclineRegistration,
   useCancelInvitation,
+  useCancelRegistration,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -73,6 +74,7 @@ export default function EventDetail() {
   const [declineDialog, setDeclineDialog] = useState<{ open: boolean; registrationId: string | null }>({ open: false, registrationId: null });
   const [declineReason, setDeclineReason] = useState("");
   const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
+  const [cancelMyRegistrationDialog, setCancelMyRegistrationDialog] = useState(false);
 
   // Fetch event data
   const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
@@ -89,6 +91,13 @@ export default function EventDetail() {
   const approveMutation = useApproveRegistration();
   const declineMutation = useDeclineRegistration();
   const cancelInvitationMutation = useCancelInvitation();
+  const cancelRegistrationMutation = useCancelRegistration();
+
+  // Find the current user's registration (for athlete view)
+  const myRegistration = useMemo(() => {
+    if (!registrations || !user) return null;
+    return registrations.find((r: any) => r.userId === user.id);
+  }, [registrations, user]);
 
   // Handle approve registration
   const handleApprove = async (registrationId: string) => {
@@ -161,6 +170,25 @@ export default function EventDetail() {
         variant: "destructive",
         title: "Error",
         description: "Failed to cancel invitation.",
+      });
+    }
+  };
+
+  // Handle athlete cancelling their own registration
+  const handleCancelMyRegistration = async () => {
+    if (!eventId || !myRegistration) return;
+    try {
+      await cancelRegistrationMutation.mutateAsync({ eventId });
+      toast({
+        title: "Registration Cancelled",
+        description: "You have cancelled your registration for this event.",
+      });
+      setCancelMyRegistrationDialog(false);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to cancel registration.",
       });
     }
   };
@@ -513,7 +541,60 @@ export default function EventDetail() {
               </Card>
             )}
 
-            {/* Athlete Actions - for non-managers */}
+            {/* Athlete Registration Status - for non-managers */}
+            {!canManageEvent && myRegistration && (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Registration</CardTitle>
+                  <CardDescription>Your status for this event</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <Badge
+                      variant={
+                        myRegistration.status === 'approved' ? 'default' :
+                        myRegistration.status === 'checked_in' ? 'default' :
+                        myRegistration.status === 'pending' ? 'secondary' :
+                        myRegistration.status === 'waitlisted' ? 'secondary' :
+                        'destructive'
+                      }
+                      className={
+                        myRegistration.status === 'approved' ? 'bg-green-100 text-green-800' :
+                        myRegistration.status === 'checked_in' ? 'bg-blue-100 text-blue-800' :
+                        myRegistration.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                        myRegistration.status === 'waitlisted' ? 'bg-orange-100 text-orange-800' :
+                        ''
+                      }
+                    >
+                      {myRegistration.status === 'approved' && '✓ Registered'}
+                      {myRegistration.status === 'checked_in' && '✓ Checked In'}
+                      {myRegistration.status === 'pending' && '⏳ Pending Approval'}
+                      {myRegistration.status === 'waitlisted' && '📋 Waitlisted'}
+                      {myRegistration.status === 'declined' && '✗ Declined'}
+                      {myRegistration.status === 'cancelled' && '✗ Cancelled'}
+                    </Badge>
+                    {myRegistration.checkedInAt && (
+                      <span className="text-sm text-muted-foreground">
+                        Checked in at {format(new Date(myRegistration.checkedInAt), 'h:mm a')}
+                      </span>
+                    )}
+                  </div>
+                  {/* Cancel button - only show if not already checked in or cancelled/declined */}
+                  {!['checked_in', 'cancelled', 'declined'].includes(myRegistration.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => setCancelMyRegistrationDialog(true)}
+                    >
+                      Cancel Registration
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Athlete Results - for non-managers when results published */}
             {!canManageEvent && event.resultsPublishedAt && (
               <Card>
                 <CardHeader>
@@ -897,6 +978,36 @@ export default function EventDetail() {
               disabled={cancelInvitationMutation.isPending}
             >
               {cancelInvitationMutation.isPending ? "Cancelling..." : "Cancel Invitation"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancel My Registration Dialog (for athletes) */}
+      <Dialog
+        open={cancelMyRegistrationDialog}
+        onOpenChange={setCancelMyRegistrationDialog}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cancel Registration</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel your registration for this event? You may need to re-register if you change your mind.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setCancelMyRegistrationDialog(false)}
+            >
+              No, Keep It
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleCancelMyRegistration}
+              disabled={cancelRegistrationMutation.isPending}
+            >
+              {cancelRegistrationMutation.isPending ? "Cancelling..." : "Yes, Cancel Registration"}
             </Button>
           </DialogFooter>
         </DialogContent>
