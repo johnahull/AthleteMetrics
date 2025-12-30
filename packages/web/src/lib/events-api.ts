@@ -225,6 +225,21 @@ export async function registerForEvent(params: RegisterForEventParams): Promise<
 }
 
 /**
+ * Fetch own registration for a specific event
+ */
+export async function fetchMyEventRegistration(eventId: string): Promise<EventRegistration | null> {
+  const response = await fetch(`/api/events/${eventId}/my-registration`);
+  if (response.status === 404) {
+    return null;  // Not registered
+  }
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to fetch registration');
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/**
  * Cancel own registration
  */
 export async function cancelRegistration(eventId: string): Promise<{ success: boolean }> {
@@ -804,6 +819,18 @@ export function useCancelRegistration() {
       queryClient.invalidateQueries({ queryKey: ['events', eventId] });
       queryClient.invalidateQueries({ queryKey: ['events', 'my-registrations'] });
     },
+  });
+}
+
+/**
+ * Hook to fetch athlete's own registration for a specific event
+ */
+export function useMyEventRegistration(eventId: string | undefined) {
+  return useQuery({
+    queryKey: ['events', eventId, 'my-registration'],
+    queryFn: () => fetchMyEventRegistration(eventId!),
+    enabled: !!eventId,
+    staleTime: STALE_TIME.REALTIME,
   });
 }
 

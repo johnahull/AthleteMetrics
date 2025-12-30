@@ -17,6 +17,7 @@ import {
   useDeclineRegistration,
   useCancelInvitation,
   useCancelRegistration,
+  useMyEventRegistration,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -93,11 +94,8 @@ export default function EventDetail() {
   const cancelInvitationMutation = useCancelInvitation();
   const cancelRegistrationMutation = useCancelRegistration();
 
-  // Find the current user's registration (for athlete view)
-  const myRegistration = useMemo(() => {
-    if (!registrations || !user) return null;
-    return registrations.find((r: any) => r.userId === user.id);
-  }, [registrations, user]);
+  // Fetch athlete's own registration (for athlete view)
+  const { data: myRegistration } = useMyEventRegistration(eventId);
 
   // Handle approve registration
   const handleApprove = async (registrationId: string) => {

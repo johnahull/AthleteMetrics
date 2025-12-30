@@ -68,6 +68,7 @@ vi.mock('@/lib/events-api', () => ({
   useEvent: vi.fn(() => ({ data: mockEvent, isLoading: false, error: null })),
   useEventRegistrations: vi.fn(() => ({ data: mockRegistrations, isLoading: false })),
   useEventInvitations: vi.fn(() => ({ data: [], isLoading: false })),
+  useMyEventRegistration: vi.fn(() => ({ data: null, isLoading: false })),
   useFreezeEvent: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useUnfreezeEvent: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useApproveRegistration: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
