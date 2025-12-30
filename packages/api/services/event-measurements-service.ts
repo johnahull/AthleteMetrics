@@ -49,8 +49,8 @@ export class EventMeasurementsService {
       userId: options?.userId,
     });
 
-    // Filter by eventId (since getMeasurements doesn't support eventId filter yet)
-    return allMeasurements.filter((m: any) => m.eventId === eventId);
+    // Filter by eventId - measurements have optional eventId field
+    return allMeasurements.filter((m) => m.eventId === eventId);
   }
 
   /**
@@ -71,17 +71,27 @@ export class EventMeasurementsService {
       throw new Error("Cannot create measurements for frozen event");
     }
 
+    // Validate metric code format
+    if (!data.metric || typeof data.metric !== 'string') {
+      throw new Error('Invalid metric code');
+    }
+
+    // Validate event has a start date
+    if (!event.startDate) {
+      throw new Error('Event must have a start date');
+    }
+
     // Create measurement with event context
     const measurement = await this.storage.createMeasurement(
       {
         userId: data.userId,
-        metric: data.metric as any,
+        metric: data.metric,
         value: data.value,
         date: data.date.toISOString().split('T')[0],
         notes: data.notes,
         eventId: eventId,
         eventNameSnapshot: event.name,
-        eventDateSnapshot: event.startDate!.toISOString().split('T')[0],
+        eventDateSnapshot: event.startDate.toISOString().split('T')[0],
       },
       createdBy
     );
@@ -106,28 +116,40 @@ export class EventMeasurementsService {
       throw new Error("Cannot create measurements for frozen event");
     }
 
+    // Validate event has a start date before bulk operation
+    if (!event.startDate) {
+      throw new Error('Event must have a start date');
+    }
+
     const created: Measurement[] = [];
     const errors: Array<{ index: number; error: string }> = [];
 
     for (let i = 0; i < measurementsData.length; i++) {
       try {
         const m = measurementsData[i];
+
+        // Validate metric code
+        if (!m.metric || typeof m.metric !== 'string') {
+          throw new Error('Invalid metric code');
+        }
+
         const measurement = await this.storage.createMeasurement(
           {
             userId: m.userId,
-            metric: m.metric as any,
+            metric: m.metric,
             value: m.value,
             date: m.date.toISOString().split('T')[0],
             notes: m.notes,
             eventId: eventId,
             eventNameSnapshot: event.name,
-            eventDateSnapshot: event.startDate!.toISOString().split('T')[0],
+            eventDateSnapshot: event.startDate.toISOString().split('T')[0],
           },
           createdBy
         );
         created.push(measurement);
-      } catch (err: any) {
-        errors.push({ index: i, error: err.message });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+        errors.push({ index: i, error: errorMessage });
       }
     }
 
