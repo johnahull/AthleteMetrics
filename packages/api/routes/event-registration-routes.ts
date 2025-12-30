@@ -95,6 +95,17 @@ export function registerEventRegistrationRoutes(app: Express) {
       const { eventId } = req.params;
       const { discoveryMethod, athleteNotes } = req.body;
 
+      // Validate discoveryMethod enum
+      const validDiscoveryMethods = ['event_code', 'direct_link', 'invitation', 'org_roster', null];
+      if (discoveryMethod && !validDiscoveryMethods.includes(discoveryMethod)) {
+        return res.status(400).json({ message: "Invalid discovery method" });
+      }
+
+      // Validate athleteNotes length if provided
+      if (athleteNotes && typeof athleteNotes === 'string' && athleteNotes.length > 1000) {
+        return res.status(400).json({ message: "Athlete notes must be 1000 characters or less" });
+      }
+
       const options: RegisterOptions = {
         discoveryMethod: discoveryMethod || 'direct_link',
         athleteNotes: athleteNotes || null,

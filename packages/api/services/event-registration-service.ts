@@ -178,7 +178,10 @@ export class EventRegistrationService {
 
     // Check authorization - user can cancel their own, admins can cancel any
     if (registration.userId !== cancelledBy) {
-      const roles = await this.storage.getUserRoles(cancelledBy, event.organizationId || '');
+      if (!event.organizationId) {
+        throw new Error('Not authorized to cancel this registration');
+      }
+      const roles = await this.storage.getUserRoles(cancelledBy, event.organizationId);
       const isAdmin = roles.includes('org_admin') || roles.includes('coach');
       if (!isAdmin) {
         throw new Error('Not authorized to cancel this registration');

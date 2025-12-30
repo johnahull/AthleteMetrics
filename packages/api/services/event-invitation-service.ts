@@ -181,7 +181,7 @@ export class EventInvitationService {
       }
     } catch (error) {
       // Log error but don't fail the invitation creation
-      console.error(`Failed to send invitation email for invitation ${invitation.id}:`, error);
+      // Error is already logged by email service
     }
 
     // Update invitation with email status if email was sent

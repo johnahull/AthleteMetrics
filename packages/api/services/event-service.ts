@@ -163,7 +163,10 @@ export class EventService {
     }
 
     // For org-private events, check user's org membership
-    if (event.organizationId) {
+    if (event.visibility === 'org_private') {
+      if (!event.organizationId) {
+        throw new Error('Access denied: Event organization not found');
+      }
       const hasAccess = await this.checkUserOrgAccess(requestingUserId, event.organizationId);
       if (!hasAccess) {
         throw new Error('Access denied: You are not a member of this organization');

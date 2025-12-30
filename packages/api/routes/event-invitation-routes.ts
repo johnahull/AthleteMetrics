@@ -70,7 +70,8 @@ export function registerEventInvitationRoutes(app: Express) {
     try {
       const { token } = req.params;
 
-      if (!token || token.length < 32) {
+      // Validate token format: must be exactly 64 hex characters (32 bytes)
+      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 
@@ -122,7 +123,8 @@ export function registerEventInvitationRoutes(app: Express) {
 
       const { token } = req.params;
 
-      if (!token || token.length < 32) {
+      // Validate token format: must be exactly 64 hex characters (32 bytes)
+      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 
@@ -163,7 +165,8 @@ export function registerEventInvitationRoutes(app: Express) {
     try {
       const { token } = req.params;
 
-      if (!token || token.length < 32) {
+      // Validate token format: must be exactly 64 hex characters (32 bytes)
+      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 
