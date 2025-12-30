@@ -207,6 +207,20 @@ describe('Event Detail Page Permissions', () => {
 
       expect(screen.queryByText('Quick Actions')).not.toBeInTheDocument();
     });
+
+    it('should NOT show registration stats (Registered, Checked In, Pending, Waitlisted) for athletes', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByText('Spring Combine 2024')).toBeInTheDocument();
+      });
+
+      // Admin stats should NOT be visible to athletes
+      expect(screen.queryByText('Registered')).not.toBeInTheDocument();
+      expect(screen.queryByText('Checked In')).not.toBeInTheDocument();
+      expect(screen.queryByText('Pending')).not.toBeInTheDocument();
+      expect(screen.queryByText('Waitlisted')).not.toBeInTheDocument();
+    });
   });
 
   describe('Coach View (has management permissions)', () => {
@@ -268,6 +282,20 @@ describe('Event Detail Page Permissions', () => {
       });
 
       expect(screen.getByText('Quick Actions')).toBeInTheDocument();
+    });
+
+    it('should show registration stats for coaches', async () => {
+      render(<EventDetail />, { wrapper: createWrapper() });
+
+      await waitFor(() => {
+        expect(screen.getByText('Spring Combine 2024')).toBeInTheDocument();
+      });
+
+      // Admin stats should be visible to coaches
+      expect(screen.getByText('Registered')).toBeInTheDocument();
+      expect(screen.getByText('Checked In')).toBeInTheDocument();
+      expect(screen.getByText('Pending')).toBeInTheDocument();
+      expect(screen.getByText('Waitlisted')).toBeInTheDocument();
     });
   });
 

@@ -412,64 +412,66 @@ export default function EventDetail() {
         {/* Overview Tab */}
         <TabsContent value="overview">
           <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-green-100 rounded-lg">
-                      <Users className="h-5 w-5 text-green-600" />
+            {/* Stats Cards - Admin Only */}
+            {canManageEvent && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <Users className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{approvedCount}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Registered
+                          {event.maxRegistrations && ` / ${event.maxRegistrations}`}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-2xl font-bold">{approvedCount}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Registered
-                        {event.maxRegistrations && ` / ${event.maxRegistrations}`}
-                      </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-blue-100 rounded-lg">
+                        <CheckCircle className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{checkedInCount}</p>
+                        <p className="text-sm text-muted-foreground">Checked In</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-blue-100 rounded-lg">
-                      <CheckCircle className="h-5 w-5 text-blue-600" />
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-yellow-100 rounded-lg">
+                        <Clock className="h-5 w-5 text-yellow-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{pendingCount}</p>
+                        <p className="text-sm text-muted-foreground">Pending</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-2xl font-bold">{checkedInCount}</p>
-                      <p className="text-sm text-muted-foreground">Checked In</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-orange-100 rounded-lg">
+                        <ClipboardList className="h-5 w-5 text-orange-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{waitlistCount}</p>
+                        <p className="text-sm text-muted-foreground">Waitlisted</p>
+                      </div>
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-yellow-100 rounded-lg">
-                      <Clock className="h-5 w-5 text-yellow-600" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{pendingCount}</p>
-                      <p className="text-sm text-muted-foreground">Pending</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-orange-100 rounded-lg">
-                      <ClipboardList className="h-5 w-5 text-orange-600" />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold">{waitlistCount}</p>
-                      <p className="text-sm text-muted-foreground">Waitlisted</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
 
             {/* Description */}
             {event.description && (
