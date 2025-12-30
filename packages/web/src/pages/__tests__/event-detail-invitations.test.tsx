@@ -183,6 +183,10 @@ vi.mock('wouter', () => ({
 vi.mock('@/lib/auth', () => ({
   useAuth: () => ({
     user: { id: 'user-123', role: 'coach' },
+    // userOrganizations is required for canManageEvent to return true
+    userOrganizations: [
+      { organizationId: 'org-123', role: 'coach', organizationName: 'Test Org' },
+    ],
   }),
 }));
 
@@ -217,10 +221,18 @@ vi.mock('@/lib/events-api', () => ({
     mutateAsync: mockDeclineMutate,
     isPending: false,
   }),
-  // TODO: Add this hook when implementing
   useCancelInvitation: () => ({
     mutateAsync: mockCancelInvitationMutate,
     isPending: false,
+  }),
+  // Additional hooks required by EventDetail component
+  useCancelRegistration: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+  }),
+  useMyEventRegistration: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 

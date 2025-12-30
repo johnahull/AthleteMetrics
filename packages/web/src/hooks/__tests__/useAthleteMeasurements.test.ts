@@ -164,7 +164,7 @@ describe('useAthleteMeasurements Hooks', () => {
   });
 
   describe('useAthleteMeasurements with AthleteOrgContext', () => {
-    it('should include filterMode=personal in query params when context filterMode is personal', async () => {
+    it('should default to filterMode=all even when user has no organizations', async () => {
       const mockMeasurements = [createMockMeasurement()];
 
       mockFetch.mockResolvedValue({
@@ -172,14 +172,15 @@ describe('useAthleteMeasurements Hooks', () => {
         json: async () => mockMeasurements,
       });
 
-      // Mock user with no organizations to trigger personal mode
+      // Mock user with no organizations - filterMode defaults to 'all', not 'personal'
+      // Personal mode must be explicitly selected by the user
       mockUseAuth.mockReturnValue({
         user: { id: 'user-123', isSiteAdmin: false },
-        userOrganizations: [], // No organizations triggers personal mode
+        userOrganizations: [], // No organizations, but filterMode still defaults to 'all'
       });
 
       // Create fresh wrapper with updated auth mock
-      const wrapperWithPersonal = ({ children }: { children: React.ReactNode }) =>
+      const wrapperWithNoOrgs = ({ children }: { children: React.ReactNode }) =>
         React.createElement(
           QueryClientProvider,
           { client: queryClient },
@@ -188,16 +189,17 @@ describe('useAthleteMeasurements Hooks', () => {
 
       const { result } = renderHook(
         () => useAthleteMeasurements('athlete-123'),
-        { wrapper: wrapperWithPersonal }
+        { wrapper: wrapperWithNoOrgs }
       );
 
       await waitFor(() => {
         expect(result.current.isLoading).toBe(false);
       });
 
-      // Should include filterMode=personal in the URL
+      // Should include filterMode=all in the URL (default behavior)
+      // Personal mode must be explicitly selected by user
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringMatching(/athleteId=athlete-123.*filterMode=personal|filterMode=personal.*athleteId=athlete-123/),
+        expect.stringContaining('filterMode=all'),
         expect.objectContaining({ credentials: 'include' })
       );
     });

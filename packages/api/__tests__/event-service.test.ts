@@ -169,7 +169,8 @@ describe("EventService", () => {
 
       const result = await service.createEvent(eventData, "admin-123");
 
-      expect(result.organizationId).toBeNull();
+      // When organizationId is not provided, service uses undefined (not null)
+      expect(result.organizationId).toBeUndefined();
       expect(result.visibility).toBe("public");
     });
 
