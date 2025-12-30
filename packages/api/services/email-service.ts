@@ -62,6 +62,37 @@ function sanitizeUrl(url: string | undefined | null, expectedType?: 'invitation'
   return urlString;
 }
 
+/**
+ * Validate email address format and check for header injection attempts
+ * RFC 5322 simplified validation with newline protection
+ * @param email - Email address to validate
+ * @returns true if email is valid and safe
+ */
+function isValidEmail(email: string): boolean {
+  if (!email || typeof email !== 'string') return false;
+
+  // Check for header injection characters (newlines, carriage returns)
+  if (email.includes('\n') || email.includes('\r')) {
+    console.error('⚠️ Blocked email header injection attempt:', email.substring(0, 50));
+    return false;
+  }
+
+  // RFC 5322 simplified validation - basic format check
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    console.warn('⚠️ Invalid email format:', email.substring(0, 50));
+    return false;
+  }
+
+  // Additional length check (prevent extremely long emails that could cause issues)
+  if (email.length > 254) {
+    console.warn('⚠️ Email exceeds maximum length (254 chars):', email.length);
+    return false;
+  }
+
+  return true;
+}
+
 // Resend client is initialized in the EmailService class
 
 interface EmailOptions {
@@ -170,6 +201,12 @@ export class EmailService {
    * Send a raw email
    */
   private async sendEmail(options: EmailOptions): Promise<boolean> {
+    // Validate email address to prevent header injection
+    if (!isValidEmail(options.to)) {
+      console.error(`❌ Rejected invalid email address: ${options.to.substring(0, 50)}`);
+      return false;
+    }
+
     if (!this.enabled || !this.resend) {
       console.log('📧 Email sending disabled (no API key). Would have sent:', {
         to: options.to,

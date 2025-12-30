@@ -16,6 +16,13 @@ import {
 import crypto from 'crypto';
 import type { IStorage } from '../storage';
 
+/**
+ * Event code configuration
+ * Uses an unambiguous character set (no 0/O/1/I confusion)
+ */
+const EVENT_CODE_LENGTH = 8;
+const EVENT_CODE_CHARSET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 32 chars, no 0/O/1/I
+
 export interface EventFilters {
   organizationId?: string;
   visibility?: EventVisibility;
@@ -82,11 +89,16 @@ export class EventService {
 
   /**
    * Generate an 8-character alphanumeric event code
+   * Uses unambiguous character set (no 0/O/1/I confusion)
    * Similar to organization join codes
    */
   generateEventCode(): string {
-    const bytes = crypto.randomBytes(5);
-    return bytes.toString('hex').toUpperCase().substring(0, 8);
+    const randomValues = crypto.randomBytes(EVENT_CODE_LENGTH);
+    let code = '';
+    for (let i = 0; i < EVENT_CODE_LENGTH; i++) {
+      code += EVENT_CODE_CHARSET[randomValues[i] % EVENT_CODE_CHARSET.length];
+    }
+    return code;
   }
 
   /**
