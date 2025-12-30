@@ -6,8 +6,9 @@
 
 -- Create backup table before clearing (enables rollback)
 -- Drop and recreate to ensure it's populated on every run (idempotent)
+-- Note: IF NOT EXISTS is redundant after DROP but satisfies linter requirements
 DROP TABLE IF EXISTS site_metrics_sport_backup_20251217;
-CREATE TABLE site_metrics_sport_backup_20251217 AS
+CREATE TABLE IF NOT EXISTS site_metrics_sport_backup_20251217 AS
 SELECT id, code, sport_associations, updated_at
 FROM site_metrics
 WHERE is_system_default = true AND sport_associations IS NOT NULL;

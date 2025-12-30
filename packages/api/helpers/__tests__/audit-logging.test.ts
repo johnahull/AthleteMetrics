@@ -58,6 +58,7 @@ describe('logAuthorizationFailure', () => {
       }),
       ipAddress: '192.168.1.1',
       userAgent: 'Mozilla/5.0',
+      timestamp: expect.any(String), // ISO timestamp for fallback logging
     });
   });
 
@@ -94,6 +95,7 @@ describe('logAuthorizationFailure', () => {
       }),
       ipAddress: '10.0.0.1',
       userAgent: 'curl/7.0',
+      timestamp: expect.any(String), // ISO timestamp for fallback logging
     });
   });
 
@@ -121,6 +123,7 @@ describe('logAuthorizationFailure', () => {
       }),
       ipAddress: '0.0.0.0', // undefined is converted to '0.0.0.0' by normalizeIpAddress()
       userAgent: null, // undefined is converted to null
+      timestamp: expect.any(String), // ISO timestamp for fallback logging
     });
   });
 
@@ -135,8 +138,9 @@ describe('logAuthorizationFailure', () => {
     // Mock createSecurityEvent to reject
     vi.mocked(storage.createSecurityEvent).mockRejectedValue(new Error('Database error'));
 
-    // Spy on console.error
+    // Spy on console.error and console.warn
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // Should not throw despite the error
     expect(() => {
@@ -146,13 +150,22 @@ describe('logAuthorizationFailure', () => {
     // Wait for async error handling
     await new Promise(resolve => setTimeout(resolve, 50));
 
-    // Verify error was logged to console (prefix matches implementation)
+    // Verify critical error was logged to console (new fallback logging pattern)
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      '[security:audit] Failed to log authorization failure:',
-      expect.any(Error)
+      '[security:audit] CRITICAL: Failed to persist security event to database'
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[security:audit] Database error:',
+      'Database error'
+    );
+    // Verify fallback logging was triggered
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[security:audit:fallback]',
+      expect.stringContaining('"fallbackReason":"database_write_failed"')
     );
 
     consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
   });
 
   it('should use fire-and-forget pattern (non-blocking)', () => {
