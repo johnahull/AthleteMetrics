@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +33,14 @@ import { useToast } from "@/hooks/use-toast";
 import { useCreateSiteMetric, useUpdateSiteMetric } from "@/lib/metrics-api";
 import type { SiteMetric } from "@shared/schema";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
+import { SportMultiSelect } from "@/components/sport-multi-select";
 import { organizationTypeEnum, metricTypeEnum } from "@shared/schema";
+import { useQuery } from "@tanstack/react-query";
+import { CheckCircle2, XCircle } from "lucide-react";
+import { useDebounce } from "@/hooks/useDebounce";
+
+// CODE QUALITY FIX: Extract magic number to named constant
+const DEFAULT_DECIMAL_PRECISION = 3; // Standard precision for athletic measurements
 
 // Zod schema for metric form validation
 const metricFormSchema = z.object({
@@ -50,6 +58,17 @@ const metricFormSchema = z.object({
   description: z.string().optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
+  sportAssociations: z.array(z.string()).optional(),
+  isDerived: z.boolean().default(false),
+  formula: z.string().max(500).optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']).default('same_date'),
+    maxDateDifference: z.number().int().min(1).max(365).optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']).default('skip'),
+  }).optional(),
+}).refine(data => !data.isDerived || data.formula, {
+  message: "Formula is required for derived metrics",
+  path: ["formula"],
 });
 
 type MetricFormValues = z.infer<typeof metricFormSchema>;
@@ -58,6 +77,34 @@ interface MetricFormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   metric?: SiteMetric | null; // If provided, edit mode; otherwise create mode
+}
+
+// Formula validation debounce delay in milliseconds
+// Prevents excessive API calls while user is typing
+const FORMULA_VALIDATION_DEBOUNCE_MS = 500;
+
+// Hook for formula validation with debounce
+function useValidateFormula(formula: string, excludeCode?: string) {
+  const debouncedFormula = useDebounce(formula, FORMULA_VALIDATION_DEBOUNCE_MS);
+
+  return useQuery({
+    queryKey: ['validate-formula', debouncedFormula, excludeCode],
+    queryFn: async () => {
+      const res = await fetch('/api/metrics/validate-formula', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ formula: debouncedFormula, excludeMetricCode: excludeCode }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.message || 'Validation failed');
+      }
+      return res.json() as Promise<{ valid: boolean; dependentMetrics?: string[]; error?: string }>;
+    },
+    enabled: debouncedFormula.length > 0,
+    staleTime: 30000,
+    retry: false,
+  });
 }
 
 export default function MetricFormDialog({
@@ -81,8 +128,27 @@ export default function MetricFormDialog({
       description: "",
       metricType: 'lower_is_better',
       availableOrgTypes: undefined,
+      sportAssociations: undefined,
+      isDerived: false,
+      formula: "",
+      calculationConfig: {
+        dateMatchStrategy: 'same_date',
+        maxDateDifference: 7,
+        missingSourceBehavior: 'skip',
+      },
     },
   });
+
+  // Watch isDerived to show/hide derived metric fields
+  const isDerived = form.watch('isDerived');
+  const formula = form.watch('formula');
+  const dateMatchStrategy = form.watch('calculationConfig.dateMatchStrategy');
+
+  // Validate formula with debounce
+  const formulaValidation = useValidateFormula(
+    isDerived && formula ? formula : '',
+    isEditMode ? metric?.code : undefined
+  );
 
   // Populate form when editing
   useEffect(() => {
@@ -95,6 +161,14 @@ export default function MetricFormDialog({
         description: metric.description || "",
         metricType: metric.metricType,
         availableOrgTypes: metric.availableOrgTypes || undefined,
+        sportAssociations: metric.sportAssociations || undefined,
+        isDerived: metric.isDerived || false,
+        formula: metric.formula || "",
+        calculationConfig: metric.calculationConfig || {
+          dateMatchStrategy: 'same_date',
+          maxDateDifference: 7,
+          missingSourceBehavior: 'skip',
+        },
       });
     } else if (!open) {
       // Reset form when dialog closes
@@ -106,6 +180,14 @@ export default function MetricFormDialog({
         description: "",
         metricType: 'lower_is_better',
         availableOrgTypes: undefined,
+        sportAssociations: undefined,
+        isDerived: false,
+        formula: "",
+        calculationConfig: {
+          dateMatchStrategy: 'same_date',
+          maxDateDifference: 7,
+          missingSourceBehavior: 'skip',
+        },
       });
     }
   }, [metric, open, form]);
@@ -114,6 +196,8 @@ export default function MetricFormDialog({
     try {
       if (isEditMode) {
         // Update existing metric
+        // CONSISTENCY FIX: Use undefined for all optional fields (Drizzle convention)
+        // undefined = "don't update", null = "clear field"
         await updateMetricMutation.mutateAsync({
           code: metric.code,
           data: {
@@ -122,7 +206,14 @@ export default function MetricFormDialog({
             unit: data.unit || undefined,
             description: data.description || undefined,
             metricType: data.metricType,
-            availableOrgTypes: data.availableOrgTypes || undefined,
+            availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : undefined,
+            sportAssociations: data.sportAssociations?.length ? data.sportAssociations : undefined,
+            isDerived: data.isDerived,
+            formula: data.isDerived ? data.formula : undefined,
+            dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics
+              ? formulaValidation.data.dependentMetrics
+              : undefined,
+            calculationConfig: data.isDerived ? data.calculationConfig : undefined,
           },
         });
         toast({
@@ -139,8 +230,15 @@ export default function MetricFormDialog({
           description: data.description || undefined,
           metricType: data.metricType,
           availableOrgTypes: data.availableOrgTypes || undefined,
+          sportAssociations: data.sportAssociations || undefined,
           isActive: true,
-          decimalPrecision: 3, // Default precision for measurements
+          decimalPrecision: DEFAULT_DECIMAL_PRECISION,
+          isDerived: data.isDerived,
+          formula: data.isDerived ? data.formula : undefined,
+          dependentMetrics: data.isDerived && formulaValidation.data?.dependentMetrics
+            ? formulaValidation.data.dependentMetrics
+            : undefined,
+          calculationConfig: data.isDerived ? data.calculationConfig : undefined,
         });
         toast({
           title: "Metric created",
@@ -339,6 +437,194 @@ export default function MetricFormDialog({
                 </FormItem>
               )}
             />
+
+            {/* Sport Associations field */}
+            <FormField
+              control={form.control}
+              name="sportAssociations"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Relevant Sports</FormLabel>
+                  <FormControl>
+                    <SportMultiSelect
+                      value={field.value}
+                      onChange={field.onChange}
+                      placeholder="All sports (default)"
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Tag this metric with relevant sports to help organizations find applicable tests.
+                    Leave empty if the metric applies to all sports.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Derived Metric Section */}
+            <div className="pt-4 border-t">
+              <FormField
+                control={form.control}
+                name="isDerived"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Derived Metric</FormLabel>
+                      <FormDescription>
+                        Calculate this metric's value from other metrics
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        data-testid="is-derived-switch"
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {/* Derived metric fields - shown when isDerived is true */}
+              {isDerived && (
+                <div className="mt-4 space-y-4 rounded-lg bg-muted/50 p-4">
+                  {/* Formula field */}
+                  <FormField
+                    control={form.control}
+                    name="formula"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Formula *</FormLabel>
+                        <FormControl>
+                          <div className="space-y-2">
+                            <Input
+                              {...field}
+                              placeholder="10 / fly10_time * 2.045"
+                              data-testid="formula-input"
+                            />
+                            {/* Validation feedback */}
+                            {field.value && formulaValidation.data && (
+                              <div className="flex items-start gap-2 text-sm">
+                                {formulaValidation.data.valid ? (
+                                  <>
+                                    <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
+                                    <div className="text-green-600">
+                                      Formula valid - uses: {formulaValidation.data.dependentMetrics?.join(', ')}
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="h-4 w-4 text-destructive mt-0.5" />
+                                    <div className="text-destructive">
+                                      {formulaValidation.data.error || 'Invalid formula'}
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                            {field.value && formulaValidation.isLoading && (
+                              <div className="text-sm text-muted-foreground">
+                                Validating formula...
+                              </div>
+                            )}
+                          </div>
+                        </FormControl>
+                        <FormDescription>
+                          Use metric codes as variables (e.g., fly10_time, vertical_jump). Functions: sqrt(), pow(), abs(), round(), min(), max()
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Date Matching Strategy */}
+                  <FormField
+                    control={form.control}
+                    name="calculationConfig.dateMatchStrategy"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Date Matching Strategy</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="date-match-strategy-select">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="same_date">Same date only</SelectItem>
+                            <SelectItem value="latest_before">Latest available before date</SelectItem>
+                            <SelectItem value="closest">Closest within days</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          How to match source metric dates when calculating this metric
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Max Date Difference - shown when closest is selected */}
+                  {dateMatchStrategy === 'closest' && (
+                    <FormField
+                      control={form.control}
+                      name="calculationConfig.maxDateDifference"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Maximum days difference</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={1}
+                              max={365}
+                              {...field}
+                              onChange={(e) => field.onChange(parseInt(e.target.value, 10))}
+                              data-testid="max-date-difference-input"
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Maximum number of days between source metric dates (1-365)
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
+                  {/* Missing Source Behavior */}
+                  <FormField
+                    control={form.control}
+                    name="calculationConfig.missingSourceBehavior"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>When source metrics are missing</FormLabel>
+                        <Select
+                          onValueChange={field.onChange}
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="missing-source-behavior-select">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="skip">Skip calculation</SelectItem>
+                            <SelectItem value="error">Show error</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          What to do when required source metrics are not available
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
+            </div>
             </form>
           </Form>
         </div>

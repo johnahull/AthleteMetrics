@@ -1,5 +1,10 @@
 /**
  * Tests for server/routes.ts helper functions
+ *
+ * NOTE: METRIC_CONFIG is now empty - units should come from the database
+ * via the site_metrics table. The getDefaultUnit function returns 's' (seconds)
+ * as a fallback when a metric is not found in METRIC_CONFIG (which is always
+ * the case now since METRIC_CONFIG is empty).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -14,36 +19,16 @@ const getDefaultUnit = (metric: string): string => {
 };
 
 describe('getDefaultUnit', () => {
-  it('should return mph for TOP_SPEED', () => {
-    expect(getDefaultUnit('TOP_SPEED')).toBe('mph');
-  });
-
-  it('should return s for FLY10_TIME', () => {
+  it('should return s (fallback) for all metrics since METRIC_CONFIG is empty', () => {
+    // With METRIC_CONFIG empty, all metrics fall back to 's'
+    expect(getDefaultUnit('TOP_SPEED')).toBe('s');
     expect(getDefaultUnit('FLY10_TIME')).toBe('s');
-  });
-
-  it('should return in for VERTICAL_JUMP', () => {
-    expect(getDefaultUnit('VERTICAL_JUMP')).toBe('in');
-  });
-
-  it('should return s for DASH_40YD', () => {
+    expect(getDefaultUnit('VERTICAL_JUMP')).toBe('s');
     expect(getDefaultUnit('DASH_40YD')).toBe('s');
-  });
-
-  it('should return s for AGILITY_505', () => {
     expect(getDefaultUnit('AGILITY_505')).toBe('s');
-  });
-
-  it('should return s for AGILITY_5105', () => {
     expect(getDefaultUnit('AGILITY_5105')).toBe('s');
-  });
-
-  it('should return s for T_TEST', () => {
     expect(getDefaultUnit('T_TEST')).toBe('s');
-  });
-
-  it('should return empty string for RSI', () => {
-    expect(getDefaultUnit('RSI')).toBe('');
+    expect(getDefaultUnit('RSI')).toBe('s');
   });
 
   it('should default to s for unknown metrics', () => {
@@ -54,18 +39,7 @@ describe('getDefaultUnit', () => {
     expect(getDefaultUnit('')).toBe('s');
   });
 
-  it('should be case-sensitive', () => {
-    expect(getDefaultUnit('top_speed')).toBe('s'); // lowercase not recognized
-    expect(getDefaultUnit('Top_Speed')).toBe('s'); // mixed case not recognized
-  });
-
-  it('should pull from METRIC_CONFIG correctly for all metrics', () => {
-    const allMetrics = Object.keys(METRIC_CONFIG);
-
-    allMetrics.forEach(metric => {
-      const expectedUnit = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG].unit;
-      const actualUnit = getDefaultUnit(metric);
-      expect(actualUnit).toBe(expectedUnit);
-    });
+  it('should verify METRIC_CONFIG is empty', () => {
+    expect(Object.keys(METRIC_CONFIG).length).toBe(0);
   });
 });

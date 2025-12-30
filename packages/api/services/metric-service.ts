@@ -12,6 +12,9 @@ import type {
   OrganizationMetric,
   UpdateOrganizationMetric,
 } from "@shared/schema";
+import { validateFormula, detectCircularDependencies } from "./formula-service";
+import { getDerivedMetricCalculator } from "./derived-metric-calculator";
+import { db } from "../db";
 
 export interface SiteMetricFilters {
   includeInactive?: boolean;
@@ -121,8 +124,55 @@ export class MetricService extends BaseService {
         throw new Error(`Metric with code ${validatedData.code} already exists`);
       }
 
+      // DERIVED METRIC VALIDATION
+      // If metric is being created as derived, validate formula requirements
+      if (validatedData.isDerived === true) {
+        if (!validatedData.formula || validatedData.formula.trim() === '') {
+          throw new Error("Formula is required for derived metrics");
+        }
+
+        // Get all available metric codes (excluding this one since it's being created)
+        const allMetrics = await this.storage.getSiteMetrics({ includeInactive: false });
+        const availableCodes = allMetrics.map(m => m.code);
+
+        // Validate formula syntax
+        const formulaValidation = validateFormula(validatedData.formula, availableCodes);
+        if (!formulaValidation.valid) {
+          throw new Error(`Invalid formula: ${formulaValidation.errors.join(', ')}`);
+        }
+
+        // Set dependentMetrics from formula validation if not explicitly provided
+        if (!validatedData.dependentMetrics || validatedData.dependentMetrics.length === 0) {
+          validatedData.dependentMetrics = formulaValidation.referencedMetrics;
+        }
+
+        // Check for circular dependencies
+        // Create a hypothetical metric list with the new metric
+        const hypotheticalMetrics = [
+          ...allMetrics.map(m => ({
+            code: m.code,
+            dependentMetrics: m.dependentMetrics || []
+          })),
+          {
+            code: validatedData.code,
+            dependentMetrics: validatedData.dependentMetrics || []
+          }
+        ];
+
+        const circularCheck = detectCircularDependencies(hypotheticalMetrics);
+        // Only block if THIS metric is involved in the circular dependency
+        // Pre-existing circular dependencies in other metrics shouldn't block unrelated creates
+        if (circularCheck.hasCircular && circularCheck.cycle?.includes(validatedData.code)) {
+          throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
+        }
+      }
+
       // Create metric
       const metric = await this.storage.createSiteMetric(validatedData, requestingUserId);
+
+      // Invalidate metric config cache so new metric is picked up immediately
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(metric.code);
 
       // Audit log
       try {
@@ -171,8 +221,57 @@ export class MetricService extends BaseService {
       // Validate input
       const validatedData = updateSiteMetricSchema.parse(metricData);
 
+      // DERIVED METRIC VALIDATION
+      // If metric is being marked as derived, validate formula requirements
+      if (validatedData.isDerived === true) {
+        if (!validatedData.formula || validatedData.formula.trim() === '') {
+          throw new Error("Formula is required for derived metrics");
+        }
+
+        // Get all available metric codes (excluding this one to allow self-updates)
+        const allMetrics = await this.storage.getSiteMetrics({ includeInactive: false });
+        const availableCodes = allMetrics
+          .map(m => m.code)
+          .filter(c => c !== code);
+
+        // Validate formula syntax
+        const formulaValidation = validateFormula(validatedData.formula, availableCodes);
+        if (!formulaValidation.valid) {
+          throw new Error(`Invalid formula: ${formulaValidation.errors.join(', ')}`);
+        }
+
+        // Set dependentMetrics from formula validation if not explicitly provided
+        if (validatedData.dependentMetrics === undefined) {
+          validatedData.dependentMetrics = formulaValidation.referencedMetrics;
+        }
+
+        // Check for circular dependencies
+        // Create a hypothetical metric list with the updated metric
+        const existingMetric = await this.storage.getSiteMetric(code);
+        const hypotheticalMetrics = allMetrics
+          .map(m => m.code === code ? {
+            code: code,
+            dependentMetrics: validatedData.dependentMetrics || []
+          } : {
+            code: m.code,
+            dependentMetrics: m.dependentMetrics || []
+          });
+
+        const circularCheck = detectCircularDependencies(hypotheticalMetrics);
+        // Only block if THIS metric is involved in the circular dependency
+        // Pre-existing circular dependencies in other metrics shouldn't block unrelated updates
+        if (circularCheck.hasCircular && circularCheck.cycle?.includes(code)) {
+          throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
+        }
+      }
+
       // Update metric
       const metric = await this.storage.updateSiteMetric(code, validatedData);
+
+      // Invalidate metric config cache to ensure updates are reflected immediately
+      // This is critical if metricType (higher_is_better vs lower_is_better) changed
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(metric.code);
 
       // Audit log
       try {
@@ -225,6 +324,11 @@ export class MetricService extends BaseService {
       // Update status
       const updated = await this.storage.toggleSiteMetricStatus(code, isActive);
 
+      // Invalidate metric config cache when status changes
+      // Inactive metrics should not be cached
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(code);
+
       // Audit log
       try {
         await this.storage.createAuditLog({
@@ -274,6 +378,10 @@ export class MetricService extends BaseService {
 
       // Delete metric (storage layer handles validation)
       await this.storage.deleteSiteMetric(code);
+
+      // Invalidate metric config cache after deletion
+      const calculator = getDerivedMetricCalculator(db);
+      calculator.invalidateCache(code);
 
       // Audit log
       try {

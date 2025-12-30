@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { RouteWrapper } from "./components/RouteWrapper";
 import { AuthProvider } from "./lib/auth";
+import { AthleteOrgProvider } from "./lib/athlete-org-context";
 import Layout from "./components/layout";
 import Login from "./pages/login";
 import NotFound from "@/pages/not-found";
@@ -56,6 +57,8 @@ const EnhancedLogin = React.lazy(() => import("./pages/enhanced-login"));
 const ForgotPassword = React.lazy(() => import("./pages/forgot-password"));
 const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
+const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
+const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -96,6 +99,9 @@ const JoinOrganization = React.lazy(() => import("./pages/join-organization"));
 const JoinByCode = React.lazy(() => import("./pages/join-by-code"));
 const MyRequests = React.lazy(() => import("./pages/my-requests"));
 
+// Lazy load notification settings page
+const NotificationSettings = React.lazy(() => import("./pages/notification-settings"));
+
 function Router() {
   return (
     <Switch>
@@ -128,6 +134,16 @@ function Router() {
       <Route path="/verify-email">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <VerifyEmail />
+        </Suspense>
+      </Route>
+      <Route path="/privacy">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <PrivacyPolicy />
+        </Suspense>
+      </Route>
+      <Route path="/terms">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <TermsOfService />
         </Suspense>
       </Route>
       <Route path="/join/:code">
@@ -189,6 +205,11 @@ function Router() {
       <Route path="/my-global-profile">
         <RouteWrapper loadingText="Loading Global Profile...">
           <MyGlobalProfile />
+        </RouteWrapper>
+      </Route>
+      <Route path="/notification-settings">
+        <RouteWrapper loadingText="Loading Settings...">
+          <NotificationSettings />
         </RouteWrapper>
       </Route>
       <Route path="/unified-dashboard">
@@ -433,9 +454,11 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <CommandPaletteProvider>
-            <AppContent />
-          </CommandPaletteProvider>
+          <AthleteOrgProvider>
+            <CommandPaletteProvider>
+              <AppContent />
+            </CommandPaletteProvider>
+          </AthleteOrgProvider>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

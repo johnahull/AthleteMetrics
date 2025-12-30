@@ -20,7 +20,12 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart, UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy, RefreshCw, Globe, CheckCircle, Pencil, X, Dices } from "lucide-react";
+import {
+  ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart,
+  UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy, RefreshCw,
+  Globe, CheckCircle, Pencil, X, Dices, Bell, Calculator, Loader2
+} from "lucide-react";
+import { OrgNotificationSettingsCard } from "@/components/notifications/org-notification-settings-card";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -253,6 +258,33 @@ export default function OrgAdminSettings() {
     },
   });
 
+  // Recalculate derived metrics mutation
+  const recalculateDerivedMetricsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/organizations/${organizationId}/recalculate-derived-metrics`);
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || "Failed to recalculate derived metrics");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      // Invalidate measurements queries to show updated values
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+      toast({
+        title: "Recalculation complete",
+        description: data.message || `Updated ${data.recalculated} derived measurements.`
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error recalculating metrics",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
   // Handle role change with confirmation for certain transitions
   const handleRoleChange = (userId: string, currentRole: string, newRole: string) => {
     if (currentRole === newRole) return;
@@ -387,6 +419,16 @@ export default function OrgAdminSettings() {
   const cancelEditingJoinCode = () => {
     setIsEditingJoinCode(false);
     setCustomJoinCode("");
+  };
+
+  // Handle recalculate derived metrics with confirmation
+  const handleRecalculateDerivedMetrics = () => {
+    confirm({
+      title: "Recalculate Derived Metrics",
+      description: "This will recalculate all derived metrics for your organization's athletes. This may take a few moments. Are you sure you want to continue?",
+      confirmText: "Recalculate",
+      onConfirm: () => recalculateDerivedMetricsMutation.mutate(),
+    });
   };
 
   // Form setup with React Hook Form + Zod validation
@@ -985,6 +1027,57 @@ export default function OrgAdminSettings() {
         organizationId={organizationId!}
         canEdit={true}
       />
+
+      {/* Derived Metrics Recalculation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            Derived Metrics Recalculation
+          </CardTitle>
+          <CardDescription>
+            Recalculate all derived metrics for your organization's athletes
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              This will recalculate all derived metrics (e.g., speed calculations, power metrics) for athletes in your organization.
+              Use this after fixing data issues or when derived values appear incorrect.
+            </AlertDescription>
+          </Alert>
+
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="flex-1">
+              <h4 className="text-sm font-medium">Recalculate All Derived Metrics</h4>
+              <p className="text-sm text-muted-foreground mt-1">
+                This will update all calculated measurements based on the latest source data
+              </p>
+            </div>
+            <Button
+              onClick={handleRecalculateDerivedMetrics}
+              disabled={recalculateDerivedMetricsMutation.isPending}
+              variant="outline"
+            >
+              {recalculateDerivedMetricsMutation.isPending ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Recalculating...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Recalculate
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Push Notification Settings */}
+      <OrgNotificationSettingsCard organizationId={organizationId!} />
 
       {/* Invitation Modal */}
       {organizationId && (

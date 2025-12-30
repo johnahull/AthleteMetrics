@@ -20,6 +20,7 @@ import { TableSkeleton } from "@/components/ui/loading-states";
 import { useResponsiveMode } from "@/hooks/use-mobile";
 import { AthletesCardView } from "@/components/athletes-card-view";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useSports, usePositionsForSports } from "@/lib/sports-api";
 
 export default function Athletes() {
   const responsiveMode = useResponsiveMode();
@@ -200,6 +201,49 @@ export default function Athletes() {
       return data;
     },
   });
+
+  // Fetch sports for name lookup
+  const { data: sports = [] } = useSports();
+
+  // Collect unique sport codes from all athletes for position fetching
+  const uniqueSportCodes = useMemo(() => {
+    const codes = new Set<string>();
+    athletes.forEach((athlete: any) => {
+      if (athlete.sports) {
+        athlete.sports.forEach((sport: string) => codes.add(sport));
+      }
+    });
+    return Array.from(codes);
+  }, [athletes]);
+
+  // Fetch positions for all sports used by athletes
+  const { data: positionsByCode = {} } = usePositionsForSports(uniqueSportCodes);
+
+  // Create lookup maps for sport and position names
+  const sportNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    sports.forEach((sport) => {
+      map[sport.code] = sport.name;
+    });
+    return map;
+  }, [sports]);
+
+  const positionNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    Object.values(positionsByCode).forEach((positions) => {
+      positions.forEach((position) => {
+        // Use shortName if available, otherwise name
+        map[position.code] = position.shortName || position.name;
+      });
+    });
+    return map;
+  }, [positionsByCode]);
+
+  // Helper function to get display name for position code
+  const getPositionName = (code: string) => positionNameMap[code] || code;
+
+  // Helper function to get display name for sport code
+  const getSportName = (code: string) => sportNameMap[code] || code;
 
   const deleteAthleteMutation = useMutation({
     mutationFn: async (athleteId: string) => {
@@ -619,9 +663,9 @@ export default function Athletes() {
           aValue = a.gender?.toLowerCase() || 'zzz';
           bValue = b.gender?.toLowerCase() || 'zzz';
           break;
-        case 'school':
-          aValue = a.school?.toLowerCase() || 'zzz';
-          bValue = b.school?.toLowerCase() || 'zzz';
+        case 'position':
+          aValue = (a.positions && a.positions.length > 0) ? a.positions[0].toLowerCase() : 'zzz';
+          bValue = (b.positions && b.positions.length > 0) ? b.positions[0].toLowerCase() : 'zzz';
           break;
         case 'sport':
           aValue = a.sports && a.sports.length > 0 ? a.sports[0].toLowerCase() : 'zzz';
@@ -1021,6 +1065,7 @@ export default function Athletes() {
                 // Could open a measurement modal or navigate
                 setLocation(`/athletes/${athleteId}`);
               }}
+              getSportName={getSportName}
             />
           ) : (
             /* Desktop Table View */
@@ -1114,13 +1159,13 @@ export default function Athletes() {
                     </th>
                     <th
                       className="px-6 py-3 cursor-pointer hover:bg-gray-100"
-                      onClick={() => handleSort('school')}
-                      data-testid="sort-header-school"
-                      aria-sort={sortColumn === 'school' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
+                      onClick={() => handleSort('position')}
+                      data-testid="sort-header-position"
+                      aria-sort={sortColumn === 'position' ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none'}
                     >
                       <div className="flex items-center gap-2">
-                        School
-                        {sortColumn === 'school' ? (
+                        Position(s)
+                        {sortColumn === 'position' ? (
                           sortDirection === 'asc' ? (
                             <ArrowUp className="h-4 w-4" data-testid="icon-sort-asc" />
                           ) : (
@@ -1212,12 +1257,19 @@ export default function Athletes() {
                       </td>
                       <td className="px-6 py-4 text-gray-600">{athlete.birthYear}</td>
                       <td className="px-6 py-4 text-gray-600">{athlete.gender || "Not Specified"}</td>
-                      <td className="px-6 py-4 text-gray-600">{athlete.school || "N/A"}</td>
                       <td className="px-6 py-4 text-gray-600">
-                        {athlete.sports && athlete.sports.length > 0 
-                          ? athlete.sports.length > 1 
-                            ? `${athlete.sports[0]} (+${athlete.sports.length - 1} more)`
-                            : athlete.sports[0]
+                        {athlete.positions && athlete.positions.length > 0
+                          ? athlete.positions.length > 1
+                            ? `${getPositionName(athlete.positions[0])} (+${athlete.positions.length - 1} more)`
+                            : getPositionName(athlete.positions[0])
+                          : "N/A"
+                        }
+                      </td>
+                      <td className="px-6 py-4 text-gray-600">
+                        {athlete.sports && athlete.sports.length > 0
+                          ? athlete.sports.length > 1
+                            ? `${getSportName(athlete.sports[0])} (+${athlete.sports.length - 1} more)`
+                            : getSportName(athlete.sports[0])
                           : "N/A"
                         }
                       </td>

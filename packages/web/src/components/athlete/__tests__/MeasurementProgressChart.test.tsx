@@ -45,6 +45,9 @@ function createMockMeasurement(overrides: Partial<Measurement> = {}): Measuremen
     season: null,
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-01-15'),
     ...overrides,
   };
@@ -96,7 +99,8 @@ describe('MeasurementProgressChart', () => {
     it('should render chart with metric name as label', () => {
       render(<MeasurementProgressChart measurements={mockMeasurements} />);
 
-      expect(screen.getByTestId('chart-dataset-label')).toHaveTextContent(/10-Yard Fly/i);
+      // Now uses raw metric code as fallback since METRIC_DISPLAY_NAMES is empty
+      expect(screen.getByTestId('chart-dataset-label')).toHaveTextContent(/FLY10_TIME/i);
     });
   });
 

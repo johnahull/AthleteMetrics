@@ -41,7 +41,7 @@ const mockAthletes = [
     fullName: 'Alice Anderson',
     birthYear: 2005,
     gender: 'Female',
-    school: 'Central High',
+    positions: ['Guard'],
     sports: ['Basketball', 'Track'],
     emails: ['alice@test.com'],
     isActive: true,
@@ -54,7 +54,7 @@ const mockAthletes = [
     fullName: 'Bob Brown',
     birthYear: 2003,
     gender: 'Male',
-    school: 'North Academy',
+    positions: ['Quarterback'],
     sports: ['Football'],
     emails: ['bob@test.com'],
     isActive: false,
@@ -67,7 +67,7 @@ const mockAthletes = [
     fullName: 'Charlie Chen',
     birthYear: 2007,
     gender: 'Male',
-    school: null, // Test null handling
+    positions: [], // Test empty array handling
     sports: [], // Test empty array
     emails: ['charlie@test.com'],
     isActive: true,
@@ -80,7 +80,7 @@ const mockAthletes = [
     fullName: 'Diana Davis',
     birthYear: 2004,
     gender: 'Female',
-    school: 'South High',
+    positions: ['Midfielder'],
     sports: ['Soccer', 'Volleyball'],
     emails: ['diana@test.com'],
     isActive: true,
@@ -93,7 +93,7 @@ const mockAthletes = [
     fullName: 'Ethan Evans',
     birthYear: 2006,
     gender: 'Male',
-    school: 'East Academy',
+    positions: ['Pitcher'],
     sports: ['Baseball'],
     emails: ['ethan@test.com'],
     isActive: false,
@@ -171,7 +171,7 @@ describe('Athletes Page - Column Sorting', () => {
       const teamHeader = screen.getByTestId('sort-header-team');
       const birthYearHeader = screen.getByTestId('sort-header-birthYear');
       const genderHeader = screen.getByTestId('sort-header-gender');
-      const schoolHeader = screen.getByTestId('sort-header-school');
+      const positionHeader = screen.getByTestId('sort-header-position');
       const sportHeader = screen.getByTestId('sort-header-sport');
       const statusHeader = screen.getByTestId('sort-header-status');
 
@@ -179,7 +179,7 @@ describe('Athletes Page - Column Sorting', () => {
       expect(teamHeader).toBeInTheDocument();
       expect(birthYearHeader).toBeInTheDocument();
       expect(genderHeader).toBeInTheDocument();
-      expect(schoolHeader).toBeInTheDocument();
+      expect(positionHeader).toBeInTheDocument();
       expect(sportHeader).toBeInTheDocument();
       expect(statusHeader).toBeInTheDocument();
 
@@ -480,8 +480,8 @@ describe('Athletes Page - Column Sorting', () => {
     });
   });
 
-  describe('Sort Logic - School', () => {
-    it('should sort athletes by school name alphabetically', async () => {
+  describe('Sort Logic - Position', () => {
+    it('should sort athletes by position name alphabetically', async () => {
       const user = userEvent.setup();
       setupFetchMocks(mockAthletes);
       renderWithProviders(<Athletes />);
@@ -490,27 +490,27 @@ describe('Athletes Page - Column Sorting', () => {
         expect(screen.getByTestId('athletes-count')).toHaveTextContent('5 athletes');
       });
 
-      const schoolHeader = screen.getByTestId('sort-header-school');
-      await user.click(schoolHeader);
+      const positionHeader = screen.getByTestId('sort-header-position');
+      await user.click(positionHeader);
 
       await waitFor(() => {
         const table = screen.getByRole('table');
         const rows = within(table).getAllByRole('row');
 
-        const schools = rows.slice(1).map(row =>
+        const positions = rows.slice(1).map(row =>
           within(row).getAllByRole('cell')[5]?.textContent?.trim()
         ).filter(Boolean);
 
-        // Schools in alphabetical order (null/"N/A" should be at the end)
-        expect(schools[0]).toBe('Central High');
-        expect(schools[1]).toBe('East Academy');
-        expect(schools[2]).toBe('North Academy');
-        expect(schools[3]).toBe('South High');
-        expect(schools[4]).toBe('N/A');
+        // Positions in alphabetical order (null/"N/A" should be at the end)
+        expect(positions[0]).toBe('Guard');
+        expect(positions[1]).toBe('Midfielder');
+        expect(positions[2]).toBe('Pitcher');
+        expect(positions[3]).toBe('Quarterback');
+        expect(positions[4]).toBe('N/A');
       });
     });
 
-    it('should handle null school values in sorting', async () => {
+    it('should handle null position values in sorting', async () => {
       const user = userEvent.setup();
       setupFetchMocks(mockAthletes);
       renderWithProviders(<Athletes />);
@@ -519,19 +519,19 @@ describe('Athletes Page - Column Sorting', () => {
         expect(screen.getByTestId('athletes-count')).toHaveTextContent('5 athletes');
       });
 
-      const schoolHeader = screen.getByTestId('sort-header-school');
-      await user.click(schoolHeader);
+      const positionHeader = screen.getByTestId('sort-header-position');
+      await user.click(positionHeader);
 
       await waitFor(() => {
         const table = screen.getByRole('table');
         const rows = within(table).getAllByRole('row');
 
-        const schools = rows.slice(1).map(row =>
+        const positions = rows.slice(1).map(row =>
           within(row).getAllByRole('cell')[5]?.textContent?.trim()
         ).filter(Boolean);
 
-        // N/A (null school) should be at the end when ascending
-        expect(schools[schools.length - 1]).toBe('N/A');
+        // "N/A" (null position) should be at the end when ascending
+        expect(positions[positions.length - 1]).toBe('N/A');
       });
     });
   });

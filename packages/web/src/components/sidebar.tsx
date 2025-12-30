@@ -26,6 +26,7 @@ import {
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
 import { OrganizationDisplay } from "./organization-display";
+import { OrgSwitcher } from "./athlete/OrgSwitcher";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 
@@ -226,6 +227,13 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
       </div>
 
       <NavigationMenu navigation={navigation} currentLocation={location} onNavigate={onNavigate} />
+
+      {/* Organization Switcher for Athletes */}
+      {userRole === 'athlete' && (
+        <div className="px-4 py-3 border-t border-gray-200">
+          <OrgSwitcher />
+        </div>
+      )}
 
       <UserProfileDisplay
         user={userData}

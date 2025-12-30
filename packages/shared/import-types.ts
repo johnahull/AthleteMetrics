@@ -271,3 +271,83 @@ export const TEAM_HANDLING_DESCRIPTIONS: Record<TeamHandlingMode, { label: strin
     description: 'Create athletes without team assignment for missing teams'
   }
 };
+
+// ============================================
+// Import Wizard Types
+// ============================================
+
+/**
+ * Steps in the import wizard flow
+ */
+export type ImportWizardStep =
+  | 'select-type'       // Step 1: Choose athletes or measurements
+  | 'select-team'       // Step 2: Select team(s) for context
+  | 'select-metrics'    // Step 3: Choose metrics (measurements only)
+  | 'preview-template'  // Step 4: Preview and download template
+  | 'upload';           // Step 5: Upload and import CSV
+
+/**
+ * Wizard state for multi-step import flow
+ */
+export interface ImportWizardState {
+  importType: 'athletes' | 'measurements';
+  selectedTeamIds: string[];
+  selectedMetricCodes: string[];
+  includeExamples: boolean;
+  generatedTemplate: string | null;
+  currentStep: ImportWizardStep;
+}
+
+/**
+ * Request body for wizard template endpoint
+ */
+export interface TemplateWizardRequest {
+  type: 'athletes' | 'measurements';
+  teamIds: string[];
+  metricCodes?: string[];
+  includeExamples?: boolean;
+}
+
+/**
+ * Metric info returned by wizard endpoint
+ */
+export interface WizardMetricInfo {
+  code: string;
+  label: string;
+  unit: string | null;
+  category: string;
+  isCommon: boolean;
+}
+
+/**
+ * Team info returned by wizard endpoint
+ */
+export interface WizardTeamInfo {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response from wizard template endpoint
+ */
+export interface TemplateWizardResponse {
+  csvContent: string;
+  headers: string[];
+  teams: WizardTeamInfo[];
+  /** Only present for measurement templates */
+  enabledMetrics?: WizardMetricInfo[];
+  exampleRows: Record<string, string>[];
+}
+
+/**
+ * Common/popular metrics that are pre-selected by default in the wizard
+ */
+export const COMMON_METRICS = [
+  'FLY10_TIME',
+  'VERTICAL_JUMP',
+  'DASH_40YD',
+  'AGILITY_505',
+  'TOP_SPEED'
+] as const;
+
+export type CommonMetricCode = typeof COMMON_METRICS[number];

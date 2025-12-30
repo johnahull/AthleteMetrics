@@ -31,6 +31,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Spring',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-03-15'),
   },
   {
@@ -52,6 +55,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Spring',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-03-10'),
   },
   {
@@ -73,6 +79,9 @@ const mockMeasurements: Measurement[] = [
     season: '2024-Spring',
     teamContextAuto: true,
     globalAthleteId: null,
+    isCalculated: false,
+    calculatedFromMeasurementIds: null,
+    calculationMetadata: null,
     createdAt: new Date('2024-03-01'),
   },
 ];
@@ -106,15 +115,13 @@ describe('MeasurementHistoryTable', () => {
     });
 
     it('should display metric display name instead of raw key', () => {
+      // NOTE: getMetricDisplayName now returns metric codes as fallback.
+      // In production, labels come from database via useMetricConfig hook.
       render(<MeasurementHistoryTable measurements={mockMeasurements} />);
 
-      // Should show "10-Yard Fly" not "FLY10_TIME"
-      expect(screen.getByText('10-Yard Fly')).toBeInTheDocument();
-      expect(screen.queryByText('FLY10_TIME')).not.toBeInTheDocument();
-
-      // Should show "Vertical Jump" not "VERTICAL_JUMP"
-      expect(screen.getByText('Vertical Jump')).toBeInTheDocument();
-      expect(screen.queryByText('VERTICAL_JUMP')).not.toBeInTheDocument();
+      // Now displays metric codes (fallback behavior - labels from DB in production)
+      expect(screen.getByText('FLY10_TIME')).toBeInTheDocument();
+      expect(screen.getByText('VERTICAL_JUMP')).toBeInTheDocument();
     });
 
     it('should display value with units', () => {
@@ -169,8 +176,8 @@ describe('MeasurementHistoryTable', () => {
     it('should not show actual data when loading', () => {
       render(<MeasurementHistoryTable measurements={mockMeasurements} isLoading={true} />);
 
-      // Data should not be visible during loading
-      expect(screen.queryByText('10-Yard Fly')).not.toBeInTheDocument();
+      // Data should not be visible during loading (metric codes instead of display names)
+      expect(screen.queryByText('FLY10_TIME')).not.toBeInTheDocument();
     });
   });
 
@@ -214,8 +221,8 @@ describe('MeasurementHistoryTable', () => {
       const rows = screen.getAllByRole('row').slice(1);
       const firstRow = rows[0];
 
-      // Should be sorted alphabetically by metric display name
-      expect(within(firstRow).getByText(/10-yard fly|5-0-5 agility|vertical jump/i)).toBeInTheDocument();
+      // Should be sorted alphabetically by metric code (fallback behavior)
+      expect(within(firstRow).getByText(/FLY10_TIME|AGILITY_505|VERTICAL_JUMP/i)).toBeInTheDocument();
     });
 
     it('should sort by value when clicking value column header', async () => {

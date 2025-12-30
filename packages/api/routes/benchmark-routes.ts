@@ -9,15 +9,26 @@ import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { BenchmarkService } from "../services/benchmark-service";
 import { peerComparisonService, type PeerFilterCriteria } from "../services/peer-comparison-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess, requireAthleteAccess } from "../middleware";
-import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
+import { validateOrgTypeQuery, type OrganizationTypeRequest } from "../middleware/organization-type-middleware";
+import { z } from "zod";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
   insertCustomBenchmarkSchema,
   updateCustomBenchmarkSchema,
+  insertTierGroupSchema,
 } from "@shared/schema";
 
 const benchmarkService = new BenchmarkService();
+
+// Zod schema for peer filter criteria validation
+const peerFilterSchema = z.object({
+  ageRange: z.tuple([z.number(), z.number()]).optional(),
+  gender: z.enum(['Male', 'Female']).optional(),
+  orgTypes: z.array(z.string()).optional(),
+  sports: z.array(z.string()).optional(),
+  teamIds: z.array(z.string()).optional(),
+}).strict();
 
 function sanitizeError(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;
@@ -55,7 +66,7 @@ function handleBenchmarkError(res: Response, error: unknown, operation: string):
   }
 
   // 404 - Not found
-  if (errorMessage.includes('not found')) {
+  if (errorMessage.includes('not found') || errorMessage.includes('does not exist')) {
     res.status(404).json({ message: error.message });
     return;
   }
@@ -148,13 +159,54 @@ export function registerBenchmarkRoutes(app: Express) {
       try {
         const userId = req.session.user!.id;
         const includeInactive = req.query.includeInactive === 'true';
-        const orgType = (req as any).organizationType as string | undefined; // Get validated org type from middleware
+        const orgType = (req as OrganizationTypeRequest).organizationType ?? undefined; // Get validated org type from middleware
 
         const benchmarks = await benchmarkService.getSiteBenchmarks(userId, { includeInactive, orgType });
         res.json(benchmarks);
       } catch (error) {
         console.error("GET /api/site-benchmarks error:", error);
         handleBenchmarkError(res, error, "fetch site benchmarks");
+      }
+    }
+  );
+
+  // Get tier groups for site benchmarks (site admin only)
+  app.get("/api/site-benchmarks/tier-groups",
+    benchmarkReadLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req, res) => {
+      try {
+        const metricCode = req.query.metricCode as string | undefined;
+        const tierGroups = await benchmarkService.getSiteTierGroups(metricCode);
+        res.json(tierGroups);
+      } catch (error) {
+        console.error("GET /api/site-benchmarks/tier-groups error:", error);
+        handleBenchmarkError(res, error, "fetch tier groups");
+      }
+    }
+  );
+
+  // Create a tier group (batch creation of benchmarks) (site admin only)
+  app.post("/api/site-benchmarks/tier-group",
+    benchmarkCreateLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req, res) => {
+      try {
+        const userId = req.session.user!.id;
+        const validatedData = insertTierGroupSchema.parse(req.body);
+
+        const context = {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        };
+
+        const result = await benchmarkService.createTierGroup(validatedData, userId, context);
+        res.status(201).json(result);
+      } catch (error) {
+        console.error("POST /api/site-benchmarks/tier-group error:", error);
+        handleBenchmarkError(res, error, "create tier group");
       }
     }
   );
@@ -573,12 +625,16 @@ export function registerBenchmarkRoutes(app: Express) {
         }
         const metrics = metricsParam.split(',').map(m => m.trim()).filter(m => m);
 
-        // Parse optional filters
+        // Parse and validate optional filters
         let filters: PeerFilterCriteria = {};
         if (req.query.filters) {
           try {
-            filters = JSON.parse(req.query.filters as string);
-          } catch {
+            const parsed = JSON.parse(req.query.filters as string);
+            filters = peerFilterSchema.parse(parsed);
+          } catch (parseError) {
+            if (parseError instanceof z.ZodError) {
+              return res.status(400).json({ message: "Invalid filters format", errors: parseError.errors });
+            }
             return res.status(400).json({ message: "Invalid filters JSON" });
           }
         }
@@ -614,12 +670,16 @@ export function registerBenchmarkRoutes(app: Express) {
       try {
         const { metric } = req.params;
 
-        // Parse optional filters
+        // Parse and validate optional filters
         let filters: PeerFilterCriteria = {};
         if (req.query.filters) {
           try {
-            filters = JSON.parse(req.query.filters as string);
-          } catch {
+            const parsed = JSON.parse(req.query.filters as string);
+            filters = peerFilterSchema.parse(parsed);
+          } catch (parseError) {
+            if (parseError instanceof z.ZodError) {
+              return res.status(400).json({ message: "Invalid filters format", errors: parseError.errors });
+            }
             return res.status(400).json({ message: "Invalid filters JSON" });
           }
         }

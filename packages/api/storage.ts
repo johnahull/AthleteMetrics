@@ -24,10 +24,11 @@ import {
   type OrganizationType,
   type InsertOAuthUser
 } from "@shared/schema";
+import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
@@ -255,7 +256,7 @@ export interface IStorage {
   revokeLoginSession(token: string): Promise<void>;
   revokeAllUserSessions(userId: string, options?: { throwOnError?: boolean }): Promise<number>;
   updateUserBackupCodes(userId: string, codes: string[]): Promise<void>;
-  createSecurityEvent(event: any): Promise<void>;
+  createSecurityEvent(event: Omit<SecurityEvent, 'id' | 'createdAt'>): Promise<void>;
   getUserSecurityEvents(userId: string, limit: number): Promise<any[]>;
   getSecurityEventsByIP(ipAddress: string, timeWindow: number): Promise<any[]>;
   getRecentEmailChanges(userId: string, timeWindow: number): Promise<any[]>;
@@ -299,7 +300,8 @@ export interface IStorage {
   getSiteBenchmarks(filters?: { includeInactive?: boolean; orgType?: OrganizationType }): Promise<SiteBenchmark[]>;
   getSiteBenchmark(id: string): Promise<SiteBenchmark | undefined>;
   getSiteBenchmarksByIds(ids: string[]): Promise<SiteBenchmark[]>;
-  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark>;
+  getSiteBenchmarksByTierGroup(tierGroupId: string): Promise<SiteBenchmark[]>;
+  createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark>;
   updateSiteBenchmark(id: string, benchmark: Partial<UpdateSiteBenchmark>): Promise<SiteBenchmark>;
   toggleSiteBenchmarkStatus(id: string, isActive: boolean): Promise<SiteBenchmark>;
   deleteSiteBenchmark(id: string): Promise<void>;
@@ -307,9 +309,14 @@ export interface IStorage {
   // Custom Benchmarks (Org-specific benchmarks)
   getCustomBenchmarksForOrg(organizationId: string, filters?: { includeInactive?: boolean }): Promise<CustomBenchmark[]>;
   getCustomBenchmark(id: string): Promise<CustomBenchmark | undefined>;
+  getCustomBenchmarksByTierGroup(organizationId: string, tierGroupId: string): Promise<CustomBenchmark[]>;
   createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark>;
   updateCustomBenchmark(organizationId: string, benchmarkId: string, benchmark: Partial<UpdateCustomBenchmark>): Promise<CustomBenchmark>;
   deleteCustomBenchmark(organizationId: string, benchmarkId: string): Promise<void>;
+
+  // Tier Groups (for form dropdowns)
+  getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>>;
+  getCustomTierGroups(organizationId: string, metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>>;
 
   // Organization Benchmarks (Org-level benchmark enablement)
   getOrganizationBenchmarks(organizationId: string, filters?: { includeInactive?: boolean }): Promise<OrganizationBenchmark[]>;
@@ -1592,7 +1599,22 @@ export class DatabaseStorage implements IStorage {
     return invitation || undefined;
   }
 
-  async acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }> {
+  async acceptInvitation(
+    token: string,
+    userInfo: {
+      email: string;
+      username: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+      legalAcceptedAt?: string;
+      legalAcceptedVersion?: string;
+    },
+    auditContext?: {
+      ipAddress?: string;
+      userAgent?: string;
+    }
+  ): Promise<{ user: User; invitation: Invitation }> {
     // Use database transaction with row-level locking to prevent race conditions
     return await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
@@ -1612,6 +1634,13 @@ export class DatabaseStorage implements IStorage {
 
       let user;
 
+      // Prepare legal acceptance data
+      const { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } = await import('@shared/legal-acceptance');
+      const legalData = userInfo.legalAcceptedAt ? {
+        legalAcceptedAt: new Date(userInfo.legalAcceptedAt),
+        legalAcceptedVersion: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp()
+      } : {};
+
       // Check if invitation is linked to an existing athlete (playerId)
       if (invitation.playerId) {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
@@ -1628,7 +1657,8 @@ export class DatabaseStorage implements IStorage {
         user = await this.updateUser(invitation.playerId, {
           username: userInfo.username,
           password: userInfo.password,
-          isActive: true
+          isActive: true,
+          ...legalData
         });
 
         console.log("Updated existing athlete with credentials:", user.id);
@@ -1641,7 +1671,8 @@ export class DatabaseStorage implements IStorage {
           password: userInfo.password,
           firstName: userInfo.firstName,
           lastName: userInfo.lastName,
-          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete"
+          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
+          ...legalData
         };
 
         console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
@@ -1688,7 +1719,43 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(invitations.token, token));
 
-      return { user };
+      // Create audit logs as part of the transaction
+      // All audit logs must be inside transaction for atomicity and consistency
+
+      // 1. Legal acceptance audit log (if provided)
+      if (userInfo.legalAcceptedAt) {
+        await tx.insert(auditLogs).values({
+          userId: user.id,
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
+          resourceType: 'user',
+          resourceId: user.id,
+          details: JSON.stringify({
+            version: userInfo.legalAcceptedVersion || getLegalAcceptanceTimestamp(),
+            acceptedAt: userInfo.legalAcceptedAt,
+            method: 'invitation'
+          }),
+          ipAddress: auditContext?.ipAddress,
+          userAgent: auditContext?.userAgent,
+        });
+      }
+
+      // 2. Invitation accepted audit log
+      // Note: This is separate from legal acceptance - tracks the invitation being used
+      await tx.insert(auditLogs).values({
+        userId: user.id,
+        action: 'invitation_accepted',
+        resourceType: 'invitation',
+        resourceId: invitation.id,
+        details: JSON.stringify({
+          email: invitation.email,
+          role: invitation.role,
+          organizationId: invitation.organizationId
+        }),
+        ipAddress: auditContext?.ipAddress,
+        userAgent: auditContext?.userAgent,
+      });
+
+      return { user, invitation };
     });
   }
 
@@ -3541,9 +3608,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, userId));
   }
 
-  async createSecurityEvent(event: any): Promise<void> {
-    // Would need securityEvents table implementation
-    console.log('Creating security event:', event.eventType);
+  async createSecurityEvent(event: Omit<SecurityEvent, 'id' | 'createdAt'>): Promise<void> {
+    // Validate event data with Zod schema before insertion
+    // This ensures type safety and prevents invalid data from reaching the database
+    try {
+      const { createSecurityEventSchema } = await import('@shared/enhanced-auth-schema');
+      const validated = createSecurityEventSchema.parse(event);
+      await db.insert(securityEvents).values(validated);
+    } catch (error) {
+      // Log validation errors but don't propagate (fire-and-forget pattern)
+      console.error('[security:audit] Failed to create security event:', error);
+      throw error; // Re-throw to maintain error handling contract
+    }
   }
 
   async getUserSecurityEvents(userId: string, limit: number): Promise<any[]> {
@@ -4261,16 +4337,100 @@ export class DatabaseStorage implements IStorage {
     return benchmarks;
   }
 
-  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string): Promise<SiteBenchmark> {
-    const [created] = await db
+  async getSiteBenchmarksByTierGroup(tierGroupId: string): Promise<SiteBenchmark[]> {
+    const benchmarks = await db
+      .select()
+      .from(siteBenchmarks)
+      .where(eq(siteBenchmarks.tierGroupId, tierGroupId))
+      .orderBy(siteBenchmarks.tierOrder);
+
+    return benchmarks;
+  }
+
+  async createSiteBenchmark(benchmark: InsertSiteBenchmark, createdBy: string, tx?: any): Promise<SiteBenchmark> {
+    const dbInstance = tx || db;
+
+    // Build insert values explicitly, only including fields with actual values
+    // This prevents Drizzle from inserting NULL for undefined/null fields
+    const insertValues: Partial<typeof siteBenchmarks.$inferInsert> = {
+      // Required fields
+      metricCode: benchmark.metricCode,
+      name: benchmark.name,
+      comparisonOperator: benchmark.comparisonOperator || 'lte',
+      // Control flags with defaults
+      // isSystemDefault is omitted from InsertSiteBenchmark type - always false for user-created
+      isSystemDefault: false,
+      isActive: benchmark.isActive ?? true,
+      displayOrder: benchmark.displayOrder ?? 999,
+      benchmarkSource: 'static', // User-created benchmarks are always 'static'
+      // Metadata
+      createdBy,
+      createdAt: new Date(),
+    };
+
+    // Optional text fields - only include if provided
+    if (benchmark.description !== undefined && benchmark.description !== null) {
+      insertValues.description = benchmark.description;
+    }
+    if (benchmark.tierGroupId !== undefined && benchmark.tierGroupId !== null) {
+      insertValues.tierGroupId = benchmark.tierGroupId;
+    }
+    if (benchmark.tierName !== undefined && benchmark.tierName !== null) {
+      insertValues.tierName = benchmark.tierName;
+    }
+    if (benchmark.tierColor !== undefined && benchmark.tierColor !== null) {
+      insertValues.tierColor = benchmark.tierColor;
+    }
+    if (benchmark.color !== undefined && benchmark.color !== null) {
+      insertValues.color = benchmark.color;
+    }
+    if (benchmark.icon !== undefined && benchmark.icon !== null) {
+      insertValues.icon = benchmark.icon;
+    }
+    if (benchmark.gender !== undefined && benchmark.gender !== null) {
+      insertValues.gender = benchmark.gender;
+    }
+    if (benchmark.position !== undefined && benchmark.position !== null) {
+      insertValues.position = benchmark.position;
+    }
+    if (benchmark.level !== undefined && benchmark.level !== null) {
+      insertValues.level = benchmark.level;
+    }
+
+    // Optional numeric fields - convert to string for decimal precision
+    if (benchmark.benchmarkValue !== undefined && benchmark.benchmarkValue !== null) {
+      insertValues.benchmarkValue = Number(benchmark.benchmarkValue).toFixed(3);
+    }
+    if (benchmark.minValue !== undefined && benchmark.minValue !== null) {
+      insertValues.minValue = Number(benchmark.minValue).toFixed(3);
+    }
+    if (benchmark.maxValue !== undefined && benchmark.maxValue !== null) {
+      insertValues.maxValue = Number(benchmark.maxValue).toFixed(3);
+    }
+    if (benchmark.tierOrder !== undefined && benchmark.tierOrder !== null) {
+      insertValues.tierOrder = benchmark.tierOrder;
+    }
+    if (benchmark.ageMin !== undefined && benchmark.ageMin !== null) {
+      insertValues.ageMin = benchmark.ageMin;
+    }
+    if (benchmark.ageMax !== undefined && benchmark.ageMax !== null) {
+      insertValues.ageMax = benchmark.ageMax;
+    }
+    if (benchmark.peerPercentileTarget !== undefined && benchmark.peerPercentileTarget !== null) {
+      insertValues.peerPercentileTarget = benchmark.peerPercentileTarget;
+    }
+
+    // Optional array/object fields
+    if (benchmark.applicableOrgTypes !== undefined && benchmark.applicableOrgTypes !== null) {
+      insertValues.applicableOrgTypes = benchmark.applicableOrgTypes;
+    }
+    if (benchmark.peerFilterCriteria !== undefined && benchmark.peerFilterCriteria !== null) {
+      insertValues.peerFilterCriteria = benchmark.peerFilterCriteria;
+    }
+
+    const [created] = await dbInstance
       .insert(siteBenchmarks)
-      .values({
-        ...benchmark,
-        // Convert numeric values to strings for decimal columns with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
-        createdBy,
-        createdAt: new Date(),
-      })
+      .values(insertValues as typeof siteBenchmarks.$inferInsert)
       .returning();
 
     return created;
@@ -4281,8 +4441,10 @@ export class DatabaseStorage implements IStorage {
       .update(siteBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(eq(siteBenchmarks.id, id))
@@ -4376,13 +4538,30 @@ export class DatabaseStorage implements IStorage {
     return result[0];
   }
 
+  async getCustomBenchmarksByTierGroup(organizationId: string, tierGroupId: string): Promise<CustomBenchmark[]> {
+    const benchmarks = await db
+      .select()
+      .from(customBenchmarks)
+      .where(
+        and(
+          eq(customBenchmarks.organizationId, organizationId),
+          eq(customBenchmarks.tierGroupId, tierGroupId)
+        )
+      )
+      .orderBy(customBenchmarks.tierOrder);
+
+    return benchmarks;
+  }
+
   async createCustomBenchmark(benchmark: InsertCustomBenchmark, createdBy: string): Promise<CustomBenchmark> {
     const [created] = await db
       .insert(customBenchmarks)
       .values({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
-        benchmarkValue: Number(benchmark.benchmarkValue).toFixed(3),
+        // Convert numeric values to strings for decimal columns with proper precision
+        benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         createdBy,
         createdAt: new Date(),
       })
@@ -4396,8 +4575,10 @@ export class DatabaseStorage implements IStorage {
       .update(customBenchmarks)
       .set({
         ...benchmark,
-        // Convert numeric value to string for decimal column with proper precision (DECIMAL(10,3))
+        // Convert numeric values to strings for decimal columns with proper precision
         benchmarkValue: benchmark.benchmarkValue !== undefined ? Number(benchmark.benchmarkValue).toFixed(3) : undefined,
+        minValue: benchmark.minValue !== undefined ? Number(benchmark.minValue).toFixed(3) : undefined,
+        maxValue: benchmark.maxValue !== undefined ? Number(benchmark.maxValue).toFixed(3) : undefined,
         updatedAt: new Date(),
       })
       .where(
@@ -4429,6 +4610,61 @@ export class DatabaseStorage implements IStorage {
     if (result.length === 0) {
       throw new Error(`Custom benchmark with id ${id} not found for organization ${organizationId}`);
     }
+  }
+
+  // ========================================================================
+  // TIER GROUPS (for form dropdowns)
+  // ========================================================================
+
+  async getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    const conditions = [isNotNull(siteBenchmarks.tierGroupId)];
+
+    if (metricCode) {
+      conditions.push(eq(siteBenchmarks.metricCode, metricCode));
+    }
+
+    const results = await db
+      .select({
+        tierGroupId: siteBenchmarks.tierGroupId,
+        metricCode: siteBenchmarks.metricCode,
+        tierCount: sql<number>`count(*)`.as('tier_count'),
+      })
+      .from(siteBenchmarks)
+      .where(and(...conditions))
+      .groupBy(siteBenchmarks.tierGroupId, siteBenchmarks.metricCode);
+
+    return results.map(r => ({
+      tierGroupId: r.tierGroupId!,
+      metricCode: r.metricCode,
+      tierCount: Number(r.tierCount),
+    }));
+  }
+
+  async getCustomTierGroups(organizationId: string, metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    const conditions = [
+      eq(customBenchmarks.organizationId, organizationId),
+      isNotNull(customBenchmarks.tierGroupId),
+    ];
+
+    if (metricCode) {
+      conditions.push(eq(customBenchmarks.metricCode, metricCode));
+    }
+
+    const results = await db
+      .select({
+        tierGroupId: customBenchmarks.tierGroupId,
+        metricCode: customBenchmarks.metricCode,
+        tierCount: sql<number>`count(*)`.as('tier_count'),
+      })
+      .from(customBenchmarks)
+      .where(and(...conditions))
+      .groupBy(customBenchmarks.tierGroupId, customBenchmarks.metricCode);
+
+    return results.map(r => ({
+      tierGroupId: r.tierGroupId!,
+      metricCode: r.metricCode,
+      tierCount: Number(r.tierCount),
+    }));
   }
 
   // Organization Benchmarks Enablement
@@ -4473,6 +4709,8 @@ export class DatabaseStorage implements IStorage {
         description: siteBenchmarks.description,
         benchmarkValue: siteBenchmarks.benchmarkValue,
         comparisonOperator: siteBenchmarks.comparisonOperator,
+        minValue: siteBenchmarks.minValue,
+        maxValue: siteBenchmarks.maxValue,
         gender: siteBenchmarks.gender,
         ageMin: siteBenchmarks.ageMin,
         ageMax: siteBenchmarks.ageMax,
@@ -4507,6 +4745,8 @@ export class DatabaseStorage implements IStorage {
         description: customBenchmarks.description,
         benchmarkValue: customBenchmarks.benchmarkValue,
         comparisonOperator: customBenchmarks.comparisonOperator,
+        minValue: customBenchmarks.minValue,
+        maxValue: customBenchmarks.maxValue,
         gender: customBenchmarks.gender,
         ageMin: customBenchmarks.ageMin,
         ageMax: customBenchmarks.ageMax,
@@ -4528,8 +4768,10 @@ export class DatabaseStorage implements IStorage {
     // Convert to OrganizationBenchmarkWithDetails type
     return allResults.map(row => ({
       ...row,
-      benchmarkValue: Number(row.benchmarkValue),
-      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq',
+      benchmarkValue: row.benchmarkValue ? Number(row.benchmarkValue) : null,
+      minValue: row.minValue ? Number(row.minValue) : null,
+      maxValue: row.maxValue ? Number(row.maxValue) : null,
+      comparisonOperator: row.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
       gender: row.gender as 'Male' | 'Female' | 'Not Specified' | null,
       level: row.level as 'college' | 'high_school' | 'club' | null,
     }));

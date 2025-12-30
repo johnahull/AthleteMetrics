@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -22,6 +22,12 @@ export const organizationTypeEnum = ['youth', 'high_school', 'college', 'club', 
  * - tracking: No better/worse direction, just informational (e.g., HEIGHT, WEIGHT)
  */
 export const metricTypeEnum = ['lower_is_better', 'higher_is_better', 'tracking'] as const;
+
+/**
+ * Sport code enum for metric sport associations
+ * These codes correspond to the 'code' field in the site_sports table
+ */
+export const sportCodeEnum = ['SOCCER', 'BASKETBALL', 'VOLLEYBALL', 'TENNIS', 'BASEBALL', 'FOOTBALL', 'HOCKEY', 'LACROSSE'] as const;
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -111,6 +117,25 @@ export const users = pgTable("users", {
   // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
   showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
   peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
+  /**
+   * Legal acceptance tracking
+   *
+   * legalAcceptedAt: Timestamp when user accepted Terms of Service and Privacy Policy
+   *   - NULL for grandfathered users (existed before legal acceptance requirement)
+   *   - Required for all new users (registration, invitation, OAuth signup)
+   *
+   * legalAcceptedVersion: Version identifier for accepted terms (YYYY-MM-DD format)
+   *   - Represents the date/time when user accepted, NOT the policy document version
+   *   - Used for compliance auditing and potential future re-acceptance flows
+   *   - Example: "2024-12-13"
+   *
+   * Compliance notes:
+   *   - Both fields must be set together for new users
+   *   - Audit logs are created in parallel (see audit_logs table)
+   *   - Grandfathered users (NULL values) are assumed to have implicitly accepted
+   */
+  legalAcceptedAt: timestamp("legal_accepted_at"),
+  legalAcceptedVersion: text("legal_accepted_version"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -158,6 +183,16 @@ export const siteMetrics = pgTable("site_metrics", {
   // Display settings
   color: varchar("color", { length: 20 }), // Hex color or Tailwind class
   icon: varchar("icon", { length: 50 }), // Icon identifier
+  // Derived metrics configuration
+  isDerived: boolean("is_derived").default(false).notNull(), // Whether this metric is calculated from other metrics
+  formula: text("formula"), // Formula for calculation (e.g., "10 / fly10_time * 2.045")
+  dependentMetrics: text("dependent_metrics").array(), // Metric codes this formula depends on
+  calculationConfig: jsonb("calculation_config").$type<{
+    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+    maxDateDifference?: number;
+    missingSourceBehavior: 'skip' | 'error';
+    constants?: Record<string, number>;
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -167,6 +202,8 @@ export const siteMetrics = pgTable("site_metrics", {
   categoryIdx: index("site_metrics_category_idx").on(table.category),
   // Index for organization type filtering
   availableOrgTypesIdx: index("site_metrics_available_org_types_idx").on(table.availableOrgTypes),
+  // Index for querying derived metrics (partial index: WHERE is_derived = true)
+  isDerivedIdx: index("idx_site_metrics_is_derived").on(table.isDerived).where(sql`${table.isDerived} = true`),
 }));
 
 // Organization-level metric enablement (org opt-in to site metrics)
@@ -233,8 +270,16 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
-  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq'
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
+  // Range-based benchmark fields (migration 0076)
+  minValue: decimal("min_value", { precision: 10, scale: 2 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  // Tier grouping fields (migration 0077)
+  tierGroupId: varchar("tier_group_id"),
+  tierOrder: integer("tier_order"),
+  tierName: varchar("tier_name", { length: 50 }),
+  tierColor: varchar("tier_color", { length: 20 }),
   // Organization type filtering (NULL = applies to all org types)
   applicableOrgTypes: text("applicable_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Athlete attribute filters (NULL = applies to all)
@@ -283,8 +328,16 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   metricCode: varchar("metric_code", { length: 50 }).notNull().references(() => siteMetrics.code, { onDelete: 'cascade' }),
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
-  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }).notNull(),
-  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(),
+  benchmarkValue: decimal("benchmark_value", { precision: 10, scale: 3 }),
+  comparisonOperator: varchar("comparison_operator", { length: 10 }).default('lte').notNull(), // 'lte', 'gte', 'eq', 'range'
+  // Range-based benchmark fields (migration 0076)
+  minValue: decimal("min_value", { precision: 10, scale: 2 }),
+  maxValue: decimal("max_value", { precision: 10, scale: 2 }),
+  // Tier grouping fields (migration 0077)
+  tierGroupId: varchar("tier_group_id"),
+  tierOrder: integer("tier_order"),
+  tierName: varchar("tier_name", { length: 50 }),
+  tierColor: varchar("tier_color", { length: 20 }),
   // Athlete attribute filters
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
@@ -356,12 +409,33 @@ export const measurements = pgTable("measurements", {
   teamContextAuto: boolean("team_context_auto").default(true).notNull(), // Whether team was auto-assigned vs manually selected
   // Global athlete linking for cross-org aggregation
   globalAthleteId: varchar("global_athlete_id"), // Historical reference (no FK - allows orphaned data)
+  // Derived/calculated measurement fields
+  isCalculated: boolean("is_calculated").default(false).notNull(), // Whether this measurement was auto-calculated
+  calculatedFromMeasurementIds: text("calculated_from_measurement_ids").array(), // Source measurement IDs used in calculation
+  calculationMetadata: jsonb("calculation_metadata").$type<{
+    formula: string;
+    sourceValues: Record<string, number>;
+    calculatedAt: string;
+    calculationVersion?: string;  // Version of the calculator (e.g., "1.0.0")
+    triggeredBy?: {
+      event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
+      userId?: string;              // Who triggered the calculation (if applicable)
+      sourceMeasurementId?: string; // Source measurement that triggered the calculation
+    };
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({
   globalAthleteIdx: index("measurements_global_athlete_idx").on(table.globalAthleteId, table.date),
   // Performance indexes for peer comparison queries
   metricVerifiedIdx: index("measurements_metric_verified_idx").on(table.metric, table.isVerified, table.userId, table.value),
   userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
+  // Derived metrics indexes (partial indexes: WHERE is_calculated = true / is_verified = true)
+  isCalculatedIdx: index("idx_measurements_is_calculated").on(table.isCalculated).where(sql`${table.isCalculated} = true`),
+  // Note: idx_measurements_calculated_from is a GIN index (USING GIN) created in migration 0083
+  // for array containment queries on calculated_from_measurement_ids. Drizzle doesn't support
+  // specifying GIN index type, so this index is created manually in the migration.
+  // Index name: idx_measurements_calculated_from (partial: WHERE is_calculated = true)
+  userMetricVerifiedDateIdx: index("idx_measurements_user_metric_verified_date").on(table.userId, table.metric, table.date).where(sql`${table.isVerified} = true`),
 }));
 
 export const userOrganizations = pgTable("user_organizations", {
@@ -511,6 +585,9 @@ export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   aiModel: text("ai_model").notNull().default("gpt-5-nano"),
   wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
+  // Push notification global settings
+  pushNotificationsEnabled: boolean("push_notifications_enabled").notNull().default(true),
+  pushDefaultOrgSettings: jsonb("push_default_org_settings"),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
   updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
 });
@@ -1508,7 +1585,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
 }).extend({
   userId: z.string().min(1, "User is required"), // Changed from playerId to userId
   date: z.string().date("Date must be in YYYY-MM-DD format"), // Strict date validation
-  metric: z.enum(["FLY10_TIME", "VERTICAL_JUMP", "AGILITY_505", "AGILITY_5105", "T_TEST", "DASH_40YD", "RSI", "TOP_SPEED"]),
+  // Accept any metric code - validation against active metrics happens at API level
+  // This allows derived metrics and custom metrics to be recorded
+  metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
@@ -1537,12 +1616,47 @@ export const insertSiteMetricSchema = createInsertSchema(siteMetrics).omit({
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string()).optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).default(3),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().default(false),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
+  dependentMetrics: z.array(z.string()).optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is true, formula is required
+  if (data.isDerived === true) {
+    if (!data.formula || data.formula.trim() === '') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+    if (!data.calculationConfig) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Calculation config is required when isDerived is true",
+        path: ['calculationConfig'],
+      });
+    }
+  }
+  // If isDerived is false, formula should not be set
+  if (data.isDerived === false && data.formula) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should not be set when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const updateSiteMetricSchema = z.object({
@@ -1553,13 +1667,42 @@ export const updateSiteMetricSchema = z.object({
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
   description: z.string().optional(),
-  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
-  sportAssociations: z.array(z.string()).optional(),
+  // Allow null to explicitly clear these array fields (undefined means "don't update")
+  availableOrgTypes: z.array(z.enum(organizationTypeEnum)).nullable().optional(),
+  sportAssociations: z.array(z.string().max(50, "Sport code must be 50 characters or less").regex(/^[A-Z0-9_]+$/, "Sport code must be uppercase letters, numbers, and underscores")).nullable().optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
   color: z.string().max(20).optional(),
   icon: z.string().max(50).optional(),
+  // Derived metrics fields
+  isDerived: z.boolean().optional(),
+  formula: z.string().max(1000, "Formula must be 1000 characters or less").optional(),
+  dependentMetrics: z.array(z.string()).nullable().optional(),
+  calculationConfig: z.object({
+    dateMatchStrategy: z.enum(['same_date', 'latest_before', 'closest']),
+    maxDateDifference: z.number().int().positive().optional(),
+    missingSourceBehavior: z.enum(['skip', 'error']),
+  }).nullable().optional(),
+}).superRefine((data, ctx) => {
+  // Cross-field validation: If isDerived is being set to true, formula should be provided
+  if (data.isDerived === true) {
+    if (data.formula !== undefined && (!data.formula || data.formula.trim() === '')) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Formula is required when isDerived is true",
+        path: ['formula'],
+      });
+    }
+  }
+  // If isDerived is being set to false, warn if formula is still set (unless explicitly cleared)
+  if (data.isDerived === false && data.formula !== undefined && data.formula !== null && data.formula.trim() !== '') {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Formula should be cleared when isDerived is false",
+      path: ['formula'],
+    });
+  }
 });
 
 export const insertOrganizationMetricSchema = createInsertSchema(organizationMetrics).omit({
@@ -1650,8 +1793,14 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   metricCode: z.string().min(1, "Metric code is required").max(50),
   name: z.string().min(1, "Benchmark name is required").max(100),
   description: z.string().optional(),
-  benchmarkValue: z.number().positive("Benchmark value must be positive"),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  benchmarkValue: z.number().positive("Benchmark value must be positive").optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1670,13 +1819,55 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // If comparison operator is 'range', minValue and maxValue are required
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If comparison operator is 'range', minValue must be less than maxValue
+    if (data.comparisonOperator === 'range' && data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue for range benchmarks", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If comparison operator is NOT 'range', benchmarkValue is required
+    if (data.comparisonOperator !== 'range') {
+      return data.benchmarkValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
+).refine(
+  (data) => {
+    // If tierGroupId is set, tierOrder and tierName are required
+    if (data.tierGroupId !== undefined) {
+      return data.tierOrder !== undefined && data.tierName !== undefined;
+    }
+    return true;
+  },
+  { message: "Tier benchmarks require tierOrder and tierName when tierGroupId is set", path: ["tierGroupId"] }
 );
 
 export const updateSiteBenchmarkSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
@@ -1695,6 +1886,24 @@ export const updateSiteBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // When switching to range mode, both min and max must be provided
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If both min and max are being updated, ensure min < max
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
 );
 
 export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).omit({
@@ -1707,8 +1916,14 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   metricCode: z.string().min(1, "Metric code is required").max(50),
   name: z.string().min(1, "Benchmark name is required").max(100),
   description: z.string().optional(),
-  benchmarkValue: z.number().positive("Benchmark value must be positive"),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).default('lte'),
+  benchmarkValue: z.number().positive("Benchmark value must be positive").optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).default('lte'),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1726,13 +1941,52 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator === 'range' && data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue for range benchmarks", path: ["minValue"] }
+).refine(
+  (data) => {
+    if (data.comparisonOperator !== 'range') {
+      return data.benchmarkValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
+).refine(
+  (data) => {
+    // If tierGroupId is set, tierOrder and tierName are required
+    if (data.tierGroupId !== undefined) {
+      return data.tierOrder !== undefined && data.tierName !== undefined;
+    }
+    return true;
+  },
+  { message: "Tier benchmarks require tierOrder and tierName when tierGroupId is set", path: ["tierGroupId"] }
 );
 
 export const updateCustomBenchmarkSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   description: z.string().optional(),
   benchmarkValue: z.number().positive().optional(),
-  comparisonOperator: z.enum(['lte', 'gte', 'eq']).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']).optional(),
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  tierGroupId: z.string().uuid().optional(),
+  tierOrder: z.number().int().positive().optional(),
+  tierName: z.string().max(50).optional(),
+  tierColor: z.string().max(20).optional(),
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
@@ -1750,6 +2004,24 @@ export const updateCustomBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // When switching to range mode, both min and max must be provided
+    if (data.comparisonOperator === 'range') {
+      return data.minValue !== undefined && data.maxValue !== undefined;
+    }
+    return true;
+  },
+  { message: "Range benchmarks require both minValue and maxValue", path: ["minValue"] }
+).refine(
+  (data) => {
+    // If both min and max are being updated, ensure min < max
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
 );
 
 export const insertOrganizationBenchmarkSchema = createInsertSchema(organizationBenchmarks).omit({
@@ -1992,6 +2264,63 @@ export type InsertSiteBenchmark = z.infer<typeof insertSiteBenchmarkSchema>;
 export type SiteBenchmark = typeof siteBenchmarks.$inferSelect;
 export type UpdateSiteBenchmark = z.infer<typeof updateSiteBenchmarkSchema>;
 
+// Tier definition for a single tier in a group
+export const tierDefinitionSchema = z.object({
+  tierName: z.string().min(1).max(50),
+  tierOrder: z.number().int().min(1),
+  tierColor: z.string().max(20).optional(),
+  // For range benchmarks
+  minValue: z.number().optional(),
+  maxValue: z.number().optional(),
+  // For single-value benchmarks
+  benchmarkValue: z.number().optional(),
+}).refine(
+  (data) => {
+    // Validate minValue < maxValue when both are provided
+    if (data.minValue !== undefined && data.maxValue !== undefined) {
+      return data.minValue < data.maxValue;
+    }
+    return true;
+  },
+  { message: "minValue must be less than maxValue", path: ["minValue"] }
+);
+
+export type TierDefinition = z.infer<typeof tierDefinitionSchema>;
+
+// Schema for creating a tier group (batch creation)
+export const insertTierGroupSchema = z.object({
+  metricCode: z.string().min(1).max(50),
+  name: z.string().min(1).max(100), // Base name for the group
+  description: z.string().max(1000).optional(),
+  comparisonOperator: z.enum(['lte', 'gte', 'eq', 'range']),
+  tiers: z.array(tierDefinitionSchema).min(2, "Tier group must have at least 2 tiers").max(10, "Tier group must have at most 10 tiers"),
+  // Shared filters
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  ageMin: z.number().int().min(0).optional(),
+  ageMax: z.number().int().max(100).optional(),
+  position: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  applicableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
+}).refine(data => {
+  // Validate tier orders are sequential starting from 1
+  const orders = data.tiers.map(t => t.tierOrder).sort((a, b) => a - b);
+  return orders.every((o, i) => o === i + 1);
+}, { message: "Tier orders must be sequential (1, 2, 3...)" })
+.refine(data => {
+  // Validate unique tier names
+  const names = data.tiers.map(t => t.tierName.toLowerCase());
+  return new Set(names).size === names.length;
+}, { message: "Tier names must be unique within the group" })
+.refine(data => {
+  // Validate ageMin <= ageMax when both are provided
+  if (data.ageMin !== undefined && data.ageMax !== undefined) {
+    return data.ageMin <= data.ageMax;
+  }
+  return true;
+}, { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] });
+
+export type InsertTierGroup = z.infer<typeof insertTierGroupSchema>;
+
 export type InsertCustomBenchmark = z.infer<typeof insertCustomBenchmarkSchema>;
 export type CustomBenchmark = typeof customBenchmarks.$inferSelect;
 export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;
@@ -2018,8 +2347,10 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   name: string;
   metricCode: string;
   description: string | null;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  benchmarkValue: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue: number | null;
+  maxValue: number | null;
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;
@@ -2140,6 +2471,9 @@ export const insertAthleteSchema = z.object({
 
 // Organization Type
 export type OrganizationType = (typeof organizationTypeEnum)[number];
+
+// Sport Code Type
+export type SportCode = (typeof sportCodeEnum)[number];
 
 // Legacy compatibility exports removed - use Athlete types instead
 
@@ -2265,3 +2599,241 @@ export const updateOrgMembershipSettingsSchema = z.object({
 });
 
 export type UpdateOrgMembershipSettings = z.infer<typeof updateOrgMembershipSettingsSchema>;
+
+// ============================================================================
+// PUSH NOTIFICATIONS
+// ============================================================================
+
+/**
+ * Notification type enum for categorizing push notifications
+ */
+export const notificationTypeEnum = [
+  'wellness_survey',      // Coach sends wellness survey to athletes
+  'wellness_digest',      // Daily digest of at-risk athletes for coaches
+  'new_measurement',      // New performance data logged for athlete
+  'team_announcement',    // Coach broadcasts to team
+] as const;
+
+/**
+ * Notification delivery status enum
+ */
+export const notificationDeliveryStatusEnum = ['pending', 'delivered', 'failed', 'expired'] as const;
+
+/**
+ * Notification channel enum
+ */
+export const notificationChannelEnum = ['push', 'email'] as const;
+
+/**
+ * Push Subscriptions - stores Web Push subscriptions per device
+ * One user can have multiple subscriptions (multiple devices)
+ */
+export const pushSubscriptions = pgTable("push_subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  // Web Push subscription data
+  endpoint: varchar("endpoint", { length: 2048 }).notNull().unique(),
+  p256dh: text("p256dh").notNull(),      // Public key for encryption
+  auth: text("auth").notNull(),           // Auth secret for encryption
+  // Device metadata
+  deviceName: text("device_name"),        // Optional: "iPhone", "Chrome Desktop"
+  userAgent: text("user_agent"),          // Browser/device info
+  // Lifecycle tracking
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),  // Track active subscriptions
+  expiresAt: timestamp("expires_at"),     // Optional: subscription expiry
+}, (table) => ({
+  // Performance indexes
+  userIndex: index("push_subscriptions_user_idx").on(table.userId),
+  endpointIndex: index("push_subscriptions_endpoint_idx").on(table.endpoint),
+}));
+
+/**
+ * User Notification Preferences - user-level toggle controls
+ * One row per user, created with defaults on first access
+ */
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  // Master toggles
+  pushEnabled: boolean("push_enabled").default(true).notNull(),
+  emailEnabled: boolean("email_enabled").default(true).notNull(),
+  // Push notification type toggles
+  pushWellnessSurveys: boolean("push_wellness_surveys").default(true).notNull(),
+  pushWellnessDigest: boolean("push_wellness_digest").default(true).notNull(),
+  pushNewMeasurements: boolean("push_new_measurements").default(true).notNull(),
+  pushTeamAnnouncements: boolean("push_team_announcements").default(true).notNull(),
+  // Email notification type toggles
+  emailWellnessSurveys: boolean("email_wellness_surveys").default(true).notNull(),
+  emailWellnessDigest: boolean("email_wellness_digest").default(true).notNull(),
+  emailNewMeasurements: boolean("email_new_measurements").default(false).notNull(),
+  emailTeamAnnouncements: boolean("email_team_announcements").default(true).notNull(),
+  // Quiet hours (optional - notifications deferred during these times)
+  quietHoursEnabled: boolean("quiet_hours_enabled").default(false).notNull(),
+  quietHoursStart: time("quiet_hours_start"),  // e.g., "22:00"
+  quietHoursEnd: time("quiet_hours_end"),      // e.g., "07:00"
+  quietHoursTimezone: text("quiet_hours_timezone").default("America/New_York"),
+  // Lifecycle
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Notification History - audit log and analytics for sent notifications
+ */
+export const notificationHistory = pgTable("notification_history", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  orgId: varchar("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  // Notification content
+  type: text("type", { enum: notificationTypeEnum }).notNull(),
+  title: text("title").notNull(),
+  body: text("body").notNull(),
+  url: text("url"),                        // Deep link URL when clicked
+  data: jsonb("data"),                     // Additional payload data
+  // Delivery tracking
+  channels: text("channels").array().notNull().default(sql`ARRAY['push']::text[]`),
+  deliveryStatus: text("delivery_status", { enum: notificationDeliveryStatusEnum }).default("pending").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  clickedAt: timestamp("clicked_at"),       // Track engagement
+  // Error tracking
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0),
+}, (table) => ({
+  // Performance indexes for analytics
+  userIndex: index("notification_history_user_idx").on(table.userId),
+  orgIndex: index("notification_history_org_idx").on(table.orgId),
+  typeIndex: index("notification_history_type_idx").on(table.type),
+  sentAtIndex: index("notification_history_sent_at_idx").on(table.sentAt),
+  // Composite indexes for common query patterns
+  userSentAtIndex: index("notification_history_user_sent_idx").on(table.userId, table.sentAt.desc()),
+  orgTypeSentIndex: index("notification_history_org_type_sent_idx").on(table.orgId, table.type, table.sentAt.desc()).where(sql`org_id IS NOT NULL`),
+}));
+
+/**
+ * Organization Notification Settings - org-level controls set by org admins
+ * Controls which notification types are available and default preferences
+ */
+export const orgNotificationSettings = pgTable("org_notification_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orgId: varchar("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }).unique(),
+  // Master toggle for the organization
+  pushEnabled: boolean("push_enabled").default(true).notNull(),
+  // Which notification types are available to users in this org
+  wellnessSurveysEnabled: boolean("wellness_surveys_enabled").default(true).notNull(),
+  wellnessDigestEnabled: boolean("wellness_digest_enabled").default(true).notNull(),
+  newMeasurementsEnabled: boolean("new_measurements_enabled").default(true).notNull(),
+  teamAnnouncementsEnabled: boolean("team_announcements_enabled").default(true).notNull(),
+  // Daily digest configuration for coaches
+  digestTime: time("digest_time").default(sql`'07:00'::time`).notNull(),
+  digestSkipWeekends: boolean("digest_skip_weekends").default(false).notNull(),
+  digestTimezone: text("digest_timezone").default("America/New_York").notNull(),
+  // Default preferences for new users in this org
+  defaultPushWellnessSurveys: boolean("default_push_wellness_surveys").default(true).notNull(),
+  defaultPushMeasurements: boolean("default_push_measurements").default(true).notNull(),
+  defaultPushAnnouncements: boolean("default_push_announcements").default(true).notNull(),
+  defaultEmailWellnessSurveys: boolean("default_email_wellness_surveys").default(true).notNull(),
+  defaultEmailMeasurements: boolean("default_email_measurements").default(false).notNull(),
+  defaultEmailAnnouncements: boolean("default_email_announcements").default(true).notNull(),
+  // Lifecycle
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+// Push Notification Relations
+export const pushSubscriptionsRelations = relations(pushSubscriptions, ({ one }) => ({
+  user: one(users, {
+    fields: [pushSubscriptions.userId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationPreferencesRelations = relations(notificationPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const notificationHistoryRelations = relations(notificationHistory, ({ one }) => ({
+  user: one(users, {
+    fields: [notificationHistory.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [notificationHistory.orgId],
+    references: [organizations.id],
+  }),
+}));
+
+export const orgNotificationSettingsRelations = relations(orgNotificationSettings, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [orgNotificationSettings.orgId],
+    references: [organizations.id],
+  }),
+  updatedByUser: one(users, {
+    fields: [orgNotificationSettings.updatedBy],
+    references: [users.id],
+  }),
+}));
+
+// Push Notification Type Exports
+export type PushSubscriptionRecord = typeof pushSubscriptions.$inferSelect;
+export type NotificationPreferencesRecord = typeof notificationPreferences.$inferSelect;
+export type NotificationHistoryRecord = typeof notificationHistory.$inferSelect;
+export type OrgNotificationSettingsRecord = typeof orgNotificationSettings.$inferSelect;
+export type NotificationType = (typeof notificationTypeEnum)[number];
+export type NotificationDeliveryStatus = (typeof notificationDeliveryStatusEnum)[number];
+export type NotificationChannel = (typeof notificationChannelEnum)[number];
+
+// Push Subscription Insert Schema
+export const insertPushSubscriptionSchema = createInsertSchema(pushSubscriptions).omit({
+  id: true,
+  createdAt: true,
+  lastUsedAt: true,
+}).extend({
+  endpoint: z.string().url("Invalid endpoint URL"),
+  p256dh: z.string().min(1, "Public key is required"),
+  auth: z.string().min(1, "Auth secret is required"),
+  deviceName: z.string().max(100).optional(),
+});
+
+// Notification Preferences Update Schema
+export const updateNotificationPreferencesSchema = z.object({
+  pushEnabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+  pushWellnessSurveys: z.boolean().optional(),
+  pushWellnessDigest: z.boolean().optional(),
+  pushNewMeasurements: z.boolean().optional(),
+  pushTeamAnnouncements: z.boolean().optional(),
+  emailWellnessSurveys: z.boolean().optional(),
+  emailWellnessDigest: z.boolean().optional(),
+  emailNewMeasurements: z.boolean().optional(),
+  emailTeamAnnouncements: z.boolean().optional(),
+  quietHoursEnabled: z.boolean().optional(),
+  quietHoursStart: z.string().regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format").optional(),
+  quietHoursEnd: z.string().regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format").optional(),
+  quietHoursTimezone: z.string().optional(),
+});
+
+// Org Notification Settings Update Schema
+export const updateOrgNotificationSettingsSchema = z.object({
+  pushEnabled: z.boolean().optional(),
+  wellnessSurveysEnabled: z.boolean().optional(),
+  wellnessDigestEnabled: z.boolean().optional(),
+  newMeasurementsEnabled: z.boolean().optional(),
+  teamAnnouncementsEnabled: z.boolean().optional(),
+  digestTime: z.string().regex(/^\d{2}:\d{2}$/, "Time must be in HH:MM format").optional(),
+  digestSkipWeekends: z.boolean().optional(),
+  digestTimezone: z.string().optional(),
+  defaultPushWellnessSurveys: z.boolean().optional(),
+  defaultPushMeasurements: z.boolean().optional(),
+  defaultPushAnnouncements: z.boolean().optional(),
+  defaultEmailWellnessSurveys: z.boolean().optional(),
+  defaultEmailMeasurements: z.boolean().optional(),
+  defaultEmailAnnouncements: z.boolean().optional(),
+});
+
+export type InsertPushSubscription = z.infer<typeof insertPushSubscriptionSchema>;
+export type UpdateNotificationPreferences = z.infer<typeof updateNotificationPreferencesSchema>;
+export type UpdateOrgNotificationSettings = z.infer<typeof updateOrgNotificationSettingsSchema>;

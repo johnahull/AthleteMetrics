@@ -81,13 +81,29 @@ export async function loginAs(
  * @throws Error if STAGING_USERNAME or STAGING_PASSWORD not set
  */
 export async function loginAsDefaultUser(page: Page): Promise<void> {
-  // Check if already authenticated by looking for session cookie (fast, no navigation)
-  const sessionCookie = await getSessionCookie(page);
-  if (sessionCookie) {
-    // Already authenticated via storageState, skip login
+  // IMPORTANT: We verify authentication by navigating to a protected page
+  // and checking if we get redirected to login. This is more reliable than
+  // just checking for cookie presence because:
+  // 1. Cookies might exist but be expired/invalid
+  // 2. Session might not exist on the server even if cookie is present
+  // 3. StorageState loading timing issues in Playwright
+
+  // Navigate to a protected page to check auth status
+  await page.goto(`${TESTING_URL}/dashboard`, { timeout: 30000 });
+  await page.waitForLoadState('domcontentloaded');
+
+  // Give time for any redirects to complete
+  await page.waitForTimeout(500);
+
+  // Check if we were redirected to login
+  const currentUrl = page.url();
+  if (!currentUrl.includes('/login')) {
+    // Already authenticated via storageState - no need to login
     console.log('✓ Already authenticated via storageState, skipping login');
     return;
   }
+
+  console.log('⚠ Not authenticated, performing login...');
 
   // Try testing credentials first, fall back to staging
   const username = process.env.TESTING_USERNAME || process.env.STAGING_USERNAME;

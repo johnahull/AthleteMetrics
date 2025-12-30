@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
 import type { User, InsertOAuthUser } from '@shared/schema';
+import { getLegalAcceptanceTimestamp, AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
 export interface OAuthProfile {
   provider: 'google' | 'apple';
@@ -180,6 +181,11 @@ export class OAuthService extends BaseService {
       throw new Error('Failed to generate unique username');
     }
 
+    // Set legal acceptance fields for new OAuth users
+    const now = new Date();
+    const legalAcceptedAt = now;
+    const legalAcceptedVersion = getLegalAcceptanceTimestamp(); // YYYY-MM-DD format
+
     const userData: InsertOAuthUser = {
       username,
       emails: [profile.email],
@@ -195,10 +201,40 @@ export class OAuthService extends BaseService {
       lastAuthMethod: profile.provider,
       isEmailVerified: profile.emailVerified,  // OAuth emails are pre-verified
       accountLinkedAt: new Date(),
+      legalAcceptedAt,
+      legalAcceptedVersion,
     };
 
     // Use InsertOAuthUser type which allows optional password for OAuth-only accounts
-    return await this.storage.createUser(userData);
+    const user = await this.storage.createUser(userData);
+
+    // Create audit log for legal acceptance (critical for compliance)
+    // If audit log fails, rollback by deleting the user
+    try {
+      await this.storage.createAuditLog({
+        userId: user.id,
+        action: AUDIT_ACTION_LEGAL_ACCEPTED,
+        resourceType: 'user',
+        resourceId: user.id,
+        details: JSON.stringify({
+          version: legalAcceptedVersion,
+          acceptedAt: legalAcceptedAt.toISOString(),
+          method: 'oauth',
+          provider: profile.provider
+        }),
+      });
+    } catch (auditError) {
+      console.error('[CRITICAL] Failed to create audit log for OAuth user:', auditError);
+      // Rollback user creation for compliance
+      try {
+        await this.storage.deleteUser(user.id);
+      } catch (cleanupError) {
+        console.error('[CRITICAL] Failed to cleanup user after audit log failure:', cleanupError);
+      }
+      throw new Error('Failed to complete OAuth registration');
+    }
+
+    return user;
   }
 
   /**

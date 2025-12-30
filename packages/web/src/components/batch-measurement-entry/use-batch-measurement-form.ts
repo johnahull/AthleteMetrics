@@ -9,9 +9,8 @@ import { useAuth } from '@/lib/auth';
 const batchMeasurementRowSchema = z.object({
   athleteId: z.string().min(1, 'Athlete is required'), // Frontend uses athleteId, mapped to userId on submit
   date: z.string().date('Date must be in YYYY-MM-DD format'), // Use strict .date() validation like server
-  metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'], {
-    errorMap: () => ({ message: 'Invalid metric type' })
-  }), // Match server enum validation
+  // Accept any valid metric code - supports derived metrics and custom metrics
+  metric: z.string().min(1, 'Metric is required').regex(/^[A-Z0-9_]+$/, 'Invalid metric code format'),
   value: z.number().positive('Value must be positive').refine((val) => val < 10000, {
     message: 'Value exceeds realistic range'
   }), // Add upper bound validation

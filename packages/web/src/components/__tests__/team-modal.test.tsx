@@ -234,13 +234,13 @@ describe('TeamModal', () => {
 
       await waitFor(() => {
         expect(mockApiRequest).toHaveBeenCalledWith(
-          'PATCH',
+          'PUT',
           '/api/teams/team-123',
           expect.objectContaining({ notes: 'Updated notes' })
         );
       });
 
-      // Should not include unchanged fields like name (unless all fields unchanged)
+      // Verify notes was updated
       const callArgs = mockApiRequest.mock.calls[0][2];
       expect(callArgs).toHaveProperty('notes');
     });

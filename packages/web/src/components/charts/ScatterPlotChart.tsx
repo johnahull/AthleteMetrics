@@ -21,7 +21,8 @@ import { usePerformanceMonitor } from '@/utils/performance-monitor';
 import type {
   ChartDataPoint,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -59,7 +60,47 @@ interface AthleteData {
   metrics: Record<string, number>;
 }
 
+// Using generic array for datasets to support mixed chart types (scatter + line for regression)
+interface ScatterChartData {
+  datasets: Array<{
+    type?: 'scatter' | 'line';
+    label: string;
+    data: Array<{ x: number; y: number } | ScatterPoint>;
+    [key: string]: unknown;
+  }>;
+  xMetric: string;
+  yMetric: string;
+  xUnit: string;
+  yUnit: string;
+  xLabel: string;
+  yLabel: string;
+  points: ScatterPoint[];
+  regression: RegressionResult | null;
+  validatedStats: Record<string, Partial<StatisticalSummary>>;
+}
+
+// Type for Chart.js element with context (used for athlete name rendering)
+interface ChartElement {
+  x: number;
+  y: number;
+  $context?: {
+    raw?: ScatterPoint;
+  };
+}
+
 // Register Chart.js components
+ChartJS.register(
+  LinearScale,
+  PointElement,
+  LineElement,
+  Title,
+  Tooltip,
+  Legend,
+  ScatterController,
+  LineController,
+  Filler,
+  annotationPlugin
+);
 
 // Regression calculation helper function
 function calculateRegression(points: ScatterPoint[]): RegressionResult | null {
@@ -195,6 +236,8 @@ interface ScatterPlotChartProps {
   config: ChartConfiguration;
   highlightAthlete?: string;
   showAthleteNames?: boolean;
+  benchmarks?: BenchmarkLine[]; // Benchmarks will be matched to X or Y metric
+  showBenchmarks?: boolean;
 }
 
 export const ScatterPlotChart = React.memo(function ScatterPlotChart({
@@ -202,12 +245,14 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
   statistics,
   config,
   highlightAthlete,
-  showAthleteNames = false
+  showAthleteNames = false,
+  benchmarks,
+  showBenchmarks = true
 }: ScatterPlotChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
   const monitor = usePerformanceMonitor('ScatterPlotChart');
-  const chartRef = useRef<any>(null);
+  const chartRef = useRef<ChartJS<'scatter'> | null>(null);
   const namesRenderedRef = useRef<boolean>(false);
   const [showRegressionLine, setShowRegressionLine] = useState(true);
   const [showQuadrants, setShowQuadrants] = useState(true);
@@ -278,7 +323,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     if (scatterPoints.length === 0) return null;
 
     // Simple fallback: use server statistics if available, otherwise calculate from data
-    const validatedStats: Record<string, any> = {};
+    const validatedStats: Record<string, Partial<StatisticalSummary>> = {};
 
     for (const metric of [xMetric, yMetric]) {
       let stats = statistics?.[metric];
@@ -409,11 +454,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
       points: scatterPoints,
       regression,
       validatedStats
-    } as any;
+    } as ScatterChartData;
     } finally {
       monitor.endTiming('dataTransformation');
     }
-  }, [data, statistics, highlightAthlete, showRegressionLine, showQuadrants, localShowAthleteNames]);
+  }, [data, statistics, highlightAthlete, showRegressionLine, getMetricConfig]);
 
   // Memoize correlation coefficient calculation
   const correlation = useMemo(() => {
@@ -446,6 +491,172 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     return isNaN(result) || !isFinite(result) ? null : result;
   }, [scatterData?.points]);
 
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
+  // Generate benchmark annotations for both X and Y axes
+  // Benchmarks are matched to their corresponding axis based on metricCode
+  const benchmarkAnnotations = useMemo(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0 || !scatterData) {
+      return {};
+    }
+
+    const annotations: Record<string, AnnotationOptions> = {};
+
+    benchmarks.forEach((benchmark, index) => {
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+      const backgroundColor = parseColorToRgba(color, 0.15);
+
+      // Determine which axis this benchmark belongs to based on metricCode
+      const isXMetric = benchmark.metricCode === scatterData.xMetric;
+      const isYMetric = benchmark.metricCode === scatterData.yMetric;
+
+      // If no metricCode or doesn't match either axis, default to Y-axis for backwards compatibility
+      const targetAxis = isXMetric ? 'x' : 'y';
+
+      // Range benchmark: render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        if (targetAxis === 'y' || isYMetric) {
+          // Y-axis range: horizontal band across full X range
+          annotations[`benchmark-y-${index}`] = {
+            type: 'box',
+            yMin: benchmark.minValue,
+            yMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            borderDash: [5, 5],
+            z: 2,
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'end',
+              color: color,
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+        if (isXMetric) {
+          // X-axis range: vertical band across full Y range
+          annotations[`benchmark-x-${index}`] = {
+            type: 'box',
+            xMin: benchmark.minValue,
+            xMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            borderDash: [5, 5],
+            z: 2,
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'start',
+              color: color,
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+      } else {
+        // Single-value benchmark: render as line annotation
+        const borderDash = benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [];
+
+        if (targetAxis === 'y' || isYMetric) {
+          // Y-axis line: horizontal line
+          annotations[`benchmark-y-${index}`] = {
+            type: 'line',
+            yMin: benchmark.value,
+            yMax: benchmark.value,
+            borderColor: color,
+            borderWidth: 2,
+            borderDash,
+            z: 2,
+            label: {
+              display: true,
+              content: benchmark.name,
+              position: 'end',
+              backgroundColor: color,
+              color: 'white',
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+        if (isXMetric) {
+          // X-axis line: vertical line
+          annotations[`benchmark-x-${index}`] = {
+            type: 'line',
+            xMin: benchmark.value,
+            xMax: benchmark.value,
+            borderColor: color,
+            borderWidth: 2,
+            borderDash,
+            z: 2,
+            label: {
+              display: true,
+              content: benchmark.name,
+              position: 'start',
+              backgroundColor: color,
+              color: 'white',
+              font: { size: 10, weight: 'bold' },
+              padding: 4
+            }
+          };
+        }
+      }
+    });
+
+    return annotations;
+  }, [benchmarks, showBenchmarks, scatterData]);
+
   // Chart options
   const options: ChartOptions<'scatter'> = useMemo(() => ({
     responsive: true,
@@ -468,11 +679,11 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         callbacks: {
           title: (context) => {
             if (!context || context.length === 0) return 'Unknown';
-            const point = context[0].raw as any;
+            const point = context[0].raw as ScatterPoint | undefined;
             return point?.athleteName || 'Group Average';
           },
           label: (context) => {
-            const point = context.raw as any;
+            const point = context.raw as ScatterPoint | undefined;
             if (!point) return ['No data'];
 
             // Format x value with dual display for FLY10_TIME
@@ -493,7 +704,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
             ];
           },
           afterLabel: (context) => {
-            const point = context.raw as any;
+            const point = context.raw as ScatterPoint | undefined;
             return point?.teamName ? [`Team: ${point.teamName}`] : [];
           }
         }
@@ -502,103 +713,104 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         display: config.showLegend,
         position: 'top' as const
       },
-      annotation: showQuadrants && scatterData ? {
+      annotation: (showQuadrants || Object.keys(benchmarkAnnotations).length > 0) && scatterData ? {
         annotations: (() => {
-          const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
-          const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
-          const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
+          // Start with benchmark annotations
+          const allAnnotations: Record<string, AnnotationOptions> = { ...benchmarkAnnotations };
 
-          // Calculate chart bounds for full background coverage
-          const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
-          const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
+          // Add quadrant annotations if enabled
+          if (showQuadrants) {
+            const xMean = scatterData.validatedStats[scatterData.xMetric]?.mean || 0;
+            const yMean = scatterData.validatedStats[scatterData.yMetric]?.mean || 0;
+            const labels = getPerformanceQuadrantLabels(scatterData.xMetric, scatterData.yMetric, getMetricConfig);
 
-          // Safety check for empty arrays
-          if (xValues.length === 0 || yValues.length === 0) {
-            return {};
+            // Calculate chart bounds for full background coverage
+            const xValues = scatterData.points.map((p: ScatterPoint) => p.x);
+            const yValues = scatterData.points.map((p: ScatterPoint) => p.y);
+
+            // Safety check for empty arrays
+            if (xValues.length > 0 && yValues.length > 0) {
+              const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+              const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
+
+              const colorMap = {
+                green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
+                yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+                orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
+                red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
+              };
+
+              // Add quadrant annotations (z: 0 so they render behind benchmarks)
+              Object.assign(allAnnotations, {
+                topRight: {
+                  type: 'box' as const,
+                  xMin: xMean,
+                  xMax: xMax,
+                  yMin: yMean,
+                  yMax: yMax,
+                  backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                topLeft: {
+                  type: 'box' as const,
+                  xMin: xMin,
+                  xMax: xMean,
+                  yMin: yMean,
+                  yMax: yMax,
+                  backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                bottomRight: {
+                  type: 'box' as const,
+                  xMin: xMean,
+                  xMax: xMax,
+                  yMin: yMin,
+                  yMax: yMean,
+                  backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                bottomLeft: {
+                  type: 'box' as const,
+                  xMin: xMin,
+                  xMax: xMean,
+                  yMin: yMin,
+                  yMax: yMean,
+                  backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
+                  borderWidth: 0,
+                  z: 0
+                },
+                xMeanLine: {
+                  type: 'line' as const,
+                  xMin: xMean,
+                  xMax: xMean,
+                  yMin: yMin,
+                  yMax: yMax,
+                  borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+                  borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                  borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
+                  z: 1
+                },
+                yMeanLine: {
+                  type: 'line' as const,
+                  xMin: xMin,
+                  xMax: xMax,
+                  yMin: yMean,
+                  yMax: yMean,
+                  borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
+                  borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
+                  borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
+                  z: 1
+                }
+              });
+            }
           }
 
-          const xMin = Math.min(...xValues) - (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const xMax = Math.max(...xValues) + (Math.max(...xValues) - Math.min(...xValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMin = Math.min(...yValues) - (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-          const yMax = Math.max(...yValues) + (Math.max(...yValues) - Math.min(...yValues)) * CHART_CONFIG.SCATTER.CHART_PADDING;
-
-          const colorMap = {
-            green: CHART_CONFIG.COLORS.QUADRANTS.ELITE,
-            yellow: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            orange: CHART_CONFIG.COLORS.QUADRANTS.GOOD,
-            red: CHART_CONFIG.COLORS.QUADRANTS.NEEDS_WORK
-          };
-
-          return {
-            // Top Right Quadrant
-            topRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Top Left Quadrant
-            topLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMean,
-              yMax: yMax,
-              backgroundColor: colorMap[labels.topLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Right Quadrant
-            bottomRight: {
-              type: 'box' as const,
-              xMin: xMean,
-              xMax: xMax,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomRight.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Bottom Left Quadrant
-            bottomLeft: {
-              type: 'box' as const,
-              xMin: xMin,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMean,
-              backgroundColor: colorMap[labels.bottomLeft.color as keyof typeof colorMap],
-              borderWidth: 0,
-              z: 0
-            },
-            // Vertical line at x mean
-            xMeanLine: {
-              type: 'line' as const,
-              xMin: xMean,
-              xMax: xMean,
-              yMin: yMin,
-              yMax: yMax,
-              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
-              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
-              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
-              z: 1
-            },
-            // Horizontal line at y mean
-            yMeanLine: {
-              type: 'line' as const,
-              xMin: xMin,
-              xMax: xMax,
-              yMin: yMean,
-              yMax: yMean,
-              borderColor: CHART_CONFIG.COLORS.NEUTRAL_ALPHA,
-              borderWidth: CHART_CONFIG.STYLING.BORDER_WIDTH.THIN,
-              borderDash: [...CHART_CONFIG.STYLING.DOTTED_LINE],
-              z: 1
-            }
-          };
+          return allAnnotations;
         })()
       } : undefined
     },
@@ -666,13 +878,14 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
               const meta = chart.getDatasetMeta(0); // Get first dataset metadata
               if (meta && meta.data) {
                 // Find the corresponding chart element for this point
-                const chartElement = meta.data.find((element: any) => {
-                  if (element && element.$context && element.$context.raw) {
-                    const rawData = element.$context.raw;
+                const chartElement = meta.data.find((element: unknown) => {
+                  const el = element as ChartElement;
+                  if (el && el.$context && el.$context.raw) {
+                    const rawData = el.$context.raw;
                     return rawData.x === point.x && rawData.y === point.y;
                   }
                   return false;
-                });
+                }) as ChartElement | undefined;
 
                 if (chartElement && point.athleteName) {
                   const x = chartElement.x + ATHLETE_NAME_CONSTANTS.LABEL_OFFSET_X;
@@ -705,7 +918,7 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         }
       }
     }
-  }), [scatterData, config, showQuadrants, localShowAthleteNames]);
+  }), [scatterData, config, showQuadrants, localShowAthleteNames, benchmarkAnnotations]);
 
   // Generate quadrant legend data (must be before early return to avoid hooks violation)
   const quadrantLegend = useMemo(() => {
@@ -829,7 +1042,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
       {/* Chart */}
       <div className="h-96">
-        <Scatter ref={chartRef} data={scatterData} options={options} />
+        {/* Type assertion needed because Scatter chart supports mixed datasets (scatter + line for regression) at runtime */}
+        <Scatter ref={chartRef} data={scatterData as Parameters<typeof Scatter>[0]['data']} options={options} />
       </div>
     </div>
   );

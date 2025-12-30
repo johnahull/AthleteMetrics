@@ -95,6 +95,13 @@ export const RATE_LIMITS = {
    * @default 10 requests per 1-hour window
    */
   TEST_EMAIL: 10,
+
+  /**
+   * Cross-organization measurement queries (data extraction prevention)
+   * Stricter limit per unique orgIds combination to prevent rapid cross-org data extraction
+   * @default 10 requests per 15-minute window per unique orgIds combination
+   */
+  CROSS_ORG_QUERY: 10,
 } as const;
 
 /**

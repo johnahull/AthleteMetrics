@@ -11,6 +11,7 @@ import { BenchmarkCatalog } from "./BenchmarkCatalog";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
 import { BenchmarkFilters } from "./BenchmarkFilters";
 import { Link } from "wouter";
+import { getMetricDisplayName } from "@/constants/metrics";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 
 interface OrganizationBenchmarksListProps {
@@ -184,15 +185,23 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                     <div className="flex flex-wrap gap-3 text-sm">
                       <div>
                         <span className="font-medium">Metric:</span>{" "}
-                        <span className="text-muted-foreground">{benchmark.metricCode}</span>
+                        <span className="text-muted-foreground">{getMetricDisplayName(benchmark.metricCode)}</span>
                       </div>
                       <div>
                         <span className="font-medium">Target:</span>{" "}
                         <span className="text-muted-foreground">
-                          {benchmark.comparisonOperator === "lte" && "≤ "}
-                          {benchmark.comparisonOperator === "gte" && "≥ "}
-                          {benchmark.comparisonOperator === "eq" && "= "}
-                          {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
+                          {benchmark.comparisonOperator === "range" ? (
+                            <>
+                              ↔ {benchmark.minValue} – {benchmark.maxValue}{unit ? ` ${unit}` : ''}
+                            </>
+                          ) : (
+                            <>
+                              {benchmark.comparisonOperator === "lte" && "≤ "}
+                              {benchmark.comparisonOperator === "gte" && "≥ "}
+                              {benchmark.comparisonOperator === "eq" && "= "}
+                              {benchmark.benchmarkValue}{unit ? ` ${unit}` : ''}
+                            </>
+                          )}
                         </span>
                       </div>
                       {(benchmark.ageMin !== null || benchmark.ageMax !== null) && (

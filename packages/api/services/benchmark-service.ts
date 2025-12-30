@@ -6,11 +6,14 @@
 
 import { BaseService } from "./base-service";
 import { retryAuditLog } from "../utils/audit-retry";
+import { db } from "../db";
+import crypto from "crypto";
 import {
   insertSiteBenchmarkSchema,
   updateSiteBenchmarkSchema,
   insertCustomBenchmarkSchema,
   updateCustomBenchmarkSchema,
+  insertTierGroupSchema,
 } from "@shared/schema";
 import type {
   SiteBenchmark,
@@ -21,6 +24,7 @@ import type {
   UpdateCustomBenchmark,
   OrganizationBenchmark,
   OrganizationBenchmarkWithDetails,
+  InsertTierGroup,
 } from "@shared/schema";
 
 export interface BenchmarkFilters {
@@ -31,6 +35,14 @@ export interface BenchmarkFilters {
 export interface RequestContext {
   ipAddress?: string;
   userAgent?: string;
+}
+
+export interface TierEvaluationResult {
+  tierName: string | null;
+  tierColor: string | null;
+  tierOrder: number | null;
+  nextTierName: string | null;
+  distanceToNextTier: number | null;
 }
 
 export class BenchmarkService extends BaseService {
@@ -289,6 +301,121 @@ export class BenchmarkService extends BaseService {
       return await this.storage.getSiteBenchmark(benchmarkId);
     } catch (error) {
       return this.handleError(error, "BenchmarkService.getSiteBenchmark");
+    }
+  }
+
+  /**
+   * Get tier groups for site benchmarks
+   * Returns a list of tier groups with their metric code and tier count
+   * Used for populating tier group dropdowns in the benchmark form
+   */
+  async getSiteTierGroups(metricCode?: string): Promise<Array<{ tierGroupId: string; metricCode: string; tierCount: number }>> {
+    try {
+      return await this.storage.getSiteTierGroups(metricCode);
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.getSiteTierGroups");
+    }
+  }
+
+  /**
+   * Create a tier group (batch creation of related benchmarks)
+   * All benchmarks in the group share the same tierGroupId and filters
+   * Uses a database transaction to ensure atomicity
+   */
+  async createTierGroup(
+    data: InsertTierGroup,
+    createdBy: string,
+    context?: RequestContext
+  ): Promise<{ tierGroupId: string; benchmarks: SiteBenchmark[] }> {
+    try {
+      // Verify site admin permission
+      if (!(await this.isSiteAdmin(createdBy))) {
+        throw new Error("Unauthorized: Only site administrators can create tier groups");
+      }
+
+      // Validate input
+      const validatedData = insertTierGroupSchema.parse(data);
+
+      // Validate metric exists
+      const metric = await this.storage.getSiteMetric(validatedData.metricCode);
+      if (!metric) {
+        throw new Error(`Metric with code ${validatedData.metricCode} does not exist`);
+      }
+
+      // Generate shared tierGroupId
+      const tierGroupId = crypto.randomUUID();
+
+      // Create all benchmarks in a transaction for atomicity
+      // If any benchmark creation fails, all will be rolled back
+      const benchmarks = await db.transaction(async (tx) => {
+        const createdBenchmarks: SiteBenchmark[] = [];
+
+        for (const tier of validatedData.tiers) {
+          // Construct benchmark name: "{name} - {tierName}"
+          const benchmarkName = `${validatedData.name} - ${tier.tierName}`;
+
+          // Build benchmark data with shared filters
+          const benchmarkData: InsertSiteBenchmark = {
+            metricCode: validatedData.metricCode,
+            name: benchmarkName,
+            description: validatedData.description,
+            comparisonOperator: validatedData.comparisonOperator,
+            benchmarkValue: tier.benchmarkValue,
+            minValue: tier.minValue,
+            maxValue: tier.maxValue,
+            tierGroupId,
+            tierOrder: tier.tierOrder,
+            tierName: tier.tierName,
+            tierColor: tier.tierColor,
+            // Shared filters
+            gender: validatedData.gender,
+            ageMin: validatedData.ageMin,
+            ageMax: validatedData.ageMax,
+            position: validatedData.position,
+            level: validatedData.level,
+            applicableOrgTypes: validatedData.applicableOrgTypes,
+            isActive: true,
+          };
+
+          // Create benchmark within transaction
+          const benchmark = await this.storage.createSiteBenchmark(benchmarkData, createdBy, tx);
+          createdBenchmarks.push(benchmark);
+        }
+
+        return createdBenchmarks;
+      });
+
+      // Create audit log for tier group creation
+      // Use 'benchmark_created' action as tier groups are batch benchmark creation
+      await retryAuditLog(
+        async () => {
+          await this.storage.createAuditLog({
+            userId: createdBy,
+            action: 'benchmark_created',
+            resourceType: 'site_benchmark',
+            resourceId: tierGroupId,
+            details: JSON.stringify({
+              tierGroup: true,
+              name: validatedData.name,
+              metricCode: validatedData.metricCode,
+              tierCount: validatedData.tiers.length,
+              benchmarkIds: benchmarks.map(b => b.id),
+            }),
+            ipAddress: context?.ipAddress || null,
+            userAgent: context?.userAgent || null,
+          });
+        },
+        {
+          operation: 'benchmark_created',
+          userId: createdBy,
+          resourceType: 'site_benchmark',
+          resourceId: tierGroupId,
+        }
+      );
+
+      return { tierGroupId, benchmarks };
+    } catch (error) {
+      return this.handleError(error, "BenchmarkService.createTierGroup");
     }
   }
 
@@ -784,8 +911,195 @@ export class BenchmarkService extends BaseService {
   }
 
   /**
+   * Evaluate if an athlete's value is within a range benchmark
+   * Cycle 20: Returns true when athlete value is within [minValue, maxValue] (inclusive)
+   */
+  evaluateRangeBenchmark(
+    athleteValue: number,
+    minValue: number,
+    maxValue: number
+  ): boolean {
+    return athleteValue >= minValue && athleteValue <= maxValue;
+  }
+
+  /**
+   * Calculate progress percentage for range-based benchmarks
+   * Cycle 21: Returns 100% when within range, <100% when outside range
+   * - Within range: 100% (meets benchmark)
+   * - Below range: percentage based on distance from minValue
+   * - Above range: percentage based on distance from maxValue
+   */
+  getRangeBenchmarkProgress(
+    athleteValue: number,
+    minValue: number,
+    maxValue: number
+  ): number {
+    // Validate inputs are finite numbers (guards against NaN, Infinity)
+    if (!Number.isFinite(athleteValue) || !Number.isFinite(minValue) || !Number.isFinite(maxValue)) {
+      return 0;
+    }
+
+    // If within range, benchmark is met (100%)
+    if (athleteValue >= minValue && athleteValue <= maxValue) {
+      return 100;
+    }
+
+    // If below range, calculate how far below
+    if (athleteValue < minValue) {
+      // Avoid division by zero
+      if (minValue === 0) {
+        return 0;
+      }
+      // Progress = (athleteValue / minValue) * 100
+      // Example: minValue=25, athlete=20 → (20/25)*100 = 80%
+      const progress = (athleteValue / minValue) * 100;
+      // Clamp to reasonable bounds (0-100) for display purposes
+      return Math.max(0, Math.min(100, progress));
+    }
+
+    // If above range, calculate how far above
+    // Progress = 100 - ((athleteValue - maxValue) / maxValue * 100)
+    // Example: maxValue=30, athlete=35 → 100 - ((35-30)/30*100) = 100 - 16.67 = 83.33%
+    if (maxValue === 0) {
+      return 0;
+    }
+    const excessPercentage = ((athleteValue - maxValue) / maxValue) * 100;
+    // Clamp to 0 minimum (can't have negative progress)
+    return Math.max(0, 100 - excessPercentage);
+  }
+
+  /**
+   * Evaluate which tier an athlete's value falls into
+   * Cycle 23: Tier benchmark evaluation
+   *
+   * @param athleteValue - The athlete's measured value
+   * @param tiers - Array of tier definitions with ranges and metadata
+   * @param lowerIsBetter - True for metrics where lower values are better (e.g., time)
+   * @returns Tier evaluation result with current tier and distance to next tier
+   */
+  evaluateTierBenchmark(
+    athleteValue: number,
+    tiers: Array<{ minValue: number; maxValue: number; tierName: string; tierColor: string; tierOrder: number }>,
+    lowerIsBetter: boolean = true
+  ): TierEvaluationResult {
+    // Sort tiers by tierOrder (1 = best, 2 = second best, etc.)
+    const sortedTiers = [...tiers].sort((a, b) => a.tierOrder - b.tierOrder);
+
+    // Find the tier that contains the athlete's value
+    // When value is exactly at a boundary, prefer the worse tier (higher tierOrder)
+    const currentTier = sortedTiers
+      .slice()
+      .reverse()
+      .find(tier => athleteValue >= tier.minValue && athleteValue <= tier.maxValue);
+
+    if (currentTier) {
+      // Athlete is within a tier
+      const currentTierIndex = sortedTiers.indexOf(currentTier);
+
+      // Check if there's a better tier (lower tierOrder)
+      if (currentTierIndex > 0) {
+        const nextTier = sortedTiers[currentTierIndex - 1];
+        const distance = this.getDistanceToNextTier(
+          athleteValue,
+          nextTier.minValue,
+          nextTier.maxValue,
+          lowerIsBetter
+        );
+
+        return {
+          tierName: currentTier.tierName,
+          tierColor: currentTier.tierColor,
+          tierOrder: currentTier.tierOrder,
+          nextTierName: nextTier.tierName,
+          distanceToNextTier: distance,
+        };
+      } else {
+        // Already at best tier
+        return {
+          tierName: currentTier.tierName,
+          tierColor: currentTier.tierColor,
+          tierOrder: currentTier.tierOrder,
+          nextTierName: null,
+          distanceToNextTier: null,
+        };
+      }
+    } else {
+      // Athlete is not in any tier - find the next tier to reach
+      if (lowerIsBetter) {
+        // For lower-is-better metrics (e.g., time), find the worst tier they're slower than
+        const nextTier = sortedTiers
+          .slice()
+          .reverse()
+          .find(tier => athleteValue > tier.maxValue);
+
+        if (nextTier) {
+          const distance = athleteValue - nextTier.maxValue;
+          return {
+            tierName: null,
+            tierColor: null,
+            tierOrder: null,
+            nextTierName: nextTier.tierName,
+            distanceToNextTier: distance,
+          };
+        }
+      } else {
+        // For higher-is-better metrics (e.g., vertical jump), find the worst tier they're below
+        const nextTier = sortedTiers
+          .slice()
+          .reverse()
+          .find(tier => athleteValue < tier.minValue);
+
+        if (nextTier) {
+          const distance = nextTier.minValue - athleteValue;
+          return {
+            tierName: null,
+            tierColor: null,
+            tierOrder: null,
+            nextTierName: nextTier.tierName,
+            distanceToNextTier: distance,
+          };
+        }
+      }
+
+      // Value is outside all tiers (e.g., above best tier for higher-is-better)
+      return {
+        tierName: null,
+        tierColor: null,
+        tierOrder: null,
+        nextTierName: null,
+        distanceToNextTier: null,
+      };
+    }
+  }
+
+  /**
+   * Calculate distance to next tier
+   *
+   * @param athleteValue - Current athlete value
+   * @param nextTierMinValue - Next tier's minimum value
+   * @param nextTierMaxValue - Next tier's maximum value
+   * @param lowerIsBetter - True for metrics where lower values are better
+   * @returns Distance to reach the next tier
+   */
+  getDistanceToNextTier(
+    athleteValue: number,
+    nextTierMinValue: number,
+    nextTierMaxValue: number,
+    lowerIsBetter: boolean
+  ): number {
+    if (lowerIsBetter) {
+      // For lower-is-better, need to reach maxValue of next tier
+      return athleteValue - nextTierMaxValue;
+    } else {
+      // For higher-is-better, need to reach minValue of next tier
+      return nextTierMinValue - athleteValue;
+    }
+  }
+
+  /**
    * Get benchmark status for an athlete
    * Cycle 19: Returns met/unmet status for all applicable benchmarks
+   * Cycle 22: Now supports range-based benchmarks
    * Filters benchmarks by athlete attributes (age, gender, position, level)
    */
   async getAthleteBenchmarkStatus(
@@ -795,8 +1109,10 @@ export class BenchmarkService extends BaseService {
     benchmarkId: string;
     benchmarkName: string;
     metricCode: string;
-    benchmarkValue: number;
-    comparisonOperator: 'lte' | 'gte' | 'eq';
+    benchmarkValue: number | null;
+    comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+    minValue?: number | null;
+    maxValue?: number | null;
     athleteValue: number | null;
     isMet: boolean;
     progress: number;
@@ -908,22 +1224,48 @@ export class BenchmarkService extends BaseService {
         let progress = 0;
 
         if (athleteValue !== null) {
-          const benchmarkValue = typeof benchmark.benchmarkValue === 'string'
-            ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue;
+          if (benchmark.comparisonOperator === 'range') {
+            // Range-based benchmark evaluation
+            const minValue = typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue ?? 0;
+            const maxValue = typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue ?? 0;
 
-          isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
-          progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+            isMet = this.evaluateRangeBenchmark(athleteValue, minValue, maxValue);
+            progress = this.getRangeBenchmarkProgress(athleteValue, minValue, maxValue);
+          } else {
+            // Single-value benchmark evaluation (lte, gte, eq)
+            const benchmarkValue = typeof benchmark.benchmarkValue === 'string'
+              ? parseFloat(benchmark.benchmarkValue)
+              : benchmark.benchmarkValue ?? 0;
+
+            isMet = this.evaluateBenchmark(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+            progress = this.getBenchmarkProgress(athleteValue, benchmarkValue, benchmark.comparisonOperator as 'lte' | 'gte' | 'eq');
+          }
         }
 
         return {
           benchmarkId: benchmark.id,
           benchmarkName: benchmark.name,
           metricCode: benchmark.metricCode,
-          benchmarkValue: typeof benchmark.benchmarkValue === 'string'
-            ? parseFloat(benchmark.benchmarkValue)
-            : benchmark.benchmarkValue,
-          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq',
+          benchmarkValue: benchmark.benchmarkValue
+            ? (typeof benchmark.benchmarkValue === 'string'
+              ? parseFloat(benchmark.benchmarkValue)
+              : benchmark.benchmarkValue)
+            : null,
+          comparisonOperator: benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range',
+          minValue: benchmark.minValue
+            ? (typeof benchmark.minValue === 'string'
+              ? parseFloat(benchmark.minValue)
+              : benchmark.minValue)
+            : null,
+          maxValue: benchmark.maxValue
+            ? (typeof benchmark.maxValue === 'string'
+              ? parseFloat(benchmark.maxValue)
+              : benchmark.maxValue)
+            : null,
           athleteValue,
           isMet,
           progress,

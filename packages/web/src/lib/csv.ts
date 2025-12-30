@@ -317,10 +317,21 @@ export function validateMeasurementCSV(row: any, validMetrics?: string[]): { val
     }
   }
 
-  // Validate metric type - use provided valid metrics or fall back to system defaults
-  const allowedMetrics = validMetrics || ['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED'];
-  if (!row.metric || !allowedMetrics.includes(row.metric)) {
-    errors.push(`Metric must be one of: ${allowedMetrics.join(', ')}`);
+  // Validate metric type - use provided valid metrics or accept any valid metric code format
+  // When validMetrics is provided, restrict to those metrics; otherwise accept any valid format
+  if (!row.metric) {
+    errors.push('Metric is required');
+  } else if (validMetrics && validMetrics.length > 0) {
+    // Restrict to provided valid metrics list (org-specific)
+    if (!validMetrics.includes(row.metric)) {
+      errors.push(`Metric must be one of: ${validMetrics.join(', ')}`);
+    }
+  } else {
+    // No specific list provided - accept any valid metric code format (uppercase letters, numbers, underscores)
+    const metricCodePattern = /^[A-Z0-9_]+$/;
+    if (!metricCodePattern.test(row.metric)) {
+      errors.push('Invalid metric code format');
+    }
   }
 
   // Validate value

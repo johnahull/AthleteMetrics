@@ -7,8 +7,10 @@ import { useToggleSiteBenchmarkStatus, useDeleteSiteBenchmark } from "@/lib/benc
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useMetricConfig } from "@/hooks/use-metric-config";
-import { Edit, Trash2, Target } from "lucide-react";
+import { Edit, Trash2, Target, Layers } from "lucide-react";
 import { BenchmarkDeleteDialog } from "./BenchmarkDeleteDialog";
+import { TierBadgeCompact } from "./TierBadge";
+import { getMetricDisplayName } from "@/constants/metrics";
 import type { SiteBenchmark } from "@shared/schema";
 
 interface BenchmarkCardProps {
@@ -70,7 +72,14 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
     lte: "≤ (Lower is better)",
     gte: "≥ (Higher is better)",
     eq: "= (Exact match)",
-  }[benchmark.comparisonOperator as 'lte' | 'gte' | 'eq'] || benchmark.comparisonOperator;
+    range: "↔ (Target Range)",
+  }[benchmark.comparisonOperator as 'lte' | 'gte' | 'eq' | 'range'] || benchmark.comparisonOperator;
+
+  // Check if this is a range benchmark
+  const isRangeBenchmark = benchmark.comparisonOperator === 'range';
+
+  // Check if this is a tier benchmark
+  const isTierBenchmark = !!benchmark.tierGroupId;
 
   // Format athlete filters
   const athleteFilters: string[] = [];
@@ -97,13 +106,25 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
                 <Target className="h-4 w-4" />
                 {benchmark.name}
               </CardTitle>
-              <div className="flex gap-2 mt-2">
-                <Badge variant="outline">{benchmark.metricCode}</Badge>
+              <div className="flex flex-wrap gap-2 mt-2">
+                <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
                 <Badge variant={benchmark.isActive ? "default" : "secondary"}>
                   {benchmark.isActive ? "Active" : "Inactive"}
                 </Badge>
                 {benchmark.isSystemDefault && (
                   <Badge variant="secondary">System Default</Badge>
+                )}
+                {isTierBenchmark && benchmark.tierName && benchmark.tierColor && (
+                  <TierBadgeCompact
+                    tierName={benchmark.tierName}
+                    tierColor={benchmark.tierColor}
+                  />
+                )}
+                {isTierBenchmark && (
+                  <Badge variant="outline" className="flex items-center gap-1">
+                    <Layers className="h-3 w-3" />
+                    Tier {benchmark.tierOrder}
+                  </Badge>
                 )}
               </div>
             </div>
@@ -118,11 +139,24 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
 
           {/* Benchmark Value & Operator */}
           <div className="bg-muted p-3 rounded-md">
-            <div className="text-sm font-medium mb-1">Target Value</div>
+            <div className="text-sm font-medium mb-1">
+              {isRangeBenchmark ? "Target Range" : "Target Value"}
+            </div>
             <div className="flex justify-between items-center">
               <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
-                {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                {isRangeBenchmark ? (
+                  <>
+                    <span className="text-2xl font-bold">
+                      {benchmark.minValue ?? '—'} – {benchmark.maxValue ?? '—'}
+                    </span>
+                    {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-2xl font-bold">{benchmark.benchmarkValue}</span>
+                    {unit && <span className="text-sm text-muted-foreground">{unit}</span>}
+                  </>
+                )}
               </div>
               <span className="text-xs text-muted-foreground">{operatorLabel}</span>
             </div>

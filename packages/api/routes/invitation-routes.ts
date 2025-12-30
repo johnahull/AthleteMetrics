@@ -14,6 +14,13 @@ import { isSiteAdmin } from "@shared/auth-utils";
 import { emailService } from "../services/email-service";
 import type { Invitation } from "@shared/schema";
 import { MAX_INVITATION_ATTEMPTS } from "../constants/invitations";
+import {
+  validateLegalAcceptanceTimestamp,
+  getLegalAcceptanceTimestamp,
+  INVALID_TIMESTAMP_MESSAGE,
+  MISSING_ACCEPTANCE_MESSAGE,
+  AUDIT_ACTION_LEGAL_ACCEPTED
+} from "@shared/legal-acceptance";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -761,7 +768,16 @@ export function registerInvitationRoutes(app: Express) {
   app.post("/api/invitations/:token/accept", authLimiter, async (req, res) => {
     try {
       const { token } = req.params;
-      const { password, firstName, lastName, username } = req.body;
+      const { password, firstName, lastName, username, legalAcceptedAt } = req.body;
+
+      // Validate legal acceptance is provided and valid
+      if (!legalAcceptedAt) {
+        return res.status(400).json({ message: MISSING_ACCEPTANCE_MESSAGE });
+      }
+
+      if (!validateLegalAcceptanceTimestamp(legalAcceptedAt)) {
+        return res.status(400).json({ message: INVALID_TIMESTAMP_MESSAGE });
+      }
 
       // CSRF-like protection: Verify request came from same origin
       const referer = req.headers.referer || req.headers.origin;
@@ -843,33 +859,30 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(429).json({ message: "Too many failed attempts. This invitation has been locked." });
       }
 
-      const result = await storage.acceptInvitation(token, {
-        email: invitation.email,
-        username,
-        password,
-        firstName,
-        lastName
-      });
+      const result = await storage.acceptInvitation(
+        token,
+        {
+          email: invitation.email,
+          username,
+          password,
+          firstName,
+          lastName,
+          legalAcceptedAt,
+          legalAcceptedVersion: getLegalAcceptanceTimestamp() // Format: "2024-12-13"
+        },
+        {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        }
+      );
 
       console.log("Invitation accepted successfully, user created:", result.user.id);
 
-      // Audit log
-      await storage.createAuditLog({
-        userId: result.user.id,
-        action: 'invitation_accepted',
-        resourceType: 'invitation',
-        resourceId: invitation.id,
-        details: JSON.stringify({
-          email: invitation.email,
-          role: invitation.role,
-          organizationId: invitation.organizationId
-        }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      });
+      // Note: Audit logs (legal acceptance + invitation accepted) are created inside
+      // the acceptInvitation transaction for atomicity. No need to create them here.
 
       // Send welcome email
-      const organization = await storage.getOrganization(invitation.organizationId);
+      const organization = await storage.getOrganization(result.invitation.organizationId);
       await emailService.sendWelcome(result.user.emails[0], {
         userName: `${result.user.firstName} ${result.user.lastName}`,
         organizationName: organization?.name || 'the organization',

@@ -77,12 +77,14 @@ const db = drizzle(client, { schema });
 
 // Create a separate pg.Pool specifically for connect-pg-simple session store
 // connect-pg-simple requires the pg library's Pool interface, not postgres-js
+// SSL configuration must match postgres-js client: disable for localhost to support CI with local PostgreSQL containers
+const isLocalhost = DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1');
 const sessionPool = new Pool({
   connectionString: DATABASE_URL,
   max: Math.min(5, finalPoolConfig.max), // Use fewer connections for session store
   idleTimeoutMillis: finalPoolConfig.idle_timeout * 1000,
   connectionTimeoutMillis: 10000,
-  ssl: isProduction ? { rejectUnauthorized: false } : undefined,
+  ssl: (isProduction && !isLocalhost) ? { rejectUnauthorized: false } : undefined,
 });
 
 // Export db for application use

@@ -6,7 +6,7 @@
  * Supports edit/delete actions for unverified (self-entered) measurements.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useContext } from 'react';
 import type { Measurement } from '@shared/schema';
 import {
   Table,
@@ -17,11 +17,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { VerificationBadge } from './VerificationBadge';
+import { OrgBadge, PersonalBadge } from './OrgBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { ChevronDown, ChevronUp, Download, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getMetricDisplayName } from '@/constants/metrics';
+import { AthleteOrgContext } from '@/lib/athlete-org-context';
 
 export interface MeasurementHistoryTableProps {
   measurements: Measurement[];
@@ -31,6 +33,8 @@ export interface MeasurementHistoryTableProps {
   onEdit?: (measurement: Measurement) => void;
   /** Callback when delete is clicked for an unverified measurement */
   onDelete?: (measurement: Measurement) => void;
+  /** Map of organization IDs to names for displaying badges */
+  organizationNames?: Record<string, string>;
 }
 
 type SortField = 'date' | 'metric' | 'value';
@@ -51,8 +55,13 @@ export function MeasurementHistoryTable({
   onExport,
   onEdit,
   onDelete,
+  organizationNames = {},
 }: MeasurementHistoryTableProps) {
   const showActions = Boolean(onEdit || onDelete);
+
+  // Try to get filter mode from context to determine if we should show org column
+  const athleteOrgContext = useContext(AthleteOrgContext);
+  const showOrgColumn = athleteOrgContext?.filterMode === 'all';
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
@@ -122,6 +131,7 @@ export function MeasurementHistoryTable({
               <TableHead>Date</TableHead>
               <TableHead>Metric</TableHead>
               <TableHead>Value</TableHead>
+              {showOrgColumn && <TableHead>Source</TableHead>}
               <TableHead>Status</TableHead>
               {showActions && <TableHead>Actions</TableHead>}
             </TableRow>
@@ -138,6 +148,11 @@ export function MeasurementHistoryTable({
                 <TableCell>
                   <Skeleton className="h-4 w-16" />
                 </TableCell>
+                {showOrgColumn && (
+                  <TableCell>
+                    <Skeleton className="h-6 w-24" />
+                  </TableCell>
+                )}
                 <TableCell>
                   <Skeleton className="h-6 w-20" />
                 </TableCell>
@@ -224,6 +239,7 @@ export function MeasurementHistoryTable({
               Value
               <SortIcon field="value" />
             </TableHead>
+            {showOrgColumn && <TableHead>Source</TableHead>}
             <TableHead>Status</TableHead>
             {showActions && <TableHead className="w-24">Actions</TableHead>}
           </TableRow>
@@ -252,6 +268,19 @@ export function MeasurementHistoryTable({
                   <TableCell>
                     {measurement.value} {measurement.units}
                   </TableCell>
+                  {showOrgColumn && (
+                    <TableCell>
+                      {measurement.organizationId ? (
+                        <OrgBadge
+                          organizationName={organizationNames[measurement.organizationId] || 'Unknown'}
+                          organizationId={measurement.organizationId}
+                          size="sm"
+                        />
+                      ) : (
+                        <PersonalBadge size="sm" />
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <VerificationBadge
                       isVerified={measurement.isVerified}
@@ -301,7 +330,7 @@ export function MeasurementHistoryTable({
 
                 {isExpanded && (
                   <TableRow>
-                    <TableCell colSpan={showActions ? 5 : 4} className="bg-muted/30">
+                    <TableCell colSpan={4 + (showOrgColumn ? 1 : 0) + (showActions ? 1 : 0)} className="bg-muted/30">
                       <div className="py-2 px-4">
                         <h4 className="font-semibold text-sm mb-1">Notes:</h4>
                         <p className="text-sm text-muted-foreground">

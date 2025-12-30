@@ -902,4 +902,399 @@ describe('Benchmark Service', () => {
       await db.delete(users).where(eq(users.id, athlete.id));
     });
   });
+
+  describe('Range-Based Evaluation Logic', () => {
+    // Cycle 20: evaluateRangeBenchmark() returns true when athlete value is within range
+    it('should return true when athlete value is within range (inclusive)', () => {
+      // Range: 25-30 inches, Athlete: 27 inches
+      const result = benchmarkService.evaluateRangeBenchmark(27, 25, 30);
+      expect(result).toBe(true);
+    });
+
+    it('should return true when athlete value equals minValue', () => {
+      const result = benchmarkService.evaluateRangeBenchmark(25, 25, 30);
+      expect(result).toBe(true);
+    });
+
+    it('should return true when athlete value equals maxValue', () => {
+      const result = benchmarkService.evaluateRangeBenchmark(30, 25, 30);
+      expect(result).toBe(true);
+    });
+
+    it('should return false when athlete value is below minValue', () => {
+      const result = benchmarkService.evaluateRangeBenchmark(24, 25, 30);
+      expect(result).toBe(false);
+    });
+
+    it('should return false when athlete value is above maxValue', () => {
+      const result = benchmarkService.evaluateRangeBenchmark(31, 25, 30);
+      expect(result).toBe(false);
+    });
+
+    // Cycle 21: getRangeBenchmarkProgress() calculates percentage correctly
+    it('should return 100% when athlete value is within range', () => {
+      // Within range = 100% (meets benchmark)
+      const progress = benchmarkService.getRangeBenchmarkProgress(27, 25, 30);
+      expect(progress).toBe(100);
+    });
+
+    it('should return < 100% when athlete value is below range', () => {
+      // Below range: calculate how far below minValue
+      // If minValue=25 and athlete=20, they're 5 units away from 25
+      // Progress = (20/25) * 100 = 80%
+      const progress = benchmarkService.getRangeBenchmarkProgress(20, 25, 30);
+      expect(progress).toBeCloseTo(80, 1);
+    });
+
+    it('should return < 100% when athlete value is above range', () => {
+      // Above range: calculate how far above maxValue
+      // If maxValue=30 and athlete=35, they're 5 units over
+      // Progress = 100 - ((35-30)/30 * 100) = 100 - 16.67 = 83.33%
+      const progress = benchmarkService.getRangeBenchmarkProgress(35, 25, 30);
+      expect(progress).toBeCloseTo(83.33, 1);
+    });
+
+    it('should return 100% when athlete exactly hits minValue', () => {
+      const progress = benchmarkService.getRangeBenchmarkProgress(25, 25, 30);
+      expect(progress).toBe(100);
+    });
+
+    it('should return 100% when athlete exactly hits maxValue', () => {
+      const progress = benchmarkService.getRangeBenchmarkProgress(30, 25, 30);
+      expect(progress).toBe(100);
+    });
+
+    it('should handle zero values correctly', () => {
+      // Range: 0-10, Athlete: 5
+      const progress = benchmarkService.getRangeBenchmarkProgress(5, 0, 10);
+      expect(progress).toBe(100);
+    });
+
+    it('should handle negative ranges correctly', () => {
+      // Range: -10 to -5, Athlete: -7
+      const progress = benchmarkService.getRangeBenchmarkProgress(-7, -10, -5);
+      expect(progress).toBe(100);
+    });
+
+    // Edge case: single point range (min === max)
+    it('should handle single point range (min === max)', () => {
+      // Range: 25 to 25, Athlete: 25 - should be 100%
+      const progressExact = benchmarkService.getRangeBenchmarkProgress(25, 25, 25);
+      expect(progressExact).toBe(100);
+
+      // Range: 25 to 25, Athlete: 24 - should be less than 100%
+      const progressBelow = benchmarkService.getRangeBenchmarkProgress(24, 25, 25);
+      expect(progressBelow).toBeLessThan(100);
+
+      // Range: 25 to 25, Athlete: 26 - should be less than 100%
+      const progressAbove = benchmarkService.getRangeBenchmarkProgress(26, 25, 25);
+      expect(progressAbove).toBeLessThan(100);
+    });
+
+    // Edge case: NaN and Infinity inputs
+    it('should return 0 for NaN inputs', () => {
+      expect(benchmarkService.getRangeBenchmarkProgress(NaN, 25, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, NaN, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, 25, NaN)).toBe(0);
+    });
+
+    it('should return 0 for Infinity inputs', () => {
+      expect(benchmarkService.getRangeBenchmarkProgress(Infinity, 25, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, Infinity, 30)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(27, 25, Infinity)).toBe(0);
+      expect(benchmarkService.getRangeBenchmarkProgress(-Infinity, 25, 30)).toBe(0);
+    });
+
+    // Edge case: extreme deviations from range
+    it('should clamp progress for extreme values below range', () => {
+      // Athlete at 1 when min is 1000000 - should be clamped between 0-100
+      const progress = benchmarkService.getRangeBenchmarkProgress(1, 1000000, 2000000);
+      expect(progress).toBeGreaterThanOrEqual(0);
+      expect(progress).toBeLessThanOrEqual(100);
+    });
+
+    it('should clamp progress for extreme values above range', () => {
+      // Athlete at 1000000 when max is 30 - should not go below 0%
+      const progress = benchmarkService.getRangeBenchmarkProgress(1000000, 25, 30);
+      expect(progress).toBeGreaterThanOrEqual(0);
+    });
+
+    // Cycle 22: getAthleteBenchmarkStatus() correctly evaluates range-based benchmarks
+    it('should return benchmark status for range-based benchmarks (athlete within range)', async () => {
+      // Create a site benchmark with range (minValue: 25, maxValue: 30 inches for vertical jump)
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: 'VERTICAL_JUMP',
+        name: 'Acceptable Vertical Jump Range',
+        benchmarkValue: null, // No single value for range benchmarks
+        minValue: 25,
+        maxValue: 30,
+        comparisonOperator: 'range',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete
+      const [athlete] = await db.insert(users).values({
+        username: `athlete_range${Date.now()}`,
+        emails: ['athlete_range@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Range',
+        lastName: 'Athlete',
+        fullName: 'Range Athlete',
+        isSiteAdmin: false,
+        birthYear: 2000,
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      // Create measurement within range (27 inches)
+      const measurement = await storage.createMeasurement({
+        userId: athlete.id,
+        date: new Date().toISOString().split('T')[0],
+        metric: 'VERTICAL_JUMP',
+        value: 27,
+      }, siteAdminUserId);
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      expect(status).toBeDefined();
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeDefined();
+      expect(benchmarkStatus?.isMet).toBe(true);
+      expect(benchmarkStatus?.athleteValue).toBe(27);
+      expect(benchmarkStatus?.progress).toBe(100);
+
+      // Cleanup
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+
+    it('should return benchmark status for range-based benchmarks (athlete below range)', async () => {
+      // Create a site benchmark with range
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: 'VERTICAL_JUMP',
+        name: 'Vertical Jump Range Below Test',
+        benchmarkValue: null,
+        minValue: 25,
+        maxValue: 30,
+        comparisonOperator: 'range',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete
+      const [athlete] = await db.insert(users).values({
+        username: `athlete_below_range${Date.now()}`,
+        emails: ['athlete_below_range@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Below',
+        lastName: 'Range',
+        fullName: 'Below Range',
+        isSiteAdmin: false,
+        birthYear: 2000,
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      // Create measurement below range (20 inches)
+      const measurement = await storage.createMeasurement({
+        userId: athlete.id,
+        date: new Date().toISOString().split('T')[0],
+        metric: 'VERTICAL_JUMP',
+        value: 20,
+      }, siteAdminUserId);
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      expect(status).toBeDefined();
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeDefined();
+      expect(benchmarkStatus?.isMet).toBe(false);
+      expect(benchmarkStatus?.athleteValue).toBe(20);
+      expect(benchmarkStatus?.progress).toBeLessThan(100);
+
+      // Cleanup
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+
+    it('should return benchmark status for range-based benchmarks (athlete above range)', async () => {
+      // Create a site benchmark with range
+      const benchmark = await storage.createSiteBenchmark({
+        metricCode: 'VERTICAL_JUMP',
+        name: 'Vertical Jump Range Above Test',
+        benchmarkValue: null,
+        minValue: 25,
+        maxValue: 30,
+        comparisonOperator: 'range',
+      }, siteAdminUserId);
+      createdBenchmarkIds.push(benchmark.id);
+
+      // Enable benchmark for org
+      await storage.enableBenchmarkForOrg(testOrgId, benchmark.id, 'site');
+
+      // Create athlete
+      const [athlete] = await db.insert(users).values({
+        username: `athlete_above_range${Date.now()}`,
+        emails: ['athlete_above_range@example.com'],
+        password: 'hashedpassword',
+        firstName: 'Above',
+        lastName: 'Range',
+        fullName: 'Above Range',
+        isSiteAdmin: false,
+        birthYear: 2000,
+      }).returning();
+
+      // Add athlete to org
+      await storage.addUserToOrganization(athlete.id, testOrgId, 'athlete');
+
+      // Create measurement above range (35 inches)
+      const measurement = await storage.createMeasurement({
+        userId: athlete.id,
+        date: new Date().toISOString().split('T')[0],
+        metric: 'VERTICAL_JUMP',
+        value: 35,
+      }, siteAdminUserId);
+
+      const status = await benchmarkService.getAthleteBenchmarkStatus(athlete.id, testOrgId);
+
+      expect(status).toBeDefined();
+      const benchmarkStatus = status.find(s => s.benchmarkId === benchmark.id);
+      expect(benchmarkStatus).toBeDefined();
+      expect(benchmarkStatus?.isMet).toBe(false);
+      expect(benchmarkStatus?.athleteValue).toBe(35);
+      expect(benchmarkStatus?.progress).toBeLessThan(100);
+
+      // Cleanup
+      await db.delete(measurements).where(eq(measurements.userId, athlete.id));
+      await storage.removeUserFromOrganization(athlete.id, testOrgId, false).catch(() => {});
+      await db.delete(users).where(eq(users.id, athlete.id));
+    });
+  });
+
+  describe('Tier Benchmark Evaluation', () => {
+    // Test tier evaluation logic
+    it('should identify correct tier for athlete value within range', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete value within "Excellent" tier
+      const result = benchmarkService.evaluateTierBenchmark(4.5, tiers, true);
+
+      expect(result.tierName).toBe('Excellent');
+      expect(result.tierColor).toBe('silver');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('should calculate distance to next tier (lower-is-better metric)', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 4.5 (in Excellent tier), needs to reach 4.4 to enter Elite
+      const result = benchmarkService.evaluateTierBenchmark(4.5, tiers, true);
+
+      expect(result.nextTierName).toBe('Elite');
+      expect(result.distanceToNextTier).toBeCloseTo(0.1, 2); // 4.5 - 4.4 = 0.1
+    });
+
+    it('should calculate distance to next tier (higher-is-better metric)', () => {
+      const tiers = [
+        { minValue: 30, maxValue: 35, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 25, maxValue: 30, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 20, maxValue: 25, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 27 (in Excellent tier), needs to reach 30 to enter Elite
+      const result = benchmarkService.evaluateTierBenchmark(27, tiers, false);
+
+      expect(result.nextTierName).toBe('Elite');
+      expect(result.distanceToNextTier).toBeCloseTo(3, 2); // 30 - 27 = 3
+    });
+
+    it('should handle value at tier boundary', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+      ];
+
+      // Athlete exactly at boundary (4.4) - should be in Excellent tier
+      const result = benchmarkService.evaluateTierBenchmark(4.4, tiers, true);
+
+      expect(result.tierName).toBe('Excellent');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('should return null nextTier when at best tier', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+      ];
+
+      // Athlete at 4.3 (in Elite tier - best tier)
+      const result = benchmarkService.evaluateTierBenchmark(4.3, tiers, true);
+
+      expect(result.tierName).toBe('Elite');
+      expect(result.nextTierName).toBeNull();
+      expect(result.distanceToNextTier).toBeNull();
+    });
+
+    it('should handle value below all tiers', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 4.4, maxValue: 4.6, tierName: 'Excellent', tierColor: 'silver', tierOrder: 2 },
+        { minValue: 4.6, maxValue: 4.8, tierName: 'Good', tierColor: 'bronze', tierOrder: 3 },
+      ];
+
+      // Athlete at 5.0 (below all tiers for lower-is-better)
+      const result = benchmarkService.evaluateTierBenchmark(5.0, tiers, true);
+
+      expect(result.tierName).toBeNull();
+      expect(result.tierOrder).toBeNull();
+      expect(result.nextTierName).toBe('Good'); // Closest tier to enter
+      expect(result.distanceToNextTier).toBeCloseTo(0.2, 2); // 5.0 - 4.8 = 0.2
+    });
+
+    it('should handle gaps between tier ranges', () => {
+      const tiers = [
+        { minValue: 4.2, maxValue: 4.4, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        // GAP: 4.4 to 4.5
+        { minValue: 4.5, maxValue: 4.7, tierName: 'Good', tierColor: 'bronze', tierOrder: 2 },
+      ];
+
+      // Athlete at 4.45 (falls in gap between tiers)
+      const result = benchmarkService.evaluateTierBenchmark(4.45, tiers, true);
+
+      expect(result.tierName).toBeNull(); // Not in any tier
+      expect(result.nextTierName).toBe('Elite'); // Next best tier to reach
+      expect(result.distanceToNextTier).toBeCloseTo(0.05, 2); // 4.45 - 4.4 = 0.05
+    });
+
+    it('should handle value above all tiers (higher-is-better)', () => {
+      const tiers = [
+        { minValue: 30, maxValue: 35, tierName: 'Elite', tierColor: 'gold', tierOrder: 1 },
+        { minValue: 25, maxValue: 30, tierName: 'Good', tierColor: 'bronze', tierOrder: 2 },
+      ];
+
+      // Athlete at 36 (above all tiers for higher-is-better) - already exceeds best tier
+      const result = benchmarkService.evaluateTierBenchmark(36, tiers, false);
+
+      expect(result.tierName).toBeNull(); // Above all defined tiers
+      expect(result.nextTierName).toBeNull(); // No next tier when already exceeding
+      expect(result.distanceToNextTier).toBeNull();
+    });
+  });
 });

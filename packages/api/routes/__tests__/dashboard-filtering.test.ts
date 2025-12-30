@@ -7,7 +7,7 @@ import { registerAnalyticsRoutes } from '../analytics-routes';
 import { registerDashboardTrendsRoutes } from '../dashboard-trends';
 import { registerAuthRoutes } from '../auth-routes';
 import { db } from '../../db';
-import { users, teams, measurements, userTeams, organizations, userOrganizations } from '@shared/schema';
+import { users, teams, measurements, userTeams, organizations, userOrganizations, organizationMetrics } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 const app = express();
@@ -95,6 +95,12 @@ describe('Dashboard Filtering - Backend Integration', () => {
       .returning();
     team1Id = team1.id;
     team2Id = team2.id;
+
+    // Enable metrics for this organization (required for getDashboardStats to return metric stats)
+    await db.insert(organizationMetrics).values([
+      { organizationId: orgId, metricCode: 'FLY10_TIME', isEnabled: true },
+      { organizationId: orgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
+    ]).onConflictDoNothing();
 
     // Create athletes
     const [ath1, ath2, ath3] = await db
@@ -205,6 +211,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
     await db.delete(userTeams).where(eq(userTeams.userId, athlete2Id));
     await db.delete(userTeams).where(eq(userTeams.userId, athlete3Id));
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, coachUserId));
+    await db.delete(organizationMetrics).where(eq(organizationMetrics.organizationId, orgId));
     await db.delete(users).where(eq(users.id, athlete1Id));
     await db.delete(users).where(eq(users.id, athlete2Id));
     await db.delete(users).where(eq(users.id, athlete3Id));

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, CheckCircle, Eye } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useState } from "react";
+import { getMetricDisplayName } from "@/constants/metrics";
 
 interface OCRResult {
   success: boolean;
@@ -134,7 +135,7 @@ export function OCRResults({ result }: OCRResultsProps) {
                   <div className="flex-1">
                     <div className="font-medium">{item.athlete}</div>
                     <div className="text-sm text-gray-600">
-                      {item.measurement.metric}: {item.measurement.value}
+                      {getMetricDisplayName(item.measurement.metric)}: {item.measurement.value}
                       {item.measurement.date && ` | Date: ${item.measurement.date}`}
                     </div>
                     {item.rawText && (

@@ -1,6 +1,10 @@
 import { z } from 'zod';
 
-// Allowed metric types
+// Metric code validation pattern - allows any valid metric code format
+// Supports derived metrics and custom metrics (e.g., TOP_SPEED_CALC, CUSTOM_METRIC_1)
+const METRIC_CODE_REGEX = /^[A-Z0-9_]+$/;
+
+// Legacy constant for backward compatibility - actual validation uses regex
 const ALLOWED_METRICS = [
   'FLY10_TIME',
   'VERTICAL_JUMP',
@@ -8,7 +12,10 @@ const ALLOWED_METRICS = [
   'AGILITY_5105',
   'T_TEST',
   'DASH_40YD',
-  'RSI'
+  'RSI',
+  'TOP_SPEED',
+  'HEIGHT',
+  'WEIGHT',
 ] as const;
 
 // Allowed analysis types
@@ -89,15 +96,15 @@ const analyticsFiltersSchema = z.object({
   }
 );
 
-// Metrics selection schema
+// Metrics selection schema - uses regex to support derived and custom metrics
 const metricsSelectionSchema = z.object({
   primary: z
-    .enum(ALLOWED_METRICS, {
-      errorMap: () => ({ message: `Primary metric must be one of: ${ALLOWED_METRICS.join(', ')}` })
-    }),
+    .string()
+    .min(1, 'Primary metric is required')
+    .regex(METRIC_CODE_REGEX, 'Invalid metric code format'),
 
   additional: z
-    .array(z.enum(ALLOWED_METRICS))
+    .array(z.string().regex(METRIC_CODE_REGEX, 'Invalid metric code format'))
     .optional()
     .default([])
 }).refine(

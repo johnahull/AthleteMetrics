@@ -10,7 +10,7 @@
  * This page is for athletes viewing their complete measurement history.
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import {
@@ -36,14 +36,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, AlertCircle, Plus, Table as TableIcon, Calendar, LineChart, Filter } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
-import { METRIC_DISPLAY_NAMES } from '@/constants/metrics';
+import { useAvailableMetrics } from '@/hooks/use-available-metrics';
 import type { Measurement } from '@shared/schema';
-
-// Available metric types for filtering - derived from centralized constants
-const METRIC_TYPES = [
-  { value: 'all', label: 'All Metrics' },
-  ...Object.entries(METRIC_DISPLAY_NAMES).map(([value, label]) => ({ value, label })),
-];
 
 type StatusFilter = 'all' | 'verified' | 'unverified';
 
@@ -69,6 +63,38 @@ export default function MyMeasurementsPage() {
     isError,
     error,
   } = useAthleteMeasurementHistory(athleteId);
+
+  // Get available metrics for labels
+  const { metrics: availableMetrics } = useAvailableMetrics();
+
+  // Build dynamic metric filter options based on athlete's actual measurements
+  const metricTypes = useMemo(() => {
+    // Get unique metric codes from athlete's measurements
+    const uniqueMetricCodes = [...new Set(measurements.map((m: Measurement) => m.metric))];
+
+    // Create a lookup map from available metrics for labels
+    const metricLabelMap = new Map(availableMetrics.map(m => [m.code, m.label]));
+
+    // Build options for metrics the athlete has data for
+    const metricOptions = uniqueMetricCodes
+      .map(code => ({
+        value: code,
+        label: metricLabelMap.get(code) || code, // Fallback to code if label not found
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+
+    return [
+      { value: 'all', label: 'All Metrics' },
+      ...metricOptions,
+    ];
+  }, [measurements, availableMetrics]);
+
+  // Reset metric filter if selected metric is no longer available (e.g., after deleting measurements)
+  useEffect(() => {
+    if (metricFilter !== 'all' && !metricTypes.some(m => m.value === metricFilter)) {
+      setMetricFilter('all');
+    }
+  }, [metricFilter, metricTypes]);
 
   // Mutations for update and delete
   const updateMutation = useUpdateSelfMeasurement();
@@ -229,7 +255,7 @@ export default function MyMeasurementsPage() {
                     <SelectValue placeholder="Filter by metric" />
                   </SelectTrigger>
                   <SelectContent>
-                    {METRIC_TYPES.map((metric) => (
+                    {metricTypes.map((metric) => (
                       <SelectItem key={metric.value} value={metric.value}>
                         {metric.label}
                       </SelectItem>

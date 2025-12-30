@@ -7,9 +7,12 @@ import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AnalyticsService } from "../services/analytics-service";
 import { AnalyticsService as AdvancedAnalyticsService } from "../analytics-simple";
+import { storage } from "../storage";
 import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
 import { users, userTeams, teams } from "@shared/schema";
 import { eq, and, inArray } from "drizzle-orm";
@@ -67,8 +70,16 @@ export function registerAnalyticsRoutes(app: Express) {
       }
 
       // Permission check: org admins/coaches can only view athletes in their organization
-      if (!isSiteAdmin(user) && user.role !== 'athlete' && user.primaryOrganizationId) {
-        // Check if athlete belongs to a team in the user's organization
+      // SECURITY: Validate using database-verified org memberships, not session data
+      if (!isSiteAdmin(user) && user.role !== 'athlete') {
+        // Get user's org memberships from database
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
+        }
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+
+        // Check if athlete belongs to a team in any of the user's organizations
         const athleteTeams = await db
           .select({ organizationId: teams.organizationId })
           .from(userTeams)
@@ -80,9 +91,9 @@ export function registerAnalyticsRoutes(app: Express) {
             )
           );
 
-        const isInOrganization = athleteTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        const isInOrganization = athleteTeams.some(t => userOrgIds.has(t.organizationId));
         if (!isInOrganization) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ATHLETE_ORG_MISMATCH) });
         }
       }
 
@@ -105,20 +116,26 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get organizationId from query or user's primary organization
+      // SECURITY: Get organizationId from query or user's database-validated membership
       let organizationId = req.query.organizationId as string | undefined;
 
       if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+        // Use database-validated org membership instead of session
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - no organization membership" });
+        }
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       const teamStats = await analyticsService.getTeamStats(organizationId);
@@ -141,20 +158,20 @@ export function registerAnalyticsRoutes(app: Express) {
       }
 
       // Get organizationId from query or user's primary organization
-      let organizationId = req.query.organizationId as string | undefined;
+      const requestedOrgId = req.query.organizationId as string | undefined;
 
-      if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+      // SECURITY: Validate organization access and get effective org ID
+      const orgAccessResult = await validateOrganizationAccess(user, requestedOrgId);
+      if (!orgAccessResult.allowed) {
+        return res.status(403).json({
+          message: getAuthorizationError(orgAccessResult.error!)
+        });
       }
 
       // Site admins can view global dashboard without organizationId
+      const organizationId = orgAccessResult.effectiveOrgId;
       if (!organizationId && !isSiteAdmin(user)) {
         return res.status(400).json({ message: "organizationId is required" });
-      }
-
-      // Permission check: non-admin users can only access their organization
-      if (organizationId && !isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
       }
 
       // Parse optional filter parameters
@@ -287,9 +304,12 @@ export function registerAnalyticsRoutes(app: Express) {
 
       const request = validation.data;
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && request.filters.organizationId !== user.primaryOrganizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      if (request.filters.organizationId) {
+        const hasAccess = await hasOrganizationAccess(user, request.filters.organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
+        }
       }
 
       // Call the advanced analytics service
@@ -321,8 +341,16 @@ export function registerAnalyticsRoutes(app: Express) {
       }
 
       // Permission check: org admins/coaches can only view athletes in their organization
-      if (!isSiteAdmin(user) && user.role !== 'athlete' && user.primaryOrganizationId) {
-        // Check if athlete belongs to a team in the user's organization
+      // SECURITY: Validate using database-verified org memberships, not session data
+      if (!isSiteAdmin(user) && user.role !== 'athlete') {
+        // Get user's org memberships from database
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.NO_ORG_MEMBERSHIP) });
+        }
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+
+        // Check if athlete belongs to a team in any of the user's organizations
         const athleteTeams = await db
           .select({ organizationId: teams.organizationId })
           .from(userTeams)
@@ -334,9 +362,9 @@ export function registerAnalyticsRoutes(app: Express) {
             )
           );
 
-        const isInOrganization = athleteTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        const isInOrganization = athleteTeams.some(t => userOrgIds.has(t.organizationId));
         if (!isInOrganization) {
-          return res.status(403).json({ message: "Access denied - athlete not in your organization" });
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ATHLETE_ORG_MISMATCH) });
         }
       }
 
@@ -359,20 +387,26 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Get organizationId from query or user's primary organization
+      // SECURITY: Get organizationId from query or user's database-validated membership
       let organizationId = req.query.organizationId as string | undefined;
 
       if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+        // Use database-validated org membership instead of session
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - no organization membership" });
+        }
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Parse dateFrom parameter (required)
@@ -464,20 +498,26 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - athletes cannot view leaderboards" });
       }
 
-      // Get organizationId from query or user's primary organization
+      // SECURITY: Get organizationId from query or user's database-validated membership
       let organizationId = req.query.organizationId as string | undefined;
 
       if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+        // Use database-validated org membership instead of session
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - no organization membership" });
+        }
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate required metric parameter
@@ -561,20 +601,26 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - athletes cannot view improvement rankings" });
       }
 
-      // Get organizationId from query or user's primary organization
+      // SECURITY: Get organizationId from query or user's database-validated membership
       let organizationId = req.query.organizationId as string | undefined;
 
       if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+        // Use database-validated org membership instead of session
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - no organization membership" });
+        }
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate required metric parameter
@@ -658,20 +704,26 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied - athletes cannot view at-risk data" });
       }
 
-      // Get organizationId from query or user's primary organization
+      // SECURITY: Get organizationId from query or user's database-validated membership
       let organizationId = req.query.organizationId as string | undefined;
 
       if (!organizationId && !isSiteAdmin(user)) {
-        organizationId = user.primaryOrganizationId;
+        // Use database-validated org membership instead of session
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        if (userOrgs.length === 0) {
+          return res.status(400).json({ message: "organizationId is required - no organization membership" });
+        }
+        organizationId = userOrgs[0].organizationId;
       }
 
       if (!organizationId) {
         return res.status(400).json({ message: "organizationId is required" });
       }
 
-      // Permission check: non-admin users can only access their organization
-      if (!isSiteAdmin(user) && user.primaryOrganizationId !== organizationId) {
-        return res.status(403).json({ message: "Access denied - organization mismatch" });
+      // SECURITY: Validate user has access to requested organization via database membership
+      const hasAccess = await hasOrganizationAccess(user, organizationId);
+      if (!hasAccess) {
+        return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ORG_ACCESS_DENIED) });
       }
 
       // Validate optional parameters

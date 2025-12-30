@@ -56,11 +56,11 @@ export default function Teams() {
   });
 
   const { data: teamStats } = useQuery({
-    queryKey: ["/api/analytics/teams", effectiveOrganizationId],
+    queryKey: ["/api/analytics/teams/stats", effectiveOrganizationId],
     queryFn: async () => {
-      const url = effectiveOrganizationId 
-        ? `/api/analytics/teams?organizationId=${effectiveOrganizationId}`
-        : `/api/analytics/teams`;
+      const url = effectiveOrganizationId
+        ? `/api/analytics/teams/stats?organizationId=${effectiveOrganizationId}`
+        : `/api/analytics/teams/stats`;
       const response = await fetch(url);
       return response.json();
     }
@@ -72,7 +72,7 @@ export default function Teams() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams/stats"] });
       toast({
         title: "Success",
         description: `${labels.team} deleted successfully`,
@@ -96,7 +96,7 @@ export default function Teams() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams/stats"] });
       toast({
         title: "Success",
         description: `${labels.team} archived successfully`,
@@ -118,7 +118,7 @@ export default function Teams() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/teams"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/analytics/teams/stats"] });
       toast({
         title: "Success",
         description: `${labels.team} unarchived successfully`,

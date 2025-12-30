@@ -8,15 +8,48 @@ import rateLimit from "express-rate-limit";
 import { MetricService } from "../services/metric-service";
 import { requireAuth, requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { validateOrgTypeQuery } from "../middleware/organization-type-middleware";
-import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema } from "@shared/schema";
+import { insertSiteMetricSchema, updateSiteMetricSchema, updateOrganizationMetricSchema, siteSports, siteMetrics } from "@shared/schema";
+import { db } from "../db";
+import { eq, sql } from "drizzle-orm";
+import { validateFormula, detectCircularDependencies } from "../services/formula-service";
 
 const metricService = new MetricService();
+
+/**
+ * Validate sport associations against active sports in site_sports table
+ * @param sportCodes - Array of sport codes to validate
+ * @throws Error if any sport code is invalid or inactive
+ *
+ * Semantics:
+ * - null/undefined: "Available to all sports" (no validation needed)
+ * - []: Empty array treated as "available to all sports" (stored as NULL in DB)
+ * - [...codes]: Specific sports (validates each code exists and is active)
+ */
+async function validateSportAssociations(sportCodes: string[] | null | undefined): Promise<void> {
+  // Null, undefined, or empty array all mean "available to all sports"
+  // Empty arrays are converted to null by the form before submission
+  if (!sportCodes || sportCodes.length === 0) {
+    return;
+  }
+
+  // Fetch all active sports from database
+  const validSports = await db.select({ code: siteSports.code })
+    .from(siteSports)
+    .where(eq(siteSports.isActive, true));
+
+  const validCodes = new Set(validSports.map(s => s.code));
+  const invalidCodes = sportCodes.filter(code => !validCodes.has(code));
+
+  if (invalidCodes.length > 0) {
+    throw new Error(`Invalid sport codes: ${invalidCodes.join(', ')}. Sport must exist and be active.`);
+  }
+}
 
 function sanitizeError(error: unknown, fallback: string): string {
   if (!(error instanceof Error)) return fallback;
 
   const isProduction = process.env.NODE_ENV === 'production';
-  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active'];
+  const safeErrors = ['Unauthorized', 'not found', 'already exists', 'Cannot delete', 'Cannot disable', 'not active', 'Invalid sport codes'];
 
   if (isProduction) {
     return safeErrors.some(safe => error.message.includes(safe)) ? error.message : fallback;
@@ -97,6 +130,34 @@ export function registerMetricRoutes(app: Express) {
     }
   );
 
+  // Get active site metrics (any authenticated user)
+  // Used by independent athletes without org context to see available metrics
+  app.get("/api/metrics/active", requireAuth, async (req, res) => {
+    try {
+      // Fetch only active metrics - no admin check needed
+      const metrics = await db.select({
+        code: siteMetrics.code,
+        label: siteMetrics.label,
+        unit: siteMetrics.unit,
+        metricType: siteMetrics.metricType,
+        category: siteMetrics.category,
+        description: siteMetrics.description,
+        isActive: siteMetrics.isActive,
+        isDerived: siteMetrics.isDerived,
+        formula: siteMetrics.formula,
+        dependentMetrics: siteMetrics.dependentMetrics,
+      })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.isActive, true))
+        .orderBy(siteMetrics.category, siteMetrics.label);
+
+      res.json(metrics);
+    } catch (error) {
+      console.error("GET /api/metrics/active error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch active metrics") });
+    }
+  });
+
   // Get specific site metric
   app.get("/api/metrics/:code", requireAuth, async (req, res) => {
     try {
@@ -120,6 +181,9 @@ export function registerMetricRoutes(app: Express) {
       const userId = req.session.user!.id;
       const validatedData = insertSiteMetricSchema.parse(req.body);
 
+      // Validate sport associations against active sports in database
+      await validateSportAssociations(validatedData.sportAssociations);
+
       const metric = await metricService.createSiteMetric(validatedData, userId);
       res.status(201).json(metric);
     } catch (error) {
@@ -139,6 +203,12 @@ export function registerMetricRoutes(app: Express) {
       const { code } = req.params;
       const userId = req.session.user!.id;
       const validatedData = updateSiteMetricSchema.parse(req.body);
+
+      // Validate sport associations against active sports in database
+      // Note: null explicitly clears the field, undefined means "don't update"
+      if (validatedData.sportAssociations !== undefined) {
+        await validateSportAssociations(validatedData.sportAssociations);
+      }
 
       const metric = await metricService.updateSiteMetric(code, validatedData, userId);
       res.json(metric);
@@ -377,4 +447,71 @@ export function registerMetricRoutes(app: Express) {
       }
     }
   );
+
+  // ========================================================================
+  // DERIVED METRIC ENDPOINTS (Site Admin Only)
+  // ========================================================================
+
+  // Validate formula before saving a derived metric
+  app.post("/api/metrics/validate-formula", metricModifyLimiter, requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { formula, excludeMetricCode } = req.body;
+
+      if (!formula || typeof formula !== 'string') {
+        return res.status(400).json({ message: "Formula is required" });
+      }
+
+      // Get all available metric codes
+      const metrics = await db.select({ code: siteMetrics.code }).from(siteMetrics);
+      const availableCodes = metrics
+        .map(m => m.code)
+        .filter(code => code !== excludeMetricCode);
+
+      const result = validateFormula(formula, availableCodes);
+      return res.json(result);
+    } catch (error) {
+      console.error("POST /api/metrics/validate-formula error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to validate formula") });
+    }
+  });
+
+  // Get dependency graph for a metric
+  app.get("/api/metrics/:code/dependencies", requireAuth, requireSiteAdmin, async (req, res) => {
+    try {
+      const { code } = req.params;
+
+      // Validate metric code format to prevent SQL injection
+      if (!code.match(/^[A-Z0-9_]+$/)) {
+        return res.status(400).json({ message: "Invalid metric code format" });
+      }
+
+      // Find what this metric depends on (if it's derived)
+      const metric = await db.query.siteMetrics.findFirst({
+        where: eq(siteMetrics.code, code)
+      });
+
+      // SECURITY FIX: Use parameterized query to prevent SQL injection
+      // Find metrics that depend on this one using array containment operator
+      // The ${code} parameter is automatically parameterized by Drizzle (no sql.raw needed)
+      const dependents = await db.select().from(siteMetrics)
+        .where(sql`${siteMetrics.dependentMetrics} @> ARRAY[${code}]::text[]`);
+
+      return res.json({
+        metric: metric?.code || null,
+        dependsOn: metric?.dependentMetrics || [],
+        dependedOnBy: dependents.map(m => m.code)
+      });
+    } catch (error) {
+      console.error("GET /api/metrics/:code/dependencies error:", error);
+      res.status(500).json({ message: sanitizeError(error, "Failed to fetch dependencies") });
+    }
+  });
+
+  // Extend PATCH /api/metrics/:code to handle derived metric validation
+  // Note: This is already handled by the existing PATCH route above,
+  // but we need to add validation logic to the MetricService.
+  // The validation logic should be added in the service layer to:
+  // 1. Check if isDerived is true, formula is required
+  // 2. Validate formula syntax and referenced metrics
+  // 3. Check for circular dependencies before saving
 }

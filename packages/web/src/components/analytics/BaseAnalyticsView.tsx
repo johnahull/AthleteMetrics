@@ -23,10 +23,21 @@ import { MetricsSelector } from './MetricsSelector';
 import { TimeframeSelector } from './TimeframeSelector';
 import { AnalyticsToolbar } from './AnalyticsToolbar';
 import { GroupSelector } from './GroupSelector';
+import { BenchmarkLineSelector } from './BenchmarkLineSelector';
+import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
-import type { AnalysisType, AnalyticsFilters } from '@shared/analytics-types';
+import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, ChartType } from '@shared/analytics-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
+
+// Chart types that support benchmark line overlays
+const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
+  'line_chart',
+  'box_plot',
+  'scatter_plot',
+  'connected_scatter',
+  'time_series_box_swarm',
+];
 
 interface BaseAnalyticsViewProps {
   // Required props
@@ -54,7 +65,7 @@ interface BaseAnalyticsViewProps {
   customToolbar?: React.ReactNode;
 
   // Callbacks
-  onAnalyticsDataChange?: (data: any) => void;
+  onAnalyticsDataChange?: (data: AnalyticsResponse | null) => void;
   onError?: (error: string) => void;
 
   // Initial state
@@ -125,6 +136,82 @@ function BaseAnalyticsViewContent({
     analyticsData: state.analyticsData,
     isMainAnalyticsLoading: state.isLoading
   });
+
+  // State for benchmark selection
+  const [selectedBenchmarkIds, setSelectedBenchmarkIds] = React.useState<string[]>([]);
+  const previousMetricRef = useRef<string>(state.metrics.primary);
+
+  // Fetch benchmarks for the primary metric (Y-axis for most charts)
+  const { data: benchmarksForMetric } = useBenchmarksForMetric(
+    effectiveOrganizationId || '',
+    state.metrics.primary
+  );
+
+  // Fetch benchmarks for the secondary metric (X-axis in scatter plots)
+  const secondaryMetric = state.metrics.additional?.[0];
+  const { data: benchmarksForSecondaryMetric } = useBenchmarksForMetric(
+    effectiveOrganizationId || '',
+    secondaryMetric || ''
+  );
+
+  // Convert selected benchmark IDs to BenchmarkLine objects (includes both primary and secondary metrics)
+  const selectedBenchmarks = useMemo<BenchmarkLine[]>(() => {
+    if (selectedBenchmarkIds.length === 0) {
+      return [];
+    }
+
+    const benchmarks: BenchmarkLine[] = [];
+
+    // Add primary metric benchmarks (Y-axis in scatter plots)
+    if (benchmarksForMetric) {
+      benchmarksForMetric
+        .filter(b => selectedBenchmarkIds.includes(b.id))
+        .forEach(b => {
+          benchmarks.push({
+            id: b.id,
+            name: b.name,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
+            comparisonOperator: b.comparisonOperator,
+            color: b.color ?? undefined,
+            lineStyle: 'dashed' as const,
+            metricCode: state.metrics.primary,
+            filters: b.filters
+          });
+        });
+    }
+
+    // Add secondary metric benchmarks (X-axis in scatter plots)
+    if (benchmarksForSecondaryMetric && secondaryMetric) {
+      benchmarksForSecondaryMetric
+        .filter(b => selectedBenchmarkIds.includes(b.id))
+        .forEach(b => {
+          benchmarks.push({
+            id: b.id,
+            name: b.name,
+            value: b.benchmarkValue ?? 0, // Fallback to 0 for range benchmarks where value is null
+            minValue: b.minValue ?? undefined,
+            maxValue: b.maxValue ?? undefined,
+            comparisonOperator: b.comparisonOperator,
+            color: b.color ?? undefined,
+            lineStyle: 'dashed' as const,
+            metricCode: secondaryMetric,
+            filters: b.filters
+          });
+        });
+    }
+
+    return benchmarks;
+  }, [benchmarksForMetric, benchmarksForSecondaryMetric, selectedBenchmarkIds, state.metrics.primary, secondaryMetric]);
+
+  // Reset benchmark selection when primary metric changes
+  useEffect(() => {
+    if (previousMetricRef.current !== state.metrics.primary) {
+      setSelectedBenchmarkIds([]);
+      previousMetricRef.current = state.metrics.primary;
+    }
+  }, [state.metrics.primary]);
 
   // Fetch data when conditions are met
   useEffect(() => {
@@ -469,6 +556,37 @@ function BaseAnalyticsViewContent({
           return shouldShowChart;
         })() && (
           <>
+            {/* Benchmark Line Selector - only for compatible chart types */}
+            {BENCHMARK_COMPATIBLE_CHART_TYPES.includes(state.selectedChartType) &&
+             effectiveOrganizationId &&
+             ((benchmarksForMetric && benchmarksForMetric.length > 0) ||
+              (benchmarksForSecondaryMetric && benchmarksForSecondaryMetric.length > 0)) && (
+              <div className="mb-4 space-y-2">
+                {/* Primary metric benchmarks (Y-axis in scatter plots) */}
+                {benchmarksForMetric && benchmarksForMetric.length > 0 && (
+                  <BenchmarkLineSelector
+                    organizationId={effectiveOrganizationId}
+                    metricCode={state.metrics.primary}
+                    selectedBenchmarkIds={selectedBenchmarkIds}
+                    onSelectionChange={setSelectedBenchmarkIds}
+                    labelPrefix={['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) ? 'Y-Axis' : undefined}
+                  />
+                )}
+                {/* Secondary metric benchmarks (X-axis in scatter plots) */}
+                {['scatter_plot', 'connected_scatter'].includes(state.selectedChartType) &&
+                 secondaryMetric &&
+                 benchmarksForSecondaryMetric &&
+                 benchmarksForSecondaryMetric.length > 0 && (
+                  <BenchmarkLineSelector
+                    organizationId={effectiveOrganizationId}
+                    metricCode={secondaryMetric}
+                    selectedBenchmarkIds={selectedBenchmarkIds}
+                    onSelectionChange={setSelectedBenchmarkIds}
+                    labelPrefix="X-Axis"
+                  />
+                )}
+              </div>
+            )}
             {state.showAllCharts ? (
               // Multi-Chart View: Display all available charts vertically
               <div className="space-y-6">
@@ -500,6 +618,7 @@ function BaseAnalyticsViewContent({
                       metric={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.metrics.primary : undefined}
                       onExport={handleExport}
                       selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                      benchmarks={selectedBenchmarks}
                     />
                   </Suspense>
                 ))}
@@ -530,6 +649,7 @@ function BaseAnalyticsViewContent({
                   metric={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.metrics.primary : undefined}
                   onExport={handleExport}
                   selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
+                  benchmarks={selectedBenchmarks}
                 />
               </Suspense>
             )}

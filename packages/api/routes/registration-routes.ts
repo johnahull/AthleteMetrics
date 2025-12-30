@@ -9,6 +9,13 @@ import { z } from "zod";
 import { storage } from "../storage";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { emailService } from "../services/email-service";
+import {
+  validateLegalAcceptanceTimestamp,
+  getLegalAcceptanceTimestamp,
+  INVALID_TIMESTAMP_MESSAGE,
+  MISSING_ACCEPTANCE_MESSAGE,
+  AUDIT_ACTION_LEGAL_ACCEPTED
+} from "@shared/legal-acceptance";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -58,6 +65,12 @@ const registrationSchema = z.object({
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
     .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+  legalAcceptedAt: z.string()
+    .min(1, MISSING_ACCEPTANCE_MESSAGE)
+    .refine(
+      (val) => validateLegalAcceptanceTimestamp(val),
+      INVALID_TIMESTAMP_MESSAGE
+    ),
 });
 
 // Validation schema for resend verification
@@ -90,7 +103,7 @@ export function registerRegistrationRoutes(app: Express) {
         });
       }
 
-      const { firstName, lastName, email, username, password } = validationResult.data;
+      const { firstName, lastName, email, username, password, legalAcceptedAt } = validationResult.data;
 
       // Check if username is already taken
       const existingUsername = await storage.getUserByUsername(username);
@@ -112,6 +125,10 @@ export function registerRegistrationRoutes(app: Express) {
         });
       }
 
+      // Generate legal accepted version (YYYY-MM-DD format)
+      const legalAcceptedVersion = getLegalAcceptanceTimestamp();
+      const legalAcceptedAtDate = new Date(legalAcceptedAt);
+
       // Create user with isEmailVerified: false
       // User is created as an "independent athlete" with no organization
       // Note: storage.createUser handles password hashing internally
@@ -124,16 +141,62 @@ export function registerRegistrationRoutes(app: Express) {
         role: 'athlete', // Self-registered users are independent athletes
         isEmailVerified: false,
         isSiteAdmin: false,
+        legalAcceptedAt: legalAcceptedAtDate,
+        legalAcceptedVersion,
         // No organization membership - user is independent
       });
 
       const userId = user.id;
 
       // Create email verification token
-      const { token } = await storage.createEmailVerificationToken(userId, email);
+      const { token: verificationToken } = await storage.createEmailVerificationToken(userId, email);
 
-      // Send verification email
-      const verificationLink = `${process.env.APP_URL}/verify-email?token=${token}`;
+      // Create audit logs (critical for compliance)
+      // If audit logs fail, rollback by deleting the user
+      const auditLogBase = {
+        userId,
+        resourceType: 'user' as const,
+        resourceId: userId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      };
+
+      try {
+        await storage.createAuditLog({
+          ...auditLogBase,
+          action: 'user_registered',
+          details: JSON.stringify({
+            username,
+            email,
+            registrationType: 'self_registration'
+          }),
+        });
+
+        await storage.createAuditLog({
+          ...auditLogBase,
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
+          details: JSON.stringify({
+            version: legalAcceptedVersion,
+            acceptedAt: legalAcceptedAt,
+            method: 'registration'
+          }),
+        });
+      } catch (auditError) {
+        console.error('[CRITICAL] Failed to create audit logs:', auditError);
+        // Rollback user creation for compliance
+        try {
+          await storage.deleteUser(userId);
+        } catch (cleanupError) {
+          console.error('[CRITICAL] Failed to cleanup user after audit log failure:', cleanupError);
+        }
+        return res.status(500).json({
+          success: false,
+          message: "Registration failed due to system error. Please try again."
+        });
+      }
+
+      // Send verification email (outside transaction - email failure shouldn't rollback registration)
+      const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
       const emailSent = await emailService.sendEmailVerification(email, {
         userName: firstName,
         verificationLink,
@@ -141,22 +204,6 @@ export function registerRegistrationRoutes(app: Express) {
 
       // Log registration attempt
       console.log(`[Registration] New user registered: ${username} (${email}), email sent: ${emailSent}`);
-
-      // Audit log
-      await storage.createAuditLog({
-        userId,
-        action: 'user_registered',
-        resourceType: 'user',
-        resourceId: userId,
-        details: JSON.stringify({
-          username,
-          email,
-          emailSent,
-          registrationType: 'self_registration'
-        }),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent')
-      });
 
       return res.status(201).json({
         success: true,

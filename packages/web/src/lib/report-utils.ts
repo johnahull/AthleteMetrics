@@ -3,32 +3,22 @@
  * Extracted from TeamReportView to follow DRY principles
  */
 
-import { METRIC_CONFIG } from '@shared/analytics-types';
+import { getMetricTypeWithFallback } from '@shared/analytics-types';
 
 /**
  * Determine if lower values are better for a metric
- * Uses METRIC_CONFIG as source of truth instead of hardcoded list
+ * Uses the canonical fallback logic from analytics-types
  */
 export function isLowerBetter(metricCode: string): boolean {
-  // Check if metric exists in config
-  if (metricCode in METRIC_CONFIG) {
-    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].metricType === 'lower_is_better';
-  }
-
-  // Fallback: Assume time-based metrics have lower-is-better
-  // This handles any custom metrics not yet in METRIC_CONFIG
-  return metricCode.includes('TIME') || metricCode.includes('TEST');
+  return getMetricTypeWithFallback(metricCode) === 'lower_is_better';
 }
 
 /**
  * Determine if a metric is a tracking-only metric (no better/worse direction)
- * Uses METRIC_CONFIG as source of truth
+ * Uses the canonical fallback logic from analytics-types
  */
 export function isTrackingMetric(metricCode: string): boolean {
-  if (metricCode in METRIC_CONFIG) {
-    return METRIC_CONFIG[metricCode as keyof typeof METRIC_CONFIG].metricType === 'tracking';
-  }
-  return false;
+  return getMetricTypeWithFallback(metricCode) === 'tracking';
 }
 
 /**

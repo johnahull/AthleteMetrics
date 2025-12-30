@@ -45,7 +45,7 @@ export const loginSessions = pgTable("login_sessions", {
 // Security events log
 export const securityEvents = pgTable("security_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").references(() => users.id, { onDelete: 'cascade' }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
   eventType: text("event_type").notNull(), // 'login_success', 'login_failed', 'password_changed', etc.
   eventData: text("event_data"), // JSON string with additional data
   ipAddress: text("ip_address").notNull(),
@@ -128,10 +128,14 @@ export const createSecurityEventSchema = createInsertSchema(securityEvents).omit
     'mfa_disabled',
     'email_verified',
     'session_expired',
-    'suspicious_activity'
+    'suspicious_activity',
+    'authorization_failed'
   ]),
   severity: z.enum(['info', 'warning', 'critical']),
-  ipAddress: z.string().ip("Invalid IP address"),
+  // Note: IP validation removed to allow '0.0.0.0' fallback pattern used in audit logging
+  // The normalizeIpAddress() function in audit-logging.ts handles IP validation and
+  // uses '0.0.0.0' as a safe fallback for invalid/missing IPs to prevent log corruption
+  ipAddress: z.string(),
 });
 
 // Enhanced login schema with MFA support

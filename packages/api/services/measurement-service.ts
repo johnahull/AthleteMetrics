@@ -10,6 +10,7 @@ import {
   organizations,
   users,
   userTeams,
+  siteMetrics,
   type Measurement,
   type InsertMeasurement,
   type Team,
@@ -20,6 +21,11 @@ import { db } from '../db';
 import { eq, and, gte, lte, or, isNull, sql, desc, inArray, arrayContains } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
+import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
+import { AchievementService } from './achievement-service';
+
+// Singleton achievement service instance for performance
+const achievementService = new AchievementService();
 
 export interface MeasurementFilters {
   userId?: string;
@@ -41,6 +47,8 @@ export interface MeasurementFilters {
   includeUnknownBirthYear?: boolean;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export interface PaginatedMeasurements {
@@ -126,8 +134,10 @@ export class MeasurementService {
   ): Promise<Measurement> {
     // Wrap entire operation in transaction to prevent race conditions
     // Race condition scenario: User joins/leaves team between active teams query and measurement insert
+    let newMeasurement: Measurement;
+
     try {
-      return await db.transaction(async (tx) => {
+      newMeasurement = await db.transaction(async (tx) => {
       // Get user info for age calculation
       const [user] = await tx
         .select()
@@ -154,19 +164,15 @@ export class MeasurementService {
         }
       }
 
-      // Auto-calculate units based on metric
-      const units =
-        measurement.metric === 'FLY10_TIME' ||
-        measurement.metric === 'T_TEST' ||
-        measurement.metric === 'DASH_40YD' ||
-        measurement.metric === 'AGILITY_505' ||
-        measurement.metric === 'AGILITY_5105'
-          ? 's'
-          : measurement.metric === 'TOP_SPEED'
-          ? 'mph'
-          : measurement.metric === 'RSI'
-          ? 'ratio'
-          : 'in';
+      // Get units from siteMetrics table (supports derived metrics and custom metrics)
+      const [metricConfig] = await tx
+        .select({ unit: siteMetrics.unit })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, measurement.metric));
+
+      // Use metric's configured unit, or default to 'in' for unknown metrics
+      // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
+      const units = metricConfig?.unit ?? 'in';
 
       // Auto-populate team context if not explicitly provided
       let teamId = measurement.teamId;
@@ -175,46 +181,55 @@ export class MeasurementService {
       let teamNameSnapshot: string | null = null;
       let organizationId: string | null = null;
 
-      if (!teamId || teamId.trim() === '') {
-        // Get athlete's active teams at measurement date (within transaction)
-        // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
-        // See: migrations/0018_add_org_query_composite_indexes.sql
-        const activeTeams = await tx
-          .select({
-            teamId: teams.id,
-            teamName: teams.name,
-            season: teams.season,
-            organizationId: teams.organizationId,
-            organizationName: organizations.name,
-          })
-          .from(userTeams)
-          .innerJoin(teams, eq(userTeams.teamId, teams.id))
-          .innerJoin(organizations, eq(teams.organizationId, organizations.id))
-          .where(
-            and(
-              eq(userTeams.userId, measurement.userId),
-              lte(userTeams.joinedAt, measurementDate),
-              or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
-              eq(userTeams.isActive, true),
-              eq(teams.isArchived, false)
-            )
-          )
-          .for('update'); // Prevent race condition with row-level lock
+      // Check if this is athlete self-entry (personal measurement)
+      const isAthleteSelfEntry = submitterRole === 'athlete' && measurement.userId === submittedBy;
 
-        if (activeTeams.length === 1) {
-          // Single team - auto-assign
-          teamId = activeTeams[0].teamId;
-          // Use undefined for optional fields per TypeScript schema
-          season = activeTeams[0].season ?? undefined;
-          teamContextAuto = true;
-          // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
-        } else if (activeTeams.length > 1) {
-          // Multiple teams - cannot auto-assign
-          // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+      if (!teamId || teamId.trim() === '') {
+        // For athlete self-entry without explicit team, keep as personal (no org assignment)
+        if (isAthleteSelfEntry) {
+          // Personal measurement - no team or organization context
           teamContextAuto = false;
         } else {
-          // No active teams - measurement without team context
-          teamContextAuto = false;
+          // Get athlete's active teams at measurement date (within transaction)
+          // Database Index: idx_user_teams_team_user_active (team_id, user_id WHERE is_active = true)
+          // See: migrations/0018_add_org_query_composite_indexes.sql
+          const activeTeams = await tx
+            .select({
+              teamId: teams.id,
+              teamName: teams.name,
+              season: teams.season,
+              organizationId: teams.organizationId,
+              organizationName: organizations.name,
+            })
+            .from(userTeams)
+            .innerJoin(teams, eq(userTeams.teamId, teams.id))
+            .innerJoin(organizations, eq(teams.organizationId, organizations.id))
+            .where(
+              and(
+                eq(userTeams.userId, measurement.userId),
+                lte(userTeams.joinedAt, measurementDate),
+                or(isNull(userTeams.leftAt), gte(userTeams.leftAt, measurementDate)),
+                eq(userTeams.isActive, true),
+                eq(teams.isArchived, false)
+              )
+            )
+            .for('update'); // Prevent race condition with row-level lock
+
+          if (activeTeams.length === 1) {
+            // Single team - auto-assign
+            teamId = activeTeams[0].teamId;
+            // Use undefined for optional fields per TypeScript schema
+            season = activeTeams[0].season ?? undefined;
+            teamContextAuto = true;
+            // Auto-assigned measurement to team: ${activeTeams[0].teamName} (${season || 'no season'})
+          } else if (activeTeams.length > 1) {
+            // Multiple teams - cannot auto-assign
+            // Athlete is on ${activeTeams.length} teams - team context not auto-assigned
+            teamContextAuto = false;
+          } else {
+            // No active teams - measurement without team context
+            teamContextAuto = false;
+          }
         }
       } else {
         // teamId was explicitly provided
@@ -244,7 +259,7 @@ export class MeasurementService {
                         submitterRole === 'site_admin';
 
       // Create measurement
-      const [newMeasurement] = await tx
+      const [txMeasurement] = await tx
         .insert(measurements)
         .values({
           userId: measurement.userId,
@@ -265,7 +280,16 @@ export class MeasurementService {
         })
         .returning();
 
-      return newMeasurement;
+      // DERIVED METRICS: Trigger automatic calculation of derived metrics
+      // This runs after the measurement is created and committed
+      const calculator = new DerivedMetricCalculator(db);
+      await calculator.processNewMeasurement(txMeasurement, {
+        event: 'measurement_insert',
+        userId: submittedBy,
+        sourceMeasurementId: txMeasurement.id,
+      });
+
+      return txMeasurement;
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
@@ -294,6 +318,24 @@ export class MeasurementService {
       // Unknown error type - wrap with context
       throw new Error(`Failed to create measurement due to unexpected error: ${String(error)}`);
     }
+
+    // ACHIEVEMENTS: Check for newly unlocked achievements AFTER transaction commits
+    // This ensures measurement data is persisted before checking achievements
+    // Wrapped in try/catch so achievement failures don't affect measurement creation
+    if (newMeasurement.organizationId) {
+      try {
+        await achievementService.checkAchievements(
+          newMeasurement.userId,
+          newMeasurement.organizationId,
+          newMeasurement
+        );
+      } catch (achievementError) {
+        // Log but don't fail - measurement was already created successfully
+        console.error('Achievement check failed:', achievementError);
+      }
+    }
+
+    return newMeasurement;
   }
 
   /**
@@ -482,21 +524,15 @@ export class MeasurementService {
           updateData.metric = measurement.metric;
 
           // CRITICAL: Recalculate units when metric changes
-          // Different metrics use different units (seconds, inches, ratio, mph)
-          const newUnits =
-            measurement.metric === 'FLY10_TIME' ||
-            measurement.metric === 'T_TEST' ||
-            measurement.metric === 'DASH_40YD' ||
-            measurement.metric === 'AGILITY_505' ||
-            measurement.metric === 'AGILITY_5105'
-              ? 's'
-              : measurement.metric === 'TOP_SPEED'
-              ? 'mph'
-              : measurement.metric === 'RSI'
-              ? 'ratio'
-              : 'in';
+          // Get units from siteMetrics table (supports derived metrics and custom metrics)
+          const [metricConfig] = await tx
+            .select({ unit: siteMetrics.unit })
+            .from(siteMetrics)
+            .where(eq(siteMetrics.code, measurement.metric));
 
-          updateData.units = newUnits;
+          // Use metric's configured unit, or default to 'in' for unknown metrics
+          // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
+          updateData.units = metricConfig?.unit ?? 'in';
         }
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);
@@ -514,6 +550,23 @@ export class MeasurementService {
           .set(updateData)
           .where(eq(measurements.id, id))
           .returning();
+
+        // DERIVED METRICS: Trigger recalculation if value or date changed
+        // This ensures derived metrics stay synchronized with source changes
+        if (updateData.value !== undefined || updateData.date !== undefined) {
+          const calculator = new DerivedMetricCalculator(db);
+          await calculator.recalculateForAthlete(
+            updated.userId,
+            updated.metric,
+            updated.date,
+            {
+              triggerContext: {
+                event: 'measurement_update',
+                sourceMeasurementId: updated.id,
+              },
+            }
+          );
+        }
 
         return updated;
       });
@@ -564,8 +617,21 @@ export class MeasurementService {
           throw new Error('Access denied - measurement belongs to different organization');
         }
 
+        // Store info for derived metric recalculation before deleting
+        const { userId, metric, date, id: measurementId } = existing;
+
         // Delete the measurement
         await tx.delete(measurements).where(eq(measurements.id, id));
+
+        // DERIVED METRICS: Trigger recalculation after deletion
+        // This ensures derived metrics are updated when source measurements are removed
+        const calculator = new DerivedMetricCalculator(db);
+        await calculator.recalculateForAthlete(userId, metric, date, {
+          triggerContext: {
+            event: 'measurement_delete',
+            sourceMeasurementId: measurementId,
+          },
+        });
       });
     } catch (error) {
       // Preserve error specificity
@@ -846,8 +912,9 @@ export class MeasurementService {
     allowCrossOrganization: boolean = false
   ): Promise<PaginatedMeasurements> {
     // Defense-in-depth: Enforce organizationId requirement for non-site-admin contexts
+    // Exception: filterMode queries bypass this requirement (they have their own filtering logic)
     // This prevents accidental data leakage if route-layer authorization is bypassed
-    if (!filters?.organizationId && !allowCrossOrganization) {
+    if (!filters?.organizationId && !allowCrossOrganization && !filters?.filterMode) {
       throw new Error('organizationId is required for organization-scoped queries');
     }
 
@@ -866,30 +933,60 @@ export class MeasurementService {
       conditions.push(eq(measurements.metric, filters.metric));
     }
 
-    if (filters?.organizationId) {
-      // LEGACY DATA HANDLING:
-      // Include measurements with matching organizationId OR NULL organizationId.
-      // NULL organization IDs represent legacy measurements before organization tracking was implemented.
+    // CROSS-ORG MEASUREMENT QUERIES (filterMode parameter)
+    // Handle new filter modes: 'personal', 'all', 'org'
+    if (filters?.filterMode === 'personal') {
+      // Only self-entered measurements (organizationId IS NULL)
+      conditions.push(isNull(measurements.organizationId));
+    } else if (filters?.filterMode === 'all') {
+      // Measurements from any of specified org IDs OR personal (NULL)
+      const orgIdArray = filters.orgIds
+        ? filters.orgIds.split(',').map(id => id.trim()).filter(Boolean)
+        : [];
+
+      // Defensive check: enforce MAX_ORG_IDS limit even if route validation is bypassed
+      // Route layer validates this via Zod schema, but defense-in-depth requires service-layer check
+      if (orgIdArray.length > 100) {
+        throw new Error('orgIds cannot exceed 100 organizations');
+      }
+
+      if (orgIdArray.length > 0) {
+        // Include measurements from specified orgs OR personal measurements (NULL)
+        // NOTE: The OR isNull() pattern is suboptimal for index usage, but required for functionality.
+        // The composite index (user_id, organization_id, date DESC) WITH WHERE is_verified=true
+        // helps PostgreSQL use index scans more efficiently than before.
+        // For maximum performance (3-10x faster), consider refactoring to UNION ALL:
+        //   SELECT ... WHERE org_id IN (orgIds) UNION ALL SELECT ... WHERE org_id IS NULL
+        // However, this requires significant query restructuring and is deferred for now.
+        conditions.push(
+          or(
+            inArray(measurements.organizationId, orgIdArray),
+            isNull(measurements.organizationId)
+          )!
+        );
+      } else {
+        // Empty orgIds = only personal measurements
+        conditions.push(isNull(measurements.organizationId));
+      }
+    } else if (filters?.organizationId) {
+      // Default 'org' mode: existing organizationId filter
+      // STRICT ORGANIZATION ISOLATION (SECURITY FIX - 2025-12-22)
+      // Only include measurements that explicitly belong to the specified organization.
       //
-      // SECURITY CONSIDERATION:
-      // This means ALL organizations can see legacy (NULL) measurements. This is intentional for
-      // backward compatibility, as legacy measurements were created before multi-tenant isolation.
+      // HISTORICAL NOTE:
+      // Previously, this code included `isNull(measurements.organizationId)` to show
+      // legacy measurements (with NULL organization_id) to all organizations.
+      // This was a multi-tenant data isolation vulnerability.
       //
-      // FUTURE IMPROVEMENT:
-      // Consider backfilling organizationId for legacy measurements by associating them with
-      // their team's organization. Once backfilled, remove the NULL check for stricter isolation.
-      // See: docs/LEGACY_DATA_MIGRATION.md (if exists) or create a ticket for data migration.
+      // Migration 0087_backfill_measurements_org_final.sql backfills organization_id
+      // for legacy measurements. After backfill, measurements with NULL organization_id
+      // are considered orphaned and should NOT be visible to any organization.
       //
       // CURRENT BEHAVIOR:
-      // - Organization A sees: measurements with org_id = A + measurements with org_id = NULL
-      // - Organization B sees: measurements with org_id = B + measurements with org_id = NULL
+      // - Organization A sees: ONLY measurements with org_id = A
+      // - Measurements with NULL org_id are invisible (orphaned data)
       // - Site admins see: all measurements (allowCrossOrganization = true bypasses this filter)
-      conditions.push(
-        or(
-          eq(measurements.organizationId, filters.organizationId),
-          isNull(measurements.organizationId)
-        )!
-      );
+      conditions.push(eq(measurements.organizationId, filters.organizationId));
     }
 
     if (filters?.dateFrom) {
@@ -1031,6 +1128,10 @@ export class MeasurementService {
         teamContextAuto: measurements.teamContextAuto,
         createdAt: measurements.createdAt,
         globalAthleteId: measurements.globalAthleteId,
+        // Derived/calculated measurement fields
+        isCalculated: measurements.isCalculated,
+        calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
+        calculationMetadata: measurements.calculationMetadata,
         // User data (athlete)
         user: sql<{
           id: string;
@@ -1077,11 +1178,14 @@ export class MeasurementService {
           'lastName', ${verifierUser.lastName},
           'fullName', ${verifierUser.fullName}
         ) ELSE NULL END`,
+        // Organization name (prevents N+1 queries for org badge display)
+        organizationName: organizations.name,
       })
         .from(measurements)
         .leftJoin(users, eq(measurements.userId, users.id))
         .leftJoin(submitterUser, eq(measurements.submittedBy, submitterUser.id))
         .leftJoin(verifierUser, eq(measurements.verifiedBy, verifierUser.id))
+        .leftJoin(organizations, eq(measurements.organizationId, organizations.id))
         .where(whereClause)
         .orderBy(desc(measurements.date))
         .limit(limit)

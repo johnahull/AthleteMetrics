@@ -66,17 +66,9 @@ const LINT_RULES = [
     // Match ADD COLUMN without IF NOT EXISTS - improved regex to properly handle optional COLUMN keyword
     pattern: /ALTER\s+TABLE\s+(\w+)\s+ADD\s+COLUMN\s+(?!IF\s+NOT\s+EXISTS\b)(\w+)/gim,
     message: 'ADD COLUMN without IF NOT EXISTS',
-    suggestion: (match) => `ALTER TABLE ${match[1]} ADD COLUMN IF NOT EXISTS ${match[2]}`
-  },
-  {
-    id: 'add-constraint-not-wrapped',
-    severity: 'warning',
-    pattern: /^\s*ALTER\s+TABLE\s+\w+\s+ADD\s+CONSTRAINT\s+(\w+)/gim,
-    message: 'ADD CONSTRAINT should be wrapped in DO $$ block for idempotency',
-    suggestion: (match) => `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${match[1]}') THEN ... END IF; END $$;`,
-    // Skip if inside a DO $$ block (we'll check context)
+    suggestion: (match) => `ALTER TABLE ${match[1]} ADD COLUMN IF NOT EXISTS ${match[2]}`,
+    // Skip if inside a DO $$ block (idempotent via IF NOT EXISTS check)
     contextCheck: (content, matchIndex) => {
-      // Check if this is inside a DO $$ block
       const before = content.substring(0, matchIndex);
       const doBlocks = before.match(/DO\s+\$\$/gi) || [];
       const endBlocks = before.match(/END\s+\$\$/gi) || [];
@@ -84,15 +76,52 @@ const LINT_RULES = [
     }
   },
   {
+    id: 'add-constraint-not-wrapped',
+    severity: 'warning',
+    pattern: /^\s*ALTER\s+TABLE\s+(\w+)\s+ADD\s+CONSTRAINT\s+(\w+)/gim,
+    message: 'ADD CONSTRAINT should be wrapped in DO $$ block for idempotency',
+    suggestion: (match) => `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${match[2]}') THEN ... END IF; END $$;`,
+    // Skip if inside a DO $$ block OR preceded by DROP CONSTRAINT IF EXISTS
+    contextCheck: (content, matchIndex) => {
+      // Check if this is inside a DO $$ block
+      const before = content.substring(0, matchIndex);
+      const doBlocks = before.match(/DO\s+\$\$/gi) || [];
+      const endBlocks = before.match(/END\s+\$\$/gi) || [];
+      const inDoBlock = doBlocks.length > endBlocks.length;
+      if (inDoBlock) return false; // Skip - already idempotent via DO block
+
+      // Check if preceded by DROP CONSTRAINT IF EXISTS for the same constraint
+      // Look for pattern like: DROP CONSTRAINT IF EXISTS constraint_name; followed by ADD CONSTRAINT constraint_name
+      const statement = getStatementContext(content, matchIndex);
+      // Find the constraint name in the ADD CONSTRAINT statement
+      const addMatch = statement.match(/ADD\s+CONSTRAINT\s+(\w+)/i);
+      if (addMatch) {
+        const constraintName = addMatch[1];
+        // Look in the 2000 chars before for DROP CONSTRAINT IF EXISTS with same name
+        // (increased from 500 to handle migrations where DROPs are grouped before ADDs)
+        const lookback = content.substring(Math.max(0, matchIndex - 2000), matchIndex);
+        const dropPattern = new RegExp(`DROP\\s+CONSTRAINT\\s+IF\\s+EXISTS\\s+${constraintName}`, 'i');
+        if (dropPattern.test(lookback)) {
+          return false; // Skip - idempotent via DROP IF EXISTS before ADD
+        }
+      }
+
+      return true; // Flag it - not idempotent
+    }
+  },
+  {
     id: 'insert-no-conflict-handling',
     severity: 'warning',
-    pattern: /^\s*INSERT\s+INTO\s+(\w+)\s*\([^)]+\)\s*VALUES\s*\([^)]+\)(?!\s*ON\s+CONFLICT)/gim,
+    // Match INSERT INTO - we'll check for ON CONFLICT in the statement context
+    pattern: /^\s*INSERT\s+INTO\s+(\w+)\s*\([^)]+\)\s*VALUES/gim,
     message: 'INSERT without ON CONFLICT or WHERE NOT EXISTS',
     suggestion: (match) => `INSERT INTO ${match[1]} (...) VALUES (...) ON CONFLICT (...) DO NOTHING`,
-    // Skip if preceded by WHERE NOT EXISTS in same statement
+    // Skip if statement includes ON CONFLICT, WHERE NOT EXISTS, or is a SELECT (CTE)
     contextCheck: (content, matchIndex) => {
       const statement = getStatementContext(content, matchIndex);
-      return !statement.includes('WHERE NOT EXISTS') && !statement.includes('SELECT');
+      return !statement.includes('ON CONFLICT') &&
+             !statement.includes('WHERE NOT EXISTS') &&
+             !statement.includes('SELECT');
     }
   },
   {
@@ -118,9 +147,16 @@ const LINT_RULES = [
   {
     id: 'drop-index-no-if-exists',
     severity: 'warning',
-    pattern: /^\s*DROP\s+INDEX\s+(?!CONCURRENTLY\s+)?(?!IF\s+EXISTS\b)(\w+)/gim,
+    // Match DROP INDEX without IF EXISTS
+    // Use contextCheck to handle CONCURRENTLY and IF EXISTS properly
+    pattern: /^\s*DROP\s+INDEX\s+/gim,
     message: 'DROP INDEX without IF EXISTS',
-    suggestion: (match) => `DROP INDEX IF EXISTS ${match[1]}`
+    suggestion: () => `DROP INDEX IF EXISTS <name>`,
+    contextCheck: (content, matchIndex) => {
+      const statement = getStatementContext(content, matchIndex);
+      // Skip if statement includes IF EXISTS
+      return !statement.includes('IF EXISTS');
+    }
   }
 ];
 

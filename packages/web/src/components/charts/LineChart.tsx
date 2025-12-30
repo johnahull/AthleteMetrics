@@ -1,10 +1,12 @@
 import React, { useMemo, useState, useRef } from 'react';
 import type { ChartOptions } from 'chart.js';
+import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
 import type {
   TrendData,
   ChartConfiguration,
-  StatisticalSummary
+  StatisticalSummary,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
@@ -23,6 +25,8 @@ interface LineChartProps {
   selectedAthleteIds?: string[];
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
+  benchmarks?: BenchmarkLine[];
+  showBenchmarks?: boolean;
 }
 
 export function LineChart({
@@ -32,7 +36,9 @@ export function LineChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 10
+  maxAthletes = 10,
+  benchmarks,
+  showBenchmarks = true
 }: LineChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -282,6 +288,119 @@ export function LineChart({
     return bests;
   }, [lineData, data, highlightAthlete, getMetricConfig]);
 
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
+  // Generate benchmark annotations for Chart.js annotation plugin
+  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
+      return [];
+    }
+
+    return benchmarks.map((benchmark): AnnotationOptions => {
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+      const backgroundColor = parseColorToRgba(color, 0.15);
+
+      // Range benchmark: render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        return {
+          type: 'box',
+          yMin: benchmark.minValue,
+          yMax: benchmark.maxValue,
+          backgroundColor,
+          borderColor: color,
+          borderWidth: 1,
+          label: {
+            display: true,
+            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+            position: 'end',
+            color: color,
+            padding: 4,
+            font: {
+              size: 10
+            }
+          }
+        };
+      }
+
+      // Single-value benchmark: render as line annotation (backwards compatibility)
+      let borderDash: number[] | undefined;
+      if (benchmark.lineStyle === 'dashed') {
+        borderDash = [5, 5];
+      } else if (benchmark.lineStyle === 'dotted') {
+        borderDash = [2, 2];
+      }
+      // If lineStyle is 'solid' or undefined, borderDash remains undefined (solid line)
+
+      return {
+        type: 'line',
+        yMin: benchmark.value,
+        yMax: benchmark.value,
+        borderColor: color,
+        borderWidth: 2,
+        borderDash,
+        label: {
+          display: true,
+          content: benchmark.name,
+          position: 'end',
+          backgroundColor: color,
+          color: 'white',
+          padding: 4,
+          font: {
+            size: 10
+          }
+        }
+      };
+    });
+  }, [benchmarks, showBenchmarks]);
+
   // Chart options
   const options: ChartOptions<'line'> = {
     responsive: true,
@@ -334,7 +453,14 @@ export function LineChart({
       legend: {
         display: config.showLegend,
         position: 'top' as const
-      }
+      },
+      // Benchmark line/box annotations from chartjs-plugin-annotation
+      annotation: benchmarkAnnotations.length > 0 ? {
+        annotations: benchmarkAnnotations.reduce((acc, annotation, index) => {
+          acc[`benchmark-${index}`] = annotation;
+          return acc;
+        }, {} as Record<string, AnnotationOptions>)
+      } : undefined
     },
     scales: {
       x: {
@@ -440,7 +566,7 @@ export function LineChart({
   }
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full flex flex-col">
       {/* Athlete Controls Panel - Only show when not in highlight mode */}
       {!highlightAthlete && allAthletes.length > 0 && (
         <div className="mb-4">
@@ -542,7 +668,17 @@ export function LineChart({
         </div>
       )}
 
-      <Line data={lineData} options={options} />
+      <div
+        role="img"
+        aria-label={`Line chart showing ${lineData.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
+        aria-describedby="linechart-description"
+        className="flex-1 min-h-[300px]"
+      >
+        <span id="linechart-description" className="sr-only">
+          {`Performance trend chart for ${lineData.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}
+        </span>
+        <Line data={lineData} options={options} />
+      </div>
 
       {/* Progress indicators */}
       {highlightAthlete && personalBests.length > 0 && (

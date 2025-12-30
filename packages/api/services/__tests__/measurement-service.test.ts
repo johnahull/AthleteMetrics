@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { MeasurementService } from '../measurement-service';
 import { db } from '../../db';
-import { measurements, teams, organizations, users, userTeams } from '@shared/schema';
+import { measurements, teams, organizations, users, userTeams, siteMetrics } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 
 describe('MeasurementService', () => {
@@ -139,15 +139,17 @@ describe('MeasurementService', () => {
     });
 
     it('should auto-assign units based on metric', async () => {
-      const testCases = [
-        { metric: 'FLY10_TIME', expectedUnits: 's' },
-        { metric: 'DASH_40YD', expectedUnits: 's' },
-        { metric: 'T_TEST', expectedUnits: 's' },
-        { metric: 'VERTICAL_JUMP', expectedUnits: 'in' },
-        { metric: 'RSI', expectedUnits: 'ratio' },
-      ];
+      const testMetrics = ['FLY10_TIME', 'DASH_40YD', 'T_TEST', 'VERTICAL_JUMP', 'RSI'];
 
-      for (const { metric, expectedUnits } of testCases) {
+      for (const metric of testMetrics) {
+        // Query database for the expected unit for this metric
+        const [metricConfig] = await db
+          .select({ unit: siteMetrics.unit })
+          .from(siteMetrics)
+          .where(eq(siteMetrics.code, metric));
+
+        const expectedUnits = metricConfig?.unit ?? ''; // Empty string matches getMetricUnits() fallback behavior
+
         const result = await measurementService.createMeasurement(
           {
             userId: testUserId,

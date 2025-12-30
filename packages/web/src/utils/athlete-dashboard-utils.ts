@@ -3,17 +3,7 @@
  */
 
 import { differenceInDays, startOfMonth, endOfMonth } from 'date-fns';
-
-/**
- * Metrics where lower values are better (time/speed metrics)
- */
-const LOWER_IS_BETTER_METRICS = [
-  'FLY10_TIME',
-  'AGILITY_505',
-  'AGILITY_5105',
-  'T_TEST',
-  'DASH_40YD',
-] as const;
+import { isLowerIsBetter } from '@/lib/metrics';
 
 interface Measurement {
   id: string;
@@ -73,7 +63,7 @@ export function calculatePersonalRecords(measurements: Measurement[]) {
     if (metricMeasurements.length === 0) return;
 
     // Sort by value (ascending for time-based metrics, descending for others)
-    const isLowerBetter = LOWER_IS_BETTER_METRICS.includes(metric as any);
+    const isLowerBetter = isLowerIsBetter(metric);
 
     const sortedMeasurements = [...metricMeasurements].sort((a, b) => {
       const aValue = parseFloat(String(a.value));

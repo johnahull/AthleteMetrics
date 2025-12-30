@@ -4,8 +4,10 @@ import { cn } from "@/lib/utils";
 
 interface BenchmarkComparisonProps {
   athleteValue: number | null;
-  benchmarkValue: number;
-  comparisonOperator: 'lte' | 'gte' | 'eq';
+  benchmarkValue?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   metricCode: string;
   isMet: boolean;
 }
@@ -13,6 +15,8 @@ interface BenchmarkComparisonProps {
 export function BenchmarkComparison({
   athleteValue,
   benchmarkValue,
+  minValue,
+  maxValue,
   comparisonOperator,
   metricCode,
   isMet,
@@ -22,16 +26,18 @@ export function BenchmarkComparison({
     lte: "≤",
     gte: "≥",
     eq: "=",
+    range: "↔",
   }[comparisonOperator];
 
   const operatorText = {
     lte: "Lower is better",
     gte: "Higher is better",
     eq: "Exact target",
+    range: "Target range",
   }[comparisonOperator];
 
-  // Calculate difference
-  const difference = athleteValue !== null
+  // Calculate difference (only for non-range benchmarks)
+  const difference = athleteValue !== null && benchmarkValue !== null && benchmarkValue !== undefined
     ? Math.abs(athleteValue - benchmarkValue)
     : null;
 
@@ -41,6 +47,41 @@ export function BenchmarkComparison({
       return { text: "No measurement recorded", icon: null, color: "text-muted-foreground" };
     }
 
+    // Handle range benchmarks
+    if (comparisonOperator === "range") {
+      if (isMet) {
+        return {
+          text: "Within Range ✓",
+          icon: <Target className="h-4 w-4" />,
+          color: "text-green-600",
+        };
+      } else {
+        // Determine if below or above range
+        if (minValue !== null && minValue !== undefined && athleteValue < minValue) {
+          const distanceToMin = minValue - athleteValue;
+          return {
+            text: `Below Range by ${distanceToMin.toFixed(3)}`,
+            icon: <ArrowDown className="h-4 w-4" />,
+            color: "text-orange-600",
+          };
+        } else if (maxValue !== null && maxValue !== undefined && athleteValue > maxValue) {
+          const distanceToMax = athleteValue - maxValue;
+          return {
+            text: `Above Range by ${distanceToMax.toFixed(3)}`,
+            icon: <ArrowUp className="h-4 w-4" />,
+            color: "text-orange-600",
+          };
+        }
+        // Fallback (shouldn't happen if backend is correct)
+        return {
+          text: "Outside Range",
+          icon: null,
+          color: "text-orange-600",
+        };
+      }
+    }
+
+    // Handle traditional operators
     if (isMet) {
       if (comparisonOperator === "lte") {
         return {
@@ -98,9 +139,15 @@ export function BenchmarkComparison({
         </div>
         <div>
           <div className="text-xs text-muted-foreground mb-1">
-            Target {operatorSymbol}
+            {comparisonOperator === "range" ? "Target Range" : `Target ${operatorSymbol}`}
           </div>
-          <div className="text-2xl font-bold">{benchmarkValue}</div>
+          <div className="text-2xl font-bold">
+            {comparisonOperator === "range"
+              ? (minValue !== null && minValue !== undefined && maxValue !== null && maxValue !== undefined
+                  ? `${minValue} – ${maxValue}`
+                  : "—")
+              : benchmarkValue}
+          </div>
         </div>
       </div>
 

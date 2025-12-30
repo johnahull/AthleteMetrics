@@ -4,12 +4,14 @@
  */
 
 import type { Express } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { type Options } from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
-import { insertMeasurementSchema, teams, userTeams } from "@shared/schema";
+import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
+import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
 import { ZodError } from "zod";
 import { db } from "../db";
@@ -45,21 +47,45 @@ const measurementBatchLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Per-organization rate limiting for cross-org queries
+// Prevents rapid data extraction across multiple organization combinations
+const orgSpecificLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.CROSS_ORG_QUERY,
+  keyGenerator: (req) => {
+    const orgIds = (req.query.orgIds as string) || '';
+    // Use req.ip (Express handles X-Forwarded-For when 'trust proxy' is configured)
+    // Fallback to socket address if req.ip is unavailable
+    const clientIp = req.ip || req.socket?.remoteAddress || '';
+    return `${clientIp}:${orgIds}`; // Rate limit by IP + orgIds combination
+  },
+  message: { message: "Too many queries for this organization combination. Please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
+    return !req.query.orgIds;
+  },
+  // NOTE: Using default validation (IPv6 support enabled)
+  // req.ip is used for IP extraction, which handles X-Forwarded-For when 'trust proxy' is configured.
+  // Ensure Express app.set('trust proxy', true) is configured for proper IP detection behind proxies.
+});
+
+// Shared UUID validation pattern (RFC 4122 format: 8-4-4-4-12 hex pattern)
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Maximum number of organizations that can be queried in a single request
+const MAX_ORG_IDS = 100;
+
 // Query parameter validation schema
 const measurementQuerySchema = z.object({
   userId: z.string().uuid().optional(),
   athleteId: z.string().uuid().optional(),
   organizationId: z.string().uuid().optional(),
-  metric: z.enum(['FLY10_TIME', 'VERTICAL_JUMP', 'AGILITY_505', 'AGILITY_5105', 'T_TEST', 'DASH_40YD', 'RSI', 'TOP_SPEED']).optional(),
+  // Accept any metric code - supports derived metrics and custom metrics
+  metric: z.string().regex(/^[A-Z0-9_]+$/, "Invalid metric code format").optional(),
   teamIds: z.string().optional().refine(
-    (val) => !val || val.split(',').every(id => {
-      const trimmedId = id.trim();
-      // UUID format validation (8-4-4-4-12 hex pattern)
-      // Accepts all RFC 4122 UUIDs including nil UUID (00000000-0000-0000-0000-000000000000)
-      // Security: Database foreign key validation is the primary security boundary
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-      return uuidPattern.test(trimmedId);
-    }),
+    (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
     { message: "teamIds must be comma-separated valid UUIDs" }
   ), // Comma-separated UUIDs
   sport: z.string().min(1).max(100).optional(),
@@ -80,6 +106,17 @@ const measurementQuerySchema = z.object({
   ageTo: z.coerce.number().int().min(0).max(120).optional(),
   limit: z.coerce.number().int().min(1).max(PAGINATION.MAX_LIMIT).optional(),
   offset: z.coerce.number().int().min(0).max(PAGINATION.MAX_OFFSET).optional(),
+  // Cross-org measurement query parameters
+  filterMode: z.enum(['all', 'personal', 'org']).optional(),
+  orgIds: z.string().optional()
+    .refine(
+      (val) => !val || val.split(',').length <= MAX_ORG_IDS,
+      { message: `orgIds cannot exceed ${MAX_ORG_IDS} organizations` }
+    )
+    .refine(
+      (val) => !val || val.split(',').every(id => UUID_PATTERN.test(id.trim())),
+      { message: "orgIds must be comma-separated valid UUIDs" }
+    ),
 }).refine(
   (data) => {
     if (data.birthYearFrom !== undefined && data.birthYearTo !== undefined) {
@@ -111,6 +148,8 @@ interface MeasurementFilters {
   organizationId?: string;
   limit?: number;
   offset?: number;
+  filterMode?: 'all' | 'personal' | 'org';
+  orgIds?: string;
 }
 
 export function registerMeasurementRoutes(app: Express) {
@@ -118,8 +157,35 @@ export function registerMeasurementRoutes(app: Express) {
 
   /**
    * Get measurements with optional filters
+   *
+   * @param {string} [filterMode=org] - Filter mode: 'all' (cross-org), 'personal' (no org), 'org' (single org)
+   * @param {string} [orgIds] - Comma-separated org UUIDs for filterMode='all' (max 100 orgs)
+   *   Example: "uuid1,uuid2,uuid3" queries measurements from 3 organizations plus personal measurements
+   * @param {string} [organizationId] - Single organization ID for filterMode='org'
+   * @param {string} [athleteId] - Filter by athlete/user ID
+   * @param {string} [metric] - Filter by metric code (e.g., 'FLY10_TIME', 'VERTICAL_JUMP')
+   * @param {string} [teamIds] - Comma-separated team UUIDs
+   * @param {string} [sport] - Filter by sport name
+   * @param {string} [gender] - Filter by gender ('Male', 'Female', 'Not Specified')
+   * @param {string} [dateFrom] - Filter measurements from this date (ISO 8601 or YYYY-MM-DD)
+   * @param {string} [dateTo] - Filter measurements to this date (ISO 8601 or YYYY-MM-DD)
+   * @param {boolean} [includeUnverified=false] - Include unverified measurements
+   * @param {number} [birthYearFrom] - Filter by birth year range (1900-2100)
+   * @param {number} [birthYearTo] - Filter by birth year range (1900-2100)
+   * @param {number} [ageFrom] - Filter by age range (0-120)
+   * @param {number} [ageTo] - Filter by age range (0-120)
+   * @param {number} [limit] - Maximum results to return (default varies by role)
+   * @param {number} [offset] - Pagination offset
+   *
+   * @rateLimit 200 req/15min (general), 10 req/15min per orgIds combination (cross-org)
+   * @security Non-admins can only query organizations they belong to
+   * @returns {Measurement[]} Array of measurement objects
    */
-  app.get("/api/measurements", measurementLimiter, requireAuth, async (req, res) => {
+  // Two-tier rate limiting strategy:
+  // 1. measurementLimiter (200 req/15min) - General protection against high-volume queries
+  // 2. orgSpecificLimiter (10 req/15min) - Stricter limit per orgIds combination to prevent cross-org data extraction
+  // Order matters: General limiter first provides base protection, stricter limiter second provides targeted security
+  app.get("/api/measurements", measurementLimiter, orgSpecificLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -147,25 +213,50 @@ export function registerMeasurementRoutes(app: Express) {
         ...(validatedParams.ageTo !== undefined && { ageTo: validatedParams.ageTo }),
         ...(validatedParams.limit !== undefined && { limit: validatedParams.limit }),
         ...(validatedParams.offset !== undefined && { offset: validatedParams.offset }),
+        ...(validatedParams.filterMode && { filterMode: validatedParams.filterMode }),
+        ...(validatedParams.orgIds && { orgIds: validatedParams.orgIds }),
       };
 
-      // Organization-based filtering
-      if (validatedParams.organizationId) {
-        // If organizationId is provided, use it (with permission check below)
-        filters.organizationId = validatedParams.organizationId;
+      // SECURITY: Validate orgIds if provided (non-site-admins only)
+      // Site admins can query any org, non-admins must belong to all specified orgs
+      if (filters.orgIds && !isSiteAdmin(user)) {
+        const requestedOrgIds = filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '');
 
-        // Security: Non-admin users can only query their own organization
-        if (!isSiteAdmin(user) && filters.organizationId !== user.primaryOrganizationId) {
+        if (requestedOrgIds.length > 0) {
+          // Get user's organizations
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+
+          // Check if all requested orgIds belong to the user
+          const unauthorizedOrgs = requestedOrgIds.filter(orgId => !userOrgIds.has(orgId));
+          if (unauthorizedOrgs.length > 0) {
+            return res.status(403).json({
+              message: `Access denied - you are not authorized to access organizations: ${unauthorizedOrgs.join(', ')}`
+            });
+          }
+        }
+      }
+
+      // Organization-based filtering (existing logic for non-filterMode queries)
+      // SECURITY: Validate organization access and get effective org ID
+      if (!filters.filterMode || filters.filterMode === 'org') {
+        const orgAccessResult = await validateOrganizationAccess(user, validatedParams.organizationId);
+
+        // For measurements endpoint, users with no org membership get empty results
+        if (!orgAccessResult.allowed && orgAccessResult.error === "Access denied - no organization membership") {
+          return res.json([]); // Users without an organization have no measurements to view
+        }
+
+        if (!orgAccessResult.allowed) {
           return res.status(403).json({
-            message: "Access denied - cannot query measurements from different organization"
+            message: getAuthorizationError(orgAccessResult.error!)
           });
         }
-      } else if (!isSiteAdmin(user) && user.primaryOrganizationId) {
-        // Non-admin users without explicit organizationId should see their organization
-        filters.organizationId = user.primaryOrganizationId;
-      } else if (!isSiteAdmin(user) && !user.primaryOrganizationId) {
-        // Users without an organization (e.g., newly self-registered) have no measurements to view
-        return res.json([]);
+
+        // Set the organization filter to the effective org ID
+        if (orgAccessResult.effectiveOrgId) {
+          filters.organizationId = orgAccessResult.effectiveOrgId;
+        }
       }
 
       // Site admins can query across organizations, non-admins cannot
@@ -204,9 +295,12 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: non-admin users can only view measurements in their organization
-      if (!isSiteAdmin(user) && measurement.organizationId && user.primaryOrganizationId !== measurement.organizationId) {
-        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      // SECURITY: Validate user has access to measurement's organization via database membership
+      if (measurement.organizationId) {
+        const hasAccess = await hasOrganizationAccess(user, measurement.organizationId);
+        if (!hasAccess) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
+        }
       }
 
       res.json(measurement);
@@ -248,8 +342,9 @@ export function registerMeasurementRoutes(app: Express) {
           return res.status(404).json({ message: "Team not found" });
         }
 
-        // SECURITY: Non-site-admins can only assign measurements to teams in their organization
-        if (!isSiteAdmin(user) && team.organizationId !== user.primaryOrganizationId) {
+        // SECURITY: Validate user has access to team's organization via database membership
+        const hasTeamAccess = await hasOrganizationAccess(user, team.organizationId);
+        if (!hasTeamAccess) {
           return res.status(403).json({
             message: "Cannot assign measurements to teams in different organizations"
           });
@@ -272,7 +367,10 @@ export function registerMeasurementRoutes(app: Express) {
           return res.status(404).json({ message: "User not found or not on any team" });
         }
 
-        const hasOrgAccess = targetUserTeams.some(t => t.organizationId === user.primaryOrganizationId);
+        // SECURITY: Validate user has access to at least one of the target user's organizations
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
         if (!hasOrgAccess) {
           return res.status(403).json({
             message: "Cannot create measurements for users in different organizations"
@@ -400,11 +498,18 @@ export function registerMeasurementRoutes(app: Express) {
         }
       }
 
-      // Permission check: submitter, org admins/coaches in same org, or site admins can update
+      // SECURITY: Validate user has access to measurement's organization via database membership
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
-        (user.role === 'org_admin' || user.role === 'coach') &&
-        existingMeasurement.organizationId === user.primaryOrganizationId;
+      let isOrgAdminOrCoach = false;
+      let userOrgIds: Set<string> = new Set();
+
+      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        isOrgAdminOrCoach = existingMeasurement.organizationId
+          ? userOrgIds.has(existingMeasurement.organizationId)
+          : false;
+      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only update measurements you submitted or measurements in your organization" });
@@ -415,7 +520,16 @@ export function registerMeasurementRoutes(app: Express) {
       const validatedData = updateSchema.parse(req.body);
 
       // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      // Use first org from actual membership, not session
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (userOrgIds.size === 0) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          expectedOrganizationId = userOrgs[0]?.organizationId;
+        } else {
+          expectedOrganizationId = Array.from(userOrgIds)[0];
+        }
+      }
       const updatedMeasurement = await measurementService.updateMeasurement(
         measurementId,
         validatedData,
@@ -457,18 +571,34 @@ export function registerMeasurementRoutes(app: Express) {
         });
       }
 
-      // Permission check: submitter, org admins/coaches in same org, or site admins can delete
+      // SECURITY: Validate user has access to measurement's organization via database membership
       const isSubmitter = existingMeasurement.submittedBy === user.id;
-      const isOrgAdminOrCoach = !isSiteAdmin(user) &&
-        (user.role === 'org_admin' || user.role === 'coach') &&
-        existingMeasurement.organizationId === user.primaryOrganizationId;
+      let isOrgAdminOrCoach = false;
+      let userOrgIds: Set<string> = new Set();
+
+      if (!isSiteAdmin(user) && (user.role === 'org_admin' || user.role === 'coach')) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        isOrgAdminOrCoach = existingMeasurement.organizationId
+          ? userOrgIds.has(existingMeasurement.organizationId)
+          : false;
+      }
 
       if (!isSiteAdmin(user) && !isSubmitter && !isOrgAdminOrCoach) {
         return res.status(403).json({ message: "Access denied - you can only delete measurements you submitted or measurements in your organization" });
       }
 
       // Pass organizationId for defense-in-depth validation (non-site-admins only)
-      const expectedOrganizationId = isSiteAdmin(user) ? undefined : user.primaryOrganizationId;
+      // Use first org from actual membership, not session
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (userOrgIds.size === 0) {
+          const userOrgs = await storage.getUserOrganizations(user.id);
+          expectedOrganizationId = userOrgs[0]?.organizationId;
+        } else {
+          expectedOrganizationId = Array.from(userOrgIds)[0];
+        }
+      }
       await measurementService.deleteMeasurement(measurementId, expectedOrganizationId);
       res.json({ message: "Measurement deleted successfully" });
     } catch (error) {
@@ -502,16 +632,24 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // Permission check: org admins/coaches can only verify measurements in their organization
-      if (!isSiteAdmin(user) && existingMeasurement.organizationId !== user.primaryOrganizationId) {
-        return res.status(403).json({ message: "Access denied - measurement belongs to different organization" });
+      // SECURITY: Validate user has access to measurement's organization via database membership
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        if (existingMeasurement.organizationId) {
+          const hasAccess = await hasOrganizationAccess(user, existingMeasurement.organizationId);
+          if (!hasAccess) {
+            return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
+          }
+        }
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        expectedOrganizationId = userOrgs[0]?.organizationId;
       }
 
       // SECURITY FIX: Pass expectedOrganizationId for defense-in-depth IDOR protection
       const verifiedMeasurement = await measurementService.verifyMeasurement(
         measurementId,
         user.id,
-        isSiteAdmin(user) ? undefined : user.primaryOrganizationId
+        expectedOrganizationId
       );
       res.json(verifiedMeasurement);
     } catch (error) {
@@ -654,6 +792,138 @@ export function registerMeasurementRoutes(app: Express) {
       }
       const message = error instanceof Error ? error.message : "Failed to bulk unverify measurements";
       res.status(400).json({ message });
+    }
+  });
+
+  /**
+   * Get calculation preview for derived metrics
+   */
+  app.get("/api/measurements/calculate-preview", measurementLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate query parameters
+      const querySchema = z.object({
+        athleteId: z.string().uuid(),
+        metricCode: z.string(),
+        date: dateStringSchema,
+      });
+
+      const { athleteId, metricCode, date } = querySchema.parse(req.query);
+
+      // SECURITY: Validate user has access to athlete's organization
+      const targetUserTeams = await db
+        .select({ organizationId: teams.organizationId })
+        .from(userTeams)
+        .innerJoin(teams, eq(userTeams.teamId, teams.id))
+        .where(and(
+          eq(userTeams.userId, athleteId),
+          eq(userTeams.isActive, true),
+          eq(teams.isArchived, false)
+        ));
+
+      if (targetUserTeams.length === 0) {
+        return res.status(404).json({ message: "Athlete not found or not on any team" });
+      }
+
+      // Validate user has access to at least one of the athlete's organizations
+      if (!isSiteAdmin(user)) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const userOrgIds = new Set(userOrgs.map(o => o.organizationId));
+        const hasOrgAccess = targetUserTeams.some(t => userOrgIds.has(t.organizationId));
+        if (!hasOrgAccess) {
+          return res.status(403).json({
+            message: "Cannot access athletes in different organizations"
+          });
+        }
+      }
+
+      // Get the metric definition
+      const [metric] = await db
+        .select()
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, metricCode));
+
+      if (!metric) {
+        return res.status(404).json({ message: "Metric not found" });
+      }
+
+      if (!metric.isDerived || !metric.formula || !metric.dependentMetrics) {
+        return res.json({
+          calculatedValue: null,
+          sourceMetrics: [],
+          formula: null
+        });
+      }
+
+      // Find source measurements using calculator
+      const { DerivedMetricCalculator } = await import("../services/derived-metric-calculator");
+      const calculator = new DerivedMetricCalculator(db);
+
+      const sourceMeasurementsMap = await calculator.findSourceMeasurementsPublic(
+        athleteId,
+        metric.dependentMetrics,
+        date,
+        metric.calculationConfig || {
+          dateMatchStrategy: 'same_date',
+          missingSourceBehavior: 'skip',
+          maxDateDifference: undefined,
+        }
+      );
+
+      if (!sourceMeasurementsMap) {
+        return res.json({
+          calculatedValue: null,
+          sourceMetrics: [],
+          missingMetrics: metric.dependentMetrics,
+          formula: metric.formula
+        });
+      }
+
+      // Build source values and metadata
+      const sourceValues: Record<string, number> = {};
+      const sourceMetrics: Array<{ code: string; label: string; value: number; unit: string; measurementId: string }> = [];
+      const sourceMeasurementIds: string[] = [];
+
+      for (const [code, measurement] of sourceMeasurementsMap.entries()) {
+        sourceValues[code.toLowerCase()] = parseFloat(measurement.value);
+        sourceMeasurementIds.push(measurement.id);
+
+        // Get label and unit from siteMetrics
+        const [sourceMetric] = await db
+          .select()
+          .from(siteMetrics)
+          .where(eq(siteMetrics.code, code));
+
+        sourceMetrics.push({
+          code,
+          label: sourceMetric?.label || code,
+          value: parseFloat(measurement.value),
+          unit: measurement.units || sourceMetric?.unit || '',
+          measurementId: measurement.id
+        });
+      }
+
+      // Evaluate formula
+      const { evaluateFormula } = await import("../services/formula-service");
+      const calculatedValue = evaluateFormula(metric.formula, sourceValues);
+
+      return res.json({
+        calculatedValue,
+        sourceMetrics,
+        sourceMeasurementIds,
+        formula: metric.formula
+      });
+    } catch (error) {
+      console.error("Calculate preview error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to calculate preview";
+      res.status(500).json({ message });
     }
   });
 }

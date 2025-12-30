@@ -3,8 +3,8 @@
  * Robust statistical calculations with proper error handling and validation
  */
 
-import type { StatisticalSummary, ChartDataPoint } from './analytics-types';
-import { METRIC_CONFIG } from './analytics-types';
+import type { StatisticalSummary, ChartDataPoint, MetricType } from './analytics-types';
+import { getMetricTypeWithFallback } from './analytics-types';
 
 /**
  * Validates that input values are valid numbers
@@ -128,8 +128,7 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
 export function getBestPerformanceValue(metric: string, stats: StatisticalSummary): number {
   if (stats.count === 0) return 0;
 
-  const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-  const metricType = metricConfig?.metricType ?? 'lower_is_better';
+  const metricType = getMetricTypeWithFallback(metric);
 
   // For tracking metrics, use max as proxy for latest value
   // For lower_is_better, use min; for higher_is_better, use max
@@ -154,8 +153,7 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
     if (athleteMetricData.length === 0) return athleteMetricData[0]; // Should not happen
 
     const metric = athleteMetricData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const metricType = metricConfig?.metricType ?? 'lower_is_better';
+    const metricType = getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, find the most recent measurement by date
@@ -197,8 +195,7 @@ export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDa
     if (athleteMetricDateData.length === 0) return athleteMetricDateData[0]; // Should not happen
 
     const metric = athleteMetricDateData[0].metric;
-    const metricConfig = METRIC_CONFIG[metric as keyof typeof METRIC_CONFIG];
-    const metricType = metricConfig?.metricType ?? 'lower_is_better';
+    const metricType = getMetricTypeWithFallback(metric);
 
     if (metricType === 'tracking') {
       // For tracking metrics, all values on same date are equally valid, return first

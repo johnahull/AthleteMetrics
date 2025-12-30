@@ -32,6 +32,9 @@ const mockMeasurement: Measurement = {
   season: null,
   teamContextAuto: true,
   globalAthleteId: null,
+  isCalculated: false,
+  calculatedFromMeasurementIds: null,
+  calculationMetadata: null,
   createdAt: new Date('2024-01-15'),
 };
 
@@ -99,6 +102,8 @@ describe('DeleteMeasurementDialog', () => {
     });
 
     it('should display metric name in message', () => {
+      // NOTE: getMetricDisplayName now returns metric codes as fallback.
+      // In production, labels come from database via useMetricConfig hook.
       render(
         <DeleteMeasurementDialog
           open={true}
@@ -108,7 +113,8 @@ describe('DeleteMeasurementDialog', () => {
         />
       );
 
-      expect(screen.getByText(/10-yard fly/i)).toBeInTheDocument();
+      // Now displays metric code (fallback behavior)
+      expect(screen.getByText(/FLY10_TIME/i)).toBeInTheDocument();
     });
   });
 

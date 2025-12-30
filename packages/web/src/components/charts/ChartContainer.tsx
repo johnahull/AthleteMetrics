@@ -21,7 +21,8 @@ import type {
   StatisticalSummary,
   TrendData,
   MultiMetricData,
-  GroupDefinition
+  GroupDefinition,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { devLog } from '@/utils/dev-logger';
 import { getChartDataForType } from './chartDataUtils';
@@ -123,6 +124,7 @@ interface ChartContainerProps {
   selectedDates?: string[];
   metric?: string;
   selectedGroups?: GroupDefinition[];
+  benchmarks?: BenchmarkLine[];
   onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => Promise<ShareResult | void> | void;
   onFullscreen?: () => void;
   className?: string;
@@ -146,6 +148,7 @@ export function ChartContainer({
   selectedDates,
   metric,
   selectedGroups,
+  benchmarks,
   onExport,
   onFullscreen,
   className
@@ -477,6 +480,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     selectedAthleteIds={selectedAthleteIds}
                     onAthleteSelectionChange={onAthleteSelectionChange}
+                    benchmarks={benchmarks}
+                    showBenchmarks={!!benchmarks && benchmarks.length > 0}
                   />
                 ) : chartType === 'multi_line' ? (
                   <MultiLineChart
@@ -507,6 +512,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     showAllPoints={true}
                     selectedGroups={selectedGroups}
+                    benchmarks={benchmarks}
+                    showBenchmarks={!!benchmarks && benchmarks.length > 0}
                   />
                 ) : chartType === 'time_series_box_swarm' ? (
                   <TimeSeriesBoxSwarmChart
@@ -545,6 +552,8 @@ export function ChartContainer({
                     highlightAthlete={highlightAthlete}
                     showAllPoints={chartType === 'box_plot' && selectedGroups && selectedGroups.length >= 2}
                     selectedGroups={selectedGroups}
+                    benchmarks={benchmarks}
+                    showBenchmarks={true}
                   />
                 ) : (
                   <div className="flex items-center justify-center h-64 text-muted-foreground">
@@ -580,6 +589,8 @@ export function ChartContainer({
         selectedDates={selectedDates}
         metric={metric}
         selectedGroups={selectedGroups}
+        benchmarks={benchmarks}
+        showBenchmarks={!!benchmarks && benchmarks.length > 0}
       />
     </Card>
   );

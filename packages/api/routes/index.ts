@@ -12,6 +12,7 @@ import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
+import { registerBenchmarkAnalyticsRoutes } from "./benchmark-analytics-routes";
 import { registerReportRoutes } from "./report-routes";
 import { registerDashboardTrendsRoutes } from "./dashboard-trends";
 import { registerSearchRoutes } from "./search-routes";
@@ -27,8 +28,13 @@ import { registerMembershipRequestRoutes } from "./membership-request-routes";
 import { registerImportExportRoutes } from "./import-export-routes";
 import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
+import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
+import { registerPushNotificationRoutes } from "./push-notification-routes";
+import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
+import { registerOrgNotificationRoutes } from "./org-notification-routes";
+import { registerAdminNotificationRoutes } from "./admin-notification-routes";
 
 /**
  * Register all application routes
@@ -69,6 +75,9 @@ export function registerAllRoutes(app: Express) {
 
   // Benchmark management routes
   registerBenchmarkRoutes(app);
+
+  // Benchmark analytics routes
+  registerBenchmarkAnalyticsRoutes(app);
 
   // Report management routes
   registerReportRoutes(app);
@@ -111,6 +120,21 @@ export function registerAllRoutes(app: Express) {
 
   // Admin utility routes (data cleanup, testing)
   registerAdminUtilityRoutes(app);
+
+  // Admin security routes (security metrics, monitoring)
+  registerAdminSecurityRoutes(app);
+
+  // Push notification routes (Web Push subscription management)
+  registerPushNotificationRoutes(app);
+
+  // Notification preferences routes (user notification settings)
+  registerNotificationPreferencesRoutes(app);
+
+  // Organization notification routes (org admin settings)
+  registerOrgNotificationRoutes(app);
+
+  // Site admin notification routes (global settings and analytics)
+  registerAdminNotificationRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

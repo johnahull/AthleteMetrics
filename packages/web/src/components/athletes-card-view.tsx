@@ -29,9 +29,10 @@ interface Athlete {
 interface AthletesCardViewProps {
   athletes: Athlete[];
   onAthleteClick?: (athleteId: string) => void;
+  getSportName?: (code: string) => string;
 }
 
-export function AthletesCardView({ athletes, onAthleteClick }: AthletesCardViewProps) {
+export function AthletesCardView({ athletes, onAthleteClick, getSportName }: AthletesCardViewProps) {
   const calculateAge = (birthYear: number | null) => {
     if (!birthYear) return null;
     const currentYear = new Date().getFullYear();
@@ -157,7 +158,7 @@ export function AthletesCardView({ athletes, onAthleteClick }: AthletesCardViewP
                 <div className="flex flex-wrap gap-1">
                   {athlete.sports.map((sport, index) => (
                     <Badge key={index} variant="secondary" className="text-xs">
-                      {sport}
+                      {getSportName ? getSportName(sport) : sport}
                     </Badge>
                   ))}
                 </div>

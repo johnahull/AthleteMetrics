@@ -104,8 +104,27 @@ export function registerAuthRoutes(app: Express) {
         return res.status(401).json({ message: "Not authenticated" });
       }
 
-      const organizations = await authService.getUserOrganizations(req.session.user.id);
-      console.log('[auth-routes] /api/auth/me/organizations response for user', req.session.user.id, ':', organizations);
+      const rawOrganizations = await authService.getUserOrganizations(req.session.user.id);
+
+      // Transform to match frontend UserOrganization interface
+      // Backend returns: { organizationId, role, organization: { id, name, ... } }
+      // Frontend expects: { organizationId, organizationName, role, createdAt }
+      // Filter out deleted organizations (where organization or organization.name is null)
+      const organizations = rawOrganizations
+        .filter((org) => org.organization && org.organization.name) // Exclude deleted orgs
+        .map((org) => {
+          // Runtime assertion for type safety - should never fail due to filter above
+          if (!org.organization?.name) {
+            throw new Error(`Organization data incomplete for ID ${org.organizationId}`);
+          }
+          return {
+            organizationId: org.organizationId,
+            organizationName: org.organization.name,
+            role: org.role,
+            createdAt: org.createdAt,
+          };
+        });
+
       res.json(organizations);
     } catch (error) {
       console.error("Get organizations error:", error);

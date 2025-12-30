@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   XCircle
 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import { validatePassword, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
@@ -41,7 +42,8 @@ export default function Register() {
     email: '',
     username: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    termsAccepted: false
   });
 
   // Validation states
@@ -143,6 +145,11 @@ export default function Register() {
       return;
     }
 
+    if (!formData.termsAccepted) {
+      setError('You must accept the Terms of Service and Privacy Policy to continue');
+      return;
+    }
+
     // Validate username
     const usernameValidation = validateUsername(formData.username);
     if (!usernameValidation.valid) {
@@ -188,6 +195,7 @@ export default function Register() {
           email: formData.email.trim().toLowerCase(),
           username: formData.username.trim().toLowerCase(),
           password: formData.password,
+          legalAcceptedAt: new Date().toISOString(),
         }),
       });
 
@@ -461,10 +469,51 @@ export default function Register() {
               )}
             </div>
 
+            {/* Legal Acceptance Checkbox */}
+            <div className="flex items-start space-x-2">
+              <Checkbox
+                id="termsAccepted"
+                checked={formData.termsAccepted}
+                onCheckedChange={(checked) =>
+                  setFormData(prev => ({ ...prev, termsAccepted: checked === true }))
+                }
+                data-testid="checkbox-terms-accepted"
+                className="mt-1"
+                aria-describedby="terms-description"
+                aria-required="true"
+              />
+              <Label
+                htmlFor="termsAccepted"
+                id="terms-description"
+                className="text-sm leading-relaxed cursor-pointer"
+              >
+                I am 18+ or have parental consent, and I agree to the{' '}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                  aria-label="Privacy Policy (opens in new tab)"
+                >
+                  Privacy Policy
+                </a>
+                {' '}and{' '}
+                <a
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary hover:underline"
+                  aria-label="Terms of Service (opens in new tab)"
+                >
+                  Terms of Service
+                </a>
+              </Label>
+            </div>
+
             <Button
               type="submit"
               className="w-full"
-              disabled={submitting || !usernameAvailable || !emailAvailable}
+              disabled={submitting || !usernameAvailable || !emailAvailable || !formData.termsAccepted}
             >
               {submitting ? (
                 <>

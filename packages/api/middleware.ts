@@ -1,32 +1,67 @@
 import { storage } from "./storage";
 import { isSiteAdmin } from "@shared/auth-utils";
-import type { Express, Request, Response, NextFunction } from "express";
+import type { Request, Response, NextFunction } from "express";
+import { getCachedUserOrganizations } from "./helpers/cached-org-access";
+import { logAuthorizationFailure } from "./helpers/audit-logging";
 
 // Re-export for backwards compatibility - AuthenticatedRequest is now just Request
 // since we've augmented the Express.Request interface globally in types/session.d.ts
 export type AuthenticatedRequest = Request;
 
-const canAccessOrganization = async (user: any, organizationId: string): Promise<boolean> => {
+/**
+ * Session user type from session data
+ * Matches the SessionData.user structure in types/session.d.ts
+ */
+type SessionUser = {
+  id: string;
+  username?: string;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+  athleteId?: string;
+  isSiteAdmin?: boolean;
+  primaryOrganizationId?: string;
+  emailVerified?: boolean;
+  admin?: true; // Legacy admin flag for backward compatibility
+};
+
+/**
+ * Legacy admin user object for backward compatibility with old session format
+ * Used when req.session.admin is true but req.session.user is not set
+ */
+const LEGACY_ADMIN_USER: Express.User = {
+  id: 'admin',
+  email: 'admin@system',
+  firstName: 'System',
+  lastName: 'Admin',
+  role: 'site_admin',
+  isSiteAdmin: true,
+};
+
+const canAccessOrganization = async (req: Request, user: SessionUser, organizationId: string): Promise<boolean> => {
   if (!user?.id || !organizationId) return false;
   if (isSiteAdmin(user)) return true;
 
-  const userOrgs = await storage.getUserOrganizations(user.id);
+  const userOrgs = await getCachedUserOrganizations(req, user.id);
   return userOrgs.some(org => org.organizationId === organizationId);
 };
 
 // Base authentication middleware
-export const requireAuth = (req: any, res: Response, next: NextFunction) => {
-  const user = req.session.user || (req.session.admin ? { admin: true } : null);
+export const requireAuth = (req: Request, res: Response, next: NextFunction) => {
+  const sessionUser = req.session?.user;
+  const user: SessionUser | null = sessionUser || (req.session?.admin ? LEGACY_ADMIN_USER : null);
   if (!user) {
     return res.status(401).json({ message: "Not authenticated" });
   }
-  req.user = user;
+  req.user = user as Express.User;
   next();
 };
 
 // Site admin only middleware
-export const requireSiteAdmin = async (req: any, res: Response, next: NextFunction) => {
-  const user = req.session.user || (req.session.admin ? { admin: true } : null);
+export const requireSiteAdmin = async (req: Request, res: Response, next: NextFunction) => {
+  const sessionUser = req.session?.user;
+  const user: SessionUser | null = sessionUser || (req.session?.admin ? LEGACY_ADMIN_USER : null);
 
   // Check authentication first (return 401 if not authenticated)
   if (!user) {
@@ -35,10 +70,16 @@ export const requireSiteAdmin = async (req: any, res: Response, next: NextFuncti
 
   // Then check if user is site admin (return 403 if not admin)
   if (!isSiteAdmin(user)) {
+    logAuthorizationFailure(user.id, 'access', 'site_admin', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      route: req.path,
+      method: req.method,
+    });
     return res.status(403).json({ message: "Site admin access required" });
   }
 
-  req.user = user;
+  req.user = user as Express.User;
   next();
 };
 
@@ -48,7 +89,8 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
     const user = req.session?.user || req.user;
     // SECURITY: Prioritize URL parameter to prevent authorization bypass via body manipulation
     // URL parameters are more trustworthy as they're part of the route definition
-    let organizationId = req.params.organizationId;
+    // Support both :organizationId and :orgId parameter names for route flexibility
+    let organizationId = req.params.organizationId || req.params.orgId;
     if (!organizationId) {
       // Fallback to query/body only if not in URL (rare case for non-RESTful endpoints)
       organizationId = req.query.organizationId as string || req.body.organizationId;
@@ -69,8 +111,17 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
     }
 
     // Check organization access
-    const hasAccess = await canAccessOrganization(user, organizationId);
+    const hasAccess = await canAccessOrganization(req, user, organizationId);
     if (!hasAccess) {
+      const userOrgs = await getCachedUserOrganizations(req, user.id);
+      logAuthorizationFailure(user.id, 'access', 'organization', {
+        attemptedOrgId: organizationId,
+        userOrgIds: userOrgs.map(o => o.organizationId),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        route: req.path,
+        method: req.method,
+      });
       return res.status(403).json({ message: "Access denied to this organization" });
     }
 
@@ -78,8 +129,15 @@ export const requireOrganizationAccess = (roleRequired?: string) => {
     if (roleRequired) {
       const userRoles = await storage.getUserRoles(user.id, organizationId);
       if (!userRoles.includes(roleRequired) && !userRoles.includes("org_admin")) {
-        return res.status(403).json({ 
-          message: `${roleRequired} role required for this action` 
+        logAuthorizationFailure(user.id, 'access', 'organization_role', {
+          attemptedOrgId: organizationId,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          route: req.path,
+          method: req.method,
+        });
+        return res.status(403).json({
+          message: `${roleRequired} role required for this action`
         });
       }
     }
@@ -115,14 +173,30 @@ export const requireTeamAccess = (actionRequired?: 'read' | 'write') => {
       return res.status(404).json({ message: "Team not found" });
     }
 
-    const hasOrgAccess = await canAccessOrganization(user, team.organizationId);
+    const hasOrgAccess = await canAccessOrganization(req, user, team.organizationId);
     if (!hasOrgAccess) {
+      const userOrgs = await getCachedUserOrganizations(req, user.id);
+      logAuthorizationFailure(user.id, 'access', 'team', {
+        attemptedOrgId: team.organizationId,
+        userOrgIds: userOrgs.map(o => o.organizationId),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        route: req.path,
+        method: req.method,
+      });
       return res.status(403).json({ message: "Access denied to this team" });
     }
 
     // Check write permissions for modification actions
     if (actionRequired === 'write') {
       if (user.role === "athlete") {
+        logAuthorizationFailure(user.id, 'write', 'team', {
+          attemptedOrgId: team.organizationId,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          route: req.path,
+          method: req.method,
+        });
         return res.status(403).json({ message: "Athletes cannot modify teams" });
       }
     }
@@ -155,6 +229,12 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
     // Athletes can only access their own data
     if (user.role === "athlete") {
       if (user.id !== athleteId) {
+        logAuthorizationFailure(user.id, 'access', 'athlete', {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+          route: req.path,
+          method: req.method,
+        });
         return res.status(403).json({ message: "Athletes can only access their own data" });
       }
       req.user = user;
@@ -170,14 +250,21 @@ export const requireAthleteAccess = (actionRequired?: 'read' | 'write') => {
     const athleteTeams = await storage.getUserTeams(athleteId);
     const athleteOrganizations = athleteTeams.map(team => team.team.organization.id);
 
-    const userOrgs = await storage.getUserOrganizations(user.id);
+    const userOrgs = await getCachedUserOrganizations(req, user.id);
     const userOrganizationIds = userOrgs.map(userOrg => userOrg.organizationId);
 
-    const hasSharedOrg = athleteOrganizations.some(orgId => 
+    const hasSharedOrg = athleteOrganizations.some(orgId =>
       userOrganizationIds.includes(orgId)
     );
 
     if (!hasSharedOrg) {
+      logAuthorizationFailure(user.id, 'access', 'athlete', {
+        userOrgIds: userOrganizationIds,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        route: req.path,
+        method: req.method,
+      });
       return res.status(403).json({ message: "Access denied to this athlete" });
     }
 
@@ -213,8 +300,17 @@ export const requireAIEnabled = async (req: AuthenticatedRequest, res: Response,
 
   // Check organization access before revealing AI status
   // This prevents information disclosure about AI being enabled for orgs user can't access
-  const hasAccess = await canAccessOrganization(user, organizationId);
+  const hasAccess = await canAccessOrganization(req, user, organizationId);
   if (!hasAccess) {
+    const userOrgs = await getCachedUserOrganizations(req, user.id);
+    logAuthorizationFailure(user.id, 'access', 'ai_insights', {
+      attemptedOrgId: organizationId,
+      userOrgIds: userOrgs.map(o => o.organizationId),
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+      route: req.path,
+      method: req.method,
+    });
     return res.status(403).json({ message: "Access denied to this organization" });
   }
 
@@ -318,7 +414,7 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
       if (!isTargetedDirectly && wellnessRequest.targetTeamIds && wellnessRequest.targetTeamIds.length > 0) {
         const athleteTeams = await storage.getUserTeams(athleteId);
         const athleteTeamIds = athleteTeams.map(ut => ut.teamId);
-        isTargetedViaTeam = wellnessRequest.targetTeamIds.some(teamId => athleteTeamIds.includes(teamId));
+        isTargetedViaTeam = wellnessRequest.targetTeamIds.some((teamId: string) => athleteTeamIds.includes(teamId));
       }
 
       if (!isTargetedDirectly && !isTargetedViaTeam) {
@@ -335,7 +431,7 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
 
       // SECURITY: Verify athlete belongs to the same organization as the wellness request
       // This prevents cross-org data leakage via magic links
-      const athleteOrgs = await storage.getUserOrganizations(athleteId);
+      const athleteOrgs = await getCachedUserOrganizations(req, athleteId);
       const belongsToRequestOrg = athleteOrgs.some(uo => uo.organizationId === wellnessRequest.organizationId);
       if (!belongsToRequestOrg) {
         return res.status(403).json({ message: genericError });

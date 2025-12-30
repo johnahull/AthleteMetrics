@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { useAuth } from "@/lib/auth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from "@/components/ui/select";
@@ -8,19 +9,30 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Heart, AlertTriangle, FileText } from "lucide-react";
+import { Sparkles, Heart, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
+import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
 
 export default function AdminPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
 
-  // Site Settings
+  // Site Settings - hooks must be called unconditionally (React Rules of Hooks)
   const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean }>({
     queryKey: ["/api/site-settings"],
+    enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
   const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
+
+  // Redirect non-site-admins to home
+  useEffect(() => {
+    if (user && !user.isSiteAdmin) {
+      setLocation("/");
+    }
+  }, [user, setLocation]);
 
   useEffect(() => {
     if (siteSettings?.aiModel) {
@@ -71,6 +83,31 @@ export default function AdminPage() {
       });
     },
   });
+
+  const recalculateDerivedMetricsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/recalculate-derived-metrics", {});
+      return res.json();
+    },
+    onSuccess: (data: { recalculated: number; total: number; skipped: number; errors: string[] }) => {
+      toast({
+        title: "Derived metrics recalculated",
+        description: `Updated ${data.recalculated} of ${data.total} measurements.${data.skipped > 0 ? ` Skipped ${data.skipped}.` : ''}`,
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Recalculation failed",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  // Don't render anything while checking authorization or if not authorized
+  if (!user?.isSiteAdmin) {
+    return null;
+  }
 
   // AI Model pricing data
   const aiModels = [
@@ -250,6 +287,43 @@ export default function AdminPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Derived Metrics Recalculation */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calculator className="h-5 w-5" />
+            Derived Metrics Recalculation
+          </CardTitle>
+          <CardDescription>
+            Recalculate all derived metrics using the best trial values
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Use this after updating derived metric formulas or fixing calculation logic.
+            This will update all calculated measurements (like Approach Reach, Block Reach, Top Speed)
+            using the best value from multiple trials instead of the last imported value.
+          </p>
+          <Button
+            onClick={() => recalculateDerivedMetricsMutation.mutate()}
+            disabled={recalculateDerivedMetricsMutation.isPending}
+            data-testid="recalculate-derived-metrics-btn"
+          >
+            {recalculateDerivedMetricsMutation.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Recalculating...
+              </>
+            ) : (
+              "Recalculate All Derived Metrics"
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Push Notification Settings */}
+      <AdminNotificationSettingsCard />
     </div>
   );
 }

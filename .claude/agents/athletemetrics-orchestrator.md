@@ -1,3 +1,8 @@
+---
+name: athletemetrics-orchestrator
+description: Intelligent task routing and coordination across AthleteMetrics specialized agents
+---
+
 # AthleteMetrics Master Orchestrator Agent
 
 **Agent Type**: athletemetrics-orchestrator

@@ -13,6 +13,7 @@ import {
   calculateAthleteAnalytics
 } from '@/utils/chart-calculations';
 import { CHART_COLORS } from '@/constants/chart-config';
+import { useMetricConfig } from './use-metric-config';
 
 interface UseChartCalculationsParams {
   data: TrendData[];
@@ -27,6 +28,9 @@ export function useChartCalculations({
   highlightAthlete,
   statistics
 }: UseChartCalculationsParams) {
+  // Get dynamic metric configurations from database
+  const { getMetricConfig } = useMetricConfig();
+
   // Memoized processing of trend data for scatter plot
   const scatterData = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -80,12 +84,13 @@ export function useChartCalculations({
     // Process athlete datasets using utility function
     const datasets = processAthleteDatasets(athleteTrends, xMetric, yMetric, colors, highlightAthlete);
 
-    // Get metric configuration
-    const { METRIC_CONFIG } = require('@shared/analytics-types');
-    const xUnit = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const yUnit = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.unit || '';
-    const xLabel = METRIC_CONFIG[xMetric as keyof typeof METRIC_CONFIG]?.label || xMetric;
-    const yLabel = METRIC_CONFIG[yMetric as keyof typeof METRIC_CONFIG]?.label || yMetric;
+    // Get metric configuration from database
+    const xConfig = getMetricConfig(xMetric);
+    const yConfig = getMetricConfig(yMetric);
+    const xUnit = xConfig?.unit || '';
+    const yUnit = yConfig?.unit || '';
+    const xLabel = xConfig?.label || xMetric;
+    const yLabel = yConfig?.label || yMetric;
 
     // Calculate analytics using utility function
     const analytics = calculateAthleteAnalytics(validAthletes, xMetric, yMetric, statistics, highlightAthlete);
@@ -105,7 +110,7 @@ export function useChartCalculations({
         analytics
       }
     };
-  }, [data, displayedAthletes, highlightAthlete, statistics]);
+  }, [data, displayedAthletes, highlightAthlete, statistics, getMetricConfig]);
 
   // Memoized performance quadrant labels
   const quadrantLabels = useMemo(() => {

@@ -1,0 +1,34 @@
+[
+  {
+    "content": "Write failing tests for formula service (unit tests)",
+    "status": "completed"
+  },
+  {
+    "content": "Write failing tests for schema changes (type tests)",
+    "status": "completed"
+  },
+  {
+    "content": "Install mathjs dependency",
+    "status": "completed"
+  },
+  {
+    "content": "Implement formula-service.ts to make tests pass",
+    "status": "completed"
+  },
+  {
+    "content": "Add derived metric columns to schema.ts",
+    "status": "completed"
+  },
+  {
+    "content": "Create database migration file",
+    "status": "completed"
+  },
+  {
+    "content": "Run all tests and verify passing",
+    "status": "completed"
+  },
+  {
+    "content": "Run type checking",
+    "status": "completed"
+  }
+]

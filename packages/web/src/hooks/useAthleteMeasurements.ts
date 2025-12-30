@@ -9,6 +9,8 @@
 
 import { useQuery, useMutation, useQueryClient, UseQueryResult } from '@tanstack/react-query';
 import type { Measurement } from '@shared/schema';
+import { useContext } from 'react';
+import { AthleteOrgContext } from '@/lib/athlete-org-context';
 
 interface UseAthleteMeasurementsOptions {
   /** Whether to fetch the data */
@@ -43,14 +45,38 @@ export function useAthleteMeasurements(
 ): UseQueryResult<Measurement[]> {
   const { enabled = true, staleTime = 60 * 1000, includeUnverified = false } = options;
 
+  // Try to access AthleteOrgContext (may not be available)
+  const context = useContext(AthleteOrgContext);
+  const filterMode = context?.filterMode;
+  const organizations = context?.organizations;
+
   return useQuery({
-    queryKey: ['/api/measurements', { athleteId, includeUnverified }],
+    queryKey: ['/api/measurements', { athleteId, includeUnverified, filterMode }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('athleteId', athleteId!);
+
       if (includeUnverified) {
         params.set('includeUnverified', 'true');
       }
+
+      // Add filterMode params if context is available
+      if (filterMode) {
+        if (filterMode === 'personal') {
+          params.set('filterMode', 'personal');
+        } else if (filterMode === 'all') {
+          params.set('filterMode', 'all');
+          // Include all org IDs
+          if (organizations && organizations.length > 0) {
+            const orgIds = organizations.map(org => org.id).join(',');
+            params.set('orgIds', orgIds);
+          }
+        } else {
+          // filterMode is a specific org ID
+          params.set('organizationId', filterMode);
+        }
+      }
+
       const response = await fetch(`/api/measurements?${params.toString()}`, {
         credentials: 'include',
       });
@@ -62,6 +88,9 @@ export function useAthleteMeasurements(
     enabled: !!athleteId && enabled,
     staleTime,
     gcTime: 10 * 60 * 1000, // Keep in cache for 10 minutes
+    // Prevent unnecessary refetches - filterMode change already triggers new query via queryKey
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 }
 

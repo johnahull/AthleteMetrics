@@ -7,18 +7,31 @@ import type { Express } from "express";
 import { z } from "zod";
 import rateLimit from "express-rate-limit";
 import { storage } from "../storage";
-import { requireSiteAdmin } from "../middleware";
+import { requireSiteAdmin, requireOrganizationAccess } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { generateInvitationLink, getBaseUrl } from "../utils/url-utils";
 import { emailService } from "../services/email-service";
 import { isValidEmail } from "@shared/email-validation";
 import { RATE_LIMITS, TEST_EMAIL_WINDOW_MS } from "../constants/rate-limits";
+import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
+import { db } from "../db";
 
 // Rate limiting for test email endpoint
 const testEmailLimiter = rateLimit({
   windowMs: TEST_EMAIL_WINDOW_MS,
   limit: RATE_LIMITS.TEST_EMAIL,
   message: { message: "Too many test email requests, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
+
+// Rate limiting for bulk recalculation endpoint
+// Prevents concurrent bulk operations that could overload the database
+const bulkRecalculationLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  limit: 5, // Max 5 bulk recalculations per hour
+  message: { error: 'Bulk recalculation rate limit exceeded. Please wait before triggering another bulk operation.' },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: (req) => shouldSkipRateLimiting(req, 'general'),
@@ -212,6 +225,120 @@ export function registerAdminUtilityRoutes(app: Express) {
       res.status(500).json({
         success: false,
         error: 'Failed to send test email'
+      });
+    }
+  });
+
+  /**
+   * Recalculate derived metrics for a specific organization (org-scoped)
+   * Allows org admins to recalculate derived metrics for their organization's athletes
+   *
+   * POST /api/organizations/:organizationId/recalculate-derived-metrics
+   * Query params:
+   *   - metricCode: optional - only recalculate this specific derived metric
+   *   - createMissing: optional - if "false", only update existing (default: true)
+   * Rate limiting: 5 requests per hour to prevent database overload
+   */
+  app.post("/api/organizations/:organizationId/recalculate-derived-metrics", bulkRecalculationLimiter, requireOrganizationAccess('org_admin'), async (req, res) => {
+    try {
+      const { organizationId } = req.params;
+      const { metricCode, createMissing } = req.query;
+
+      const calculator = new DerivedMetricCalculator(db);
+
+      const result = await calculator.recalculateAllDerivedMetrics({
+        organizationId,
+        metricCode: typeof metricCode === 'string' ? metricCode : undefined,
+        createMissing: createMissing !== 'false', // Default to true
+      });
+
+      // Build message parts
+      const messageParts = [];
+      if (result.recalculated > 0) {
+        messageParts.push(`updated ${result.recalculated}`);
+      }
+      if (result.created > 0) {
+        messageParts.push(`created ${result.created}`);
+      }
+      if (messageParts.length === 0) {
+        messageParts.push('no changes made');
+      }
+
+      res.json({
+        success: true,
+        message: `Recalculation complete: ${messageParts.join(', ')} (${result.total} total processed).`,
+        total: result.total,
+        recalculated: result.recalculated,
+        created: result.created,
+        skipped: result.skipped,
+        errors: result.errors,
+      });
+
+    } catch (error) {
+      console.error('Error recalculating derived metrics:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to recalculate derived metrics',
+        message: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  });
+
+  /**
+   * Recalculate all derived metrics (site-admin only)
+   * Used after fixing calculation logic to update existing values
+   *
+   * POST /api/admin/recalculate-derived-metrics
+   * Query params:
+   *   - organizationId: optional - only recalculate for this org
+   *   - metricCode: optional - only recalculate this specific derived metric
+   *   - dryRun: optional - if "true", return what would change without making changes
+   *   - batchSize: optional - number of measurements per transaction batch (default: 500)
+   *   - createMissing: optional - if "false", only update existing (default: true)
+   *
+   * Rate limiting: 5 requests per hour to prevent database overload
+   */
+  app.post("/api/admin/recalculate-derived-metrics", bulkRecalculationLimiter, requireSiteAdmin, async (req, res) => {
+    try {
+      const { organizationId, metricCode, dryRun, batchSize, createMissing } = req.query;
+
+      const calculator = new DerivedMetricCalculator(db);
+
+      const result = await calculator.recalculateAllDerivedMetrics({
+        organizationId: typeof organizationId === 'string' ? organizationId : undefined,
+        metricCode: typeof metricCode === 'string' ? metricCode : undefined,
+        dryRun: dryRun === 'true',
+        batchSize: typeof batchSize === 'string' ? parseInt(batchSize, 10) : undefined,
+        createMissing: createMissing !== 'false', // Default to true
+      });
+
+      // Build message parts
+      const messageParts = [];
+      if (result.recalculated > 0) {
+        messageParts.push(`updated ${result.recalculated}`);
+      }
+      if (result.created > 0) {
+        messageParts.push(`created ${result.created}`);
+      }
+      if (messageParts.length === 0) {
+        messageParts.push('no changes');
+      }
+
+      const isDryRun = dryRun === 'true';
+      res.json({
+        success: true,
+        message: isDryRun
+          ? `Dry run complete: would ${messageParts.join(', ')} (${result.total} total).`
+          : `Recalculation complete: ${messageParts.join(', ')} (${result.total} total processed).`,
+        ...result,
+      });
+
+    } catch (error) {
+      console.error('Error recalculating derived metrics:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Failed to recalculate derived metrics',
+        message: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   });

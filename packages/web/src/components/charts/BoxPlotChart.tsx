@@ -12,6 +12,7 @@ import {
   ChartData,
   Filler,
 } from 'chart.js';
+import annotationPlugin, { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Chart } from 'react-chartjs-2';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
@@ -23,7 +24,8 @@ import type {
   ChartConfiguration,
   StatisticalSummary,
   BoxPlotData,
-  GroupDefinition
+  GroupDefinition,
+  BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
@@ -43,6 +45,8 @@ interface BoxPlotChartProps {
   showAllPoints?: boolean; // Option to show all data points (swarm style)
   showAthleteNames?: boolean; // Option to show athlete names next to points
   selectedGroups?: GroupDefinition[]; // For multi-group analysis
+  benchmarks?: BenchmarkLine[]; // Benchmark lines/ranges to display
+  showBenchmarks?: boolean; // Whether to show benchmarks
 }
 
 export const BoxPlotChart = React.memo(function BoxPlotChart({
@@ -53,7 +57,9 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   highlightAthlete,
   showAllPoints = false,
   showAthleteNames = false,
-  selectedGroups
+  selectedGroups,
+  benchmarks,
+  showBenchmarks = true
 }: BoxPlotChartProps) {
   const { getMetricConfig } = useMetricConfig();
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
@@ -967,6 +973,114 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     };
   }, [data, statistics, highlightAthlete, showAllPoints, showAthleteNames, selectedGroups]);
 
+  // Generate benchmark annotations for chart overlay
+  // Helper to parse any color format to rgba with specified opacity
+  const parseColorToRgba = (color: string, opacity: number): string => {
+    // Named colors map
+    const namedColors: Record<string, [number, number, number]> = {
+      red: [255, 0, 0],
+      green: [0, 128, 0],
+      blue: [0, 0, 255],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      purple: [128, 0, 128],
+      pink: [255, 192, 203],
+      black: [0, 0, 0],
+      white: [255, 255, 255],
+      gray: [128, 128, 128],
+      grey: [128, 128, 128],
+      gold: [255, 215, 0],
+      silver: [192, 192, 192],
+      bronze: [205, 127, 50],
+      cyan: [0, 255, 255],
+      magenta: [255, 0, 255],
+    };
+
+    // Try rgba/rgb match
+    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
+    if (rgbaMatch) {
+      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    }
+
+    // Try hex match
+    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
+    if (hexMatch) {
+      const hex = hexMatch[1];
+      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
+      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
+      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Try named color
+    const lowerColor = color.toLowerCase();
+    if (namedColors[lowerColor]) {
+      const [r, g, b] = namedColors[lowerColor];
+      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    }
+
+    // Default fallback - use a visible pink color
+    return `rgba(255, 99, 132, ${opacity})`;
+  };
+
+  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
+      return [];
+    }
+
+    return benchmarks.map((benchmark): AnnotationOptions => {
+      const defaultColor = 'rgba(255, 99, 132, 0.8)';
+      const color = benchmark.color || defaultColor;
+      const backgroundColor = parseColorToRgba(color, 0.15);
+
+      // Range benchmark - render as box annotation
+      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        return {
+          type: 'box',
+          yMin: benchmark.minValue,
+          yMax: benchmark.maxValue,
+          backgroundColor,
+          borderColor: color,
+          borderWidth: 1,
+          borderDash: [5, 5],
+          label: {
+            display: true,
+            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+            position: 'end',
+            color: color,
+            font: {
+              size: 11,
+              weight: 'bold'
+            },
+            padding: 4
+          }
+        };
+      }
+
+      // Single-value benchmark - render as line annotation
+      return {
+        type: 'line',
+        yMin: benchmark.value,
+        yMax: benchmark.value,
+        borderColor: color,
+        borderWidth: 2,
+        borderDash: benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [],
+        label: {
+          display: true,
+          content: benchmark.name,
+          position: 'end',
+          backgroundColor: color,
+          color: 'white',
+          font: {
+            size: 11,
+            weight: 'bold'
+          },
+          padding: 4
+        }
+      };
+    });
+  }, [benchmarks, showBenchmarks]);
+
   // Custom plugin for drawing team labels
   const multiGroupLabelsPlugin = {
     id: 'multiGroupLabels',
@@ -1130,6 +1244,12 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
     },
     plugins: {
       ...config.plugins,
+      annotation: {
+        annotations: benchmarkAnnotations.reduce((acc, annotation, index) => {
+          acc[`benchmark-${index}`] = annotation;
+          return acc;
+        }, {} as Record<string, AnnotationOptions>)
+      },
       title: {
         display: true,
         text: config.title,
@@ -1470,7 +1590,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
                   type="scatter"
                   data={chartData}
                   options={chartOptions}
-                  plugins={[multiGroupLabelsPlugin]}
+                  plugins={[annotationPlugin as any, multiGroupLabelsPlugin]}
                   ref={chartRef}
                   key={`boxplot-${selectedGroups?.length || 0}-${chartData.datasets?.length || 0}`}
                 />

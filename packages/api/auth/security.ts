@@ -240,7 +240,13 @@ export class AuthSecurity {
    */
   static async logSecurityEvent(event: Omit<CreateSecurityEvent, 'createdAt'>): Promise<void> {
     try {
-      await storage.createSecurityEvent(event);
+      // Convert optional fields to explicit null for database storage
+      await storage.createSecurityEvent({
+        ...event,
+        userId: event.userId ?? null,
+        eventData: event.eventData ?? null,
+        userAgent: event.userAgent ?? null,
+      });
     } catch (error) {
       console.error('Failed to log security event:', error);
     }
