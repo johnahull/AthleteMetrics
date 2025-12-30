@@ -141,7 +141,10 @@ describe('My Events - Pending Invitations', () => {
 
       render(<MyEvents />, { wrapper: createWrapper() });
 
-      expect(screen.getByText(/pending invitations/i)).toBeInTheDocument();
+      // Use getAllByText since "pending invitations" appears in both the alert banner
+      // and the section header - we just want to verify the text exists
+      const pendingInvitationsElements = screen.getAllByText(/pending invitations/i);
+      expect(pendingInvitationsElements.length).toBeGreaterThan(0);
     });
 
     it('should show invitation count in section header', () => {

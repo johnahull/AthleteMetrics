@@ -110,6 +110,10 @@ vi.mock('wouter', () => ({
 vi.mock('@/lib/auth', () => ({
   useAuth: () => ({
     user: { id: 'user-123', role: 'coach' },
+    // userOrganizations is required for permission checks (canManageEvent)
+    userOrganizations: [
+      { organizationId: 'org-123', role: 'coach', organizationName: 'Test Org' },
+    ],
   }),
 }));
 
@@ -122,10 +126,14 @@ vi.mock('@/hooks/use-toast', () => ({
 // Mock event-related API hooks
 const mockUseEvent = vi.fn();
 const mockUseEventRegistrations = vi.fn();
+const mockUseEventInvitations = vi.fn();
+const mockCancelInvitationMutate = vi.fn();
+const mockCancelRegistrationMutate = vi.fn();
 
 vi.mock('@/lib/events-api', () => ({
   useEvent: () => mockUseEvent(),
   useEventRegistrations: () => mockUseEventRegistrations(),
+  useEventInvitations: () => mockUseEventInvitations(),
   useFreezeEvent: () => ({
     mutateAsync: mockFreezeMutate,
     isPending: false,
@@ -141,6 +149,18 @@ vi.mock('@/lib/events-api', () => ({
   useDeclineRegistration: () => ({
     mutateAsync: mockDeclineMutate,
     isPending: false,
+  }),
+  useCancelInvitation: () => ({
+    mutateAsync: mockCancelInvitationMutate,
+    isPending: false,
+  }),
+  useCancelRegistration: () => ({
+    mutateAsync: mockCancelRegistrationMutate,
+    isPending: false,
+  }),
+  useMyEventRegistration: () => ({
+    data: null,
+    isLoading: false,
   }),
 }));
 
@@ -182,6 +202,10 @@ describe('EventDetail Page', () => {
     });
     mockUseEventRegistrations.mockReturnValue({
       data: mockRegistrations,
+      isLoading: false,
+    });
+    mockUseEventInvitations.mockReturnValue({
+      data: [],
       isLoading: false,
     });
   });
