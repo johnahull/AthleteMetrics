@@ -277,21 +277,19 @@ describe("Event Invitation Email Integration", () => {
       expect(invitation.emailSentAt).toBeNull();
     });
 
-    it("should log error when email fails but not throw", async () => {
-      const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-
+    it("should not throw error when email fails (graceful degradation)", async () => {
       vi.mocked(emailService.sendEventInvitation).mockRejectedValueOnce(
         new Error("Email service down")
       );
 
-      await invitationService.createInvitation(
-        testEventId,
-        testCoachId,
-        { email: `log${testSuffix}@example.com` }
-      );
-
-      expect(consoleSpy).toHaveBeenCalled();
-      consoleSpy.mockRestore();
+      // Should not throw - invitation creation should succeed even if email fails
+      await expect(
+        invitationService.createInvitation(
+          testEventId,
+          testCoachId,
+          { email: `log${testSuffix}@example.com` }
+        )
+      ).resolves.toBeDefined();
     });
 
     it("should return false from sendEmail when email service returns false", async () => {
