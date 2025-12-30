@@ -506,12 +506,19 @@ export async function registerRoutes(app: Express) {
   }
 
   // Configure session store
+  // Detect localhost for cookie security - CI runs production mode on localhost
+  const databaseUrl = process.env.DATABASE_URL || '';
+  const isLocalhost = databaseUrl.includes('localhost') || databaseUrl.includes('127.0.0.1');
+
   const sessionConfig: any = {
     secret: sessionSecret,
     resave: false,  // Don't save unchanged sessions
     saveUninitialized: false,  // Don't create sessions for unauthenticated users
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      // Secure cookies only in production AND not on localhost
+      // CI runs NODE_ENV=production but uses localhost database/server
+      // Secure cookies require HTTPS, which localhost doesn't provide
+      secure: process.env.NODE_ENV === 'production' && !isLocalhost,
       httpOnly: true, // Prevent XSS attacks
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       sameSite: 'strict' // CSRF protection
