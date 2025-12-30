@@ -19,6 +19,7 @@ import { Progress } from "@/components/ui/progress";
 import { Calendar, Users, Settings, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { MetricsSelector, type SelectedMetric } from "./MetricsSelector";
 import type { InsertEvent, EventVisibility, RegistrationMode, ResultsVisibility } from "@shared/schema";
+import { eventVisibilityEnum, registrationModeEnum, resultsVisibilityEnum } from "@shared/schema";
 
 // Form validation schema
 const eventFormSchema = z.object({
@@ -31,8 +32,8 @@ const eventFormSchema = z.object({
   description: z.string().optional(),
 
   // Step 2: Registration Settings
-  visibility: z.enum(["org_private", "public", "invite_only"]).default("org_private"),
-  registrationMode: z.enum(["open", "request_approval", "invitation_only"]).default("open"),
+  visibility: z.enum(eventVisibilityEnum).default("org_private"),
+  registrationMode: z.enum(registrationModeEnum).default("open"),
   maxRegistrations: z.number().int().positive().optional().nullable(),
   registrationOpensAt: z.string().optional(),
   registrationClosesAt: z.string().optional(),
@@ -40,7 +41,7 @@ const eventFormSchema = z.object({
   // Step 3: Metrics - handled separately
 
   // Step 4: Results Visibility
-  resultsVisibility: z.enum(["immediate", "after_event", "manual"]).default("after_event"),
+  resultsVisibility: z.enum(resultsVisibilityEnum).default("after_event"),
 });
 
 type EventFormValues = z.infer<typeof eventFormSchema>;
