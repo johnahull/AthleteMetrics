@@ -68,7 +68,10 @@ export function registerEventMeasurementsRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { eventId } = req.params;
-        const user = req.user as SessionUser;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
+        }
         const requestedUserId = req.query.userId as string | undefined;
 
         // Get the event to check permissions
@@ -120,7 +123,10 @@ export function registerEventMeasurementsRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { eventId } = req.params;
-        const user = req.user as SessionUser;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
+        }
 
         // Get the event to check permissions
         const event = await storage.getEvent(eventId);
@@ -154,7 +160,10 @@ export function registerEventMeasurementsRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { eventId } = req.params;
-        const user = req.user as SessionUser;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
+        }
 
         // Check permissions
         const hasAccess = await canManageEventMeasurements(user, eventId);
@@ -207,7 +216,10 @@ export function registerEventMeasurementsRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { eventId } = req.params;
-        const user = req.user as SessionUser;
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ error: "User not authenticated" });
+        }
 
         // Check permissions
         const hasAccess = await canManageEventMeasurements(user, eventId);
