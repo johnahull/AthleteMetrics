@@ -54,6 +54,9 @@ export type {
   RegistrationStatus, EventInvitationStatus,
   // Special types
   AIModel, Athlete,
+  // Enriched/composite types
+  SiteSportWithPositions, SiteSportUsage, SitePositionUsage,
+  OrganizationBenchmarkWithDetails, EventWithCounts, EventMetricWithDetails,
 } from "./types";
 
 // Re-export the type aliases that share names with constants

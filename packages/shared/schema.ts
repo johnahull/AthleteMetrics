@@ -165,12 +165,5 @@ export type {
   InsertEventMetric,
 } from "./schema-original";
 
-// Re-export complex types that were in the original schema
-export type {
-  SiteSportWithPositions,
-  SiteSportUsage,
-  SitePositionUsage,
-  OrganizationBenchmarkWithDetails,
-  EventWithCounts,
-  EventMetricWithDetails,
-} from "./schema-original";
+// Note: Complex types (SiteSportWithPositions, EventWithCounts, etc.)
+// are now defined in schema/types.ts and exported via schema/index.ts

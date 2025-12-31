@@ -156,3 +156,58 @@ export type AIModel = typeof constants.AI_MODELS[number];
 
 // Alias for backward compatibility
 export type Athlete = User;
+
+// ============================================================================
+// Enriched/Composite Types
+// ============================================================================
+
+// Sport with its positions (for sport management UI)
+export type SiteSportWithPositions = SiteSport & {
+  positions: SitePosition[];
+};
+
+// Sport usage count for deletion warning
+export type SiteSportUsage = {
+  athleteCount: number;
+  teamCount: number;
+  metricCount: number;
+};
+
+// Position usage count for deletion warning
+export type SitePositionUsage = {
+  athleteCount: number;
+};
+
+// Enriched type for organization benchmarks with full benchmark details
+export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
+  // Benchmark details (from either site_benchmarks or custom_benchmarks)
+  name: string;
+  metricCode: string;
+  description: string | null;
+  benchmarkValue: number | null;
+  comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
+  minValue: number | null;
+  maxValue: number | null;
+  // Athlete filters
+  ageMin: number | null;
+  ageMax: number | null;
+  gender: 'Male' | 'Female' | 'Not Specified' | null;
+  position: string | null;
+  level: 'college' | 'high_school' | 'club' | null;
+  // Status (from site benchmarks only, custom benchmarks don't have isActive)
+  isActive?: boolean;
+};
+
+// Event with registration counts
+export type EventWithCounts = Event & {
+  registrationCount: number;
+  approvedCount: number;
+  waitlistCount: number;
+};
+
+// Event metric with full details
+export type EventMetricWithDetails = EventMetric & {
+  metricLabel: string;
+  metricType: string;
+  units: string;
+};
