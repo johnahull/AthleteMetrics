@@ -455,8 +455,8 @@ describe('AthleteOrgContext', () => {
       });
 
       expect(result.current.organizations).toEqual([]);
-      // With no organizations, 'personal' is the only meaningful view
-      expect(result.current.filterMode).toBe('personal');
+      // Default is 'all' regardless of organization count
+      expect(result.current.filterMode).toBe('all');
     });
 
     it('should handle user with single organization', () => {
@@ -579,8 +579,8 @@ describe('AthleteOrgContext', () => {
       });
 
       expect(result.current.organizations).toEqual([]);
-      // With null/no organizations, 'personal' is the only meaningful view
-      expect(result.current.filterMode).toBe('personal');
+      // Default is 'all' regardless of organization count
+      expect(result.current.filterMode).toBe('all');
     });
   });
 });

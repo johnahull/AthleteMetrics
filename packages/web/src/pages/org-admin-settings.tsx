@@ -86,6 +86,7 @@ type OrganizationProfile = {
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
   wellnessEnabled: z.boolean().default(true),
+  eventsEnabled: z.boolean().default(false),
 });
 
 type OrgAdminSettings = z.infer<typeof orgAdminSettingsSchema>;
@@ -438,6 +439,7 @@ export default function OrgAdminSettings() {
     values: organization ? {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
       wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
+      eventsEnabled: organization.eventsEnabled ?? false,
     } : undefined,
   });
 
@@ -447,6 +449,7 @@ export default function OrgAdminSettings() {
       await updateMutation.mutateAsync({
         aiEnabled: data.aiEnabled,
         wellnessEnabled: data.wellnessEnabled,
+        eventsEnabled: data.eventsEnabled,
       });
 
       toast({
@@ -631,6 +634,27 @@ export default function OrgAdminSettings() {
                         checked={field.value}
                         onCheckedChange={field.onChange}
                         disabled={!wellnessModuleEnabled}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="eventsEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Enable Events Module</FormLabel>
+                      <FormDescription>
+                        Enable event management for combines, camps, and testing days
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
                       />
                     </FormControl>
                   </FormItem>

@@ -34,6 +34,9 @@ const mockMeasurements: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2024-12-15'),
+    eventId: null,
+    eventNameSnapshot: null,
+    eventDateSnapshot: null,
   },
   {
     id: '2',
@@ -58,6 +61,9 @@ const mockMeasurements: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2024-12-10'),
+    eventId: null,
+    eventNameSnapshot: null,
+    eventDateSnapshot: null,
   },
   {
     id: '3',
@@ -82,6 +88,9 @@ const mockMeasurements: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2024-11-20'),
+    eventId: null,
+    eventNameSnapshot: null,
+    eventDateSnapshot: null,
   },
   {
     id: '4',
@@ -106,6 +115,9 @@ const mockMeasurements: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2024-11-15'),
+    eventId: null,
+    eventNameSnapshot: null,
+    eventDateSnapshot: null,
   },
 ];
 

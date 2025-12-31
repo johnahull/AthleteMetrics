@@ -16,6 +16,7 @@ import {
   customBenchmarks,
   organizationBenchmarks,
   siteMetrics,
+  events,
   type Report,
   type ReportSnapshot,
   type ReportBenchmark,
@@ -44,6 +45,8 @@ interface ReportFilters {
 }
 
 interface ReportConfig {
+  eventId?: string; // Filter measurements to specific event
+  includeEventPercentiles?: boolean; // Compare against event participants
   timeframe: TimeframeConfig;
   metrics: string[];
   benchmarks?: {
@@ -69,6 +72,7 @@ interface AthletePerformance {
   teams?: string[];
   measurements: Record<string, number>;
   percentiles: Record<string, number>;
+  eventPercentiles?: Record<string, number>; // Percentile within event participants
   teamAverages: Record<string, number>;
   compositeIndex?: number;
   benchmarkComparisons: Record<string, BenchmarkComparison[]>;
@@ -102,6 +106,13 @@ interface BenchmarkComparison {
   comparisonOperator: string;
 }
 
+interface EventContext {
+  eventId: string;
+  eventName: string;
+  eventDate: Date;
+  participantCount: number;
+}
+
 interface TeamReportData {
   reportType: 'team';
   reportConfig: ReportConfig;
@@ -112,6 +123,7 @@ interface TeamReportData {
   athleteCount: number;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  eventContext?: EventContext; // Present when eventId filter is used
 }
 
 interface IndividualReportData {
@@ -121,6 +133,7 @@ interface IndividualReportData {
   generatedAt: string;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  eventContext?: EventContext; // Present when eventId filter is used
 }
 
 export class ReportService extends BaseService {
@@ -198,13 +211,14 @@ export class ReportService extends BaseService {
     // Calculate date range from timeframe
     const { startDate, endDate } = this.calculateDateRange(config.timeframe);
 
-    // Get measurements based on filters
+    // Get measurements based on filters (including eventId if specified)
     const measurementData = await this.getFilteredMeasurements(
       report.organizationId,
       config.metrics,
       config.filters,
       startDate,
-      endDate
+      endDate,
+      config.eventId
     );
 
     // Get benchmarks for the report
@@ -229,11 +243,32 @@ export class ReportService extends BaseService {
       config.metrics,
       config.compositeIndex,
       reportId,
-      benchmarksByMetric
+      benchmarksByMetric,
+      config.includeEventPercentiles
     );
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+
+    // Get event context if eventId is specified
+    let eventContext: EventContext | undefined;
+    if (config.eventId) {
+      const event = await db
+        .select()
+        .from(events)
+        .where(eq(events.id, config.eventId))
+        .limit(1)
+        .then((rows) => rows[0]);
+
+      if (event) {
+        eventContext = {
+          eventId: event.id,
+          eventName: event.name,
+          eventDate: event.startDate,
+          participantCount: athleteRankings.length,
+        };
+      }
+    }
 
     const result = {
       reportType: 'team' as const,
@@ -245,6 +280,7 @@ export class ReportService extends BaseService {
       athleteCount: athleteRankings.length,
       metricLabels,
       metricUnits,
+      eventContext,
     };
 
     return result;
@@ -312,19 +348,23 @@ export class ReportService extends BaseService {
 
     const teamNames = athleteTeams.map(t => t.teamName);
 
-    // Get athlete measurements
+    // Get athlete measurements (filter by eventId if specified)
+    const measurementConditions = [
+      eq(measurements.userId, athleteId),
+      eq(measurements.organizationId, report.organizationId),
+      gte(measurements.date, startDate),
+      lte(measurements.date, endDate),
+      inArray(measurements.metric, config.metrics),
+    ];
+
+    if (config.eventId) {
+      measurementConditions.push(eq(measurements.eventId, config.eventId));
+    }
+
     const athleteMeasurements = await db
       .select()
       .from(measurements)
-      .where(
-        and(
-          eq(measurements.userId, athleteId),
-          eq(measurements.organizationId, report.organizationId),
-          gte(measurements.date, startDate),
-          lte(measurements.date, endDate),
-          inArray(measurements.metric, config.metrics)
-        )
-      )
+      .where(and(...measurementConditions))
       .orderBy(desc(measurements.date));
 
     // Get best performance for each metric
@@ -342,7 +382,8 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate percentiles and team averages against all athletes in organization
+    // Calculate org-wide percentiles and team averages (always org-wide, not filtered by event)
+    // Note: Don't pass eventId here - org-wide percentiles should compare against all org athletes
     const { percentiles, teamAverages } = await this.calculatePercentilesAndAverages(
       athleteId,
       report.organizationId,
@@ -350,7 +391,20 @@ export class ReportService extends BaseService {
       bestPerformances,
       startDate,
       endDate
+      // eventId intentionally not passed - org percentiles should be org-wide
     );
+
+    // Calculate event percentiles if requested
+    let eventPercentiles: Record<string, number> | undefined;
+    if (config.includeEventPercentiles && config.eventId) {
+      const { percentiles: evtPercentiles } = await this.calculateEventPercentiles(
+        athleteId,
+        config.eventId,
+        config.metrics,
+        bestPerformances
+      );
+      eventPercentiles = evtPercentiles;
+    }
 
     // Get benchmark comparisons
     const benchmarkComparisons = await this.getBenchmarkComparisons(
@@ -373,12 +427,40 @@ export class ReportService extends BaseService {
       teams: teamNames.length > 0 ? teamNames : undefined,
       measurements: bestPerformances,
       percentiles,
+      eventPercentiles,
       teamAverages,
       benchmarkComparisons,
     };
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+
+    // Get event context if eventId is specified
+    let eventContext: EventContext | undefined;
+    if (config.eventId) {
+      const event = await db
+        .select()
+        .from(events)
+        .where(eq(events.id, config.eventId))
+        .limit(1)
+        .then((rows) => rows[0]);
+
+      if (event) {
+        // Count total participants in the event
+        const participantCount = await db
+          .select({ count: sql<number>`count(distinct ${measurements.userId})` })
+          .from(measurements)
+          .where(eq(measurements.eventId, config.eventId))
+          .then((rows) => rows[0]?.count || 0);
+
+        eventContext = {
+          eventId: event.id,
+          eventName: event.name,
+          eventDate: event.startDate,
+          participantCount,
+        };
+      }
+    }
 
     return {
       reportType: 'individual',
@@ -387,6 +469,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       metricLabels,
       metricUnits,
+      eventContext,
     };
   }
 
@@ -420,7 +503,8 @@ export class ReportService extends BaseService {
     metrics: string[],
     athletePerformances: Record<string, number>,
     startDate: string,
-    endDate: string
+    endDate: string,
+    eventId?: string
   ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number> }> {
     const percentiles: Record<string, number> = {};
     const teamAverages: Record<string, number> = {};
@@ -430,21 +514,25 @@ export class ReportService extends BaseService {
         continue;
       }
 
-      // Get all measurements for this metric in the organization
+      // Get all measurements for this metric in the organization (optionally filtered by event)
+      const measurementConditions = [
+        eq(measurements.organizationId, organizationId),
+        eq(measurements.metric, metric),
+        gte(measurements.date, startDate),
+        lte(measurements.date, endDate),
+      ];
+
+      if (eventId) {
+        measurementConditions.push(eq(measurements.eventId, eventId));
+      }
+
       const allMeasurements = await db
         .select({
           value: measurements.value,
           userId: measurements.userId,
         })
         .from(measurements)
-        .where(
-          and(
-            eq(measurements.organizationId, organizationId),
-            eq(measurements.metric, metric),
-            gte(measurements.date, startDate),
-            lte(measurements.date, endDate)
-          )
-        );
+        .where(and(...measurementConditions));
 
       // Get best performance per athlete
       const athleteBestMap = new Map<string, number>();
@@ -481,6 +569,69 @@ export class ReportService extends BaseService {
     }
 
     return { percentiles, teamAverages };
+  }
+
+  /**
+   * Calculate event-specific percentiles (compare athlete to event participants only)
+   */
+  async calculateEventPercentiles(
+    athleteId: string,
+    eventId: string,
+    metrics: string[],
+    athletePerformances: Record<string, number>
+  ): Promise<{ percentiles: Record<string, number> }> {
+    const percentiles: Record<string, number> = {};
+
+    for (const metric of metrics) {
+      if (athletePerformances[metric] === undefined) {
+        continue;
+      }
+
+      // Get all measurements for this metric in the event
+      const eventMeasurements = await db
+        .select({
+          value: measurements.value,
+          userId: measurements.userId,
+        })
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.eventId, eventId),
+            eq(measurements.metric, metric)
+          )
+        );
+
+      // Get best performance per athlete in the event
+      const athleteBestMap = new Map<string, number>();
+      const metricInfo = await this.getMetricInfo(metric);
+
+      for (const m of eventMeasurements) {
+        const value = parseFloat(m.value);
+        const current = athleteBestMap.get(m.userId);
+
+        if (current === undefined) {
+          athleteBestMap.set(m.userId, value);
+        } else {
+          if (metricInfo.lowerIsBetter) {
+            if (value < current) athleteBestMap.set(m.userId, value);
+          } else {
+            if (value > current) athleteBestMap.set(m.userId, value);
+          }
+        }
+      }
+
+      const allValues = Array.from(athleteBestMap.values());
+
+      if (allValues.length > 0) {
+        const athleteValue = athletePerformances[metric];
+
+        // Calculate percentile rank within event participants
+        const rank = quantileRank(allValues, athleteValue) * 100;
+        percentiles[metric] = metricInfo.lowerIsBetter ? 100 - rank : rank;
+      }
+    }
+
+    return { percentiles };
   }
 
   /**
@@ -847,7 +998,8 @@ export class ReportService extends BaseService {
     metrics: string[],
     filters: ReportFilters | undefined,
     startDate: string,
-    endDate: string
+    endDate: string,
+    eventId?: string
   ) {
     let whereConditions = [
       eq(measurements.organizationId, organizationId),
@@ -855,6 +1007,11 @@ export class ReportService extends BaseService {
       gte(measurements.date, startDate),
       lte(measurements.date, endDate),
     ];
+
+    // Apply event filter (when specified, ONLY include event measurements)
+    if (eventId) {
+      whereConditions.push(eq(measurements.eventId, eventId));
+    }
 
     // Apply team filter
     if (filters?.teamIds && filters.teamIds.length > 0) {
@@ -1015,7 +1172,8 @@ export class ReportService extends BaseService {
     metrics: string[],
     compositeIndexConfig: CompositeIndexConfig | undefined,
     reportId: string,
-    benchmarksByMetric?: Record<string, Array<{ name: string; value: number }>>
+    benchmarksByMetric?: Record<string, Array<{ name: string; value: number }>>,
+    includeEventPercentiles?: boolean
   ): Promise<AthletePerformance[]> {
     // Group measurements by athlete
     const athleteMap = new Map<string, any>();
@@ -1033,6 +1191,7 @@ export class ReportService extends BaseService {
             : undefined,
           measurements: {},
           percentiles: {},
+          eventPercentiles: {}, // Will be populated if includeEventPercentiles is true
           teamAverages: {},
           benchmarkComparisons: {},
         });
@@ -1081,6 +1240,13 @@ export class ReportService extends BaseService {
             ? 100 - rank
             : rank;
           athlete.teamAverages[metric] = teamAverage;
+
+          // Calculate event percentiles if requested
+          // For team reports with event filter, percentiles are already event-based
+          // This adds explicit event percentiles for comparison
+          if (includeEventPercentiles) {
+            athlete.eventPercentiles[metric] = athlete.percentiles[metric];
+          }
         }
       }
     }

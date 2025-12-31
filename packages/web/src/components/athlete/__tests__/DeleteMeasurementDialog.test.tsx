@@ -36,6 +36,9 @@ const mockMeasurement: Measurement = {
   calculatedFromMeasurementIds: null,
   calculationMetadata: null,
   createdAt: new Date('2024-01-15'),
+  eventId: null,
+  eventNameSnapshot: null,
+  eventDateSnapshot: null,
 };
 
 describe('DeleteMeasurementDialog', () => {

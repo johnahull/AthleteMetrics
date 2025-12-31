@@ -2,6 +2,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SiteSettings, Organization, UserOrganization } from "@shared/schema";
+import { useMyPendingInvitations } from "@/lib/events-api";
 import {
   BarChart3,
   Building2,
@@ -21,7 +22,8 @@ import {
   ClipboardCheck,
   Trophy,
   Link,
-  UserPlus
+  UserPlus,
+  Calendar
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -52,6 +54,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: teamLabel, href: "/teams", icon: Users },
       { name: athletesLabel, href: "/athletes", icon: UsersRound },
       { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+      { name: "Events", href: "/events", icon: Calendar },
       { name: "Wellness", href: "/wellness", icon: Heart },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
       { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -65,6 +68,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: teamLabel, href: "/teams", icon: Users },
     { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Events", href: "/events", icon: Calendar },
     { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -78,6 +82,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: teamLabel, href: "/teams", icon: Users },
     { name: athletesLabel, href: "/athletes", icon: UsersRound },
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
+    { name: "Events", href: "/events", icon: Calendar },
     { name: "Wellness", href: "/wellness", icon: Heart },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
     { name: "Reports", href: "/reports", icon: ClipboardList },
@@ -85,17 +90,18 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
   ],
-  athlete: [
+  athlete: (invitationBadge?: number) => [
     { name: "My Profile", href: "/my-profile", icon: UsersRound },
     { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
     { name: "My Measurements", href: "/my-measurements", icon: ClipboardList },
+    { name: "My Events", href: "/my-events", icon: Calendar, badge: invitationBadge },
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users },
     { name: "My Goals", href: "/my-goals", icon: Target },
     { name: "Join Organization", href: "/join", icon: UserPlus }
   ]
 });
 
-const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes") => {
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number) => {
   // Get navigation configs with contextual labels
   const NAVIGATION_CONFIGS = getNavigationConfigs(teamLabel, athletesLabel);
 
@@ -104,7 +110,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     const config = isInOrganizationContext
       ? NAVIGATION_CONFIGS.site_admin.organization_context
       : NAVIGATION_CONFIGS.site_admin.default;
-    
+
     // Add organization context link if needed
     if (isInOrganizationContext && organizationContext) {
       return [
@@ -117,7 +123,11 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
 
   // Get base navigation for role
   const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
-  let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
+  let navigation = Array.isArray(baseConfig)
+    ? [...baseConfig]
+    : typeof baseConfig === 'function'
+    ? baseConfig(invitationBadge)
+    : [...baseConfig.default];
   
   // Athletes now use the static /my-profile and /my-dashboard routes
   // No special handling needed - routes are already in the NAVIGATION_CONFIGS
@@ -185,6 +195,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
+  // Fetch pending invitations for athletes only
+  const { data: pendingInvitations } = useMyPendingInvitations();
+
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
@@ -193,7 +206,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const orgIdFromUrl = location.match(/\/organizations\/([^\/]+)/)?.[1];
   const isInOrganizationContext = !!orgIdFromUrl;
 
-  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes);
+  // Calculate invitation badge count for athletes
+  const invitationBadge = userRole === 'athlete' ? (pendingInvitations?.length || 0) : undefined;
+
+  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes, invitationBadge);
 
   // Filter out Wellness link if wellness module is disabled
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
@@ -202,6 +218,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   if (!isWellnessEnabled) {
     navigation = navigation.filter(item => item.name !== "Wellness");
+  }
+
+  // Filter out Events link if events module is disabled for organization
+  const eventsEnabled = organization?.eventsEnabled ?? false;
+  if (!eventsEnabled) {
+    navigation = navigation.filter(item =>
+      item.name !== "Events" && item.name !== "My Events"
+    );
   }
 
   return (

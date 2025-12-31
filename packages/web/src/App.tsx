@@ -102,6 +102,17 @@ const MyRequests = React.lazy(() => import("./pages/my-requests"));
 // Lazy load notification settings page
 const NotificationSettings = React.lazy(() => import("./pages/notification-settings"));
 
+// Lazy load event pages
+const Events = React.lazy(() => import("./pages/events"));
+const MyEvents = React.lazy(() => import("./pages/my-events"));
+const EventNew = React.lazy(() => import("./pages/event-new"));
+const EventEdit = React.lazy(() => import("./pages/event-edit"));
+const EventDetail = React.lazy(() => import("./pages/event-detail"));
+const EventJoin = React.lazy(() => import("./pages/event-join"));
+const EventInvite = React.lazy(() => import("./pages/event-invite"));
+const EventDataEntry = React.lazy(() => import("./pages/event-data-entry"));
+const EventResults = React.lazy(() => import("./pages/event-results"));
+
 function Router() {
   return (
     <Switch>
@@ -400,6 +411,52 @@ function Router() {
       <Route path="/reports">
         <RouteWrapper loadingText="Loading Reports...">
           <Reports />
+        </RouteWrapper>
+      </Route>
+      {/* Event routes - specific routes must come before generic */}
+      <Route path="/events/join/:code">
+        <RouteWrapper loadingText="Loading Event...">
+          <EventJoin />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/invite/:token">
+        <RouteWrapper loadingText="Loading Invitation...">
+          <EventInvite />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/new">
+        <RouteWrapper loadingText="Loading Event Form...">
+          <EventNew />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/:eventId/data-entry">
+        <RouteWrapper loadingText="Loading Data Entry...">
+          <EventDataEntry />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/:eventId/results">
+        <RouteWrapper loadingText="Loading Results...">
+          <EventResults />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/:eventId/edit">
+        <RouteWrapper loadingText="Loading Event Editor...">
+          <EventEdit />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events/:eventId">
+        <RouteWrapper loadingText="Loading Event...">
+          <EventDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/events">
+        <RouteWrapper loadingText="Loading Events...">
+          <Events />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-events">
+        <RouteWrapper loadingText="Loading My Events...">
+          <MyEvents />
         </RouteWrapper>
       </Route>
       {/* Component test pages (development) */}
