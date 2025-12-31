@@ -52,11 +52,26 @@ export interface IInvitationStorage extends IStorage {
 
 const DEFAULT_EXPIRY_DAYS = 7;
 
+/**
+ * Get and validate the application base URL
+ * Ensures APP_URL is properly formatted to prevent malicious invitation links
+ */
+function getValidatedAppUrl(): string {
+  const baseUrl = process.env.APP_URL || 'http://localhost:5000';
+
+  // Validate URL format
+  if (!baseUrl.match(/^https?:\/\/.+/)) {
+    throw new Error('Invalid APP_URL configuration: must start with http:// or https://');
+  }
+
+  return baseUrl;
+}
+
 export class EventInvitationService {
   private storage: IInvitationStorage;
 
-  constructor(storage: IStorage) {
-    this.storage = storage as IInvitationStorage;
+  constructor(storage: IInvitationStorage) {
+    this.storage = storage;
   }
 
   /**
@@ -160,7 +175,7 @@ export class EventInvitationService {
       }
 
       // Construct accept URL
-      const acceptUrl = `${process.env.APP_URL || 'http://localhost:5000'}/events/invite/${token}`;
+      const acceptUrl = `${getValidatedAppUrl()}/events/invite/${token}`;
 
       // Send the email
       const sendResult = await emailService.sendEventInvitation({

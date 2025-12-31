@@ -10,7 +10,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { organizations, users, userOrganizations, events } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { EventService } from "../services/event-service";
+import { EventService, type IEventStorage } from "../services/event-service";
 import type { IStorage } from "../storage";
 
 describe("Event Routes", () => {
@@ -142,7 +142,7 @@ describe("Event Routes", () => {
     });
 
     // Initialize EventService
-    eventService = new EventService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
   });
 
   // Note: afterEach cleanup removed - was too aggressive and deleted events
@@ -823,7 +823,7 @@ describe("Event Cross-Organization Security", () => {
       role: "org_admin",
     });
 
-    eventService = new EventService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
 
     // Create event in org1
     const event = await eventService.createEvent({
@@ -866,7 +866,7 @@ describe("Event Code Generation", () => {
   let eventService: EventService;
 
   beforeAll(() => {
-    eventService = new EventService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
   });
 
   it("should generate 8-character alphanumeric codes", () => {

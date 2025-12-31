@@ -14,7 +14,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventInvitationService, type CreateInvitationOptions, type InvitationFilters } from "../services/event-invitation-service";
+import { EventInvitationService, type CreateInvitationOptions, type InvitationFilters, type IInvitationStorage } from "../services/event-invitation-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -55,7 +55,7 @@ async function canManageEventInvitations(user: SessionUser, organizationId: stri
 }
 
 export function registerEventInvitationRoutes(app: Express) {
-  const invitationService = new EventInvitationService(storage);
+  const invitationService = new EventInvitationService(storage as IInvitationStorage);
 
   // ============================================================
   // PUBLIC TOKEN-BASED ROUTES (no auth required)

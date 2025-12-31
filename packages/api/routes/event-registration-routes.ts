@@ -16,7 +16,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventRegistrationService, type RegisterOptions, type RegistrationFilters } from "../services/event-registration-service";
+import { EventRegistrationService, type RegisterOptions, type RegistrationFilters, type IRegistrationStorage } from "../services/event-registration-service";
 import { requireAuth } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -57,7 +57,7 @@ async function canManageEventRegistrations(user: SessionUser, organizationId: st
 }
 
 export function registerEventRegistrationRoutes(app: Express) {
-  const registrationService = new EventRegistrationService(storage);
+  const registrationService = new EventRegistrationService(storage as IRegistrationStorage);
 
   /**
    * Get user's own registrations across all events

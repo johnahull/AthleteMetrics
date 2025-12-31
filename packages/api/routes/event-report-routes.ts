@@ -6,9 +6,9 @@
 import type { Express, Response } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
-import { EventService } from "../services/event-service";
-import { EventMetricsService } from "../services/event-metrics-service";
-import { EventRegistrationService } from "../services/event-registration-service";
+import { EventService, type IEventStorage } from "../services/event-service";
+import { EventMetricsService, type IMetricsStorage } from "../services/event-metrics-service";
+import { EventRegistrationService, type IRegistrationStorage } from "../services/event-registration-service";
 import { requireAuth, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import { db } from "../db";
@@ -53,9 +53,9 @@ async function canAccessEventReports(
 
 export function registerEventReportRoutes(app: Express) {
   const reportService = new ReportService();
-  const eventService = new EventService(storage);
-  const eventMetricsService = new EventMetricsService(storage);
-  const eventRegistrationService = new EventRegistrationService(storage);
+  const eventService = new EventService(storage as IEventStorage);
+  const eventMetricsService = new EventMetricsService(storage as IMetricsStorage);
+  const eventRegistrationService = new EventRegistrationService(storage as IRegistrationStorage);
 
   /**
    * GET /api/events/:eventId/reports

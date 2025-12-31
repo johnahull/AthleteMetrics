@@ -10,8 +10,8 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { organizations, users, userOrganizations, events, eventMetrics, siteMetrics } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
-import { EventService } from "../services/event-service";
-import { EventMetricsService } from "../services/event-metrics-service";
+import { EventService, type IEventStorage } from "../services/event-service";
+import { EventMetricsService, type IMetricsStorage } from "../services/event-metrics-service";
 import type { IStorage } from "../storage";
 
 describe("Event Metrics Service", () => {
@@ -79,8 +79,8 @@ describe("Event Metrics Service", () => {
     });
 
     // Initialize services
-    eventService = new EventService(storage as IStorage);
-    metricsService = new EventMetricsService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    metricsService = new EventMetricsService(storage as IMetricsStorage);
 
     // Create test events
     const testEvent = await eventService.createEvent({
@@ -380,8 +380,8 @@ describe("Event Metrics Audit Logging", () => {
       role: "org_admin",
     });
 
-    eventService = new EventService(storage as IStorage);
-    metricsService = new EventMetricsService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    metricsService = new EventMetricsService(storage as IMetricsStorage);
 
     const event = await eventService.createEvent({
       name: "EM Audit Test Event",

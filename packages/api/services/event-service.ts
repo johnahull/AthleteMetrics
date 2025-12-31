@@ -83,8 +83,8 @@ export interface IEventStorage extends IStorage {
 export class EventService {
   private storage: IEventStorage;
 
-  constructor(storage: IStorage) {
-    this.storage = storage as IEventStorage;
+  constructor(storage: IEventStorage) {
+    this.storage = storage;
   }
 
   /**
@@ -226,11 +226,9 @@ export class EventService {
 
   /**
    * List events with filters
+   * Note: Authorization checks are performed at the route level
    */
-  async listEvents(
-    filters: EventFilters,
-    requestingUserId: string
-  ): Promise<Event[]> {
+  async listEvents(filters: EventFilters): Promise<Event[]> {
     return this.storage.listEvents(filters);
   }
 

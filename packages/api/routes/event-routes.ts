@@ -10,7 +10,7 @@
 
 import type { Express, Request, Response } from "express";
 import rateLimit from "express-rate-limit";
-import { EventService, type CreateEventData, type UpdateEventData, type EventFilters } from "../services/event-service";
+import { EventService, type CreateEventData, type UpdateEventData, type EventFilters, type IEventStorage } from "../services/event-service";
 import { requireAuth } from "../middleware";
 import { insertEventSchema, type EventVisibility, type EventStatus } from "@shared/schema";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
@@ -67,7 +67,7 @@ function isValidEventCode(code: string): boolean {
 }
 
 export function registerEventRoutes(app: Express) {
-  const eventService = new EventService(storage);
+  const eventService = new EventService(storage as IEventStorage);
 
   // ============================================================
   // ROUTE ORDER IS CRITICAL - Specific paths before parameterized
@@ -113,8 +113,8 @@ export function registerEventRoutes(app: Express) {
         }
       }
 
-      // Use empty string for userId since this is public access
-      const events = await eventService.listEvents(filters, '');
+      // Authorization: Public events only (enforced via filters)
+      const events = await eventService.listEvents(filters);
       res.json(events);
     } catch (error) {
       console.error("List public events error:", error);
@@ -289,7 +289,7 @@ export function registerEventRoutes(app: Express) {
         }
       }
 
-      const events = await eventService.listEvents(filters, user.id);
+      const events = await eventService.listEvents(filters);
       res.json(events);
     } catch (error) {
       console.error("List events error:", error);
@@ -457,6 +457,10 @@ export function registerEventRoutes(app: Express) {
 
       if (!reason || typeof reason !== 'string' || reason.trim().length === 0) {
         return res.status(400).json({ message: "Freeze reason is required" });
+      }
+
+      if (reason.length > 1000) {
+        return res.status(400).json({ message: "Freeze reason must not exceed 1000 characters" });
       }
 
       // Get the event first to check permissions

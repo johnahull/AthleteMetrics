@@ -42,8 +42,8 @@ export interface IRegistrationStorage extends IStorage {
 export class EventRegistrationService {
   private storage: IRegistrationStorage;
 
-  constructor(storage: IStorage) {
-    this.storage = storage as IRegistrationStorage;
+  constructor(storage: IRegistrationStorage) {
+    this.storage = storage;
   }
 
   /**

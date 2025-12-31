@@ -10,8 +10,8 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { organizations, users, userOrganizations, events, eventRegistrations, eventInvitations } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { EventService } from "../services/event-service";
-import { EventInvitationService } from "../services/event-invitation-service";
+import { EventService, type IEventStorage } from "../services/event-service";
+import { EventInvitationService, type IInvitationStorage } from "../services/event-invitation-service";
 import type { IStorage } from "../storage";
 
 describe("Event Invitation Service", () => {
@@ -111,8 +111,8 @@ describe("Event Invitation Service", () => {
     testAthlete2Id = athlete2.id;
 
     // Initialize services
-    eventService = new EventService(storage as IStorage);
-    invitationService = new EventInvitationService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    invitationService = new EventInvitationService(storage as IInvitationStorage);
 
     // Create test events
     const inviteEvent = await eventService.createEvent({
@@ -572,8 +572,8 @@ describe("Invitation Audit Logging", () => {
       role: "athlete",
     });
 
-    eventService = new EventService(storage as IStorage);
-    invitationService = new EventInvitationService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    invitationService = new EventInvitationService(storage as IInvitationStorage);
 
     const event = await eventService.createEvent({
       name: "Inv Audit Test Event",

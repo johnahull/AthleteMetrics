@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { EventService } from "../services/event-service";
+import { EventService, type IEventStorage } from "../services/event-service";
 import type { Event, EventRegistration, User, Organization } from "@shared/schema";
 import type { IStorage } from "../storage";
 
@@ -113,7 +113,7 @@ describe("EventService", () => {
       getEventRegistrationCount: vi.fn(),
     };
 
-    service = new EventService(mockStorage as IStorage);
+    service = new EventService(mockStorage as IEventStorage);
   });
 
   describe("createEvent", () => {

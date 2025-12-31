@@ -10,8 +10,8 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { organizations, users, userOrganizations, events } from "@shared/schema";
 import { eq } from "drizzle-orm";
-import { EventService } from "../services/event-service";
-import { EventResultsService } from "../services/event-results-service";
+import { EventService, type IEventStorage } from "../services/event-service";
+import { EventResultsService, type IResultsStorage } from "../services/event-results-service";
 import type { IStorage } from "../storage";
 
 describe("Event Results Service", () => {
@@ -98,8 +98,8 @@ describe("Event Results Service", () => {
     });
 
     // Initialize services
-    eventService = new EventService(storage as IStorage);
-    resultsService = new EventResultsService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    resultsService = new EventResultsService(storage as IResultsStorage);
 
     // Create events with different visibility modes
     const immediateEvent = await eventService.createEvent({
@@ -410,8 +410,8 @@ describe("Event Results Audit Logging", () => {
       role: "org_admin",
     });
 
-    eventService = new EventService(storage as IStorage);
-    resultsService = new EventResultsService(storage as IStorage);
+    eventService = new EventService(storage as IEventStorage);
+    resultsService = new EventResultsService(storage as IResultsStorage);
 
     const event = await eventService.createEvent({
       name: "ER Audit Test Event",
