@@ -4692,6 +4692,9 @@ export class DatabaseStorage implements IStorage {
     if (benchmark.gender !== undefined && benchmark.gender !== null) {
       insertValues.gender = benchmark.gender;
     }
+    if (benchmark.sport !== undefined && benchmark.sport !== null) {
+      insertValues.sport = benchmark.sport;
+    }
     if (benchmark.position !== undefined && benchmark.position !== null) {
       insertValues.position = benchmark.position;
     }
