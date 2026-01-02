@@ -21,6 +21,10 @@ ADD COLUMN IF NOT EXISTS sport varchar(50);
 COMMENT ON COLUMN site_benchmarks.sport IS
   'Sport code filter (e.g., SOCCER, BASKETBALL). When set with position, creates sport-position specific benchmarks. NULL = applies to all sports.';
 
+-- Backfill: Clear orphan positions (positions without sport) before adding constraint
+-- This ensures existing data won't violate the new CHECK constraint
+UPDATE site_benchmarks SET position = NULL WHERE sport IS NULL AND position IS NOT NULL;
+
 -- Add CHECK constraint to enforce "position requires sport" rule
 -- This prevents position being set without a sport at the database level
 DO $$
@@ -45,6 +49,10 @@ ADD COLUMN IF NOT EXISTS sport varchar(50);
 -- Add comment for documentation
 COMMENT ON COLUMN custom_benchmarks.sport IS
   'Sport code filter (e.g., SOCCER, BASKETBALL). When set with position, creates sport-position specific benchmarks. NULL = applies to all sports.';
+
+-- Backfill: Clear orphan positions (positions without sport) before adding constraint
+-- This ensures existing data won't violate the new CHECK constraint
+UPDATE custom_benchmarks SET position = NULL WHERE sport IS NULL AND position IS NOT NULL;
 
 -- Add CHECK constraint to enforce "position requires sport" rule
 -- This prevents position being set without a sport at the database level

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -125,10 +125,14 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   // Fetch positions for selected sport
   const { data: positions = [] } = usePositions(selectedSport || "");
 
-  // Clear position when sport changes
+  // Track previous sport to detect changes
+  const previousSportRef = useRef(selectedSport);
+
+  // Clear position when sport changes (any change, not just when becoming empty)
   useEffect(() => {
-    if (!selectedSport) {
-      form.setValue("position", undefined);
+    if (previousSportRef.current !== selectedSport) {
+      form.setValue("position", null);
+      previousSportRef.current = selectedSport;
     }
   }, [selectedSport, form]);
 
@@ -176,8 +180,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
-        sport: benchmark.sport || undefined,
-        position: benchmark.position || undefined,
+        sport: benchmark.sport || null,
+        position: benchmark.position || null,
         level: benchmark.level || undefined,
         applicableOrgTypes: benchmark.applicableOrgTypes || undefined,
         isActive: benchmark.isActive,
@@ -185,6 +189,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         color: benchmark.color || undefined,
         icon: benchmark.icon || undefined,
       });
+      // Sync ref with loaded benchmark's sport to prevent unwanted position clear
+      previousSportRef.current = benchmark.sport || null;
     } else {
       setIsTierMode(false);
       form.reset({
@@ -202,8 +208,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: undefined,
         ageMin: undefined,
         ageMax: undefined,
-        sport: undefined,
-        position: undefined,
+        sport: null,
+        position: null,
         level: undefined,
         applicableOrgTypes: undefined,
         isActive: true,
@@ -211,6 +217,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         color: undefined,
         icon: undefined,
       });
+      // Reset ref when creating new benchmark
+      previousSportRef.current = null;
     }
   }, [benchmark, form]);
 
@@ -701,7 +709,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                         <FormLabel>Sport</FormLabel>
                         <Select
                           onValueChange={(value) =>
-                            field.onChange(value === "all" ? undefined : value)
+                            field.onChange(value === "all" ? null : value)
                           }
                           value={field.value || "all"}
                         >
@@ -736,7 +744,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                         <FormLabel>Position</FormLabel>
                         <Select
                           onValueChange={(value) =>
-                            field.onChange(value === "all" ? undefined : value)
+                            field.onChange(value === "all" ? null : value)
                           }
                           value={field.value || "all"}
                           disabled={!selectedSport}
