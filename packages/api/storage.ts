@@ -5224,6 +5224,7 @@ export class DatabaseStorage implements IStorage {
     athleteAttributes: {
       gender?: string;
       age?: number;
+      sport?: string;
       position?: string;
       level?: string;
     }
@@ -5260,6 +5261,16 @@ export class DatabaseStorage implements IStorage {
           or(
             isNull(tableName.ageMax),
             gte(tableName.ageMax, athleteAttributes.age)
+          )!
+        );
+      }
+
+      // Sport filter: NULL OR matches
+      if (athleteAttributes.sport) {
+        conditions.push(
+          or(
+            isNull(tableName.sport),
+            eq(tableName.sport, athleteAttributes.sport)
           )!
         );
       }

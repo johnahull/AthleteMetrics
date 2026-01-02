@@ -41,6 +41,8 @@ import {
   updateCustomBenchmarkSchema,
   type InsertCustomBenchmark,
   type CustomBenchmark,
+  type SiteSport,
+  type SitePosition,
 } from "@shared/schema";
 import { z } from "zod";
 import { useSports, usePositions } from "@/lib/sports-api";
@@ -93,8 +95,8 @@ export function CustomBenchmarkForm({
     gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
     ageMin: z.number().int().min(0).optional(),
     ageMax: z.number().int().min(0).optional(),
-    sport: z.string().max(50).optional(),
-    position: z.string().max(50).optional(),
+    sport: z.string().min(1).max(50).optional().nullable(),
+    position: z.string().min(1).max(50).optional().nullable(),
     level: z.string().max(50).optional(),
     isActive: z.boolean().default(true),
     displayOrder: z.number().int().optional(),
@@ -550,7 +552,7 @@ export function CustomBenchmarkForm({
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="all">All Sports</SelectItem>
-                            {sports.map((sport: any) => (
+                            {sports.map((sport: SiteSport) => (
                               <SelectItem key={sport.code} value={sport.code}>
                                 {sport.name}
                               </SelectItem>
@@ -586,7 +588,7 @@ export function CustomBenchmarkForm({
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="all">All Positions</SelectItem>
-                            {positions.map((position: any) => (
+                            {positions.map((position: SitePosition) => (
                               <SelectItem key={position.id} value={position.name}>
                                 {position.name}
                               </SelectItem>

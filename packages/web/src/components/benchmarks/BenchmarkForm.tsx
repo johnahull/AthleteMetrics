@@ -40,6 +40,8 @@ import {
   updateSiteBenchmarkSchema,
   type InsertSiteBenchmark,
   type SiteBenchmark,
+  type SiteSport,
+  type SitePosition,
 } from "@shared/schema";
 import { z } from "zod";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
@@ -710,7 +712,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="all">All Sports</SelectItem>
-                            {sports.map((sport: any) => (
+                            {sports.map((sport: SiteSport) => (
                               <SelectItem key={sport.code} value={sport.code}>
                                 {sport.name}
                               </SelectItem>
@@ -746,7 +748,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                           </FormControl>
                           <SelectContent>
                             <SelectItem value="all">All Positions</SelectItem>
-                            {positions.map((position: any) => (
+                            {positions.map((position: SitePosition) => (
                               <SelectItem key={position.id} value={position.name}>
                                 {position.name}
                               </SelectItem>
