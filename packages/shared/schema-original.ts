@@ -1814,7 +1814,8 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
-  position: z.string().max(50).optional(),
+  sport: z.string().min(1).max(50).optional().nullable(),
+  position: z.string().min(1).max(50).optional().nullable(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().optional(),
@@ -1828,6 +1829,15 @@ export const insertSiteBenchmarkSchema = createInsertSchema(siteBenchmarks).omit
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // Position requires sport to be set
+    if (data.position && data.position.trim() !== '') {
+      return data.sport && data.sport.trim() !== '';
+    }
+    return true;
+  },
+  { message: "Position requires sport to be set", path: ["position"] }
 ).refine(
   (data) => {
     // If comparison operator is 'range', minValue and maxValue are required
@@ -1881,7 +1891,8 @@ export const updateSiteBenchmarkSchema = z.object({
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
-  position: z.string().max(50).optional(),
+  sport: z.string().min(1).max(50).optional().nullable(),
+  position: z.string().min(1).max(50).optional().nullable(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
@@ -1895,6 +1906,15 @@ export const updateSiteBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // Position requires sport to be set
+    if (data.position && data.position.trim() !== '') {
+      return data.sport && data.sport.trim() !== '';
+    }
+    return true;
+  },
+  { message: "Position requires sport to be set", path: ["position"] }
 ).refine(
   (data) => {
     // When switching to range mode, both min and max must be provided
@@ -1936,7 +1956,8 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
-  position: z.string().max(50).optional(),
+  sport: z.string().min(1).max(50).optional().nullable(),
+  position: z.string().min(1).max(50).optional().nullable(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().default(true),
   displayOrder: z.number().int().optional(),
@@ -1950,6 +1971,15 @@ export const insertCustomBenchmarkSchema = createInsertSchema(customBenchmarks).
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // Position requires sport to be set
+    if (data.position && data.position.trim() !== '') {
+      return data.sport && data.sport.trim() !== '';
+    }
+    return true;
+  },
+  { message: "Position requires sport to be set", path: ["position"] }
 ).refine(
   (data) => {
     if (data.comparisonOperator === 'range') {
@@ -1999,7 +2029,8 @@ export const updateCustomBenchmarkSchema = z.object({
   gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
   ageMin: z.number().int().min(5).max(100).optional(),
   ageMax: z.number().int().min(5).max(100).optional(),
-  position: z.string().max(50).optional(),
+  sport: z.string().min(1).max(50).optional().nullable(),
+  position: z.string().min(1).max(50).optional().nullable(),
   level: z.string().max(50).optional(),
   isActive: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
@@ -2013,6 +2044,15 @@ export const updateCustomBenchmarkSchema = z.object({
     return true;
   },
   { message: "Age minimum must be less than or equal to age maximum", path: ["ageMin"] }
+).refine(
+  (data) => {
+    // Position requires sport to be set
+    if (data.position && data.position.trim() !== '') {
+      return data.sport && data.sport.trim() !== '';
+    }
+    return true;
+  },
+  { message: "Position requires sport to be set", path: ["position"] }
 ).refine(
   (data) => {
     // When switching to range mode, both min and max must be provided

@@ -32,6 +32,7 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
   ageMax: integer("age_max"),
+  sport: varchar("sport", { length: 50 }), // Sport code (e.g., "SOCCER", "BASKETBALL")
   position: varchar("position", { length: 50 }),
   level: varchar("level", { length: 50 }),
   // Control flags
@@ -88,6 +89,7 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
   ageMin: integer("age_min"),
   ageMax: integer("age_max"),
+  sport: varchar("sport", { length: 50 }), // Sport code (e.g., "SOCCER", "BASKETBALL")
   position: varchar("position", { length: 50 }),
   level: varchar("level", { length: 50 }),
   // Control flags

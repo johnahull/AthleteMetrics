@@ -4692,6 +4692,9 @@ export class DatabaseStorage implements IStorage {
     if (benchmark.gender !== undefined && benchmark.gender !== null) {
       insertValues.gender = benchmark.gender;
     }
+    if (benchmark.sport !== undefined && benchmark.sport !== null) {
+      insertValues.sport = benchmark.sport;
+    }
     if (benchmark.position !== undefined && benchmark.position !== null) {
       insertValues.position = benchmark.position;
     }
@@ -5224,6 +5227,7 @@ export class DatabaseStorage implements IStorage {
     athleteAttributes: {
       gender?: string;
       age?: number;
+      sport?: string;
       position?: string;
       level?: string;
     }
@@ -5260,6 +5264,16 @@ export class DatabaseStorage implements IStorage {
           or(
             isNull(tableName.ageMax),
             gte(tableName.ageMax, athleteAttributes.age)
+          )!
+        );
+      }
+
+      // Sport filter: NULL OR matches
+      if (athleteAttributes.sport) {
+        conditions.push(
+          or(
+            isNull(tableName.sport),
+            eq(tableName.sport, athleteAttributes.sport)
           )!
         );
       }
