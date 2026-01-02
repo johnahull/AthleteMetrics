@@ -43,6 +43,7 @@ import {
   type CustomBenchmark,
 } from "@shared/schema";
 import { z } from "zod";
+import { useSports, usePositions } from "@/lib/sports-api";
 
 interface CustomBenchmarkFormProps {
   open: boolean;
@@ -92,6 +93,7 @@ export function CustomBenchmarkForm({
     gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
     ageMin: z.number().int().min(0).optional(),
     ageMax: z.number().int().min(0).optional(),
+    sport: z.string().max(50).optional(),
     position: z.string().max(50).optional(),
     level: z.string().max(50).optional(),
     isActive: z.boolean().default(true),
@@ -130,6 +132,15 @@ export function CustomBenchmarkForm({
       return true;
     },
     { message: "Non-range benchmarks require a benchmarkValue", path: ["benchmarkValue"] }
+  ).refine(
+    (data) => {
+      // Position requires sport (validation constraint)
+      if (data.position && !data.sport) {
+        return false;
+      }
+      return true;
+    },
+    { message: "Position requires sport to be set", path: ["position"] }
   );
 
   type FormData = z.infer<typeof formSchema>;
@@ -147,6 +158,7 @@ export function CustomBenchmarkForm({
       gender: undefined,
       ageMin: undefined,
       ageMax: undefined,
+      sport: undefined,
       position: undefined,
       level: undefined,
       isActive: true,
@@ -158,6 +170,20 @@ export function CustomBenchmarkForm({
 
   // Watch comparison operator to conditionally show range fields
   const comparisonOperator = form.watch("comparisonOperator");
+  const selectedSport = form.watch("sport");
+
+  // Fetch available sports
+  const { data: sports = [] } = useSports();
+
+  // Fetch positions for selected sport
+  const { data: positions = [] } = usePositions(selectedSport || "");
+
+  // Clear position when sport changes
+  useEffect(() => {
+    if (!selectedSport) {
+      form.setValue("position", undefined);
+    }
+  }, [selectedSport, form]);
 
   useEffect(() => {
     if (benchmark) {
@@ -172,6 +198,7 @@ export function CustomBenchmarkForm({
         gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
+        sport: benchmark.sport || undefined,
         position: benchmark.position || undefined,
         level: benchmark.level || undefined,
         isActive: benchmark.isActive,
@@ -191,6 +218,7 @@ export function CustomBenchmarkForm({
         gender: undefined,
         ageMin: undefined,
         ageMax: undefined,
+        sport: undefined,
         position: undefined,
         level: undefined,
         isActive: true,
@@ -502,6 +530,41 @@ export function CustomBenchmarkForm({
                     />
                   </div>
 
+                  {/* Sport */}
+                  <FormField
+                    control={form.control}
+                    name="sport"
+                    render={({ field }) => (
+                      <FormItem className="mb-4">
+                        <FormLabel>Sport</FormLabel>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? undefined : value)
+                          }
+                          value={field.value || "all"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All sports" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Sports</SelectItem>
+                            {sports.map((sport: any) => (
+                              <SelectItem key={sport.code} value={sport.code}>
+                                {sport.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Leave as "All Sports" to apply to athletes in any sport
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   {/* Position */}
                   <FormField
                     control={form.control}
@@ -509,14 +572,32 @@ export function CustomBenchmarkForm({
                     render={({ field }) => (
                       <FormItem className="mb-4">
                         <FormLabel>Position</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            value={field.value || ""}
-                            placeholder="e.g., Forward, Defense"
-                          />
-                        </FormControl>
-                        <FormDescription>Specific position or role</FormDescription>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? undefined : value)
+                          }
+                          value={field.value || "all"}
+                          disabled={!selectedSport}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={selectedSport ? "All positions" : "Select sport first"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Positions</SelectItem>
+                            {positions.map((position: any) => (
+                              <SelectItem key={position.id} value={position.name}>
+                                {position.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {selectedSport
+                            ? "Leave as \"All Positions\" to apply to athletes in any position"
+                            : "Select a sport first to filter by position"}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

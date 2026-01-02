@@ -16,6 +16,7 @@ describe('Benchmark Schema', () => {
         gender: 'Male' as const,
         ageMin: 18,
         ageMax: 22,
+        sport: 'SOCCER',
         position: 'Forward',
         level: 'College',
         isActive: true,

@@ -83,6 +83,7 @@ export function BenchmarkCard({ benchmark, onEdit }: BenchmarkCardProps) {
 
   // Format athlete filters
   const athleteFilters: string[] = [];
+  if (benchmark.sport) athleteFilters.push(`Sport: ${benchmark.sport}`);
   if (benchmark.gender) athleteFilters.push(`Gender: ${benchmark.gender}`);
   if (benchmark.ageMin || benchmark.ageMax) {
     if (benchmark.ageMin && benchmark.ageMax) {

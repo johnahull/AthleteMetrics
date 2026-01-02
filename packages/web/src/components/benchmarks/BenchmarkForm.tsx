@@ -43,6 +43,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
+import { useSports, usePositions } from "@/lib/sports-api";
 
 // Tier color options
 const TIER_COLORS = [
@@ -100,6 +101,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
       gender: undefined,
       ageMin: undefined,
       ageMax: undefined,
+      sport: undefined,
       position: undefined,
       level: undefined,
       applicableOrgTypes: undefined,
@@ -113,6 +115,20 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   // Watch comparison operator to conditionally show range fields
   const comparisonOperator = form.watch("comparisonOperator");
   const selectedMetricCode = form.watch("metricCode");
+  const selectedSport = form.watch("sport");
+
+  // Fetch available sports
+  const { data: sports = [] } = useSports();
+
+  // Fetch positions for selected sport
+  const { data: positions = [] } = usePositions(selectedSport || "");
+
+  // Clear position when sport changes
+  useEffect(() => {
+    if (!selectedSport) {
+      form.setValue("position", undefined);
+    }
+  }, [selectedSport, form]);
 
   // Clear tier fields when tier mode is disabled or when switching away from range
   useEffect(() => {
@@ -158,6 +174,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
+        sport: benchmark.sport || undefined,
         position: benchmark.position || undefined,
         level: benchmark.level || undefined,
         applicableOrgTypes: benchmark.applicableOrgTypes || undefined,
@@ -183,6 +200,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: undefined,
         ageMin: undefined,
         ageMax: undefined,
+        sport: undefined,
         position: undefined,
         level: undefined,
         applicableOrgTypes: undefined,
@@ -672,6 +690,41 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                     />
                   </div>
 
+                  {/* Sport */}
+                  <FormField
+                    control={form.control}
+                    name="sport"
+                    render={({ field }) => (
+                      <FormItem className="mb-4">
+                        <FormLabel>Sport</FormLabel>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? undefined : value)
+                          }
+                          value={field.value || "all"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All sports" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Sports</SelectItem>
+                            {sports.map((sport: any) => (
+                              <SelectItem key={sport.code} value={sport.code}>
+                                {sport.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Leave as "All Sports" to apply to athletes in any sport
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   {/* Position */}
                   <FormField
                     control={form.control}
@@ -679,14 +732,32 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                     render={({ field }) => (
                       <FormItem className="mb-4">
                         <FormLabel>Position</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            value={field.value || ""}
-                            placeholder="e.g., Forward, Defense"
-                          />
-                        </FormControl>
-                        <FormDescription>Specific position or role</FormDescription>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? undefined : value)
+                          }
+                          value={field.value || "all"}
+                          disabled={!selectedSport}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={selectedSport ? "All positions" : "Select sport first"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Positions</SelectItem>
+                            {positions.map((position: any) => (
+                              <SelectItem key={position.id} value={position.name}>
+                                {position.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {selectedSport
+                            ? "Leave as \"All Positions\" to apply to athletes in any position"
+                            : "Select a sport first to filter by position"}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
