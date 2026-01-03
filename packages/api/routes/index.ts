@@ -11,6 +11,7 @@ import { registerAthleteRoutes } from "./athlete-routes";
 import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
+import { registerCustomOrgMetricRoutes } from "./custom-org-metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerBenchmarkAnalyticsRoutes } from "./benchmark-analytics-routes";
 import { registerReportRoutes } from "./report-routes";
@@ -79,6 +80,9 @@ export function registerAllRoutes(app: Express) {
 
   // Metric management routes
   registerMetricRoutes(app);
+
+  // Custom organization metric routes
+  registerCustomOrgMetricRoutes(app);
 
   // Benchmark management routes
   registerBenchmarkRoutes(app);

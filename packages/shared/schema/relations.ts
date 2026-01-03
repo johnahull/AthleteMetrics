@@ -17,6 +17,7 @@ const {
   userTeams,
   siteMetrics,
   organizationMetrics,
+  customOrgMetrics,
   siteSports,
   sitePositions,
   siteBenchmarks,
@@ -70,6 +71,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   invitations: many(invitations),
   membershipRequests: many(membershipRequests),
   organizationMetrics: many(organizationMetrics),
+  customOrgMetrics: many(customOrgMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
   reports: many(reports),
@@ -95,6 +97,18 @@ export const organizationMetricsRelations = relations(organizationMetrics, ({ on
   siteMetric: one(siteMetrics, {
     fields: [organizationMetrics.metricCode],
     references: [siteMetrics.code],
+  }),
+}));
+
+
+export const customOrgMetricsRelations = relations(customOrgMetrics, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [customOrgMetrics.organizationId],
+    references: [organizations.id],
+  }),
+  createdBy: one(users, {
+    fields: [customOrgMetrics.createdBy],
+    references: [users.id],
   }),
 }));
 

@@ -7,7 +7,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { db } from '../db';
-import { measurements, users, siteMetrics, organizations, userOrganizations } from '@shared/schema';
+import { measurements, users, siteMetrics, organizations, userOrganizations, customOrgMetrics } from '@shared/schema';
 import { DerivedMetricCalculator } from '../services/derived-metric-calculator';
 import { eq, and } from 'drizzle-orm';
 
@@ -1319,6 +1319,391 @@ describe('DerivedMetricCalculator', () => {
       await db.delete(userOrganizations).where(eq(userOrganizations.userId, user2.id));
       await db.delete(users).where(eq(users.id, user2.id));
       await db.delete(organizations).where(eq(organizations.id, org2.id));
+    });
+  });
+
+  // ========================================================================
+  // CUSTOM ORGANIZATION METRICS TESTS
+  // ========================================================================
+
+  describe('Custom Organization Derived Metrics', () => {
+    let customDerivedMetric: typeof customOrgMetrics.$inferSelect;
+
+    beforeEach(async () => {
+      // Create a custom org derived metric that depends on FLY10_TIME
+      const [customMetric] = await db
+        .insert(customOrgMetrics)
+        .values({
+          organizationId: testOrg.id,
+          code: `ORG_${testOrg.id.substring(0, 8).toUpperCase()}_SPEED_INDEX`,
+          label: 'Custom Speed Index',
+          category: 'speed',
+          unit: 'index',
+          metricType: 'higher_is_better',
+          isDerived: true,
+          formula: '100 / FLY10_TIME',
+          dependentMetrics: ['FLY10_TIME'],
+          calculationConfig: {
+            dateMatchStrategy: 'same_date',
+            missingSourceBehavior: 'skip',
+          },
+          isActive: true,
+          createdBy: testUser.id,
+        })
+        .returning();
+      customDerivedMetric = customMetric;
+    });
+
+    afterEach(async () => {
+      // Cleanup custom metrics
+      await db.delete(customOrgMetrics).where(eq(customOrgMetrics.organizationId, testOrg.id));
+    });
+
+    it('should calculate custom org derived metrics when source measurement is created', async () => {
+      // Create source measurement (FLY10_TIME = 1.0s)
+      const [sourceMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.0',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      // Process the new measurement
+      const calculatedMeasurements = await calculator.processNewMeasurement(sourceMeasurement);
+
+      // Should create both site-level TOP_SPEED_CALC AND custom org metric
+      expect(calculatedMeasurements.length).toBeGreaterThanOrEqual(2);
+
+      // Find the custom org metric measurement
+      const customCalc = calculatedMeasurements.find(m => m.metric === customDerivedMetric.code);
+      expect(customCalc).toBeDefined();
+      expect(customCalc!.isCalculated).toBe(true);
+      expect(customCalc!.organizationId).toBe(testOrg.id);
+
+      // SPEED_INDEX = 100 / 1.0 = 100
+      expect(parseFloat(customCalc!.value)).toBeCloseTo(100, 2);
+    });
+
+    it('should only calculate custom org derived metrics for measurements in that org', async () => {
+      // Create a second organization
+      const [org2] = await db
+        .insert(organizations)
+        .values({
+          name: `Org 2 ${Date.now()}`,
+          description: 'Second test organization',
+          orgType: 'college',
+        })
+        .returning();
+
+      // Create athlete in second org
+      const [user2] = await db
+        .insert(users)
+        .values({
+          username: `athlete_org2_${Date.now()}`,
+          emails: ['athlete_org2@test.com'],
+          password: 'hashedpassword',
+          firstName: 'Test',
+          lastName: 'Athlete2',
+          fullName: 'Test Athlete2',
+          birthDate: '2001-01-01',
+          birthYear: 2001,
+          isSiteAdmin: false,
+          isActive: true,
+        })
+        .returning();
+
+      await db.insert(userOrganizations).values({
+        userId: user2.id,
+        organizationId: org2.id,
+        role: 'athlete',
+      });
+
+      // Create source measurement for athlete in org2 (not testOrg)
+      const [sourceMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: user2.id,
+          submittedBy: user2.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.0',
+          units: 's',
+          age: 23,
+          isVerified: true,
+          organizationId: org2.id,
+        })
+        .returning();
+
+      // Process the new measurement
+      const calculatedMeasurements = await calculator.processNewMeasurement(sourceMeasurement);
+
+      // Should NOT include the custom org metric from testOrg
+      const customCalc = calculatedMeasurements.find(m => m.metric === customDerivedMetric.code);
+      expect(customCalc).toBeUndefined();
+
+      // Should still include site-level TOP_SPEED_CALC
+      const siteCalc = calculatedMeasurements.find(m => m.metric === 'TOP_SPEED_CALC');
+      expect(siteCalc).toBeDefined();
+
+      // Cleanup
+      await db.delete(measurements).where(eq(measurements.userId, user2.id));
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, user2.id));
+      await db.delete(users).where(eq(users.id, user2.id));
+      await db.delete(organizations).where(eq(organizations.id, org2.id));
+    });
+
+    it('should allow custom org derived metrics to depend on other custom org metrics', async () => {
+      // Create a non-derived custom metric first
+      const [customSourceMetric] = await db
+        .insert(customOrgMetrics)
+        .values({
+          organizationId: testOrg.id,
+          code: `ORG_${testOrg.id.substring(0, 8).toUpperCase()}_CUSTOM_TIME`,
+          label: 'Custom Time Metric',
+          category: 'speed',
+          unit: 's',
+          metricType: 'lower_is_better',
+          isDerived: false,
+          isActive: true,
+          createdBy: testUser.id,
+        })
+        .returning();
+
+      // Create derived metric that depends on the custom source
+      const [customDerived2] = await db
+        .insert(customOrgMetrics)
+        .values({
+          organizationId: testOrg.id,
+          code: `ORG_${testOrg.id.substring(0, 8).toUpperCase()}_CUSTOM_SCORE`,
+          label: 'Custom Score',
+          category: 'speed',
+          unit: 'score',
+          metricType: 'higher_is_better',
+          isDerived: true,
+          formula: `50 / ${customSourceMetric.code}`,
+          dependentMetrics: [customSourceMetric.code],
+          calculationConfig: {
+            dateMatchStrategy: 'same_date',
+            missingSourceBehavior: 'skip',
+          },
+          isActive: true,
+          createdBy: testUser.id,
+        })
+        .returning();
+
+      // Create source measurement for the custom non-derived metric
+      const [sourceMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: customSourceMetric.code,
+          value: '2.5',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      // Process the new measurement
+      const calculatedMeasurements = await calculator.processNewMeasurement(sourceMeasurement);
+
+      // Should create the derived custom metric
+      const customCalc = calculatedMeasurements.find(m => m.metric === customDerived2.code);
+      expect(customCalc).toBeDefined();
+      expect(customCalc!.isCalculated).toBe(true);
+
+      // CUSTOM_SCORE = 50 / 2.5 = 20
+      expect(parseFloat(customCalc!.value)).toBeCloseTo(20, 2);
+
+      // Cleanup - delete measurements for custom metrics
+      await db.delete(measurements).where(
+        and(
+          eq(measurements.userId, testUser.id),
+          eq(measurements.metric, customSourceMetric.code)
+        )
+      );
+      await db.delete(measurements).where(
+        and(
+          eq(measurements.userId, testUser.id),
+          eq(measurements.metric, customDerived2.code)
+        )
+      );
+    });
+
+    it('should recalculate custom org derived metrics when source changes', async () => {
+      // Create initial source measurement
+      const [initialSource] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: 'FLY10_TIME',
+          value: '1.0',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      // Process to create calculated measurement
+      await calculator.processNewMeasurement(initialSource);
+
+      // Verify custom calculated measurement exists
+      const [initialCalculated] = await db
+        .select()
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, testUser.id),
+            eq(measurements.metric, customDerivedMetric.code),
+            eq(measurements.date, '2024-01-15')
+          )
+        );
+
+      expect(initialCalculated).toBeDefined();
+      expect(parseFloat(initialCalculated.value)).toBeCloseTo(100, 2);
+
+      // Update source measurement
+      await db
+        .update(measurements)
+        .set({ value: '2.0' })
+        .where(eq(measurements.id, initialSource.id));
+
+      // Recalculate
+      await calculator.recalculateForAthlete(testUser.id, 'FLY10_TIME', '2024-01-15');
+
+      // Verify calculated measurement updated
+      const [updatedCalculated] = await db
+        .select()
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, testUser.id),
+            eq(measurements.metric, customDerivedMetric.code),
+            eq(measurements.date, '2024-01-15')
+          )
+        );
+
+      // SPEED_INDEX = 100 / 2.0 = 50
+      expect(parseFloat(updatedCalculated.value)).toBeCloseTo(50, 2);
+    });
+
+    it('should use custom org metric configs for best value selection', async () => {
+      // Create custom org metric with lower_is_better type
+      const [customLowerMetric] = await db
+        .insert(customOrgMetrics)
+        .values({
+          organizationId: testOrg.id,
+          code: `ORG_${testOrg.id.substring(0, 8).toUpperCase()}_CUSTOM_TIME_METRIC`,
+          label: 'Custom Time',
+          category: 'speed',
+          unit: 's',
+          metricType: 'lower_is_better',
+          isDerived: false,
+          isActive: true,
+          createdBy: testUser.id,
+        })
+        .returning();
+
+      // Create derived metric depending on it
+      const [customDerivedLower] = await db
+        .insert(customOrgMetrics)
+        .values({
+          organizationId: testOrg.id,
+          code: `ORG_${testOrg.id.substring(0, 8).toUpperCase()}_DERIVED_FROM_LOWER`,
+          label: 'Derived From Lower',
+          category: 'speed',
+          unit: 'score',
+          metricType: 'higher_is_better',
+          isDerived: true,
+          formula: `100 / ${customLowerMetric.code}`,
+          dependentMetrics: [customLowerMetric.code],
+          calculationConfig: {
+            dateMatchStrategy: 'same_date',
+            missingSourceBehavior: 'skip',
+          },
+          isActive: true,
+          createdBy: testUser.id,
+        })
+        .returning();
+
+      // Create multiple source measurements (1.5, 1.0, 1.3 - best is 1.0 for lower_is_better)
+      await db.insert(measurements).values([
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: customLowerMetric.code,
+          value: '1.5',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+        {
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: customLowerMetric.code,
+          value: '1.3',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        },
+      ]);
+
+      // Trigger with the best value
+      const [triggerMeasurement] = await db
+        .insert(measurements)
+        .values({
+          userId: testUser.id,
+          submittedBy: testUser.id,
+          date: '2024-01-15',
+          metric: customLowerMetric.code,
+          value: '1.0',
+          units: 's',
+          age: 24,
+          isVerified: true,
+          organizationId: testOrg.id,
+        })
+        .returning();
+
+      const calculatedMeasurements = await calculator.processNewMeasurement(triggerMeasurement);
+
+      // Find the derived metric
+      const derivedCalc = calculatedMeasurements.find(m => m.metric === customDerivedLower.code);
+      expect(derivedCalc).toBeDefined();
+
+      // Should use best value (1.0): 100 / 1.0 = 100
+      expect(parseFloat(derivedCalc!.value)).toBeCloseTo(100, 2);
+
+      // Cleanup
+      await db.delete(measurements).where(
+        and(
+          eq(measurements.userId, testUser.id),
+          eq(measurements.metric, customLowerMetric.code)
+        )
+      );
+      await db.delete(measurements).where(
+        and(
+          eq(measurements.userId, testUser.id),
+          eq(measurements.metric, customDerivedLower.code)
+        )
+      );
     });
   });
 });
