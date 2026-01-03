@@ -92,7 +92,7 @@ export const siteSports = pgTable("site_sports", {
 
 // Organization-specific custom metrics (org-private, not shared across orgs)
 export const customOrgMetrics = pgTable("custom_org_metrics", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").notNull()
     .references(() => organizations.id, { onDelete: 'cascade' }),
 
@@ -139,7 +139,6 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
 }, (table) => ({
   uniqueOrgCode: unique("custom_org_metrics_org_code_unique")
     .on(table.organizationId, table.code),
-  orgIdx: index("custom_org_metrics_org_idx").on(table.organizationId),
   orgActiveIdx: index("custom_org_metrics_org_active_idx")
     .on(table.organizationId, table.isActive),
   codeIdx: index("custom_org_metrics_code_idx").on(table.code),

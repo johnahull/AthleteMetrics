@@ -3,8 +3,8 @@
 -- Description: Allows organizations to create private, custom metrics with full configuration
 
 -- Create custom_org_metrics table
-CREATE TABLE custom_org_metrics (
-  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+CREATE TABLE IF NOT EXISTS custom_org_metrics (
+  id VARCHAR(36) PRIMARY KEY DEFAULT gen_random_uuid(),
   organization_id VARCHAR NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
 
   -- Metric identity
@@ -49,10 +49,9 @@ CREATE TABLE custom_org_metrics (
 );
 
 -- Indexes for query performance
-CREATE INDEX idx_custom_org_metrics_org ON custom_org_metrics(organization_id);
-CREATE INDEX idx_custom_org_metrics_org_active ON custom_org_metrics(organization_id, is_active);
-CREATE INDEX idx_custom_org_metrics_code ON custom_org_metrics(code);
-CREATE INDEX idx_custom_org_metrics_derived ON custom_org_metrics(is_derived) WHERE is_derived = true;
+CREATE INDEX IF NOT EXISTS idx_custom_org_metrics_org_active ON custom_org_metrics(organization_id, is_active);
+CREATE INDEX IF NOT EXISTS idx_custom_org_metrics_code ON custom_org_metrics(code);
+CREATE INDEX IF NOT EXISTS idx_custom_org_metrics_derived ON custom_org_metrics(is_derived) WHERE is_derived = true;
 
 -- Comments for documentation
 COMMENT ON TABLE custom_org_metrics IS 'Organization-private custom metrics (org-scoped, not shared across orgs)';
