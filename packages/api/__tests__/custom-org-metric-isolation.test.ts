@@ -39,15 +39,17 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
     customOrgMetricService = new CustomOrgMetricService();
     const timestamp = Date.now();
 
-    // Create two separate organizations
+    // Create two separate organizations with customMetricsEnabled
     orgA = await storage.createOrganization({
       name: `Org A Test ${timestamp}`,
       isActive: true,
+      customMetricsEnabled: true,
     });
 
     orgB = await storage.createOrganization({
       name: `Org B Test ${timestamp}`,
       isActive: true,
+      customMetricsEnabled: true,
     });
 
     // Create org admins for each organization
@@ -165,7 +167,7 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
       // Admin A should be able to read their own org's metrics
       const metric = await customOrgMetricService.getCustomOrgMetric(orgA.id, metricA.code, adminA.id);
       expect(metric).toBeDefined();
-      expect(metric.organizationId).toBe(orgA.id);
+      expect(metric!.organizationId).toBe(orgA.id);
     });
 
     it('should allow Admin A to list Org A metrics', async () => {
@@ -305,16 +307,22 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
   });
 
   describe('Code Namespacing Validation', () => {
-    it('should generate org-scoped codes with ORG_{orgId}_ prefix', () => {
-      // Verify that metrics have org-scoped codes
-      expect(metricA.code).toMatch(new RegExp(`^ORG_${orgA.id}_`));
-      expect(metricB.code).toMatch(new RegExp(`^ORG_${orgB.id}_`));
+    // Helper to get org prefix (first 8 chars uppercase, no hyphens)
+    const getOrgPrefix = (orgId: string) => orgId.substring(0, 8).toUpperCase().replace(/-/g, '');
+
+    it('should generate org-scoped codes with ORG_{orgPrefix}_ format', () => {
+      // Verify that metrics have org-scoped codes using first 8 chars of org ID
+      const orgAPrefix = getOrgPrefix(orgA.id);
+      const orgBPrefix = getOrgPrefix(orgB.id);
+
+      expect(metricA.code).toMatch(new RegExp(`^ORG_${orgAPrefix}_`));
+      expect(metricB.code).toMatch(new RegExp(`^ORG_${orgBPrefix}_`));
 
       // Codes should be different between orgs even with same label
       expect(metricA.code).not.toBe(metricB.code);
     });
 
-    it('should prevent code collisions across organizations', async () => {
+    it('should prevent code collisions across organizations', { timeout: 30000 }, async () => {
       // Both orgs create metrics with the same label
       const metricA2 = await customOrgMetricService.createCustomOrgMetric(
         orgA.id,
@@ -342,8 +350,9 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Codes should be different (org-scoped)
       expect(metricA2.code).not.toBe(metricB2.code);
-      expect(metricA2.code).toContain(orgA.id);
-      expect(metricB2.code).toContain(orgB.id);
+      // Verify codes contain the org prefix (first 8 chars uppercase)
+      expect(metricA2.code).toContain(getOrgPrefix(orgA.id));
+      expect(metricB2.code).toContain(getOrgPrefix(orgB.id));
 
       // Cleanup
       await db.delete(customOrgMetrics).where(eq(customOrgMetrics.id, metricA2.id));

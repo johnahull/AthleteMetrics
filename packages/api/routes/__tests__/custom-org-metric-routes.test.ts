@@ -66,12 +66,14 @@ describe("Custom Org Metrics API Routes", () => {
     const [org1] = await db.insert(organizations).values({
       name: `Test Org API ${uniqueSuffix}`,
       description: 'Test org for API tests',
+      customMetricsEnabled: true,
     }).returning();
     testOrgId = org1.id;
 
     const [org2] = await db.insert(organizations).values({
       name: `Test Org 2 API ${uniqueSuffix}`,
       description: 'Second test org',
+      customMetricsEnabled: true,
     }).returning();
     testOrgId2 = org2.id;
 
