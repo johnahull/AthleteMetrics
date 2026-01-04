@@ -142,22 +142,22 @@ describe('CustomOrgMetricService', () => {
   // ========================================================================
 
   describe('generateMetricCode', () => {
-    it('should generate code with org prefix and label', () => {
-      const code = customMetricService.generateMetricCode(testOrgId, 'Sprint 15m');
+    it('should generate code with org prefix and label', async () => {
+      const code = await customMetricService.generateMetricCode(testOrgId, 'Sprint 15m');
 
       expect(code).toMatch(/^ORG_[A-Z0-9]+_SPRINT_15M$/);
       expect(code.length).toBeLessThanOrEqual(100);
     });
 
-    it('should handle special characters in label', () => {
-      const code = customMetricService.generateMetricCode(testOrgId, "Player's Speed (fast!)");
+    it('should handle special characters in label', async () => {
+      const code = await customMetricService.generateMetricCode(testOrgId, "Player's Speed (fast!)");
 
       expect(code).toMatch(/^ORG_[A-Z0-9]+_PLAYERS_SPEED_FAST$/);
     });
 
-    it('should truncate long labels', () => {
+    it('should truncate long labels', async () => {
       const longLabel = 'This is a very long metric label that should be truncated';
-      const code = customMetricService.generateMetricCode(testOrgId, longLabel);
+      const code = await customMetricService.generateMetricCode(testOrgId, longLabel);
 
       expect(code.length).toBeLessThanOrEqual(100);
     });
@@ -226,20 +226,26 @@ describe('CustomOrgMetricService', () => {
       ).rejects.toThrow(/Unauthorized|access/i);
     });
 
-    it('should reject duplicate labels in same org', async () => {
-      await customMetricService.createCustomOrgMetric(
+    it('should allow duplicate labels with auto-incremented code', async () => {
+      // Create first metric with a label
+      const metric1 = await customMetricService.createCustomOrgMetric(
         testOrgId,
         { label: 'Duplicate Test', metricType: 'tracking' },
         orgAdminUserId
       );
 
-      await expect(
-        customMetricService.createCustomOrgMetric(
-          testOrgId,
-          { label: 'Duplicate Test', metricType: 'tracking' },
-          orgAdminUserId
-        )
-      ).rejects.toThrow(/already exists|duplicate/i);
+      // Create second metric with same label - should succeed with _2 suffix
+      const metric2 = await customMetricService.createCustomOrgMetric(
+        testOrgId,
+        { label: 'Duplicate Test', metricType: 'tracking' },
+        orgAdminUserId
+      );
+
+      // Both metrics should exist with different codes
+      expect(metric1.code).toMatch(/^ORG_[A-Z0-9]+_DUPLICATE_TEST$/);
+      expect(metric2.code).toMatch(/^ORG_[A-Z0-9]+_DUPLICATE_TEST_2$/);
+      expect(metric1.label).toBe('Duplicate Test');
+      expect(metric2.label).toBe('Duplicate Test');
     });
 
     it('should allow same label in different orgs', async () => {
