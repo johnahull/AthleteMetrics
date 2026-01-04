@@ -31,6 +31,8 @@ export const organizations = pgTable("organizations", {
   autoApproveRequests: boolean("auto_approve_requests").default(false).notNull(),
   // Events module feature flag (added in migration 0079)
   eventsEnabled: boolean("events_enabled").default(false).notNull(),
+  // Custom organization metrics feature flag (added in migration 0093)
+  customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

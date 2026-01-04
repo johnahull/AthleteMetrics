@@ -7,7 +7,7 @@
 
 import { BaseService } from "./base-service";
 import { db } from "../db";
-import { customOrgMetrics, siteMetrics, measurements, userOrganizations } from "@shared/schema";
+import { customOrgMetrics, siteMetrics, measurements, userOrganizations, organizations } from "@shared/schema";
 import { eq, and, count, sql, or } from "drizzle-orm";
 import type { CustomOrgMetric } from "@shared/schema";
 import { validateFormula, detectCircularDependencies } from "./formula-service";
@@ -111,6 +111,38 @@ export class CustomOrgMetricService extends BaseService {
     return !!userOrg;
   }
 
+  /**
+   * Check if custom metrics feature is enabled for an organization
+   */
+  private async isCustomMetricsEnabled(organizationId: string): Promise<boolean> {
+    const [org] = await db.select({ customMetricsEnabled: organizations.customMetricsEnabled })
+      .from(organizations)
+      .where(eq(organizations.id, organizationId))
+      .limit(1);
+
+    return org?.customMetricsEnabled ?? false;
+  }
+
+  /**
+   * Throws an error if custom metrics are not enabled for the organization
+   * Site admins can bypass this check for read operations
+   */
+  private async ensureCustomMetricsEnabled(
+    organizationId: string,
+    userId: string,
+    allowSiteAdminBypass: boolean = false
+  ): Promise<void> {
+    // Allow site admins to bypass for read operations
+    if (allowSiteAdminBypass && await this.isSiteAdmin(userId)) {
+      return;
+    }
+
+    const enabled = await this.isCustomMetricsEnabled(organizationId);
+    if (!enabled) {
+      throw new Error("Custom metrics feature is not enabled for this organization");
+    }
+  }
+
   // ========================================================================
   // CREATE
   // ========================================================================
@@ -124,6 +156,9 @@ export class CustomOrgMetricService extends BaseService {
     requestingUserId: string
   ): Promise<CustomOrgMetric> {
     try {
+      // Check feature flag - custom metrics must be enabled for this org
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, false);
+
       // Check authorization - only org admins can create metrics
       if (!(await this.isOrgAdmin(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: Only organization administrators can create custom metrics");
@@ -210,6 +245,9 @@ export class CustomOrgMetricService extends BaseService {
     filters?: CustomOrgMetricFilters
   ): Promise<CustomOrgMetric[]> {
     try {
+      // Check feature flag - site admins can bypass for viewing
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, true);
+
       // Check authorization - org members can view metrics
       if (!(await this.hasOrgAccess(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: No access to this organization");
@@ -247,6 +285,9 @@ export class CustomOrgMetricService extends BaseService {
     requestingUserId: string
   ): Promise<CustomOrgMetric | undefined> {
     try {
+      // Check feature flag - site admins can bypass for viewing
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, true);
+
       // Check authorization
       if (!(await this.hasOrgAccess(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: No access to this organization");
@@ -298,6 +339,9 @@ export class CustomOrgMetricService extends BaseService {
     requestingUserId: string
   ): Promise<CustomOrgMetric> {
     try {
+      // Check feature flag - custom metrics must be enabled for this org
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, false);
+
       // Check authorization - only org admins can update
       if (!(await this.isOrgAdmin(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: Only organization administrators can update custom metrics");
@@ -362,6 +406,9 @@ export class CustomOrgMetricService extends BaseService {
     requestingUserId: string
   ): Promise<CustomOrgMetric> {
     try {
+      // Check feature flag - custom metrics must be enabled for this org
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, false);
+
       // Check authorization
       if (!(await this.isOrgAdmin(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: Only organization administrators can archive custom metrics");
@@ -398,6 +445,9 @@ export class CustomOrgMetricService extends BaseService {
     requestingUserId: string
   ): Promise<CustomOrgMetric> {
     try {
+      // Check feature flag - custom metrics must be enabled for this org
+      await this.ensureCustomMetricsEnabled(organizationId, requestingUserId, false);
+
       // Check authorization
       if (!(await this.isOrgAdmin(requestingUserId, organizationId))) {
         throw new Error("Unauthorized: Only organization administrators can restore custom metrics");

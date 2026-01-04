@@ -20,6 +20,8 @@ import type { CustomOrgMetric } from "@shared/schema";
 
 interface CustomOrgMetricListProps {
   organizationId: string;
+  /** When true, hides the page header and info banner (for embedding in parent page) */
+  embedded?: boolean;
 }
 
 const METRIC_CATEGORIES = [
@@ -36,7 +38,7 @@ const METRIC_CATEGORIES = [
   { value: "custom", label: "Custom" },
 ];
 
-export function CustomOrgMetricList({ organizationId }: CustomOrgMetricListProps) {
+export function CustomOrgMetricList({ organizationId, embedded = false }: CustomOrgMetricListProps) {
   const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
   const [editingMetric, setEditingMetric] = useState<CustomOrgMetric | null>(null);
@@ -98,41 +100,55 @@ export function CustomOrgMetricList({ organizationId }: CustomOrgMetricListProps
   }
 
   return (
-    <div className="container mx-auto p-6">
-      {/* Header */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-3xl font-bold">Custom Metrics</h1>
-          <p className="text-muted-foreground mt-1">
-            Create organization-specific metrics tailored to your needs
-          </p>
+    <div className={embedded ? "" : "container mx-auto p-6"}>
+      {/* Header - hidden when embedded */}
+      {!embedded && (
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h1 className="text-3xl font-bold">Custom Metrics</h1>
+            <p className="text-muted-foreground mt-1">
+              Create organization-specific metrics tailored to your needs
+            </p>
+          </div>
+          {canEditMetrics && (
+            <Button onClick={handleNewMetric} data-testid="new-custom-metric-button">
+              <Plus className="mr-2 h-4 w-4" />
+              New Custom Metric
+            </Button>
+          )}
         </div>
-        {canEditMetrics && (
+      )}
+
+      {/* Embedded header with just the button */}
+      {embedded && canEditMetrics && (
+        <div className="flex justify-end mb-4">
           <Button onClick={handleNewMetric} data-testid="new-custom-metric-button">
             <Plus className="mr-2 h-4 w-4" />
             New Custom Metric
           </Button>
-        )}
-      </div>
+        </div>
+      )}
 
-      {/* Info Banner */}
-      <Card className="mb-6 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
-        <CardContent className="pt-6">
-          <div className="flex gap-3">
-            <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-            <div>
-              <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
-                Organization-Specific Metrics
-              </p>
-              <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-                Custom metrics are only visible to your organization and can be used for
-                measurements, analytics, and benchmarks. You can also create derived metrics
-                that automatically calculate from other measurements.
-              </p>
+      {/* Info Banner - hidden when embedded */}
+      {!embedded && (
+        <Card className="mb-6 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+          <CardContent className="pt-6">
+            <div className="flex gap-3">
+              <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  Organization-Specific Metrics
+                </p>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
+                  Custom metrics are only visible to your organization and can be used for
+                  measurements, analytics, and benchmarks. You can also create derived metrics
+                  that automatically calculate from other measurements.
+                </p>
+              </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card className="mb-6">

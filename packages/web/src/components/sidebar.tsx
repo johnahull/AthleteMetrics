@@ -76,7 +76,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
-    { name: "Custom Metrics", href: "/organizations/__ORG_ID__/custom-metrics", icon: Ruler },
+    { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler },
     { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings }
   ],
   coach: [
@@ -151,11 +151,11 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     }
   }
 
-  // Update custom metrics link with organization ID for org_admin
+  // Update metrics link with organization ID for org_admin
   if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
-    const customMetricsIndex = navigation.findIndex(item => item.name === "Custom Metrics");
-    if (customMetricsIndex !== -1) {
-      navigation[customMetricsIndex].href = `/organizations/${userOrganizations[0].organizationId}/custom-metrics`;
+    const metricsIndex = navigation.findIndex(item => item.name === "Metrics");
+    if (metricsIndex !== -1) {
+      navigation[metricsIndex].href = `/organizations/${userOrganizations[0].organizationId}/metrics`;
     }
   }
 

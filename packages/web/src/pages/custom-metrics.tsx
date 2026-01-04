@@ -1,30 +1,20 @@
+/**
+ * Legacy Custom Metrics Page
+ *
+ * This page now redirects to the unified Metrics Configuration page.
+ * Kept for backwards compatibility with bookmarks and external links.
+ */
+
 import { useParams, Redirect } from "wouter";
-import { CustomOrgMetricList } from "@/components/custom-metrics";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { useAuth } from "@/lib/auth";
 
 export default function CustomMetricsPage() {
   const { id } = useParams();
-  const { user, userOrganizations, isLoading } = useAuth();
 
+  // Handle missing ID parameter
   if (!id) {
-    return <LoadingSpinner text="Loading custom metrics..." />;
-  }
-
-  // Wait for auth to load
-  if (isLoading) {
-    return <LoadingSpinner text="Loading..." />;
-  }
-
-  // Check if user has access (site admin or org admin for this org)
-  const hasAccess = user?.isSiteAdmin ||
-    userOrganizations?.some(o =>
-      o.organizationId === id && o.role === 'org_admin'
-    );
-
-  if (!hasAccess) {
     return <Redirect to="/" />;
   }
 
-  return <CustomOrgMetricList organizationId={id} />;
+  // Redirect to the new unified metrics page
+  return <Redirect to={`/organizations/${id}/metrics`} />;
 }

@@ -29,16 +29,18 @@ describe('CustomOrgMetricService', () => {
     // Create unique suffix to avoid race conditions
     const uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
-    // Create test organizations
+    // Create test organizations with custom metrics enabled
     const [org1] = await db.insert(organizations).values({
       name: `Test Org 1 ${uniqueSuffix}`,
       description: 'Test organization for custom metric tests',
+      customMetricsEnabled: true, // Enable custom metrics for testing
     }).returning();
     testOrgId = org1.id;
 
     const [org2] = await db.insert(organizations).values({
       name: `Test Org 2 ${uniqueSuffix}`,
       description: 'Second test organization',
+      customMetricsEnabled: true, // Enable custom metrics for testing
     }).returning();
     testOrgId2 = org2.id;
 
