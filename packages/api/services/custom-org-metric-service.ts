@@ -191,8 +191,11 @@ export class CustomOrgMetricService extends BaseService {
         throw new Error("Unauthorized: Only organization administrators can create custom metrics");
       }
 
-      // Generate unique code from label (includes collision detection)
-      const code = await this.generateMetricCode(organizationId, data.label);
+      // Check for duplicate label (Issue #5 fix)
+      const existingByLabel = await this.getCustomOrgMetricByLabel(organizationId, data.label);
+      if (existingByLabel) {
+        throw new Error(`A custom metric with label "${data.label}" already exists in this organization`);
+      }
 
       // Validate derived metric requirements
       if (data.isDerived === true) {
@@ -220,32 +223,64 @@ export class CustomOrgMetricService extends BaseService {
             throw new Error(`Invalid dependency: Metric "${depCode}" is not available to this organization`);
           }
         }
+
+        // Issue #4 fix: Detect circular dependencies
+        // Build list of all existing custom org metrics + the new one being created
+        const existingMetrics = await db.select({ code: customOrgMetrics.code, dependentMetrics: customOrgMetrics.dependentMetrics })
+          .from(customOrgMetrics)
+          .where(and(
+            eq(customOrgMetrics.organizationId, organizationId),
+            eq(customOrgMetrics.isActive, true),
+            eq(customOrgMetrics.isDerived, true)
+          ));
+
+        // Generate temporary code for circular dependency check
+        const tempCode = await this.generateMetricCode(organizationId, data.label);
+
+        // Add the new metric to the list for cycle detection
+        const allMetrics = [
+          ...existingMetrics.map(m => ({ code: m.code, dependentMetrics: m.dependentMetrics || [] })),
+          { code: tempCode, dependentMetrics: data.dependentMetrics || [] }
+        ];
+
+        const circularCheck = detectCircularDependencies(allMetrics);
+        if (circularCheck.hasCircular) {
+          throw new Error(`Circular dependency detected: ${circularCheck.cycle?.join(' → ')}`);
+        }
       }
 
-      // Insert the metric
-      const [metric] = await db.insert(customOrgMetrics).values({
-        organizationId,
-        code,
-        label: data.label,
-        category: data.category,
-        unit: data.unit,
-        metricType: data.metricType,
-        description: data.description,
-        validationMin: data.validationMin?.toString(),
-        validationMax: data.validationMax?.toString(),
-        decimalPrecision: data.decimalPrecision ?? 3,
-        sportAssociations: data.sportAssociations,
-        isDerived: data.isDerived ?? false,
-        formula: data.formula,
-        dependentMetrics: data.dependentMetrics,
-        calculationConfig: data.calculationConfig,
-        displayOrder: data.displayOrder ?? 999,
-        color: data.color,
-        icon: data.icon,
-        isActive: true,
-        createdBy: requestingUserId,
-        createdAt: new Date(),
-      }).returning();
+      // Issue #2 fix: Wrap code generation + insertion in transaction to prevent race condition
+      const metric = await db.transaction(async (tx) => {
+        // Generate unique code from label (includes collision detection)
+        const code = await this.generateMetricCode(organizationId, data.label);
+
+        // Insert the metric
+        const [newMetric] = await tx.insert(customOrgMetrics).values({
+          organizationId,
+          code,
+          label: data.label,
+          category: data.category,
+          unit: data.unit,
+          metricType: data.metricType,
+          description: data.description,
+          validationMin: data.validationMin?.toString(),
+          validationMax: data.validationMax?.toString(),
+          decimalPrecision: data.decimalPrecision ?? 3,
+          sportAssociations: data.sportAssociations,
+          isDerived: data.isDerived ?? false,
+          formula: data.formula,
+          dependentMetrics: data.dependentMetrics,
+          calculationConfig: data.calculationConfig,
+          displayOrder: data.displayOrder ?? 999,
+          color: data.color,
+          icon: data.icon,
+          isActive: true,
+          createdBy: requestingUserId,
+          createdAt: new Date(),
+        }).returning();
+
+        return newMetric;
+      });
 
       return metric;
     } catch (error) {
