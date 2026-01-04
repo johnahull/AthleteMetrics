@@ -132,7 +132,7 @@ export function useAvailableMetrics(): {
       result.push(...siteMetricsList);
 
       // Add custom org metrics
-      if (customOrgMetrics) {
+      if (customOrgMetrics && Array.isArray(customOrgMetrics)) {
         const customMetricsList = customOrgMetrics
           .filter(cm => cm.isActive) // Only active custom metrics
           .map(cm => ({
