@@ -29,7 +29,15 @@ import {
   useUpdateOrganizationMetric,
 } from "@/lib/metrics-api";
 import { useSports } from "@/lib/sports-api";
-import type { SiteMetric, OrganizationMetric } from "@shared/schema";
+import {
+  useCustomOrgMetrics,
+  useArchiveCustomOrgMetric,
+  useRestoreCustomOrgMetric,
+} from "@/lib/custom-metrics-api";
+import { useOrganization } from "@/lib/organization-api";
+import type { SiteMetric, OrganizationMetric, CustomOrgMetric } from "@shared/schema";
+import { Separator } from "@/components/ui/separator";
+import { Ruler } from "lucide-react";
 
 // Maximum number of sport badges to display before showing "+N more"
 const MAX_VISIBLE_SPORT_BADGES = 3;
@@ -58,14 +66,28 @@ export default function OrganizationMetricsCard({
     false
   );
 
+  // Fetch organization data to check customMetricsEnabled
+  const { data: organization } = useOrganization(organizationId);
+
+  // Fetch custom metrics (include archived to show with toggle off)
+  const { data: customMetrics, isLoading: loadingCustom } = useCustomOrgMetrics(
+    organizationId,
+    { includeArchived: true }
+  );
+
   // Fetch sports for filter dropdown
   const { data: sports } = useSports();
 
+  // Site metrics mutations
   const enableMutation = useEnableMetricForOrganization();
   const disableMutation = useDisableMetricForOrganization();
   const updateMutation = useUpdateOrganizationMetric();
 
-  const isLoading = loadingSite || loadingOrg;
+  // Custom metrics mutations
+  const archiveMutation = useArchiveCustomOrgMetric();
+  const restoreMutation = useRestoreCustomOrgMetric();
+
+  const isLoading = loadingSite || loadingOrg || loadingCustom;
 
   // Filter metrics by selected sport
   const filteredMetrics = useMemo(() => {
@@ -163,6 +185,39 @@ export default function OrganizationMetricsCard({
         toast({
           title: "Metric disabled",
           description: `${metric.label} has been disabled for your organization.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Failed to update metric",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  // Handle custom metric toggle (archive = inactive, restore = active)
+  const handleCustomMetricToggle = async (metric: CustomOrgMetric, active: boolean) => {
+    if (!canEdit) return;
+
+    try {
+      if (active) {
+        await restoreMutation.mutateAsync({
+          organizationId,
+          code: metric.code,
+        });
+        toast({
+          title: "Metric activated",
+          description: `${metric.label} is now active for your organization.`,
+        });
+      } else {
+        await archiveMutation.mutateAsync({
+          organizationId,
+          code: metric.code,
+        });
+        toast({
+          title: "Metric deactivated",
+          description: `${metric.label} has been deactivated for your organization.`,
         });
       }
     } catch (error) {
@@ -391,6 +446,84 @@ export default function OrganizationMetricsCard({
             })}
           </TableBody>
         </Table>
+
+        {/* Custom Metrics Section - only if org has customMetricsEnabled */}
+        {organization?.customMetricsEnabled && (
+          <>
+            <Separator className="my-6" />
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Ruler className="h-5 w-5 text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Custom Metrics</h3>
+                <Badge variant="secondary" className="text-xs">
+                  {customMetrics?.length || 0} metrics
+                </Badge>
+              </div>
+
+              {customMetrics && customMetrics.length > 0 ? (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Metric</TableHead>
+                      <TableHead>Category</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Sports</TableHead>
+                      <TableHead className="text-right">Active</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {customMetrics.map((metric) => (
+                      <TableRow
+                        key={metric.code}
+                        data-testid={`custom-metric-row-${metric.code}`}
+                        className={!metric.isActive ? "opacity-60" : ""}
+                      >
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            {metric.label}
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700">
+                              Custom
+                            </Badge>
+                            {metric.isDerived && (
+                              <Badge variant="secondary" className="text-xs">
+                                Derived
+                              </Badge>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {metric.category ? (
+                            <Badge variant="outline">{metric.category}</Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {metric.unit || <span className="text-muted-foreground">-</span>}
+                        </TableCell>
+                        <TableCell>
+                          {renderSportBadges(metric.sportAssociations)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Switch
+                            checked={metric.isActive}
+                            onCheckedChange={(checked) => handleCustomMetricToggle(metric, checked)}
+                            disabled={!canEdit || archiveMutation.isPending || restoreMutation.isPending}
+                            data-testid={`toggle-custom-metric-${metric.code}`}
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  No custom metrics have been created yet.
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </CardContent>
     </Card>
   );
