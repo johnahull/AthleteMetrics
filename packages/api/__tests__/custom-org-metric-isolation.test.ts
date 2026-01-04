@@ -80,31 +80,37 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
     await storage.addUserToOrganization(adminB.id, orgB.id, 'org_admin');
 
     // Create custom metrics in each organization
-    metricA = await customOrgMetricService.create({
-      organizationId: orgA.id,
-      label: 'Custom Sprint A',
-      unit: 's',
-      metricType: 'lower_is_better',
-      category: 'speed',
-      description: 'Org A custom sprint test',
-      validationMin: 0,
-      validationMax: 10,
-      decimalPrecision: 3,
-      isDerived: false,
-    }, adminA.id);
+    metricA = await customOrgMetricService.createCustomOrgMetric(
+      orgA.id,
+      {
+        label: 'Custom Sprint A',
+        unit: 's',
+        metricType: 'lower_is_better',
+        category: 'speed',
+        description: 'Org A custom sprint test',
+        validationMin: 0,
+        validationMax: 10,
+        decimalPrecision: 3,
+        isDerived: false,
+      },
+      adminA.id
+    );
 
-    metricB = await customOrgMetricService.create({
-      organizationId: orgB.id,
-      label: 'Custom Sprint B',
-      unit: 's',
-      metricType: 'lower_is_better',
-      category: 'speed',
-      description: 'Org B custom sprint test',
-      validationMin: 0,
-      validationMax: 10,
-      decimalPrecision: 3,
-      isDerived: false,
-    }, adminB.id);
+    metricB = await customOrgMetricService.createCustomOrgMetric(
+      orgB.id,
+      {
+        label: 'Custom Sprint B',
+        unit: 's',
+        metricType: 'lower_is_better',
+        category: 'speed',
+        description: 'Org B custom sprint test',
+        validationMin: 0,
+        validationMax: 10,
+        decimalPrecision: 3,
+        isDerived: false,
+      },
+      adminB.id
+    );
   });
 
   afterAll(async () => {
@@ -128,7 +134,7 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
   });
 
   describe('IDOR Prevention: Reading Custom Metrics', () => {
-    it('should prevent Admin A from reading Org B metrics via getById', async () => {
+    it('should prevent Admin A from reading Org B metrics via getCustomOrgMetric', async () => {
       // Admin A attempts to read Org B's custom metric
       const userOrgs = await storage.getUserOrganizations(adminA.id);
       const hasAccessToOrgB = userOrgs.some(org => org.organizationId === orgB.id);
@@ -138,7 +144,7 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Attempting to get Org B's metric should fail
       await expect(
-        customOrgMetricService.getById(metricB.id, adminA.id)
+        customOrgMetricService.getCustomOrgMetric(orgB.id, metricB.code, adminA.id)
       ).rejects.toThrow(); // Should throw authorization error
     });
 
@@ -151,20 +157,20 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Attempting to list Org B's metrics should fail
       await expect(
-        customOrgMetricService.list(orgB.id, adminA.id)
+        customOrgMetricService.getCustomOrgMetrics(orgB.id, adminA.id)
       ).rejects.toThrow(); // Should throw authorization error
     });
 
     it('should allow Admin A to read Org A metrics', async () => {
       // Admin A should be able to read their own org's metrics
-      const metric = await customOrgMetricService.getById(metricA.id, adminA.id);
+      const metric = await customOrgMetricService.getCustomOrgMetric(orgA.id, metricA.code, adminA.id);
       expect(metric).toBeDefined();
       expect(metric.organizationId).toBe(orgA.id);
     });
 
     it('should allow Admin A to list Org A metrics', async () => {
       // Admin A should be able to list their own org's metrics
-      const metrics = await customOrgMetricService.list(orgA.id, adminA.id);
+      const metrics = await customOrgMetricService.getCustomOrgMetrics(orgA.id, adminA.id);
       expect(metrics.length).toBeGreaterThan(0);
       expect(metrics.every(m => m.organizationId === orgA.id)).toBe(true);
     });
@@ -180,27 +186,33 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Attempting to create a metric in Org B should fail
       await expect(
-        customOrgMetricService.create({
-          organizationId: orgB.id, // Attempting to create in Org B
-          label: 'Malicious Metric',
-          unit: 's',
-          metricType: 'lower_is_better',
-          category: 'speed',
-          isDerived: false,
-        }, adminA.id)
+        customOrgMetricService.createCustomOrgMetric(
+          orgB.id, // Attempting to create in Org B
+          {
+            label: 'Malicious Metric',
+            unit: 's',
+            metricType: 'lower_is_better',
+            category: 'speed',
+            isDerived: false,
+          },
+          adminA.id
+        )
       ).rejects.toThrow(); // Should throw authorization error
     });
 
     it('should allow Admin A to create metrics in Org A', async () => {
       // Admin A should be able to create metrics in their own org
-      const metric = await customOrgMetricService.create({
-        organizationId: orgA.id,
-        label: 'Valid Metric A',
-        unit: 's',
-        metricType: 'lower_is_better',
-        category: 'speed',
-        isDerived: false,
-      }, adminA.id);
+      const metric = await customOrgMetricService.createCustomOrgMetric(
+        orgA.id,
+        {
+          label: 'Valid Metric A',
+          unit: 's',
+          metricType: 'lower_is_better',
+          category: 'speed',
+          isDerived: false,
+        },
+        adminA.id
+      );
 
       expect(metric).toBeDefined();
       expect(metric.organizationId).toBe(orgA.id);
@@ -220,8 +232,9 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Attempting to update Org B's metric should fail
       await expect(
-        customOrgMetricService.update(
-          metricB.id,
+        customOrgMetricService.updateCustomOrgMetric(
+          orgB.id,
+          metricB.code,
           {
             label: 'Hacked Metric',
             description: 'This should not work',
@@ -233,8 +246,9 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
     it('should allow Admin A to update Org A metrics', async () => {
       // Admin A should be able to update their own org's metrics
-      const updated = await customOrgMetricService.update(
-        metricA.id,
+      const updated = await customOrgMetricService.updateCustomOrgMetric(
+        orgA.id,
+        metricA.code,
         {
           description: 'Updated description',
         },
@@ -257,28 +271,31 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
       // Attempting to archive Org B's metric should fail
       await expect(
-        customOrgMetricService.archive(metricB.id, adminA.id)
+        customOrgMetricService.archiveCustomOrgMetric(orgB.id, metricB.code, adminA.id)
       ).rejects.toThrow(); // Should throw authorization error
     });
 
     it('should allow Admin A to archive and restore Org A metrics', async () => {
       // Create a temporary metric for testing archive/restore
-      const tempMetric = await customOrgMetricService.create({
-        organizationId: orgA.id,
-        label: 'Temp Metric for Archive',
-        unit: 's',
-        metricType: 'lower_is_better',
-        category: 'speed',
-        isDerived: false,
-      }, adminA.id);
+      const tempMetric = await customOrgMetricService.createCustomOrgMetric(
+        orgA.id,
+        {
+          label: 'Temp Metric for Archive',
+          unit: 's',
+          metricType: 'lower_is_better',
+          category: 'speed',
+          isDerived: false,
+        },
+        adminA.id
+      );
 
       // Admin A should be able to archive their own org's metrics
-      const archived = await customOrgMetricService.archive(tempMetric.id, adminA.id);
+      const archived = await customOrgMetricService.archiveCustomOrgMetric(orgA.id, tempMetric.code, adminA.id);
       expect(archived.isActive).toBe(false);
       expect(archived.archivedAt).toBeDefined();
 
       // Admin A should be able to restore their own org's metrics
-      const restored = await customOrgMetricService.restore(tempMetric.id, adminA.id);
+      const restored = await customOrgMetricService.restoreCustomOrgMetric(orgA.id, tempMetric.code, adminA.id);
       expect(restored.isActive).toBe(true);
       expect(restored.archivedAt).toBeNull();
 
@@ -299,23 +316,29 @@ describe('Custom Org Metrics - Multi-Tenant Isolation', () => {
 
     it('should prevent code collisions across organizations', async () => {
       // Both orgs create metrics with the same label
-      const metricA2 = await customOrgMetricService.create({
-        organizationId: orgA.id,
-        label: 'Duplicate Label Test',
-        unit: 's',
-        metricType: 'lower_is_better',
-        category: 'speed',
-        isDerived: false,
-      }, adminA.id);
+      const metricA2 = await customOrgMetricService.createCustomOrgMetric(
+        orgA.id,
+        {
+          label: 'Duplicate Label Test',
+          unit: 's',
+          metricType: 'lower_is_better',
+          category: 'speed',
+          isDerived: false,
+        },
+        adminA.id
+      );
 
-      const metricB2 = await customOrgMetricService.create({
-        organizationId: orgB.id,
-        label: 'Duplicate Label Test', // Same label as Org A
-        unit: 's',
-        metricType: 'lower_is_better',
-        category: 'speed',
-        isDerived: false,
-      }, adminB.id);
+      const metricB2 = await customOrgMetricService.createCustomOrgMetric(
+        orgB.id,
+        {
+          label: 'Duplicate Label Test', // Same label as Org A
+          unit: 's',
+          metricType: 'lower_is_better',
+          category: 'speed',
+          isDerived: false,
+        },
+        adminB.id
+      );
 
       // Codes should be different (org-scoped)
       expect(metricA2.code).not.toBe(metricB2.code);

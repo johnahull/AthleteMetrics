@@ -49,9 +49,9 @@ export class CustomOrgMetricService extends BaseService {
 
   /**
    * Generate a unique metric code from org ID and label
-   * Format: ORG_{orgIdPrefix}_METRIC_NAME
+   * Format: ORG_{orgIdPrefix}_METRIC_NAME or ORG_{orgIdPrefix}_METRIC_NAME_N if collision
    */
-  generateMetricCode(organizationId: string, label: string): string {
+  async generateMetricCode(organizationId: string, label: string): Promise<string> {
     // Extract first 8 chars of org ID (uppercase, remove hyphens)
     const orgPrefix = organizationId.substring(0, 8).toUpperCase().replace(/-/g, '');
 
@@ -63,7 +63,34 @@ export class CustomOrgMetricService extends BaseService {
       .replace(/\s+/g, '_') // Replace spaces with underscores
       .substring(0, 30); // Limit length
 
-    return `ORG_${orgPrefix}_${labelPart}`;
+    const baseCode = `ORG_${orgPrefix}_${labelPart}`;
+
+    // Check for collision and add counter if needed
+    let code = baseCode;
+    let counter = 1;
+
+    while (true) {
+      const [existing] = await db.select()
+        .from(customOrgMetrics)
+        .where(and(
+          eq(customOrgMetrics.organizationId, organizationId),
+          eq(customOrgMetrics.code, code)
+        ))
+        .limit(1);
+
+      if (!existing) {
+        return code;
+      }
+
+      // Collision detected, try with counter
+      counter++;
+      code = `${baseCode}_${counter}`;
+
+      // Safety limit to prevent infinite loops
+      if (counter > 100) {
+        throw new Error('Unable to generate unique metric code after 100 attempts');
+      }
+    }
   }
 
   // ========================================================================
@@ -164,14 +191,8 @@ export class CustomOrgMetricService extends BaseService {
         throw new Error("Unauthorized: Only organization administrators can create custom metrics");
       }
 
-      // Generate code from label
-      const code = this.generateMetricCode(organizationId, data.label);
-
-      // Check for duplicate code in this org
-      const existing = await this.getCustomOrgMetric(organizationId, code, requestingUserId);
-      if (existing) {
-        throw new Error(`A custom metric with label "${data.label}" already exists in this organization`);
-      }
+      // Generate unique code from label (includes collision detection)
+      const code = await this.generateMetricCode(organizationId, data.label);
 
       // Validate derived metric requirements
       if (data.isDerived === true) {
