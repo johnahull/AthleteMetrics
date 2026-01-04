@@ -5,5 +5,5 @@ DROP INDEX IF EXISTS idx_custom_org_metrics_org_active;
 DROP INDEX IF EXISTS idx_custom_org_metrics_code;
 DROP INDEX IF EXISTS idx_custom_org_metrics_derived;
 
--- Drop table
+-- Drop table (constraints are automatically dropped with the table)
 DROP TABLE IF EXISTS custom_org_metrics CASCADE;

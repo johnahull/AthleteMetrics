@@ -45,7 +45,13 @@ CREATE TABLE IF NOT EXISTS custom_org_metrics (
   updated_at TIMESTAMP,
 
   -- Constraints
-  UNIQUE(organization_id, code)
+  UNIQUE(organization_id, code),
+  -- Ensure non-derived metrics have a unit (how do you measure without units?)
+  CONSTRAINT check_non_derived_has_unit CHECK (is_derived = true OR unit IS NOT NULL),
+  -- Ensure derived metrics have a formula
+  CONSTRAINT check_derived_has_formula CHECK (is_derived = false OR formula IS NOT NULL),
+  -- Ensure validation_min < validation_max
+  CONSTRAINT check_validation_min_max CHECK (validation_min IS NULL OR validation_max IS NULL OR validation_min < validation_max)
 );
 
 -- Indexes for query performance
