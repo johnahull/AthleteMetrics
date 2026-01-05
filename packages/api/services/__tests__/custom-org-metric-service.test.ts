@@ -226,26 +226,22 @@ describe('CustomOrgMetricService', () => {
       ).rejects.toThrow(/Unauthorized|access/i);
     });
 
-    it('should allow duplicate labels with auto-incremented code', async () => {
+    it('should reject duplicate labels in same org', async () => {
       // Create first metric with a label
-      const metric1 = await customMetricService.createCustomOrgMetric(
+      await customMetricService.createCustomOrgMetric(
         testOrgId,
         { label: 'Duplicate Test', metricType: 'tracking' },
         orgAdminUserId
       );
 
-      // Create second metric with same label - should succeed with _2 suffix
-      const metric2 = await customMetricService.createCustomOrgMetric(
-        testOrgId,
-        { label: 'Duplicate Test', metricType: 'tracking' },
-        orgAdminUserId
-      );
-
-      // Both metrics should exist with different codes
-      expect(metric1.code).toMatch(/^ORG_[A-Z0-9]+_DUPLICATE_TEST$/);
-      expect(metric2.code).toMatch(/^ORG_[A-Z0-9]+_DUPLICATE_TEST_2$/);
-      expect(metric1.label).toBe('Duplicate Test');
-      expect(metric2.label).toBe('Duplicate Test');
+      // Second metric with same label should be rejected
+      await expect(
+        customMetricService.createCustomOrgMetric(
+          testOrgId,
+          { label: 'Duplicate Test', metricType: 'tracking' },
+          orgAdminUserId
+        )
+      ).rejects.toThrow(/already exists/i);
     });
 
     it('should allow same label in different orgs', async () => {
