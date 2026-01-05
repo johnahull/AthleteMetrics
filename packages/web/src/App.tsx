@@ -81,6 +81,12 @@ const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-ben
 const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
 
+// Lazy load custom metrics page
+const CustomMetrics = React.lazy(() => import("./pages/custom-metrics"));
+
+// Lazy load org metrics page (unified metrics configuration for org admins)
+const OrgMetrics = React.lazy(() => import("./pages/org-metrics"));
+
 // Lazy load report pages
 const Reports = React.lazy(() => import("./pages/reports"));
 const ReportView = React.lazy(() => import("./pages/report-view"));
@@ -356,6 +362,17 @@ function Router() {
       <Route path="/organizations/:id/custom-benchmarks">
         <RouteWrapper loadingText="Loading Custom Benchmarks...">
           <CustomBenchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/metrics">
+        <RouteWrapper loadingText="Loading Metrics Configuration...">
+          <OrgMetrics />
+        </RouteWrapper>
+      </Route>
+      {/* Legacy route - redirects to new unified metrics page */}
+      <Route path="/organizations/:id/custom-metrics">
+        <RouteWrapper loadingText="Loading Custom Metrics...">
+          <CustomMetrics />
         </RouteWrapper>
       </Route>
       <Route path="/organizations/:id/benchmarks">

@@ -130,7 +130,8 @@ describe("MostImprovedCard", () => {
     it("should allow retry after error", async () => {
       let callCount = 0;
       (global.fetch as any).mockImplementation((url: string) => {
-        if (url.includes("/api/organizations/org-123/metrics")) {
+        // Handle metrics endpoint
+        if (url.includes("/api/organizations/org-123/metrics") && !url.includes("custom-metrics")) {
           return Promise.resolve({
             ok: true,
             json: () => Promise.resolve([
@@ -150,6 +151,15 @@ describe("MostImprovedCard", () => {
           });
         }
 
+        // Handle custom metrics endpoint (return empty array)
+        if (url.includes("/custom-metrics")) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve([]),
+          });
+        }
+
+        // For improvements endpoint: first call fails, retry succeeds
         callCount++;
         if (callCount === 1) {
           return Promise.reject(new Error("Network error"));

@@ -1409,6 +1409,7 @@ export const updateOrganizationSchema = z.object({
   aiEnabled: z.boolean().optional(), // Org admin can set this
   wellnessEnabled: z.boolean().optional(), // Org admin can set this (only effective when site wellness enabled)
   eventsEnabled: z.boolean().optional(), // Org admin can enable/disable events module
+  customMetricsEnabled: z.boolean().optional(), // Site admin only - enable/disable custom metrics feature
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true

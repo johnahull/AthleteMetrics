@@ -284,8 +284,10 @@ export function evaluateFormula(
     // Sort by length descending to avoid partial replacements
     variablesToReplace.sort((a, b) => b.original.length - a.original.length);
     for (const { original, lowercase } of variablesToReplace) {
+      // Escape regex metacharacters to prevent ReDoS
+      const escapedOriginal = original.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       // Use word boundary regex to avoid partial matches
-      const regex = new RegExp(`\\b${original}\\b`, 'g');
+      const regex = new RegExp(`\\b${escapedOriginal}\\b`, 'g');
       normalizedFormula = normalizedFormula.replace(regex, lowercase);
     }
 

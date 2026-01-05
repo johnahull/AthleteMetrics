@@ -1,12 +1,13 @@
 /**
  * Centralized hook for getting available metrics across the application
- * Ensures consistent filtering: only active site metrics + org-enabled metrics
+ * Ensures consistent filtering: only active site metrics + org-enabled metrics + custom org metrics
  */
 
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth';
 import { useOrganizationMetrics } from '@/lib/metrics-api';
+import { useCustomOrgMetrics } from '@/lib/custom-metrics-api';
 import type { MetricType } from '@shared/analytics-types';
 
 export interface AvailableMetric {
@@ -20,6 +21,7 @@ export interface AvailableMetric {
   isDerived?: boolean;
   formula?: string;
   dependentMetrics?: string[];
+  isCustom?: boolean; // True if this is an organization-specific custom metric
 }
 
 /**
@@ -28,7 +30,8 @@ export interface AvailableMetric {
  * Filtering rules:
  * 1. Site-level: Only active metrics (siteMetrics.isActive = true)
  * 2. Org-level: Only enabled metrics (organizationMetrics.isEnabled = true)
- * 3. Custom labels: Org custom labels override site labels
+ * 3. Custom org metrics: Active custom metrics for the organization
+ * 4. Custom labels: Org custom labels override site labels
  *
  * Use this hook in:
  * - Data entry forms (measurement creation)
@@ -57,6 +60,16 @@ export function useAvailableMetrics(): {
   } = useOrganizationMetrics(
     currentOrgId || "",
     true // enabledOnly - only get org-enabled metrics
+  );
+
+  // Fetch custom org metrics (organization-specific custom metrics)
+  const {
+    data: customOrgMetrics,
+    isLoading: loadingCustom,
+    error: errorCustom
+  } = useCustomOrgMetrics(
+    currentOrgId || "",
+    { includeArchived: false }
   );
 
   // Fallback to site metrics for users without org context
@@ -92,13 +105,16 @@ export function useAvailableMetrics(): {
   // Build available metrics list
   const metrics = useMemo((): AvailableMetric[] => {
     // Return empty array if still loading and no data available yet
-    if ((loadingOrg || loadingSite) && !orgMetrics && !siteMetrics) {
+    const isLoading = loadingOrg || loadingSite || loadingCustom;
+    if (isLoading && !orgMetrics && !siteMetrics && !customOrgMetrics) {
       return [];
     }
 
+    const result: AvailableMetric[] = [];
+
     // Use org metrics if available (already filtered by backend for active+enabled)
     if (currentOrgId && orgMetrics) {
-      return orgMetrics
+      const siteMetricsList = orgMetrics
         .filter(om => om.isEnabled) // Extra safety filter (redundant but explicit)
         .map(om => ({
           code: om.metricCode,
@@ -111,7 +127,31 @@ export function useAvailableMetrics(): {
           isDerived: om.siteMetric.isDerived || undefined,
           formula: om.siteMetric.formula || undefined,
           dependentMetrics: om.siteMetric.dependentMetrics || undefined,
+          isCustom: false,
         }));
+      result.push(...siteMetricsList);
+
+      // Add custom org metrics
+      if (customOrgMetrics && Array.isArray(customOrgMetrics)) {
+        const customMetricsList = customOrgMetrics
+          .filter(cm => cm.isActive) // Only active custom metrics
+          .map(cm => ({
+            code: cm.code,
+            label: cm.label,
+            unit: cm.unit || '',
+            metricType: cm.metricType as MetricType,
+            lowerIsBetter: cm.metricType === 'lower_is_better',
+            category: cm.category || undefined,
+            description: cm.description || undefined,
+            isDerived: cm.isDerived || undefined,
+            formula: cm.formula || undefined,
+            dependentMetrics: cm.dependentMetrics || undefined,
+            isCustom: true,
+          }));
+        result.push(...customMetricsList);
+      }
+
+      return result;
     }
 
     // Fallback to active site metrics (for users without org context, e.g., independent athletes)
@@ -129,17 +169,18 @@ export function useAvailableMetrics(): {
           isDerived: sm.isDerived || undefined,
           formula: sm.formula || undefined,
           dependentMetrics: sm.dependentMetrics || undefined,
+          isCustom: false,
         }));
     }
 
     return [];
-  }, [currentOrgId, orgMetrics, siteMetrics, loadingOrg, loadingSite]);
+  }, [currentOrgId, orgMetrics, customOrgMetrics, siteMetrics, loadingOrg, loadingCustom, loadingSite]);
 
   return {
     metrics,
-    isLoading: loadingOrg || loadingSite,
-    error: (errorOrg || errorSite)
-      ? new Error((errorOrg || errorSite)?.message || 'Failed to fetch metrics')
+    isLoading: loadingOrg || loadingSite || loadingCustom,
+    error: (errorOrg || errorSite || errorCustom)
+      ? new Error((errorOrg || errorSite || errorCustom)?.message || 'Failed to fetch metrics')
       : null,
   };
 }

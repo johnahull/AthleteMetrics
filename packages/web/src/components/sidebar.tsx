@@ -23,7 +23,8 @@ import {
   Trophy,
   Link,
   UserPlus,
-  Calendar
+  Calendar,
+  Ruler
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -75,6 +76,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Measurements", href: "/publish", icon: FileCheck },
     { name: "Import/Export", href: "/import-export", icon: FileText },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
+    { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler },
     { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings }
   ],
   coach: [
@@ -146,6 +148,14 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
     if (benchmarksIndex !== -1) {
       navigation[benchmarksIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmarks`;
+    }
+  }
+
+  // Update metrics link with organization ID for org_admin
+  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+    const metricsIndex = navigation.findIndex(item => item.name === "Metrics");
+    if (metricsIndex !== -1) {
+      navigation[metricsIndex].href = `/organizations/${userOrganizations[0].organizationId}/metrics`;
     }
   }
 

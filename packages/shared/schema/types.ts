@@ -25,6 +25,9 @@ export type UserTeam = typeof tables.userTeams.$inferSelect;
 
 export type SiteMetric = typeof tables.siteMetrics.$inferSelect;
 export type OrganizationMetric = typeof tables.organizationMetrics.$inferSelect;
+export type CustomOrgMetric = typeof tables.customOrgMetrics.$inferSelect;
+export type InsertCustomOrgMetric = typeof tables.customOrgMetrics.$inferInsert;
+export type UpdateCustomOrgMetric = Partial<InsertCustomOrgMetric>;
 export type SiteSport = typeof tables.siteSports.$inferSelect;
 export type SitePosition = typeof tables.sitePositions.$inferSelect;
 

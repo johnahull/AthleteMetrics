@@ -90,6 +90,71 @@ export const siteSports = pgTable("site_sports", {
   displayOrderIdx: index("site_sports_display_order_idx").on(table.displayOrder),
 }));
 
+/**
+ * Organization-specific custom metrics (org-private, not shared across orgs)
+ *
+ * Database CHECK Constraints (enforced at DB level via migration 0092):
+ * - check_non_derived_has_unit: Non-derived metrics must have a unit
+ * - check_derived_has_formula: Derived metrics must have a formula
+ * - check_validation_min_max: validation_min must be < validation_max
+ *
+ * These constraints are defined in the migration and must be manually maintained.
+ */
+export const customOrgMetrics = pgTable("custom_org_metrics", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+
+  // Metric identity (mirrors siteMetrics structure)
+  code: varchar("code", { length: 100 }).notNull(),
+  label: varchar("label", { length: 100 }).notNull(),
+  category: varchar("category", { length: 50 }),
+  unit: varchar("unit", { length: 20 }),
+  metricType: text("metric_type", { enum: metricTypeEnum })
+    .default('lower_is_better').notNull(),
+  description: text("description"),
+
+  // Validation rules
+  validationMin: decimal("validation_min", { precision: 10, scale: 3 }),
+  validationMax: decimal("validation_max", { precision: 10, scale: 3 }),
+  decimalPrecision: integer("decimal_precision").default(3).notNull(),
+
+  // Sport associations
+  sportAssociations: text("sport_associations").array(),
+
+  // Derived metric configuration
+  isDerived: boolean("is_derived").default(false).notNull(),
+  formula: text("formula"),
+  dependentMetrics: text("dependent_metrics").array(),
+  calculationConfig: jsonb("calculation_config").$type<{
+    dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
+    maxDateDifference?: number;
+    missingSourceBehavior: 'skip' | 'error';
+  }>(),
+
+  // Display settings
+  displayOrder: integer("display_order").default(999),
+  color: varchar("color", { length: 20 }),
+  icon: varchar("icon", { length: 50 }),
+
+  // Lifecycle (soft delete)
+  isActive: boolean("is_active").default(true).notNull(),
+  archivedAt: timestamp("archived_at"),
+
+  // Audit
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgCode: unique("custom_org_metrics_org_code_unique")
+    .on(table.organizationId, table.code),
+  orgActiveIdx: index("custom_org_metrics_org_active_idx")
+    .on(table.organizationId, table.isActive),
+  codeIdx: index("custom_org_metrics_code_idx").on(table.code),
+  isDerivedIdx: index("custom_org_metrics_is_derived_idx")
+    .on(table.isDerived).where(sql`${table.isDerived} = true`),
+}));
+
 // Sport-specific position definitions
 export const sitePositions = pgTable("site_positions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

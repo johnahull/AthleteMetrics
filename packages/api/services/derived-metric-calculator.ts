@@ -9,10 +9,13 @@ import type { db as dbType } from '../db';
 import {
   measurements,
   siteMetrics,
+  customOrgMetrics,
+  userOrganizations,
   users,
   type Measurement,
   type InsertMeasurement,
   type SiteMetric,
+  type CustomOrgMetric,
 } from '@shared/schema';
 import { eq, and, gte, lte, sql, or, desc, asc } from 'drizzle-orm';
 import type { PgTransaction } from 'drizzle-orm/pg-core';
@@ -52,11 +55,13 @@ class MetricConfigCache {
    *
    * @param metricCodes - Array of metric codes to fetch (will be normalized to uppercase)
    * @param db - Database connection or transaction
+   * @param organizationId - Optional organization ID to also check custom org metrics
    * @returns Map of uppercase metric codes to { higherIsBetter: boolean }
    */
   async get(
     metricCodes: string[],
-    db: typeof dbType | DbTransaction
+    db: typeof dbType | DbTransaction,
+    organizationId?: string
   ): Promise<Map<string, { higherIsBetter: boolean }>> {
     const now = Date.now();
     const result = new Map<string, { higherIsBetter: boolean }>();
@@ -78,7 +83,8 @@ class MetricConfigCache {
 
     // Fetch missing metric configs from database
     if (missing.length > 0) {
-      const metricConfigs = await db
+      // First, fetch from site metrics
+      const siteMetricConfigs = await db
         .select({
           code: siteMetrics.code,
           metricType: siteMetrics.metricType,
@@ -91,8 +97,9 @@ class MetricConfigCache {
           )}]::text[])`
         );
 
-      // Update cache and result
-      for (const config of metricConfigs) {
+      // Update cache and result from site metrics
+      const foundCodes = new Set<string>();
+      for (const config of siteMetricConfigs) {
         const upperCode = config.code.toUpperCase();
         const higherIsBetter = config.metricType === 'higher_is_better';
 
@@ -104,6 +111,45 @@ class MetricConfigCache {
 
         // Add to result
         result.set(upperCode, { higherIsBetter });
+        foundCodes.add(upperCode);
+      }
+
+      // If organizationId is provided, also check custom org metrics for remaining codes
+      if (organizationId) {
+        const stillMissing = missing.filter(code => !foundCodes.has(code));
+        if (stillMissing.length > 0) {
+          const customMetricConfigs = await db
+            .select({
+              code: customOrgMetrics.code,
+              metricType: customOrgMetrics.metricType,
+            })
+            .from(customOrgMetrics)
+            .where(
+              and(
+                eq(customOrgMetrics.organizationId, organizationId),
+                eq(customOrgMetrics.isActive, true),
+                sql`UPPER(${customOrgMetrics.code}) = ANY(ARRAY[${sql.join(
+                  stillMissing.map(code => sql`${code}`),
+                  sql`, `
+                )}]::text[])`
+              )
+            );
+
+          // Update cache and result from custom org metrics
+          for (const config of customMetricConfigs) {
+            const upperCode = config.code.toUpperCase();
+            const higherIsBetter = config.metricType === 'higher_is_better';
+
+            // Store in cache with timestamp
+            this.cache.set(upperCode, {
+              higherIsBetter,
+              cachedAt: now,
+            });
+
+            // Add to result
+            result.set(upperCode, { higherIsBetter });
+          }
+        }
       }
     }
 
@@ -225,8 +271,8 @@ export class DerivedMetricCalculator {
   ): Promise<Measurement[]> {
     // RACE CONDITION FIX: Wrap entire operation in transaction
     return await this.db.transaction(async (tx) => {
-      // Find all active derived metrics
-      const derivedMetrics = await tx
+      // Find all active derived site metrics
+      const siteDerivedMetrics = await tx
         .select()
         .from(siteMetrics)
         .where(
@@ -236,16 +282,69 @@ export class DerivedMetricCalculator {
           )
         );
 
+      // Also find active derived custom org metrics for the measurement's organization
+      let customDerivedMetrics: CustomOrgMetric[] = [];
+      if (measurement.organizationId) {
+        customDerivedMetrics = await tx
+          .select()
+          .from(customOrgMetrics)
+          .where(
+            and(
+              eq(customOrgMetrics.organizationId, measurement.organizationId),
+              eq(customOrgMetrics.isDerived, true),
+              eq(customOrgMetrics.isActive, true)
+            )
+          );
+      }
+
       // Filter to only those that depend on this measurement's metric
       // Case-insensitive comparison to handle mixed-case dependent_metrics config
       const measurementMetricUpper = measurement.metric.toUpperCase();
-      const dependentDerivedMetrics = derivedMetrics.filter(
+
+      // Filter site derived metrics
+      const dependentSiteDerivedMetrics = siteDerivedMetrics.filter(
         (metric: SiteMetric) =>
           metric.dependentMetrics &&
           metric.dependentMetrics.some(dep => dep.toUpperCase() === measurementMetricUpper)
       );
 
-      if (dependentDerivedMetrics.length === 0) {
+      // Filter custom org derived metrics
+      const dependentCustomDerivedMetrics = customDerivedMetrics.filter(
+        (metric: CustomOrgMetric) =>
+          metric.dependentMetrics &&
+          metric.dependentMetrics.some(dep => dep.toUpperCase() === measurementMetricUpper)
+      );
+
+      // Combine both lists - use a unified type with common fields
+      type DerivedMetricInfo = {
+        code: string;
+        formula: string | null;
+        dependentMetrics: string[] | null;
+        calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+        unit: string | null;
+        isCustomOrg: boolean;
+      };
+
+      const allDependentDerivedMetrics: DerivedMetricInfo[] = [
+        ...dependentSiteDerivedMetrics.map(m => ({
+          code: m.code,
+          formula: m.formula,
+          dependentMetrics: m.dependentMetrics,
+          calculationConfig: m.calculationConfig,
+          unit: m.unit,
+          isCustomOrg: false,
+        })),
+        ...dependentCustomDerivedMetrics.map(m => ({
+          code: m.code,
+          formula: m.formula,
+          dependentMetrics: m.dependentMetrics,
+          calculationConfig: m.calculationConfig,
+          unit: m.unit,
+          isCustomOrg: true,
+        })),
+      ];
+
+      if (allDependentDerivedMetrics.length === 0) {
         return [];
       }
 
@@ -254,23 +353,23 @@ export class DerivedMetricCalculator {
       // Fetch metric configurations for all dependent metrics to enable best value selection
       // Build a Map of metric code -> { higherIsBetter }
       const allDependentMetrics = new Set<string>();
-      for (const derivedMetric of dependentDerivedMetrics) {
+      for (const derivedMetric of allDependentDerivedMetrics) {
         for (const depMetric of (derivedMetric.dependentMetrics || [])) {
           allDependentMetrics.add(depMetric.toUpperCase());
         }
       }
 
-      // Fetch metric configurations for best value selection
+      // Fetch metric configurations for best value selection (including custom org metrics)
       const metricCodes = Array.from(allDependentMetrics);
-      const metricConfigsMap = await this.fetchMetricConfigs(tx, metricCodes);
+      const metricConfigsMap = await this.fetchMetricConfigs(tx, metricCodes, measurement.organizationId || undefined);
 
-      // Process each derived metric
+      // Process each derived metric (both site and custom org)
       // NOTE: Sequential processing pattern (potential N+1 queries)
       // For typical use cases (1-2 derived metrics per source measurement), this performs well.
       // If scaling issues arise (many derived metrics triggered per source measurement),
       // consider batch-fetching all source measurements upfront or implementing a calculation queue.
       // Current implementation prioritizes code clarity and transaction safety over premature optimization.
-      for (const derivedMetric of dependentDerivedMetrics) {
+      for (const derivedMetric of allDependentDerivedMetrics) {
         try {
           // Check if athlete already has a direct (non-calculated) measurement for this derived metric on this date
           const [directMeasurement] = await tx
@@ -450,18 +549,20 @@ export class DerivedMetricCalculator {
    *
    * @param dbOrTx - Database connection or transaction
    * @param metricCodes - Array of metric codes to fetch configs for (will be normalized to uppercase)
+   * @param organizationId - Optional organization ID to also check custom org metrics
    * @returns Map of uppercase metric codes to { higherIsBetter: boolean }
    */
   private async fetchMetricConfigs(
     dbOrTx: typeof dbType | DbTransaction,
-    metricCodes: string[]
+    metricCodes: string[],
+    organizationId?: string
   ): Promise<Map<string, { higherIsBetter: boolean }>> {
     if (metricCodes.length === 0) {
       return new Map<string, { higherIsBetter: boolean }>();
     }
 
-    // Use cache for performance optimization
-    return await this.metricConfigCache.get(metricCodes, dbOrTx);
+    // Use cache for performance optimization (with org support)
+    return await this.metricConfigCache.get(metricCodes, dbOrTx, organizationId);
   }
 
   /**
@@ -503,8 +604,8 @@ export class DerivedMetricCalculator {
     date?: string,
     triggerContext?: TriggerContext
   ): Promise<void> {
-    // Find all derived metrics that depend on this source metric
-    const derivedMetrics = await dbOrTx
+    // Find all derived site metrics that depend on this source metric
+    const siteDerivedMetrics = await dbOrTx
       .select()
       .from(siteMetrics)
       .where(
@@ -514,32 +615,97 @@ export class DerivedMetricCalculator {
         )
       );
 
+    // Find the user's organizations to also check custom org derived metrics
+    const userOrgRecords = await dbOrTx
+      .select({ organizationId: userOrganizations.organizationId })
+      .from(userOrganizations)
+      .where(eq(userOrganizations.userId, userId));
+
+    const userOrgIds = userOrgRecords.map(r => r.organizationId);
+
+    // Find custom org derived metrics for all user's organizations
+    let customDerivedMetrics: CustomOrgMetric[] = [];
+    if (userOrgIds.length > 0) {
+      customDerivedMetrics = await dbOrTx
+        .select()
+        .from(customOrgMetrics)
+        .where(
+          and(
+            sql`${customOrgMetrics.organizationId} = ANY(ARRAY[${sql.join(
+              userOrgIds.map(id => sql`${id}`),
+              sql`, `
+            )}]::text[])`,
+            eq(customOrgMetrics.isDerived, true),
+            eq(customOrgMetrics.isActive, true)
+          )
+        );
+    }
+
     // Case-insensitive comparison to handle mixed-case dependent_metrics config
     const metricCodeUpper = metricCode.toUpperCase();
-    const dependentDerivedMetrics = derivedMetrics.filter(
+
+    // Filter site derived metrics
+    const dependentSiteDerivedMetrics = siteDerivedMetrics.filter(
       (metric: SiteMetric) =>
         metric.dependentMetrics &&
         metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
     );
 
-    if (dependentDerivedMetrics.length === 0) {
+    // Filter custom org derived metrics
+    const dependentCustomDerivedMetrics = customDerivedMetrics.filter(
+      (metric: CustomOrgMetric) =>
+        metric.dependentMetrics &&
+        metric.dependentMetrics.some(dep => dep.toUpperCase() === metricCodeUpper)
+    );
+
+    // Combine both lists - use a unified type with common fields
+    type DerivedMetricInfo = {
+      code: string;
+      formula: string | null;
+      dependentMetrics: string[] | null;
+      calculationConfig: { dateMatchStrategy: 'same_date' | 'latest_before' | 'closest'; maxDateDifference?: number; missingSourceBehavior: 'skip' | 'error' } | null;
+      unit: string | null;
+      organizationId?: string;
+    };
+
+    const allDependentDerivedMetrics: DerivedMetricInfo[] = [
+      ...dependentSiteDerivedMetrics.map(m => ({
+        code: m.code,
+        formula: m.formula,
+        dependentMetrics: m.dependentMetrics,
+        calculationConfig: m.calculationConfig,
+        unit: m.unit,
+        organizationId: undefined,
+      })),
+      ...dependentCustomDerivedMetrics.map(m => ({
+        code: m.code,
+        formula: m.formula,
+        dependentMetrics: m.dependentMetrics,
+        calculationConfig: m.calculationConfig,
+        unit: m.unit,
+        organizationId: m.organizationId,
+      })),
+    ];
+
+    if (allDependentDerivedMetrics.length === 0) {
       return;
     }
 
     // Fetch metric configurations for all dependent metrics to enable best value selection
     const allDependentMetrics = new Set<string>();
-    for (const derivedMetric of dependentDerivedMetrics) {
+    for (const derivedMetric of allDependentDerivedMetrics) {
       for (const depMetric of (derivedMetric.dependentMetrics || [])) {
         allDependentMetrics.add(depMetric.toUpperCase());
       }
     }
 
     // Fetch metric configurations for best value selection
+    // Pass the first org ID for custom metric config lookup (can be improved to pass all)
     const metricCodes = Array.from(allDependentMetrics);
-    const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes);
+    const metricConfigsMap = await this.fetchMetricConfigs(dbOrTx, metricCodes, userOrgIds[0]);
 
     // For each derived metric, recalculate or delete calculated measurements
-    for (const derivedMetric of dependentDerivedMetrics) {
+    for (const derivedMetric of allDependentDerivedMetrics) {
       try {
         // Find all calculated measurements for this derived metric and athlete
         // Build conditions array based on whether date is specified
