@@ -343,11 +343,19 @@ export function registerCustomOrgMetricRoutes(app: Express) {
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId } = req.params;
+        const userId = req.session?.user?.id;
         const { formula, excludeCode } = req.body;
+
+        if (!userId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
 
         if (!formula || typeof formula !== 'string') {
           return res.status(400).json({ error: "Formula is required" });
         }
+
+        // Check if custom metrics feature is enabled (Critical Issue #1 fix)
+        await service.ensureCustomMetricsEnabled(organizationId, userId, false);
 
         const result = await service.validateCustomFormula(
           organizationId,
@@ -358,6 +366,9 @@ export function registerCustomOrgMetricRoutes(app: Express) {
         res.json(result);
       } catch (error) {
         console.error("Error validating formula:", error);
+        if (error instanceof Error && error.message.includes('not enabled')) {
+          return res.status(403).json({ error: error.message });
+        }
         res.status(500).json({ error: "Failed to validate formula" });
       }
     }
@@ -378,12 +389,23 @@ export function registerCustomOrgMetricRoutes(app: Express) {
     async (req: AuthenticatedRequest, res: Response) => {
       try {
         const { organizationId } = req.params;
+        const userId = req.session?.user?.id;
+
+        if (!userId) {
+          return res.status(401).json({ error: "Authentication required" });
+        }
+
+        // Check if custom metrics feature is enabled (Critical Issue #2 fix)
+        await service.ensureCustomMetricsEnabled(organizationId, userId, false);
 
         const codes = await service.getAvailableMetricCodesForFormula(organizationId);
 
         res.json({ availableMetrics: codes });
       } catch (error) {
         console.error("Error getting formula sources:", error);
+        if (error instanceof Error && error.message.includes('not enabled')) {
+          return res.status(403).json({ error: error.message });
+        }
         res.status(500).json({ error: "Failed to get formula sources" });
       }
     }

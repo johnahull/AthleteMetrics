@@ -50,8 +50,17 @@ export class CustomOrgMetricService extends BaseService {
   /**
    * Generate a unique metric code from org ID and label
    * Format: ORG_{orgIdPrefix}_METRIC_NAME or ORG_{orgIdPrefix}_METRIC_NAME_N if collision
+   *
+   * @param tx Optional transaction to use (Critical Issue #3 fix - prevents race conditions)
    */
-  async generateMetricCode(organizationId: string, label: string): Promise<string> {
+  async generateMetricCode(
+    organizationId: string,
+    label: string,
+    tx?: any
+  ): Promise<string> {
+    // Use transaction if provided, otherwise use db
+    const dbOrTx = tx || db;
+
     // Extract first 8 chars of org ID (uppercase, remove hyphens)
     const orgPrefix = organizationId.substring(0, 8).toUpperCase().replace(/-/g, '');
 
@@ -70,7 +79,7 @@ export class CustomOrgMetricService extends BaseService {
     let counter = 1;
 
     while (true) {
-      const [existing] = await db.select()
+      const [existing] = await dbOrTx.select()
         .from(customOrgMetrics)
         .where(and(
           eq(customOrgMetrics.organizationId, organizationId),
@@ -252,7 +261,8 @@ export class CustomOrgMetricService extends BaseService {
       // Issue #2 fix: Wrap code generation + insertion in transaction to prevent race condition
       const metric = await db.transaction(async (tx) => {
         // Generate unique code from label (includes collision detection)
-        const code = await this.generateMetricCode(organizationId, data.label);
+        // Critical Issue #3 fix: Pass transaction to ensure collision check is atomic
+        const code = await this.generateMetricCode(organizationId, data.label, tx);
 
         // Insert the metric
         const [newMetric] = await tx.insert(customOrgMetrics).values({
