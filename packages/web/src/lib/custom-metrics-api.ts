@@ -197,7 +197,15 @@ export async function validateFormula(
     throw new Error(error.error || 'Failed to validate formula');
   }
 
-  return response.json();
+  const data = await response.json();
+
+  // Transform backend response (valid) to frontend format (isValid)
+  return {
+    isValid: data.valid,
+    errors: data.errors,
+    warnings: data.warnings,
+    referencedMetrics: data.referencedMetrics,
+  };
 }
 
 /**
