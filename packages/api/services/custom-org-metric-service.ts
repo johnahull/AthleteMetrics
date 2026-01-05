@@ -162,8 +162,13 @@ export class CustomOrgMetricService extends BaseService {
   /**
    * Throws an error if custom metrics are not enabled for the organization
    * Site admins can bypass this check for read operations
+   *
+   * @param organizationId - The organization ID to check
+   * @param userId - The user ID making the request
+   * @param allowSiteAdminBypass - Whether to allow site admins to bypass the check (for read operations)
+   * @throws {Error} If custom metrics are not enabled and user is not a site admin (when bypass allowed)
    */
-  private async ensureCustomMetricsEnabled(
+  async ensureCustomMetricsEnabled(
     organizationId: string,
     userId: string,
     allowSiteAdminBypass: boolean = false
@@ -375,6 +380,10 @@ export class CustomOrgMetricService extends BaseService {
 
   /**
    * Get a custom metric by label (for duplicate checking)
+   *
+   * @param organizationId - The organization ID to search in
+   * @param label - The label to search for
+   * @returns The custom metric if found, undefined otherwise
    */
   async getCustomOrgMetricByLabel(
     organizationId: string,
@@ -547,6 +556,10 @@ export class CustomOrgMetricService extends BaseService {
 
   /**
    * Get count of measurements using a custom metric
+   *
+   * @param organizationId - The organization ID to search in
+   * @param metricCode - The metric code to count measurements for
+   * @returns The number of measurements using this metric
    */
   async getMeasurementCount(organizationId: string, metricCode: string): Promise<number> {
     const [result] = await db.select({ count: count() })
@@ -589,6 +602,11 @@ export class CustomOrgMetricService extends BaseService {
 
   /**
    * Validate a formula for a custom org metric
+   *
+   * @param organizationId - The organization ID to validate the formula for
+   * @param formula - The formula string to validate
+   * @param excludeCode - Optional metric code to exclude from available metrics (for self-reference removal)
+   * @returns Validation result with valid flag, errors array, and referenced metrics
    */
   async validateCustomFormula(
     organizationId: string,

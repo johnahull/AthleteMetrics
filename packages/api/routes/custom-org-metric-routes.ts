@@ -17,6 +17,7 @@ const createMetricLimiter = rateLimit({
   message: { error: "Too many metric creation requests, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === 'test' || process.env.BYPASS_CUSTOM_METRIC_RATE_LIMIT === 'true',
 });
 
 const modifyMetricLimiter = rateLimit({
@@ -25,6 +26,7 @@ const modifyMetricLimiter = rateLimit({
   message: { error: "Too many metric modification requests, please try again later" },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => process.env.NODE_ENV === 'test' || process.env.BYPASS_CUSTOM_METRIC_RATE_LIMIT === 'true',
 });
 
 // Validation schemas
