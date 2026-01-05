@@ -90,7 +90,16 @@ export const siteSports = pgTable("site_sports", {
   displayOrderIdx: index("site_sports_display_order_idx").on(table.displayOrder),
 }));
 
-// Organization-specific custom metrics (org-private, not shared across orgs)
+/**
+ * Organization-specific custom metrics (org-private, not shared across orgs)
+ *
+ * Database CHECK Constraints (enforced at DB level via migration 0092):
+ * - check_non_derived_has_unit: Non-derived metrics must have a unit
+ * - check_derived_has_formula: Derived metrics must have a formula
+ * - check_validation_min_max: validation_min must be < validation_max
+ *
+ * These constraints are defined in the migration and must be manually maintained.
+ */
 export const customOrgMetrics = pgTable("custom_org_metrics", {
   id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
   organizationId: varchar("organization_id").notNull()
