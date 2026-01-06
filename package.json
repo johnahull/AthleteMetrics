@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/johnahull/AthleteMetrics.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnahull/AthleteMetrics/issues"
+  },
+  "homepage": "https://github.com/johnahull/AthleteMetrics#readme",
   "workspaces": [
     "packages/*"
   ],

@@ -14,6 +14,12 @@ vite.config.ts.*
 .env.staging
 .env.testing
 
+# Test data files (root level)
+athletes.csv
+measurements.csv
+test_*.csv
+test_*.js
+
 # Database
 *.db
 *.sqlite

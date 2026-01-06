@@ -1,13 +1,23 @@
 /**
  * Test analytics endpoints against staging database
  * This helps reproduce the 500 errors seen on staging
+ *
+ * Usage: DATABASE_URL="your-connection-string" node scripts/test-analytics-staging.mjs
  */
 
 import pg from 'pg';
 const { Client } = pg;
 
-const STAGING_DB_URL = 'postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway';
-const ORG_ID = '7ea312df-d815-47bf-8945-fefe710747d5';
+// Get database URL from environment variable
+const STAGING_DB_URL = process.env.DATABASE_URL;
+if (!STAGING_DB_URL) {
+  console.error('❌ DATABASE_URL environment variable is required');
+  console.error('Usage: DATABASE_URL="postgresql://..." node scripts/test-analytics-staging.mjs');
+  process.exit(1);
+}
+
+// Get org ID from command line or use a test value
+const ORG_ID = process.argv[2] || '7ea312df-d815-47bf-8945-fefe710747d5';
 
 async function testAthleteIdsQuery() {
   const client = new Client({ connectionString: STAGING_DB_URL });
@@ -86,7 +96,7 @@ async function testAthleteIdsQuery() {
       console.error('Error:', error.message);
       console.error('Code:', error.code);
       console.error('Detail:', error.detail);
-      console.error('');
+      console.log('');
     }
 
     // Test 3: At-Risk Query (mimics getAtRiskAthletes - declining performance)
@@ -156,7 +166,7 @@ async function testAthleteIdsQuery() {
       console.error('Error:', error.message);
       console.error('Code:', error.code);
       console.error('Detail:', error.detail);
-      console.error('');
+      console.log('');
     }
 
     // Test 4: At-Risk Query (inactive athletes) - FIXED VERSION
@@ -191,7 +201,7 @@ async function testAthleteIdsQuery() {
       console.error('Error:', error.message);
       console.error('Code:', error.code);
       console.error('Detail:', error.detail);
-      console.error('');
+      console.log('');
     }
 
     console.log('✓ All tests completed');
