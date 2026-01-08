@@ -330,6 +330,63 @@ export function registerProfileRoutes(app: Express) {
   });
 
   /**
+   * Get onboarding status for current user
+   */
+  app.get("/api/profile/onboarding-status", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const dbUser = await storage.getUser(currentUser.id);
+      if (!dbUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        hasCompletedOnboarding: dbUser.hasCompletedOnboarding ?? false,
+        isSiteAdmin: dbUser.isSiteAdmin ?? false,
+      });
+    } catch (error) {
+      console.error("Error fetching onboarding status:", error);
+      res.status(500).json({ message: "Failed to fetch onboarding status" });
+    }
+  });
+
+  /**
+   * Update onboarding status for current user
+   */
+  app.put("/api/profile/onboarding-status", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { completed } = req.body;
+
+      if (typeof completed !== 'boolean') {
+        return res.status(400).json({ message: "Invalid request: 'completed' must be a boolean" });
+      }
+
+      await storage.updateUser(currentUser.id, {
+        hasCompletedOnboarding: completed,
+      });
+
+      res.json({
+        hasCompletedOnboarding: completed,
+        message: completed ? "Onboarding marked as completed" : "Onboarding status reset",
+      });
+    } catch (error) {
+      console.error("Error updating onboarding status:", error);
+      res.status(500).json({ message: "Failed to update onboarding status" });
+    }
+  });
+
+  /**
    * Change password for current user
    */
   app.put("/api/profile/password", requireAuth, async (req, res) => {

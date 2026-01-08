@@ -1478,6 +1478,8 @@ export const insertUserSchema = createInsertSchema(users).omit({
   positions: z.array(z.string().min(1, "Position code required")).optional(),
   phoneNumbers: z.array(z.string().min(1, "Phone number cannot be empty")).optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
+  // Onboarding tracking - defaults to false for new users
+  hasCompletedOnboarding: z.boolean().optional(),
 });
 
 // Schema for creating OAuth users (password is optional for OAuth-only accounts)

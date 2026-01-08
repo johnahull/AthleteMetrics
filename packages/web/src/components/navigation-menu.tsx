@@ -9,6 +9,7 @@ export interface NavigationItem {
   icon: React.ComponentType<{ className?: string }>;
   testId?: string; // Optional custom test ID
   badge?: number; // Optional badge count
+  tourId?: string; // Optional tour step ID for onboarding
 }
 
 interface NavigationMenuProps {
@@ -32,6 +33,7 @@ export function NavigationMenu({ navigation, currentLocation, onNavigate }: Navi
                   : "text-gray-700 hover:bg-gray-100"
               )}
               data-testid={item.testId || `nav-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
+              data-tour={item.tourId}
               onClick={onNavigate}
             >
               <item.icon className="h-5 w-5" />

@@ -17,6 +17,7 @@ import { CommandPalette } from "./components/command-palette/command-palette";
 import { KeyboardShortcutsHelp } from "./components/command-palette/keyboard-shortcuts-help";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PWAInstallPrompt } from "./components/pwa-install-prompt";
+import { OnboardingProvider, OnboardingTour } from "./components/onboarding";
 
 // Register all Chart.js components once at app level
 import "./lib/chart-setup";
@@ -511,6 +512,7 @@ function AppContent() {
       </ErrorBoundary>
       <KeyboardShortcutsHelp isOpen={isHelpOpen} onClose={closeHelp} />
       <PWAInstallPrompt />
+      <OnboardingTour />
       <Router />
     </Layout>
   );
@@ -529,9 +531,11 @@ function App() {
       <TooltipProvider>
         <AuthProvider>
           <AthleteOrgProvider>
-            <CommandPaletteProvider>
-              <AppContent />
-            </CommandPaletteProvider>
+            <OnboardingProvider>
+              <CommandPaletteProvider>
+                <AppContent />
+              </CommandPaletteProvider>
+            </OnboardingProvider>
           </AthleteOrgProvider>
         </AuthProvider>
       </TooltipProvider>
