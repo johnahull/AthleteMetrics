@@ -2,7 +2,7 @@
 -- This column tracks whether a user has completed the first-time onboarding tour
 
 ALTER TABLE users
-ADD COLUMN has_completed_onboarding BOOLEAN NOT NULL DEFAULT FALSE;
+ADD COLUMN IF NOT EXISTS has_completed_onboarding BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Site admins don't need onboarding, so mark them as completed
 UPDATE users
