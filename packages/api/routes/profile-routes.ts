@@ -366,11 +366,20 @@ export function registerProfileRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      const { completed } = req.body;
+      // Validate request body with Zod
+      const onboardingStatusSchema = z.object({
+        completed: z.boolean()
+      });
 
-      if (typeof completed !== 'boolean') {
-        return res.status(400).json({ message: "Invalid request: 'completed' must be a boolean" });
+      const parseResult = onboardingStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          message: "Invalid request body",
+          errors: parseResult.error.errors
+        });
       }
+
+      const { completed } = parseResult.data;
 
       await storage.updateUser(currentUser.id, {
         hasCompletedOnboarding: completed,

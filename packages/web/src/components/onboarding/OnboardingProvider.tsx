@@ -17,13 +17,16 @@ interface OnboardingContextType {
 
 const OnboardingContext = createContext<OnboardingContextType | undefined>(undefined);
 
+// Delay before showing onboarding tour to allow page to render
+const ONBOARDING_START_DELAY_MS = 500;
+
 export function OnboardingProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [isOnboardingActive, setIsOnboardingActive] = useState(false);
 
   // Fetch onboarding status from backend
-  const { data: onboardingStatus } = useQuery({
+  const { data: onboardingStatus, isLoading } = useQuery({
     queryKey: ['/api/profile/onboarding-status'],
     queryFn: async () => {
       const response = await fetch('/api/profile/onboarding-status', {
@@ -50,6 +53,10 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/profile/onboarding-status'] });
     },
+    onError: (error) => {
+      console.error('Failed to update onboarding status:', error);
+      // User still sees visual feedback via localStorage, so silent error handling is acceptable
+    },
   });
 
   // Auto-start onboarding for new users
@@ -59,14 +66,15 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
     // Check localStorage for instant feedback
     const hasSeenOnboarding = localStorage.getItem(`onboarding_seen_${user.id}`);
 
-    if (onboardingStatus && !onboardingStatus.hasCompletedOnboarding && !hasSeenOnboarding) {
+    // Only start if we have confirmed API data (not still loading)
+    if (onboardingStatus && !onboardingStatus.hasCompletedOnboarding && !hasSeenOnboarding && !isLoading) {
       // Small delay to let the page render first
       const timer = setTimeout(() => {
         setIsOnboardingActive(true);
-      }, 500);
+      }, ONBOARDING_START_DELAY_MS);
       return () => clearTimeout(timer);
     }
-  }, [user, onboardingStatus]);
+  }, [user, onboardingStatus, isLoading]);
 
   const startOnboarding = () => {
     // Clear localStorage to allow replay even if previously seen
