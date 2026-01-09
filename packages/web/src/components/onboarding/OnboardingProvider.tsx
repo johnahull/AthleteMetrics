@@ -8,6 +8,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@/hooks/use-toast';
+import type { OnboardingStatusResponse } from '@shared/schema/types';
 
 interface OnboardingContextType {
   isOnboardingActive: boolean;
@@ -27,7 +28,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const [isOnboardingActive, setIsOnboardingActive] = useState(false);
 
   // Fetch onboarding status from backend
-  const { data: onboardingStatus, isLoading } = useQuery({
+  const { data: onboardingStatus, isLoading } = useQuery<OnboardingStatusResponse>({
     queryKey: ['/api/profile/onboarding-status'],
     queryFn: async () => {
       const response = await fetch('/api/profile/onboarding-status', {
@@ -51,11 +52,8 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       if (!response.ok) throw new Error('Failed to update onboarding status');
       return response.json();
     },
-    onSuccess: (data, variables, context) => {
-      // Only set localStorage AFTER API success to prevent race condition
-      if (user) {
-        localStorage.setItem(`onboarding_seen_${user.id}`, 'true');
-      }
+    onSuccess: () => {
+      // Invalidate query to refetch updated status from server
       queryClient.invalidateQueries({ queryKey: ['/api/profile/onboarding-status'] });
     },
     onError: (error) => {
@@ -116,7 +114,12 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const stopOnboarding = () => {
     setIsOnboardingActive(false);
     if (user) {
-      // Mark as completed in backend (localStorage will be set on success)
+      // Optimistic update: Set localStorage immediately for better UX
+      // If API fails, user still gets visual feedback via localStorage
+      // Toast notification on error alerts user to connectivity issues
+      localStorage.setItem(`onboarding_seen_${user.id}`, 'true');
+
+      // Mark as completed in backend
       completeMutation.mutate();
     }
   };

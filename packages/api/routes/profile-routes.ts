@@ -14,6 +14,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
+import type { OnboardingStatusResponse } from "@shared/schema/types";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for username check endpoint to prevent enumeration attacks
@@ -345,10 +346,14 @@ export function registerProfileRoutes(app: Express) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      res.json({
+      // Note: Role information is not included in this response because
+      // the frontend already has user.role from the auth session context.
+      // This endpoint only provides onboarding-specific flags.
+      const response: OnboardingStatusResponse = {
         hasCompletedOnboarding: dbUser.hasCompletedOnboarding ?? false,
         isSiteAdmin: dbUser.isSiteAdmin ?? false,
-      });
+      };
+      res.json(response);
     } catch (error) {
       console.error("Error fetching onboarding status:", error);
       res.status(500).json({ message: "Failed to fetch onboarding status" });

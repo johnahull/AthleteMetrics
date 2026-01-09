@@ -214,3 +214,16 @@ export type EventMetricWithDetails = EventMetric & {
   metricType: string;
   units: string;
 };
+
+// ============================================================================
+// Onboarding Types
+// ============================================================================
+
+/**
+ * Response from GET /api/profile/onboarding-status
+ * Note: User role is not included here as it's available from auth session context
+ */
+export interface OnboardingStatusResponse {
+  hasCompletedOnboarding: boolean;
+  isSiteAdmin: boolean;
+}
