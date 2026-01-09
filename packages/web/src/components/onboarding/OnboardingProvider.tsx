@@ -7,6 +7,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from '@/hooks/use-toast';
 
 interface OnboardingContextType {
   isOnboardingActive: boolean;
@@ -50,14 +51,42 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
       if (!response.ok) throw new Error('Failed to update onboarding status');
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data, variables, context) => {
+      // Only set localStorage AFTER API success to prevent race condition
+      if (user) {
+        localStorage.setItem(`onboarding_seen_${user.id}`, 'true');
+      }
       queryClient.invalidateQueries({ queryKey: ['/api/profile/onboarding-status'] });
     },
     onError: (error) => {
       console.error('Failed to update onboarding status:', error);
-      // User still sees visual feedback via localStorage, so silent error handling is acceptable
+      // Show user feedback on error
+      toast({
+        title: "Connection Error",
+        description: "Tour completed locally, but couldn't save to server. Please check your connection.",
+        variant: "destructive",
+      });
     },
   });
+
+  // Clean up old localStorage keys from other users (prevent accumulation)
+  useEffect(() => {
+    if (!user) return;
+
+    const currentKey = `onboarding_seen_${user.id}`;
+    const keysToRemove: string[] = [];
+
+    // Find all onboarding keys that aren't for the current user
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('onboarding_seen_') && key !== currentKey) {
+        keysToRemove.push(key);
+      }
+    }
+
+    // Remove old keys
+    keysToRemove.forEach(key => localStorage.removeItem(key));
+  }, [user]);
 
   // Auto-start onboarding for new users
   useEffect(() => {
@@ -87,9 +116,7 @@ export function OnboardingProvider({ children }: { children: React.ReactNode }) 
   const stopOnboarding = () => {
     setIsOnboardingActive(false);
     if (user) {
-      // Mark as seen in localStorage for instant feedback
-      localStorage.setItem(`onboarding_seen_${user.id}`, 'true');
-      // Mark as completed in backend
+      // Mark as completed in backend (localStorage will be set on success)
       completeMutation.mutate();
     }
   };
