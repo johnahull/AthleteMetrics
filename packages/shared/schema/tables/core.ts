@@ -100,6 +100,8 @@ export const users = pgTable("users", {
   // Peer comparison display preference (controls UI visibility, not data sharing - all measurements contribute to anonymous peer pool)
   showPeerComparisons: boolean("show_peer_comparisons").default(true).notNull(),
   peerComparisonConsentedAt: timestamp("peer_comparison_consented_at"), // Legacy: kept for historical records
+  // Onboarding tour completion tracking
+  hasCompletedOnboarding: boolean("has_completed_onboarding").default(false).notNull(),
   /**
    * Legal acceptance tracking
    *

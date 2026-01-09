@@ -14,6 +14,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin } from "@shared/auth-utils";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
+import type { OnboardingStatusResponse } from "@shared/schema/types";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
 // Rate limiting for username check endpoint to prevent enumeration attacks
@@ -326,6 +327,76 @@ export function registerProfileRoutes(app: Express) {
         console.error("Error updating profile:", error);
         res.status(500).json({ message: "Failed to update profile" });
       }
+    }
+  });
+
+  /**
+   * Get onboarding status for current user
+   */
+  app.get("/api/profile/onboarding-status", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const dbUser = await storage.getUser(currentUser.id);
+      if (!dbUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Note: Role information is not included in this response because
+      // the frontend already has user.role from the auth session context.
+      // This endpoint only provides onboarding-specific flags.
+      const response: OnboardingStatusResponse = {
+        hasCompletedOnboarding: dbUser.hasCompletedOnboarding ?? false,
+        isSiteAdmin: dbUser.isSiteAdmin ?? false,
+      };
+      res.json(response);
+    } catch (error) {
+      console.error("Error fetching onboarding status:", error);
+      res.status(500).json({ message: "Failed to fetch onboarding status" });
+    }
+  });
+
+  /**
+   * Update onboarding status for current user
+   */
+  app.put("/api/profile/onboarding-status", requireAuth, async (req, res) => {
+    try {
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate request body with Zod
+      const onboardingStatusSchema = z.object({
+        completed: z.boolean()
+      });
+
+      const parseResult = onboardingStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({
+          message: "Invalid request body",
+          errors: parseResult.error.errors
+        });
+      }
+
+      const { completed } = parseResult.data;
+
+      await storage.updateUser(currentUser.id, {
+        hasCompletedOnboarding: completed,
+      });
+
+      res.json({
+        hasCompletedOnboarding: completed,
+        message: completed ? "Onboarding marked as completed" : "Onboarding status reset",
+      });
+    } catch (error) {
+      console.error("Error updating onboarding status:", error);
+      res.status(500).json({ message: "Failed to update onboarding status" });
     }
   });
 

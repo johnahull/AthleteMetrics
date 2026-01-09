@@ -649,7 +649,9 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
+      'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding'
     ];
 
     const updateData: any = {};
@@ -3011,7 +3013,8 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'showPeerComparisons', 'hasCompletedOnboarding'
     ];
 
     // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors

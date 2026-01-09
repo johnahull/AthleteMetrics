@@ -13,19 +13,22 @@ import { useAuth } from '@/lib/auth';
 import { useAthleteContext } from '@/hooks/useAthleteContext';
 import { useAthleteProfileComplete } from '@/hooks/useAthleteProfile';
 import { usePeerComparisonStatus, useUpdatePeerComparisonStatus } from '@/hooks/usePeerComparison';
+import { useOnboarding } from '@/components/onboarding';
 import { AthleteHeader } from '@/components/athlete/profile/AthleteHeader';
 import { ContactInfoCard } from '@/components/athlete/profile/ContactInfoCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, AlertCircle, User, Shield, Users, Bell, ChevronRight } from 'lucide-react';
+import { Loader2, AlertCircle, User, Shield, Users, Bell, ChevronRight, LifeBuoy } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
 
 export default function MyProfilePage() {
   const { user, isLoading: authLoading } = useAuth();
   const { athleteId, isOwnProfile, canView, isLoading: contextLoading } = useAthleteContext();
+  const { startOnboarding } = useOnboarding();
 
   // Fetch athlete profile data
   const { athlete, teams, isLoading, isError, error } = useAthleteProfileComplete(athleteId);
@@ -219,6 +222,28 @@ export default function MyProfilePage() {
             </div>
           </CardContent>
         </Link>
+      </Card>
+
+      {/* Replay Onboarding Tour */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <LifeBuoy className="h-5 w-5 text-blue-600" />
+            Help & Guidance
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground mb-4">
+            New to AthleteMetrics or need a refresher? Take the guided tour again to learn about all features.
+          </p>
+          <Button
+            onClick={startOnboarding}
+            variant="outline"
+            className="w-full"
+          >
+            Replay Onboarding Tour
+          </Button>
+        </CardContent>
       </Card>
 
       {/* Tips Card */}
