@@ -182,7 +182,7 @@ describe('OnboardingProvider', () => {
       expect(screen.getByTestId('is-active').textContent).toBe('false');
     });
 
-    it('sets localStorage when stopping tour', () => {
+    it('sets localStorage when stopping tour', async () => {
       renderWithProvider();
 
       // Start first
@@ -195,7 +195,10 @@ describe('OnboardingProvider', () => {
         fireEvent.click(screen.getByTestId('stop-btn'));
       });
 
-      expect(localStorageMock.setItem).toHaveBeenCalledWith(`onboarding_seen_user-123`, 'true');
+      // Wait for mutation's onSuccess callback which sets localStorage
+      await vi.waitFor(() => {
+        expect(localStorageMock.setItem).toHaveBeenCalledWith(`onboarding_seen_user-123`, 'true');
+      });
     });
 
     it('calls API to mark onboarding as completed', async () => {
