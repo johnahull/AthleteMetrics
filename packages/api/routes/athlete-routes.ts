@@ -7,6 +7,7 @@
  * ✅ DELETE /api/athletes/:id - Uses requireAthleteAccessPermission
  * ⚠️  GET /api/athletes/:id - Has inline permission checks (legacy pattern)
  * ⚠️  GET /api/athletes - No specific permission middleware (requireAuth only)
+ * ⚠️  GET /api/athletes/:id/active-teams - Has inline permission checks (legacy pattern)
  *
  * Future: Migrate GET routes to use middleware for consistency
  */
@@ -28,6 +29,9 @@ import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
+import { MeasurementService } from "../services/measurement-service";
+import { dateStringSchema } from "@shared/date-utils";
+import { z } from "zod";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -49,6 +53,9 @@ const athleteDeleteLimiter = rateLimit({
 });
 
 export function registerAthleteRoutes(app: Express) {
+  // Create service instance once for all routes (avoid per-request instantiation)
+  const measurementService = new MeasurementService();
+
   /**
    * Get recent athletes with measurements
    */
@@ -652,6 +659,95 @@ export function registerAthleteRoutes(app: Express) {
     } catch (error) {
       console.error("[BULK INVITE] Error:", error);
       const message = error instanceof Error ? error.message : "Failed to bulk invite athletes";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get athlete's active teams at a specific date
+   */
+  app.get("/api/athletes/:id/active-teams", athleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const athleteId = req.params.id;
+      const currentUser = req.session.user;
+
+      if (!currentUser?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Validate date parameter
+      const dateParam = req.query.date;
+      if (!dateParam || typeof dateParam !== 'string') {
+        return res.status(400).json({ message: "Date parameter is required" });
+      }
+
+      // Validate date format using Zod schema
+      const dateValidation = dateStringSchema.safeParse(dateParam);
+      if (!dateValidation.success) {
+        return res.status(400).json({ message: "Date parameter is invalid. Expected format: YYYY-MM-DD" });
+      }
+
+      // Check if athlete exists
+      const athlete = await storage.getAthlete(athleteId);
+      if (!athlete) {
+        return res.status(404).json({ message: "Athlete not found" });
+      }
+
+      const userIsSiteAdmin = isSiteAdmin(currentUser);
+
+      // SECURITY: Verify user has access to the athlete's organization
+      if (!userIsSiteAdmin) {
+        // Get user's organizations
+        const userOrgs = await getCachedUserOrganizations(req, currentUser.id);
+        if (userOrgs.length === 0) {
+          return res.status(403).json({ message: "Access denied - no organization access" });
+        }
+
+        // Get the athlete's organization assignments
+        const athleteOrgs = await getCachedUserOrganizations(req, athleteId);
+        const athleteTeams = await storage.getUserTeams(athleteId);
+
+        // Athlete must belong to at least one organization OR have team assignments
+        if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
+          return res.status(403).json({ message: "Access denied - athlete has no organization assignments" });
+        }
+
+        // Check if user has access to any of the athlete's organizations
+        const userOrgIds = userOrgs.map(org => org.organizationId);
+        const athleteOrgIds = athleteOrgs.map(org => org.organizationId);
+        const athleteTeamOrgIds = athleteTeams.map(team => team.team.organizationId);
+
+        // Combine both organization sources
+        const allAthleteOrgIds = [...new Set([...athleteOrgIds, ...athleteTeamOrgIds])];
+
+        const hasOrganizationAccess = allAthleteOrgIds.some(orgId => userOrgIds.includes(orgId));
+        if (!hasOrganizationAccess) {
+          // Audit log: User attempted to access athlete from different org
+          logAuthorizationFailure(currentUser.id, 'read', 'athlete-active-teams', {
+            attemptedOrgId: allAthleteOrgIds[0],
+            userOrgIds: userOrgIds,
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+            route: req.path,
+            method: req.method,
+          });
+          return res.status(403).json({ message: "Access denied - athlete belongs to a different organization" });
+        }
+      }
+
+      // Convert date string to Date object
+      const measurementDate = new Date(dateParam);
+
+      // Get active teams using the MeasurementService (instance created at function scope)
+      const activeTeams = await measurementService.getAthleteActiveTeamsAtDate(
+        athleteId,
+        measurementDate
+      );
+
+      res.json(activeTeams);
+    } catch (error) {
+      console.error("Get athlete active teams error:", error);
+      const message = error instanceof Error ? error.message : "Failed to fetch athlete active teams";
       res.status(500).json({ message });
     }
   });
