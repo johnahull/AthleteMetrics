@@ -129,7 +129,9 @@ export const createSecurityEventSchema = createInsertSchema(securityEvents).omit
     'email_verified',
     'session_expired',
     'suspicious_activity',
-    'authorization_failed'
+    'authorization_failed',
+    'role_change',             // Role assignment changes (new role, demotion, or lateral move)
+    'permission_escalation'    // Privilege increase (promoted to higher role level)
   ]),
   severity: z.enum(['info', 'warning', 'critical']),
   // Note: IP validation removed to allow '0.0.0.0' fallback pattern used in audit logging
