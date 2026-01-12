@@ -131,6 +131,45 @@ When ENABLED:
 | Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
 | Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
 
+## Git Workflow
+
+### Branching Strategy
+
+This repository uses a **develop → main** branching model:
+
+```
+feature/xyz ──┐
+fix/abc ──────┼──► develop ──────► main
+chore/123 ────┘
+```
+
+**Rules:**
+1. **All feature branches** (`feature/*`, `fix/*`, `chore/*`, etc.) must open PRs against `develop`
+2. **Only `develop`** may open a PR against `main`
+3. **Never PR directly** from a feature branch to `main`
+
+### Branch Naming Conventions
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| New feature | `feature/<description>` | `feature/athlete-dashboard` |
+| Bug fix | `fix/<description>` | `fix/rbac-requirerole-bug` |
+| Maintenance | `chore/<description>` | `chore/update-dependencies` |
+| Documentation | `docs/<description>` | `docs/api-reference` |
+| Refactoring | `refactor/<description>` | `refactor/auth-middleware` |
+
+### Creating PRs
+
+When creating a PR, always specify `develop` as the base branch:
+
+```bash
+# Create PR against develop (correct)
+gh pr create --base develop --title "feat: add new feature"
+
+# Never do this for feature branches
+gh pr create --base main  # ❌ Wrong for feature branches
+```
+
 ## Development Commands
 
 ### Core Development
