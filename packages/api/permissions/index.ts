@@ -57,3 +57,28 @@ export {
   getAssignableRoles,
   getRoleDisplayName,
 } from './helpers';
+
+// Measurement-specific permission helpers
+export {
+  canCreateMeasurementFor,
+  canModifyMeasurement,
+  canDeleteMeasurement,
+  canVerifyMeasurement,
+  canUseBatchEndpoint,
+  canQueryCrossOrganization,
+} from './measurement-helpers';
+
+export type {
+  PermissionResult,
+  MeasurementForPermission,
+  UserForPermission,
+} from './measurement-helpers';
+
+// Analytics-specific permission helpers
+export {
+  canViewUserStats,
+  canAccessLeaderboard,
+  canAccessMostImproved,
+  canAccessAtRiskData,
+  canAccessCoachAnalytics,
+} from './analytics-helpers';

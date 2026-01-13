@@ -215,6 +215,17 @@ export class RoleManager {
 
   /**
    * Create role-based middleware for routes
+   *
+   * @deprecated Use `requirePermission` from 'packages/api/permissions' instead.
+   * This method will be removed in a future version.
+   *
+   * @example
+   * // Old usage (deprecated):
+   * RoleManager.requirePermission('CREATE_TEAM')
+   *
+   * // New usage:
+   * import { requirePermission } from '../permissions';
+   * requirePermission('CREATE_TEAM')
    */
   static requirePermission(permission: Permission) {
     return async (req: any, res: any, next: any) => {
@@ -252,12 +263,19 @@ export class RoleManager {
   /**
    * Create role-based middleware for minimum role requirement
    *
+   * @deprecated Use `requireRole` from 'packages/api/permissions' instead.
+   * This method will be removed in a future version.
+   *
    * @param minRole - The minimum role level required to access the route
    * @returns Express middleware that validates user has sufficient role level
    *
    * @example
-   * // Require at least coach role
-   * router.get('/team-stats', RoleManager.requireRole('coach'), handler);
+   * // Old usage (deprecated):
+   * RoleManager.requireRole('coach')
+   *
+   * // New usage:
+   * import { requireRole } from '../permissions';
+   * requireRole('coach')
    *
    * @note Uses role LEVEL comparison (>=) not canManageRole (>).
    * A coach (level 60) can access coach-required routes.
