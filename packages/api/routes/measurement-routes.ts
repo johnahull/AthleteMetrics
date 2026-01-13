@@ -11,9 +11,6 @@ import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import {
-  canCreateMeasurementFor,
-  canModifyMeasurement,
-  canDeleteMeasurement,
   canVerifyMeasurement,
   canUseBatchEndpoint,
   canQueryCrossOrganization,

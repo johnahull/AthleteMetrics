@@ -1,73 +1,19 @@
 /**
  * Unified Permission Types
  *
- * Defines the role hierarchy, permission matrix, and resource-action model
- * for the AthleteMetrics RBAC system.
+ * Re-exports role hierarchy and permissions from the shared module,
+ * and adds resource-action model for granular access control.
  *
  * @see packages/api/permissions/middleware.ts for middleware implementations
  */
 
-/**
- * Role hierarchy with numeric levels for comparison.
- * Higher numbers = more privileges.
- */
-export const ROLE_HIERARCHY = {
-  site_admin: 100,
-  org_admin: 80,
-  coach: 60,
-  athlete: 40,
-  guest: 20,
-} as const;
-
-export type Role = keyof typeof ROLE_HIERARCHY;
-
-/**
- * Legacy permission names mapped to roles that can perform them.
- * Maintains backward compatibility with RoleManager.requirePermission().
- */
-export const PERMISSIONS: Record<string, Role[]> = {
-  // Organization management
-  CREATE_ORGANIZATION: ['site_admin'],
-  MANAGE_ORGANIZATION: ['site_admin', 'org_admin'],
-  VIEW_ORGANIZATION: ['site_admin', 'org_admin', 'coach', 'athlete'],
-  DELETE_ORGANIZATION: ['site_admin'],
-
-  // User management
-  INVITE_USERS: ['site_admin', 'org_admin'],
-  MANAGE_USERS: ['site_admin', 'org_admin'],
-  VIEW_ALL_USERS: ['site_admin', 'org_admin', 'coach'],
-  DELETE_USERS: ['site_admin', 'org_admin'],
-  IMPERSONATE_USERS: ['site_admin'],
-
-  // Team management
-  CREATE_TEAM: ['site_admin', 'org_admin', 'coach'],
-  MANAGE_TEAM: ['site_admin', 'org_admin', 'coach'],
-  VIEW_TEAM: ['site_admin', 'org_admin', 'coach', 'athlete'],
-  DELETE_TEAM: ['site_admin', 'org_admin'],
-
-  // Measurement management
-  IMPORT_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-  CREATE_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-  EDIT_ANY_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-  EDIT_OWN_MEASUREMENTS: ['athlete'],
-  VIEW_ALL_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-  VIEW_OWN_MEASUREMENTS: ['athlete'],
-  DELETE_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-  VERIFY_MEASUREMENTS: ['site_admin', 'org_admin', 'coach'],
-
-  // Analytics and reporting
-  VIEW_ANALYTICS: ['site_admin', 'org_admin', 'coach'],
-  VIEW_ADVANCED_ANALYTICS: ['site_admin', 'org_admin'],
-  EXPORT_DATA: ['site_admin', 'org_admin', 'coach'],
-  BULK_EXPORT: ['site_admin', 'org_admin'],
-
-  // System administration
-  MANAGE_SYSTEM: ['site_admin'],
-  VIEW_LOGS: ['site_admin'],
-  CONFIGURE_SETTINGS: ['site_admin', 'org_admin'],
-} as const;
-
-export type Permission = keyof typeof PERMISSIONS;
+// Re-export core types from shared module to avoid duplication
+export {
+  ROLE_HIERARCHY,
+  PERMISSIONS,
+  type Role,
+  type Permission,
+} from '@shared/role-types';
 
 /**
  * Resource types for resource-action based permissions
@@ -85,6 +31,9 @@ export type Resource =
  * Actions that can be performed on resources
  */
 export type Action = 'create' | 'read' | 'update' | 'delete' | 'verify';
+
+// Import Role type for use in RESOURCE_PERMISSIONS
+import type { Role } from '@shared/role-types';
 
 /**
  * Resource-action permission matrix.

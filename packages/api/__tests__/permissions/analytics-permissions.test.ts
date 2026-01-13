@@ -160,4 +160,55 @@ describe('Analytics Permission Helpers', () => {
       expect(result.allowed).toBe(false);
     });
   });
+
+  describe('Edge Cases: Null/Undefined Role', () => {
+    it('should deny access to user stats with null role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canViewUserStats(user as any, 'another-user');
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny access to user stats with undefined role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false };
+      const result = canViewUserStats(user as any, 'another-user');
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny leaderboard access with null role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canAccessLeaderboard(user as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny leaderboard access with undefined role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false };
+      const result = canAccessLeaderboard(user as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny most-improved access with null role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canAccessMostImproved(user as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny at-risk data access with null role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canAccessAtRiskData(user as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny coach analytics access with null role', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canAccessCoachAnalytics(user as any);
+      expect(result.allowed).toBe(false);
+    });
+
+    it('should deny self-access for user stats with null role (no valid role)', () => {
+      const user = { id: 'user-1', isSiteAdmin: false, role: null };
+      const result = canViewUserStats(user as any, 'user-1');
+      // Users with no role cannot access anything (security-conscious default)
+      expect(result.allowed).toBe(false);
+    });
+  });
 });
