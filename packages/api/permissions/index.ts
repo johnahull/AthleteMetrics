@@ -53,6 +53,7 @@ export {
   hasPermission,
   canPerformAction,
   isSiteAdmin,
+  isValidRole,
   canManageRole,
   getAssignableRoles,
   getRoleDisplayName,

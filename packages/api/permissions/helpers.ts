@@ -19,7 +19,22 @@ export {
 } from '@shared/role-types';
 
 // Import getRoleLevel for use in local functions
-import { getRoleLevel } from '@shared/role-types';
+import { getRoleLevel, ROLE_HIERARCHY } from '@shared/role-types';
+
+/**
+ * Type guard to check if a value is a valid Role.
+ *
+ * @param role - Value to check
+ * @returns True if the value is a valid Role type
+ *
+ * @example
+ * isValidRole('coach') // true
+ * isValidRole('invalid_role') // false
+ * isValidRole(null) // false
+ */
+export function isValidRole(role: any): role is Role {
+  return typeof role === 'string' && role in ROLE_HIERARCHY;
+}
 
 /**
  * Check if a user has at least the minimum required role level.

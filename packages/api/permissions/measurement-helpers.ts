@@ -12,7 +12,7 @@
  */
 
 import { storage } from '../storage';
-import { isSiteAdmin } from './helpers';
+import { isSiteAdmin, isValidRole } from './helpers';
 
 /**
  * Permission check result with optional reason for denial
@@ -57,6 +57,14 @@ export async function canCreateMeasurementFor(
   // Site admins can create for anyone
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   // Athletes can only create for themselves
@@ -113,6 +121,14 @@ export async function canModifyMeasurement(
   // Site admins can modify anything
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   // Check if user is the original submitter
@@ -189,6 +205,14 @@ export async function canDeleteMeasurement(
     return { allowed: true };
   }
 
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
+  }
+
   // Check if user is the original submitter
   const isSubmitter = measurement.submittedBy === user.id;
 
@@ -260,6 +284,14 @@ export async function canVerifyMeasurement(
     return { allowed: true };
   }
 
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
+  }
+
   // Athletes cannot verify
   if (user.role === 'athlete' || user.role === 'guest') {
     return {
@@ -302,6 +334,14 @@ export async function canVerifyMeasurement(
 export function canUseBatchEndpoint(user: UserForPermission): PermissionResult {
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   if (user.role === 'coach' || user.role === 'org_admin') {

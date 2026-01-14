@@ -8,7 +8,7 @@
  * @see packages/api/routes/analytics-routes.ts
  */
 
-import { isSiteAdmin } from './helpers';
+import { isSiteAdmin, isValidRole } from './helpers';
 import type { PermissionResult, UserForPermission } from './measurement-helpers';
 
 /**
@@ -26,6 +26,14 @@ export function canViewUserStats(
   // Site admins can view anyone's stats
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   // Athletes can only view their own stats
@@ -63,6 +71,14 @@ export function canAccessLeaderboard(user: UserForPermission): PermissionResult 
     return { allowed: true };
   }
 
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
+  }
+
   if (user.role === 'coach' || user.role === 'org_admin') {
     return { allowed: true };
   }
@@ -83,6 +99,14 @@ export function canAccessLeaderboard(user: UserForPermission): PermissionResult 
 export function canAccessMostImproved(user: UserForPermission): PermissionResult {
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   if (user.role === 'coach' || user.role === 'org_admin') {
@@ -107,6 +131,14 @@ export function canAccessAtRiskData(user: UserForPermission): PermissionResult {
     return { allowed: true };
   }
 
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
+  }
+
   if (user.role === 'coach' || user.role === 'org_admin') {
     return { allowed: true };
   }
@@ -126,6 +158,14 @@ export function canAccessAtRiskData(user: UserForPermission): PermissionResult {
 export function canAccessCoachAnalytics(user: UserForPermission): PermissionResult {
   if (isSiteAdmin(user)) {
     return { allowed: true };
+  }
+
+  // Validate role
+  if (!user.role || !isValidRole(user.role)) {
+    return {
+      allowed: false,
+      reason: 'Invalid or missing user role',
+    };
   }
 
   if (user.role === 'coach' || user.role === 'org_admin') {
