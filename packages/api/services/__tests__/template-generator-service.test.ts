@@ -104,10 +104,11 @@ describe('TemplateGeneratorService', () => {
       expect(birthYear).toBeGreaterThanOrEqual(2004);
       expect(birthYear).toBeLessThanOrEqual(2010);
 
-      // Graduation year should be future or recent
+      // Graduation year should be future or recent (dynamic based on current year)
       const gradYear = parseInt(row.graduationYear);
-      expect(gradYear).toBeGreaterThanOrEqual(2024);
-      expect(gradYear).toBeLessThanOrEqual(2028);
+      const currentYear = new Date().getFullYear();
+      expect(gradYear).toBeGreaterThanOrEqual(currentYear - 2);
+      expect(gradYear).toBeLessThanOrEqual(currentYear + 4);
 
       // Email should follow pattern
       expect(row.emails).toContain('@example.com');
