@@ -719,6 +719,7 @@ describe('MeasurementService', () => {
           metric: 'FLY10_TIME',
           birthYearFrom: 2000,
           includeUnknownBirthYear: true,
+          organizationId: testOrgId,
         }, true);
 
         // Should include user2005 (2005 >= 2000) and userNoBirthYear (NULL included)
@@ -734,6 +735,7 @@ describe('MeasurementService', () => {
           metric: 'FLY10_TIME',
           birthYearTo: 2000,
           includeUnknownBirthYear: true,
+          organizationId: testOrgId,
         }, true);
 
         // Should include user1995 (1995 <= 2000) and userNoBirthYear (NULL included)
@@ -750,6 +752,7 @@ describe('MeasurementService', () => {
           birthYearFrom: 2000,
           birthYearTo: 2010,
           includeUnknownBirthYear: true,
+          organizationId: testOrgId,
         }, true);
 
         // Should include user2005 (2000 <= 2005 <= 2010) and userNoBirthYear (NULL included)
@@ -765,6 +768,7 @@ describe('MeasurementService', () => {
           metric: 'FLY10_TIME',
           birthYearFrom: 2020, // Very restrictive filter
           includeUnknownBirthYear: true,
+          organizationId: testOrgId,
         }, true);
 
         // Should still include userNoBirthYear (NULL included when includeUnknownBirthYear is true)
@@ -782,6 +786,7 @@ describe('MeasurementService', () => {
           birthYearFrom: 2000,
           birthYearTo: 2010,
           includeUnknownBirthYear: true,
+          organizationId: testOrgId,
         }, true);
 
         // Should include: user2005 (2005 in range), userNoBirthYear (NULL included),
@@ -802,6 +807,7 @@ describe('MeasurementService', () => {
           birthYearFrom: 2000,
           birthYearTo: 2010,
           includeUnknownBirthYear: false,
+          organizationId: testOrgId,
         }, true);
 
         // Should include users in range (user2005, testUserId) but NOT userNoBirthYear

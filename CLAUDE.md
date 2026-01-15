@@ -375,6 +375,46 @@ export default function NewFeaturePage() {
 <Route path="/admin/new-feature" component={NewFeaturePage} />
 ```
 
+#### Permission Middleware Module
+
+The unified permission module in `packages/api/permissions/` provides consistent RBAC middleware:
+
+```typescript
+import {
+  requirePermission,
+  requireRole,
+  requireOrgAccess,
+  requireResourceAccess,
+} from '../permissions';
+
+// Permission-based (legacy PERMISSIONS matrix)
+router.post('/teams', requireAuth, requirePermission('CREATE_TEAM'), handler);
+
+// Role-based (minimum role level)
+router.get('/coach-dashboard', requireAuth, requireRole('coach'), handler);
+
+// Organization access (validates org membership)
+router.get('/org/:orgId/data', requireAuth, requireOrgAccess(), handler);
+
+// Resource-action based (granular control)
+router.put('/athletes/:id', requireAuth, requireResourceAccess('athlete', 'update'), handler);
+```
+
+**Role Hierarchy (higher = more privileges):**
+- `site_admin` (100) - Full system access
+- `org_admin` (80) - Organization management
+- `coach` (60) - Team and athlete management
+- `athlete` (40) - Self-access only
+- `guest` (20) - Read-only access
+
+**Specialized Permission Helpers:**
+- `canCreateMeasurementFor()` - Measurement creation authorization
+- `canModifyMeasurement()` - Update authorization with verified check
+- `canVerifyMeasurement()` - Verification authorization
+- `canAccessLeaderboard()` - Coach-only analytics features
+
+**Migration Note:** `RoleManager.requirePermission()` and `RoleManager.requireRole()` are deprecated. Use the `permissions` module instead.
+
 ### Database Schema Architecture
 The application uses Drizzle ORM with PostgreSQL and follows a normalized relational design:
 
