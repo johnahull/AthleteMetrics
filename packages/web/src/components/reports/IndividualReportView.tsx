@@ -13,8 +13,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2 } from "lucide-react";
+import { FileDown, Share2, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
+import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { useAuth } from "@/lib/auth";
@@ -27,6 +28,7 @@ interface IndividualReportViewProps {
 
 export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showSendDialog, setShowSendDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
   const { user } = useAuth();
@@ -172,6 +174,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </Button>
+              <Button variant="outline" onClick={() => setShowSendDialog(true)}>
+                <Send className="h-4 w-4 mr-2" />
+                Send to Athlete
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -272,6 +278,18 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           reportId={report.id}
           open={showShareDialog}
           onClose={() => setShowShareDialog(false)}
+        />
+      )}
+
+      {athleteId && athlete && (
+        <SendReportToAthleteDialog
+          open={showSendDialog}
+          onOpenChange={setShowSendDialog}
+          reportId={report.id}
+          reportName={report.name}
+          athleteId={athleteId}
+          athleteName={athlete.userName || 'Athlete'}
+          athleteEmail={athlete.email}
         />
       )}
     </div>

@@ -83,6 +83,7 @@ export const notificationTypeEnum = [
   'wellness_digest',      // Daily digest of at-risk athletes for coaches
   'new_measurement',      // New performance data logged for athlete
   'team_announcement',    // Coach broadcasts to team
+  'report_shared',        // Coach shares performance report with athlete
 ] as const;
 
 /**

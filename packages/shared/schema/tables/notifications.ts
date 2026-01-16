@@ -40,11 +40,13 @@ export const notificationPreferences = pgTable("notification_preferences", {
   pushWellnessDigest: boolean("push_wellness_digest").default(true).notNull(),
   pushNewMeasurements: boolean("push_new_measurements").default(true).notNull(),
   pushTeamAnnouncements: boolean("push_team_announcements").default(true).notNull(),
+  pushReportShared: boolean("push_report_shared").default(true).notNull(),
   // Email notification type toggles
   emailWellnessSurveys: boolean("email_wellness_surveys").default(true).notNull(),
   emailWellnessDigest: boolean("email_wellness_digest").default(true).notNull(),
   emailNewMeasurements: boolean("email_new_measurements").default(false).notNull(),
   emailTeamAnnouncements: boolean("email_team_announcements").default(true).notNull(),
+  emailReportShared: boolean("email_report_shared").default(true).notNull(),
   // Quiet hours (optional - notifications deferred during these times)
   quietHoursEnabled: boolean("quiet_hours_enabled").default(false).notNull(),
   quietHoursStart: time("quiet_hours_start"),  // e.g., "22:00"

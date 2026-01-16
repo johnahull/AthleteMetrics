@@ -74,6 +74,7 @@ export type SiteSettings = typeof tables.siteSettings.$inferSelect;
 export type Report = typeof tables.reports.$inferSelect;
 export type ReportSnapshot = typeof tables.reportSnapshots.$inferSelect;
 export type ReportBenchmark = typeof tables.reportBenchmarks.$inferSelect;
+export type ReportShare = typeof tables.reportShares.$inferSelect;
 
 // ============================================================================
 // Wellness Tables
