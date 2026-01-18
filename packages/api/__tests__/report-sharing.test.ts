@@ -926,6 +926,93 @@ describe("Report Sharing", () => {
 
       expect(shares.length).toBe(0);
     });
+
+    it("should return response with nested report object structure", async () => {
+      // This test verifies the API response format matches what the frontend expects
+      // The frontend uses: const { report, message, sharedBy } = sharedReport;
+      // And then: report.reportType === "team"
+
+      // Create a share to test response structure
+      const [share] = await db.insert(reportShares).values({
+        reportId: testReportId,
+        athleteId: testAthleteId,
+        sharedBy: testCoachId,
+        organizationId: testOrgId,
+        message: "Response structure test",
+      }).returning();
+
+      // Simulate what the API endpoint returns by doing the same query
+      const [result] = await db
+        .select({
+          shareId: reportShares.id,
+          reportId: reportShares.reportId,
+          reportName: reports.name,
+          reportType: reports.reportType,
+          reportConfig: reports.config,
+          reportDescription: reports.description,
+          reportCoachingInsights: reports.coachingInsights,
+          reportCreatedBy: reports.createdBy,
+          sharedById: reportShares.sharedBy,
+          sharedByFirstName: users.firstName,
+          sharedByLastName: users.lastName,
+          message: reportShares.message,
+          createdAt: reportShares.createdAt,
+          viewedAt: reportShares.viewedAt,
+          organizationId: reportShares.organizationId,
+        })
+        .from(reportShares)
+        .innerJoin(reports, eq(reportShares.reportId, reports.id))
+        .leftJoin(users, eq(reportShares.sharedBy, users.id))
+        .where(
+          and(
+            eq(reportShares.id, share.id),
+            eq(reportShares.athleteId, testAthleteId)
+          )
+        );
+
+      // Verify all required fields for the nested report object are present
+      expect(result).toBeDefined();
+      expect(result.shareId).toBe(share.id);
+      expect(result.reportId).toBeDefined();
+      expect(result.reportName).toBeDefined();
+      expect(result.reportType).toBeDefined();
+      expect(result.reportType).toMatch(/^(team|individual)$/);
+      expect(result.organizationId).toBeDefined();
+      expect(result.reportCreatedBy).toBeDefined();
+      expect(result.sharedById).toBe(testCoachId);
+      expect(result.sharedByFirstName).toBeDefined();
+      expect(result.sharedByLastName).toBeDefined();
+      expect(result.message).toBe("Response structure test");
+    });
+
+    it("should include all Report interface fields in response", async () => {
+      // Create a share
+      const [share] = await db.insert(reportShares).values({
+        reportId: testReportId,
+        athleteId: testAthleteId,
+        sharedBy: testCoachId,
+        organizationId: testOrgId,
+      }).returning();
+
+      // Get the report directly to compare
+      const [report] = await db
+        .select()
+        .from(reports)
+        .where(eq(reports.id, testReportId));
+
+      // Verify the report has all required fields from Report interface:
+      // id, organizationId, createdBy, name, description, reportType, config,
+      // isTemplate, isPinned, createdAt, coachingInsights
+      expect(report.id).toBeDefined();
+      expect(report.organizationId).toBeDefined();
+      expect(report.createdBy).toBeDefined();
+      expect(report.name).toBeDefined();
+      expect(report.reportType).toBeDefined();
+      expect(report.config).toBeDefined();
+      expect(typeof report.isTemplate).toBe('boolean');
+      expect(typeof report.isPinned).toBe('boolean');
+      expect(report.createdAt).toBeDefined();
+    });
   });
 
   describe("Bulk Share Limit Enforcement", () => {

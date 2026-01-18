@@ -11,15 +11,16 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import { Redirect } from "wouter";
 import { useEffect } from "react";
+import type { Report } from "@/types/report-types";
 
 interface SharedReportDetails {
   shareId: string;
-  report: any;
+  report: Report;
   message?: string;
   sharedBy: {
     firstName: string;
     lastName: string;
-  };
+  } | null;
   createdAt: string;
 }
 
@@ -117,7 +118,9 @@ export default function MyReportView() {
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Message from {sharedBy.firstName} {sharedBy.lastName}
+              {sharedBy
+                ? `Message from ${sharedBy.firstName} ${sharedBy.lastName}`
+                : "Message from coach"}
             </CardTitle>
           </CardHeader>
           <CardContent>

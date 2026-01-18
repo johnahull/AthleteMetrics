@@ -1,5 +1,5 @@
 import { useAuth } from "@/lib/auth";
-import { useMyReports, useMarkReportViewed } from "@/hooks/use-my-reports";
+import { useMyReports } from "@/hooks/use-my-reports";
 import { SharedReportCard } from "@/components/reports/SharedReportCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, AlertCircle, FileText } from "lucide-react";
@@ -16,9 +16,6 @@ export default function MyReportsPage() {
     isError,
     error,
   } = useMyReports();
-
-  // Mark report as viewed mutation
-  const markViewedMutation = useMarkReportViewed();
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -63,9 +60,8 @@ export default function MyReportsPage() {
 
   // Handle viewing a report
   const handleViewReport = (shareId: string) => {
-    // Mark as viewed
-    markViewedMutation.mutate(shareId);
     // Navigate to the report view page
+    // Note: Report is marked as viewed in my-report-view.tsx's useEffect
     setLocation(`/my-reports/${shareId}`);
   };
 

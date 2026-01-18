@@ -36,9 +36,14 @@ export function SendReportToAthleteDialog({
   const shareReport = useShareReport();
 
   const handleShare = async () => {
-    await shareReport.mutateAsync({ reportId, athleteId, message: message || undefined });
-    setMessage("");
-    onOpenChange(false);
+    try {
+      await shareReport.mutateAsync({ reportId, athleteId, message: message || undefined });
+      setMessage("");
+      onOpenChange(false);
+    } catch {
+      // Error toast is handled by the hook's onError callback
+      // Dialog stays open for retry
+    }
   };
 
   return (
@@ -72,7 +77,11 @@ export function SendReportToAthleteDialog({
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={3}
+              maxLength={1000}
             />
+            <p className="text-xs text-muted-foreground text-right">
+              {message.length}/1000
+            </p>
           </div>
 
           {/* Info about notification */}

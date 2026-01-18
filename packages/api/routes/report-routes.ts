@@ -1837,6 +1837,13 @@ export function registerReportRoutes(app: Express) {
 
         const shareId = req.params.shareId;
 
+        // Validate shareId is a valid UUID
+        const uuidSchema = z.string().uuid();
+        const parseResult = uuidSchema.safeParse(shareId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: "Invalid share ID format" });
+        }
+
         // Get share with report and coach info
         const [share] = await db
           .select({
@@ -1926,6 +1933,13 @@ export function registerReportRoutes(app: Express) {
 
         const shareId = req.params.shareId;
 
+        // Validate shareId is a valid UUID
+        const uuidSchema = z.string().uuid();
+        const parseResult = uuidSchema.safeParse(shareId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: "Invalid share ID format" });
+        }
+
         // Get share
         const [share] = await db
           .select()
@@ -1988,6 +2002,14 @@ export function registerReportRoutes(app: Express) {
 
         const reportId = req.params.id;
         const shareId = req.params.shareId;
+
+        // Validate IDs are valid UUIDs
+        const uuidSchema = z.string().uuid();
+        const reportIdResult = uuidSchema.safeParse(reportId);
+        const shareIdResult = uuidSchema.safeParse(shareId);
+        if (!reportIdResult.success || !shareIdResult.success) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
 
         // Get share
         const [share] = await db
