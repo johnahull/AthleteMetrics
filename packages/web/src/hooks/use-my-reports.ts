@@ -64,14 +64,15 @@ export function useMarkReportViewed() {
 
 /**
  * Hook for getting unread report count (for badge)
+ * Uses dedicated endpoint for efficiency instead of fetching all reports
  */
 export function useUnreadReportCount() {
   return useQuery<number>({
     queryKey: ["my-reports", "unread-count"],
     queryFn: async () => {
-      const res = await apiRequest("GET", "/api/my/reports");
+      const res = await apiRequest("GET", "/api/my/reports/unread-count");
       const data = await res.json();
-      return data.reports.filter((r: SharedReport) => r.isNew).length;
+      return data.unreadCount;
     },
     staleTime: UNREAD_COUNT_STALE_TIME,
   });

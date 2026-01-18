@@ -26,7 +26,7 @@ import {
 } from "@shared/schema";
 import { ZodError, z } from "zod";
 import { db } from "../db";
-import { eq, and, desc, asc, sql, inArray, type SQL } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -1764,6 +1764,92 @@ export function registerReportRoutes(app: Express) {
               });
               shared++;
             }
+
+            // Send notifications to all athletes (non-blocking)
+            // Note: For large bulk shares (e.g., 100 athletes), this runs sequentially
+            // but doesn't block the response. Consider moving to background job queue
+            // for production if notification volume becomes an issue.
+            if (sharesToInsert.length > 0) {
+              // Get coach details once for all notifications
+              const coach = await db
+                .select({ fullName: users.fullName })
+                .from(users)
+                .where(eq(users.id, user.id))
+                .limit(1)
+                .then((rows) => rows[0]);
+
+              const organization = await db
+                .select({ name: organizations.name })
+                .from(organizations)
+                .where(eq(organizations.id, report.organizationId))
+                .limit(1)
+                .then((rows) => rows[0]);
+
+              const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+
+              // Send notifications asynchronously (fire and forget)
+              Promise.all(
+                sharesToInsert.map(async (share) => {
+                  try {
+                    // Get athlete's notification preferences
+                    const prefs = await db
+                      .select()
+                      .from(notificationPreferences)
+                      .where(eq(notificationPreferences.userId, share.athleteId))
+                      .limit(1)
+                      .then((rows) => rows[0]);
+
+                    const pushEnabled = prefs?.pushEnabled ?? true;
+                    const emailEnabled = prefs?.emailEnabled ?? true;
+                    const pushReportShared = prefs?.pushReportShared ?? true;
+                    const emailReportShared = prefs?.emailReportShared ?? true;
+
+                    // Get athlete details
+                    const athlete = athletes.find((a) => a.id === share.athleteId);
+                    if (!athlete) return;
+
+                    // Send email notification
+                    if (emailEnabled && emailReportShared && athlete.emails && athlete.emails.length > 0) {
+                      try {
+                        await emailService.sendReportSharedNotification(athlete.emails[0], {
+                          athleteName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+                          coachName: coach?.fullName || 'Your coach',
+                          organizationName: organization?.name || 'Your organization',
+                          reportName: report.name,
+                          message: share.message || undefined,
+                          viewUrl: `${appUrl}/my-reports`,
+                        });
+                      } catch (emailError) {
+                        console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                      }
+                    }
+
+                    // Send push notification
+                    if (pushEnabled && pushReportShared) {
+                      try {
+                        const pushService = getPushNotificationService(db);
+                        const notificationPayload: NotificationPayload = {
+                          type: 'report_shared',
+                          title: 'New Performance Report',
+                          body: `${coach?.fullName || 'Your coach'} shared "${report.name}" with you`,
+                          url: '/my-reports',
+                          data: {
+                            reportId: share.reportId,
+                          },
+                        };
+                        await pushService.sendToUser(share.athleteId, notificationPayload, report.organizationId);
+                      } catch (pushError) {
+                        console.error(`Failed to send push notification to athlete ${share.athleteId}:`, pushError);
+                      }
+                    }
+                  } catch (notificationError) {
+                    console.error(`Failed to send notifications to athlete ${share.athleteId}:`, notificationError);
+                  }
+                })
+              ).catch((err) => {
+                console.error('Error in bulk notification sending:', err);
+              });
+            }
           } catch (shareError: any) {
             console.error('Failed to bulk insert shares:', shareError);
             // If transaction fails, mark all as failed
@@ -1856,6 +1942,42 @@ export function registerReportRoutes(app: Express) {
       res.status(500).json({ message: "Failed to fetch shared reports" });
     }
   });
+
+  /**
+   * Get unread report count for badge display
+   * GET /api/my/reports/unread-count
+   */
+  app.get(
+    "/api/my/reports/unread-count",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Count unread reports using efficient query
+        const result = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(reportShares)
+          .where(
+            and(
+              eq(reportShares.athleteId, user.id),
+              isNull(reportShares.viewedAt)
+            )
+          );
+
+        const unreadCount = Number(result[0]?.count || 0);
+
+        res.json({ unreadCount });
+      } catch (error) {
+        console.error("Error fetching unread report count:", error);
+        res.status(500).json({ message: "Failed to fetch unread count" });
+      }
+    }
+  );
 
   /**
    * Get a single shared report by share ID
