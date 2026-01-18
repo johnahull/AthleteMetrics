@@ -9,13 +9,24 @@ interface ShareReportParams {
 }
 
 interface ReportShare {
-  id: string;
-  reportId: string;
-  athleteId: string;
+  shareId: string;
+  athlete: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  sharedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  } | null;
   message?: string;
-  sharedAt: string;
-  sharedBy: string;
-  viewedAt?: string;
+  createdAt: string;
+  viewedAt: string | null;
+}
+
+interface ReportSharesResponse {
+  shares: ReportShare[];
 }
 
 export function useShareReport() {
@@ -48,7 +59,7 @@ export function useShareReport() {
 }
 
 export function useReportShares(reportId: string) {
-  return useQuery<ReportShare[]>({
+  return useQuery<ReportSharesResponse>({
     queryKey: ["/api/reports", reportId, "shares"],
     queryFn: async () => {
       const res = await apiRequest("GET", `/api/reports/${reportId}/shares`);

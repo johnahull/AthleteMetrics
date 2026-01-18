@@ -11,9 +11,10 @@ interface SharedReport {
   reportName: string;
   reportType: "team" | "individual";
   sharedBy: {
+    id: string;
     firstName: string;
     lastName: string;
-  };
+  } | null;
   message?: string;
   createdAt: string;
   isNew: boolean;

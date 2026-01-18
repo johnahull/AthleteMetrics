@@ -17,6 +17,7 @@ interface SharedReportDetails {
   report: Report;
   message?: string;
   sharedBy: {
+    id: string;
     firstName: string;
     lastName: string;
   } | null;
