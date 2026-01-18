@@ -1847,6 +1847,7 @@ export function registerReportRoutes(app: Express) {
             reportConfig: reports.config,
             reportDescription: reports.description,
             reportCoachingInsights: reports.coachingInsights,
+            reportCreatedBy: reports.createdBy,
             sharedById: reportShares.sharedBy,
             sharedByFirstName: users.firstName,
             sharedByLastName: users.lastName,
@@ -1870,15 +1871,23 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Shared report not found" });
         }
 
-        // Format response
+        // Format response with nested report object (matches Report interface)
         const response = {
           shareId: share.shareId,
-          reportId: share.reportId,
-          reportName: share.reportName,
-          reportType: share.reportType as 'team' | 'individual',
-          reportConfig: share.reportConfig,
-          reportDescription: share.reportDescription,
-          coachingInsights: share.reportCoachingInsights,
+          report: {
+            id: share.reportId,
+            organizationId: share.organizationId,
+            createdBy: share.reportCreatedBy,
+            name: share.reportName,
+            description: share.reportDescription,
+            reportType: share.reportType as 'team' | 'individual',
+            config: share.reportConfig,
+            coachingInsights: share.reportCoachingInsights,
+            // These fields are required by IndividualReportView/TeamReportView
+            isTemplate: false,
+            isPinned: false,
+            createdAt: share.createdAt.toISOString(),
+          },
           sharedBy: share.sharedById
             ? {
                 id: share.sharedById,
@@ -1890,7 +1899,6 @@ export function registerReportRoutes(app: Express) {
           createdAt: share.createdAt.toISOString(),
           viewedAt: share.viewedAt ? share.viewedAt.toISOString() : null,
           isNew: share.viewedAt === null,
-          organizationId: share.organizationId,
         };
 
         res.json(response);
