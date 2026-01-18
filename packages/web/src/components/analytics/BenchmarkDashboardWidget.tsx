@@ -3,16 +3,28 @@
  * Team benchmark achievement dashboard for coach analytics
  */
 
+import { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTeamBenchmarkAggregation } from '@/lib/benchmarks-api';
+import { useBenchmarkSets, useBenchmarkSet } from '@/lib/benchmark-sets-api';
 import { BenchmarkCard } from './BenchmarkCard';
 import { cn } from '@/lib/utils';
 import { getBenchmarkProgressColor } from '@/utils/benchmark-colors';
+import { Layers } from 'lucide-react';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 interface BenchmarkDashboardWidgetProps {
   organizationId: string;
   teamIds?: string[];
   genders?: string[];
+  /** Optional benchmark set ID to filter by (if provided, no dropdown shown) */
+  benchmarkSetId?: string;
   onBenchmarkClick?: (benchmarkId: string, status: 'met' | 'unmet') => void;
   className?: string;
 }
@@ -21,18 +33,37 @@ export function BenchmarkDashboardWidget({
   organizationId,
   teamIds,
   genders,
+  benchmarkSetId: externalSetId,
   onBenchmarkClick,
   className
 }: BenchmarkDashboardWidgetProps) {
+  // Internal state for set filter (only used when externalSetId not provided)
+  const [internalSetId, setInternalSetId] = useState<string>("all");
+  const activeSetId = externalSetId || (internalSetId !== "all" ? internalSetId : undefined);
+
   const { data: benchmarks, isLoading, error } = useTeamBenchmarkAggregation(
     organizationId,
     { teamIds, genders }
   );
 
-  // Calculate overall achievement rate
-  const overallAchievementRate = benchmarks && benchmarks.length > 0
+  // Fetch available benchmark sets for filtering (only when no external set ID)
+  const { data: benchmarkSets } = useBenchmarkSets(organizationId);
+  const { data: selectedSet } = useBenchmarkSet(
+    organizationId,
+    activeSetId || ""
+  );
+
+  // Filter benchmarks by set membership
+  const filteredBenchmarks = useMemo(() => {
+    if (!activeSetId || !selectedSet?.items) return benchmarks;
+    const setIds = new Set(selectedSet.items.map(item => item.benchmarkId));
+    return benchmarks?.filter(b => setIds.has(b.benchmarkId));
+  }, [benchmarks, activeSetId, selectedSet]);
+
+  // Calculate overall achievement rate from filtered benchmarks
+  const overallAchievementRate = filteredBenchmarks && filteredBenchmarks.length > 0
     ? Math.round(
-        benchmarks.reduce((sum, b) => sum + b.achievementRate, 0) / benchmarks.length
+        filteredBenchmarks.reduce((sum, b) => sum + b.achievementRate, 0) / filteredBenchmarks.length
       )
     : 0;
 
@@ -65,7 +96,7 @@ export function BenchmarkDashboardWidget({
   }
 
   // Empty state
-  if (!benchmarks || benchmarks.length === 0) {
+  if (!filteredBenchmarks || filteredBenchmarks.length === 0) {
     return (
       <Card className={cn(className)}>
         <CardHeader>
@@ -73,7 +104,10 @@ export function BenchmarkDashboardWidget({
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            No benchmarks enabled for this organization. Enable benchmarks in settings to track team progress.
+            {activeSetId
+              ? "No benchmarks in this set are enabled for the selected filters."
+              : "No benchmarks enabled for this organization. Enable benchmarks in settings to track team progress."
+            }
           </p>
         </CardContent>
       </Card>
@@ -86,7 +120,28 @@ export function BenchmarkDashboardWidget({
   return (
     <Card className={cn(className)}>
       <CardHeader>
-        <CardTitle>Benchmark Achievement Dashboard</CardTitle>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <CardTitle>Benchmark Achievement Dashboard</CardTitle>
+          {/* Show filter dropdown only when no external set ID provided */}
+          {!externalSetId && benchmarkSets && benchmarkSets.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-muted-foreground" />
+              <Select value={internalSetId} onValueChange={setInternalSetId}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Benchmarks" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Benchmarks</SelectItem>
+                  {benchmarkSets.map((set) => (
+                    <SelectItem key={set.id} value={set.id}>
+                      {set.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
       </CardHeader>
 
       <CardContent className="space-y-6">
@@ -95,6 +150,11 @@ export function BenchmarkDashboardWidget({
           <div className="flex items-center justify-between">
             <span className="text-lg font-semibold">
               Overall: {overallAchievementRate}% of benchmarks met
+              {activeSetId && selectedSet && (
+                <span className="text-sm font-normal text-muted-foreground ml-2">
+                  (in {selectedSet.name})
+                </span>
+              )}
             </span>
           </div>
           <div
@@ -113,7 +173,7 @@ export function BenchmarkDashboardWidget({
 
         {/* Individual Benchmark Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {benchmarks.map((benchmark) => (
+          {filteredBenchmarks.map((benchmark) => (
             <BenchmarkCard
               key={benchmark.benchmarkId}
               benchmark={benchmark}

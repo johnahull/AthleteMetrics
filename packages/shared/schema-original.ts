@@ -2095,6 +2095,48 @@ export const updateOrganizationBenchmarkSchema = z.object({
   displayOrder: z.number().int().optional(),
 });
 
+// ============================================================================
+// Benchmark Set Schemas
+// ============================================================================
+
+export const insertBenchmarkSetSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100),
+  description: z.string().max(1000).optional(),
+  sport: z.string().max(50).optional(),
+  level: z.string().max(50).optional(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional(),
+  isTemplate: z.boolean().default(false),
+});
+
+export const updateBenchmarkSetSchema = z.object({
+  name: z.string().min(1).max(100).optional(),
+  description: z.string().max(1000).optional(),
+  sport: z.string().max(50).optional().nullable(),
+  level: z.string().max(50).optional().nullable(),
+  gender: z.enum(['Male', 'Female', 'Not Specified']).optional().nullable(),
+  isTemplate: z.boolean().optional(),
+  isActive: z.boolean().optional(),
+});
+
+export const insertBenchmarkSetItemSchema = z.object({
+  benchmarkId: z.string().min(1, "Benchmark ID is required"),
+  benchmarkType: z.enum(['site', 'custom']),
+  displayOrder: z.number().int().min(0).optional(),
+  customLabel: z.string().max(100).optional(),
+});
+
+export const updateBenchmarkSetItemSchema = z.object({
+  displayOrder: z.number().int().min(0).optional(),
+  customLabel: z.string().max(100).optional().nullable(),
+});
+
+export const reorderBenchmarkSetItemsSchema = z.object({
+  items: z.array(z.object({
+    id: z.string().min(1),
+    displayOrder: z.number().int().min(0),
+  })).min(1),
+});
+
 // Report Schemas
 export const insertReportSchema = createInsertSchema(reports).omit({
   id: true,
@@ -2380,6 +2422,12 @@ export type UpdateCustomBenchmark = z.infer<typeof updateCustomBenchmarkSchema>;
 export type InsertOrganizationBenchmark = z.infer<typeof insertOrganizationBenchmarkSchema>;
 export type OrganizationBenchmark = typeof organizationBenchmarks.$inferSelect;
 export type UpdateOrganizationBenchmark = z.infer<typeof updateOrganizationBenchmarkSchema>;
+
+export type InsertBenchmarkSet = z.infer<typeof insertBenchmarkSetSchema>;
+export type UpdateBenchmarkSet = z.infer<typeof updateBenchmarkSetSchema>;
+export type InsertBenchmarkSetItem = z.infer<typeof insertBenchmarkSetItemSchema>;
+export type UpdateBenchmarkSetItem = z.infer<typeof updateBenchmarkSetItemSchema>;
+export type ReorderBenchmarkSetItems = z.infer<typeof reorderBenchmarkSetItemsSchema>;
 
 export type InsertReport = z.infer<typeof insertReportSchema>;
 export type Report = typeof reports.$inferSelect;

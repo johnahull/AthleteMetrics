@@ -25,7 +25,8 @@ import {
   Link,
   UserPlus,
   Calendar,
-  Ruler
+  Ruler,
+  Layers
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -62,7 +63,8 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
       { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
       { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
-      { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
+      { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
+      { name: "Benchmark Sets", href: "/organizations/__ORG_ID__/benchmark-sets", icon: Layers, tourId: "benchmark-sets" }
     ]
   },
   org_admin: [
@@ -77,6 +79,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
+    { name: "Benchmark Sets", href: "/organizations/__ORG_ID__/benchmark-sets", icon: Layers, tourId: "benchmark-sets" },
     { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler, tourId: "metrics" },
     { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings, tourId: "settings" }
   ],
@@ -91,7 +94,8 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
-    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
+    { name: "Benchmark Sets", href: "/organizations/__ORG_ID__/benchmark-sets", icon: Layers, tourId: "benchmark-sets" }
   ],
   athlete: (invitationBadge?: number, reportBadge?: number) => [
     { name: "My Profile", href: "/my-profile", icon: UsersRound, tourId: "my-profile" },
@@ -151,6 +155,10 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     if (benchmarksIndex !== -1) {
       navigation[benchmarksIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmarks`;
     }
+    const benchmarkSetsIndex = navigation.findIndex(item => item.name === "Benchmark Sets");
+    if (benchmarkSetsIndex !== -1) {
+      navigation[benchmarkSetsIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmark-sets`;
+    }
   }
 
   // Update metrics link with organization ID for org_admin
@@ -166,6 +174,10 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
     if (benchmarksIndex !== -1) {
       navigation[benchmarksIndex].href = `/organizations/${organizationContext}/benchmarks`;
+    }
+    const benchmarkSetsIndex = navigation.findIndex(item => item.name === "Benchmark Sets");
+    if (benchmarkSetsIndex !== -1) {
+      navigation[benchmarkSetsIndex].href = `/organizations/${organizationContext}/benchmark-sets`;
     }
   }
 

@@ -8,6 +8,8 @@ import { useAuth } from "@/lib/auth";
 import { useCreateReport } from "@/hooks/use-reports";
 import { useOrganizationMetrics } from "@/lib/metrics-api";
 import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useBenchmarkSets, useBenchmarkSet } from "@/lib/benchmark-sets-api";
+import { BenchmarkSetPreview } from "@/components/benchmark-sets";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Layers, List } from "lucide-react";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
@@ -75,6 +77,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const { organizationContext } = useAuth();
   const [step, setStep] = useState(1);
   const totalSteps = 8;
+
+  // Benchmark selection mode: 'individual' for checkboxes, 'set' for selecting from a benchmark set
+  const [benchmarkSelectionMode, setBenchmarkSelectionMode] = useState<'individual' | 'set'>('individual');
+  const [selectedBenchmarkSetId, setSelectedBenchmarkSetId] = useState<string | null>(null);
 
   const {
     register,
@@ -132,6 +138,17 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const { data: enabledBenchmarks, isLoading: benchmarksLoading, error: benchmarksError } = useOrganizationBenchmarks(
     organizationContext || "",
     false // includeInactive - only get active benchmarks
+  );
+
+  // Fetch benchmark sets for the organization
+  const { data: benchmarkSets, isLoading: benchmarkSetsLoading } = useBenchmarkSets(
+    organizationContext || ""
+  );
+
+  // Fetch selected benchmark set details
+  const { data: selectedBenchmarkSet } = useBenchmarkSet(
+    organizationContext || "",
+    selectedBenchmarkSetId || ""
   );
 
   // Separate site and custom benchmarks from the enabled benchmarks (memoized for performance)
@@ -216,7 +233,24 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       athleteIds: data.athleteIds,
     };
 
-    if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
+    // Handle benchmarks - either from set or individual selection
+    if (benchmarkSelectionMode === 'set' && selectedBenchmarkSet?.items?.length) {
+      // Using a benchmark set - extract benchmark IDs from set items
+      const siteBenchmarkIds = selectedBenchmarkSet.items
+        .filter(item => item.benchmarkType === 'site')
+        .map(item => item.benchmarkId);
+      const customBenchmarkIds = selectedBenchmarkSet.items
+        .filter(item => item.benchmarkType === 'custom')
+        .map(item => item.benchmarkId);
+
+      config.benchmarks = {
+        site: siteBenchmarkIds,
+        custom: customBenchmarkIds,
+        // Store set reference for traceability
+        setId: selectedBenchmarkSet.id,
+        setName: selectedBenchmarkSet.name,
+      };
+    } else if (data.siteBenchmarks?.length || data.customBenchmarks?.length) {
       config.benchmarks = {
         site: data.siteBenchmarks,
         custom: data.customBenchmarks,
@@ -494,87 +528,173 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 Select benchmarks to compare against in the report
               </p>
 
-              {benchmarksLoading ? (
-                <div className="flex justify-center py-8">
-                  <LoadingSpinner />
-                </div>
-              ) : (
-                <>
-                  {benchmarksError && (
-                    <div className="border border-destructive rounded-lg p-4 text-center">
-                      <p className="text-sm text-destructive">Failed to load benchmarks</p>
-                    </div>
-                  )}
+              {/* Selection Mode Toggle */}
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={benchmarkSelectionMode === 'individual' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setBenchmarkSelectionMode('individual');
+                    setSelectedBenchmarkSetId(null);
+                  }}
+                >
+                  <List className="h-4 w-4 mr-2" />
+                  Select Individual
+                </Button>
+                <Button
+                  type="button"
+                  variant={benchmarkSelectionMode === 'set' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setBenchmarkSelectionMode('set');
+                    // Clear individual selections when switching to set mode
+                    setValue("siteBenchmarks", []);
+                    setValue("customBenchmarks", []);
+                  }}
+                  disabled={!benchmarkSets || benchmarkSets.length === 0}
+                >
+                  <Layers className="h-4 w-4 mr-2" />
+                  Select from Set
+                </Button>
+              </div>
 
-                  {siteBenchmarks && siteBenchmarks.length > 0 && (
-                    <div>
-                      <h4 className="font-medium mb-2">Site Benchmarks</h4>
-                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                        {siteBenchmarks.map((benchmark: any) => (
-                          <div key={benchmark.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`site-${benchmark.id}`}
-                              checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
-                              onCheckedChange={(checked) => {
-                                const current = watch("siteBenchmarks") || [];
-                                setValue(
-                                  "siteBenchmarks",
-                                  checked
-                                    ? [...current, benchmark.benchmarkId]
-                                    : current.filter((id) => id !== benchmark.benchmarkId)
-                                );
-                              }}
-                            />
-                            <Label
-                              htmlFor={`site-${benchmark.id}`}
-                              className="cursor-pointer"
-                            >
-                              {benchmark.name}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
+              {/* Set Selection Mode */}
+              {benchmarkSelectionMode === 'set' && (
+                <div className="space-y-4">
+                  {benchmarkSetsLoading ? (
+                    <div className="flex justify-center py-8">
+                      <LoadingSpinner />
                     </div>
-                  )}
-
-                  {customBenchmarks && customBenchmarks.length > 0 && (
-                    <div>
-                      <h4 className="font-medium mb-2">Custom Benchmarks</h4>
-                      <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                        {customBenchmarks.map((benchmark: any) => (
-                          <div key={benchmark.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`custom-${benchmark.id}`}
-                              checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
-                              onCheckedChange={(checked) => {
-                                const current = watch("customBenchmarks") || [];
-                                setValue(
-                                  "customBenchmarks",
-                                  checked
-                                    ? [...current, benchmark.benchmarkId]
-                                    : current.filter((id) => id !== benchmark.benchmarkId)
-                                );
-                              }}
-                            />
-                            <Label
-                              htmlFor={`custom-${benchmark.id}`}
-                              className="cursor-pointer"
-                            >
-                              {benchmark.name}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {!benchmarksError &&
-                   (!siteBenchmarks || siteBenchmarks.length === 0) &&
-                   (!customBenchmarks || customBenchmarks.length === 0) && (
+                  ) : !benchmarkSets || benchmarkSets.length === 0 ? (
                     <div className="border rounded-lg p-4 text-center text-muted-foreground">
-                      <p>No enabled benchmarks available</p>
-                      <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
+                      <p>No benchmark sets available</p>
+                      <p className="text-sm mt-1">Create benchmark sets in Benchmark Sets management</p>
                     </div>
+                  ) : (
+                    <>
+                      <div>
+                        <Label className="mb-2 block">Select a Benchmark Set</Label>
+                        <Select
+                          value={selectedBenchmarkSetId || ""}
+                          onValueChange={(value) => {
+                            setSelectedBenchmarkSetId(value || null);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Choose a benchmark set" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {benchmarkSets.map((set) => (
+                              <SelectItem key={set.id} value={set.id}>
+                                <div className="flex items-center gap-2">
+                                  <Layers className="h-4 w-4 text-muted-foreground" />
+                                  <span>{set.name}</span>
+                                  {set.sport && (
+                                    <span className="text-xs text-muted-foreground">({set.sport})</span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Preview of selected set */}
+                      {selectedBenchmarkSet && (
+                        <BenchmarkSetPreview set={selectedBenchmarkSet} />
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+
+              {/* Individual Selection Mode */}
+              {benchmarkSelectionMode === 'individual' && (
+                <>
+                  {benchmarksLoading ? (
+                    <div className="flex justify-center py-8">
+                      <LoadingSpinner />
+                    </div>
+                  ) : (
+                    <>
+                      {benchmarksError && (
+                        <div className="border border-destructive rounded-lg p-4 text-center">
+                          <p className="text-sm text-destructive">Failed to load benchmarks</p>
+                        </div>
+                      )}
+
+                      {siteBenchmarks && siteBenchmarks.length > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-2">Site Benchmarks</h4>
+                          <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                            {siteBenchmarks.map((benchmark: any) => (
+                              <div key={benchmark.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`site-${benchmark.id}`}
+                                  checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
+                                  onCheckedChange={(checked) => {
+                                    const current = watch("siteBenchmarks") || [];
+                                    setValue(
+                                      "siteBenchmarks",
+                                      checked
+                                        ? [...current, benchmark.benchmarkId]
+                                        : current.filter((id) => id !== benchmark.benchmarkId)
+                                    );
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={`site-${benchmark.id}`}
+                                  className="cursor-pointer"
+                                >
+                                  {benchmark.name}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {customBenchmarks && customBenchmarks.length > 0 && (
+                        <div>
+                          <h4 className="font-medium mb-2">Custom Benchmarks</h4>
+                          <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
+                            {customBenchmarks.map((benchmark: any) => (
+                              <div key={benchmark.id} className="flex items-center space-x-2">
+                                <Checkbox
+                                  id={`custom-${benchmark.id}`}
+                                  checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
+                                  onCheckedChange={(checked) => {
+                                    const current = watch("customBenchmarks") || [];
+                                    setValue(
+                                      "customBenchmarks",
+                                      checked
+                                        ? [...current, benchmark.benchmarkId]
+                                        : current.filter((id) => id !== benchmark.benchmarkId)
+                                    );
+                                  }}
+                                />
+                                <Label
+                                  htmlFor={`custom-${benchmark.id}`}
+                                  className="cursor-pointer"
+                                >
+                                  {benchmark.name}
+                                </Label>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {!benchmarksError &&
+                       (!siteBenchmarks || siteBenchmarks.length === 0) &&
+                       (!customBenchmarks || customBenchmarks.length === 0) && (
+                        <div className="border rounded-lg p-4 text-center text-muted-foreground">
+                          <p>No enabled benchmarks available</p>
+                          <p className="text-sm mt-1">You can skip this step or enable benchmarks in Settings</p>
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}

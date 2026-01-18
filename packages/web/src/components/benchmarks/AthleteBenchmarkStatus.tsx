@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useAthleteBenchmarkStatus } from "@/lib/benchmarks-api";
+import { useBenchmarkSets, useBenchmarkSet } from "@/lib/benchmark-sets-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Filter, Target } from "lucide-react";
+import { Filter, Target, Layers } from "lucide-react";
 import { BenchmarkProgressBar } from "./BenchmarkProgressBar";
 import { BenchmarkBadge } from "./BenchmarkBadge";
 import { BenchmarkComparison } from "./BenchmarkComparison";
@@ -29,23 +30,38 @@ export function AthleteBenchmarkStatus({
   athleteName,
 }: AthleteBenchmarkStatusProps) {
   const [filterStatus, setFilterStatus] = useState<"all" | "met" | "unmet">("all");
+  const [filterSetId, setFilterSetId] = useState<string>("all");
 
   const { data: benchmarks, isLoading, error } = useAthleteBenchmarkStatus(
     organizationId,
     athleteId
   );
 
-  // Filter benchmarks by met/unmet status
-  const filteredBenchmarks = benchmarks?.filter((benchmark) => {
+  // Fetch available benchmark sets for filtering
+  const { data: benchmarkSets } = useBenchmarkSets(organizationId);
+  const { data: selectedSet } = useBenchmarkSet(
+    organizationId,
+    filterSetId !== "all" ? filterSetId : ""
+  );
+
+  // Filter benchmarks by set membership first
+  const setFilteredBenchmarks = useMemo(() => {
+    if (filterSetId === "all" || !selectedSet?.items) return benchmarks;
+    const setIds = new Set(selectedSet.items.map(item => item.benchmarkId));
+    return benchmarks?.filter(b => setIds.has(b.benchmarkId));
+  }, [benchmarks, filterSetId, selectedSet]);
+
+  // Then filter by met/unmet status
+  const filteredBenchmarks = setFilteredBenchmarks?.filter((benchmark) => {
     if (filterStatus === "all") return true;
     if (filterStatus === "met") return benchmark.isMet;
     if (filterStatus === "unmet") return !benchmark.isMet;
     return true;
   });
 
-  // Calculate stats
-  const totalBenchmarks = benchmarks?.length || 0;
-  const metBenchmarks = benchmarks?.filter((b) => b.isMet).length || 0;
+  // Calculate stats based on set-filtered benchmarks (before status filter)
+  const totalBenchmarks = setFilteredBenchmarks?.length || 0;
+  const metBenchmarks = setFilteredBenchmarks?.filter((b) => b.isMet).length || 0;
   const unmetBenchmarks = totalBenchmarks - metBenchmarks;
   const completionPercentage = totalBenchmarks > 0
     ? Math.round((metBenchmarks / totalBenchmarks) * 100)
@@ -106,22 +122,45 @@ export function AthleteBenchmarkStatus({
         </CardContent>
       </Card>
 
-      {/* Filter */}
+      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex items-center gap-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <label className="text-sm font-medium">Filter by Status:</label>
-            <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Benchmarks</SelectItem>
-                <SelectItem value="met">Met Only</SelectItem>
-                <SelectItem value="unmet">Unmet Only</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex flex-wrap items-center gap-4">
+            {/* Filter by Set */}
+            {benchmarkSets && benchmarkSets.length > 0 && (
+              <div className="flex items-center gap-3">
+                <Layers className="h-4 w-4 text-muted-foreground" />
+                <label className="text-sm font-medium">Filter by Set:</label>
+                <Select value={filterSetId} onValueChange={setFilterSetId}>
+                  <SelectTrigger className="w-[200px]">
+                    <SelectValue placeholder="All Benchmarks" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Benchmarks</SelectItem>
+                    {benchmarkSets.map((set) => (
+                      <SelectItem key={set.id} value={set.id}>
+                        {set.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {/* Filter by Status */}
+            <div className="flex items-center gap-3">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <label className="text-sm font-medium">Filter by Status:</label>
+              <Select value={filterStatus} onValueChange={(value: any) => setFilterStatus(value)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Benchmarks</SelectItem>
+                  <SelectItem value="met">Met Only</SelectItem>
+                  <SelectItem value="unmet">Unmet Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
