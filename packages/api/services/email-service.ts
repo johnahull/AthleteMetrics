@@ -1479,7 +1479,7 @@ export class EmailService {
               </p>
 
               <p style="margin: 0 0 24px; color: #3b82f6; font-size: 14px; word-break: break-all;">
-                ${sanitizedViewUrl}
+                ${escapeHtml(sanitizedViewUrl)}
               </p>
             </td>
           </tr>

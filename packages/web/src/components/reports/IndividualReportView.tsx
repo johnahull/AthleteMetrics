@@ -147,7 +147,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
               </Button>
-              <Button variant="outline" onClick={() => setShowSendDialog(true)}>
+              <Button variant="outline" onClick={() => setShowSendDialog(true)} data-testid="send-to-athlete-button">
                 <Send className="h-4 w-4 mr-2" />
                 Send to Athlete
               </Button>

@@ -1789,6 +1789,8 @@ export function registerReportRoutes(app: Express) {
               const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
 
               // Send notifications asynchronously (fire and forget)
+              // Note: Notification failures are logged but don't block the response.
+              // Athletes can still see shared reports in "My Reports" even if notifications fail.
               Promise.all(
                 sharesToInsert.map(async (share) => {
                   try {

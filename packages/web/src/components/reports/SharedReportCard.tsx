@@ -28,6 +28,7 @@ export function SharedReportCard({
     <Card
       className="hover:bg-accent/50 cursor-pointer transition-colors"
       onClick={onView}
+      data-testid="shared-report-card"
     >
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
@@ -35,7 +36,7 @@ export function SharedReportCard({
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-medium truncate">{reportName}</h3>
               {isNew && (
-                <Badge variant="default" className="shrink-0">
+                <Badge variant="default" className="shrink-0" data-testid="new-report-badge">
                   New
                 </Badge>
               )}

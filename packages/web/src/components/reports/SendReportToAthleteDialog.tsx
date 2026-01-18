@@ -48,7 +48,7 @@ export function SendReportToAthleteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent data-testid="send-report-dialog">
         <DialogHeader>
           <DialogTitle>Send Report to Athlete</DialogTitle>
           <DialogDescription>
@@ -91,10 +91,10 @@ export function SendReportToAthleteDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} data-testid="cancel-share-button">
             Cancel
           </Button>
-          <Button onClick={handleShare} disabled={shareReport.isPending}>
+          <Button onClick={handleShare} disabled={shareReport.isPending} data-testid="confirm-share-button">
             {shareReport.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
