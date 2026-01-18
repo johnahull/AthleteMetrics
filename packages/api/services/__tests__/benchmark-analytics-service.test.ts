@@ -39,6 +39,10 @@ describe('BenchmarkAnalyticsService', () => {
     service = new BenchmarkAnalyticsService();
     uniqueSuffix = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
 
+    // Use dynamic birth years to ensure consistent ages regardless of when tests run
+    // This prevents test failures as time passes (e.g., athlete turning 26 and exceeding ageMax: 25)
+    const currentYear = new Date().getFullYear();
+
     // Create test organization with benchmarks enabled
     const [org] = await db.insert(organizations).values({
       name: `Test Org Benchmark Analytics ${uniqueSuffix}`,
@@ -57,7 +61,8 @@ describe('BenchmarkAnalyticsService', () => {
     testTeamId = team.id;
 
     // Create test athletes with different demographics
-    // Athlete 1: Male, age ~24 (born 2000)
+    // Use dynamic birth years to always produce expected ages
+    // Athlete 1: Male, age 24 (will be within ageMin=20, ageMax=25)
     const [athlete1] = await db.insert(users).values({
       username: `athlete1${uniqueSuffix}`,
       emails: ['athlete1@test.com'],
@@ -65,7 +70,7 @@ describe('BenchmarkAnalyticsService', () => {
       firstName: 'John',
       lastName: 'Doe',
       fullName: 'John Doe',
-      birthDate: new Date('2000-01-15').toISOString(),
+      birthDate: new Date(`${currentYear - 24}-01-15`).toISOString(),
       gender: 'M',
       sports: ['Football'],
       positions: ['WR'],
@@ -73,7 +78,7 @@ describe('BenchmarkAnalyticsService', () => {
     }).returning();
     athlete1Id = athlete1.id;
 
-    // Athlete 2: Male, age ~22 (born 2002)
+    // Athlete 2: Male, age 22 (will be within ageMin=20, ageMax=25)
     const [athlete2] = await db.insert(users).values({
       username: `athlete2${uniqueSuffix}`,
       emails: ['athlete2@test.com'],
@@ -81,7 +86,7 @@ describe('BenchmarkAnalyticsService', () => {
       firstName: 'Mike',
       lastName: 'Smith',
       fullName: 'Mike Smith',
-      birthDate: new Date('2002-05-20').toISOString(),
+      birthDate: new Date(`${currentYear - 22}-05-20`).toISOString(),
       gender: 'M',
       sports: ['Football'],
       positions: ['RB'],
@@ -89,7 +94,7 @@ describe('BenchmarkAnalyticsService', () => {
     }).returning();
     athlete2Id = athlete2.id;
 
-    // Athlete 3: Female, age ~23 (born 2001)
+    // Athlete 3: Female, age 23 (excluded from site benchmark by gender)
     const [athlete3] = await db.insert(users).values({
       username: `athlete3${uniqueSuffix}`,
       emails: ['athlete3@test.com'],
@@ -97,7 +102,7 @@ describe('BenchmarkAnalyticsService', () => {
       firstName: 'Jane',
       lastName: 'Wilson',
       fullName: 'Jane Wilson',
-      birthDate: new Date('2001-03-10').toISOString(),
+      birthDate: new Date(`${currentYear - 23}-03-10`).toISOString(),
       gender: 'F',
       sports: ['Soccer'],
       positions: ['MF'],
@@ -331,7 +336,7 @@ describe('BenchmarkAnalyticsService', () => {
         firstName: 'Other',
         lastName: 'Athlete',
         fullName: 'Other Athlete',
-        birthDate: new Date('2000-06-01').toISOString(),
+        birthDate: new Date(`${new Date().getFullYear() - 24}-06-01`).toISOString(),
         gender: 'M',
         sports: ['Football'],
         isActive: true,
@@ -371,12 +376,14 @@ describe('BenchmarkAnalyticsService', () => {
     });
 
     it('should filter by birthYear range when provided', async () => {
+      // Use dynamic birth years matching the athletes created in beforeEach
+      const currentYear = new Date().getFullYear();
       const result = await service.getTeamBenchmarkAggregation(testOrgId, {
-        birthYearFrom: 2001,
-        birthYearTo: 2002,
+        birthYearFrom: currentYear - 23, // Include athlete3 (age 23)
+        birthYearTo: currentYear - 22,   // Include athlete2 (age 22)
       });
 
-      // Should only count athlete2 (born 2002) and athlete3 (born 2001)
+      // Should only count athlete2 (age 22) and athlete3 (age 23)
       const customBenchmarkResult = result.find(r => r.benchmarkId === customBenchmarkId);
       expect(customBenchmarkResult?.applicableAthletes).toBe(2); // athlete2 and athlete3
       expect(customBenchmarkResult?.athletesMet).toBe(1); // Only athlete3 meets it
@@ -542,7 +549,7 @@ describe('BenchmarkAnalyticsService', () => {
         firstName: 'Other',
         lastName: 'Filter',
         fullName: 'Other Filter',
-        birthDate: new Date('2000-06-01').toISOString(),
+        birthDate: new Date(`${new Date().getFullYear() - 24}-06-01`).toISOString(),
         gender: 'M',
         sports: ['Football'],
         isActive: true,
@@ -730,7 +737,7 @@ describe('BenchmarkAnalyticsService', () => {
         firstName: 'Other',
         lastName: 'Progress',
         fullName: 'Other Progress',
-        birthDate: new Date('2000-06-01').toISOString(),
+        birthDate: new Date(`${new Date().getFullYear() - 24}-06-01`).toISOString(),
         gender: 'M',
         sports: ['Football'],
         isActive: true,
