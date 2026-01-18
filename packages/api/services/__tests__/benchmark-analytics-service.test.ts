@@ -605,17 +605,18 @@ describe('BenchmarkAnalyticsService', () => {
     });
 
     it('should filter by birthYear range when provided', async () => {
-      // Get athletes who met custom benchmark, born 2001-2002
+      // Get athletes who met custom benchmark, filtered by birth year
+      const currentYear = new Date().getFullYear();
       const result = await service.getAthletesByBenchmarkStatus(
         testOrgId,
         customBenchmarkId,
         'met',
-        { birthYearFrom: 2001, birthYearTo: 2002 }
+        { birthYearFrom: currentYear - 23, birthYearTo: currentYear - 22 }
       );
 
       expect(result.length).toBe(1);
-      expect(result[0]).toBe(athlete3Id); // Born 2001
-      expect(result).not.toContain(athlete1Id); // Born 2000
+      expect(result[0]).toBe(athlete3Id); // Age 23
+      expect(result).not.toContain(athlete1Id); // Age 24
     });
   });
 
