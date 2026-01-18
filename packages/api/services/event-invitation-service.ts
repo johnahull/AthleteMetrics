@@ -15,6 +15,7 @@ import {
 import crypto from 'crypto';
 import type { IStorage } from '../storage';
 import { emailService } from './email-service';
+import { timingSafeTokenCompare } from '../utils/security';
 
 export interface CreateInvitationOptions {
   userId?: string;
@@ -228,17 +229,31 @@ export class EventInvitationService {
 
   /**
    * Get an invitation by its token
+   * Uses timing-safe comparison to prevent timing attacks (OWASP A02:2021)
    */
   async getInvitationByToken(token: string): Promise<EventInvitation | null> {
-    return this.storage.getEventInvitationByToken(token);
+    const invitation = await this.storage.getEventInvitationByToken(token);
+
+    // Verify token using timing-safe comparison to prevent timing attacks
+    if (invitation && !timingSafeTokenCompare(token, invitation.token)) {
+      return null;
+    }
+
+    return invitation;
   }
 
   /**
    * Accept an invitation and create a registration
+   * Uses timing-safe comparison to prevent timing attacks (OWASP A02:2021)
    */
   async acceptInvitation(token: string, userId: string): Promise<AcceptInvitationResult> {
     const invitation = await this.storage.getEventInvitationByToken(token);
     if (!invitation) {
+      throw new Error('Invitation not found');
+    }
+
+    // Verify token using timing-safe comparison to prevent timing attacks
+    if (!timingSafeTokenCompare(token, invitation.token)) {
       throw new Error('Invitation not found');
     }
 
@@ -343,10 +358,16 @@ export class EventInvitationService {
 
   /**
    * Decline an invitation
+   * Uses timing-safe comparison to prevent timing attacks (OWASP A02:2021)
    */
   async declineInvitation(token: string): Promise<EventInvitation> {
     const invitation = await this.storage.getEventInvitationByToken(token);
     if (!invitation) {
+      throw new Error('Invitation not found');
+    }
+
+    // Verify token using timing-safe comparison to prevent timing attacks
+    if (!timingSafeTokenCompare(token, invitation.token)) {
       throw new Error('Invitation not found');
     }
 

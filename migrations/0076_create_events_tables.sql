@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS event_freeze_overrides (
   action TEXT NOT NULL,
   resource_type TEXT,
   resource_id VARCHAR,
-  overridden_by VARCHAR NOT NULL REFERENCES users(id) ON DELETE SET NULL,
+  overridden_by VARCHAR REFERENCES users(id) ON DELETE SET NULL,
   justification TEXT,
   details JSONB,
   ip_address VARCHAR(45),

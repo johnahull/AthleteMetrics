@@ -38,6 +38,16 @@ const invitationMutationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Very strict rate limiting for public token validation endpoints
+// Prevents brute-force token guessing attacks (OWASP A07:2021)
+const tokenValidationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 10, // Only 10 attempts per 15 minutes for security-sensitive token endpoints
+  message: { message: "Too many token validation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 /**
  * Check if user has permission to manage event invitations
  */
@@ -66,7 +76,7 @@ export function registerEventInvitationRoutes(app: Express) {
    * Get invitation by token (public - no auth required for viewing)
    * GET /api/event-invitations/:token
    */
-  app.get("/api/event-invitations/:token", invitationLimiter, async (req: Request, res: Response) => {
+  app.get("/api/event-invitations/:token", tokenValidationLimiter, async (req: Request, res: Response) => {
     try {
       const { token } = req.params;
 
@@ -114,7 +124,7 @@ export function registerEventInvitationRoutes(app: Express) {
    * Accept an invitation (requires auth)
    * POST /api/event-invitations/:token/accept
    */
-  app.post("/api/event-invitations/:token/accept", invitationMutationLimiter, requireAuth, async (req: Request, res: Response) => {
+  app.post("/api/event-invitations/:token/accept", tokenValidationLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -161,7 +171,7 @@ export function registerEventInvitationRoutes(app: Express) {
    * Decline an invitation (no auth required - anyone with token can decline)
    * POST /api/event-invitations/:token/decline
    */
-  app.post("/api/event-invitations/:token/decline", invitationMutationLimiter, async (req: Request, res: Response) => {
+  app.post("/api/event-invitations/:token/decline", tokenValidationLimiter, async (req: Request, res: Response) => {
     try {
       const { token } = req.params;
 

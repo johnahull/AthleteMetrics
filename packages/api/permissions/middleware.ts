@@ -122,7 +122,8 @@ export function requireRole(minRole: Role) {
     // Get user's role in this organization
     const userRole = await storage.getUserRole(user.id, organizationId);
 
-    if (!userRole) {
+    // Explicitly check for falsy values (null, undefined, empty string)
+    if (!userRole || userRole === '') {
       return res.status(403).json({
         message: `${minRole} role or higher required`,
         requiredRole: minRole,
