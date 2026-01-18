@@ -5,10 +5,9 @@ import { useAuth } from "@/lib/auth";
 import { useMarkReportViewed } from "@/hooks/use-my-reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { IndividualReportView } from "@/components/reports/IndividualReportView";
-import { TeamReportView } from "@/components/reports/TeamReportView";
+import { AthleteReportView } from "@/components/reports/AthleteReportView";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, MessageSquare } from "lucide-react";
 import { Redirect } from "wouter";
 import { useEffect } from "react";
 import type { Report } from "@/types/report-types";
@@ -117,7 +116,8 @@ export default function MyReportView() {
       {message && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
+            <CardTitle className="text-base flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-primary" />
               {sharedBy
                 ? `Message from ${sharedBy.firstName} ${sharedBy.lastName}`
                 : "Message from coach"}
@@ -129,12 +129,8 @@ export default function MyReportView() {
         </Card>
       )}
 
-      {/* Report View */}
-      {report.reportType === "team" ? (
-        <TeamReportView report={report} />
-      ) : (
-        <IndividualReportView report={report} />
-      )}
+      {/* Report View - Read-only for athletes */}
+      <AthleteReportView report={report} />
     </div>
   );
 }

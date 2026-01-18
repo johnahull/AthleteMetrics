@@ -1125,9 +1125,9 @@ export function registerReportRoutes(app: Express) {
    * Generate AI coaching insights for a report
    * POST /api/reports/:id/generate-insights
    *
-   * Requires: AI enabled for organization (both flags)
+   * Requires: Coach or above role, AI enabled for organization (both flags)
    */
-  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireRole('coach'), requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
@@ -1270,9 +1270,9 @@ export function registerReportRoutes(app: Express) {
    * Update coaching insights for a report (manual edit)
    * PATCH /api/reports/:id/insights
    *
-   * Requires: AI enabled for organization (both flags)
+   * Requires: Coach or above role, AI enabled for organization (both flags)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireRole('coach'), requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
