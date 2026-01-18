@@ -1657,13 +1657,14 @@ export function registerReportRoutes(app: Express) {
           );
         const validAthleteSet = new Set(orgMemberships.map((m) => m.userId));
 
-        // Get athlete names
+        // Get athlete names and emails for notifications
         const athletes = await db
           .select({
             id: users.id,
             firstName: users.firstName,
             lastName: users.lastName,
             fullName: users.fullName,
+            emails: users.emails,
           })
           .from(users)
           .where(inArray(users.id, targetAthleteIds));
