@@ -179,6 +179,15 @@ interface EventInvitationEmailData {
   expiresAt: Date;
 }
 
+interface ReportSharedEmailData {
+  athleteName: string;
+  coachName: string;
+  organizationName: string;
+  reportName: string;
+  message?: string;
+  viewUrl: string;
+}
+
 export class EmailService {
   private resend: Resend | null = null;
   private fromEmail: string;
@@ -381,6 +390,19 @@ export class EmailService {
     return this.sendEmail({
       to: data.email,
       subject: 'Verify your email to link your AthleteMetrics account',
+      html
+    });
+  }
+
+  /**
+   * Send report shared notification email
+   */
+  async sendReportSharedNotification(email: string, data: ReportSharedEmailData): Promise<boolean> {
+    const html = this.generateReportSharedTemplate(data);
+
+    return this.sendEmail({
+      to: email,
+      subject: `New Performance Report from ${data.coachName}`,
       html
     });
   }
@@ -1375,6 +1397,110 @@ export class EmailService {
       `.trim();
     } catch (error) {
       console.error('Failed to generate event invitation email template:', error);
+      throw new Error('Failed to generate email template');
+    }
+  }
+
+  /**
+   * Generate report shared notification template
+   */
+  private generateReportSharedTemplate(data: ReportSharedEmailData): string {
+    try {
+      const sanitizedViewUrl = sanitizeUrl(data.viewUrl);
+
+      return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>New Performance Report</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f5f5f5;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">New Performance Report</h1>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 20px; color: #1a202c; font-size: 22px; font-weight: 600;">
+                Your coach shared a report with you
+              </h2>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Hi ${escapeHtml(data.athleteName)},
+              </p>
+
+              <p style="margin: 0 0 16px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                <strong>${escapeHtml(data.coachName)}</strong> from <strong>${escapeHtml(data.organizationName)}</strong> has shared a performance report with you:
+              </p>
+
+              <!-- Report Details Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin: 24px 0; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border-left: 4px solid #3b82f6; border-radius: 4px;">
+                <tr>
+                  <td style="padding: 20px;">
+                    <h3 style="margin: 0 0 8px; color: #1e40af; font-size: 18px; font-weight: 600;">
+                      ${escapeHtml(data.reportName)}
+                    </h3>
+                    ${data.message ? `
+                    <p style="margin: 12px 0 0; color: #1e3a8a; font-size: 15px; line-height: 1.5; font-style: italic; padding-top: 12px; border-top: 1px solid #bfdbfe;">
+                      "${escapeHtml(data.message)}"
+                    </p>
+                    ` : ''}
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 24px 0 32px; color: #4a5568; font-size: 16px; line-height: 1.6;">
+                Click the button below to view your performance report and track your progress:
+              </p>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="${sanitizedViewUrl}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                      View Report
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 32px 0 16px; color: #718096; font-size: 14px; line-height: 1.6;">
+                Or copy and paste this link into your browser:
+              </p>
+
+              <p style="margin: 0 0 24px; color: #3b82f6; font-size: 14px; word-break: break-all;">
+                ${escapeHtml(sanitizedViewUrl)}
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 40px; background-color: #f7fafc; border-radius: 0 0 8px 8px; text-align: center;">
+              <p style="margin: 0; color: #a0aec0; font-size: 12px;">
+                This email was sent by ${escapeHtml(data.organizationName)} via AthleteMetrics. Your coach is tracking your progress and sharing insights to help you improve.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+      `.trim();
+    } catch (error) {
+      console.error('Failed to generate report shared email template:', error);
       throw new Error('Failed to generate email template');
     }
   }

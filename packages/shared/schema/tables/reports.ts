@@ -132,3 +132,20 @@ export const reportBenchmarks = pgTable("report_benchmarks", {
   reportIdx: index("report_benchmarks_report_idx").on(table.reportId),
   metricIdx: index("report_benchmarks_metric_idx").on(table.metricCode),
 }));
+
+export const reportShares = pgTable("report_shares", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reportId: varchar("report_id").notNull().references(() => reports.id, { onDelete: 'cascade' }),
+  athleteId: varchar("athlete_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  sharedBy: varchar("shared_by").references(() => users.id, { onDelete: 'set null' }), // Coach who shared
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  message: text("message"), // Optional message from coach
+  viewedAt: timestamp("viewed_at"), // When athlete first viewed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  // Prevent duplicate shares of same report to same athlete
+  uniqueReportAthlete: unique("report_shares_unique_report_athlete").on(table.reportId, table.athleteId),
+  reportIdx: index("report_shares_report_idx").on(table.reportId),
+  athleteIdx: index("report_shares_athlete_idx").on(table.athleteId),
+  orgIdx: index("report_shares_org_idx").on(table.organizationId),
+}));

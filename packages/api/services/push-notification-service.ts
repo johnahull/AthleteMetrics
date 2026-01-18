@@ -323,6 +323,7 @@ export class PushNotificationService {
     pushWellnessDigest: boolean;
     pushNewMeasurements: boolean;
     pushTeamAnnouncements: boolean;
+    pushReportShared: boolean;
     quietHoursEnabled: boolean;
     quietHoursStart: string | null;
     quietHoursEnd: string | null;
@@ -341,6 +342,7 @@ export class PushNotificationService {
         pushWellnessDigest: true,
         pushNewMeasurements: true,
         pushTeamAnnouncements: true,
+        pushReportShared: true,
         quietHoursEnabled: false,
         quietHoursStart: null,
         quietHoursEnd: null,
@@ -369,6 +371,8 @@ export class PushNotificationService {
         return prefs.pushNewMeasurements;
       case 'team_announcement':
         return prefs.pushTeamAnnouncements;
+      case 'report_shared':
+        return prefs.pushReportShared;
       default:
         return true;
     }

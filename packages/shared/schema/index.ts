@@ -34,7 +34,7 @@ export type {
   // Settings
   SiteSettings,
   // Reports
-  Report, ReportSnapshot, ReportBenchmark,
+  Report, ReportSnapshot, ReportBenchmark, ReportShare,
   // Wellness
   WellnessTemplate, WellnessRequest, WellnessResponse,
   // Gamification

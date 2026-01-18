@@ -96,6 +96,26 @@ export interface TeamReportData {
   metricUnits?: Record<string, string>;
 }
 
+export interface IndividualAthleteData {
+  userName: string;
+  age?: number;
+  gender?: string;
+  sports?: string[];
+  teams?: string[];
+  email?: string;
+  measurements: Record<string, number>;
+  percentiles: Record<string, number>;
+  teamAverages?: Record<string, number>;
+  benchmarkComparisons: Record<string, BenchmarkComparison[]>;
+}
+
+export interface IndividualReportData {
+  athlete: IndividualAthleteData;
+  generatedAt: string;
+  metricLabels?: Record<string, string>;
+  metricUnits?: Record<string, string>;
+}
+
 export type PdfFormat = 'visual' | 'simplified';
 
 export interface Report {

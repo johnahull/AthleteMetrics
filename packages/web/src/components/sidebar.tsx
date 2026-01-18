@@ -3,6 +3,7 @@ import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SiteSettings, Organization, UserOrganization } from "@shared/schema";
 import { useMyPendingInvitations } from "@/lib/events-api";
+import { useUnreadReportCount } from "@/hooks/use-my-reports";
 import {
   BarChart3,
   Building2,
@@ -92,10 +93,11 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
   ],
-  athlete: (invitationBadge?: number) => [
+  athlete: (invitationBadge?: number, reportBadge?: number) => [
     { name: "My Profile", href: "/my-profile", icon: UsersRound, tourId: "my-profile" },
     { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard, tourId: "my-dashboard" },
     { name: "My Measurements", href: "/my-measurements", icon: ClipboardList, tourId: "my-measurements" },
+    { name: "My Reports", href: "/my-reports", icon: FileText, badge: reportBadge, tourId: "my-reports" },
     { name: "My Events", href: "/my-events", icon: Calendar, badge: invitationBadge, tourId: "my-events" },
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users, tourId: "peer-comparison" },
     { name: "My Goals", href: "/my-goals", icon: Target, tourId: "my-goals" },
@@ -103,7 +105,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   ]
 });
 
-const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number) => {
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number, reportBadge?: number) => {
   // Get navigation configs with contextual labels
   const NAVIGATION_CONFIGS = getNavigationConfigs(teamLabel, athletesLabel);
 
@@ -128,7 +130,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
   let navigation = Array.isArray(baseConfig)
     ? [...baseConfig]
     : typeof baseConfig === 'function'
-    ? baseConfig(invitationBadge)
+    ? baseConfig(invitationBadge, reportBadge)
     : [...baseConfig.default];
   
   // Athletes now use the static /my-profile and /my-dashboard routes
@@ -208,6 +210,9 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   // Fetch pending invitations for athletes only
   const { data: pendingInvitations } = useMyPendingInvitations();
 
+  // Fetch unread report count for athletes only
+  const { data: unreadReportCount } = useUnreadReportCount();
+
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
@@ -219,7 +224,10 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   // Calculate invitation badge count for athletes
   const invitationBadge = userRole === 'athlete' ? (pendingInvitations?.length || 0) : undefined;
 
-  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes, invitationBadge);
+  // Calculate report badge count for athletes
+  const reportBadge = userRole === 'athlete' ? (unreadReportCount || 0) : undefined;
+
+  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes, invitationBadge, reportBadge);
 
   // Filter out Wellness link if wellness module is disabled
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
