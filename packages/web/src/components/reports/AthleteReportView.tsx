@@ -45,7 +45,7 @@ import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
-import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
+import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison } from "@/types/report-types";
 
 interface AthleteReportViewProps {
   report: Report;
@@ -65,7 +65,9 @@ export function AthleteReportView({ report }: AthleteReportViewProps) {
 
 function AthleteIndividualReportView({ report }: { report: Report }) {
   const generateReport = useGenerateReport(report.id);
-  const [reportData, setReportData] = useState<any>(null);
+  // Note: useGenerateReport returns GeneratedReport with data: any
+  // The actual athlete data structure is inside the response
+  const [reportData, setReportData] = useState<IndividualReportData | null>(null);
 
   // Extract athleteId from config
   const config = report.config as { athleteId?: string; athleteIds?: string[] };
@@ -78,7 +80,8 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
 
     generateReport.mutate({ athleteId }, {
       onSuccess: (data) => {
-        setReportData(data);
+        // Cast the response data to our expected structure
+        setReportData(data as unknown as IndividualReportData);
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,7 +254,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                       <TableCell>
                         {benchmarks.length > 0 ? (
                           <div className="space-y-1">
-                            {benchmarks.map((b: any, idx: number) => (
+                            {benchmarks.map((b: BenchmarkComparison, idx: number) => (
                               <div key={idx} className="text-sm">
                                 <span className="font-medium">{b.benchmarkName}:</span>{" "}
                                 {isFly10Metric(metricCode)
@@ -719,7 +722,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
       })()}
 
       {/* Composite Index Rankings */}
-      {Array.isArray(athleteRankings) && athleteRankings.length > 0 && athleteRankings.some((a: any) => a.compositeIndex !== undefined) && (
+      {Array.isArray(athleteRankings) && athleteRankings.length > 0 && athleteRankings.some((a) => a.compositeIndex !== undefined) && (
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>

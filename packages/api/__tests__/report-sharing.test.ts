@@ -1126,47 +1126,18 @@ describe("Report Sharing", () => {
   describe("Coaching Insights Role-Based Access Control", () => {
     // Tests for requireRole('coach') middleware on coaching insights endpoints
     // These tests verify that athletes cannot access coach-only actions
+    //
+    // Implementation details:
+    // - POST /api/reports/:id/generate-insights: requireRole('coach') at line ~1130
+    // - PATCH /api/reports/:id/insights: requireRole('coach') at line ~1275
+    // - Role hierarchy: athlete (40) < coach (60) < org_admin (80) < site_admin (100)
 
-    it("should restrict POST /api/reports/:id/generate-insights to coaches and above", async () => {
-      // This test documents the expected behavior:
-      // - Athletes should receive 403 Forbidden
-      // - Coaches should be allowed to generate insights
-      // - org_admin and site_admin should also be allowed
-      //
-      // Implementation: requireRole('coach') middleware added to the endpoint
-      // See packages/api/routes/report-routes.ts line ~1130
-      expect(true).toBe(true); // Placeholder - full HTTP test requires app setup
-    });
+    it.todo("should restrict POST /api/reports/:id/generate-insights to coaches and above");
 
-    it("should restrict PATCH /api/reports/:id/insights to coaches and above", async () => {
-      // This test documents the expected behavior:
-      // - Athletes should receive 403 Forbidden when trying to edit insights
-      // - Coaches should be allowed to edit insights
-      // - org_admin and site_admin should also be allowed
-      //
-      // Implementation: requireRole('coach') middleware added to the endpoint
-      // See packages/api/routes/report-routes.ts line ~1275
-      expect(true).toBe(true); // Placeholder - full HTTP test requires app setup
-    });
+    it.todo("should restrict PATCH /api/reports/:id/insights to coaches and above");
 
-    it("should allow athletes to view existing coaching insights (read-only)", async () => {
-      // Athletes viewing shared reports CAN see existing coaching insights
-      // They just cannot generate, edit, or regenerate them
-      //
-      // Frontend implementation: AthleteReportView component uses
-      // ReadOnlyCoachingInsights which only displays insights without action buttons
-      expect(true).toBe(true); // Placeholder
-    });
+    it.todo("should allow athletes to view existing coaching insights (read-only)");
 
-    it("should verify role hierarchy for coaching insights", async () => {
-      // Role hierarchy for coaching insights access:
-      // - athlete (role level 40) -> DENIED (403)
-      // - coach (role level 60) -> ALLOWED
-      // - org_admin (role level 80) -> ALLOWED
-      // - site_admin (role level 100) -> ALLOWED
-      //
-      // The requireRole('coach') middleware allows any role >= 'coach' level
-      expect(true).toBe(true); // Placeholder
-    });
+    it.todo("should verify role hierarchy for coaching insights");
   });
 });
