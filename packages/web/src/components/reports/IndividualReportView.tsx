@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
+import { useReportPdf } from "@/hooks/use-report-pdf";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ReportLoadingState } from "./ReportLoadingState";
+import { ReportErrorState } from "./ReportErrorState";
 import {
   Table,
   TableBody,
@@ -18,8 +21,8 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
-import { useAuth } from "@/lib/auth";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
+import { extractAthleteId } from "./report-utils";
 import type { Report } from "@/types/report-types";
 
 interface IndividualReportViewProps {
@@ -31,7 +34,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [showSendDialog, setShowSendDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
-  const { user } = useAuth();
+  const { toast } = useToast();
 
   // Determine if AI is enabled for this organization
   const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
@@ -41,10 +44,24 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
   const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
 
-  // Extract athleteId outside useEffect to avoid dependency issues
-  // Type guard to ensure we're accessing IndividualReportConfig properties
-  const config = report.config as { athleteId?: string; athleteIds?: string[] };
-  const athleteId = config?.athleteId || config?.athleteIds?.[0];
+  // Extract athleteId from config using shared utility
+  const athleteId = extractAthleteId(report.config as { athleteId?: string; athleteIds?: string[] });
+
+  // Error handler for PDF download
+  const handlePdfError = useCallback((error: Error) => {
+    toast({
+      variant: "destructive",
+      title: "Download Failed",
+      description: error.message || "Failed to download PDF. Please try again.",
+    });
+  }, [toast]);
+
+  // PDF download hook
+  const { downloadPdf, isDownloading: isPdfDownloading } = useReportPdf({
+    reportId: report.id,
+    reportName: report.name,
+    onError: handlePdfError,
+  });
 
   useEffect(() => {
     if (!athleteId) {
@@ -59,69 +76,25 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id, athleteId]);
 
-  const handleDownloadPDF = async () => {
-    try {
-      // Extract athleteId (try singular first, then array)
-      const config = report.config as { athleteId?: string; athleteIds?: string[] };
-      const athleteId = config?.athleteId || config?.athleteIds?.[0];
-
-      if (!athleteId) {
-        console.error('[IndividualReportView] No athleteId found for PDF download');
-        return;
-      }
-
-      // PDF endpoint uses GET with query parameter, not POST
-      const response = await fetch(`/api/reports/${report.id}/pdf?athleteId=${athleteId}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to download PDF");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${report.name.replace(/\s+/g, "_")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
+  const handleDownloadPDF = () => {
+    if (athleteId) {
+      downloadPdf({ athleteId });
     }
   };
 
   if (generateReport.isPending || !reportData) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center gap-4">
-            <LoadingSpinner />
-            <p className="text-muted-foreground">Generating report...</p>
-            {generateReport.isPending && (
-              <p className="text-xs text-muted-foreground">Status: Pending</p>
-            )}
-            {!reportData && !generateReport.isPending && (
-              <p className="text-xs text-muted-foreground">Status: Waiting for data</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
+    const status = generateReport.isPending
+      ? "Pending"
+      : "Waiting for data";
+    return <ReportLoadingState message="Generating report..." status={status} />;
   }
 
   if (generateReport.isError) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-destructive text-center">
-            Failed to generate report. Please try again.
-          </p>
-          <p className="text-sm text-muted-foreground text-center mt-2">
-            Error: {generateReport.error?.message || 'Unknown error'}
-          </p>
-        </CardContent>
-      </Card>
+      <ReportErrorState
+        message="Failed to generate report. Please try again."
+        errorDetails={generateReport.error?.message || 'Unknown error'}
+      />
     );
   }
 
@@ -166,9 +139,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleDownloadPDF}>
+              <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>
                 <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
+                {isPdfDownloading ? "Downloading..." : "Export PDF"}
               </Button>
               <Button variant="outline" onClick={() => setShowShareDialog(true)}>
                 <Share2 className="h-4 w-4 mr-2" />

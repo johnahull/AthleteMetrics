@@ -1,10 +1,13 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
+import { useReportPdf } from "@/hooks/use-report-pdf";
+import { useToast } from "@/hooks/use-toast";
 import { useTeams } from "@/hooks/use-teams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ReportLoadingState } from "./ReportLoadingState";
+import { ReportErrorState } from "./ReportErrorState";
 import {
   Table,
   TableBody,
@@ -27,9 +30,18 @@ import { ShareReportDialog } from "./ShareReportDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
+import {
+  getPerformanceColor,
+  getQuartileBadge,
+  formatDateRange,
+  getTeamNames,
+  getMetricsList,
+  getCompositeIndexDescription,
+  calculateBenchmarkAchievements,
+  calculateDeviationStats,
+} from "./report-utils";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
-import { useAuth } from "@/lib/auth";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat } from "@/types/report-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
@@ -42,7 +54,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
-  const { user } = useAuth();
+  const { toast } = useToast();
 
   // Fetch teams for team name display
   const { data: teams } = useTeams({ organizationId: report.organizationId });
@@ -54,6 +66,22 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   });
 
   const aiEnabled = organization?.aiEnabled && organization?.aiEnabledBySiteAdmin;
+
+  // Error handler for PDF download
+  const handlePdfError = useCallback((error: Error) => {
+    toast({
+      variant: "destructive",
+      title: "Download Failed",
+      description: error.message || "Failed to download PDF. Please try again.",
+    });
+  }, [toast]);
+
+  // PDF download hook
+  const { downloadPdf, isDownloading: isPdfDownloading } = useReportPdf({
+    reportId: report.id,
+    reportName: report.name,
+    onError: handlePdfError,
+  });
 
   useEffect(() => {
     // Generate report data on mount
@@ -68,65 +96,24 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         }
       },
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id]);
 
-  const handleDownloadPDF = async (format: PdfFormat) => {
-    try {
-      const response = await fetch(`/api/reports/${report.id}/pdf?format=${format}`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to download PDF");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${report.name.replace(/\s+/g, "_")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
-    }
+  const handleDownloadPDF = (format: PdfFormat) => {
+    downloadPdf({ format });
   };
 
   if (generateReport.isPending || !reportData) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center gap-4">
-            <LoadingSpinner />
-            <p className="text-muted-foreground">Generating report...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <ReportLoadingState message="Generating report..." />;
   }
 
   if (generateReport.isError) {
     console.error('[TeamReportView] Report generation failed:', generateReport.error);
-
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-destructive text-center">
-              Failed to generate report. Please try again.
-            </p>
-            <Button
-              onClick={() => generateReport.mutate({})}
-              variant="outline"
-            >
-              Retry
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <ReportErrorState
+        message="Failed to generate report. Please try again."
+        onRetry={() => generateReport.mutate({})}
+      />
     );
   }
 
@@ -145,160 +132,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   }
   const benchmarkColumns = Array.from(allBenchmarkNames);
 
-  // Helper function: Get performance color class based on percentile
-  const getPerformanceColor = (percentile: number | undefined): string => {
-    if (percentile === undefined) return 'text-muted-foreground';
-    if (percentile >= 75) return 'text-green-600';
-    if (percentile >= 50) return 'text-yellow-600';
-    if (percentile >= 25) return 'text-orange-600';
-    return 'text-red-600';
-  };
-
-  // Helper function: Get quartile badge from percentile
-  const getQuartileBadge = (percentile: number | undefined): { label: string; variant: "default" | "secondary" | "outline" | "destructive" } | null => {
-    if (percentile === undefined) return null;
-    if (percentile >= 75) return { label: "Top 25%", variant: "default" };
-    if (percentile >= 50) return { label: "Above Avg", variant: "secondary" };
-    if (percentile >= 25) return { label: "Below Avg", variant: "outline" };
-    return { label: "Bottom 25%", variant: "destructive" };
-  };
-
-  // Helper function: Format date range from timeframe config
-  const formatDateRange = (): string => {
-    const timeframe = report.config.timeframe;
-
-    if (timeframe.type === 'custom') {
-      const start = timeframe.customStart ? format(new Date(timeframe.customStart), 'MMM d, yyyy') : '';
-      const end = timeframe.customEnd ? format(new Date(timeframe.customEnd), 'MMM d, yyyy') : '';
-      return `${start} - ${end}`;
-    }
-
-    switch (timeframe.preset) {
-      case 'season':
-        return 'Current Season';
-      case 'year':
-        return 'Past Year';
-      case 'all_time':
-        return 'All Time';
-      default:
-        return 'All Time';
-    }
-  };
-
-  // Helper function: Get team names from team IDs
-  const getTeamNames = (): string => {
-    const config = report.config as { filters?: { teamIds?: string[] } };
-    const teamIds = config.filters?.teamIds;
-
-    if (!teamIds || teamIds.length === 0) {
-      return `All ${labels.teams}`;
-    }
-
-    if (!teams || teams.length === 0) {
-      return 'Loading...';
-    }
-
-    const teamNames = teamIds
-      .map((id: string) => teams.find(t => t.id === id)?.name)
-      .filter(Boolean);
-
-    return teamNames.length > 0 ? teamNames.join(', ') : `All ${labels.teams}`;
-  };
-
-  // Helper function: Get user-friendly metric names
-  const getMetricsList = (): string => {
-    if (!teamStatistics || teamStatistics.length === 0) {
-      return 'No metrics';
-    }
-
-    return teamStatistics
-      .map(stat => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
-      .join(', ');
-  };
-
-  // Helper function: Get composite index description with weights
-  const getCompositeIndexDescription = (): string => {
-    const config = report.config as { compositeIndex?: { weights?: Record<string, number> } };
-    const weights = config.compositeIndex?.weights;
-
-    if (!weights || Object.keys(weights).length === 0) {
-      return 'Weighted average of percentiles';
-    }
-
-    const weightDescriptions = Object.entries(weights)
-      .map(([metricCode, weight]) => {
-        const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
-        const percentage = ((weight as number) * 100).toFixed(0);
-        return `${metricName} (${percentage}%)`;
-      })
-      .join(', ');
-
-    return `Weighted average of percentiles: ${weightDescriptions}`;
-  };
-
-  // Helper function: Calculate benchmark achievement statistics
-  const calculateBenchmarkAchievements = () => {
-    if (!athleteRankings || athleteRankings.length === 0) {
-      return [];
-    }
-
-    // Get all unique benchmark names across all metrics
-    const allBenchmarkNames = new Set<string>();
-    athleteRankings.forEach((athlete: AthleteRanking) => {
-      if (athlete.benchmarkComparisons) {
-        Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
-          comparisons.forEach((comp) => allBenchmarkNames.add(comp.benchmarkName));
-        });
-      }
-    });
-
-    // Count how many athletes meet each benchmark
-    const benchmarkCounts: Record<string, number> = {};
-    Array.from(allBenchmarkNames).forEach((benchmarkName) => {
-      benchmarkCounts[benchmarkName] = 0;
-    });
-
-    // Track which athletes meet at least one benchmark
-    const athletesWithBenchmarks = new Set<string>();
-
-    athleteRankings.forEach((athlete: AthleteRanking) => {
-      if (athlete.benchmarkComparisons) {
-        // Check all metrics and all benchmarks
-        Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
-          comparisons.forEach((comp) => {
-            if (comp.meetsOrExceeds) {
-              benchmarkCounts[comp.benchmarkName]++;
-              athletesWithBenchmarks.add(athlete.userId);
-            }
-          });
-        });
-      }
-    });
-
-    // Convert to array format for rendering, sorted by count descending
-    const achievements = Array.from(allBenchmarkNames)
-      .map((benchmarkName) => ({
-        tier: benchmarkName,
-        count: benchmarkCounts[benchmarkName],
-        percentage: (benchmarkCounts[benchmarkName] / athleteRankings.length) * 100,
-      }))
-      .filter((achievement) => achievement.count > 0) // Only show benchmarks that are met
-      .sort((a, b) => b.count - a.count); // Sort by count descending
-
-    // Count athletes who didn't meet any benchmark
-    const noTierCount = athleteRankings.length - athletesWithBenchmarks.size;
-
-    // Add "no benchmark met" if applicable
-    if (noTierCount > 0) {
-      achievements.push({
-        tier: 'No benchmark met',
-        count: noTierCount,
-        percentage: (noTierCount / athleteRankings.length) * 100,
-      });
-    }
-
-    return achievements;
-  };
+  // Extract composite index weights for description
+  const compositeConfig = report.config as { compositeIndex?: { weights?: Record<string, number> } };
 
   return (
     <div className="space-y-6">
@@ -318,9 +153,9 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled={isPdfDownloading}>
                     <FileDown className="h-4 w-4 mr-2" />
-                    Export PDF
+                    {isPdfDownloading ? "Downloading..." : "Export PDF"}
                     <ChevronDown className="h-4 w-4 ml-2" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -358,7 +193,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
-                <p className="text-base font-semibold mt-1 break-words">{getTeamNames()}</p>
+                <p className="text-base font-semibold mt-1 break-words">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
               </div>
             </div>
 
@@ -369,7 +204,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
-                <p className="text-base font-semibold mt-1">{formatDateRange()}</p>
+                <p className="text-base font-semibold mt-1">{formatDateRange(report.config.timeframe)}</p>
               </div>
             </div>
 
@@ -393,7 +228,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Metrics</p>
-                <p className="text-base font-semibold mt-1 break-words">{getMetricsList()}</p>
+                <p className="text-base font-semibold mt-1 break-words">{getMetricsList(teamStatistics, metricLabels)}</p>
               </div>
             </div>
           </div>
@@ -489,7 +324,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
       {/* Benchmark Achievement Summary */}
       {(() => {
-        const achievements = calculateBenchmarkAchievements();
+        const achievements = calculateBenchmarkAchievements(athleteRankings);
         return achievements.length > 0 ? (
           <Card>
             <CardHeader>
@@ -532,7 +367,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
-            <CardDescription>{getCompositeIndexDescription()}</CardDescription>
+            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels)}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -598,34 +433,13 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                         const percentileColor = getPerformanceColor(percentile);
                         const quartileBadge = getQuartileBadge(percentile);
 
-                        // Calculate deviation from average
-                        const deviation = value !== undefined && stat.average !== null
-                          ? value - stat.average
-                          : null;
-                        const percentDiff = deviation !== null && stat.average !== null && stat.average !== 0
-                          ? (deviation / Math.abs(stat.average)) * 100
-                          : null;
-
-                        // Calculate Z-score
-                        const zScore = value !== undefined && stat.average !== null && stat.standardDeviation !== null && stat.standardDeviation > 0
-                          ? (value - stat.average) / stat.standardDeviation
-                          : null;
-
-                        // Get benchmark label for this athlete and metric
+                        // Get benchmark label and metric direction
                         const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
-
-                        // Determine if lower is better for this metric
                         const lowerIsBetter = isLowerBetter(stat.metric);
 
-                        // Color for deviation (green if better, red if worse)
-                        const deviationColor = deviation === null ? '' :
-                          (lowerIsBetter ? (deviation < 0 ? 'text-green-600' : 'text-red-600') :
-                           (deviation > 0 ? 'text-green-600' : 'text-red-600'));
-
-                        // Color for z-score (same logic as deviation)
-                        const zScoreColor = zScore === null ? '' :
-                          (lowerIsBetter ? (zScore < 0 ? 'text-green-600' : 'text-red-600') :
-                           (zScore > 0 ? 'text-green-600' : 'text-red-600'));
+                        // Calculate deviation statistics
+                        const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =
+                          calculateDeviationStats(value, stat.average, stat.standardDeviation, lowerIsBetter);
 
                         return (
                           <TableRow key={athlete.userId}>

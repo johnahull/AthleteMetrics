@@ -14,11 +14,14 @@
  * - View existing coaching insights (read-only)
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useGenerateReport } from "@/hooks/use-reports";
+import { useReportPdf } from "@/hooks/use-report-pdf";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { ReportLoadingState } from "./ReportLoadingState";
+import { ReportErrorState } from "./ReportErrorState";
 import {
   Table,
   TableBody,
@@ -43,6 +46,17 @@ import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
+import {
+  getPerformanceColor,
+  getQuartileBadge,
+  formatDateRange,
+  getTeamNames,
+  getMetricsList,
+  getCompositeIndexDescription,
+  calculateBenchmarkAchievements,
+  extractAthleteId,
+  calculateDeviationStats,
+} from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useTeams } from "@/hooks/use-teams";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, IndividualReportData, BenchmarkComparison } from "@/types/report-types";
@@ -68,10 +82,26 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
   // Note: useGenerateReport returns GeneratedReport with data: any
   // The actual athlete data structure is inside the response
   const [reportData, setReportData] = useState<IndividualReportData | null>(null);
+  const { toast } = useToast();
 
-  // Extract athleteId from config
-  const config = report.config as { athleteId?: string; athleteIds?: string[] };
-  const athleteId = config?.athleteId || config?.athleteIds?.[0];
+  // Extract athleteId using shared utility
+  const athleteId = extractAthleteId(report.config as { athleteId?: string; athleteIds?: string[] });
+
+  // Error handler for PDF download
+  const handlePdfError = useCallback((error: Error) => {
+    toast({
+      variant: "destructive",
+      title: "Download Failed",
+      description: error.message || "Failed to download PDF. Please try again.",
+    });
+  }, [toast]);
+
+  // PDF download hook
+  const { downloadPdf, isDownloading: isPdfDownloading } = useReportPdf({
+    reportId: report.id,
+    reportName: report.name,
+    onError: handlePdfError,
+  });
 
   useEffect(() => {
     if (!athleteId) {
@@ -87,58 +117,22 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id, athleteId]);
 
-  const handleDownloadPDF = async () => {
-    try {
-      if (!athleteId) {
-        console.error("[AthleteReportView] No athleteId found for PDF download");
-        return;
-      }
-
-      const response = await fetch(`/api/reports/${report.id}/pdf?athleteId=${athleteId}`);
-
-      if (!response.ok) {
-        throw new Error("Failed to download PDF");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${report.name.replace(/\s+/g, "_")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
+  const handleDownloadPDF = () => {
+    if (athleteId) {
+      downloadPdf({ athleteId });
     }
   };
 
   if (generateReport.isPending || !reportData) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center gap-4">
-            <LoadingSpinner />
-            <p className="text-muted-foreground">Loading report...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <ReportLoadingState message="Loading report..." />;
   }
 
   if (generateReport.isError) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-destructive text-center">
-            Failed to load report. Please try again.
-          </p>
-          <p className="text-sm text-muted-foreground text-center mt-2">
-            Error: {generateReport.error?.message || "Unknown error"}
-          </p>
-        </CardContent>
-      </Card>
+      <ReportErrorState
+        message="Failed to load report. Please try again."
+        errorDetails={generateReport.error?.message || "Unknown error"}
+      />
     );
   }
 
@@ -184,9 +178,9 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
             </div>
             {/* Only Export PDF button - NO Share or Send to Athlete */}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={handleDownloadPDF}>
+              <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>
                 <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
+                {isPdfDownloading ? "Downloading..." : "Export PDF"}
               </Button>
             </div>
           </div>
@@ -293,9 +287,26 @@ function AthleteTeamReportView({ report }: { report: Report }) {
   const labels = useContextualLabels();
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
+  const { toast } = useToast();
 
   // Fetch teams for team name display
   const { data: teams } = useTeams({ organizationId: report.organizationId });
+
+  // Error handler for PDF download
+  const handlePdfError = useCallback((error: Error) => {
+    toast({
+      variant: "destructive",
+      title: "Download Failed",
+      description: error.message || "Failed to download PDF. Please try again.",
+    });
+  }, [toast]);
+
+  // PDF download hook
+  const { downloadPdf, isDownloading: isPdfDownloading } = useReportPdf({
+    reportId: report.id,
+    reportName: report.name,
+    onError: handlePdfError,
+  });
 
   useEffect(() => {
     generateReport.mutate({}, {
@@ -310,58 +321,20 @@ function AthleteTeamReportView({ report }: { report: Report }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report.id]);
 
-  const handleDownloadPDF = async (format: PdfFormat) => {
-    try {
-      const response = await fetch(`/api/reports/${report.id}/pdf?format=${format}`, {
-        method: "GET",
-        credentials: "include",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to download PDF");
-      }
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `${report.name.replace(/\s+/g, "_")}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      console.error("Error downloading PDF:", error);
-    }
+  const handleDownloadPDF = (format: PdfFormat) => {
+    downloadPdf({ format });
   };
 
   if (generateReport.isPending || !reportData) {
-    return (
-      <Card>
-        <CardContent className="py-12">
-          <div className="flex flex-col items-center gap-4">
-            <LoadingSpinner />
-            <p className="text-muted-foreground">Loading report...</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
+    return <ReportLoadingState message="Loading report..." />;
   }
 
   if (generateReport.isError) {
     return (
-      <Card>
-        <CardContent className="py-8">
-          <div className="flex flex-col items-center gap-4">
-            <p className="text-destructive text-center">
-              Failed to load report. Please try again.
-            </p>
-            <Button onClick={() => generateReport.mutate({})} variant="outline">
-              Retry
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <ReportErrorState
+        message="Failed to load report. Please try again."
+        onRetry={() => generateReport.mutate({})}
+      />
     );
   }
 
@@ -380,129 +353,8 @@ function AthleteTeamReportView({ report }: { report: Report }) {
   }
   const benchmarkColumns = Array.from(allBenchmarkNames);
 
-  // Helper functions
-  const getPerformanceColor = (percentile: number | undefined): string => {
-    if (percentile === undefined) return "text-muted-foreground";
-    if (percentile >= 75) return "text-green-600";
-    if (percentile >= 50) return "text-yellow-600";
-    if (percentile >= 25) return "text-orange-600";
-    return "text-red-600";
-  };
-
-  const getQuartileBadge = (percentile: number | undefined): { label: string; variant: "default" | "secondary" | "outline" | "destructive" } | null => {
-    if (percentile === undefined) return null;
-    if (percentile >= 75) return { label: "Top 25%", variant: "default" };
-    if (percentile >= 50) return { label: "Above Avg", variant: "secondary" };
-    if (percentile >= 25) return { label: "Below Avg", variant: "outline" };
-    return { label: "Bottom 25%", variant: "destructive" };
-  };
-
-  const formatDateRange = (): string => {
-    const timeframe = report.config.timeframe;
-    if (timeframe.type === "custom") {
-      const start = timeframe.customStart ? format(new Date(timeframe.customStart), "MMM d, yyyy") : "";
-      const end = timeframe.customEnd ? format(new Date(timeframe.customEnd), "MMM d, yyyy") : "";
-      return `${start} - ${end}`;
-    }
-    switch (timeframe.preset) {
-      case "season": return "Current Season";
-      case "year": return "Past Year";
-      case "all_time": return "All Time";
-      default: return "All Time";
-    }
-  };
-
-  const getTeamNames = (): string => {
-    const config = report.config as { filters?: { teamIds?: string[] } };
-    const teamIds = config.filters?.teamIds;
-    if (!teamIds || teamIds.length === 0) {
-      return `All ${labels.teams}`;
-    }
-    if (!teams || teams.length === 0) {
-      return "Loading...";
-    }
-    const teamNames = teamIds
-      .map((id: string) => teams.find(t => t.id === id)?.name)
-      .filter(Boolean);
-    return teamNames.length > 0 ? teamNames.join(", ") : `All ${labels.teams}`;
-  };
-
-  const getMetricsList = (): string => {
-    if (!teamStatistics || teamStatistics.length === 0) {
-      return "No metrics";
-    }
-    return teamStatistics
-      .map(stat => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
-      .join(", ");
-  };
-
-  const getCompositeIndexDescription = (): string => {
-    const config = report.config as { compositeIndex?: { weights?: Record<string, number> } };
-    const weights = config.compositeIndex?.weights;
-    if (!weights || Object.keys(weights).length === 0) {
-      return "Weighted average of percentiles";
-    }
-    const weightDescriptions = Object.entries(weights)
-      .map(([metricCode, weight]) => {
-        const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
-        const percentage = ((weight as number) * 100).toFixed(0);
-        return `${metricName} (${percentage}%)`;
-      })
-      .join(", ");
-    return `Weighted average of percentiles: ${weightDescriptions}`;
-  };
-
-  const calculateBenchmarkAchievements = () => {
-    if (!athleteRankings || athleteRankings.length === 0) return [];
-
-    const allBenchmarks = new Set<string>();
-    athleteRankings.forEach((athlete: AthleteRanking) => {
-      if (athlete.benchmarkComparisons) {
-        Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
-          comparisons.forEach((comp) => allBenchmarks.add(comp.benchmarkName));
-        });
-      }
-    });
-
-    const benchmarkCounts: Record<string, number> = {};
-    Array.from(allBenchmarks).forEach((name) => {
-      benchmarkCounts[name] = 0;
-    });
-
-    const athletesWithBenchmarks = new Set<string>();
-    athleteRankings.forEach((athlete: AthleteRanking) => {
-      if (athlete.benchmarkComparisons) {
-        Object.values(athlete.benchmarkComparisons).forEach((comparisons) => {
-          comparisons.forEach((comp) => {
-            if (comp.meetsOrExceeds) {
-              benchmarkCounts[comp.benchmarkName]++;
-              athletesWithBenchmarks.add(athlete.userId);
-            }
-          });
-        });
-      }
-    });
-
-    const achievements = Array.from(allBenchmarks)
-      .map((name) => ({
-        tier: name,
-        count: benchmarkCounts[name],
-        percentage: (benchmarkCounts[name] / athleteRankings.length) * 100,
-      }))
-      .filter((a) => a.count > 0)
-      .sort((a, b) => b.count - a.count);
-
-    const noTierCount = athleteRankings.length - athletesWithBenchmarks.size;
-    if (noTierCount > 0) {
-      achievements.push({
-        tier: "No benchmark met",
-        count: noTierCount,
-        percentage: (noTierCount / athleteRankings.length) * 100,
-      });
-    }
-
-    return achievements;
-  };
+  // Extract composite index weights for description
+  const compositeConfig = report.config as { compositeIndex?: { weights?: Record<string, number> } };
 
   return (
     <div className="space-y-6">
@@ -523,9 +375,9 @@ function AthleteTeamReportView({ report }: { report: Report }) {
             <div className="flex gap-2">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="outline">
+                  <Button variant="outline" disabled={isPdfDownloading}>
                     <FileDown className="h-4 w-4 mr-2" />
-                    Export PDF
+                    {isPdfDownloading ? "Downloading..." : "Export PDF"}
                     <ChevronDown className="h-4 w-4 ml-2" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -558,7 +410,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">{labels.teams}</p>
-                <p className="text-base font-semibold mt-1 break-words">{getTeamNames()}</p>
+                <p className="text-base font-semibold mt-1 break-words">{getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams)}</p>
               </div>
             </div>
 
@@ -568,7 +420,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Testing Period</p>
-                <p className="text-base font-semibold mt-1">{formatDateRange()}</p>
+                <p className="text-base font-semibold mt-1">{formatDateRange(report.config.timeframe)}</p>
               </div>
             </div>
 
@@ -590,7 +442,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-muted-foreground">Metrics</p>
-                <p className="text-base font-semibold mt-1 break-words">{getMetricsList()}</p>
+                <p className="text-base font-semibold mt-1 break-words">{getMetricsList(teamStatistics, metricLabels)}</p>
               </div>
             </div>
           </div>
@@ -683,7 +535,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
 
       {/* Benchmark Achievement Summary */}
       {(() => {
-        const achievements = calculateBenchmarkAchievements();
+        const achievements = calculateBenchmarkAchievements(athleteRankings);
         return achievements.length > 0 ? (
           <Card>
             <CardHeader>
@@ -726,7 +578,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
         <Card>
           <CardHeader>
             <CardTitle>Composite Index Rankings</CardTitle>
-            <CardDescription>{getCompositeIndexDescription()}</CardDescription>
+            <CardDescription>{getCompositeIndexDescription(compositeConfig.compositeIndex?.weights, metricLabels)}</CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -791,27 +643,13 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                         const percentileColor = getPerformanceColor(percentile);
                         const quartileBadge = getQuartileBadge(percentile);
 
-                        const deviation = value !== undefined && stat.average !== null
-                          ? value - stat.average
-                          : null;
-                        const percentDiff = deviation !== null && stat.average !== null && stat.average !== 0
-                          ? (deviation / Math.abs(stat.average)) * 100
-                          : null;
-
-                        const zScore = value !== undefined && stat.average !== null && stat.standardDeviation !== null && stat.standardDeviation > 0
-                          ? (value - stat.average) / stat.standardDeviation
-                          : null;
-
+                        // Get benchmark label and metric direction
                         const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
                         const lowerIsBetter = isLowerBetter(stat.metric);
 
-                        const deviationColor = deviation === null ? "" :
-                          (lowerIsBetter ? (deviation < 0 ? "text-green-600" : "text-red-600") :
-                            (deviation > 0 ? "text-green-600" : "text-red-600"));
-
-                        const zScoreColor = zScore === null ? "" :
-                          (lowerIsBetter ? (zScore < 0 ? "text-green-600" : "text-red-600") :
-                            (zScore > 0 ? "text-green-600" : "text-red-600"));
+                        // Calculate deviation statistics
+                        const { deviation, percentDiff, zScore, deviationColor, zScoreColor } =
+                          calculateDeviationStats(value, stat.average, stat.standardDeviation, lowerIsBetter);
 
                         return (
                           <TableRow key={athlete.userId}>
