@@ -64,6 +64,13 @@ vi.mock('../athlete/OrgSwitcher', () => ({
   OrgSwitcher: () => <div data-testid="org-switcher" />,
 }));
 
+// Mock use-my-reports hook (used by sidebar for report badge)
+vi.mock('@/hooks/use-my-reports', () => ({
+  useUnreadReportCount: vi.fn(() => ({ data: 0, isLoading: false })),
+  useMyReports: vi.fn(() => ({ data: { reports: [] }, isLoading: false })),
+  useMarkReportViewed: vi.fn(() => ({ mutate: vi.fn() })),
+}));
+
 describe('Sidebar Events Menu Item', () => {
   beforeEach(() => {
     vi.clearAllMocks();

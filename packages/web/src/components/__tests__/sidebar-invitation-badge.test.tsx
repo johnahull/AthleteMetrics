@@ -19,10 +19,14 @@ vi.mock('@/lib/auth', () => ({
   useAuth: vi.fn(),
 }));
 
-// Mock React Query
-vi.mock('@tanstack/react-query', () => ({
-  useQuery: vi.fn(),
-}));
+// Mock React Query with QueryClient for queryClient.ts module
+vi.mock('@tanstack/react-query', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@tanstack/react-query')>();
+  return {
+    ...actual,
+    useQuery: vi.fn(),
+  };
+});
 
 // Mock events API
 vi.mock('@/lib/events-api', () => ({
@@ -44,6 +48,13 @@ vi.mock('@/lib/athlete-org-context', () => ({
     setFilterMode: vi.fn(),
     organizations: [],
   }),
+}));
+
+// Mock use-my-reports hook (used by sidebar for report badge)
+vi.mock('@/hooks/use-my-reports', () => ({
+  useUnreadReportCount: vi.fn(() => ({ data: 0, isLoading: false })),
+  useMyReports: vi.fn(() => ({ data: { reports: [] }, isLoading: false })),
+  useMarkReportViewed: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
 import { useAuth } from '@/lib/auth';
