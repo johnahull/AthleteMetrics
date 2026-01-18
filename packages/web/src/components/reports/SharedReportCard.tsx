@@ -49,6 +49,7 @@ export function SharedReportCard({
               {formatDistanceToNow(new Date(createdAt), { addSuffix: true })}
             </p>
             {message && (
+              // Safe: React automatically escapes text content in JSX, preventing XSS
               <p className="text-sm mt-2 italic text-muted-foreground line-clamp-2">
                 "{message}"
               </p>

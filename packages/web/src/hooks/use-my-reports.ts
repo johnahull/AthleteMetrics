@@ -2,6 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
+// Cache duration for unread report count to reduce API calls
+const UNREAD_COUNT_STALE_TIME = 30000; // 30 seconds
+
 interface SharedReport {
   shareId: string;
   reportId: string;
@@ -70,6 +73,6 @@ export function useUnreadReportCount() {
       const data = await res.json();
       return data.reports.filter((r: SharedReport) => r.isNew).length;
     },
-    staleTime: 30000, // Cache for 30 seconds
+    staleTime: UNREAD_COUNT_STALE_TIME,
   });
 }

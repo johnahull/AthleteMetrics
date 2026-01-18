@@ -134,6 +134,10 @@ const reportLimiter = rateLimit({
   message: { message: "Too many report requests, please try again later." },
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`Rate limit exceeded for report endpoints - IP: ${req.ip}, User: ${req.session.user?.id || 'unauthenticated'}`);
+    res.status(429).json({ message: "Too many report requests, please try again later." });
+  },
 });
 
 // Stricter rate limiting for report generation and PDF export (expensive operations)
@@ -1420,6 +1424,14 @@ export function registerReportRoutes(app: Express) {
             .json({ message: "Athlete not found in this organization" });
         }
 
+        // Verify that the user is actually an athlete (not a coach or admin)
+        const userRoles = await storage.getUserRoles(athleteId, report.organizationId);
+        if (!userRoles.includes('athlete')) {
+          return res
+            .status(400)
+            .json({ message: "User must be an athlete to receive report shares" });
+        }
+
         // Get athlete details (including email for notifications)
         const athlete = await db
           .select({
@@ -1632,14 +1644,15 @@ export function registerReportRoutes(app: Express) {
           });
         }
 
-        // Batch verify organization membership (fixes N+1 query)
+        // Batch verify organization membership AND athlete role (fixes N+1 query)
         const orgMemberships = await db
-          .select({ userId: userOrganizations.userId })
+          .select({ userId: userOrganizations.userId, role: userOrganizations.role })
           .from(userOrganizations)
           .where(
             and(
               inArray(userOrganizations.userId, targetAthleteIds),
-              eq(userOrganizations.organizationId, report.organizationId)
+              eq(userOrganizations.organizationId, report.organizationId),
+              eq(userOrganizations.role, 'athlete')
             )
           );
         const validAthleteSet = new Set(orgMemberships.map((m) => m.userId));
@@ -1677,7 +1690,7 @@ export function registerReportRoutes(app: Express) {
           existingShares.map((s) => s.athleteId)
         );
 
-        // Process shares
+        // Process shares - prepare data first, then insert in a transaction
         const results: Array<{
           athleteId: string;
           athleteName: string;
@@ -1685,9 +1698,17 @@ export function registerReportRoutes(app: Express) {
           reason?: string;
         }> = [];
 
-        let shared = 0;
         let skipped = 0;
         let alreadyShared = 0;
+
+        // Prepare list of shares to insert
+        const sharesToInsert: Array<{
+          reportId: string;
+          athleteId: string;
+          sharedBy: string;
+          organizationId: string;
+          message: string | null;
+        }> = [];
 
         for (const athleteId of targetAthleteIds) {
           const athleteName = athleteMap.get(athleteId) || 'Unknown Athlete';
@@ -1715,30 +1736,46 @@ export function registerReportRoutes(app: Express) {
             continue;
           }
 
-          // Create share
+          // Add to batch insert
+          sharesToInsert.push({
+            reportId,
+            athleteId,
+            sharedBy: user.id,
+            organizationId: report.organizationId,
+            message: message || null,
+          });
+        }
+
+        // Insert all shares in a single transaction for consistency
+        let shared = 0;
+        if (sharesToInsert.length > 0) {
           try {
-            await db.insert(reportShares).values({
-              reportId,
-              athleteId,
-              sharedBy: user.id,
-              organizationId: report.organizationId,
-              message: message || null,
+            await db.transaction(async (tx) => {
+              await tx.insert(reportShares).values(sharesToInsert);
             });
 
-            results.push({
-              athleteId,
-              athleteName,
-              status: 'shared',
-            });
-            shared++;
+            // Mark all as shared in results
+            for (const share of sharesToInsert) {
+              const athleteName = athleteMap.get(share.athleteId) || 'Unknown Athlete';
+              results.push({
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'shared',
+              });
+              shared++;
+            }
           } catch (shareError: any) {
-            console.error(`Failed to share with athlete ${athleteId}:`, shareError);
-            results.push({
-              athleteId,
-              athleteName,
-              status: 'failed',
-              reason: shareError.message || 'Unknown error',
-            });
+            console.error('Failed to bulk insert shares:', shareError);
+            // If transaction fails, mark all as failed
+            for (const share of sharesToInsert) {
+              const athleteName = athleteMap.get(share.athleteId) || 'Unknown Athlete';
+              results.push({
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'failed',
+                reason: shareError.message || 'Database transaction failed',
+              });
+            }
           }
         }
 
