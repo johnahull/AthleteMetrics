@@ -1,20 +1,20 @@
 /**
- * BenchmarkSetDetail - Detail view for managing benchmark set items
- * Allows viewing, adding, removing, and reordering benchmarks in a set
+ * SiteBenchmarkSetDetail - Detail view for managing site-level benchmark set items
+ * Site-level sets can only contain site benchmarks (not custom org benchmarks)
  */
 
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
 import {
-  useBenchmarkSet,
-  useAddBenchmarkToSet,
-  useRemoveBenchmarkFromSet,
-  useReorderBenchmarkSetItems,
-  useDeleteBenchmarkSet,
-  useUpdateBenchmarkSet,
+  useSiteBenchmarkSet,
+  useAddBenchmarkToSiteSet,
+  useRemoveBenchmarkFromSiteSet,
+  useReorderSiteBenchmarkSetItems,
+  useDeleteSiteBenchmarkSet,
+  useUpdateSiteBenchmarkSet,
 } from "@/lib/benchmark-sets-api";
 import { Switch } from "@/components/ui/switch";
-import { useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useSiteBenchmarks } from "@/lib/benchmarks-api";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -47,22 +47,21 @@ import {
   Target,
   Pencil,
   Layers,
+  Globe,
   Loader2,
   Check,
-  Info,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { BenchmarkSetForm } from "./BenchmarkSetForm";
-import type { BenchmarkSet, BenchmarkSetWithItems, OrganizationBenchmarkWithDetails } from "@shared/schema";
+import { SiteBenchmarkSetForm } from "./SiteBenchmarkSetForm";
+import type { SiteBenchmark } from "@shared/schema";
 
-interface BenchmarkSetDetailProps {
-  organizationId: string;
+interface SiteBenchmarkSetDetailProps {
   setId: string;
 }
 
-export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetailProps) {
+export function SiteBenchmarkSetDetail({ setId }: SiteBenchmarkSetDetailProps) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
@@ -73,21 +72,18 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
   const [itemToRemove, setItemToRemove] = useState<string | null>(null);
   const [selectedBenchmarkIds, setSelectedBenchmarkIds] = useState<Set<string>>(new Set());
 
-  // Fetch the benchmark set with items
-  const { data: benchmarkSet, isLoading, error, refetch } = useBenchmarkSet(organizationId, setId);
+  // Fetch the site-level benchmark set with items
+  const { data: benchmarkSet, isLoading, error, refetch } = useSiteBenchmarkSet(setId);
 
-  // Site-level sets are read-only for organizations
-  const isSiteSet = benchmarkSet?.organizationId === null;
-
-  // Fetch organization's enabled benchmarks for the add dialog
-  const { data: enabledBenchmarks } = useOrganizationBenchmarks(organizationId, false);
+  // Fetch all site benchmarks for the add dialog
+  const { data: siteBenchmarks } = useSiteBenchmarks(false);
 
   // Mutations
-  const addMutation = useAddBenchmarkToSet(organizationId, setId);
-  const removeMutation = useRemoveBenchmarkFromSet(organizationId, setId);
-  const reorderMutation = useReorderBenchmarkSetItems(organizationId, setId);
-  const deleteMutation = useDeleteBenchmarkSet(organizationId);
-  const updateMutation = useUpdateBenchmarkSet(organizationId, setId);
+  const addMutation = useAddBenchmarkToSiteSet(setId);
+  const removeMutation = useRemoveBenchmarkFromSiteSet(setId);
+  const reorderMutation = useReorderSiteBenchmarkSetItems(setId);
+  const deleteMutation = useDeleteSiteBenchmarkSet();
+  const updateMutation = useUpdateSiteBenchmarkSet(setId);
 
   // Handle toggling active status
   const handleToggleActive = async () => {
@@ -99,10 +95,10 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
         description: `"${benchmarkSet.name}" is now ${benchmarkSet.isActive ? "inactive" : "active"}.`,
       });
       refetch();
-    } catch (err) {
+    } catch (error) {
       toast({
         title: "Update Failed",
-        description: err instanceof Error ? err.message : "An error occurred",
+        description: error instanceof Error ? error.message : "An error occurred",
         variant: "destructive",
       });
     }
@@ -110,10 +106,10 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
 
   // Filter out benchmarks already in the set
   const availableBenchmarks = useMemo(() => {
-    if (!enabledBenchmarks || !benchmarkSet?.items) return [];
+    if (!siteBenchmarks || !benchmarkSet?.items) return [];
     const existingIds = new Set(benchmarkSet.items.map((item) => item.benchmarkId));
-    return enabledBenchmarks.filter((b) => !existingIds.has(b.benchmarkId));
-  }, [enabledBenchmarks, benchmarkSet]);
+    return siteBenchmarks.filter((b) => !existingIds.has(b.id));
+  }, [siteBenchmarks, benchmarkSet]);
 
   // Toggle benchmark selection in the add dialog
   const handleToggleBenchmark = (benchmarkId: string) => {
@@ -131,14 +127,14 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
   // Handle adding selected benchmarks to the set (batch add)
   const handleAddSelected = async () => {
     const benchmarksToAdd = availableBenchmarks.filter(b =>
-      selectedBenchmarkIds.has(b.benchmarkId)
+      selectedBenchmarkIds.has(b.id)
     );
 
     const results = await Promise.allSettled(
       benchmarksToAdd.map(benchmark =>
         addMutation.mutateAsync({
-          benchmarkId: benchmark.benchmarkId,
-          benchmarkType: benchmark.benchmarkType as 'site' | 'custom',
+          benchmarkId: benchmark.id,
+          benchmarkType: 'site', // Site sets only allow site benchmarks
         })
       )
     );
@@ -235,7 +231,7 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
         title: "Benchmark Set Deleted",
         description: "The benchmark set has been deleted.",
       });
-      setLocation(`/organizations/${organizationId}/benchmark-sets`);
+      setLocation('/benchmarks');
     } catch (err) {
       toast({
         title: "Failed to Delete Set",
@@ -247,7 +243,7 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
 
   // Handle going back to the list
   const handleBack = () => {
-    setLocation(`/organizations/${organizationId}/benchmark-sets`);
+    setLocation('/benchmarks');
   };
 
   if (isLoading) {
@@ -267,7 +263,7 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
             </p>
             <Button variant="outline" onClick={handleBack} className="mt-4">
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back to Benchmark Sets
+              Back to Benchmarks
             </Button>
           </CardContent>
         </Card>
@@ -286,7 +282,7 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
         <div>
           <Button variant="ghost" onClick={handleBack} className="mb-2 -ml-3">
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Benchmark Sets
+            Back to Benchmarks
           </Button>
           <div className="flex items-center gap-3">
             <Layers className="h-8 w-8 text-primary" />
@@ -298,7 +294,10 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
             </div>
           </div>
           <div className="flex gap-2 mt-3">
-            {isSiteSet && <Badge variant="default" className="bg-blue-600">Site</Badge>}
+            <Badge variant="default" className="flex items-center gap-1">
+              <Globe className="h-3 w-3" />
+              Site-Level
+            </Badge>
             {!benchmarkSet.isActive && <Badge variant="secondary">Inactive</Badge>}
             {benchmarkSet.sport && <Badge variant="outline">{benchmarkSet.sport}</Badge>}
             {benchmarkSet.level && <Badge variant="outline">{benchmarkSet.level}</Badge>}
@@ -306,49 +305,43 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
             {benchmarkSet.isTemplate && <Badge variant="secondary">Template</Badge>}
           </div>
         </div>
-        {/* Hide controls for site-level sets (read-only) */}
-        {!isSiteSet && (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <label
-                htmlFor="active-toggle-detail"
-                className="text-sm font-medium cursor-pointer"
-              >
-                Active
-              </label>
-              <Switch
-                id="active-toggle-detail"
-                checked={benchmarkSet.isActive}
-                onCheckedChange={handleToggleActive}
-                disabled={updateMutation.isPending}
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setShowEditForm(true)}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit Set
-              </Button>
-              <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-                <Trash className="mr-2 h-4 w-4" />
-                Delete Set
-              </Button>
-            </div>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="active-toggle-detail"
+              className="text-sm font-medium cursor-pointer"
+            >
+              Active
+            </label>
+            <Switch
+              id="active-toggle-detail"
+              checked={benchmarkSet.isActive}
+              onCheckedChange={handleToggleActive}
+              disabled={updateMutation.isPending}
+            />
           </div>
-        )}
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowEditForm(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit Set
+            </Button>
+            <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
+              <Trash className="mr-2 h-4 w-4" />
+              Delete Set
+            </Button>
+          </div>
+        </div>
       </div>
 
-      {/* Site-level set info banner */}
-      {isSiteSet && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="flex items-center gap-3 py-4">
-            <Info className="h-5 w-5 text-blue-600 flex-shrink-0" />
-            <p className="text-sm text-blue-800">
-              This is a site-level benchmark set managed by site administrators.
-              You can view the benchmarks in this set, but editing is not available.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Info Banner */}
+      <Card className="bg-blue-50 border-blue-200">
+        <CardContent className="pt-6">
+          <p className="text-sm text-blue-700">
+            This is a <strong>site-level</strong> benchmark set. It can only contain site benchmarks
+            (not organization-specific custom benchmarks).
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Benchmarks in Set */}
       <Card>
@@ -361,17 +354,14 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
               </CardTitle>
               <CardDescription>
                 {sortedItems.length === 0
-                  ? "No benchmarks added yet. Add benchmarks to use this set in reports and analytics."
+                  ? "No benchmarks added yet. Add site benchmarks to use this set."
                   : `${sortedItems.length} benchmark${sortedItems.length !== 1 ? "s" : ""} in this set`}
               </CardDescription>
             </div>
-            {/* Hide add button for site-level sets (read-only) */}
-            {!isSiteSet && (
-              <Button onClick={() => setShowAddDialog(true)} disabled={availableBenchmarks.length === 0}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Benchmark
-              </Button>
-            )}
+            <Button onClick={() => setShowAddDialog(true)} disabled={availableBenchmarks.length === 0}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Benchmark
+            </Button>
           </div>
         </CardHeader>
         <CardContent>
@@ -380,16 +370,12 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
               <Target className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No Benchmarks Yet</h3>
               <p className="text-muted-foreground mb-4">
-                {isSiteSet
-                  ? "This site-level set has no benchmarks. Contact a site administrator to add benchmarks."
-                  : "Add benchmarks from your organization's enabled benchmarks."}
+                Add site benchmarks to this set.
               </p>
-              {!isSiteSet && (
-                <Button onClick={() => setShowAddDialog(true)} disabled={availableBenchmarks.length === 0}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add First Benchmark
-                </Button>
-              )}
+              <Button onClick={() => setShowAddDialog(true)} disabled={availableBenchmarks.length === 0}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add First Benchmark
+              </Button>
             </div>
           ) : (
             <div className="space-y-2">
@@ -399,42 +385,35 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
                   data-benchmark-item
                   className="flex items-center gap-3 p-3 border rounded-lg hover:bg-muted/50 transition-colors"
                 >
-                  {/* Hide reorder controls for site-level sets (read-only) */}
-                  {!isSiteSet && (
-                    <>
-                      <div className="flex flex-col gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleMoveItem(item.id, "up")}
-                          disabled={index === 0 || reorderMutation.isPending}
-                          aria-label="Move up"
-                        >
-                          <ChevronUp className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() => handleMoveItem(item.id, "down")}
-                          disabled={index === sortedItems.length - 1 || reorderMutation.isPending}
-                          aria-label="Move down"
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
-                      </div>
-                      <GripVertical className="h-5 w-5 text-muted-foreground" />
-                    </>
-                  )}
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleMoveItem(item.id, "up")}
+                      disabled={index === 0 || reorderMutation.isPending}
+                      aria-label="Move up"
+                    >
+                      <ChevronUp className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6"
+                      onClick={() => handleMoveItem(item.id, "down")}
+                      disabled={index === sortedItems.length - 1 || reorderMutation.isPending}
+                      aria-label="Move down"
+                    >
+                      <ChevronDown className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <GripVertical className="h-5 w-5 text-muted-foreground" />
                   <div className="flex-1">
                     <div className="font-medium">
                       {item.customLabel || item.benchmark?.name || "Unknown Benchmark"}
                     </div>
                     <div className="text-sm text-muted-foreground flex items-center gap-2">
-                      <Badge variant="outline" className="text-xs">
-                        {item.benchmarkType === "site" ? "Site" : "Custom"}
-                      </Badge>
+                      <Badge variant="outline" className="text-xs">Site</Badge>
                       {item.benchmark?.metricCode && (
                         <span>{item.benchmark.metricCode}</span>
                       )}
@@ -447,18 +426,15 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
                       )}
                     </div>
                   </div>
-                  {/* Hide remove button for site-level sets (read-only) */}
-                  {!isSiteSet && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                      onClick={() => setItemToRemove(item.id)}
-                      aria-label="Remove benchmark"
-                    >
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  )}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => setItemToRemove(item.id)}
+                    aria-label="Remove benchmark"
+                  >
+                    <Trash className="h-4 w-4" />
+                  </Button>
                 </div>
               ))}
             </div>
@@ -473,34 +449,34 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
       }}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Add Benchmarks to Set</DialogTitle>
+            <DialogTitle>Add Site Benchmarks to Set</DialogTitle>
             <DialogDescription>
-              Select benchmarks from your organization's enabled benchmarks.
+              Select benchmarks to add to this set.
               {selectedBenchmarkIds.size > 0 && ` (${selectedBenchmarkIds.size} selected)`}
             </DialogDescription>
           </DialogHeader>
           <div className="flex-1 overflow-y-auto py-4">
             {availableBenchmarks.length === 0 ? (
               <p className="text-center text-muted-foreground py-8">
-                All enabled benchmarks are already in this set.
+                All site benchmarks are already in this set.
               </p>
             ) : (
               <div className="space-y-2">
                 {availableBenchmarks.map((benchmark) => {
-                  const isSelected = selectedBenchmarkIds.has(benchmark.benchmarkId);
+                  const isSelected = selectedBenchmarkIds.has(benchmark.id);
                   return (
                     <div
-                      key={benchmark.benchmarkId}
-                      data-benchmark-id={benchmark.benchmarkId}
+                      key={benchmark.id}
+                      data-benchmark-id={benchmark.id}
                       role="checkbox"
                       aria-checked={isSelected}
-                      aria-label={`Select ${benchmark.customName || benchmark.name || "benchmark"}`}
+                      aria-label={`Select ${benchmark.name}`}
                       tabIndex={0}
-                      onClick={() => handleToggleBenchmark(benchmark.benchmarkId)}
+                      onClick={() => handleToggleBenchmark(benchmark.id)}
                       onKeyDown={(e) => {
                         if (e.key === ' ' || e.key === 'Enter') {
                           e.preventDefault();
-                          handleToggleBenchmark(benchmark.benchmarkId);
+                          handleToggleBenchmark(benchmark.id);
                         }
                       }}
                       className={cn(
@@ -512,19 +488,20 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
                     >
                       <Checkbox
                         checked={isSelected}
-                        onCheckedChange={() => handleToggleBenchmark(benchmark.benchmarkId)}
+                        onCheckedChange={() => handleToggleBenchmark(benchmark.id)}
                         onClick={(e) => e.stopPropagation()}
                       />
                       <div className="flex-1">
-                        <div className="font-medium">
-                          {benchmark.customName || benchmark.name || "Unknown"}
-                        </div>
+                        <div className="font-medium">{benchmark.name}</div>
                         <div className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Badge variant="outline" className="text-xs">
-                            {benchmark.benchmarkType === "site" ? "Site" : "Custom"}
-                          </Badge>
-                          {benchmark.metricCode && (
-                            <span>{benchmark.metricCode}</span>
+                          <Badge variant="outline" className="text-xs">Site</Badge>
+                          {benchmark.metricCode && <span>{benchmark.metricCode}</span>}
+                          {benchmark.benchmarkValue && (
+                            <span>
+                              {benchmark.comparisonOperator === "lte" ? "≤" :
+                               benchmark.comparisonOperator === "gte" ? "≥" : "="}
+                              {" "}{benchmark.benchmarkValue}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -589,13 +566,12 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
       </AlertDialog>
 
       {/* Edit Form Dialog */}
-      <BenchmarkSetForm
+      <SiteBenchmarkSetForm
         open={showEditForm}
         onClose={() => {
           setShowEditForm(false);
           refetch();
         }}
-        organizationId={organizationId}
         benchmarkSet={benchmarkSet}
       />
     </div>

@@ -22,8 +22,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { MoreHorizontal, Pencil, Trash, Layers, Calendar } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useDeleteBenchmarkSet } from "@/lib/benchmark-sets-api";
+import { useDeleteBenchmarkSet, useUpdateBenchmarkSet } from "@/lib/benchmark-sets-api";
 import type { BenchmarkSet } from "@shared/schema";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -43,7 +44,27 @@ export function BenchmarkSetCard({
   const [, setLocation] = useLocation();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
+  // Site-level sets are read-only for organizations
+  const isSiteSet = benchmarkSet.organizationId === null;
+
   const deleteMutation = useDeleteBenchmarkSet(organizationId);
+  const updateMutation = useUpdateBenchmarkSet(organizationId, benchmarkSet.id);
+
+  const handleToggleActive = async () => {
+    try {
+      await updateMutation.mutateAsync({ isActive: !benchmarkSet.isActive });
+      toast({
+        title: benchmarkSet.isActive ? "Set Deactivated" : "Set Activated",
+        description: `"${benchmarkSet.name}" is now ${benchmarkSet.isActive ? "inactive" : "active"}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Update Failed",
+        description: err instanceof Error ? err.message : "An error occurred",
+        variant: "destructive",
+      });
+    }
+  };
 
   const handleDelete = async () => {
     try {
@@ -52,10 +73,10 @@ export function BenchmarkSetCard({
         title: "Benchmark Set Deleted",
         description: `"${benchmarkSet.name}" has been deleted.`,
       });
-    } catch (error) {
+    } catch (err) {
       toast({
         title: "Delete Failed",
-        description: error instanceof Error ? error.message : "An error occurred",
+        description: err instanceof Error ? err.message : "An error occurred",
         variant: "destructive",
       });
     }
@@ -85,40 +106,43 @@ export function BenchmarkSetCard({
                 </p>
               )}
             </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onEdit(benchmarkSet);
-                  }}
-                >
-                  <Pencil className="mr-2 h-4 w-4" />
-                  Edit
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="text-destructive"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowDeleteDialog(true);
-                  }}
-                >
-                  <Trash className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {/* Hide edit/delete menu for site-level sets (read-only) */}
+            {!isSiteSet && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit(benchmarkSet);
+                    }}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-destructive"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowDeleteDialog(true);
+                    }}
+                  >
+                    <Trash className="mr-2 h-4 w-4" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
-            {!benchmarkSet.isActive && (
-              <Badge variant="secondary">Inactive</Badge>
+            {isSiteSet && (
+              <Badge variant="default" className="bg-blue-600">Site</Badge>
             )}
             {benchmarkSet.sport && (
               <Badge variant="outline">{benchmarkSet.sport}</Badge>
@@ -133,9 +157,31 @@ export function BenchmarkSetCard({
               <Badge variant="secondary">Template</Badge>
             )}
           </div>
-          <div className="mt-3 flex items-center text-xs text-muted-foreground">
-            <Calendar className="mr-1 h-3 w-3" />
-            Created {new Date(benchmarkSet.createdAt).toLocaleDateString()}
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex items-center text-xs text-muted-foreground">
+              <Calendar className="mr-1 h-3 w-3" />
+              Created {new Date(benchmarkSet.createdAt).toLocaleDateString()}
+            </div>
+            {/* Hide active toggle for site-level sets (read-only) */}
+            {!isSiteSet && (
+              <div
+                className="flex items-center gap-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <label
+                  htmlFor={`active-${benchmarkSet.id}`}
+                  className="text-xs font-medium cursor-pointer"
+                >
+                  Active
+                </label>
+                <Switch
+                  id={`active-${benchmarkSet.id}`}
+                  checked={benchmarkSet.isActive}
+                  onCheckedChange={handleToggleActive}
+                  disabled={updateMutation.isPending}
+                />
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

@@ -29,6 +29,10 @@ export const benchmarkSetKeys = {
   details: () => [...benchmarkSetKeys.all, 'detail'] as const,
   detail: (orgId: string, setId: string) => [...benchmarkSetKeys.details(), orgId, setId] as const,
   memberships: (orgId: string) => [...benchmarkSetKeys.all, 'memberships', orgId] as const,
+  // Site-level keys (no org scope)
+  siteLists: () => [...benchmarkSetKeys.all, 'site-list'] as const,
+  siteDetails: () => [...benchmarkSetKeys.all, 'site-detail'] as const,
+  siteDetail: (setId: string) => [...benchmarkSetKeys.siteDetails(), setId] as const,
 };
 
 // ============================================================================
@@ -223,7 +227,7 @@ export async function reorderBenchmarkSetItems(
  */
 export function useBenchmarkSets(organizationId: string, includeInactive = false) {
   return useQuery({
-    queryKey: benchmarkSetKeys.list(organizationId),
+    queryKey: [...benchmarkSetKeys.list(organizationId), includeInactive],
     queryFn: () => fetchBenchmarkSets(organizationId, includeInactive),
     staleTime: STALE_TIME.STATIC,
     enabled: !!organizationId,
@@ -372,5 +376,274 @@ export function useBenchmarkMemberships(organizationId: string) {
     queryFn: () => fetchBenchmarkMemberships(organizationId),
     staleTime: STALE_TIME.STATIC,
     enabled: !!organizationId,
+  });
+}
+
+// ============================================================================
+// SITE-LEVEL BENCHMARK SETS
+// These functions manage benchmark sets at the site level (organizationId = NULL)
+// Only accessible by site admins
+// ============================================================================
+
+/**
+ * Fetch all site-level benchmark sets
+ */
+export async function fetchSiteBenchmarkSets(
+  includeInactive = false
+): Promise<BenchmarkSet[]> {
+  const params = new URLSearchParams();
+  if (includeInactive) {
+    params.append('includeInactive', 'true');
+  }
+
+  const response = await fetch(`/api/site-benchmark-sets?${params.toString()}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch site benchmark sets' }));
+    throw new Error(error.message || 'Failed to fetch site benchmark sets');
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch a single site-level benchmark set with its items
+ */
+export async function fetchSiteBenchmarkSet(
+  setId: string
+): Promise<BenchmarkSetWithItems> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}`);
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch site benchmark set' }));
+    throw new Error(error.message || 'Failed to fetch site benchmark set');
+  }
+
+  return response.json();
+}
+
+/**
+ * Create a new site-level benchmark set
+ */
+export async function createSiteBenchmarkSet(
+  data: InsertBenchmarkSet
+): Promise<BenchmarkSet> {
+  const response = await fetch('/api/site-benchmark-sets', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to create site benchmark set' }));
+    throw new Error(error.message || 'Failed to create site benchmark set');
+  }
+
+  return response.json();
+}
+
+/**
+ * Update an existing site-level benchmark set
+ */
+export async function updateSiteBenchmarkSet(
+  setId: string,
+  data: UpdateBenchmarkSet
+): Promise<BenchmarkSet> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to update site benchmark set' }));
+    throw new Error(error.message || 'Failed to update site benchmark set');
+  }
+
+  return response.json();
+}
+
+/**
+ * Delete a site-level benchmark set
+ */
+export async function deleteSiteBenchmarkSet(setId: string): Promise<void> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to delete site benchmark set' }));
+    throw new Error(error.message || 'Failed to delete site benchmark set');
+  }
+}
+
+/**
+ * Add a benchmark to a site-level set
+ */
+export async function addBenchmarkToSiteSet(
+  setId: string,
+  data: InsertBenchmarkSetItem
+): Promise<BenchmarkSetItem & { benchmark?: any }> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to add benchmark to site set' }));
+    throw new Error(error.message || 'Failed to add benchmark to site set');
+  }
+
+  return response.json();
+}
+
+/**
+ * Remove a benchmark from a site-level set
+ */
+export async function removeBenchmarkFromSiteSet(
+  setId: string,
+  itemId: string
+): Promise<void> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}/items/${itemId}`, {
+    method: 'DELETE',
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to remove benchmark from site set' }));
+    throw new Error(error.message || 'Failed to remove benchmark from site set');
+  }
+}
+
+/**
+ * Reorder benchmarks in a site-level set
+ */
+export async function reorderSiteBenchmarkSetItems(
+  setId: string,
+  data: ReorderBenchmarkSetItems
+): Promise<{ items: (BenchmarkSetItem & { benchmark?: any })[] }> {
+  const response = await fetch(`/api/site-benchmark-sets/${setId}/items/reorder`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to reorder benchmarks in site set' }));
+    throw new Error(error.message || 'Failed to reorder benchmarks in site set');
+  }
+
+  return response.json();
+}
+
+// ============================================================================
+// Site-Level React Query Hooks
+// ============================================================================
+
+/**
+ * Hook to fetch all site-level benchmark sets
+ */
+export function useSiteBenchmarkSets(includeInactive = false) {
+  return useQuery({
+    queryKey: [...benchmarkSetKeys.siteLists(), includeInactive],
+    queryFn: () => fetchSiteBenchmarkSets(includeInactive),
+    staleTime: STALE_TIME.STATIC,
+  });
+}
+
+/**
+ * Hook to fetch a single site-level benchmark set with items
+ */
+export function useSiteBenchmarkSet(setId: string) {
+  return useQuery({
+    queryKey: benchmarkSetKeys.siteDetail(setId),
+    queryFn: () => fetchSiteBenchmarkSet(setId),
+    staleTime: STALE_TIME.STATIC,
+    enabled: !!setId,
+  });
+}
+
+/**
+ * Hook to create a new site-level benchmark set
+ */
+export function useCreateSiteBenchmarkSet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: InsertBenchmarkSet) => createSiteBenchmarkSet(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteLists() });
+    },
+  });
+}
+
+/**
+ * Hook to update a site-level benchmark set
+ */
+export function useUpdateSiteBenchmarkSet(setId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: UpdateBenchmarkSet) => updateSiteBenchmarkSet(setId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteLists() });
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteDetail(setId) });
+    },
+  });
+}
+
+/**
+ * Hook to delete a site-level benchmark set
+ */
+export function useDeleteSiteBenchmarkSet() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (setId: string) => deleteSiteBenchmarkSet(setId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteLists() });
+    },
+  });
+}
+
+/**
+ * Hook to add a benchmark to a site-level set
+ */
+export function useAddBenchmarkToSiteSet(setId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: InsertBenchmarkSetItem) => addBenchmarkToSiteSet(setId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteDetail(setId) });
+    },
+  });
+}
+
+/**
+ * Hook to remove a benchmark from a site-level set
+ */
+export function useRemoveBenchmarkFromSiteSet(setId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (itemId: string) => removeBenchmarkFromSiteSet(setId, itemId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteDetail(setId) });
+    },
+  });
+}
+
+/**
+ * Hook to reorder benchmarks in a site-level set
+ */
+export function useReorderSiteBenchmarkSetItems(setId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (data: ReorderBenchmarkSetItems) => reorderSiteBenchmarkSetItems(setId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.siteDetail(setId) });
+    },
   });
 }

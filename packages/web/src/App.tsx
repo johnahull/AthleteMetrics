@@ -83,6 +83,7 @@ const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
 const BenchmarkSets = React.lazy(() => import("./pages/benchmark-sets"));
 const BenchmarkSetDetail = React.lazy(() => import("./pages/benchmark-set-detail"));
+const SiteBenchmarkSetDetail = React.lazy(() => import("./pages/site-benchmark-set-detail"));
 
 // Lazy load custom metrics page
 const CustomMetrics = React.lazy(() => import("./pages/custom-metrics"));
@@ -372,6 +373,11 @@ function Router() {
       <Route path="/benchmarks">
         <RouteWrapper loadingText="Loading Benchmarks...">
           <Benchmarks />
+        </RouteWrapper>
+      </Route>
+      <Route path="/benchmark-sets/:setId">
+        <RouteWrapper loadingText="Loading Benchmark Set...">
+          <SiteBenchmarkSetDetail />
         </RouteWrapper>
       </Route>
       <Route path="/organizations/:id/custom-benchmarks">

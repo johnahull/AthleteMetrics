@@ -16,9 +16,9 @@ import {
   insertBenchmarkSetItemSchema,
   reorderBenchmarkSetItemsSchema,
 } from "@shared/schema";
-import { requireAuth, requireOrganizationAccess } from "../middleware";
+import { requireAuth, requireOrganizationAccess, requireSiteAdmin } from "../middleware";
 import { requireRole } from "../permissions/middleware";
-import { eq, and, asc, inArray } from "drizzle-orm";
+import { eq, and, asc, inArray, isNull } from "drizzle-orm";
 
 // Rate limiters
 const setCreateLimiter = rateLimit({
@@ -110,6 +110,40 @@ function handleError(res: Response, error: unknown, operation: string): void {
 }
 
 /**
+ * Fetch benchmark details for site-level set items
+ * Site sets only contain site benchmarks (no custom benchmarks)
+ * @param items - The benchmark set items to enrich
+ */
+async function enrichSiteSetItems(
+  items: typeof benchmarkSetItems.$inferSelect[]
+) {
+  if (items.length === 0) return [];
+
+  // Site sets only have site benchmarks
+  const siteIds = items.map(i => i.benchmarkId);
+
+  const siteBenchmarksMap = new Map<string, any>();
+  if (siteIds.length > 0) {
+    const siteBenchmarkResults = await db
+      .select({
+        id: siteBenchmarks.id,
+        name: siteBenchmarks.name,
+        metricCode: siteBenchmarks.metricCode,
+        benchmarkValue: siteBenchmarks.benchmarkValue,
+        comparisonOperator: siteBenchmarks.comparisonOperator,
+      })
+      .from(siteBenchmarks)
+      .where(inArray(siteBenchmarks.id, siteIds));
+    siteBenchmarkResults.forEach(b => siteBenchmarksMap.set(b.id, b));
+  }
+
+  return items.map(item => ({
+    ...item,
+    benchmark: siteBenchmarksMap.get(item.benchmarkId) || null,
+  }));
+}
+
+/**
  * Fetch benchmark details for set items
  * Uses batched queries to avoid N+1 performance issues
  * @param items - The benchmark set items to enrich
@@ -175,6 +209,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
   // ========================================================================
 
   // List benchmark sets for organization
+  // Also includes active site-level sets (read-only for orgs)
   app.get("/api/organizations/:organizationId/benchmark-sets",
     setReadLimiter,
     requireAuth,
@@ -184,20 +219,32 @@ export function registerBenchmarkSetRoutes(app: Express) {
         const { organizationId } = req.params;
         const includeInactive = req.query.includeInactive === 'true';
 
-        let query = db
+        // Fetch org-level sets
+        const orgSets = await db
           .select()
           .from(benchmarkSets)
           .where(eq(benchmarkSets.organizationId, organizationId))
           .orderBy(asc(benchmarkSets.name));
 
-        const sets = await query;
+        // Filter inactive org sets if needed
+        const filteredOrgSets = includeInactive
+          ? orgSets
+          : orgSets.filter(s => s.isActive);
 
-        // Filter inactive if needed
-        const filteredSets = includeInactive
-          ? sets
-          : sets.filter(s => s.isActive);
+        // Fetch active site-level sets (always active only, read-only for orgs)
+        const siteSets = await db
+          .select()
+          .from(benchmarkSets)
+          .where(
+            and(
+              isNull(benchmarkSets.organizationId),
+              eq(benchmarkSets.isActive, true)
+            )
+          )
+          .orderBy(asc(benchmarkSets.name));
 
-        res.json(filteredSets);
+        // Return site sets first (templates), then org sets
+        res.json([...siteSets, ...filteredOrgSets]);
       } catch (error) {
         handleError(res, error, "list benchmark sets");
       }
@@ -205,6 +252,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
   );
 
   // Get single benchmark set with items
+  // Also supports fetching active site-level sets (read-only for orgs)
   app.get("/api/organizations/:organizationId/benchmark-sets/:setId",
     setReadLimiter,
     requireAuth,
@@ -213,14 +261,26 @@ export function registerBenchmarkSetRoutes(app: Express) {
       try {
         const { organizationId, setId } = req.params;
 
-        // Get the set
-        const [set] = await db
+        // First, try to get an org-level set
+        let [set] = await db
           .select()
           .from(benchmarkSets)
           .where(and(
             eq(benchmarkSets.id, setId),
             eq(benchmarkSets.organizationId, organizationId)
           ));
+
+        // If not found, check for active site-level set
+        if (!set) {
+          [set] = await db
+            .select()
+            .from(benchmarkSets)
+            .where(and(
+              eq(benchmarkSets.id, setId),
+              isNull(benchmarkSets.organizationId),
+              eq(benchmarkSets.isActive, true)
+            ));
+        }
 
         if (!set) {
           return res.status(404).json({ message: "Benchmark set not found" });
@@ -234,7 +294,10 @@ export function registerBenchmarkSetRoutes(app: Express) {
           .orderBy(asc(benchmarkSetItems.displayOrder));
 
         // Enrich with benchmark details
-        const enrichedItems = await enrichSetItems(items, organizationId);
+        // Use site enrichment for site sets (no custom benchmarks)
+        const enrichedItems = set.organizationId === null
+          ? await enrichSiteSetItems(items)
+          : await enrichSetItems(items, organizationId);
 
         res.json({
           ...set,
@@ -623,6 +686,401 @@ export function registerBenchmarkSetRoutes(app: Express) {
         res.json(memberships);
       } catch (error) {
         handleError(res, error, "get benchmark memberships");
+      }
+    }
+  );
+
+  // ========================================================================
+  // SITE-LEVEL BENCHMARK SETS (Site Admin Only)
+  // These endpoints manage benchmark sets at the site level (organizationId = NULL)
+  // Only site admins can access these endpoints
+  // ========================================================================
+
+  // List site-level benchmark sets
+  app.get("/api/site-benchmark-sets",
+    setReadLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const includeInactive = req.query.includeInactive === 'true';
+
+        const sets = await db
+          .select()
+          .from(benchmarkSets)
+          .where(isNull(benchmarkSets.organizationId))
+          .orderBy(asc(benchmarkSets.name));
+
+        const filteredSets = includeInactive
+          ? sets
+          : sets.filter(s => s.isActive);
+
+        res.json(filteredSets);
+      } catch (error) {
+        handleError(res, error, "list site benchmark sets");
+      }
+    }
+  );
+
+  // Get single site-level benchmark set with items
+  app.get("/api/site-benchmark-sets/:setId",
+    setReadLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId } = req.params;
+
+        // Get the set (must be site-level - organizationId IS NULL)
+        const [set] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!set) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Get items
+        const items = await db
+          .select()
+          .from(benchmarkSetItems)
+          .where(eq(benchmarkSetItems.setId, setId))
+          .orderBy(asc(benchmarkSetItems.displayOrder));
+
+        // Enrich with benchmark details (site benchmarks only)
+        const enrichedItems = await enrichSiteSetItems(items);
+
+        res.json({
+          ...set,
+          items: enrichedItems,
+        });
+      } catch (error) {
+        handleError(res, error, "get site benchmark set");
+      }
+    }
+  );
+
+  // Create site-level benchmark set
+  app.post("/api/site-benchmark-sets",
+    setCreateLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.session.user!.id;
+
+        const validatedData = insertBenchmarkSetSchema.parse(req.body);
+
+        // Check for duplicate name among site-level sets
+        const [existing] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            isNull(benchmarkSets.organizationId),
+            eq(benchmarkSets.name, validatedData.name)
+          ));
+
+        if (existing) {
+          return res.status(409).json({
+            message: `A site-level benchmark set named "${validatedData.name}" already exists`
+          });
+        }
+
+        const [newSet] = await db
+          .insert(benchmarkSets)
+          .values({
+            ...validatedData,
+            organizationId: null, // Site-level
+            createdBy: userId,
+          })
+          .returning();
+
+        res.status(201).json(newSet);
+      } catch (error) {
+        handleError(res, error, "create site benchmark set");
+      }
+    }
+  );
+
+  // Update site-level benchmark set
+  app.patch("/api/site-benchmark-sets/:setId",
+    setModifyLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId } = req.params;
+
+        const validatedData = updateBenchmarkSetSchema.parse(req.body);
+
+        // Check set exists and is site-level
+        const [existingSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!existingSet) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Check for duplicate name if name is being changed
+        if (validatedData.name && validatedData.name !== existingSet.name) {
+          const [duplicate] = await db
+            .select()
+            .from(benchmarkSets)
+            .where(and(
+              isNull(benchmarkSets.organizationId),
+              eq(benchmarkSets.name, validatedData.name)
+            ));
+
+          if (duplicate) {
+            return res.status(409).json({
+              message: `A site-level benchmark set named "${validatedData.name}" already exists`
+            });
+          }
+        }
+
+        const [updated] = await db
+          .update(benchmarkSets)
+          .set({
+            ...validatedData,
+            updatedAt: new Date(),
+          })
+          .where(eq(benchmarkSets.id, setId))
+          .returning();
+
+        res.json(updated);
+      } catch (error) {
+        handleError(res, error, "update site benchmark set");
+      }
+    }
+  );
+
+  // Delete site-level benchmark set
+  app.delete("/api/site-benchmark-sets/:setId",
+    setModifyLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId } = req.params;
+
+        // Check set exists and is site-level
+        const [existingSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!existingSet) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Delete (cascade will delete items)
+        await db
+          .delete(benchmarkSets)
+          .where(eq(benchmarkSets.id, setId));
+
+        res.status(204).send();
+      } catch (error) {
+        handleError(res, error, "delete site benchmark set");
+      }
+    }
+  );
+
+  // ========================================================================
+  // SITE-LEVEL BENCHMARK SET ITEMS
+  // ========================================================================
+
+  // Add benchmark to site-level set
+  app.post("/api/site-benchmark-sets/:setId/items",
+    setModifyLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId } = req.params;
+
+        const validatedData = insertBenchmarkSetItemSchema.parse(req.body);
+
+        // Check set exists and is site-level
+        const [existingSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!existingSet) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Site sets can ONLY contain site benchmarks
+        if (validatedData.benchmarkType !== 'site') {
+          return res.status(400).json({
+            message: "Site-level benchmark sets can only contain site benchmarks"
+          });
+        }
+
+        // Verify the site benchmark exists
+        const [benchmark] = await db
+          .select()
+          .from(siteBenchmarks)
+          .where(eq(siteBenchmarks.id, validatedData.benchmarkId));
+
+        if (!benchmark) {
+          return res.status(404).json({ message: "Site benchmark not found" });
+        }
+
+        // Check for duplicate
+        const [existing] = await db
+          .select()
+          .from(benchmarkSetItems)
+          .where(and(
+            eq(benchmarkSetItems.setId, setId),
+            eq(benchmarkSetItems.benchmarkId, validatedData.benchmarkId),
+            eq(benchmarkSetItems.benchmarkType, validatedData.benchmarkType)
+          ));
+
+        if (existing) {
+          return res.status(409).json({
+            message: "This benchmark is already in the set"
+          });
+        }
+
+        // Get max display order
+        const items = await db
+          .select({ displayOrder: benchmarkSetItems.displayOrder })
+          .from(benchmarkSetItems)
+          .where(eq(benchmarkSetItems.setId, setId));
+
+        const maxOrder = items.length > 0
+          ? Math.max(...items.map(i => i.displayOrder))
+          : -1;
+
+        const [newItem] = await db
+          .insert(benchmarkSetItems)
+          .values({
+            setId,
+            benchmarkId: validatedData.benchmarkId,
+            benchmarkType: validatedData.benchmarkType,
+            displayOrder: validatedData.displayOrder ?? maxOrder + 1,
+            customLabel: validatedData.customLabel,
+          })
+          .returning();
+
+        // Return enriched item
+        const enrichedItems = await enrichSiteSetItems([newItem]);
+        res.status(201).json(enrichedItems[0]);
+      } catch (error) {
+        handleError(res, error, "add benchmark to site set");
+      }
+    }
+  );
+
+  // Remove benchmark from site-level set
+  app.delete("/api/site-benchmark-sets/:setId/items/:itemId",
+    setModifyLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId, itemId } = req.params;
+
+        // Check set exists and is site-level
+        const [existingSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!existingSet) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Check item exists in set
+        const [existingItem] = await db
+          .select()
+          .from(benchmarkSetItems)
+          .where(and(
+            eq(benchmarkSetItems.id, itemId),
+            eq(benchmarkSetItems.setId, setId)
+          ));
+
+        if (!existingItem) {
+          return res.status(404).json({ message: "Item not found in set" });
+        }
+
+        await db
+          .delete(benchmarkSetItems)
+          .where(eq(benchmarkSetItems.id, itemId));
+
+        res.status(204).send();
+      } catch (error) {
+        handleError(res, error, "remove benchmark from site set");
+      }
+    }
+  );
+
+  // Reorder items in site-level set
+  app.patch("/api/site-benchmark-sets/:setId/items/reorder",
+    setModifyLimiter,
+    requireAuth,
+    requireSiteAdmin,
+    async (req: Request, res: Response) => {
+      try {
+        const { setId } = req.params;
+
+        const validatedData = reorderBenchmarkSetItemsSchema.parse(req.body);
+
+        // Check set exists and is site-level
+        const [existingSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!existingSet) {
+          return res.status(404).json({ message: "Benchmark set not found" });
+        }
+
+        // Update each item's display order
+        for (const item of validatedData.items) {
+          await db
+            .update(benchmarkSetItems)
+            .set({ displayOrder: item.displayOrder })
+            .where(and(
+              eq(benchmarkSetItems.id, item.id),
+              eq(benchmarkSetItems.setId, setId)
+            ));
+        }
+
+        // Return updated items
+        const items = await db
+          .select()
+          .from(benchmarkSetItems)
+          .where(eq(benchmarkSetItems.setId, setId))
+          .orderBy(asc(benchmarkSetItems.displayOrder));
+
+        const enrichedItems = await enrichSiteSetItems(items);
+
+        res.json({ items: enrichedItems });
+      } catch (error) {
+        handleError(res, error, "reorder site benchmark set items");
       }
     }
   );

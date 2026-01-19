@@ -1,7 +1,9 @@
 /**
- * BenchmarkSetForm - Create/Edit dialog for benchmark sets
+ * SiteBenchmarkSetForm - Create/Edit dialog for site-level benchmark sets
+ * Site-level sets (organizationId = NULL) are managed by site admins only.
  */
 
+import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
@@ -33,8 +35,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import {
-  useCreateBenchmarkSet,
-  useUpdateBenchmarkSet,
+  useCreateSiteBenchmarkSet,
+  useUpdateSiteBenchmarkSet,
 } from "@/lib/benchmark-sets-api";
 import {
   insertBenchmarkSetSchema,
@@ -44,39 +46,51 @@ import {
 import { useSports } from "@/lib/sports-api";
 import { Loader2 } from "lucide-react";
 
-interface BenchmarkSetFormProps {
+interface SiteBenchmarkSetFormProps {
   open: boolean;
   onClose: () => void;
-  organizationId: string;
   benchmarkSet: BenchmarkSet | null;
 }
 
-export function BenchmarkSetForm({
+export function SiteBenchmarkSetForm({
   open,
   onClose,
-  organizationId,
   benchmarkSet,
-}: BenchmarkSetFormProps) {
+}: SiteBenchmarkSetFormProps) {
   const { toast } = useToast();
   const isEditing = !!benchmarkSet;
 
   // Fetch available sports
   const { data: sports = [] } = useSports();
 
-  const createMutation = useCreateBenchmarkSet(organizationId);
-  const updateMutation = useUpdateBenchmarkSet(organizationId, benchmarkSet?.id ?? '');
+  const createMutation = useCreateSiteBenchmarkSet();
+  const updateMutation = useUpdateSiteBenchmarkSet(benchmarkSet?.id ?? '');
 
   const form = useForm<InsertBenchmarkSet>({
     resolver: zodResolver(insertBenchmarkSetSchema),
     defaultValues: {
-      name: benchmarkSet?.name ?? "",
-      description: benchmarkSet?.description ?? "",
-      sport: benchmarkSet?.sport ?? "",
-      level: benchmarkSet?.level ?? "",
-      gender: (benchmarkSet?.gender as 'Male' | 'Female' | 'Not Specified' | undefined) ?? undefined,
-      isTemplate: benchmarkSet?.isTemplate ?? false,
+      name: "",
+      description: "",
+      sport: "",
+      level: "",
+      gender: undefined,
+      isTemplate: true, // Site sets are templates by default
     },
   });
+
+  // Reset form when benchmarkSet changes
+  useEffect(() => {
+    if (open) {
+      form.reset({
+        name: benchmarkSet?.name ?? "",
+        description: benchmarkSet?.description ?? "",
+        sport: benchmarkSet?.sport ?? "",
+        level: benchmarkSet?.level ?? "",
+        gender: (benchmarkSet?.gender as 'Male' | 'Female' | 'Not Specified' | undefined) ?? undefined,
+        isTemplate: benchmarkSet?.isTemplate ?? true,
+      });
+    }
+  }, [benchmarkSet, open, form]);
 
   const handleSubmit = async (data: InsertBenchmarkSet) => {
     try {
@@ -117,12 +131,12 @@ export function BenchmarkSetForm({
       <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? "Edit Benchmark Set" : "Create Benchmark Set"}
+            {isEditing ? "Edit Site Benchmark Set" : "Create Site Benchmark Set"}
           </DialogTitle>
           <DialogDescription>
             {isEditing
-              ? "Update the benchmark set details below."
-              : "Create a named collection of benchmarks for use in reports and analytics."}
+              ? "Update the site-level benchmark set details below."
+              : "Create a site-level benchmark set template. This set can only contain site benchmarks (not organization-specific custom benchmarks)."}
           </DialogDescription>
         </DialogHeader>
 
