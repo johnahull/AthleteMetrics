@@ -26,8 +26,8 @@ export function BenchmarkSetList({ organizationId }: BenchmarkSetListProps) {
   const [showHiddenSiteSets, setShowHiddenSiteSets] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Check if user is org admin (can manage site set visibility)
-  const isOrgAdmin = user?.role === 'org_admin' || user?.isSiteAdmin;
+  // Check if user can manage site set visibility (coaches, org admins, site admins)
+  const canManageVisibility = user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin;
 
   // Fetch benchmark sets for this organization
   const { data: sets, isLoading, error } = useBenchmarkSets(organizationId, {
@@ -150,7 +150,7 @@ export function BenchmarkSetList({ organizationId }: BenchmarkSetListProps) {
             </div>
 
             {/* Show Hidden Site Sets Toggle (Org Admin Only) */}
-            {isOrgAdmin && (
+            {canManageVisibility && (
               <div className="flex items-center gap-2">
                 <Switch
                   id="show-hidden-site-sets"

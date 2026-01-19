@@ -718,7 +718,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
     setModifyLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    requireRole('org_admin'),
+    requireRole('coach'),
     async (req: Request, res: Response) => {
       try {
         const { organizationId, setId } = req.params;

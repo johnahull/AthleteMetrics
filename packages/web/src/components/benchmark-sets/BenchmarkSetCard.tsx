@@ -52,8 +52,8 @@ export function BenchmarkSetCard({
 
   // Site-level sets are read-only for organizations
   const isSiteSet = benchmarkSet.organizationId === null;
-  // Check if user is org admin (can hide/show site sets)
-  const isOrgAdmin = user?.role === 'org_admin' || user?.isSiteAdmin;
+  // Check if user can manage site set visibility (coaches, org admins, site admins)
+  const canManageVisibility = user?.role === 'coach' || user?.role === 'org_admin' || user?.isSiteAdmin;
   // Check if this site set is currently hidden for the org
   const isHiddenForOrg = benchmarkSet.isHiddenForOrg === true;
 
@@ -169,7 +169,7 @@ export function BenchmarkSetCard({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            ) : isOrgAdmin ? (
+            ) : canManageVisibility ? (
               // Site-level sets + org admin: show hide/show button
               <Button
                 variant="ghost"
