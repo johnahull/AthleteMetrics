@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDefaultUser } from './helpers/auth';
 
 /**
  * Wellness Template Library E2E Tests
@@ -14,14 +15,8 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Wellness Template Library', () => {
   test.beforeEach(async ({ page }) => {
-    // Login as admin
-    await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.STAGING_USERNAME || 'admin');
-    await page.fill('input[name="password"]', process.env.STAGING_PASSWORD || 'Admin@password123');
-    await page.click('button[type="submit"]');
-
-    // Wait for redirect to home page
-    await page.waitForURL('/');
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
 
     // Navigate to wellness page
     await page.goto('/wellness');

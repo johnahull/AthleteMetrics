@@ -4,25 +4,16 @@
  */
 
 import { test, expect } from '@playwright/test';
+import { loginAsDefaultUser } from './helpers/auth';
 
 // Test configuration
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
-const COACH_USERNAME = process.env.STAGING_USERNAME || 'testuser';
-const COACH_PASSWORD = process.env.STAGING_PASSWORD || 'TestPassword123!';
 
 test.describe('Event Reports', () => {
   // Login before all tests in this describe block
   test.beforeEach(async ({ page }) => {
-    // Go to login page
-    await page.goto(`${STAGING_URL}/login`);
-
-    // Fill login form
-    await page.fill('input[name="username"]', COACH_USERNAME);
-    await page.fill('input[name="password"]', COACH_PASSWORD);
-    await page.click('button[type="submit"]');
-
-    // Wait for navigation to dashboard
-    await page.waitForURL(/.*dashboard|.*events/);
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
   });
 
   test.describe('Reports Tab Display', () => {

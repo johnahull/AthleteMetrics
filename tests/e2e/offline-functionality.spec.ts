@@ -1,16 +1,10 @@
 import { test, expect } from '@playwright/test';
-import { getEnvironmentConfig } from './config';
-
-const { TARGET_USERNAME, TARGET_PASSWORD } = getEnvironmentConfig();
+import { loginAsDefaultUser } from './helpers/auth';
 
 test.describe('Offline Functionality', () => {
   test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('input[name="username"]', TARGET_USERNAME || 'admin');
-    await page.fill('input[name="password"]', TARGET_PASSWORD || 'password');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/dashboard');
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
   });
 
   test('should show offline indicator when connection is lost', async ({ page, context }) => {
@@ -210,12 +204,8 @@ test.describe('Offline Functionality', () => {
 
 test.describe('Responsive Charts', () => {
   test.beforeEach(async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('input[name="username"]', 'admin');
-    await page.fill('input[name="password"]', 'password');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/dashboard');
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
   });
 
   test.describe('Mobile Viewport (<768px)', () => {

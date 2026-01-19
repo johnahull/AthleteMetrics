@@ -43,9 +43,9 @@ test.describe('Visual Regression Tests', () => {
   test('login page layout matches baseline', async ({ page }) => {
     await page.goto(`${STAGING_URL}/login`);
 
-    // Wait for form to be fully loaded
-    await page.waitForSelector('input[name="username"]', { state: 'visible' });
-    await page.waitForSelector('input[name="password"]', { state: 'visible' });
+    // Wait for form to be fully loaded - use combined selectors for flexibility
+    await page.waitForSelector('#username, input[name="username"]', { state: 'visible' });
+    await page.waitForSelector('#password, input[name="password"]', { state: 'visible' });
     await page.waitForSelector('button[type="submit"]', { state: 'visible' });
 
     // Take screenshot and compare to baseline

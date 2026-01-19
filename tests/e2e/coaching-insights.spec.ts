@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { loginAs, loginAsDefaultUser } from './helpers/auth';
+import { isSameUserMode } from './fixtures/test-users';
 
 /**
  * E2E Tests for Coaching Insights Feature
@@ -18,12 +20,13 @@ test.describe('Coaching Insights - Site Admin Configuration', () => {
   let originalAIModel: string | null = null;
 
   test.beforeEach(async ({ page }) => {
-    // Login as site admin
-    await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_SITE_ADMIN_USERNAME || 'admin');
-    await page.fill('input[name="password"]', process.env.E2E_SITE_ADMIN_PASSWORD || 'password');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/');
+    // Use auth helper that handles storageState and proper selectors
+    // In CI with same-user mode, loginAsDefaultUser gives site admin access
+    if (isSameUserMode()) {
+      await loginAsDefaultUser(page);
+    } else {
+      await loginAs(page, 'site_admin');
+    }
   });
 
   test.afterEach(async ({ page }) => {
@@ -97,8 +100,8 @@ test.describe('Coaching Insights - Org Admin Configuration', () => {
   test.beforeEach(async ({ page }) => {
     // Login as org admin
     await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
-    await page.fill('input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
+    await page.fill('#username, input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
+    await page.fill('#password, input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
@@ -148,8 +151,8 @@ test.describe('Coaching Insights - Generation and Editing', () => {
   test.beforeEach(async ({ page }) => {
     // Login as coach or org admin
     await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
-    await page.fill('input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
+    await page.fill('#username, input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
+    await page.fill('#password, input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
@@ -269,8 +272,8 @@ test.describe('Coaching Insights - PDF Export', () => {
   test.beforeEach(async ({ page }) => {
     // Login
     await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
-    await page.fill('input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
+    await page.fill('#username, input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
+    await page.fill('#password, input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
@@ -315,8 +318,8 @@ test.describe('Coaching Insights - Feature Visibility', () => {
     // This test assumes there's a test organization with AI disabled
     // Login as user in org with AI disabled
     await page.goto('/login');
-    await page.fill('input[name="username"]', 'testuser');
-    await page.fill('input[name="password"]', 'password');
+    await page.fill('#username, input[name="username"]', 'testuser');
+    await page.fill('#password, input[name="password"]', 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
 
@@ -339,8 +342,8 @@ test.describe('Coaching Insights - Feature Visibility', () => {
   test('should show insights when AI enabled at both levels', async ({ page }) => {
     // Login to org with AI enabled
     await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
-    await page.fill('input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
+    await page.fill('#username, input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
+    await page.fill('#password, input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
 
@@ -374,8 +377,8 @@ test.describe('Coaching Insights - Individual Report', () => {
   test.beforeEach(async ({ page }) => {
     // Login
     await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
-    await page.fill('input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
+    await page.fill('#username, input[name="username"]', process.env.E2E_ORG_ADMIN_USERNAME || 'orgadmin');
+    await page.fill('#password, input[name="password"]', process.env.E2E_ORG_ADMIN_PASSWORD || 'password');
     await page.click('button[type="submit"]');
     await page.waitForURL('/');
   });
