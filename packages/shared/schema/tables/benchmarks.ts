@@ -170,3 +170,20 @@ export const benchmarkSetItems = pgTable("benchmark_set_items", {
   setIdx: index("benchmark_set_items_set_idx").on(table.setId),
   uniqueSetBenchmark: unique("benchmark_set_items_unique").on(table.setId, table.benchmarkId, table.benchmarkType),
 }));
+
+// Organization-level site benchmark set visibility
+// Allows org admins to hide/disable site-level benchmark sets for their organization
+// Default behavior: No row = site set IS visible (auto-visible by default)
+// Disabled: Row with isEnabled: false = site set hidden for org
+// Re-enabled: Row with isEnabled: true = explicitly re-enabled
+export const organizationBenchmarkSets = pgTable("organization_benchmark_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  siteSetId: varchar("site_set_id").notNull().references(() => benchmarkSets.id, { onDelete: 'cascade' }),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgSet: unique("organization_benchmark_sets_unique").on(table.organizationId, table.siteSetId),
+  orgIdx: index("org_benchmark_sets_org_idx").on(table.organizationId),
+}));

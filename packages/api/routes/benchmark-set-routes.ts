@@ -11,6 +11,7 @@ import {
   benchmarkSetItems,
   siteBenchmarks,
   customBenchmarks,
+  organizationBenchmarkSets,
   insertBenchmarkSetSchema,
   updateBenchmarkSetSchema,
   insertBenchmarkSetItemSchema,
@@ -209,7 +210,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
   // ========================================================================
 
   // List benchmark sets for organization
-  // Also includes active site-level sets (read-only for orgs)
+  // Also includes active site-level sets (read-only for orgs) unless disabled by org admin
   app.get("/api/organizations/:organizationId/benchmark-sets",
     setReadLimiter,
     requireAuth,
@@ -218,6 +219,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
       try {
         const { organizationId } = req.params;
         const includeInactive = req.query.includeInactive === 'true';
+        const includeHiddenSiteSets = req.query.includeHiddenSiteSets === 'true';
 
         // Fetch org-level sets
         const orgSets = await db
@@ -243,8 +245,24 @@ export function registerBenchmarkSetRoutes(app: Express) {
           )
           .orderBy(asc(benchmarkSets.name));
 
+        // Fetch disabled site set IDs for this org
+        const disabledSetsResults = await db
+          .select({ siteSetId: organizationBenchmarkSets.siteSetId })
+          .from(organizationBenchmarkSets)
+          .where(and(
+            eq(organizationBenchmarkSets.organizationId, organizationId),
+            eq(organizationBenchmarkSets.isEnabled, false)
+          ));
+        const disabledSetIds = new Set(disabledSetsResults.map(d => d.siteSetId));
+
+        // Filter site sets based on org visibility preferences
+        // If includeHiddenSiteSets is true, mark hidden sets but still include them
+        const visibleSiteSets = includeHiddenSiteSets
+          ? siteSets.map(s => ({ ...s, isHiddenForOrg: disabledSetIds.has(s.id) }))
+          : siteSets.filter(s => !disabledSetIds.has(s.id));
+
         // Return site sets first (templates), then org sets
-        res.json([...siteSets, ...filteredOrgSets]);
+        res.json([...visibleSiteSets, ...filteredOrgSets]);
       } catch (error) {
         handleError(res, error, "list benchmark sets");
       }
@@ -686,6 +704,107 @@ export function registerBenchmarkSetRoutes(app: Express) {
         res.json(memberships);
       } catch (error) {
         handleError(res, error, "get benchmark memberships");
+      }
+    }
+  );
+
+  // ========================================================================
+  // SITE BENCHMARK SET VISIBILITY (Org Admin Only)
+  // Allows org admins to hide/show site-level benchmark sets for their org
+  // ========================================================================
+
+  // Toggle site benchmark set visibility for organization
+  app.patch("/api/organizations/:organizationId/site-benchmark-sets/:setId/visibility",
+    setModifyLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    requireRole('org_admin'),
+    async (req: Request, res: Response) => {
+      try {
+        const { organizationId, setId } = req.params;
+        const { isEnabled } = req.body;
+
+        if (typeof isEnabled !== 'boolean') {
+          return res.status(400).json({ message: "isEnabled must be a boolean" });
+        }
+
+        // Verify the site benchmark set exists
+        const [siteSet] = await db
+          .select()
+          .from(benchmarkSets)
+          .where(and(
+            eq(benchmarkSets.id, setId),
+            isNull(benchmarkSets.organizationId)
+          ));
+
+        if (!siteSet) {
+          return res.status(404).json({ message: "Site benchmark set not found" });
+        }
+
+        // Check if there's already an entry for this org/set combination
+        const [existing] = await db
+          .select()
+          .from(organizationBenchmarkSets)
+          .where(and(
+            eq(organizationBenchmarkSets.organizationId, organizationId),
+            eq(organizationBenchmarkSets.siteSetId, setId)
+          ));
+
+        if (existing) {
+          // Update existing entry
+          const [updated] = await db
+            .update(organizationBenchmarkSets)
+            .set({
+              isEnabled,
+              updatedAt: new Date(),
+            })
+            .where(eq(organizationBenchmarkSets.id, existing.id))
+            .returning();
+
+          return res.json(updated);
+        } else {
+          // Create new entry
+          const [created] = await db
+            .insert(organizationBenchmarkSets)
+            .values({
+              organizationId,
+              siteSetId: setId,
+              isEnabled,
+            })
+            .returning();
+
+          return res.status(201).json(created);
+        }
+      } catch (error) {
+        handleError(res, error, "toggle site benchmark set visibility");
+      }
+    }
+  );
+
+  // Get visibility status of site benchmark sets for organization
+  app.get("/api/organizations/:organizationId/site-benchmark-sets/visibility",
+    setReadLimiter,
+    requireAuth,
+    requireOrganizationAccess(),
+    async (req: Request, res: Response) => {
+      try {
+        const { organizationId } = req.params;
+
+        // Get all visibility overrides for this org
+        const overrides = await db
+          .select()
+          .from(organizationBenchmarkSets)
+          .where(eq(organizationBenchmarkSets.organizationId, organizationId));
+
+        // Create a map of setId -> isEnabled
+        const visibilityMap: Record<string, boolean> = {};
+        for (const override of overrides) {
+          visibilityMap[override.siteSetId] = override.isEnabled;
+        }
+
+        res.json(visibilityMap);
+      } catch (error) {
+        handleError(res, error, "get site benchmark set visibility");
       }
     }
   );

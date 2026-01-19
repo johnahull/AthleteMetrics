@@ -21,18 +21,23 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreHorizontal, Pencil, Trash, Layers, Calendar } from "lucide-react";
+import { MoreHorizontal, Pencil, Trash, Calendar, Eye, EyeOff } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { useDeleteBenchmarkSet, useUpdateBenchmarkSet } from "@/lib/benchmark-sets-api";
-import type { BenchmarkSet } from "@shared/schema";
+import {
+  useDeleteBenchmarkSet,
+  useUpdateBenchmarkSet,
+  useToggleSiteBenchmarkSetVisibility,
+  type BenchmarkSetWithVisibility,
+} from "@/lib/benchmark-sets-api";
+import { useAuth } from "@/lib/auth";
 import { useState } from "react";
 import { useLocation } from "wouter";
 
 interface BenchmarkSetCardProps {
-  benchmarkSet: BenchmarkSet;
+  benchmarkSet: BenchmarkSetWithVisibility;
   organizationId: string;
-  onEdit: (set: BenchmarkSet) => void;
+  onEdit: (set: BenchmarkSetWithVisibility) => void;
 }
 
 export function BenchmarkSetCard({
@@ -41,14 +46,20 @@ export function BenchmarkSetCard({
   onEdit,
 }: BenchmarkSetCardProps) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const [, setLocation] = useLocation();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   // Site-level sets are read-only for organizations
   const isSiteSet = benchmarkSet.organizationId === null;
+  // Check if user is org admin (can hide/show site sets)
+  const isOrgAdmin = user?.role === 'org_admin' || user?.isSiteAdmin;
+  // Check if this site set is currently hidden for the org
+  const isHiddenForOrg = benchmarkSet.isHiddenForOrg === true;
 
   const deleteMutation = useDeleteBenchmarkSet(organizationId);
   const updateMutation = useUpdateBenchmarkSet(organizationId, benchmarkSet.id);
+  const toggleVisibilityMutation = useToggleSiteBenchmarkSetVisibility(organizationId);
 
   const handleToggleActive = async () => {
     try {
@@ -56,6 +67,27 @@ export function BenchmarkSetCard({
       toast({
         title: benchmarkSet.isActive ? "Set Deactivated" : "Set Activated",
         description: `"${benchmarkSet.name}" is now ${benchmarkSet.isActive ? "inactive" : "active"}.`,
+      });
+    } catch (err) {
+      toast({
+        title: "Update Failed",
+        description: err instanceof Error ? err.message : "An error occurred",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleVisibility = async () => {
+    try {
+      await toggleVisibilityMutation.mutateAsync({
+        setId: benchmarkSet.id,
+        isEnabled: isHiddenForOrg, // If hidden, enable (show). If shown, disable (hide).
+      });
+      toast({
+        title: isHiddenForOrg ? "Set Now Visible" : "Set Hidden",
+        description: isHiddenForOrg
+          ? `"${benchmarkSet.name}" is now visible for your organization.`
+          : `"${benchmarkSet.name}" is now hidden for your organization.`,
       });
     } catch (err) {
       toast({
@@ -91,7 +123,7 @@ export function BenchmarkSetCard({
     <>
       <Card
         className={`cursor-pointer hover:shadow-md transition-shadow ${
-          !benchmarkSet.isActive ? "opacity-60" : ""
+          !benchmarkSet.isActive || isHiddenForOrg ? "opacity-60" : ""
         }`}
         data-set-id={benchmarkSet.id}
         onClick={handleCardClick}
@@ -106,8 +138,9 @@ export function BenchmarkSetCard({
                 </p>
               )}
             </div>
-            {/* Hide edit/delete menu for site-level sets (read-only) */}
-            {!isSiteSet && (
+            {/* Show appropriate menu based on set type */}
+            {!isSiteSet ? (
+              // Org-level sets: full edit/delete menu
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -136,13 +169,40 @@ export function BenchmarkSetCard({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-            )}
+            ) : isOrgAdmin ? (
+              // Site-level sets + org admin: show hide/show button
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleToggleVisibility();
+                }}
+                disabled={toggleVisibilityMutation.isPending}
+                className="h-8"
+              >
+                {isHiddenForOrg ? (
+                  <>
+                    <Eye className="h-4 w-4 mr-1" />
+                    Show
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="h-4 w-4 mr-1" />
+                    Hide
+                  </>
+                )}
+              </Button>
+            ) : null}
           </div>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2">
             {isSiteSet && (
               <Badge variant="default" className="bg-blue-600">Site</Badge>
+            )}
+            {isHiddenForOrg && (
+              <Badge variant="secondary" className="bg-gray-500 text-white">Hidden</Badge>
             )}
             {benchmarkSet.sport && (
               <Badge variant="outline">{benchmarkSet.sport}</Badge>

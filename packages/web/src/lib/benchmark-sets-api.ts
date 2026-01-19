@@ -40,15 +40,25 @@ export const benchmarkSetKeys = {
 // ============================================================================
 
 /**
+ * Extended BenchmarkSet type with visibility info for site sets
+ */
+export type BenchmarkSetWithVisibility = BenchmarkSet & {
+  isHiddenForOrg?: boolean;
+};
+
+/**
  * Fetch all benchmark sets for an organization
  */
 export async function fetchBenchmarkSets(
   organizationId: string,
-  includeInactive = false
-): Promise<BenchmarkSet[]> {
+  options: { includeInactive?: boolean; includeHiddenSiteSets?: boolean } = {}
+): Promise<BenchmarkSetWithVisibility[]> {
   const params = new URLSearchParams();
-  if (includeInactive) {
+  if (options.includeInactive) {
     params.append('includeInactive', 'true');
+  }
+  if (options.includeHiddenSiteSets) {
+    params.append('includeHiddenSiteSets', 'true');
   }
 
   const response = await fetch(
@@ -225,10 +235,14 @@ export async function reorderBenchmarkSetItems(
 /**
  * Hook to fetch all benchmark sets for an organization
  */
-export function useBenchmarkSets(organizationId: string, includeInactive = false) {
+export function useBenchmarkSets(
+  organizationId: string,
+  options: { includeInactive?: boolean; includeHiddenSiteSets?: boolean } = {}
+) {
+  const { includeInactive = false, includeHiddenSiteSets = false } = options;
   return useQuery({
-    queryKey: [...benchmarkSetKeys.list(organizationId), includeInactive],
-    queryFn: () => fetchBenchmarkSets(organizationId, includeInactive),
+    queryKey: [...benchmarkSetKeys.list(organizationId), includeInactive, includeHiddenSiteSets],
+    queryFn: () => fetchBenchmarkSets(organizationId, { includeInactive, includeHiddenSiteSets }),
     staleTime: STALE_TIME.STATIC,
     enabled: !!organizationId,
   });
@@ -374,6 +388,88 @@ export function useBenchmarkMemberships(organizationId: string) {
   return useQuery({
     queryKey: benchmarkSetKeys.memberships(organizationId),
     queryFn: () => fetchBenchmarkMemberships(organizationId),
+    staleTime: STALE_TIME.STATIC,
+    enabled: !!organizationId,
+  });
+}
+
+// ============================================================================
+// SITE BENCHMARK SET VISIBILITY (Org Admin)
+// Allows org admins to hide/show site-level benchmark sets for their org
+// ============================================================================
+
+/**
+ * Type for site benchmark set visibility map
+ * Maps siteSetId to isEnabled status
+ */
+export type SiteBenchmarkSetVisibility = Record<string, boolean>;
+
+/**
+ * Toggle visibility of a site benchmark set for an organization
+ */
+export async function toggleSiteBenchmarkSetVisibility(
+  organizationId: string,
+  setId: string,
+  isEnabled: boolean
+): Promise<{ id: string; organizationId: string; siteSetId: string; isEnabled: boolean }> {
+  const response = await fetch(
+    `/api/organizations/${organizationId}/site-benchmark-sets/${setId}/visibility`,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isEnabled }),
+    }
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to toggle site benchmark set visibility' }));
+    throw new Error(error.message || 'Failed to toggle site benchmark set visibility');
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch visibility status of all site benchmark sets for an organization
+ */
+export async function fetchSiteBenchmarkSetVisibility(
+  organizationId: string
+): Promise<SiteBenchmarkSetVisibility> {
+  const response = await fetch(
+    `/api/organizations/${organizationId}/site-benchmark-sets/visibility`
+  );
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Failed to fetch site benchmark set visibility' }));
+    throw new Error(error.message || 'Failed to fetch site benchmark set visibility');
+  }
+
+  return response.json();
+}
+
+/**
+ * Hook to toggle site benchmark set visibility for an organization
+ */
+export function useToggleSiteBenchmarkSetVisibility(organizationId: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ setId, isEnabled }: { setId: string; isEnabled: boolean }) =>
+      toggleSiteBenchmarkSetVisibility(organizationId, setId, isEnabled),
+    onSuccess: () => {
+      // Invalidate the benchmark sets list to refresh the data
+      queryClient.invalidateQueries({ queryKey: benchmarkSetKeys.list(organizationId) });
+    },
+  });
+}
+
+/**
+ * Hook to fetch site benchmark set visibility for an organization
+ */
+export function useSiteBenchmarkSetVisibility(organizationId: string) {
+  return useQuery({
+    queryKey: [...benchmarkSetKeys.all, 'visibility', organizationId],
+    queryFn: () => fetchSiteBenchmarkSetVisibility(organizationId),
     staleTime: STALE_TIME.STATIC,
     enabled: !!organizationId,
   });

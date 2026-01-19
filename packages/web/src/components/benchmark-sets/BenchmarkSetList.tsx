@@ -3,32 +3,37 @@
  */
 
 import { useState } from "react";
-import { useBenchmarkSets } from "@/lib/benchmark-sets-api";
+import { useBenchmarkSets, type BenchmarkSetWithVisibility } from "@/lib/benchmark-sets-api";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Plus, Search, Layers, AlertCircle } from "lucide-react";
+import { Plus, Search, Layers, AlertCircle, EyeOff } from "lucide-react";
 import { BenchmarkSetCard } from "./BenchmarkSetCard";
 import { BenchmarkSetForm } from "./BenchmarkSetForm";
-import type { BenchmarkSet } from "@shared/schema";
+import { useAuth } from "@/lib/auth";
 
 interface BenchmarkSetListProps {
   organizationId: string;
 }
 
 export function BenchmarkSetList({ organizationId }: BenchmarkSetListProps) {
+  const { user } = useAuth();
   const [showForm, setShowForm] = useState(false);
-  const [editingSet, setEditingSet] = useState<BenchmarkSet | null>(null);
+  const [editingSet, setEditingSet] = useState<BenchmarkSetWithVisibility | null>(null);
   const [includeInactive, setIncludeInactive] = useState(false);
+  const [showHiddenSiteSets, setShowHiddenSiteSets] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Check if user is org admin (can manage site set visibility)
+  const isOrgAdmin = user?.role === 'org_admin' || user?.isSiteAdmin;
+
   // Fetch benchmark sets for this organization
-  const { data: sets, isLoading, error } = useBenchmarkSets(
-    organizationId,
-    includeInactive
-  );
+  const { data: sets, isLoading, error } = useBenchmarkSets(organizationId, {
+    includeInactive,
+    includeHiddenSiteSets: showHiddenSiteSets,
+  });
 
   // Filter sets by search query
   const filteredSets = sets?.filter((set) => {
@@ -42,7 +47,7 @@ export function BenchmarkSetList({ organizationId }: BenchmarkSetListProps) {
     );
   });
 
-  const handleEdit = (set: BenchmarkSet) => {
+  const handleEdit = (set: BenchmarkSetWithVisibility) => {
     setEditingSet(set);
     setShowForm(true);
   };
@@ -143,6 +148,24 @@ export function BenchmarkSetList({ organizationId }: BenchmarkSetListProps) {
                 Show Inactive
               </label>
             </div>
+
+            {/* Show Hidden Site Sets Toggle (Org Admin Only) */}
+            {isOrgAdmin && (
+              <div className="flex items-center gap-2">
+                <Switch
+                  id="show-hidden-site-sets"
+                  checked={showHiddenSiteSets}
+                  onCheckedChange={setShowHiddenSiteSets}
+                />
+                <label
+                  htmlFor="show-hidden-site-sets"
+                  className="text-sm font-medium cursor-pointer flex items-center gap-1"
+                >
+                  <EyeOff className="h-4 w-4" />
+                  Show Hidden
+                </label>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

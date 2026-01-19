@@ -24,7 +24,7 @@ export type {
   // Metrics
   SiteMetric, OrganizationMetric, CustomOrgMetric, InsertCustomOrgMetric, UpdateCustomOrgMetric, SiteSport, SitePosition,
   // Benchmarks
-  SiteBenchmark, CustomBenchmark, OrganizationBenchmark, BenchmarkSet, BenchmarkSetItem,
+  SiteBenchmark, CustomBenchmark, OrganizationBenchmark, BenchmarkSet, BenchmarkSetItem, OrganizationBenchmarkSet,
   // Measurements
   Measurement, PeerPercentileCache,
   // Membership

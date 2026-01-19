@@ -40,6 +40,7 @@ export type CustomBenchmark = typeof tables.customBenchmarks.$inferSelect;
 export type OrganizationBenchmark = typeof tables.organizationBenchmarks.$inferSelect;
 export type BenchmarkSet = typeof tables.benchmarkSets.$inferSelect;
 export type BenchmarkSetItem = typeof tables.benchmarkSetItems.$inferSelect;
+export type OrganizationBenchmarkSet = typeof tables.organizationBenchmarkSets.$inferSelect;
 
 // ============================================================================
 // Measurements Tables
