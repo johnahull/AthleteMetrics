@@ -72,6 +72,7 @@ export {
   insertBenchmarkSetItemSchema,
   updateBenchmarkSetItemSchema,
   reorderBenchmarkSetItemsSchema,
+  toggleSiteSetVisibilitySchema,
 } from "../schema-original";
 
 // Insert type exports

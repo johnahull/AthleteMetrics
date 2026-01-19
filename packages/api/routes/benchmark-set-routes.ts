@@ -16,6 +16,7 @@ import {
   updateBenchmarkSetSchema,
   insertBenchmarkSetItemSchema,
   reorderBenchmarkSetItemsSchema,
+  toggleSiteSetVisibilitySchema,
 } from "@shared/schema";
 import { requireAuth, requireOrganizationAccess, requireSiteAdmin } from "../middleware";
 import { requireRole } from "../permissions/middleware";
@@ -27,9 +28,13 @@ const setCreateLimiter = rateLimit({
   limit: 20,
   message: { message: "Too many benchmark set creation attempts" },
   skip: (req): boolean => {
+    // Never bypass in production, regardless of environment variable settings
     if (process.env.NODE_ENV === 'production') return false;
+    // Always bypass in test environment
     if (process.env.NODE_ENV === 'test') return true;
-    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+    // In development, only bypass if explicitly enabled AND not in production
+    const isDevelopment = ['development', 'dev'].includes(process.env.NODE_ENV || '');
+    return isDevelopment && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
@@ -43,9 +48,13 @@ const setModifyLimiter = rateLimit({
   limit: 100,
   message: { message: "Too many benchmark set modification attempts" },
   skip: (req): boolean => {
+    // Never bypass in production, regardless of environment variable settings
     if (process.env.NODE_ENV === 'production') return false;
+    // Always bypass in test environment
     if (process.env.NODE_ENV === 'test') return true;
-    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+    // In development, only bypass if explicitly enabled AND not in production
+    const isDevelopment = ['development', 'dev'].includes(process.env.NODE_ENV || '');
+    return isDevelopment && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
@@ -59,9 +68,13 @@ const setReadLimiter = rateLimit({
   limit: 200,
   message: { message: "Too many benchmark set requests" },
   skip: (req): boolean => {
+    // Never bypass in production, regardless of environment variable settings
     if (process.env.NODE_ENV === 'production') return false;
+    // Always bypass in test environment
     if (process.env.NODE_ENV === 'test') return true;
-    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+    // In development, only bypass if explicitly enabled AND not in production
+    const isDevelopment = ['development', 'dev'].includes(process.env.NODE_ENV || '');
+    return isDevelopment && process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
   },
   keyGenerator: (req): string => {
     const userId = req.session?.user?.id;
@@ -633,8 +646,23 @@ export function registerBenchmarkSetRoutes(app: Express) {
           return res.status(404).json({ message: "Benchmark set not found" });
         }
 
-        // Update all items' display order in a single batch query
+        // Verify ALL items belong to this set (security: prevent cross-org manipulation)
         if (validatedData.items.length > 0) {
+          const existingItems = await db
+            .select({ id: benchmarkSetItems.id })
+            .from(benchmarkSetItems)
+            .where(eq(benchmarkSetItems.setId, setId));
+
+          const existingItemIds = new Set(existingItems.map(i => i.id));
+          const requestedItemIds = validatedData.items.map(i => i.id);
+
+          if (!requestedItemIds.every(id => existingItemIds.has(id))) {
+            return res.status(400).json({
+              message: "One or more items do not belong to this set"
+            });
+          }
+
+          // Update all items' display order in a single batch query
           await db.execute(sql`
             UPDATE benchmark_set_items
             SET display_order = CASE id
@@ -727,15 +755,13 @@ export function registerBenchmarkSetRoutes(app: Express) {
     setModifyLimiter,
     requireAuth,
     requireOrganizationAccess(),
-    requireRole('coach'),
+    requireRole('org_admin'),
     async (req: Request, res: Response) => {
       try {
         const { organizationId, setId } = req.params;
-        const { isEnabled } = req.body;
 
-        if (typeof isEnabled !== 'boolean') {
-          return res.status(400).json({ message: "isEnabled must be a boolean" });
-        }
+        const validatedData = toggleSiteSetVisibilitySchema.parse(req.body);
+        const { isEnabled } = validatedData;
 
         // Verify the site benchmark set exists
         const [siteSet] = await db
@@ -1186,8 +1212,23 @@ export function registerBenchmarkSetRoutes(app: Express) {
           return res.status(404).json({ message: "Benchmark set not found" });
         }
 
-        // Update all items' display order in a single batch query
+        // Verify ALL items belong to this set (security: prevent cross-set manipulation)
         if (validatedData.items.length > 0) {
+          const existingItems = await db
+            .select({ id: benchmarkSetItems.id })
+            .from(benchmarkSetItems)
+            .where(eq(benchmarkSetItems.setId, setId));
+
+          const existingItemIds = new Set(existingItems.map(i => i.id));
+          const requestedItemIds = validatedData.items.map(i => i.id);
+
+          if (!requestedItemIds.every(id => existingItemIds.has(id))) {
+            return res.status(400).json({
+              message: "One or more items do not belong to this set"
+            });
+          }
+
+          // Update all items' display order in a single batch query
           await db.execute(sql`
             UPDATE benchmark_set_items
             SET display_order = CASE id

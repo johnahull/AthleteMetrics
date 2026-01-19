@@ -2134,7 +2134,11 @@ export const reorderBenchmarkSetItemsSchema = z.object({
   items: z.array(z.object({
     id: z.string().min(1),
     displayOrder: z.number().int().min(0),
-  })).min(1),
+  })).min(1).max(1000), // Prevent DoS with excessive items
+});
+
+export const toggleSiteSetVisibilitySchema = z.object({
+  isEnabled: z.boolean(),
 });
 
 // Report Schemas
