@@ -19,7 +19,7 @@ import {
 } from "@shared/schema";
 import { requireAuth, requireOrganizationAccess, requireSiteAdmin } from "../middleware";
 import { requireRole } from "../permissions/middleware";
-import { eq, and, asc, inArray, isNull } from "drizzle-orm";
+import { eq, and, asc, inArray, isNull, sql } from "drizzle-orm";
 
 // Rate limiters
 const setCreateLimiter = rateLimit({
@@ -633,15 +633,24 @@ export function registerBenchmarkSetRoutes(app: Express) {
           return res.status(404).json({ message: "Benchmark set not found" });
         }
 
-        // Update each item's display order
-        for (const item of validatedData.items) {
-          await db
-            .update(benchmarkSetItems)
-            .set({ displayOrder: item.displayOrder })
-            .where(and(
-              eq(benchmarkSetItems.id, item.id),
-              eq(benchmarkSetItems.setId, setId)
-            ));
+        // Update all items' display order in a single batch query
+        if (validatedData.items.length > 0) {
+          await db.execute(sql`
+            UPDATE benchmark_set_items
+            SET display_order = CASE id
+              ${sql.join(
+                validatedData.items.map(item =>
+                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}`
+                ),
+                sql` `
+              )}
+            END
+            WHERE id IN (${sql.join(
+              validatedData.items.map(item => sql`${item.id}::varchar`),
+              sql`, `
+            )})
+            AND set_id = ${setId}::varchar
+          `);
         }
 
         // Return updated items
@@ -1177,15 +1186,24 @@ export function registerBenchmarkSetRoutes(app: Express) {
           return res.status(404).json({ message: "Benchmark set not found" });
         }
 
-        // Update each item's display order
-        for (const item of validatedData.items) {
-          await db
-            .update(benchmarkSetItems)
-            .set({ displayOrder: item.displayOrder })
-            .where(and(
-              eq(benchmarkSetItems.id, item.id),
-              eq(benchmarkSetItems.setId, setId)
-            ));
+        // Update all items' display order in a single batch query
+        if (validatedData.items.length > 0) {
+          await db.execute(sql`
+            UPDATE benchmark_set_items
+            SET display_order = CASE id
+              ${sql.join(
+                validatedData.items.map(item =>
+                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}`
+                ),
+                sql` `
+              )}
+            END
+            WHERE id IN (${sql.join(
+              validatedData.items.map(item => sql`${item.id}::varchar`),
+              sql`, `
+            )})
+            AND set_id = ${setId}::varchar
+          `);
         }
 
         // Return updated items

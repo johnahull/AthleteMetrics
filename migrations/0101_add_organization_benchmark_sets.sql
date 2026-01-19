@@ -19,8 +19,9 @@ CREATE TABLE IF NOT EXISTS organization_benchmark_sets (
   CONSTRAINT organization_benchmark_sets_unique UNIQUE(organization_id, site_set_id)
 );
 
--- Add index for efficient org-based lookups
+-- Add indexes for efficient lookups
 CREATE INDEX IF NOT EXISTS org_benchmark_sets_org_idx ON organization_benchmark_sets(organization_id);
+CREATE INDEX IF NOT EXISTS org_benchmark_sets_org_enabled_idx ON organization_benchmark_sets(organization_id, is_enabled);
 
 -- Add comment for documentation
 COMMENT ON TABLE organization_benchmark_sets IS 'Tracks org-level visibility of site benchmark sets. No row = visible (default), is_enabled=false = hidden.';
