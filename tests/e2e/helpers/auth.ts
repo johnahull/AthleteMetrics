@@ -293,11 +293,34 @@ export async function getLoginError(page: Page): Promise<string | null> {
  * @returns Promise<void>
  */
 export async function clearAuthState(page: Page): Promise<void> {
+  // Clear cookies first (doesn't require a page context)
   await page.context().clearCookies();
-  await page.evaluate(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-  });
+
+  // page.evaluate() requires a valid document context to access localStorage/sessionStorage.
+  // If the page is on about:blank or has no URL, we need to navigate first.
+  try {
+    const currentUrl = page.url();
+
+    // about:blank doesn't have localStorage/sessionStorage
+    if (!currentUrl || currentUrl === 'about:blank' || currentUrl === '') {
+      // Navigate to login page to get a valid document context
+      await page.goto(`${TESTING_URL}/login`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 10000
+      });
+    }
+
+    await page.evaluate(() => {
+      localStorage.clear();
+      sessionStorage.clear();
+    });
+  } catch (error) {
+    // If clearing storage fails (e.g., due to CORS or page not loaded),
+    // cookies are already cleared which handles most auth state
+    console.debug('clearAuthState: Could not clear localStorage/sessionStorage:',
+      error instanceof Error ? error.message : error
+    );
+  }
 }
 
 /**
