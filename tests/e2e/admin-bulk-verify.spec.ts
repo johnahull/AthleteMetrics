@@ -23,7 +23,8 @@ const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http:
  */
 async function waitForTableOrEmptyState(page: any): Promise<boolean> {
   const tableLocator = page.locator('table');
-  const emptyStateLocator = page.locator('text=/No measurements found/i');
+  // Use .first() to avoid strict mode violation - there may be sr-only duplicates
+  const emptyStateLocator = page.locator('p:has-text("No measurements found"), .text-muted-foreground:has-text("No measurements")').first();
 
   // Wait for either to appear
   await Promise.race([
@@ -1035,9 +1036,15 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       expect(response.status()).toBe(403);
     });
 
-    test('should reject unauthenticated bulk verify API calls', async ({ request }) => {
-      // Use standalone request fixture (independent from browser cookies) for unauthenticated test
-      const response = await request.post(`${TESTING_URL}/api/measurements/bulk-verify`, {
+    test('should reject unauthenticated bulk verify API calls', async ({ playwright }) => {
+      // Create a fresh API context WITHOUT storage state to truly test unauthenticated access
+      // The default `request` fixture inherits storageState from config, so we bypass it
+      const apiContext = await playwright.request.newContext({
+        baseURL: TESTING_URL,
+        // Explicitly don't use any storage state
+      });
+
+      const response = await apiContext.post(`/api/measurements/bulk-verify`, {
         data: {
           measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
         }
@@ -1045,11 +1052,16 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
 
       // Should be rejected with 401 Unauthorized or 403 Forbidden
       expect([401, 403]).toContain(response.status());
+      await apiContext.dispose();
     });
 
-    test('should reject unauthenticated bulk unverify API calls', async ({ request }) => {
-      // Use standalone request fixture (independent from browser cookies) for unauthenticated test
-      const response = await request.post(`${TESTING_URL}/api/measurements/bulk-unverify`, {
+    test('should reject unauthenticated bulk unverify API calls', async ({ playwright }) => {
+      // Create a fresh API context WITHOUT storage state to truly test unauthenticated access
+      const apiContext = await playwright.request.newContext({
+        baseURL: TESTING_URL,
+      });
+
+      const response = await apiContext.post(`/api/measurements/bulk-unverify`, {
         data: {
           measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
         }
@@ -1057,6 +1069,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
 
       // Should be rejected with 401 Unauthorized or 403 Forbidden
       expect([401, 403]).toContain(response.status());
+      await apiContext.dispose();
     });
   });
 });
