@@ -20,6 +20,10 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 
+// Token security constants
+// Event invitation tokens are generated as 32-byte hex strings (64 characters)
+const EVENT_INVITATION_TOKEN_LENGTH = 64;
+
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
@@ -80,8 +84,9 @@ export function registerEventInvitationRoutes(app: Express) {
     try {
       const { token } = req.params;
 
-      // Validate token format: must be exactly 64 hex characters (32 bytes)
-      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+      // Validate token format: must be exactly EVENT_INVITATION_TOKEN_LENGTH hex characters (32 bytes)
+      const tokenPattern = new RegExp(`^[a-f0-9]{${EVENT_INVITATION_TOKEN_LENGTH}}$`, 'i');
+      if (!token || !tokenPattern.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 
@@ -133,8 +138,9 @@ export function registerEventInvitationRoutes(app: Express) {
 
       const { token } = req.params;
 
-      // Validate token format: must be exactly 64 hex characters (32 bytes)
-      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+      // Validate token format: must be exactly EVENT_INVITATION_TOKEN_LENGTH hex characters (32 bytes)
+      const tokenPattern = new RegExp(`^[a-f0-9]{${EVENT_INVITATION_TOKEN_LENGTH}}$`, 'i');
+      if (!token || !tokenPattern.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 
@@ -175,8 +181,9 @@ export function registerEventInvitationRoutes(app: Express) {
     try {
       const { token } = req.params;
 
-      // Validate token format: must be exactly 64 hex characters (32 bytes)
-      if (!token || !/^[a-f0-9]{64}$/i.test(token)) {
+      // Validate token format: must be exactly EVENT_INVITATION_TOKEN_LENGTH hex characters (32 bytes)
+      const tokenPattern = new RegExp(`^[a-f0-9]{${EVENT_INVITATION_TOKEN_LENGTH}}$`, 'i');
+      if (!token || !tokenPattern.test(token)) {
         return res.status(400).json({ message: "Invalid invitation token" });
       }
 

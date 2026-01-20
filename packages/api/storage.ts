@@ -3976,12 +3976,26 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
     try {
-      await db.update(userOrganizations)
-        .set({ role })
-        .where(and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
-        ));
+      // Use transaction with row-level locking to prevent race conditions (TOCTOU)
+      // SELECT ... FOR UPDATE acquires an exclusive lock on the row, preventing
+      // concurrent modifications until the transaction completes
+      await db.transaction(async (tx) => {
+        // Lock the row for update to prevent concurrent role changes
+        await tx.execute(sql`
+          SELECT * FROM ${userOrganizations}
+          WHERE ${userOrganizations.userId} = ${userId}
+          AND ${userOrganizations.organizationId} = ${organizationId}
+          FOR UPDATE
+        `);
+
+        // Now update the role within the same transaction
+        await tx.update(userOrganizations)
+          .set({ role })
+          .where(and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, organizationId)
+          ));
+      });
       return true;
     } catch {
       return false;

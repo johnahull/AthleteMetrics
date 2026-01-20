@@ -73,8 +73,7 @@ export function requirePermission(permission: Permission) {
     const allowedRoles = PERMISSIONS[permission];
     if (!allowedRoles || !allowedRoles.includes(userRole as Role)) {
       return res.status(403).json({
-        message: `Permission denied: ${permission} required`,
-        requiredPermission: permission,
+        message: 'Insufficient permissions for this action',
       });
     }
 
@@ -125,17 +124,14 @@ export function requireRole(minRole: Role) {
     // Explicitly check for falsy values (null, undefined, empty string)
     if (!userRole || userRole === '') {
       return res.status(403).json({
-        message: `${minRole} role or higher required`,
-        requiredRole: minRole,
+        message: 'Insufficient permissions for this action',
       });
     }
 
     // Compare role levels (>= for same-level access)
     if (!hasMinRoleLevel(userRole as Role, minRole)) {
       return res.status(403).json({
-        message: `${minRole} role or higher required`,
-        userRole,
-        requiredRole: minRole,
+        message: 'Insufficient permissions for this action',
       });
     }
 
@@ -211,9 +207,7 @@ export function requireOrgAccess(options: OrgAccessOptions = {}) {
 
       if (userRoleLevel < requiredRoleLevel) {
         return res.status(403).json({
-          message: `${options.role} role or higher required`,
-          userRole: membership.role,
-          requiredRole: options.role,
+          message: 'Insufficient permissions for this action',
         });
       }
     }
@@ -273,10 +267,7 @@ export function requireResourceAccess(resource: Resource, action: Action) {
     // Check resource-action permission
     if (!canPerformAction(userRole as Role, resource, action)) {
       return res.status(403).json({
-        message: `Permission denied: Cannot ${action} ${resource}`,
-        resource,
-        action,
-        userRole,
+        message: 'Insufficient permissions for this action',
       });
     }
 
