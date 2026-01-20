@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAs, loginWithCredentials, logout } from './helpers/auth';
 import { navigateTo, expectCurrentUrl } from './helpers/navigation';
 import { clickWithMultipleFallbacks } from './helpers/selectors';
+import { canTestRoleAuthorization } from './fixtures/test-users';
 
 /**
  * E2E Test: Account Settings (Profile & Password Management)
@@ -544,6 +545,10 @@ test.describe('Account Settings - Session Persistence', () => {
 
 test.describe('Account Settings - Role-Specific Views', () => {
   test('should show athlete role in security settings for athlete user', async ({ page }) => {
+    // Skip if athlete and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('athlete', 'site_admin'),
+      'Skipping: athlete and site_admin share same credentials in this environment');
+
     await loginAs(page, 'athlete');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');
@@ -556,6 +561,10 @@ test.describe('Account Settings - Role-Specific Views', () => {
   });
 
   test('should show coach role in security settings for coach user', async ({ page }) => {
+    // Skip if coach and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('coach', 'site_admin'),
+      'Skipping: coach and site_admin share same credentials in this environment');
+
     await loginAs(page, 'coach');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');
@@ -568,6 +577,10 @@ test.describe('Account Settings - Role-Specific Views', () => {
   });
 
   test('should show org admin role in security settings for org admin user', async ({ page }) => {
+    // Skip if org_admin and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+      'Skipping: org_admin and site_admin share same credentials in this environment');
+
     await loginAs(page, 'org_admin');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');

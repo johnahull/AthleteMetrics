@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { loginAs } from './helpers/auth';
+import { canTestRoleAuthorization } from './fixtures/test-users';
 
 /**
  * E2E Tests: Admin Membership Settings Configuration
@@ -76,6 +77,10 @@ test.describe('Admin Membership Settings - Page Access', () => {
   });
 
   test('coach cannot access org admin settings', async ({ page }) => {
+    // Skip if coach and org_admin share same credentials (coach IS org_admin)
+    test.skip(!canTestRoleAuthorization('coach', 'org_admin'),
+      'Skipping: coach and org_admin share same credentials in this environment');
+
     await loginAs(page, 'coach');
 
     // Try to navigate to an org's admin settings

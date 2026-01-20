@@ -257,6 +257,10 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
 
   test.describe('Access Control', () => {
     test('should prevent org_admin from accessing site-wide admin page', async ({ page }) => {
+      // Skip if org_admin and site_admin share same credentials (org_admin IS site_admin)
+      test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+        'Skipping: org_admin and site_admin share same credentials in this environment');
+
       // Login as org_admin
       const orgAdmin = getUserByRole('org_admin');
       await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
