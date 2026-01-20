@@ -175,8 +175,9 @@ test.describe('Admin Membership Settings - Join Code', () => {
     // Wait for membership settings section
     await expect(page.locator('text=Membership Settings')).toBeVisible({ timeout: 10000 });
 
-    // Should have regenerate button
-    const regenerateButton = page.locator('button:has-text("Regenerate")');
+    // Should have regenerate button (labeled "Random" with title "Generate random code")
+    // Use title attribute since button text "Random" may be hidden on mobile viewports
+    const regenerateButton = page.locator('button[title="Generate random code"], button:has-text("Random")').first();
     await expect(regenerateButton).toBeVisible({ timeout: 5000 });
   });
 
@@ -196,20 +197,20 @@ test.describe('Admin Membership Settings - Join Code', () => {
     const joinCodeInput = page.locator('input[readonly]').first();
     const originalCode = await joinCodeInput.inputValue();
 
-    // Click regenerate
-    const regenerateButton = page.locator('button:has-text("Regenerate")');
+    // Click regenerate (labeled "Random" with title "Generate random code")
+    const regenerateButton = page.locator('button[title="Generate random code"], button:has-text("Random")').first();
     await regenerateButton.click();
 
-    // Should show confirmation dialog
-    const confirmButton = page.locator('button:has-text("Regenerate")').last();
+    // Should show confirmation dialog with "Generate" button
+    const confirmButton = page.locator('button:has-text("Generate")').last();
     await expect(confirmButton).toBeVisible({ timeout: 5000 });
 
     // Confirm regeneration
     await confirmButton.click();
     await page.waitForLoadState('networkidle');
 
-    // Should show success toast
-    const successToast = page.locator('text=/regenerated/i');
+    // Should show success toast (may say "updated" or "regenerated")
+    const successToast = page.locator('text=/join code updated|regenerated/i').first();
     await expect(successToast).toBeVisible({ timeout: 5000 });
 
     // Code should be different (unless it's "Not generated")
@@ -257,10 +258,11 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     // Wait for membership settings section
     await expect(page.locator('text=Membership Settings')).toBeVisible({ timeout: 10000 });
 
-    // Find the Accept Membership Requests toggle
-    const toggleLabel = page.locator('text=Accept Membership Requests');
-    const toggleContainer = toggleLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    // Find the Accept Membership Requests toggle container and switch
+    // Structure: <div class="flex flex-row"><div>...<span>Accept Membership Requests</span>...</div><Switch/></div>
+    const toggleContainer = page.locator('div:has(span:text("Accept Membership Requests"))').filter({ has: page.locator('[role="switch"]') }).first();
     const toggle = toggleContainer.locator('[role="switch"]');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
 
     // Get initial state
     const initialState = await toggle.getAttribute('data-state');
@@ -269,8 +271,8 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     await toggle.click();
     await page.waitForLoadState('networkidle');
 
-    // Should show success toast
-    const successToast = page.locator('text=/settings updated/i, text=/membership settings/i');
+    // Should show success toast (message: "Membership settings updated")
+    const successToast = page.locator('text=/Membership settings updated/i').first();
     await expect(successToast).toBeVisible({ timeout: 5000 });
 
     // Toggle state should have changed
@@ -296,8 +298,7 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     await expect(page.locator('text=Membership Settings')).toBeVisible({ timeout: 10000 });
 
     // First ensure Accept Requests is ON (required for Public Directory to be enabled)
-    const acceptLabel = page.locator('text=Accept Membership Requests');
-    const acceptContainer = acceptLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    const acceptContainer = page.locator('div:has(span:text("Accept Membership Requests"))').filter({ has: page.locator('[role="switch"]') }).first();
     const acceptToggle = acceptContainer.locator('[role="switch"]');
     const acceptState = await acceptToggle.getAttribute('data-state');
 
@@ -308,9 +309,9 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     }
 
     // Find the Public Directory toggle
-    const toggleLabel = page.locator('text=Public Directory');
-    const toggleContainer = toggleLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    const toggleContainer = page.locator('div:has(span:text("Public Directory"))').filter({ has: page.locator('[role="switch"]') }).first();
     const toggle = toggleContainer.locator('[role="switch"]');
+    await expect(toggle).toBeVisible({ timeout: 5000 });
 
     // Verify it's not disabled
     const isDisabled = await toggle.isDisabled();
@@ -324,7 +325,7 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     await page.waitForLoadState('networkidle');
 
     // Should show success toast
-    const successToast = page.locator('text=/settings updated/i, text=/membership settings/i');
+    const successToast = page.locator('text=/Membership settings updated/i').first();
     await expect(successToast).toBeVisible({ timeout: 5000 });
 
     // Toggle state should have changed
@@ -349,12 +350,13 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     // Wait for membership settings section
     await expect(page.locator('text=Membership Settings')).toBeVisible({ timeout: 10000 });
 
-    // Turn OFF Accept Requests
-    const acceptLabel = page.locator('text=Accept Membership Requests');
-    const acceptContainer = acceptLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    // Find Accept Requests toggle
+    const acceptContainer = page.locator('div:has(span:text("Accept Membership Requests"))').filter({ has: page.locator('[role="switch"]') }).first();
     const acceptToggle = acceptContainer.locator('[role="switch"]');
+    await expect(acceptToggle).toBeVisible({ timeout: 5000 });
     const acceptState = await acceptToggle.getAttribute('data-state');
 
+    // Turn OFF Accept Requests if needed
     if (acceptState === 'checked') {
       await acceptToggle.click();
       await page.waitForLoadState('networkidle');
@@ -362,15 +364,13 @@ test.describe('Admin Membership Settings - Toggle Switches', () => {
     }
 
     // Check Public Directory is disabled
-    const publicLabel = page.locator('text=Public Directory');
-    const publicContainer = publicLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    const publicContainer = page.locator('div:has(span:text("Public Directory"))').filter({ has: page.locator('[role="switch"]') }).first();
     const publicToggle = publicContainer.locator('[role="switch"]');
     const publicDisabled = await publicToggle.isDisabled();
     expect(publicDisabled).toBe(true);
 
     // Check Auto-Approve is disabled
-    const autoLabel = page.locator('text=Auto-Approve Requests');
-    const autoContainer = autoLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    const autoContainer = page.locator('div:has(span:text("Auto-Approve Requests"))').filter({ has: page.locator('[role="switch"]') }).first();
     const autoToggle = autoContainer.locator('[role="switch"]');
     const autoDisabled = await autoToggle.isDisabled();
     expect(autoDisabled).toBe(true);
@@ -416,9 +416,9 @@ test.describe('Admin Membership Settings - Status Badges', () => {
     await expect(page.locator('text=Membership Settings')).toBeVisible({ timeout: 10000 });
 
     // Find the Accept Membership Requests toggle
-    const acceptLabel = page.locator('text=Accept Membership Requests');
-    const acceptContainer = acceptLabel.locator('xpath=ancestor::div[contains(@class, "flex")]').first();
+    const acceptContainer = page.locator('div:has(span:text("Accept Membership Requests"))').filter({ has: page.locator('[role="switch"]') }).first();
     const acceptToggle = acceptContainer.locator('[role="switch"]');
+    await expect(acceptToggle).toBeVisible({ timeout: 5000 });
 
     // Check initial badge state
     const initialState = await acceptToggle.getAttribute('data-state');

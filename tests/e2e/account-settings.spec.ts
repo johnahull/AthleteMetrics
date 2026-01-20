@@ -41,10 +41,10 @@ const TEST_DATA = {
     new: 'NewPassword456!',
     invalid: {
       tooShort: 'Short1!',
-      noUppercase: 'password123!',
-      noLowercase: 'PASSWORD123!',
-      noNumber: 'Password!',
-      noSpecialChar: 'Password123',
+      noUppercase: 'passwordonly123!',   // 16 chars, no uppercase
+      noLowercase: 'PASSWORDONLY123!',   // 16 chars, no lowercase
+      noNumber: 'PasswordOnlyAbc!',      // 16 chars, no number (must be 12+ to test char requirements)
+      noSpecialChar: 'PasswordOnly1234', // 16 chars, no special char (must be 12+ to test char requirements)
       mismatch: 'MismatchPass123!',
     },
   },
