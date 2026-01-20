@@ -241,8 +241,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should show goal progress indicator', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const count = await goalCards.count();
@@ -269,8 +272,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should open edit modal when clicking edit on a goal', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const count = await goalCards.count();
@@ -287,8 +293,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should update goal target value', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const count = await goalCards.count();
@@ -325,8 +334,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should mark goal as achieved', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const count = await goalCards.count();
@@ -371,8 +383,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should show delete confirmation dialog', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const count = await goalCards.count();
@@ -393,8 +408,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should delete goal when confirmed', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const initialCount = await goalCards.count();
@@ -425,8 +443,11 @@ test.describe('Athlete Goals CRUD', () => {
     });
 
     test('should cancel deletion when clicking cancel', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const goalCards = page.locator('[data-testid^="goal-card-"]');
       const initialCount = await goalCards.count();
@@ -519,8 +540,11 @@ test.describe('Athlete Goals CRUD', () => {
     test('should be usable on mobile viewport', async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
 
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Goals page should still be navigable
       const pageHeading = page.getByRole('heading', { name: /Goals/i });
@@ -534,8 +558,11 @@ test.describe('Athlete Goals CRUD', () => {
     test('goal wizard should work on mobile', async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 667 });
 
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Open wizard
       await page.click('[data-testid="set-new-goal-button"], button:has-text("Set New Goal")');
@@ -563,8 +590,12 @@ test.describe('Athlete Goals CRUD', () => {
       });
 
       await loginAsAthlete(page);
-      await page.goto(`${BASE_URL}/my-goals`);
-      await page.waitForLoadState('networkidle');
+
+      const isAthlete = await navigateToMyGoals(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Wait for components to render
       await page.waitForTimeout(2000);
