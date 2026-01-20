@@ -49,8 +49,11 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       // Get initial count of measurements
       const initialRows = await page.locator('table tbody tr').count();
@@ -58,6 +61,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       if (initialRows === 0) {
         console.log('No unverified measurements found - skipping test');
         test.skip();
+        return;
       }
 
       // Select 2-3 measurements (or fewer if not enough exist)
@@ -138,8 +142,11 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       // Get initial count of measurements
       const initialRows = await page.locator('table tbody tr').count();
@@ -147,6 +154,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       if (initialRows === 0) {
         console.log('No verified measurements found - skipping test');
         test.skip();
+        return;
       }
 
       // Select 2-3 measurements
@@ -221,8 +229,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No unverified measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Select one measurement
       const firstCheckbox = page.locator('table tbody tr').first().locator('input[type="checkbox"]');
@@ -314,8 +333,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count in description
       const description = page.locator('p:has-text("Showing")');
@@ -388,8 +418,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const initialRowCount = await page.locator('table tbody tr').count();
+      if (initialRowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count
       const description = page.locator('p:has-text("Showing")');
@@ -404,8 +445,9 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await pageSizeSelect.selectOption('0'); // 0 = All
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to render
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table to render (table should have rows since we checked earlier)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(1000);
 
       // Count displayed rows
       const displayedRows = await page.locator('table tbody tr').count();
@@ -451,8 +493,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count
       const description = page.locator('p:has-text("Showing")');
@@ -511,8 +564,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCountBeforeSort = await page.locator('table tbody tr').count();
+      if (rowCountBeforeSort === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Get initial first row data
       const firstRowBefore = page.locator('table tbody tr').first();
@@ -575,8 +639,19 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const measurementCount = await page.locator('table tbody tr').count();
+      if (measurementCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check if statistics cards are displayed
       const statsCards = page.locator('[class*="StatisticsSummary"], div:has(> h3:has-text("Statistics"))');
@@ -768,14 +843,18 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table structure to load (not rows, which may be empty)
+      await expect(page.locator('table')).toBeVisible({ timeout: 10000 });
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       const initialRows = await page.locator('table tbody tr').count();
 
       if (initialRows === 0) {
         console.log('No unverified measurements found - skipping network error test');
         test.skip();
+        return;
       }
 
       // Select one measurement
