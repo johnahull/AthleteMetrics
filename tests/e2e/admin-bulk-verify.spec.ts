@@ -30,7 +30,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -119,7 +119,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -292,7 +292,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -366,7 +366,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -429,7 +429,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -489,7 +489,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -553,7 +553,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -620,7 +620,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -706,7 +706,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -746,7 +746,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
