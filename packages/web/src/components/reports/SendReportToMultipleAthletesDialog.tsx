@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useBulkShareReport, useReportShares } from "@/hooks/use-share-report";
 import {
   Dialog,
@@ -50,9 +50,9 @@ export function SendReportToMultipleAthletesDialog({
   }, [sharesData]);
 
   // Create label function for disabled athletes
-  const disabledLabel = (date: Date) => {
+  const disabledLabel = useCallback((date: Date) => {
     return `Sent ${format(date, 'MMM d, yyyy')}`;
-  };
+  }, []);
 
   const alreadySentCount = disabledAthleteIds.size;
   const hasWarning = selectedAthleteIds.length > 100;
