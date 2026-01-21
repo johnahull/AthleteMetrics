@@ -11,6 +11,12 @@ import { storage } from "../storage";
 import { validateAnalyticsRequest } from "../validation/analytics-validation";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import {
+  canViewUserStats,
+  canAccessLeaderboard,
+  canAccessMostImproved,
+  canAccessAtRiskData,
+} from "../permissions/index";
 import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
@@ -64,9 +70,9 @@ export function registerAnalyticsRoutes(app: Express) {
       const userId = req.params.userId;
 
       // Permission check: athletes can only view their own stats
-      // Note: For athletes, user.id IS their athleteId (they are the same)
-      if (user.role === 'athlete' && user.id !== userId) {
-        return res.status(403).json({ message: "Athletes can only view their own statistics" });
+      const statsPermission = canViewUserStats(user, userId);
+      if (!statsPermission.allowed) {
+        return res.status(403).json({ message: statsPermission.reason });
       }
 
       // Permission check: org admins/coaches can only view athletes in their organization
@@ -335,9 +341,9 @@ export function registerAnalyticsRoutes(app: Express) {
       const userId = req.params.userId;
 
       // Permission check: athletes can only view their own stats
-      // Note: For athletes, user.id IS their athleteId (they are the same)
-      if (user.role === 'athlete' && user.id !== userId) {
-        return res.status(403).json({ message: "Athletes can only view their own statistics" });
+      const statsPermission = canViewUserStats(user, userId);
+      if (!statsPermission.allowed) {
+        return res.status(403).json({ message: statsPermission.reason });
       }
 
       // Permission check: org admins/coaches can only view athletes in their organization
@@ -493,9 +499,10 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Athletes cannot access leaderboard (coach/admin feature)
-      if (user.role === 'athlete') {
-        return res.status(403).json({ message: "Access denied - athletes cannot view leaderboards" });
+      // Permission check: only coaches and admins can access leaderboard
+      const leaderboardPermission = canAccessLeaderboard(user);
+      if (!leaderboardPermission.allowed) {
+        return res.status(403).json({ message: leaderboardPermission.reason });
       }
 
       // SECURITY: Get organizationId from query or user's database-validated membership
@@ -596,9 +603,10 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Athletes cannot access most-improved (coach/admin feature)
-      if (user.role === 'athlete') {
-        return res.status(403).json({ message: "Access denied - athletes cannot view improvement rankings" });
+      // Permission check: only coaches and admins can access most-improved
+      const mostImprovedPermission = canAccessMostImproved(user);
+      if (!mostImprovedPermission.allowed) {
+        return res.status(403).json({ message: mostImprovedPermission.reason });
       }
 
       // SECURITY: Get organizationId from query or user's database-validated membership
@@ -699,9 +707,10 @@ export function registerAnalyticsRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Athletes cannot access at-risk data (coach/admin feature)
-      if (user.role === 'athlete') {
-        return res.status(403).json({ message: "Access denied - athletes cannot view at-risk data" });
+      // Permission check: only coaches and admins can access at-risk data
+      const atRiskPermission = canAccessAtRiskData(user);
+      if (!atRiskPermission.allowed) {
+        return res.status(403).json({ message: atRiskPermission.reason });
       }
 
       // SECURITY: Get organizationId from query or user's database-validated membership

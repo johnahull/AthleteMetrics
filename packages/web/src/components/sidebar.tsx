@@ -2,6 +2,8 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SiteSettings, Organization, UserOrganization } from "@shared/schema";
+import { useMyPendingInvitations } from "@/lib/events-api";
+import { useUnreadReportCount } from "@/hooks/use-my-reports";
 import {
   BarChart3,
   Building2,
@@ -21,7 +23,9 @@ import {
   ClipboardCheck,
   Trophy,
   Link,
-  UserPlus
+  UserPlus,
+  Calendar,
+  Ruler
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -36,66 +40,72 @@ import { useContextualLabels } from "@/hooks/useContextualLabels";
 const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   site_admin: {
     default: [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: "Organizations", href: "/organizations", icon: Building2 },
-      { name: "User Management", href: "/user-management", icon: UserCog },
-      { name: "Global Athletes", href: "/global-athletes", icon: Link, testId: "global-athletes-menu-item" },
-      { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item" },
-      { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item" },
-      { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item" },
-      { name: "Sports", href: "/sports", icon: Trophy, testId: "sports-menu-item" },
-      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item" },
-      { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item" }
+      { name: "Dashboard", href: "/", icon: LayoutDashboard, tourId: "dashboard" },
+      { name: "Organizations", href: "/organizations", icon: Building2, tourId: "organizations" },
+      { name: "User Management", href: "/user-management", icon: UserCog, tourId: "user-management" },
+      { name: "Global Athletes", href: "/global-athletes", icon: Link, testId: "global-athletes-menu-item", tourId: "global-athletes" },
+      { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item", tourId: "admin-measurements" },
+      { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item", tourId: "wellness-templates" },
+      { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item", tourId: "metrics" },
+      { name: "Sports", href: "/sports", icon: Trophy, testId: "sports-menu-item", tourId: "sports" },
+      { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item", tourId: "benchmarks" },
+      { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item", tourId: "site-settings" }
     ],
     organization_context: [
-      { name: "Dashboard", href: "/", icon: LayoutDashboard },
-      { name: teamLabel, href: "/teams", icon: Users },
-      { name: athletesLabel, href: "/athletes", icon: UsersRound },
-      { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-      { name: "Wellness", href: "/wellness", icon: Heart },
-      { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
-      { name: "Reports", href: "/reports", icon: ClipboardList },
-      { name: "Measurements", href: "/publish", icon: FileCheck },
-      { name: "Import/Export", href: "/import-export", icon: FileText },
-      { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
+      { name: "Dashboard", href: "/", icon: LayoutDashboard, tourId: "dashboard" },
+      { name: teamLabel, href: "/teams", icon: Users, tourId: "teams" },
+      { name: athletesLabel, href: "/athletes", icon: UsersRound, tourId: "athletes" },
+      { name: "Data Entry", href: "/data-entry", icon: PlusCircle, tourId: "data-entry" },
+      { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
+      { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
+      { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+      { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
+      { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+      { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
+      { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
     ]
   },
   org_admin: [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: teamLabel, href: "/teams", icon: Users },
-    { name: athletesLabel, href: "/athletes", icon: UsersRound },
-    { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-    { name: "Wellness", href: "/wellness", icon: Heart },
-    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
-    { name: "Reports", href: "/reports", icon: ClipboardList },
-    { name: "Measurements", href: "/publish", icon: FileCheck },
-    { name: "Import/Export", href: "/import-export", icon: FileText },
-    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target },
-    { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings }
+    { name: "Dashboard", href: "/", icon: LayoutDashboard, tourId: "dashboard" },
+    { name: teamLabel, href: "/teams", icon: Users, tourId: "teams" },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound, tourId: "athletes" },
+    { name: "Data Entry", href: "/data-entry", icon: PlusCircle, tourId: "data-entry" },
+    { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
+    { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
+    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
+    { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+    { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
+    { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler, tourId: "metrics" },
+    { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings, tourId: "settings" }
   ],
   coach: [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: teamLabel, href: "/teams", icon: Users },
-    { name: athletesLabel, href: "/athletes", icon: UsersRound },
-    { name: "Data Entry", href: "/data-entry", icon: PlusCircle },
-    { name: "Wellness", href: "/wellness", icon: Heart },
-    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp },
-    { name: "Reports", href: "/reports", icon: ClipboardList },
-    { name: "Measurements", href: "/publish", icon: FileCheck },
-    { name: "Import/Export", href: "/import-export", icon: FileText },
-    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target }
+    { name: "Dashboard", href: "/", icon: LayoutDashboard, tourId: "dashboard" },
+    { name: teamLabel, href: "/teams", icon: Users, tourId: "teams" },
+    { name: athletesLabel, href: "/athletes", icon: UsersRound, tourId: "athletes" },
+    { name: "Data Entry", href: "/data-entry", icon: PlusCircle, tourId: "data-entry" },
+    { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
+    { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
+    { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
+    { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+    { name: "Import/Export", href: "/import-export", icon: FileText, tourId: "import-export" },
+    { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
   ],
-  athlete: [
-    { name: "My Profile", href: "/my-profile", icon: UsersRound },
-    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard },
-    { name: "My Measurements", href: "/my-measurements", icon: ClipboardList },
-    { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users },
-    { name: "My Goals", href: "/my-goals", icon: Target },
-    { name: "Join Organization", href: "/join", icon: UserPlus }
+  athlete: (invitationBadge?: number, reportBadge?: number) => [
+    { name: "My Profile", href: "/my-profile", icon: UsersRound, tourId: "my-profile" },
+    { name: "Dashboard", href: "/my-dashboard", icon: LayoutDashboard, tourId: "my-dashboard" },
+    { name: "My Measurements", href: "/my-measurements", icon: ClipboardList, tourId: "my-measurements" },
+    { name: "My Reports", href: "/my-reports", icon: FileText, badge: reportBadge, tourId: "my-reports" },
+    { name: "My Events", href: "/my-events", icon: Calendar, badge: invitationBadge, tourId: "my-events" },
+    { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users, tourId: "peer-comparison" },
+    { name: "My Goals", href: "/my-goals", icon: Target, tourId: "my-goals" },
+    { name: "Join Organization", href: "/join", icon: UserPlus, tourId: "join-organization" }
   ]
 });
 
-const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes") => {
+const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number, reportBadge?: number) => {
   // Get navigation configs with contextual labels
   const NAVIGATION_CONFIGS = getNavigationConfigs(teamLabel, athletesLabel);
 
@@ -104,7 +114,7 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     const config = isInOrganizationContext
       ? NAVIGATION_CONFIGS.site_admin.organization_context
       : NAVIGATION_CONFIGS.site_admin.default;
-    
+
     // Add organization context link if needed
     if (isInOrganizationContext && organizationContext) {
       return [
@@ -117,7 +127,11 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
 
   // Get base navigation for role
   const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
-  let navigation = Array.isArray(baseConfig) ? [...baseConfig] : [...baseConfig.default];
+  let navigation = Array.isArray(baseConfig)
+    ? [...baseConfig]
+    : typeof baseConfig === 'function'
+    ? baseConfig(invitationBadge, reportBadge)
+    : [...baseConfig.default];
   
   // Athletes now use the static /my-profile and /my-dashboard routes
   // No special handling needed - routes are already in the NAVIGATION_CONFIGS
@@ -136,6 +150,14 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     const benchmarksIndex = navigation.findIndex(item => item.name === "Benchmarks");
     if (benchmarksIndex !== -1) {
       navigation[benchmarksIndex].href = `/organizations/${userOrganizations[0].organizationId}/benchmarks`;
+    }
+  }
+
+  // Update metrics link with organization ID for org_admin
+  if (role === "org_admin" && userOrganizations?.[0]?.organizationId) {
+    const metricsIndex = navigation.findIndex(item => item.name === "Metrics");
+    if (metricsIndex !== -1) {
+      navigation[metricsIndex].href = `/organizations/${userOrganizations[0].organizationId}/metrics`;
     }
   }
 
@@ -185,6 +207,12 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
   });
 
+  // Fetch pending invitations for athletes only
+  const { data: pendingInvitations } = useMyPendingInvitations();
+
+  // Fetch unread report count for athletes only
+  const { data: unreadReportCount } = useUnreadReportCount();
+
   // Use the role from user session data
   const userRole = userData?.role || 'athlete';
   const isSiteAdmin = userData?.isSiteAdmin === true || userData?.role === "site_admin";
@@ -193,7 +221,13 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   const orgIdFromUrl = location.match(/\/organizations\/([^\/]+)/)?.[1];
   const isInOrganizationContext = !!orgIdFromUrl;
 
-  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes);
+  // Calculate invitation badge count for athletes
+  const invitationBadge = userRole === 'athlete' ? (pendingInvitations?.length || 0) : undefined;
+
+  // Calculate report badge count for athletes
+  const reportBadge = userRole === 'athlete' ? (unreadReportCount || 0) : undefined;
+
+  let navigation = getNavigation(userRole, isSiteAdmin, isInOrganizationContext, userData, userOrganizations as any[], orgIdFromUrl, labels.teams, labels.athletes, invitationBadge, reportBadge);
 
   // Filter out Wellness link if wellness module is disabled
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
@@ -202,6 +236,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
 
   if (!isWellnessEnabled) {
     navigation = navigation.filter(item => item.name !== "Wellness");
+  }
+
+  // Filter out Events link if events module is disabled for organization
+  const eventsEnabled = organization?.eventsEnabled ?? false;
+  if (!eventsEnabled) {
+    navigation = navigation.filter(item =>
+      item.name !== "Events" && item.name !== "My Events"
+    );
   }
 
   return (

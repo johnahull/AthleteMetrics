@@ -18,11 +18,11 @@ The `organization_id` on measurements enables:
 
 ### For Testing Environment (Already Complete)
 ```bash
-# 1. Push schema changes
-DATABASE_URL="postgresql://postgres:rdnrfZfXPiZWKbahqepvoYnYerNoLiRG@maglev.proxy.rlwy.net:29985/railway" npm run db:push
+# 1. Push schema changes (set DATABASE_URL from your .env file)
+npm run db:push
 
 # 2. Backfill data
-PGPASSWORD=rdnrfZfXPiZWKbahqepvoYnYerNoLiRG psql -h maglev.proxy.rlwy.net -p 29985 -U postgres -d railway -c "
+psql "$DATABASE_URL" -c "
 UPDATE measurements m
 SET organization_id = (
   SELECT uo.organization_id

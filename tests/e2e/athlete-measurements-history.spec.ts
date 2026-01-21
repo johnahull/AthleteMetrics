@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, Page } from '@playwright/test';
 import { loginAsAthlete } from './helpers/auth';
 
 /**
@@ -12,9 +12,30 @@ import { loginAsAthlete } from './helpers/auth';
  * - Cannot edit verified or coach-submitted measurements
  * - CSV export of measurement history
  * - Measurement timeline showing recent activity
+ *
+ * NOTE: In CI environments, all roles may use the same admin account.
+ * Admin users don't have an athleteId, so athlete-specific pages redirect.
+ * Tests will be skipped when the test user isn't actually an athlete.
  */
 
-const BASE_URL = process.env.STAGING_URL || 'http://localhost:5000';
+const BASE_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
+
+/**
+ * Helper to navigate to my-measurements and check if user is actually an athlete.
+ * Returns true if on my-measurements, false if redirected (user isn't an athlete).
+ */
+async function navigateToMyMeasurements(page: Page): Promise<boolean> {
+  await page.goto(`${BASE_URL}/my-measurements`);
+  await page.waitForLoadState('networkidle');
+  await page.waitForTimeout(500);
+
+  const url = page.url();
+  if (!url.includes('/my-measurements')) {
+    console.log('User is not an athlete (redirected to:', url, ') - skipping athlete-specific test');
+    return false;
+  }
+  return true;
+}
 
 test.describe('Athlete Measurements History', () => {
   test.beforeEach(async ({ page }) => {
@@ -24,8 +45,11 @@ test.describe('Athlete Measurements History', () => {
 
   test.describe('Measurement History Table', () => {
     test('should display measurement history table', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Check for table presence
       const table = page.locator('[data-testid="measurement-history-table"]');
@@ -39,8 +63,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should filter measurements by metric', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Open metric filter dropdown
       const metricFilter = page.locator('[data-testid="metric-filter"]');
@@ -63,8 +90,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should filter measurements by verification status', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Click verified filter
       const verifiedFilter = page.locator('[data-testid="verified-filter"]');
@@ -80,8 +110,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should sort measurements by date', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Click date column header to sort
       const dateHeader = page.getByRole('columnheader', { name: /Date/i });
@@ -97,8 +130,11 @@ test.describe('Athlete Measurements History', () => {
 
   test.describe('Measurement Progress Chart', () => {
     test('should display progress chart for a metric', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Look for chart component
       const chart = page.locator('[data-testid="measurement-progress-chart"]');
@@ -113,8 +149,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should show trend line toggle when sufficient data exists', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Select a metric with multiple data points
       const metricFilter = page.locator('[data-testid="metric-filter"]');
@@ -135,8 +174,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should toggle trend line on chart', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const trendToggle = page.locator('[data-testid="trend-line-toggle"]');
 
@@ -154,8 +196,11 @@ test.describe('Athlete Measurements History', () => {
 
   test.describe('Measurement Timeline', () => {
     test('should display recent activity timeline', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const timeline = page.locator('[data-testid="measurement-timeline"]');
       const rows = page.locator('[data-testid^="measurement-row-"]');
@@ -168,8 +213,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should show recent measurements in timeline', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const timelineItems = page.locator('[data-testid^="timeline-item-"]');
       const count = await timelineItems.count();
@@ -187,8 +235,11 @@ test.describe('Athlete Measurements History', () => {
 
   test.describe('CSV Export', () => {
     test('should have CSV export button', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const exportButton = page.locator('[data-testid="csv-export-button"]');
       await expect(exportButton).toBeVisible();
@@ -196,8 +247,11 @@ test.describe('Athlete Measurements History', () => {
     });
 
     test('should trigger download when export clicked', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       // Wait for download
       const downloadPromise = page.waitForEvent('download');
@@ -215,16 +269,22 @@ test.describe('Athlete Measurements History', () => {
 
   test.describe('Navigation', () => {
     test('should have link to add measurement page', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const addButton = page.locator('[data-testid="add-measurement-button"]');
       await expect(addButton).toBeVisible();
     });
 
     test('should navigate to add measurement page', async ({ page }) => {
-      await page.goto(`${BASE_URL}/my-measurements`);
-      await page.waitForLoadState('networkidle');
+      const isAthlete = await navigateToMyMeasurements(page);
+      if (!isAthlete) {
+        test.skip();
+        return;
+      }
 
       const addButton = page.locator('[data-testid="add-measurement-button"]');
       await addButton.click();

@@ -176,25 +176,42 @@ test.describe('Wellness Athlete Dropdown Selector', () => {
   });
 
   test.afterAll(async ({ browser }) => {
-    // Cleanup
+    // Cleanup - skip if setup didn't complete (variables are undefined)
+    if (!testOrgId) {
+      console.log('Skipping cleanup - test setup did not complete');
+      return;
+    }
+
     const context = await browser.newContext();
     const page = await context.newPage();
     await loginAsDefaultUser(page);
 
     try {
-      // Delete template
-      await page.request.delete(
-        `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${testTemplate.id}`
-      );
+      // Delete template (only if it was created)
+      if (testTemplate?.id) {
+        await page.request.delete(
+          `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${testTemplate.id}`
+        );
+      }
 
-      // Delete athletes
-      await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete1.id}`);
-      await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete2.id}`);
-      await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete3.id}`);
+      // Delete athletes (only if they were created)
+      if (athlete1?.id) {
+        await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete1.id}`);
+      }
+      if (athlete2?.id) {
+        await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete2.id}`);
+      }
+      if (athlete3?.id) {
+        await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/athletes/${athlete3.id}`);
+      }
 
-      // Delete teams
-      await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/teams/${team1.id}`);
-      await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/teams/${team2.id}`);
+      // Delete teams (only if they were created)
+      if (team1?.id) {
+        await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/teams/${team1.id}`);
+      }
+      if (team2?.id) {
+        await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}/teams/${team2.id}`);
+      }
 
       // Delete organization
       await page.request.delete(`${BASE_URL}/api/organizations/${testOrgId}`);

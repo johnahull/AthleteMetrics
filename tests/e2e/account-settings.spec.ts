@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { loginAs, loginWithCredentials, logout } from './helpers/auth';
 import { navigateTo, expectCurrentUrl } from './helpers/navigation';
 import { clickWithMultipleFallbacks } from './helpers/selectors';
+import { canTestRoleAuthorization } from './fixtures/test-users';
 
 /**
  * E2E Test: Account Settings (Profile & Password Management)
@@ -40,10 +41,10 @@ const TEST_DATA = {
     new: 'NewPassword456!',
     invalid: {
       tooShort: 'Short1!',
-      noUppercase: 'password123!',
-      noLowercase: 'PASSWORD123!',
-      noNumber: 'Password!',
-      noSpecialChar: 'Password123',
+      noUppercase: 'passwordonly123!',   // 16 chars, no uppercase
+      noLowercase: 'PASSWORDONLY123!',   // 16 chars, no lowercase
+      noNumber: 'PasswordOnlyAbc!',      // 16 chars, no number (must be 12+ to test char requirements)
+      noSpecialChar: 'PasswordOnly1234', // 16 chars, no special char (must be 12+ to test char requirements)
       mismatch: 'MismatchPass123!',
     },
   },
@@ -65,9 +66,9 @@ test.describe('Account Settings - Profile Management', () => {
     // Verify page title/heading is present
     await expect(page.locator('h1:has-text("Profile Settings")')).toBeVisible({ timeout: 10000 });
 
-    // Verify main sections are visible
-    await expect(page.locator('text=/Personal Information/i')).toBeVisible();
-    await expect(page.locator('text=/Security Settings/i')).toBeVisible();
+    // Verify main sections are visible - use .first() to handle multiple matches in strict mode
+    await expect(page.locator('text=/Personal Information/i').first()).toBeVisible();
+    await expect(page.locator('text=/Security Settings/i').first()).toBeVisible();
   });
 
   test('should display current user information', async ({ page }) => {
@@ -126,7 +127,7 @@ test.describe('Account Settings - Profile Management', () => {
     await page.click('[data-testid="button-update-profile"]');
 
     // Wait for success message (toast notification)
-    await expect(page.locator('text=/Profile updated successfully|Success/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Profile updated successfully|Success/i').first()).toBeVisible({ timeout: 10000 });
 
     // Verify the form now shows updated values
     await expect(firstNameInput).toHaveValue(TEST_DATA.firstName.updated);
@@ -145,7 +146,7 @@ test.describe('Account Settings - Profile Management', () => {
     await page.locator('[data-testid="input-profile-lastName"]').clear();
     await page.locator('[data-testid="input-profile-lastName"]').fill(originalLastName);
     await page.click('[data-testid="button-update-profile"]');
-    await expect(page.locator('text=/Profile updated successfully|Success/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Profile updated successfully|Success/i').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should validate required fields for profile update', async ({ page }) => {
@@ -227,7 +228,7 @@ test.describe('Account Settings - Password Management', () => {
     await page.click('[data-testid="button-save-password"]');
 
     // Should show validation error about password length
-    await expect(page.locator('text=/must be at least 12 characters/i')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('text=/must be at least 12 characters/i').first()).toBeVisible({ timeout: 5000 });
   });
 
   test('should validate password complexity requirements', async ({ page }) => {
@@ -397,7 +398,7 @@ test.describe('Account Settings - Email Verification', () => {
 
   test('should display email verification status', async ({ page }) => {
     // Wait for security settings section
-    await expect(page.locator('text=/Security Settings/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Security Settings/i').first()).toBeVisible({ timeout: 10000 });
 
     // Email status should be displayed
     await expect(page.locator('text=/Email Status:/i')).toBeVisible();
@@ -412,7 +413,7 @@ test.describe('Account Settings - Email Verification', () => {
 
   test('should show send verification email button if email is not verified', async ({ page }) => {
     // Wait for page to load
-    await expect(page.locator('text=/Security Settings/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Security Settings/i').first()).toBeVisible({ timeout: 10000 });
 
     // Check if email is not verified
     const notVerifiedCount = await page.locator('text=/Not Verified/i').count();
@@ -500,7 +501,7 @@ test.describe('Account Settings - Session Persistence', () => {
     await firstNameInput.clear();
     await firstNameInput.fill('SessionTest');
     await page.click('[data-testid="button-update-profile"]');
-    await expect(page.locator('text=/Success/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Success/i').first()).toBeVisible({ timeout: 10000 });
 
     // Navigate to another page
     await navigateTo(page, '/dashboard');
@@ -520,7 +521,7 @@ test.describe('Account Settings - Session Persistence', () => {
     await firstNameInput.clear();
     await firstNameInput.fill(originalValue);
     await page.click('[data-testid="button-update-profile"]');
-    await expect(page.locator('text=/Success/i')).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('text=/Success/i').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('should maintain session after page refresh on profile page', async ({ page }) => {
@@ -544,6 +545,10 @@ test.describe('Account Settings - Session Persistence', () => {
 
 test.describe('Account Settings - Role-Specific Views', () => {
   test('should show athlete role in security settings for athlete user', async ({ page }) => {
+    // Skip if athlete and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('athlete', 'site_admin'),
+      'Skipping: athlete and site_admin share same credentials in this environment');
+
     await loginAs(page, 'athlete');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');
@@ -552,10 +557,14 @@ test.describe('Account Settings - Role-Specific Views', () => {
     await expect(page.locator('text=/Role:/i')).toBeVisible({ timeout: 10000 });
 
     // Should show "Athlete" role (case-insensitive)
-    await expect(page.locator('text=/Athlete/i')).toBeVisible();
+    await expect(page.locator('text=/Athlete/i').first()).toBeVisible();
   });
 
   test('should show coach role in security settings for coach user', async ({ page }) => {
+    // Skip if coach and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('coach', 'site_admin'),
+      'Skipping: coach and site_admin share same credentials in this environment');
+
     await loginAs(page, 'coach');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');
@@ -568,6 +577,10 @@ test.describe('Account Settings - Role-Specific Views', () => {
   });
 
   test('should show org admin role in security settings for org admin user', async ({ page }) => {
+    // Skip if org_admin and site_admin share same credentials (can't test role-specific display)
+    test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+      'Skipping: org_admin and site_admin share same credentials in this environment');
+
     await loginAs(page, 'org_admin');
     await navigateTo(page, '/profile');
     await page.waitForLoadState('networkidle');

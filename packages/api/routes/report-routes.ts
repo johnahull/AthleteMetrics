@@ -13,23 +13,29 @@ import {
   reports,
   reportSnapshots,
   reportBenchmarks,
+  reportShares,
   insertReportBenchmarkSchema,
   insertReportSnapshotSchema,
   users,
   organizations,
   teams,
   auditLogs,
+  userOrganizations,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { db } from "../db";
-import { eq, and, desc, asc, sql, inArray, type SQL } from "drizzle-orm";
+import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { requireRole } from "../permissions/middleware";
+import { emailService } from "../services/email-service";
+import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
+import { notificationPreferences } from "@shared/schema";
 
 // Type guards for report configs
 interface IndividualReportConfig {
@@ -100,6 +106,20 @@ function isTeamReportConfig(config: unknown): config is TeamReportConfig {
   );
 }
 
+// Zod validation schemas for report sharing
+const shareReportSchema = z.object({
+  athleteId: z.string().uuid(),
+  message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
+});
+
+const bulkShareReportSchema = z.object({
+  athleteIds: z.array(z.string().uuid()).optional(),
+  message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
+});
+
+// Maximum athletes that can be shared with in a single bulk request
+const MAX_BULK_SHARE = 100;
+
 // PDF Generation Constants
 const PDF_LIMITS = {
   MAX_ATHLETES_PER_METRIC: 50,
@@ -114,6 +134,10 @@ const reportLimiter = rateLimit({
   message: { message: "Too many report requests, please try again later." },
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`Rate limit exceeded for report endpoints - IP: ${req.ip}, User: ${req.session.user?.id || 'unauthenticated'}`);
+    res.status(429).json({ message: "Too many report requests, please try again later." });
+  },
 });
 
 // Stricter rate limiting for report generation and PDF export (expensive operations)
@@ -1105,9 +1129,9 @@ export function registerReportRoutes(app: Express) {
    * Generate AI coaching insights for a report
    * POST /api/reports/:id/generate-insights
    *
-   * Requires: AI enabled for organization (both flags)
+   * Requires: Coach or above role, AI enabled for organization (both flags)
    */
-  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.post("/api/reports/:id/generate-insights", aiGenerationLimiter, requireAuth, requireRole('coach'), requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const reportId = req.params.id;
       const user = req.session?.user || req.user;
@@ -1250,9 +1274,9 @@ export function registerReportRoutes(app: Express) {
    * Update coaching insights for a report (manual edit)
    * PATCH /api/reports/:id/insights
    *
-   * Requires: AI enabled for organization (both flags)
+   * Requires: Coach or above role, AI enabled for organization (both flags)
    */
-  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireAIEnabled, async (req: AuthenticatedRequest, res) => {
+  app.patch("/api/reports/:id/insights", reportLimiter, requireAuth, requireRole('coach'), requireAIEnabled, async (req: AuthenticatedRequest, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -1336,6 +1360,956 @@ export function registerReportRoutes(app: Express) {
       });
     }
   });
+
+  /**
+   * Share a report with a single athlete
+   * POST /api/reports/:id/share
+   */
+  app.post(
+    "/api/reports/:id/share",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Validate request body
+        const validatedData = shareReportSchema.parse(req.body);
+        const { athleteId, message } = validatedData;
+
+        // Get report
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Verify athlete exists and is in same organization
+        const athleteOrgMemberships = await db
+          .select()
+          .from(userOrganizations)
+          .where(
+            and(
+              eq(userOrganizations.userId, athleteId),
+              eq(userOrganizations.organizationId, report.organizationId)
+            )
+          )
+          .limit(1);
+
+        if (athleteOrgMemberships.length === 0) {
+          return res
+            .status(400)
+            .json({ message: "Athlete not found in this organization" });
+        }
+
+        // Verify that the user is actually an athlete (not a coach or admin)
+        const userRoles = await storage.getUserRoles(athleteId, report.organizationId);
+        if (!userRoles.includes('athlete')) {
+          return res
+            .status(400)
+            .json({ message: "User must be an athlete to receive report shares" });
+        }
+
+        // Get athlete details (including email for notifications)
+        const athlete = await db
+          .select({
+            firstName: users.firstName,
+            lastName: users.lastName,
+            fullName: users.fullName,
+            emails: users.emails,
+          })
+          .from(users)
+          .where(eq(users.id, athleteId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!athlete) {
+          return res.status(400).json({ message: "Athlete not found" });
+        }
+
+        // Attempt to create share
+        try {
+          const [share] = await db
+            .insert(reportShares)
+            .values({
+              reportId,
+              athleteId,
+              sharedBy: user.id,
+              organizationId: report.organizationId,
+              message: message || null,
+            })
+            .returning();
+
+          // Send notifications (non-blocking - don't fail if notifications fail)
+          let emailSent = false;
+          let pushSent = false;
+
+          try {
+            // Get athlete's notification preferences
+            const prefs = await db
+              .select()
+              .from(notificationPreferences)
+              .where(eq(notificationPreferences.userId, athleteId))
+              .limit(1)
+              .then((rows) => rows[0]);
+
+            // Use defaults if no preferences exist
+            const pushEnabled = prefs?.pushEnabled ?? true;
+            const emailEnabled = prefs?.emailEnabled ?? true;
+            const pushReportShared = prefs?.pushReportShared ?? true;
+            const emailReportShared = prefs?.emailReportShared ?? true;
+
+            // Get coach and organization details for notification
+            const coach = await db
+              .select({ fullName: users.fullName })
+              .from(users)
+              .where(eq(users.id, user.id))
+              .limit(1)
+              .then((rows) => rows[0]);
+
+            const organization = await db
+              .select({ name: organizations.name })
+              .from(organizations)
+              .where(eq(organizations.id, report.organizationId))
+              .limit(1)
+              .then((rows) => rows[0]);
+
+            // Send email notification if enabled
+            if (emailEnabled && emailReportShared && athlete.emails && athlete.emails.length > 0) {
+              try {
+                const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+                emailSent = await emailService.sendReportSharedNotification(athlete.emails[0], {
+                  athleteName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+                  coachName: coach?.fullName || 'Your coach',
+                  organizationName: organization?.name || 'Your organization',
+                  reportName: report.name,
+                  message: message || undefined,
+                  viewUrl: `${appUrl}/my-reports`,
+                });
+              } catch (emailError) {
+                console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+              }
+            }
+
+            // Send push notification if enabled
+            if (pushEnabled && pushReportShared) {
+              try {
+                const pushService = getPushNotificationService(db);
+                const notificationPayload: NotificationPayload = {
+                  type: 'report_shared',
+                  title: 'New Performance Report',
+                  body: `${coach?.fullName || 'Your coach'} shared "${report.name}" with you`,
+                  url: '/my-reports',
+                  data: {
+                    shareId: share.id,
+                    reportId: share.reportId,
+                  },
+                };
+                const result = await pushService.sendToUser(athleteId, notificationPayload, report.organizationId);
+                pushSent = result.successful > 0;
+              } catch (pushError) {
+                console.error(`Failed to send push notification to athlete ${athleteId}:`, pushError);
+              }
+            }
+          } catch (notificationError) {
+            console.error('Failed to send notifications:', notificationError);
+            // Don't fail the request if notifications fail
+          }
+
+          res.status(201).json({
+            shareId: share.id,
+            athleteName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+            notificationSent: emailSent || pushSent,
+          });
+        } catch (insertError: any) {
+          // Check for unique constraint violation
+          if (insertError.code === '23505') { // PostgreSQL unique violation
+            return res.status(409).json({
+              message: "Report already shared with this athlete",
+            });
+          }
+          throw insertError;
+        }
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error sharing report:", error);
+        res.status(500).json({ message: "Failed to share report" });
+      }
+    }
+  );
+
+  /**
+   * Share a report with multiple athletes (bulk)
+   * POST /api/reports/:id/share-bulk
+   */
+  app.post(
+    "/api/reports/:id/share-bulk",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Validate request body
+        const validatedData = bulkShareReportSchema.parse(req.body);
+        const { athleteIds, message } = validatedData;
+
+        // Get report
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Determine target athletes
+        let targetAthleteIds: string[];
+
+        if (athleteIds && athleteIds.length > 0) {
+          // Use provided athlete IDs
+          targetAthleteIds = athleteIds;
+        } else {
+          // Get all athletes in the report's organization
+          const orgAthletes = await db
+            .select({ userId: userOrganizations.userId })
+            .from(userOrganizations)
+            .where(
+              and(
+                eq(userOrganizations.organizationId, report.organizationId),
+                eq(userOrganizations.role, 'athlete')
+              )
+            );
+
+          targetAthleteIds = orgAthletes.map((a) => a.userId);
+        }
+
+        if (targetAthleteIds.length === 0) {
+          return res.status(400).json({
+            message: "No athletes to share with",
+          });
+        }
+
+        // Enforce bulk share limit
+        if (targetAthleteIds.length > MAX_BULK_SHARE) {
+          return res.status(400).json({
+            message: `Cannot share with more than ${MAX_BULK_SHARE} athletes at once. Requested: ${targetAthleteIds.length}`,
+          });
+        }
+
+        // Batch verify organization membership AND athlete role (fixes N+1 query)
+        const orgMemberships = await db
+          .select({ userId: userOrganizations.userId, role: userOrganizations.role })
+          .from(userOrganizations)
+          .where(
+            and(
+              inArray(userOrganizations.userId, targetAthleteIds),
+              eq(userOrganizations.organizationId, report.organizationId),
+              eq(userOrganizations.role, 'athlete')
+            )
+          );
+        const validAthleteSet = new Set(orgMemberships.map((m) => m.userId));
+
+        // Get athlete names and emails for notifications
+        const athletes = await db
+          .select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            fullName: users.fullName,
+            emails: users.emails,
+          })
+          .from(users)
+          .where(inArray(users.id, targetAthleteIds));
+
+        const athleteMap = new Map(
+          athletes.map((a) => [
+            a.id,
+            a.fullName || `${a.firstName} ${a.lastName}`,
+          ])
+        );
+
+        // Get existing shares to avoid duplicates
+        const existingShares = await db
+          .select({ athleteId: reportShares.athleteId })
+          .from(reportShares)
+          .where(
+            and(
+              eq(reportShares.reportId, reportId),
+              inArray(reportShares.athleteId, targetAthleteIds)
+            )
+          );
+
+        const alreadySharedSet = new Set(
+          existingShares.map((s) => s.athleteId)
+        );
+
+        // Process shares - prepare data first, then insert in a transaction
+        const results: Array<{
+          athleteId: string;
+          athleteName: string;
+          status: 'shared' | 'skipped' | 'already_shared' | 'failed';
+          reason?: string;
+        }> = [];
+
+        let skipped = 0;
+        let alreadyShared = 0;
+
+        // Prepare list of shares to insert
+        const sharesToInsert: Array<{
+          reportId: string;
+          athleteId: string;
+          sharedBy: string;
+          organizationId: string;
+          message: string | null;
+        }> = [];
+
+        for (const athleteId of targetAthleteIds) {
+          const athleteName = athleteMap.get(athleteId) || 'Unknown Athlete';
+
+          // Skip if already shared
+          if (alreadySharedSet.has(athleteId)) {
+            results.push({
+              athleteId,
+              athleteName,
+              status: 'already_shared',
+            });
+            alreadyShared++;
+            continue;
+          }
+
+          // Verify athlete is in the organization (using pre-fetched set)
+          if (!validAthleteSet.has(athleteId)) {
+            results.push({
+              athleteId,
+              athleteName,
+              status: 'skipped',
+              reason: 'Not in organization',
+            });
+            skipped++;
+            continue;
+          }
+
+          // Add to batch insert
+          sharesToInsert.push({
+            reportId,
+            athleteId,
+            sharedBy: user.id,
+            organizationId: report.organizationId,
+            message: message || null,
+          });
+        }
+
+        // Insert all shares in a single transaction for consistency
+        let shared = 0;
+        if (sharesToInsert.length > 0) {
+          try {
+            await db.transaction(async (tx) => {
+              await tx.insert(reportShares).values(sharesToInsert);
+            });
+
+            // Mark all as shared in results
+            for (const share of sharesToInsert) {
+              const athleteName = athleteMap.get(share.athleteId) || 'Unknown Athlete';
+              results.push({
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'shared',
+              });
+              shared++;
+            }
+
+            // Send notifications to all athletes (non-blocking)
+            // Note: For large bulk shares (e.g., 100 athletes), this runs sequentially
+            // but doesn't block the response. Consider moving to background job queue
+            // for production if notification volume becomes an issue.
+            if (sharesToInsert.length > 0) {
+              // Get coach details once for all notifications
+              const coach = await db
+                .select({ fullName: users.fullName })
+                .from(users)
+                .where(eq(users.id, user.id))
+                .limit(1)
+                .then((rows) => rows[0]);
+
+              const organization = await db
+                .select({ name: organizations.name })
+                .from(organizations)
+                .where(eq(organizations.id, report.organizationId))
+                .limit(1)
+                .then((rows) => rows[0]);
+
+              const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+
+              // Send notifications asynchronously (fire and forget)
+              // Note: Notification failures are logged but don't block the response.
+              // Athletes can still see shared reports in "My Reports" even if notifications fail.
+              Promise.all(
+                sharesToInsert.map(async (share) => {
+                  try {
+                    // Get athlete's notification preferences
+                    const prefs = await db
+                      .select()
+                      .from(notificationPreferences)
+                      .where(eq(notificationPreferences.userId, share.athleteId))
+                      .limit(1)
+                      .then((rows) => rows[0]);
+
+                    const pushEnabled = prefs?.pushEnabled ?? true;
+                    const emailEnabled = prefs?.emailEnabled ?? true;
+                    const pushReportShared = prefs?.pushReportShared ?? true;
+                    const emailReportShared = prefs?.emailReportShared ?? true;
+
+                    // Get athlete details
+                    const athlete = athletes.find((a) => a.id === share.athleteId);
+                    if (!athlete) return;
+
+                    // Send email notification
+                    if (emailEnabled && emailReportShared && athlete.emails && athlete.emails.length > 0) {
+                      try {
+                        await emailService.sendReportSharedNotification(athlete.emails[0], {
+                          athleteName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+                          coachName: coach?.fullName || 'Your coach',
+                          organizationName: organization?.name || 'Your organization',
+                          reportName: report.name,
+                          message: share.message || undefined,
+                          viewUrl: `${appUrl}/my-reports`,
+                        });
+                      } catch (emailError) {
+                        console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                      }
+                    }
+
+                    // Send push notification
+                    if (pushEnabled && pushReportShared) {
+                      try {
+                        const pushService = getPushNotificationService(db);
+                        const notificationPayload: NotificationPayload = {
+                          type: 'report_shared',
+                          title: 'New Performance Report',
+                          body: `${coach?.fullName || 'Your coach'} shared "${report.name}" with you`,
+                          url: '/my-reports',
+                          data: {
+                            reportId: share.reportId,
+                          },
+                        };
+                        await pushService.sendToUser(share.athleteId, notificationPayload, report.organizationId);
+                      } catch (pushError) {
+                        console.error(`Failed to send push notification to athlete ${share.athleteId}:`, pushError);
+                      }
+                    }
+                  } catch (notificationError) {
+                    console.error(`Failed to send notifications to athlete ${share.athleteId}:`, notificationError);
+                  }
+                })
+              ).catch((err) => {
+                console.error('Error in bulk notification sending:', err);
+              });
+            }
+          } catch (shareError: any) {
+            console.error('Failed to bulk insert shares:', shareError);
+            // If transaction fails, mark all as failed
+            for (const share of sharesToInsert) {
+              const athleteName = athleteMap.get(share.athleteId) || 'Unknown Athlete';
+              results.push({
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'failed',
+                reason: shareError.message || 'Database transaction failed',
+              });
+            }
+          }
+        }
+
+        res.status(200).json({
+          totalRequested: targetAthleteIds.length,
+          shared,
+          skipped,
+          alreadyShared,
+          results,
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error bulk sharing report:", error);
+        res.status(500).json({ message: "Failed to bulk share report" });
+      }
+    }
+  );
+
+  /**
+   * Get reports shared with the authenticated athlete
+   * GET /api/my/reports
+   */
+  app.get("/api/my/reports", reportLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      // Get all shares for this athlete with joined report and coach info
+      const shares = await db
+        .select({
+          shareId: reportShares.id,
+          reportId: reportShares.reportId,
+          reportName: reports.name,
+          reportType: reports.reportType,
+          sharedById: reportShares.sharedBy,
+          sharedByFirstName: users.firstName,
+          sharedByLastName: users.lastName,
+          sharedByFullName: users.fullName,
+          message: reportShares.message,
+          createdAt: reportShares.createdAt,
+          viewedAt: reportShares.viewedAt,
+        })
+        .from(reportShares)
+        .innerJoin(reports, eq(reportShares.reportId, reports.id))
+        .leftJoin(users, eq(reportShares.sharedBy, users.id))
+        .where(eq(reportShares.athleteId, user.id))
+        .orderBy(desc(reportShares.createdAt));
+
+      // Format response
+      const formattedReports = shares.map((share) => ({
+        shareId: share.shareId,
+        reportId: share.reportId,
+        reportName: share.reportName,
+        reportType: share.reportType as 'team' | 'individual',
+        sharedBy: share.sharedById
+          ? {
+              id: share.sharedById,
+              firstName: share.sharedByFirstName || '',
+              lastName: share.sharedByLastName || '',
+            }
+          : null,
+        message: share.message,
+        createdAt: share.createdAt.toISOString(),
+        viewedAt: share.viewedAt ? share.viewedAt.toISOString() : null,
+        isNew: share.viewedAt === null,
+      }));
+
+      res.json({ reports: formattedReports });
+    } catch (error) {
+      console.error("Error fetching shared reports:", error);
+      res.status(500).json({ message: "Failed to fetch shared reports" });
+    }
+  });
+
+  /**
+   * Get unread report count for badge display
+   * GET /api/my/reports/unread-count
+   */
+  app.get(
+    "/api/my/reports/unread-count",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Count unread reports using efficient query
+        const result = await db
+          .select({ count: sql<number>`count(*)` })
+          .from(reportShares)
+          .where(
+            and(
+              eq(reportShares.athleteId, user.id),
+              isNull(reportShares.viewedAt)
+            )
+          );
+
+        const unreadCount = Number(result[0]?.count || 0);
+
+        res.json({ unreadCount });
+      } catch (error) {
+        console.error("Error fetching unread report count:", error);
+        res.status(500).json({ message: "Failed to fetch unread count" });
+      }
+    }
+  );
+
+  /**
+   * Get a single shared report by share ID
+   * GET /api/my/reports/:shareId
+   */
+  app.get(
+    "/api/my/reports/:shareId",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const shareId = req.params.shareId;
+
+        // Validate shareId is a valid UUID
+        const uuidSchema = z.string().uuid();
+        const parseResult = uuidSchema.safeParse(shareId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: "Invalid share ID format" });
+        }
+
+        // Get share with report and coach info
+        const [share] = await db
+          .select({
+            shareId: reportShares.id,
+            reportId: reportShares.reportId,
+            reportName: reports.name,
+            reportType: reports.reportType,
+            reportConfig: reports.config,
+            reportDescription: reports.description,
+            reportCoachingInsights: reports.coachingInsights,
+            reportCreatedBy: reports.createdBy,
+            sharedById: reportShares.sharedBy,
+            sharedByFirstName: users.firstName,
+            sharedByLastName: users.lastName,
+            sharedByFullName: users.fullName,
+            message: reportShares.message,
+            createdAt: reportShares.createdAt,
+            viewedAt: reportShares.viewedAt,
+            organizationId: reportShares.organizationId,
+          })
+          .from(reportShares)
+          .innerJoin(reports, eq(reportShares.reportId, reports.id))
+          .leftJoin(users, eq(reportShares.sharedBy, users.id))
+          .where(
+            and(
+              eq(reportShares.id, shareId),
+              eq(reportShares.athleteId, user.id)
+            )
+          );
+
+        if (!share) {
+          return res.status(404).json({ message: "Shared report not found" });
+        }
+
+        // Format response with nested report object (matches Report interface)
+        const response = {
+          shareId: share.shareId,
+          report: {
+            id: share.reportId,
+            organizationId: share.organizationId,
+            createdBy: share.reportCreatedBy,
+            name: share.reportName,
+            description: share.reportDescription,
+            reportType: share.reportType as 'team' | 'individual',
+            config: share.reportConfig,
+            coachingInsights: share.reportCoachingInsights,
+            // These fields are required by IndividualReportView/TeamReportView
+            isTemplate: false,
+            isPinned: false,
+            createdAt: share.createdAt.toISOString(),
+          },
+          sharedBy: share.sharedById
+            ? {
+                id: share.sharedById,
+                firstName: share.sharedByFirstName || '',
+                lastName: share.sharedByLastName || '',
+              }
+            : null,
+          message: share.message,
+          createdAt: share.createdAt.toISOString(),
+          viewedAt: share.viewedAt ? share.viewedAt.toISOString() : null,
+          isNew: share.viewedAt === null,
+        };
+
+        res.json(response);
+      } catch (error) {
+        console.error("Error fetching shared report:", error);
+        res.status(500).json({ message: "Failed to fetch shared report" });
+      }
+    }
+  );
+
+  /**
+   * Mark a shared report as viewed
+   * POST /api/my/reports/:shareId/viewed
+   */
+  app.post(
+    "/api/my/reports/:shareId/viewed",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const shareId = req.params.shareId;
+
+        // Validate shareId is a valid UUID
+        const uuidSchema = z.string().uuid();
+        const parseResult = uuidSchema.safeParse(shareId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: "Invalid share ID format" });
+        }
+
+        // Get share
+        const [share] = await db
+          .select()
+          .from(reportShares)
+          .where(eq(reportShares.id, shareId))
+          .limit(1);
+
+        if (!share) {
+          return res.status(404).json({ message: "Share not found" });
+        }
+
+        // Verify this share belongs to the authenticated user
+        if (share.athleteId !== user.id) {
+          return res.status(403).json({
+            message: "You can only mark your own reports as viewed",
+          });
+        }
+
+        // If already viewed, return existing timestamp (idempotent)
+        if (share.viewedAt) {
+          return res.json({
+            success: true,
+            viewedAt: share.viewedAt.toISOString(),
+          });
+        }
+
+        // Mark as viewed
+        const viewedAt = new Date();
+        await db
+          .update(reportShares)
+          .set({ viewedAt })
+          .where(eq(reportShares.id, shareId));
+
+        res.json({
+          success: true,
+          viewedAt: viewedAt.toISOString(),
+        });
+      } catch (error) {
+        console.error("Error marking report as viewed:", error);
+        res.status(500).json({ message: "Failed to mark report as viewed" });
+      }
+    }
+  );
+
+  /**
+   * Unshare a report from an athlete
+   * DELETE /api/reports/:id/shares/:shareId
+   */
+  app.delete(
+    "/api/reports/:id/shares/:shareId",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+        const shareId = req.params.shareId;
+
+        // Validate IDs are valid UUIDs
+        const uuidSchema = z.string().uuid();
+        const reportIdResult = uuidSchema.safeParse(reportId);
+        const shareIdResult = uuidSchema.safeParse(shareId);
+        if (!reportIdResult.success || !shareIdResult.success) {
+          return res.status(400).json({ message: "Invalid ID format" });
+        }
+
+        // Get share
+        const [share] = await db
+          .select()
+          .from(reportShares)
+          .where(
+            and(
+              eq(reportShares.id, shareId),
+              eq(reportShares.reportId, reportId)
+            )
+          )
+          .limit(1);
+
+        if (!share) {
+          return res.status(404).json({ message: "Share not found" });
+        }
+
+        // Check permissions: must be coach who shared it or org_admin
+        const userRoles = await storage.getUserRoles(user.id, share.organizationId);
+
+        const canUnshare =
+          share.sharedBy === user.id || // Coach who created the share
+          userRoles.includes('org_admin') || // Org admin
+          isSiteAdmin(user); // Site admin
+
+        if (!canUnshare) {
+          return res.status(403).json({
+            message: "You don't have permission to unshare this report",
+          });
+        }
+
+        // Delete share
+        await db.delete(reportShares).where(eq(reportShares.id, shareId));
+
+        res.json({ success: true });
+      } catch (error) {
+        console.error("Error unsharing report:", error);
+        res.status(500).json({ message: "Failed to unshare report" });
+      }
+    }
+  );
+
+  /**
+   * Get list of who a report has been shared with
+   * GET /api/reports/:id/shares
+   */
+  app.get(
+    "/api/reports/:id/shares",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Get report
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Get shares with athlete and sharedBy info
+        const shares = await db
+          .select({
+            shareId: reportShares.id,
+            athleteId: reportShares.athleteId,
+            athleteFirstName: sql<string>`athlete_user.first_name`,
+            athleteLastName: sql<string>`athlete_user.last_name`,
+            athleteFullName: sql<string>`athlete_user.full_name`,
+            sharedById: reportShares.sharedBy,
+            sharedByFirstName: sql<string>`coach_user.first_name`,
+            sharedByLastName: sql<string>`coach_user.last_name`,
+            sharedByFullName: sql<string>`coach_user.full_name`,
+            message: reportShares.message,
+            createdAt: reportShares.createdAt,
+            viewedAt: reportShares.viewedAt,
+          })
+          .from(reportShares)
+          .innerJoin(
+            sql`users AS athlete_user`,
+            sql`${reportShares.athleteId} = athlete_user.id`
+          )
+          .leftJoin(
+            sql`users AS coach_user`,
+            sql`${reportShares.sharedBy} = coach_user.id`
+          )
+          .where(eq(reportShares.reportId, reportId))
+          .orderBy(desc(reportShares.createdAt));
+
+        // Format response
+        const formattedShares = shares.map((share: any) => ({
+          shareId: share.shareId,
+          athlete: {
+            id: share.athleteId,
+            firstName: share.athleteFirstName || '',
+            lastName: share.athleteLastName || '',
+          },
+          sharedBy: share.sharedById
+            ? {
+                id: share.sharedById,
+                firstName: share.sharedByFirstName || '',
+                lastName: share.sharedByLastName || '',
+              }
+            : null,
+          message: share.message,
+          createdAt: share.createdAt.toISOString(),
+          viewedAt: share.viewedAt ? share.viewedAt.toISOString() : null,
+        }));
+
+        res.json({ shares: formattedShares });
+      } catch (error) {
+        console.error("Error fetching report shares:", error);
+        res.status(500).json({ message: "Failed to fetch report shares" });
+      }
+    }
+  );
 }
 
 /**

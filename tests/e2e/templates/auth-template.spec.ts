@@ -38,9 +38,9 @@ test.describe('Authentication Tests', () => {
   });
 
   test('should successfully login with valid credentials', async ({ page }) => {
-    // Fill in login form
-    await page.fill('input[name="username"]', TEST_USERNAME);
-    await page.fill('input[name="password"]', TEST_PASSWORD);
+    // Fill in login form - use combined selectors for flexibility (ID or name attribute)
+    await page.fill('#username, input[name="username"]', TEST_USERNAME);
+    await page.fill('#password, input[name="password"]', TEST_PASSWORD);
 
     // Submit login
     await page.click('button[type="submit"]');

@@ -16,6 +16,31 @@ import { getUserByRole, canTestRoleAuthorization } from './fixtures/test-users';
 
 const TESTING_URL = process.env.TESTING_URL || process.env.STAGING_URL || 'http://localhost:5000';
 
+/**
+ * Helper function to wait for the measurements table or empty state.
+ * The table only renders when data exists - otherwise shows "No measurements found" message.
+ * @returns true if table is visible, false if empty state is shown (test should skip)
+ */
+async function waitForTableOrEmptyState(page: any): Promise<boolean> {
+  const tableLocator = page.locator('table');
+  // Use .first() to avoid strict mode violation - there may be sr-only duplicates
+  const emptyStateLocator = page.locator('p:has-text("No measurements found"), .text-muted-foreground:has-text("No measurements")').first();
+
+  // Wait for either to appear
+  await Promise.race([
+    tableLocator.waitFor({ state: 'visible', timeout: 10000 }),
+    emptyStateLocator.waitFor({ state: 'visible', timeout: 10000 }),
+  ]).catch(() => {/* one will timeout, that's expected */});
+
+  // Return false if empty state is showing (caller should skip test)
+  if (await emptyStateLocator.isVisible()) {
+    console.log('No measurements exist in database');
+    return false;
+  }
+
+  return true;
+}
+
 test.describe('Admin Bulk Verify/Unverify Tests', () => {
 
   test.describe('Site Admin Access', () => {
@@ -30,7 +55,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -49,8 +74,15 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       // Get initial count of measurements
       const initialRows = await page.locator('table tbody tr').count();
@@ -58,6 +90,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       if (initialRows === 0) {
         console.log('No unverified measurements found - skipping test');
         test.skip();
+        return;
       }
 
       // Select 2-3 measurements (or fewer if not enough exist)
@@ -119,7 +152,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -138,8 +171,15 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       // Get initial count of measurements
       const initialRows = await page.locator('table tbody tr').count();
@@ -147,6 +187,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       if (initialRows === 0) {
         console.log('No verified measurements found - skipping test');
         test.skip();
+        return;
       }
 
       // Select 2-3 measurements
@@ -221,8 +262,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No unverified measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Select one measurement
       const firstCheckbox = page.locator('table tbody tr').first().locator('input[type="checkbox"]');
@@ -257,6 +313,10 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
 
   test.describe('Access Control', () => {
     test('should prevent org_admin from accessing site-wide admin page', async ({ page }) => {
+      // Skip if org_admin and site_admin share same credentials (org_admin IS site_admin)
+      test.skip(!canTestRoleAuthorization('org_admin', 'site_admin'),
+        'Skipping: org_admin and site_admin share same credentials in this environment');
+
       // Login as org_admin
       const orgAdmin = getUserByRole('org_admin');
       await loginWithCredentials(page, orgAdmin.username, orgAdmin.password);
@@ -292,7 +352,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -310,8 +370,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count in description
       const description = page.locator('p:has-text("Showing")');
@@ -366,7 +441,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -384,8 +459,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const initialRowCount = await page.locator('table tbody tr').count();
+      if (initialRowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count
       const description = page.locator('p:has-text("Showing")');
@@ -400,8 +490,14 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await pageSizeSelect.selectOption('0'); // 0 = All
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to render
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table to re-render after pagination change
+      const hasTableAfterPagination = await waitForTableOrEmptyState(page);
+      if (!hasTableAfterPagination) {
+        // This shouldn't happen since we confirmed data exists earlier
+        test.skip();
+        return;
+      }
+      await page.waitForTimeout(1000);
 
       // Count displayed rows
       const displayedRows = await page.locator('table tbody tr').count();
@@ -429,7 +525,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -447,8 +543,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCount = await page.locator('table tbody tr').count();
+      if (rowCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check total count
       const description = page.locator('p:has-text("Showing")');
@@ -489,7 +600,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -507,8 +618,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const rowCountBeforeSort = await page.locator('table tbody tr').count();
+      if (rowCountBeforeSort === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Get initial first row data
       const firstRowBefore = page.locator('table tbody tr').first();
@@ -553,7 +679,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -571,8 +697,23 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
+
+      // Check if there are any measurements
+      const measurementCount = await page.locator('table tbody tr').count();
+      if (measurementCount === 0) {
+        console.log('No measurements found - skipping test');
+        test.skip();
+        return;
+      }
 
       // Check if statistics cards are displayed
       const statsCards = page.locator('[class*="StatisticsSummary"], div:has(> h3:has-text("Statistics"))');
@@ -620,7 +761,14 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
+
+      // Wait for table or empty state - filters only work when data exists
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -656,8 +804,8 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       // Verify second filter reduced or maintained count
       expect(secondResultCount).toBeLessThanOrEqual(firstResultCount);
 
-      // Test 3: Clear filters
-      const clearButton = page.locator('button:has-text("Clear Filters")');
+      // Test 3: Clear filters (use exact match to avoid matching "Clear filters to see all" button)
+      const clearButton = page.getByRole('button', { name: 'Clear Filters', exact: true });
       await clearButton.click();
       await page.waitForLoadState('networkidle');
 
@@ -706,7 +854,16 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
+
+      // This test requires data to filter - skip if database is already empty
+      // (filtering empty data to get empty results is redundant)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        console.log('Skipping empty state filter test - database already empty');
+        test.skip();
+        return;
+      }
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -732,10 +889,12 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Should show empty state message
-      await expect(page.locator('body')).toContainText(/no measurements found|no results/i, { timeout: 5000 });
+      // Should show empty state message or empty table
+      // Use first() to avoid strict mode if multiple elements contain the text
+      const emptyMessage = page.locator('text=/no measurements found|no results/i').first();
+      await expect(emptyMessage).toBeVisible({ timeout: 5000 });
 
-      // Verify no table rows are visible (or empty table message)
+      // Verify no table rows are visible
       const rowCount = await page.locator('table tbody tr').count();
       expect(rowCount).toBe(0);
     });
@@ -746,7 +905,7 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Wait for page to load
-      await expect(page.locator('h1, h2')).toContainText(/measurements/i, { timeout: 10000 });
+      await expect(page.locator('main h1').first()).toContainText(/measurements/i, { timeout: 10000 });
 
       // Open filters if collapsed
       const filtersButton = page.locator('button:has-text("Filters"), button:has([data-icon="filter"])');
@@ -764,14 +923,22 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       await applyButton.click();
       await page.waitForLoadState('networkidle');
 
-      // Wait for table to load
-      await page.waitForSelector('table tbody tr', { timeout: 10000 });
+      // Wait for table or empty state (table only renders when data exists)
+      const hasTable = await waitForTableOrEmptyState(page);
+      if (!hasTable) {
+        test.skip();
+        return;
+      }
+
+      // Give the table time to populate after filters are applied
+      await page.waitForTimeout(1000);
 
       const initialRows = await page.locator('table tbody tr').count();
 
       if (initialRows === 0) {
         console.log('No unverified measurements found - skipping network error test');
         test.skip();
+        return;
       }
 
       // Select one measurement
@@ -887,32 +1054,53 @@ test.describe('Admin Bulk Verify/Unverify Tests', () => {
       expect(response.status()).toBe(403);
     });
 
-    test('should reject unauthenticated bulk verify API calls', async ({ page }) => {
-      // Don't log in - test unauthenticated access
+    test('should reject unauthenticated bulk verify API calls', async ({ playwright }) => {
+      // Create a fresh API context with EXPLICITLY empty storage state
+      // This ensures no cookies or auth data is sent with the request
+      const apiContext = await playwright.request.newContext({
+        baseURL: TESTING_URL,
+        storageState: { cookies: [], origins: [] },
+      });
 
-      // Try to call bulk verify API directly
-      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-verify`, {
+      const response = await apiContext.post(`/api/measurements/bulk-verify`, {
         data: {
           measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
         }
       });
 
       // Should be rejected with 401 Unauthorized or 403 Forbidden
-      expect([401, 403]).toContain(response.status());
+      const status = response.status();
+      console.log(`Unauthenticated bulk-verify response: ${status}`);
+      if (status !== 401 && status !== 403) {
+        const body = await response.text();
+        console.log(`Response body: ${body}`);
+      }
+      expect([401, 403]).toContain(status);
+      await apiContext.dispose();
     });
 
-    test('should reject unauthenticated bulk unverify API calls', async ({ page }) => {
-      // Don't log in - test unauthenticated access
+    test('should reject unauthenticated bulk unverify API calls', async ({ playwright }) => {
+      // Create a fresh API context with EXPLICITLY empty storage state
+      const apiContext = await playwright.request.newContext({
+        baseURL: TESTING_URL,
+        storageState: { cookies: [], origins: [] },
+      });
 
-      // Try to call bulk unverify API directly
-      const response = await page.request.post(`${TESTING_URL}/api/measurements/bulk-unverify`, {
+      const response = await apiContext.post(`/api/measurements/bulk-unverify`, {
         data: {
           measurementIds: ['00000000-0000-0000-0000-000000000001'] // Dummy ID
         }
       });
 
       // Should be rejected with 401 Unauthorized or 403 Forbidden
-      expect([401, 403]).toContain(response.status());
+      const status = response.status();
+      console.log(`Unauthenticated bulk-unverify response: ${status}`);
+      if (status !== 401 && status !== 403) {
+        const body = await response.text();
+        console.log(`Response body: ${body}`);
+      }
+      expect([401, 403]).toContain(status);
+      await apiContext.dispose();
     });
   });
 });

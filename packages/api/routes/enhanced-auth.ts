@@ -4,6 +4,7 @@ import { storage } from '../storage';
 import { AuthSecurity } from '../auth/security';
 import { PasswordResetService } from '../auth/password-reset';
 import { RoleManager } from '../auth/role-manager';
+import { requirePermission } from '../permissions/index';
 import { z } from 'zod';
 
 const router = Router();
@@ -384,7 +385,7 @@ router.get('/security-events', async (req: Request, res: Response) => {
 });
 
 // Role management endpoints
-router.post('/assign-role', RoleManager.requirePermission('MANAGE_USERS'), async (req: Request, res: Response) => {
+router.post('/assign-role', requirePermission('MANAGE_USERS'), async (req: Request, res: Response) => {
   try {
     const { targetUserId, newRole, organizationId } = req.body;
     const assignerId = req.session?.user?.id;

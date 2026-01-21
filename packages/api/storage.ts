@@ -7,6 +7,7 @@ import {
   goals, goalStatusEnum,
   achievementDefinitions, userAchievements,
   membershipRequests,
+  events, eventRegistrations, eventInvitations, eventMetrics,
   type Organization, type Team, type Measurement, type User, type UserOrganization, type UserTeam, type Invitation, type AuditLog, type EmailVerificationToken,
   type SiteMetric, type OrganizationMetric,
   type SiteBenchmark, type CustomBenchmark, type OrganizationBenchmark, type OrganizationBenchmarkWithDetails,
@@ -20,6 +21,10 @@ import {
   type Goal, type InsertGoal, type UpdateGoal,
   type AchievementDefinition, type UserAchievement,
   type MembershipRequest,
+  type Event, type InsertEvent,
+  type EventRegistration, type InsertEventRegistration, type RegistrationStatus,
+  type EventInvitation, type InsertEventInvitation, type EventInvitationStatus,
+  type EventMetric, type InsertEventMetric,
   insertUserSchema,
   type OrganizationType,
   type InsertOAuthUser
@@ -28,7 +33,7 @@ import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
-import { eq, desc, asc, and, gte, lte, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
+import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
@@ -136,6 +141,37 @@ export interface IStorage {
   cancelMembershipRequest(id: string): Promise<void>;
   hasPendingMembershipRequest(userId: string, organizationId: string): Promise<boolean>;
 
+  // Events
+  getEvent(id: string): Promise<Event | null>;
+  updateEvent(id: string, data: Partial<Event>): Promise<Event>;
+  createEvent(data: InsertEvent): Promise<Event>;
+  deleteEvent(id: string): Promise<void>;
+  listEvents(filters: { organizationId?: string; status?: string; visibility?: string }): Promise<Event[]>;
+  getEventByCode(code: string): Promise<Event | null>;
+
+  // Event Registrations
+  createEventRegistration(data: InsertEventRegistration): Promise<EventRegistration>;
+  getEventRegistration(eventId: string, userId: string): Promise<EventRegistration | null>;
+  getEventRegistrationById(id: string): Promise<EventRegistration | null>;
+  updateEventRegistration(id: string, data: Partial<InsertEventRegistration>): Promise<EventRegistration>;
+  deleteEventRegistration(id: string): Promise<void>;
+  listEventRegistrations(eventId: string, filters?: { status?: RegistrationStatus; limit?: number; offset?: number }): Promise<EventRegistration[]>;
+  countEventRegistrations(eventId: string, excludeStatuses?: RegistrationStatus[]): Promise<number>;
+  getNextRegistrationNumber(eventId: string): Promise<number>;
+  getNextWaitlistPosition(eventId: string): Promise<number>;
+  getFirstWaitlistedRegistration(eventId: string): Promise<EventRegistration | null>;
+  getUserEventRegistrations(userId: string): Promise<(EventRegistration & { event: Event })[]>;
+
+  // Event Invitations
+  createEventInvitation(data: InsertEventInvitation): Promise<EventInvitation>;
+  getEventInvitation(id: string): Promise<EventInvitation | null>;
+  getEventInvitationByToken(token: string): Promise<EventInvitation | null>;
+  getEventInvitationByUserAndEvent(eventId: string, userId: string): Promise<EventInvitation | null>;
+  getEventInvitationByEmailAndEvent(eventId: string, email: string): Promise<EventInvitation | null>;
+  updateEventInvitation(id: string, data: Partial<InsertEventInvitation>): Promise<EventInvitation>;
+  listEventInvitations(eventId: string, filters?: { status?: EventInvitationStatus; limit?: number; offset?: number }): Promise<EventInvitation[]>;
+  getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>>;
+
   // Public Organization Directory
   getPublicOrganizations(filters?: { search?: string; orgType?: OrganizationType }): Promise<(Organization & { memberCount: number })[]>;
   getOrganizationByJoinCode(joinCode: string): Promise<Organization | undefined>;
@@ -211,7 +247,7 @@ export interface IStorage {
     verifiedBy?: User;
   })[]>;
   getMeasurement(id: string): Promise<Measurement | undefined>;
-  createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement>;
+  createMeasurement(measurement: InsertMeasurement, submittedBy: string, eventContext?: { eventId: string; eventNameSnapshot: string; eventDateSnapshot: string; }): Promise<Measurement>;
   updateMeasurement(id: string, measurement: Partial<InsertMeasurement>): Promise<Measurement>;
   deleteMeasurement(id: string): Promise<void>;
   verifyMeasurement(id: string, verifiedBy: string): Promise<Measurement>;
@@ -613,7 +649,9 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
+      'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding'
     ];
 
     const updateData: any = {};
@@ -2291,6 +2329,256 @@ export class DatabaseStorage implements IStorage {
     return updated;
   }
 
+  // Events
+  async getEvent(id: string): Promise<Event | null> {
+    const result = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    return result[0] || null;
+  }
+
+  async updateEvent(id: string, data: Partial<Event>): Promise<Event> {
+    const result = await db.update(events)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(events.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event ${id} not found`);
+    return result[0];
+  }
+
+  async createEvent(data: InsertEvent): Promise<Event> {
+    const result = await db.insert(events).values(data).returning();
+    return result[0];
+  }
+
+  async deleteEvent(id: string): Promise<void> {
+    await db.delete(events).where(eq(events.id, id));
+  }
+
+  async listEvents(filters: { organizationId?: string; status?: string; visibility?: string } = {}): Promise<Event[]> {
+    const conditions = [];
+    if (filters.organizationId) conditions.push(eq(events.organizationId, filters.organizationId));
+    if (filters.status) conditions.push(eq(events.status, filters.status as any));
+    if (filters.visibility) conditions.push(eq(events.visibility, filters.visibility as any));
+
+    return db.select().from(events)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(events.startDate));
+  }
+
+  async getEventByCode(code: string): Promise<Event | null> {
+    // Case-insensitive lookup using UPPER() on both sides
+    const result = await db.select().from(events)
+      .where(sql`UPPER(${events.eventCode}) = UPPER(${code})`)
+      .limit(1);
+    return result[0] || null;
+  }
+
+  // Event Registrations
+
+  async createEventRegistration(data: InsertEventRegistration): Promise<EventRegistration> {
+    const result = await db.insert(eventRegistrations).values(data).returning();
+    return result[0];
+  }
+
+  async getEventRegistration(eventId: string, userId: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.userId, userId)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventRegistrationById(id: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(eq(eventRegistrations.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateEventRegistration(id: string, data: Partial<InsertEventRegistration>): Promise<EventRegistration> {
+    const result = await db.update(eventRegistrations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(eventRegistrations.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event registration ${id} not found`);
+    return result[0];
+  }
+
+  async deleteEventRegistration(id: string): Promise<void> {
+    await db.delete(eventRegistrations).where(eq(eventRegistrations.id, id));
+  }
+
+  async listEventRegistrations(eventId: string, filters?: { status?: RegistrationStatus; limit?: number; offset?: number }): Promise<EventRegistration[]> {
+    const conditions = [eq(eventRegistrations.eventId, eventId)];
+    if (filters?.status) {
+      conditions.push(eq(eventRegistrations.status, filters.status));
+    }
+
+    let query = db.select().from(eventRegistrations)
+      .where(and(...conditions))
+      .orderBy(asc(eventRegistrations.registrationNumber));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    return query;
+  }
+
+  async countEventRegistrations(eventId: string, excludeStatuses?: RegistrationStatus[]): Promise<number> {
+    const conditions = [eq(eventRegistrations.eventId, eventId)];
+    if (excludeStatuses && excludeStatuses.length > 0) {
+      for (const status of excludeStatuses) {
+        conditions.push(ne(eventRegistrations.status, status));
+      }
+    }
+
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(eventRegistrations)
+      .where(and(...conditions));
+    return Number(result[0]?.count || 0);
+  }
+
+  async getNextRegistrationNumber(eventId: string): Promise<number> {
+    const result = await db.select({ max: sql<number>`coalesce(max(${eventRegistrations.registrationNumber}), 0)` })
+      .from(eventRegistrations)
+      .where(eq(eventRegistrations.eventId, eventId));
+    return (result[0]?.max || 0) + 1;
+  }
+
+  async getNextWaitlistPosition(eventId: string): Promise<number> {
+    const result = await db.select({ max: sql<number>`coalesce(max(${eventRegistrations.waitlistPosition}), 0)` })
+      .from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.status, 'waitlisted')
+      ));
+    return (result[0]?.max || 0) + 1;
+  }
+
+  async getFirstWaitlistedRegistration(eventId: string): Promise<EventRegistration | null> {
+    const result = await db.select().from(eventRegistrations)
+      .where(and(
+        eq(eventRegistrations.eventId, eventId),
+        eq(eventRegistrations.status, 'waitlisted')
+      ))
+      .orderBy(asc(eventRegistrations.waitlistPosition))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getUserEventRegistrations(userId: string): Promise<(EventRegistration & { event: Event })[]> {
+    const result = await db.select({
+      registration: eventRegistrations,
+      event: events,
+    })
+      .from(eventRegistrations)
+      .innerJoin(events, eq(eventRegistrations.eventId, events.id))
+      .where(eq(eventRegistrations.userId, userId))
+      .orderBy(desc(events.startDate));
+
+    return result.map(row => ({
+      ...row.registration,
+      event: row.event,
+    }));
+  }
+
+  // Event Invitations
+
+  async createEventInvitation(data: InsertEventInvitation): Promise<EventInvitation> {
+    const result = await db.insert(eventInvitations).values(data).returning();
+    return result[0];
+  }
+
+  async getEventInvitation(id: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(eq(eventInvitations.id, id))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByToken(token: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(eq(eventInvitations.token, token))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByUserAndEvent(eventId: string, userId: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(and(
+        eq(eventInvitations.eventId, eventId),
+        eq(eventInvitations.userId, userId)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async getEventInvitationByEmailAndEvent(eventId: string, email: string): Promise<EventInvitation | null> {
+    const result = await db.select().from(eventInvitations)
+      .where(and(
+        eq(eventInvitations.eventId, eventId),
+        eq(eventInvitations.email, email)
+      ))
+      .limit(1);
+    return result[0] || null;
+  }
+
+  async updateEventInvitation(id: string, data: Partial<InsertEventInvitation>): Promise<EventInvitation> {
+    const result = await db.update(eventInvitations)
+      .set(data)
+      .where(eq(eventInvitations.id, id))
+      .returning();
+    if (!result[0]) throw new Error(`Event invitation ${id} not found`);
+    return result[0];
+  }
+
+  async listEventInvitations(eventId: string, filters?: { status?: EventInvitationStatus; limit?: number; offset?: number }): Promise<EventInvitation[]> {
+    const conditions = [eq(eventInvitations.eventId, eventId)];
+    if (filters?.status) {
+      conditions.push(eq(eventInvitations.status, filters.status));
+    }
+
+    let query = db.select().from(eventInvitations)
+      .where(and(...conditions))
+      .orderBy(desc(eventInvitations.createdAt));
+
+    if (filters?.limit) {
+      query = query.limit(filters.limit) as any;
+    }
+    if (filters?.offset) {
+      query = query.offset(filters.offset) as any;
+    }
+
+    return query;
+  }
+
+  async getUserPendingInvitations(userId: string): Promise<Array<EventInvitation & { event: Event }>> {
+    const now = new Date();
+
+    const result = await db.select({
+      invitation: eventInvitations,
+      event: events,
+    })
+      .from(eventInvitations)
+      .innerJoin(events, eq(eventInvitations.eventId, events.id))
+      .where(and(
+        eq(eventInvitations.userId, userId),
+        eq(eventInvitations.status, 'pending'),
+        gt(eventInvitations.expiresAt, now)
+      ))
+      .orderBy(events.startDate);
+
+    return result.map(row => ({
+      ...row.invitation,
+      event: row.event,
+    }));
+  }
+
   // Athletes (users with athlete role) - consolidated from legacy getPlayers
 
   async getAthletes(filters?: {
@@ -2725,7 +3013,8 @@ export class DatabaseStorage implements IStorage {
       'birthDate', 'graduationYear', 'school', 'phoneNumbers', 'sports', 'positions',
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
-      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive'
+      'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
+      'showPeerComparisons', 'hasCompletedOnboarding'
     ];
 
     // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
@@ -2931,6 +3220,10 @@ export class DatabaseStorage implements IStorage {
       flyInDistance: measurements.flyInDistance,
       notes: measurements.notes,
       createdAt: measurements.createdAt,
+      // Event context fields
+      eventId: measurements.eventId,
+      eventNameSnapshot: measurements.eventNameSnapshot,
+      eventDateSnapshot: measurements.eventDateSnapshot,
       // User data WITHOUT teams for now
       user: sql<any>`jsonb_build_object(
         'id', ${users.id},
@@ -3202,7 +3495,15 @@ export class DatabaseStorage implements IStorage {
     return activeTeams;
   }
 
-  async createMeasurement(measurement: InsertMeasurement, submittedBy: string): Promise<Measurement> {
+  async createMeasurement(
+    measurement: InsertMeasurement,
+    submittedBy: string,
+    eventContext?: {
+      eventId: string;
+      eventNameSnapshot: string;
+      eventDateSnapshot: string;  // String in 'YYYY-MM-DD' format for Drizzle's date() type
+    }
+  ): Promise<Measurement> {
     // Calculate age and units based on metric
     const user = await this.getUser(measurement.userId);
     if (!user) throw new Error("User not found");
@@ -3299,7 +3600,11 @@ export class DatabaseStorage implements IStorage {
       teamNameSnapshot: teamNameSnapshot || null,
       organizationId: organizationId || null,
       season: season || null,
-      teamContextAuto: teamContextAuto
+      teamContextAuto: teamContextAuto,
+      // Event context (for measurements taken at events)
+      eventId: eventContext?.eventId ?? null,
+      eventNameSnapshot: eventContext?.eventNameSnapshot ?? null,
+      eventDateSnapshot: eventContext?.eventDateSnapshot ?? null,
     }).returning();
 
     return newMeasurement;
@@ -3671,12 +3976,26 @@ export class DatabaseStorage implements IStorage {
 
   async updateUserRole(userId: string, organizationId: string, role: string): Promise<boolean> {
     try {
-      await db.update(userOrganizations)
-        .set({ role })
-        .where(and(
-          eq(userOrganizations.userId, userId),
-          eq(userOrganizations.organizationId, organizationId)
-        ));
+      // Use transaction with row-level locking to prevent race conditions (TOCTOU)
+      // SELECT ... FOR UPDATE acquires an exclusive lock on the row, preventing
+      // concurrent modifications until the transaction completes
+      await db.transaction(async (tx) => {
+        // Lock the row for update to prevent concurrent role changes
+        await tx.execute(sql`
+          SELECT * FROM ${userOrganizations}
+          WHERE ${userOrganizations.userId} = ${userId}
+          AND ${userOrganizations.organizationId} = ${organizationId}
+          FOR UPDATE
+        `);
+
+        // Now update the role within the same transaction
+        await tx.update(userOrganizations)
+          .set({ role })
+          .where(and(
+            eq(userOrganizations.userId, userId),
+            eq(userOrganizations.organizationId, organizationId)
+          ));
+      });
       return true;
     } catch {
       return false;
@@ -4390,6 +4709,9 @@ export class DatabaseStorage implements IStorage {
     if (benchmark.gender !== undefined && benchmark.gender !== null) {
       insertValues.gender = benchmark.gender;
     }
+    if (benchmark.sport !== undefined && benchmark.sport !== null) {
+      insertValues.sport = benchmark.sport;
+    }
     if (benchmark.position !== undefined && benchmark.position !== null) {
       insertValues.position = benchmark.position;
     }
@@ -4922,6 +5244,7 @@ export class DatabaseStorage implements IStorage {
     athleteAttributes: {
       gender?: string;
       age?: number;
+      sport?: string;
       position?: string;
       level?: string;
     }
@@ -4958,6 +5281,16 @@ export class DatabaseStorage implements IStorage {
           or(
             isNull(tableName.ageMax),
             gte(tableName.ageMax, athleteAttributes.age)
+          )!
+        );
+      }
+
+      // Sport filter: NULL OR matches
+      if (athleteAttributes.sport) {
+        conditions.push(
+          or(
+            isNull(tableName.sport),
+            eq(tableName.sport, athleteAttributes.sport)
           )!
         );
       }
@@ -5444,6 +5777,106 @@ export class DatabaseStorage implements IStorage {
     }
 
     return newAchievement;
+  }
+
+  // ============================================================
+  // Event Metrics Methods
+  // ============================================================
+
+  /**
+   * Get a site metric by code (alias for getSiteMetric, returns null instead of undefined)
+   */
+  async getSiteMetricByCode(code: string): Promise<SiteMetric | null> {
+    const metric = await this.getSiteMetric(code);
+    return metric ?? null;
+  }
+
+  /**
+   * Create an event metric (add a metric to an event)
+   */
+  async createEventMetric(data: InsertEventMetric): Promise<EventMetric> {
+    const [metric] = await db
+      .insert(eventMetrics)
+      .values({
+        ...data,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    return metric;
+  }
+
+  /**
+   * Get a specific event metric
+   */
+  async getEventMetric(eventId: string, metricCode: string): Promise<EventMetric | null> {
+    const [metric] = await db
+      .select()
+      .from(eventMetrics)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ))
+      .limit(1);
+
+    return metric ?? null;
+  }
+
+  /**
+   * Update an event metric
+   */
+  async updateEventMetric(eventId: string, metricCode: string, data: Partial<InsertEventMetric>): Promise<EventMetric> {
+    const [metric] = await db
+      .update(eventMetrics)
+      .set(data)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ))
+      .returning();
+
+    if (!metric) {
+      throw new Error(`Event metric ${metricCode} not found for event ${eventId}`);
+    }
+
+    return metric;
+  }
+
+  /**
+   * Delete an event metric
+   */
+  async deleteEventMetric(eventId: string, metricCode: string): Promise<void> {
+    await db
+      .delete(eventMetrics)
+      .where(and(
+        eq(eventMetrics.eventId, eventId),
+        eq(eventMetrics.metricCode, metricCode)
+      ));
+  }
+
+  /**
+   * List all metrics for an event
+   */
+  async listEventMetrics(eventId: string): Promise<EventMetric[]> {
+    const metrics = await db
+      .select()
+      .from(eventMetrics)
+      .where(eq(eventMetrics.eventId, eventId))
+      .orderBy(asc(eventMetrics.displayOrder));
+
+    return metrics;
+  }
+
+  /**
+   * Get the maximum display order for event metrics
+   */
+  async getMaxDisplayOrder(eventId: string): Promise<number> {
+    const [result] = await db
+      .select({ maxOrder: sql<number>`COALESCE(MAX(${eventMetrics.displayOrder}), 0)` })
+      .from(eventMetrics)
+      .where(eq(eventMetrics.eventId, eventId));
+
+    return result?.maxOrder ?? 0;
   }
 }
 

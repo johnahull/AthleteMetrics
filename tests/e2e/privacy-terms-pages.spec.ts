@@ -204,10 +204,10 @@ test.describe('Legal Acceptance on Invitation Flow', () => {
       // Verify the page loaded successfully (not error state)
       await expect(page.locator('h1, [role="heading"]').filter({ hasText: /Accept Invitation/i })).toBeVisible();
 
-      // Fill in the form fields
-      await page.fill('input[name="username"]', `legaltest${uniqueId}`);
-      await page.fill('input[name="password"]', 'Test123!@#Password');
-      await page.fill('input[name="confirmPassword"]', 'Test123!@#Password');
+      // Fill in the form fields - use combined selectors for flexibility
+      await page.fill('#username, input[name="username"]', `legaltest${uniqueId}`);
+      await page.fill('#password, input[name="password"]', 'Test123!@#Password');
+      await page.fill('#confirmPassword, input[name="confirmPassword"]', 'Test123!@#Password');
 
       // Verify legal acceptance checkbox exists and is unchecked by default
       const checkbox = page.locator('input[type="checkbox"]').filter({

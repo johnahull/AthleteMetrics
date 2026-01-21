@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDefaultUser } from './helpers/auth';
 
 /**
  * E2E test for publish page date filter functionality
@@ -8,14 +9,8 @@ test.describe('Publish Page - Date Filter E2E', () => {
   test.beforeEach(async ({ page, baseURL }) => {
     const targetURL = process.env.TESTING_URL || baseURL || 'http://localhost:5000';
 
-    // Login as admin
-    await page.goto(`${targetURL}/login`);
-    await page.fill('input[name="username"]', process.env.TESTING_USERNAME || '');
-    await page.fill('input[name="password"]', process.env.TESTING_PASSWORD || '');
-    await page.click('button[type="submit"]');
-
-    // Wait for navigation to complete
-    await page.waitForURL(/\/(dashboard|welcome)/);
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
 
     // Navigate to publish page
     await page.goto(`${targetURL}/publish`);

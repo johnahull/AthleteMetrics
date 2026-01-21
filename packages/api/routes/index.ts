@@ -11,6 +11,7 @@ import { registerAthleteRoutes } from "./athlete-routes";
 import { registerMeasurementRoutes } from "./measurement-routes";
 import { registerAnalyticsRoutes } from "./analytics-routes";
 import { registerMetricRoutes } from "./metric-routes";
+import { registerCustomOrgMetricRoutes } from "./custom-org-metric-routes";
 import { registerBenchmarkRoutes } from "./benchmark-routes";
 import { registerBenchmarkAnalyticsRoutes } from "./benchmark-analytics-routes";
 import { registerReportRoutes } from "./report-routes";
@@ -30,6 +31,13 @@ import { registerProfileRoutes } from "./profile-routes";
 import { registerAdminUtilityRoutes } from "./admin-utility-routes";
 import { registerAdminSecurityRoutes } from "./admin-security-routes";
 import { registerRegistrationRoutes } from "./registration-routes";
+import { registerEventRoutes } from "./event-routes";
+import { registerEventRegistrationRoutes } from "./event-registration-routes";
+import { registerEventInvitationRoutes } from "./event-invitation-routes";
+import { registerEventMetricsRoutes } from "./event-metrics-routes";
+import { registerEventMeasurementsRoutes } from "./event-measurements-routes";
+import { registerEventResultsRoutes } from "./event-results-routes";
+import { registerEventReportRoutes } from "./event-report-routes";
 import enhancedAuthRoutes from "./enhanced-auth";
 import { registerPushNotificationRoutes } from "./push-notification-routes";
 import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
@@ -72,6 +80,9 @@ export function registerAllRoutes(app: Express) {
 
   // Metric management routes
   registerMetricRoutes(app);
+
+  // Custom organization metric routes
+  registerCustomOrgMetricRoutes(app);
 
   // Benchmark management routes
   registerBenchmarkRoutes(app);
@@ -135,6 +146,29 @@ export function registerAllRoutes(app: Express) {
 
   // Site admin notification routes (global settings and analytics)
   registerAdminNotificationRoutes(app);
+
+  // Event registration routes (self-registration, approval, check-in)
+  // IMPORTANT: Must be BEFORE registerEventRoutes because /api/events/my-registrations
+  // must match before the parameterized /api/events/:eventId route
+  registerEventRegistrationRoutes(app);
+
+  // Event management routes (combines, camps, testing days)
+  registerEventRoutes(app);
+
+  // Event invitation routes (token-based invitations)
+  registerEventInvitationRoutes(app);
+
+  // Event metrics configuration routes
+  registerEventMetricsRoutes(app);
+
+  // Event measurements routes (measurements linked to events)
+  registerEventMeasurementsRoutes(app);
+
+  // Event results routes (results visibility and publishing)
+  registerEventResultsRoutes(app);
+
+  // Event report routes (event-specific reports with event percentiles)
+  registerEventReportRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

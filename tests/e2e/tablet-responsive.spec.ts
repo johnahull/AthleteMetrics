@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { loginAsDefaultUser } from './helpers/auth';
 
 test.describe('Tablet Responsive Mode', () => {
   test.beforeEach(async ({ page }) => {
-    // Login first (tests need authentication)
-    await page.goto('/login');
-    await page.fill('input[name="username"]', process.env.E2E_SITE_ADMIN_USERNAME || 'admin');
-    await page.fill('input[name="password"]', process.env.E2E_SITE_ADMIN_PASSWORD || 'DevPassword123!');
-    await page.click('button[type="submit"]');
-    await page.waitForURL('/dashboard');
+    // Use auth helper that handles storageState and proper selectors
+    await loginAsDefaultUser(page);
   });
 
   test.describe('Breakpoint Detection Tests', () => {

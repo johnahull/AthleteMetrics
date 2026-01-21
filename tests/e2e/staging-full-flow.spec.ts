@@ -49,16 +49,16 @@ async function checkNetworkErrors(page: Page) {
   return networkErrors;
 }
 
-// Login helper function
+// Login helper function - uses combined selector to support both ID and name attributes
 async function login(page: Page) {
   await page.goto(`${STAGING_URL}/login`);
 
-  // Wait for login form to be visible
-  await page.waitForSelector('input[name="username"]', { state: 'visible' });
+  // Wait for login form to be visible - use combined selector for flexibility
+  await page.waitForSelector('#username, input[name="username"]', { state: 'visible' });
 
-  // Fill in login form
-  await page.fill('input[name="username"]', STAGING_USERNAME);
-  await page.fill('input[name="password"]', STAGING_PASSWORD);
+  // Fill in login form - use combined selector to match either ID or name attribute
+  await page.fill('#username, input[name="username"]', STAGING_USERNAME);
+  await page.fill('#password, input[name="password"]', STAGING_PASSWORD);
 
   // Click login button
   await page.click('button[type="submit"]');

@@ -61,6 +61,7 @@ export default function OrganizationSettings() {
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
+      customMetricsEnabled: organization.customMetricsEnabled || false,
     } : undefined,
   });
 
@@ -96,6 +97,9 @@ export default function OrganizationSettings() {
       }
       if (data.wellnessEnabled !== organization?.wellnessEnabled) {
         changedFields.wellnessEnabled = data.wellnessEnabled;
+      }
+      if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
+        changedFields.customMetricsEnabled = data.customMetricsEnabled;
       }
 
       // If no changes, don't make API call
@@ -369,6 +373,27 @@ export default function OrganizationSettings() {
                       <FormLabel className="text-base">Wellness Module</FormLabel>
                       <FormDescription>
                         Enable wellness questionnaires and health tracking for this organization
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="customMetricsEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Custom Metrics</FormLabel>
+                      <FormDescription>
+                        Allow organization to create custom performance metrics (org-specific, not shared)
                       </FormDescription>
                     </div>
                     <FormControl>

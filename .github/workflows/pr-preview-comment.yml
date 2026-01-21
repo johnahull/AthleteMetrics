@@ -1,0 +1,67 @@
+name: PR Preview Comment
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - develop
+      - main
+
+# Explicit permissions following principle of least privilege
+permissions:
+  contents: read
+  pull-requests: write  # Required to comment on PRs
+
+# Cancel redundant runs for the same PR
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  comment-preview-url:
+    name: Post Preview URL
+    runs-on: ubuntu-latest
+    # Only run on PRs from the same repository (not forks)
+    # Forks don't have access to secrets needed for Railway deployment
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Find existing preview comment
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '🚂 Railway Preview Environment'
+
+      - name: Create or update preview comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            | Resource | Link |
+            |----------|------|
+            | **Preview URL** | https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app |
+            | **Railway Dashboard** | [View Environment](https://railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}) |
+
+            ### ⏳ Deployment Status
+
+            Railway automatically deploys preview environments for PRs. The preview should be available within **2-5 minutes** after the PR is opened or updated.
+
+            <details>
+            <summary>🔧 Troubleshooting</summary>
+
+            If the preview is not available:
+            1. Check the [Railway dashboard](https://railway.app) for deployment status
+            2. Ensure PR environments are enabled in Railway project settings
+            3. Review Railway deployment logs for errors
+
+            **Note:** Preview environments use the **testing database** to keep staging data pristine.
+            </details>
+
+            ---
+            <sub>🤖 This comment is automatically updated when the PR is synced.</sub>

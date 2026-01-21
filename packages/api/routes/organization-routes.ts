@@ -368,11 +368,11 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied. Org admin role required." });
       }
 
-      // Only allow updating aiEnabled and wellnessEnabled fields
-      const { aiEnabled, wellnessEnabled } = req.body;
+      // Only allow updating aiEnabled, wellnessEnabled, and eventsEnabled fields
+      const { aiEnabled, wellnessEnabled, eventsEnabled } = req.body;
 
       // Build updates object with only the fields that were provided
-      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean } = {};
+      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean; eventsEnabled?: boolean } = {};
 
       // Validate and handle aiEnabled
       if (aiEnabled !== undefined) {
@@ -407,9 +407,18 @@ export function registerOrganizationRoutes(app: Express) {
         updates.wellnessEnabled = wellnessEnabled;
       }
 
+      // Validate and handle eventsEnabled
+      if (eventsEnabled !== undefined) {
+        if (typeof eventsEnabled !== 'boolean') {
+          return res.status(400).json({ message: "eventsEnabled must be boolean" });
+        }
+
+        updates.eventsEnabled = eventsEnabled;
+      }
+
       // Require at least one field to update
       if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ message: "At least one field (aiEnabled or wellnessEnabled) is required" });
+        return res.status(400).json({ message: "At least one field (aiEnabled, wellnessEnabled, or eventsEnabled) is required" });
       }
 
       // Capture request context for audit logging
@@ -452,6 +461,23 @@ export function registerOrganizationRoutes(app: Express) {
             organizationName: org.name,
             previousValue: org.wellnessEnabled,
             newValue: updates.wellnessEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      // Create audit log for events flag change by org admin
+      if (updates.eventsEnabled !== undefined && updates.eventsEnabled !== org.eventsEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: updates.eventsEnabled ? 'org_events_enabled' : 'org_events_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.eventsEnabled,
+            newValue: updates.eventsEnabled
           }),
           ipAddress: context.ipAddress || null,
           userAgent: context.userAgent || null,

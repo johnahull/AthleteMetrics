@@ -131,6 +131,45 @@ When ENABLED:
 | Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
 | Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
 
+## Git Workflow
+
+### Branching Strategy
+
+This repository uses a **develop → main** branching model:
+
+```
+feature/xyz ──┐
+fix/abc ──────┼──► develop ──────► main
+chore/123 ────┘
+```
+
+**Rules:**
+1. **All feature branches** (`feature/*`, `fix/*`, `chore/*`, etc.) must open PRs against `develop`
+2. **Only `develop`** may open a PR against `main`
+3. **Never PR directly** from a feature branch to `main`
+
+### Branch Naming Conventions
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| New feature | `feature/<description>` | `feature/athlete-dashboard` |
+| Bug fix | `fix/<description>` | `fix/rbac-requirerole-bug` |
+| Maintenance | `chore/<description>` | `chore/update-dependencies` |
+| Documentation | `docs/<description>` | `docs/api-reference` |
+| Refactoring | `refactor/<description>` | `refactor/auth-middleware` |
+
+### Creating PRs
+
+When creating a PR, always specify `develop` as the base branch:
+
+```bash
+# Create PR against develop (correct)
+gh pr create --base develop --title "feat: add new feature"
+
+# Never do this for feature branches
+gh pr create --base main  # ❌ Wrong for feature branches
+```
+
 ## Development Commands
 
 ### Core Development
@@ -335,6 +374,46 @@ export default function NewFeaturePage() {
 // ❌ INCORRECT: Don't use /admin prefix for new features
 <Route path="/admin/new-feature" component={NewFeaturePage} />
 ```
+
+#### Permission Middleware Module
+
+The unified permission module in `packages/api/permissions/` provides consistent RBAC middleware:
+
+```typescript
+import {
+  requirePermission,
+  requireRole,
+  requireOrgAccess,
+  requireResourceAccess,
+} from '../permissions';
+
+// Permission-based (legacy PERMISSIONS matrix)
+router.post('/teams', requireAuth, requirePermission('CREATE_TEAM'), handler);
+
+// Role-based (minimum role level)
+router.get('/coach-dashboard', requireAuth, requireRole('coach'), handler);
+
+// Organization access (validates org membership)
+router.get('/org/:orgId/data', requireAuth, requireOrgAccess(), handler);
+
+// Resource-action based (granular control)
+router.put('/athletes/:id', requireAuth, requireResourceAccess('athlete', 'update'), handler);
+```
+
+**Role Hierarchy (higher = more privileges):**
+- `site_admin` (100) - Full system access
+- `org_admin` (80) - Organization management
+- `coach` (60) - Team and athlete management
+- `athlete` (40) - Self-access only
+- `guest` (20) - Read-only access
+
+**Specialized Permission Helpers:**
+- `canCreateMeasurementFor()` - Measurement creation authorization
+- `canModifyMeasurement()` - Update authorization with verified check
+- `canVerifyMeasurement()` - Verification authorization
+- `canAccessLeaderboard()` - Coach-only analytics features
+
+**Migration Note:** `RoleManager.requirePermission()` and `RoleManager.requireRole()` are deprecated. Use the `permissions` module instead.
 
 ### Database Schema Architecture
 The application uses Drizzle ORM with PostgreSQL and follows a normalized relational design:

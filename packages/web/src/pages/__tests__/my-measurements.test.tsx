@@ -160,6 +160,9 @@ describe('My Measurements Page', () => {
         calculatedFromMeasurementIds: null,
         calculationMetadata: null,
         createdAt: new Date('2024-01-15'),
+        eventId: null,
+        eventNameSnapshot: null,
+        eventDateSnapshot: null,
       },
       {
         id: 'm2',
@@ -184,6 +187,9 @@ describe('My Measurements Page', () => {
         calculatedFromMeasurementIds: null,
         calculationMetadata: null,
         createdAt: new Date('2024-01-14'),
+        eventId: null,
+        eventNameSnapshot: null,
+        eventDateSnapshot: null,
       },
       {
         id: 'm3',
@@ -207,6 +213,9 @@ describe('My Measurements Page', () => {
         isCalculated: false,
         calculatedFromMeasurementIds: null,
         calculationMetadata: null,
+        eventId: null,
+        eventNameSnapshot: null,
+        eventDateSnapshot: null,
         createdAt: new Date('2024-01-10'),
       },
     ];

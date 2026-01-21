@@ -447,8 +447,8 @@ test.describe('Enhanced RBAC Edge Cases', () => {
     // Should redirect to login page
     expect(page.url()).toContain('/login');
 
-    // Verify we can't access protected content
-    const isOnLoginPage = await page.locator('input[name="username"]').count();
+    // Verify we can't access protected content - use combined selector for flexibility
+    const isOnLoginPage = await page.locator('#username, input[name="username"]').count();
     expect(isOnLoginPage).toBeGreaterThan(0);
   });
 

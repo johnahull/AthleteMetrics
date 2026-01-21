@@ -189,6 +189,12 @@ export class OrganizationService extends BaseService {
           to: validatedUpdates.aiEnabled
         };
       }
+      if (validatedUpdates.customMetricsEnabled !== undefined && validatedUpdates.customMetricsEnabled !== org.customMetricsEnabled) {
+        changesSummary.customMetricsEnabledChanged = {
+          from: org.customMetricsEnabled,
+          to: validatedUpdates.customMetricsEnabled
+        };
+      }
 
       // Create audit log with request context
       await this.storage.createAuditLog({

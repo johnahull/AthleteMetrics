@@ -4,6 +4,14 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/johnahull/AthleteMetrics.git"
+  },
+  "bugs": {
+    "url": "https://github.com/johnahull/AthleteMetrics/issues"
+  },
+  "homepage": "https://github.com/johnahull/AthleteMetrics#readme",
   "workspaces": [
     "packages/*"
   ],
@@ -49,12 +57,14 @@
     "@types/express": "4.17.21",
     "@types/express-session": "^1.18.0",
     "@types/node": "^20.16.11",
+    "@types/node-cron": "^3.0.11",
     "@types/passport": "^1.0.16",
     "@types/passport-apple": "^2.0.3",
     "@types/passport-google-oauth20": "^2.0.17",
     "@types/passport-local": "^1.0.38",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
+    "@types/web-push": "^3.6.4",
     "@types/ws": "^8.5.13",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/ui": "^3.2.4",
@@ -95,7 +105,7 @@
     "dompurify": "^3.2.6",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",
-    "jspdf-autotable": "^5.0.2",
+    "jspdf-autotable": "^5.0.7",
     "mathjs": "^15.1.0",
     "nanoid": "^5.1.6",
     "openai": "^6.9.1",

@@ -133,21 +133,30 @@ test.describe('Wellness Athlete Submission Interface Tests', () => {
   });
 
   test.afterAll(async ({ browser }) => {
-    // Cleanup test data
+    // Cleanup test data - skip if setup didn't complete
+    if (!testOrgId) {
+      console.log('Skipping cleanup - test setup did not complete (no orgId)');
+      return;
+    }
+
     const context = await browser.newContext();
     const page = await context.newPage();
     await loginAsDefaultUser(page);
 
     try {
-      // Delete test request
-      await page.request.delete(
-        `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${testRequest.id}`
-      );
+      // Delete test request (only if it was created)
+      if (testRequest?.id) {
+        await page.request.delete(
+          `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${testRequest.id}`
+        );
+      }
 
-      // Delete test template
-      await page.request.delete(
-        `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${testTemplate.id}`
-      );
+      // Delete test template (only if it was created)
+      if (testTemplate?.id) {
+        await page.request.delete(
+          `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${testTemplate.id}`
+        );
+      }
     } catch (error) {
       console.warn('Cleanup failed:', error);
     }
@@ -371,18 +380,29 @@ test.describe('Wellness Athlete Submission Interface Tests', () => {
     });
 
     test.afterAll(async ({ browser }) => {
-      // Cleanup
+      // Cleanup - skip if setup didn't complete
+      if (!testOrgId) {
+        console.log('Skipping cleanup - test setup did not complete (no orgId)');
+        return;
+      }
+
       const context = await browser.newContext();
       const page = await context.newPage();
       await loginAsDefaultUser(page);
 
       try {
-        await page.request.delete(
-          `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${multipleChoiceRequest.id}`
-        );
-        await page.request.delete(
-          `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${multipleChoiceTemplate.id}`
-        );
+        // Delete request (only if it was created)
+        if (multipleChoiceRequest?.id) {
+          await page.request.delete(
+            `${BASE_URL}/api/organizations/${testOrgId}/wellness/requests/${multipleChoiceRequest.id}`
+          );
+        }
+        // Delete template (only if it was created)
+        if (multipleChoiceTemplate?.id) {
+          await page.request.delete(
+            `${BASE_URL}/api/organizations/${testOrgId}/wellness/templates/${multipleChoiceTemplate.id}`
+          );
+        }
       } catch (error) {
         console.warn('Cleanup failed:', error);
       }

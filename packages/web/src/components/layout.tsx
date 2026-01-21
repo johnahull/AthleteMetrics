@@ -43,7 +43,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     '/privacy',
     '/terms',
     '/wellness/submit',
-    '/public/reports'
+    '/public/reports',
+    '/events/join'
   ];
 
   const isPublicRoute = PUBLIC_ROUTES.some(route =>

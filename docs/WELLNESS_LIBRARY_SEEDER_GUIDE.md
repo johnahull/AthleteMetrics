@@ -4,6 +4,11 @@
 
 The wellness template seeder populates your database with 6 pre-built system templates that coaches can clone from the library.
 
+## Prerequisites
+
+Make sure you have the following environment variables set (see `.env.example`):
+- `DATABASE_URL` - Your PostgreSQL connection string
+
 ## Step-by-Step Instructions
 
 ### Step 1: Find Your Organization ID
@@ -12,23 +17,19 @@ First, you need to get the organization ID where you want to seed the templates.
 
 **Option A: Using psql (recommended)**
 ```bash
-# For testing environment
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" \
-PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils \
-psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway \
+# Connect using your DATABASE_URL
+psql "$DATABASE_URL" \
 -c "SELECT id, name, created_at FROM organizations ORDER BY created_at DESC LIMIT 5;"
 ```
 
 **Option B: Using the admin UI**
-1. Log into the testing environment: https://athletemetrics-testing-testing.up.railway.app/
+1. Log into your environment
 2. Check the browser network tab or URL to find the organization ID
 
 **Option C: Create a new organization (if needed)**
 ```bash
 # Connect to database
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" \
-PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils \
-psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway
+psql "$DATABASE_URL"
 
 # Inside psql, create a new org
 INSERT INTO organizations (id, name, type, created_at, updated_at)
@@ -42,16 +43,14 @@ Once you have the organization ID, run the seeder:
 
 ```bash
 # Navigate to project root
-cd /home/hulla/devel/AthleteMetrics
+cd /path/to/AthleteMetrics
 
 # Run the seeder with your organization ID
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" \
 tsx scripts/run-wellness-seeder.ts YOUR_ORG_ID_HERE
 ```
 
 **Example:**
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" \
 tsx scripts/run-wellness-seeder.ts 123e4567-e89b-12d3-a456-426614174000
 ```
 
@@ -60,9 +59,7 @@ tsx scripts/run-wellness-seeder.ts 123e4567-e89b-12d3-a456-426614174000
 Check that the templates were created:
 
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" \
-PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils \
-psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway \
+psql "$DATABASE_URL" \
 -c "SELECT name, category, is_system_seeded, array_length(tags, 1) as tag_count FROM wellness_templates WHERE is_system_seeded = true;"
 ```
 
@@ -81,8 +78,8 @@ Expected output:
 
 ### Step 4: View Templates in the UI
 
-1. Navigate to testing environment: https://athletemetrics-testing-testing.up.railway.app/
-2. Login with testing credentials
+1. Navigate to your AthleteMetrics environment
+2. Login with your credentials
 3. Go to **Wellness** → **Library** tab
 4. You should see all 6 system templates with sparkle (✨) badges
 
@@ -90,30 +87,13 @@ Expected output:
 
 ## Quick Reference
 
-### Testing Environment Database
+### Database Connection
+
+Use the `DATABASE_URL` environment variable for all database connections. See `.env.example` for the connection string format:
+
 ```bash
-# Connection details
-Host: shuttle.proxy.rlwy.net
-Port: 34674
-Database: railway
-User: postgres
-Password: lgAzCeLICfBEzQzLOrdbnAvyjOXvhils
-
-# Full connection string
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway"
-```
-
-### Staging Environment Database
-```bash
-# Connection details
-Host: maglev.proxy.rlwy.net
-Port: 29985
-Database: railway
-User: postgres
-Password: rdnrfZfXPiZWKbahqepvoYnYerNoLiRG
-
-# Full connection string
-DATABASE_URL="postgresql://postgres:rdnrfZfXPiZWKbahqepvoYnYerNoLiRG@maglev.proxy.rlwy.net:29985/railway"
+# Format
+DATABASE_URL="postgresql://USER:PASSWORD@HOST:PORT/DATABASE"
 ```
 
 ---
@@ -122,22 +102,22 @@ DATABASE_URL="postgresql://postgres:rdnrfZfXPiZWKbahqepvoYnYerNoLiRG@maglev.prox
 
 ### Get All Organizations
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway -c "SELECT id, name FROM organizations;"
+psql "$DATABASE_URL" -c "SELECT id, name FROM organizations;"
 ```
 
 ### Run Seeder (replace ORG_ID)
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" tsx scripts/run-wellness-seeder.ts ORG_ID
+tsx scripts/run-wellness-seeder.ts ORG_ID
 ```
 
 ### Check Seeded Templates
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway -c "SELECT name, category, is_system_seeded FROM wellness_templates WHERE is_system_seeded = true;"
+psql "$DATABASE_URL" -c "SELECT name, category, is_system_seeded FROM wellness_templates WHERE is_system_seeded = true;"
 ```
 
 ### Delete Seeded Templates (if you need to re-seed)
 ```bash
-DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.proxy.rlwy.net:34674/railway" PGPASSWORD=lgAzCeLICfBEzQzLOrdbnAvyjOXvhils psql -h shuttle.proxy.rlwy.net -p 34674 -U postgres -d railway -c "DELETE FROM wellness_templates WHERE is_system_seeded = true;"
+psql "$DATABASE_URL" -c "DELETE FROM wellness_templates WHERE is_system_seeded = true;"
 ```
 
 ---
@@ -216,5 +196,4 @@ DATABASE_URL="postgresql://postgres:lgAzCeLICfBEzQzLOrdbnAvyjOXvhils@shuttle.pro
 
 ---
 
-**Created:** 2025-11-24
 **For:** AthleteMetrics Wellness Template Library Feature

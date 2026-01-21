@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm, FieldErrors } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -40,9 +40,12 @@ import {
   updateSiteBenchmarkSchema,
   type InsertSiteBenchmark,
   type SiteBenchmark,
+  type SiteSport,
+  type SitePosition,
 } from "@shared/schema";
 import { z } from "zod";
 import { OrganizationTypeMultiSelect } from "@/components/organization-type-multi-select";
+import { useSports, usePositions } from "@/lib/sports-api";
 
 // Tier color options
 const TIER_COLORS = [
@@ -100,6 +103,7 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
       gender: undefined,
       ageMin: undefined,
       ageMax: undefined,
+      sport: undefined,
       position: undefined,
       level: undefined,
       applicableOrgTypes: undefined,
@@ -113,6 +117,24 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
   // Watch comparison operator to conditionally show range fields
   const comparisonOperator = form.watch("comparisonOperator");
   const selectedMetricCode = form.watch("metricCode");
+  const selectedSport = form.watch("sport");
+
+  // Fetch available sports
+  const { data: sports = [] } = useSports();
+
+  // Fetch positions for selected sport
+  const { data: positions = [] } = usePositions(selectedSport || "");
+
+  // Track previous sport to detect changes
+  const previousSportRef = useRef(selectedSport);
+
+  // Clear position when sport changes (any change, not just when becoming empty)
+  useEffect(() => {
+    if (previousSportRef.current !== selectedSport) {
+      form.setValue("position", null);
+      previousSportRef.current = selectedSport;
+    }
+  }, [selectedSport, form]);
 
   // Clear tier fields when tier mode is disabled or when switching away from range
   useEffect(() => {
@@ -158,7 +180,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: benchmark.gender as 'Male' | 'Female' | 'Not Specified' | undefined,
         ageMin: benchmark.ageMin || undefined,
         ageMax: benchmark.ageMax || undefined,
-        position: benchmark.position || undefined,
+        sport: benchmark.sport || null,
+        position: benchmark.position || null,
         level: benchmark.level || undefined,
         applicableOrgTypes: benchmark.applicableOrgTypes || undefined,
         isActive: benchmark.isActive,
@@ -166,6 +189,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         color: benchmark.color || undefined,
         icon: benchmark.icon || undefined,
       });
+      // Sync ref with loaded benchmark's sport to prevent unwanted position clear
+      previousSportRef.current = benchmark.sport || null;
     } else {
       setIsTierMode(false);
       form.reset({
@@ -183,7 +208,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         gender: undefined,
         ageMin: undefined,
         ageMax: undefined,
-        position: undefined,
+        sport: null,
+        position: null,
         level: undefined,
         applicableOrgTypes: undefined,
         isActive: true,
@@ -191,6 +217,8 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
         color: undefined,
         icon: undefined,
       });
+      // Reset ref when creating new benchmark
+      previousSportRef.current = null;
     }
   }, [benchmark, form]);
 
@@ -672,6 +700,41 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                     />
                   </div>
 
+                  {/* Sport */}
+                  <FormField
+                    control={form.control}
+                    name="sport"
+                    render={({ field }) => (
+                      <FormItem className="mb-4">
+                        <FormLabel>Sport</FormLabel>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? null : value)
+                          }
+                          value={field.value || "all"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="All sports" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Sports</SelectItem>
+                            {sports.map((sport: SiteSport) => (
+                              <SelectItem key={sport.code} value={sport.code}>
+                                {sport.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          Leave as "All Sports" to apply to athletes in any sport
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
                   {/* Position */}
                   <FormField
                     control={form.control}
@@ -679,14 +742,32 @@ export function BenchmarkForm({ open, onClose, benchmark }: BenchmarkFormProps) 
                     render={({ field }) => (
                       <FormItem className="mb-4">
                         <FormLabel>Position</FormLabel>
-                        <FormControl>
-                          <Input
-                            {...field}
-                            value={field.value || ""}
-                            placeholder="e.g., Forward, Defense"
-                          />
-                        </FormControl>
-                        <FormDescription>Specific position or role</FormDescription>
+                        <Select
+                          onValueChange={(value) =>
+                            field.onChange(value === "all" ? null : value)
+                          }
+                          value={field.value || "all"}
+                          disabled={!selectedSport}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder={selectedSport ? "All positions" : "Select sport first"} />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="all">All Positions</SelectItem>
+                            {positions.map((position: SitePosition) => (
+                              <SelectItem key={position.id} value={position.name}>
+                                {position.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormDescription>
+                          {selectedSport
+                            ? "Leave as \"All Positions\" to apply to athletes in any position"
+                            : "Select a sport first to filter by position"}
+                        </FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}

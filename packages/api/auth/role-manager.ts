@@ -1,5 +1,5 @@
 import { storage } from '../storage';
-import { Role, Permission, hasPermission, canManageRole, getAvailableRoles, PERMISSIONS } from '@shared/role-types';
+import { Role, Permission, hasPermission, canManageRole, getAvailableRoles, getRoleLevel, PERMISSIONS } from '@shared/role-types';
 import { AuthSecurity } from './security';
 
 export class RoleManager {
@@ -35,21 +35,27 @@ export class RoleManager {
 
       // Update the role
       const success = await storage.updateUserRole(targetUserId, organizationId, newRole);
-      
+
       if (success) {
-        // Log the role change
+        // Determine if this is a permission escalation (promotion to higher role)
+        const isEscalation = currentRole &&
+          getRoleLevel(newRole) > getRoleLevel(currentRole as Role);
+
+        // Log the role change with appropriate event type and severity
+        // - permission_escalation: Used for promotions (warning severity for audit trail)
+        // - role_change: Used for new assignments, demotions, or lateral moves (info severity)
         await AuthSecurity.logSecurityEvent({
           userId: targetUserId,
-          eventType: 'login_success', // We'll extend this to include role changes
-          eventData: JSON.stringify({ 
-            action: 'role_changed',
+          eventType: isEscalation ? 'permission_escalation' : 'role_change',
+          eventData: JSON.stringify({
+            action: 'role_assigned',
             assignerId,
-            oldRole: currentRole,
+            oldRole: currentRole || 'none',
             newRole,
-            organizationId 
+            organizationId
           }),
           ipAddress,
-          severity: 'info',
+          severity: isEscalation ? 'warning' : 'info',
         });
       }
       
@@ -209,6 +215,17 @@ export class RoleManager {
 
   /**
    * Create role-based middleware for routes
+   *
+   * @deprecated Use `requirePermission` from 'packages/api/permissions' instead.
+   * This method will be removed in a future version.
+   *
+   * @example
+   * // Old usage (deprecated):
+   * RoleManager.requirePermission('CREATE_TEAM')
+   *
+   * // New usage:
+   * import { requirePermission } from '../permissions';
+   * requirePermission('CREATE_TEAM')
    */
   static requirePermission(permission: Permission) {
     return async (req: any, res: any, next: any) => {
@@ -245,6 +262,24 @@ export class RoleManager {
 
   /**
    * Create role-based middleware for minimum role requirement
+   *
+   * @deprecated Use `requireRole` from 'packages/api/permissions' instead.
+   * This method will be removed in a future version.
+   *
+   * @param minRole - The minimum role level required to access the route
+   * @returns Express middleware that validates user has sufficient role level
+   *
+   * @example
+   * // Old usage (deprecated):
+   * RoleManager.requireRole('coach')
+   *
+   * // New usage:
+   * import { requireRole } from '../permissions';
+   * requireRole('coach')
+   *
+   * @note Uses role LEVEL comparison (>=) not canManageRole (>).
+   * A coach (level 60) can access coach-required routes.
+   * canManageRole() is for checking if someone can ASSIGN a role, not access it.
    */
   static requireRole(minRole: Role) {
     return async (req: any, res: any, next: any) => {
@@ -253,11 +288,36 @@ export class RoleManager {
         return res.status(401).json({ message: 'Authentication required' });
       }
 
+      // Site admins bypass all role checks
+      if (user.isSiteAdmin) {
+        req.userRole = 'site_admin';
+        req.organizationId = req.params.organizationId || user.primaryOrganizationId;
+        return next();
+      }
+
       const organizationId = req.params.organizationId || user.primaryOrganizationId;
+
+      // Require organization context for non-site-admins
+      if (!organizationId) {
+        return res.status(400).json({ message: 'Organization context required' });
+      }
+
       const userRole = await storage.getUserRole(user.id, organizationId);
 
-      if (!userRole || !canManageRole(userRole as Role, minRole)) {
-        return res.status(403).json({ 
+      if (!userRole) {
+        return res.status(403).json({
+          message: `${minRole} role or higher required`,
+          requiredRole: minRole
+        });
+      }
+
+      // FIX: Use role LEVEL comparison (>=) instead of canManageRole (>)
+      // A coach should be able to access coach-required routes
+      const userLevel = getRoleLevel(userRole as Role);
+      const requiredLevel = getRoleLevel(minRole);
+
+      if (userLevel < requiredLevel) {
+        return res.status(403).json({
           message: `${minRole} role or higher required`,
           userRole,
           requiredRole: minRole

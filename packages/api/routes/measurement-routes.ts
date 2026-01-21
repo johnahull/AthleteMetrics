@@ -10,6 +10,11 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
+import {
+  canVerifyMeasurement,
+  canUseBatchEndpoint,
+  canQueryCrossOrganization,
+} from "../permissions/index";
 import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { z } from "zod";
@@ -66,9 +71,9 @@ const orgSpecificLimiter = rateLimit({
     // Skip rate limiting if no orgIds specified (falls back to general rate limiter)
     return !req.query.orgIds;
   },
-  // NOTE: Using default validation (IPv6 support enabled)
-  // req.ip is used for IP extraction, which handles X-Forwarded-For when 'trust proxy' is configured.
-  // Ensure Express app.set('trust proxy', true) is configured for proper IP detection behind proxies.
+  // Disable IPv6 keyGenerator validation - we're intentionally using IP+orgIds composite key
+  // The IP is used for rate limiting, not security-critical operations
+  validate: { keyGeneratorIpFallback: false },
 });
 
 // Shared UUID validation pattern (RFC 4122 format: 8-4-4-4-12 hex pattern)
@@ -219,7 +224,7 @@ export function registerMeasurementRoutes(app: Express) {
 
       // SECURITY: Validate orgIds if provided (non-site-admins only)
       // Site admins can query any org, non-admins must belong to all specified orgs
-      if (filters.orgIds && !isSiteAdmin(user)) {
+      if (filters.orgIds && !canQueryCrossOrganization(user)) {
         const requestedOrgIds = filters.orgIds.split(',').map(id => id.trim()).filter(id => id !== '');
 
         if (requestedOrgIds.length > 0) {
@@ -260,7 +265,7 @@ export function registerMeasurementRoutes(app: Express) {
       }
 
       // Site admins can query across organizations, non-admins cannot
-      const allowCrossOrganization = isSiteAdmin(user);
+      const allowCrossOrganization = canQueryCrossOrganization(user);
       const result = await measurementService.getMeasurements(filters, allowCrossOrganization);
       // Return just the measurements array for backwards compatibility
       res.json(result.measurements);
@@ -401,9 +406,10 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Athletes cannot use batch endpoint
-      if (user.role === 'athlete') {
-        return res.status(403).json({ message: "Athletes cannot use batch measurement entry" });
+      // Permission check: only coaches and admins can use batch endpoint
+      const batchPermission = canUseBatchEndpoint(user);
+      if (!batchPermission.allowed) {
+        return res.status(403).json({ message: batchPermission.reason });
       }
 
       // Validate batch request structure
@@ -417,11 +423,11 @@ export function registerMeasurementRoutes(app: Express) {
       const validatedBatch = batchSchema.parse(req.body);
       const measurements = validatedBatch.measurements;
 
-      // Call batch service method with site admin check
+      // Call batch service method with cross-org permission check
       const result = await measurementService.createMeasurementsBatch(
         measurements,
         user,
-        isSiteAdmin(user)
+        canQueryCrossOrganization(user)
       );
 
       // Return appropriate HTTP status code
@@ -619,11 +625,6 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      // Permission check: only org admins, coaches, and site admins can verify
-      if (user.role === 'athlete') {
-        return res.status(403).json({ message: "Athletes cannot verify measurements" });
-      }
-
       const measurementId = req.params.id;
 
       // Get existing measurement
@@ -632,15 +633,15 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(404).json({ message: "Measurement not found" });
       }
 
-      // SECURITY: Validate user has access to measurement's organization via database membership
+      // Permission check: verify access using unified permission helper
+      const verifyPermission = await canVerifyMeasurement(user, existingMeasurement);
+      if (!verifyPermission.allowed) {
+        return res.status(403).json({ message: verifyPermission.reason });
+      }
+
+      // Get expected organization ID for defense-in-depth IDOR protection
       let expectedOrganizationId: string | undefined = undefined;
       if (!isSiteAdmin(user)) {
-        if (existingMeasurement.organizationId) {
-          const hasAccess = await hasOrganizationAccess(user, existingMeasurement.organizationId);
-          if (!hasAccess) {
-            return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.MEASUREMENT_ACCESS_DENIED) });
-          }
-        }
         const userOrgs = await storage.getUserOrganizations(user.id);
         expectedOrganizationId = userOrgs[0]?.organizationId;
       }

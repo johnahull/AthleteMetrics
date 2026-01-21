@@ -299,6 +299,7 @@ export default function MyMeasurementsPage() {
                   isLoading={measurementsLoading}
                   onEdit={handleEditMeasurement}
                   onDelete={handleDeleteMeasurement}
+                  showSourceColumn={true}
                 />
               )}
             </TabsContent>

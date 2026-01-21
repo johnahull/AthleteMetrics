@@ -12,10 +12,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const rootDir = join(__dirname, '..');
-const sourceIPhone = join(rootDir, 'am-logo-iphone.png');
-const sourceAndroid = join(rootDir, 'am-logo-android.png');
-const sourceNoBrandTransparent = join(rootDir, 'am-logo-nobrand-transparent-gimp.png');
-const sourceBrand = join(rootDir, 'am-logo-brand-transparent-gimp.png');
+const assetsDir = join(rootDir, 'attached_assets');
+const sourceIPhone = join(assetsDir, 'am-logo-iphone.png');
+const sourceAndroid = join(assetsDir, 'am-logo-android.png');
+const sourceNoBrandTransparent = join(assetsDir, 'am-logo-nobrand-transparent-gimp.png');
+const sourceBrand = join(assetsDir, 'am-logo-brand-transparent-gimp.png');
 const outputDir = join(rootDir, 'packages/web/public');
 
 async function generateVariants() {
@@ -122,8 +123,8 @@ async function generateVariants() {
   console.log('ℹ️  Note: Web icons use transparent background for better web integration');
   console.log('   Favicon uses white background for visibility on dark browser tabs');
   console.log('   Platform-specific icons (with white containers) are available separately:');
-  console.log('   - am-logo-iphone.png: iOS rounded square style');
-  console.log('   - am-logo-android.png: Android circular style');
+  console.log('   - attached_assets/am-logo-iphone.png: iOS rounded square style');
+  console.log('   - attached_assets/am-logo-android.png: Android circular style');
 }
 
 generateVariants().catch(err => {
