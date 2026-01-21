@@ -67,6 +67,12 @@ export {
   archiveTeamSchema,
   updateTeamMembershipSchema,
   createSiteAdminSchema,
+  insertBenchmarkSetSchema,
+  updateBenchmarkSetSchema,
+  insertBenchmarkSetItemSchema,
+  updateBenchmarkSetItemSchema,
+  reorderBenchmarkSetItemsSchema,
+  toggleSiteSetVisibilitySchema,
 } from "../schema-original";
 
 // Insert type exports
@@ -125,4 +131,9 @@ export type {
   UpdateEventRegistration,
   InsertEventInvitation,
   InsertEventMetric,
+  InsertBenchmarkSet,
+  UpdateBenchmarkSet,
+  InsertBenchmarkSetItem,
+  UpdateBenchmarkSetItem,
+  ReorderBenchmarkSetItems,
 } from "../schema-original";

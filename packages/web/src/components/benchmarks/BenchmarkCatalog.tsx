@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { useSiteBenchmarksForOrg, useCustomBenchmarks, useOrganizationBenchmarks } from "@/lib/benchmarks-api";
+import { useBenchmarkMemberships, type BenchmarkMemberships } from "@/lib/benchmark-sets-api";
 import { useMetricConfig } from "@/hooks/use-metric-config";
 import {
   Dialog,
@@ -12,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { Search, Target } from "lucide-react";
+import { Search, Target, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
 import { getMetricDisplayName } from "@/constants/metrics";
@@ -39,6 +40,9 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
     organizationId,
     true // include all, even disabled ones
   );
+
+  // Fetch which sets contain each benchmark
+  const { data: memberships } = useBenchmarkMemberships(organizationId);
 
   const isLoading = loadingSite || loadingCustom || loadingOrgBenchmarks;
 
@@ -148,6 +152,18 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                               </Badge>
                             )}
                           </div>
+                          {/* Show set membership badges */}
+                          {memberships && memberships[benchmark.id] && memberships[benchmark.id].length > 0 && (
+                            <div className="flex gap-1 mt-2 items-center">
+                              <Layers className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground mr-1">In sets:</span>
+                              {memberships[benchmark.id].map((set: { setId: string; setName: string }) => (
+                                <Badge key={set.setId} variant="outline" className="text-xs">
+                                  {set.setName}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="ml-4">
                           <BenchmarkEnablementToggle
@@ -209,6 +225,18 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                               </Badge>
                             )}
                           </div>
+                          {/* Show set membership badges */}
+                          {memberships && memberships[benchmark.id] && memberships[benchmark.id].length > 0 && (
+                            <div className="flex gap-1 mt-2 items-center">
+                              <Layers className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground mr-1">In sets:</span>
+                              {memberships[benchmark.id].map((set: { setId: string; setName: string }) => (
+                                <Badge key={set.setId} variant="outline" className="text-xs">
+                                  {set.setName}
+                                </Badge>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="ml-4">
                           <BenchmarkEnablementToggle

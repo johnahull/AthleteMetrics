@@ -38,6 +38,9 @@ export type SitePosition = typeof tables.sitePositions.$inferSelect;
 export type SiteBenchmark = typeof tables.siteBenchmarks.$inferSelect;
 export type CustomBenchmark = typeof tables.customBenchmarks.$inferSelect;
 export type OrganizationBenchmark = typeof tables.organizationBenchmarks.$inferSelect;
+export type BenchmarkSet = typeof tables.benchmarkSets.$inferSelect;
+export type BenchmarkSetItem = typeof tables.benchmarkSetItems.$inferSelect;
+export type OrganizationBenchmarkSet = typeof tables.organizationBenchmarkSets.$inferSelect;
 
 // ============================================================================
 // Measurements Tables
@@ -214,6 +217,20 @@ export type EventMetricWithDetails = EventMetric & {
   metricLabel: string;
   metricType: string;
   units: string;
+};
+
+// Benchmark set with items populated
+export type BenchmarkSetWithItems = BenchmarkSet & {
+  items: (BenchmarkSetItem & {
+    // Benchmark details (from either site_benchmarks or custom_benchmarks)
+    benchmark?: {
+      id: string;
+      name: string;
+      metricCode: string;
+      benchmarkValue: number | null;
+      comparisonOperator: string;
+    };
+  })[];
 };
 
 // ============================================================================

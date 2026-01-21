@@ -131,3 +131,59 @@ export const organizationBenchmarks = pgTable("organization_benchmarks", {
   orgBenchmarkIdx: index("org_benchmarks_org_benchmark_idx").on(table.organizationId, table.benchmarkId),
   enabledIdx: index("org_benchmarks_enabled_idx").on(table.isEnabled),
 }));
+
+// ============================================================================
+// BENCHMARK SETS
+// Named collections of benchmarks for use in reports and analytics
+// ============================================================================
+
+// Benchmark Sets - Named collections of benchmarks (e.g., "NCAA D1 Women's Soccer")
+export const benchmarkSets = pgTable("benchmark_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'cascade' }),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  sport: varchar("sport", { length: 50 }),
+  level: varchar("level", { length: 50 }),
+  gender: varchar("gender", { length: 20 }), // "Male", "Female", "Not Specified"
+  isTemplate: boolean("is_template").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  orgIdx: index("benchmark_sets_org_idx").on(table.organizationId),
+  activeIdx: index("benchmark_sets_active_idx").on(table.isActive),
+  uniqueOrgName: unique("benchmark_sets_unique_org_name").on(table.organizationId, table.name),
+}));
+
+// Benchmark Set Items - Individual benchmarks within a set
+export const benchmarkSetItems = pgTable("benchmark_set_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  setId: varchar("set_id").notNull().references(() => benchmarkSets.id, { onDelete: 'cascade' }),
+  benchmarkId: varchar("benchmark_id").notNull(),
+  benchmarkType: varchar("benchmark_type", { length: 10 }).notNull(), // 'site' | 'custom'
+  displayOrder: integer("display_order").default(999).notNull(),
+  customLabel: varchar("custom_label", { length: 100 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  setIdx: index("benchmark_set_items_set_idx").on(table.setId),
+  uniqueSetBenchmark: unique("benchmark_set_items_unique").on(table.setId, table.benchmarkId, table.benchmarkType),
+}));
+
+// Organization-level site benchmark set visibility
+// Allows org admins to hide/disable site-level benchmark sets for their organization
+// Default behavior: No row = site set IS visible (auto-visible by default)
+// Disabled: Row with isEnabled: false = site set hidden for org
+// Re-enabled: Row with isEnabled: true = explicitly re-enabled
+export const organizationBenchmarkSets = pgTable("organization_benchmark_sets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  siteSetId: varchar("site_set_id").notNull().references(() => benchmarkSets.id, { onDelete: 'cascade' }),
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at"),
+}, (table) => ({
+  uniqueOrgSet: unique("organization_benchmark_sets_unique").on(table.organizationId, table.siteSetId),
+  orgIdx: index("org_benchmark_sets_org_idx").on(table.organizationId),
+}));

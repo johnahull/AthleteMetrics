@@ -18,10 +18,16 @@ vi.mock('@/hooks/use-reports', () => ({
   useCreateReport: () => mockUseCreateReport(),
 }));
 
-// Mock apiRequest
+// Mock apiRequest and STALE_TIME
 const mockApiRequest = vi.fn();
 vi.mock('@/lib/queryClient', () => ({
   apiRequest: (...args: any[]) => mockApiRequest(...args),
+  STALE_TIME: {
+    REALTIME: 1 * 60 * 1000,
+    DEFAULT: 5 * 60 * 1000,
+    STATIC: 15 * 60 * 1000,
+    INFINITE: Infinity,
+  },
 }));
 
 // Mock useOrganizationMetrics
