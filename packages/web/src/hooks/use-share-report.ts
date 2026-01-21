@@ -8,6 +8,24 @@ interface ShareReportParams {
   message?: string;
 }
 
+interface BulkShareReportParams {
+  reportId: string;
+  athleteIds: string[];
+  message?: string;
+}
+
+interface BulkShareReportResult {
+  shared: number;
+  skipped: number;
+  alreadyShared: number;
+  results: Array<{
+    athleteId: string;
+    success: boolean;
+    alreadyShared?: boolean;
+    error?: string;
+  }>;
+}
+
 interface ReportShare {
   shareId: string;
   athlete: {
@@ -46,6 +64,46 @@ export function useShareReport() {
       toast({
         title: "Success",
         description: "Report sent successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to share report",
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useBulkShareReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ reportId, athleteIds, message }: BulkShareReportParams) => {
+      const res = await apiRequest("POST", `/api/reports/${reportId}/share-bulk`, {
+        athleteIds,
+        message,
+      });
+      return res.json() as Promise<BulkShareReportResult>;
+    },
+    onSuccess: (data, { reportId }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports", reportId, "shares"] });
+
+      const { shared, alreadyShared, skipped } = data;
+
+      let description = `Report sent to ${shared} athlete${shared !== 1 ? 's' : ''}`;
+      if (alreadyShared > 0) {
+        description += `, ${alreadyShared} already had access`;
+      }
+      if (skipped > 0) {
+        description += `, ${skipped} skipped due to errors`;
+      }
+
+      toast({
+        title: "Success",
+        description,
       });
     },
     onError: (error: Error) => {

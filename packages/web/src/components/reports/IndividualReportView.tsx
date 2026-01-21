@@ -16,9 +16,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2, Send } from "lucide-react";
+import { FileDown, Share2, Send, Users } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
+import { SendReportToMultipleAthletesDialog } from "./SendReportToMultipleAthletesDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
@@ -32,6 +33,7 @@ interface IndividualReportViewProps {
 export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [showMultiSendDialog, setShowMultiSendDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
   const { toast } = useToast();
@@ -151,6 +153,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <Send className="h-4 w-4 mr-2" />
                 Send to Athlete
               </Button>
+              <Button variant="outline" onClick={() => setShowMultiSendDialog(true)} data-testid="send-to-athletes-button">
+                <Users className="h-4 w-4 mr-2" />
+                Send to Athletes
+              </Button>
             </div>
           </div>
         </CardHeader>
@@ -265,6 +271,15 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           athleteEmail={athlete.email}
         />
       )}
+
+      {/* Multi-athlete send dialog */}
+      <SendReportToMultipleAthletesDialog
+        open={showMultiSendDialog}
+        onOpenChange={setShowMultiSendDialog}
+        reportId={report.id}
+        reportName={report.name}
+        organizationId={report.organizationId}
+      />
     </div>
   );
 }

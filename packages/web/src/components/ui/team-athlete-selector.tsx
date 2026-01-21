@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Search, Users, User, X, Filter } from 'lucide-react';
+import { Search, Users, User, X, Filter, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
 
@@ -41,6 +41,8 @@ interface TeamAthleteSelectorProps {
   selectedAthleteIds: string[];
   onSelectionChange: (athleteIds: string[]) => void;
   className?: string;
+  disabledAthleteIds?: Map<string, Date>;
+  disabledLabel?: (date: Date) => string;
 }
 
 // API fetch functions
@@ -64,7 +66,9 @@ export function TeamAthleteSelector({
   organizationId,
   selectedAthleteIds,
   onSelectionChange,
-  className
+  className,
+  disabledAthleteIds,
+  disabledLabel
 }: TeamAthleteSelectorProps) {
   const labels = useContextualLabels();
   // Local state
@@ -226,6 +230,11 @@ export function TeamAthleteSelector({
   };
 
   const toggleAthlete = (athleteId: string) => {
+    // Don't allow toggling disabled athletes
+    if (disabledAthleteIds?.has(athleteId)) {
+      return;
+    }
+
     if (selectedAthleteIds.includes(athleteId)) {
       onSelectionChange(selectedAthleteIds.filter(id => id !== athleteId));
     } else {
@@ -458,37 +467,57 @@ export function TeamAthleteSelector({
                       {filteredAthletes.map(athlete => {
                         console.log('[TeamAthleteSelector] RENDERING athlete item', athlete.fullName);
                         const isSelected = selectedAthleteIds.includes(athlete.id);
+                        const isDisabled = disabledAthleteIds?.has(athlete.id);
+                        const disabledDate = isDisabled && disabledAthleteIds ? disabledAthleteIds.get(athlete.id) : null;
+                        const disabledText = disabledDate && disabledLabel ? disabledLabel(disabledDate) : null;
 
                         return (
                           <div
                             key={athlete.id}
                             className={cn(
                               "flex items-center space-x-3 p-3 rounded-lg transition-all duration-200",
-                              "hover:bg-accent hover:shadow-sm cursor-pointer border border-transparent",
-                              isSelected && "bg-primary/5 border-primary/20"
+                              !isDisabled && "hover:bg-accent hover:shadow-sm cursor-pointer border border-transparent",
+                              isSelected && !isDisabled && "bg-primary/5 border-primary/20",
+                              isDisabled && "opacity-60 bg-muted/30 cursor-not-allowed"
                             )}
                           >
                             <Checkbox
                               id={`athlete-${athlete.id}`}
-                              checked={isSelected}
+                              checked={isSelected || isDisabled}
                               onCheckedChange={() => toggleAthlete(athlete.id)}
+                              disabled={isDisabled}
                               className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
                             />
-                            <User className={cn(
-                              "h-5 w-5 flex-shrink-0 transition-colors",
-                              isSelected ? "text-primary" : "text-muted-foreground"
-                            )} />
+                            {isDisabled ? (
+                              <Check className="h-5 w-5 flex-shrink-0 text-green-600" />
+                            ) : (
+                              <User className={cn(
+                                "h-5 w-5 flex-shrink-0 transition-colors",
+                                isSelected ? "text-primary" : "text-muted-foreground"
+                              )} />
+                            )}
                             <label
                               htmlFor={`athlete-${athlete.id}`}
-                              className="flex-1 text-sm cursor-pointer min-w-0"
+                              className={cn(
+                                "flex-1 text-sm min-w-0",
+                                !isDisabled && "cursor-pointer"
+                              )}
                             >
                               <div className="font-medium truncate">{athlete.fullName}</div>
                               <div className="text-xs text-muted-foreground truncate">
-                                {athlete.teams && athlete.teams.length > 0
-                                  ? athlete.teams.map(t => t.name).join(', ')
-                                  : 'No team'}
-                                {athlete.positions && athlete.positions.length > 0 &&
-                                  ` • ${athlete.positions.join(', ')}`}
+                                {isDisabled && disabledText ? (
+                                  <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                    {disabledText}
+                                  </Badge>
+                                ) : (
+                                  <>
+                                    {athlete.teams && athlete.teams.length > 0
+                                      ? athlete.teams.map(t => t.name).join(', ')
+                                      : 'No team'}
+                                    {athlete.positions && athlete.positions.length > 0 &&
+                                      ` • ${athlete.positions.join(', ')}`}
+                                  </>
+                                )}
                               </div>
                             </label>
                           </div>
