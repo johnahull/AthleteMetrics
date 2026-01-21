@@ -799,6 +799,7 @@ export default function OrgAdminSettings() {
                 </p>
               </div>
               <Switch
+                data-testid="toggle-accept-requests"
                 checked={organization?.allowMembershipRequests ?? true}
                 onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ allowMembershipRequests: checked })}
                 disabled={updateMembershipSettingsMutation.isPending}
@@ -816,6 +817,7 @@ export default function OrgAdminSettings() {
                 </p>
               </div>
               <Switch
+                data-testid="toggle-public-directory"
                 checked={organization?.isPublicDirectory ?? false}
                 onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ isPublicDirectory: checked })}
                 disabled={updateMembershipSettingsMutation.isPending || !organization?.allowMembershipRequests}
@@ -833,6 +835,7 @@ export default function OrgAdminSettings() {
                 </p>
               </div>
               <Switch
+                data-testid="toggle-auto-approve"
                 checked={organization?.autoApproveRequests ?? false}
                 onCheckedChange={(checked) => updateMembershipSettingsMutation.mutate({ autoApproveRequests: checked })}
                 disabled={updateMembershipSettingsMutation.isPending || !organization?.allowMembershipRequests}

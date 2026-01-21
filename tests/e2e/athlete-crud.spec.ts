@@ -95,7 +95,7 @@ test.describe('Athlete CRUD Tests', () => {
     );
 
     // Submit the form
-    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     // Capture athlete ID from API response
     try {
@@ -138,7 +138,7 @@ test.describe('Athlete CRUD Tests', () => {
       response.url().includes('/api/athletes') && response.request().method() === 'POST'
     );
 
-    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     try {
       const response = await responsePromise;
@@ -165,7 +165,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[data-testid="input-athlete-school"]', updatedSchool);
 
     // Save changes (button text is "Update Athlete" in edit mode)
-    await page.click('button[type="submit"]:has-text("Update Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     // Wait for modal to close
     await page.waitForSelector('[role="dialog"]', { state: 'hidden', timeout: 5000 });
@@ -193,7 +193,7 @@ test.describe('Athlete CRUD Tests', () => {
       response.url().includes('/api/athletes') && response.request().method() === 'POST'
     );
 
-    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     try {
       const response = await responsePromise;
@@ -251,7 +251,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.waitForSelector('[role="dialog"], .modal', { timeout: 5000 });
 
     // Try to submit without filling required fields
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     // Wait for validation errors to appear
     await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 5000 });
@@ -281,7 +281,7 @@ test.describe('Athlete CRUD Tests', () => {
     await page.fill('[data-testid="input-email-0"]', 'invalid-email-format');
 
     // Try to submit
-    await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     // Wait for email validation error to appear
     await page.waitForSelector('text=/invalid.*email|valid email|email.*format/i', { timeout: 5000 });
@@ -312,7 +312,7 @@ test.describe('Athlete CRUD Tests', () => {
         response.url().includes('/api/athletes') && response.request().method() === 'POST'
       );
 
-      await page.click('button[type="submit"]:has-text("Add Athlete")');
+      await page.click('[data-testid="submit-athlete"]');
 
       try {
         const response = await responsePromise;
@@ -359,7 +359,7 @@ test.describe('Athlete CRUD Tests', () => {
         response.url().includes('/api/athletes') && response.request().method() === 'POST'
       );
 
-      await page.click('button[type="submit"]:has-text("Add Athlete")');
+      await page.click('[data-testid="submit-athlete"]');
 
       try {
         const response = await responsePromise;
@@ -432,7 +432,7 @@ test.describe('Athlete CRUD Tests', () => {
       response.url().includes('/api/athletes') && response.request().method() === 'POST'
     );
 
-    await page.click('button[type="submit"]:has-text("Add Athlete")');
+    await page.click('[data-testid="submit-athlete"]');
 
     try {
       const response = await responsePromise;
