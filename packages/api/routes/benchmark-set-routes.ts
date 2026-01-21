@@ -22,10 +22,18 @@ import { requireAuth, requireOrganizationAccess, requireSiteAdmin } from "../mid
 import { requireRole } from "../permissions/middleware";
 import { eq, and, asc, inArray, isNull, sql } from "drizzle-orm";
 
+// Rate limiter configuration constants
+const RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+const RATE_LIMITS = {
+  SET_CREATE: 20,   // Max benchmark set creations per window
+  SET_MODIFY: 100,  // Max set modifications per window
+  SET_READ: 200,    // Max set read operations per window
+} as const;
+
 // Rate limiters
 const setCreateLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 20,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.SET_CREATE,
   message: { message: "Too many benchmark set creation attempts" },
   skip: (req): boolean => {
     // Never bypass in production, regardless of environment variable settings
@@ -44,8 +52,8 @@ const setCreateLimiter = rateLimit({
 });
 
 const setModifyLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.SET_MODIFY,
   message: { message: "Too many benchmark set modification attempts" },
   skip: (req): boolean => {
     // Never bypass in production, regardless of environment variable settings
@@ -64,8 +72,8 @@ const setModifyLimiter = rateLimit({
 });
 
 const setReadLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 200,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.SET_READ,
   message: { message: "Too many benchmark set requests" },
   skip: (req): boolean => {
     // Never bypass in production, regardless of environment variable settings
@@ -124,9 +132,32 @@ function handleError(res: Response, error: unknown, operation: string): void {
 }
 
 /**
- * Fetch benchmark details for site-level set items
- * Site sets only contain site benchmarks (no custom benchmarks)
- * @param items - The benchmark set items to enrich
+ * Enrich site-level benchmark set items with full benchmark details
+ *
+ * Uses a batched query strategy to fetch all site benchmarks in a single database query,
+ * preventing N+1 query performance issues. Site-level sets only contain site benchmarks
+ * (never custom benchmarks), so only site_benchmarks table is queried.
+ *
+ * **Performance optimization:**
+ * - Single query fetches all benchmarks using inArray()
+ * - Results stored in Map for O(1) lookup
+ * - Scales efficiently even with 100+ benchmarks per set
+ *
+ * **Data integrity:**
+ * - Logs ERROR-level messages if benchmarks are missing
+ * - Includes `_error` flag in response for debugging
+ * - Missing benchmarks return null (graceful degradation)
+ *
+ * @param items - Raw benchmark set items from database (must be from site-level sets)
+ * @returns Promise resolving to items enriched with benchmark details and error flags
+ *
+ * @example
+ * ```typescript
+ * const items = await db.select().from(benchmarkSetItems).where(...);
+ * const enriched = await enrichSiteSetItems(items);
+ * // enriched[0].benchmark contains full site benchmark data
+ * // enriched[0]._error === 'MISSING_BENCHMARK' if benchmark was deleted
+ * ```
  */
 async function enrichSiteSetItems(
   items: typeof benchmarkSetItems.$inferSelect[]
@@ -156,26 +187,60 @@ async function enrichSiteSetItems(
 
     // Log data integrity warning if benchmark is missing
     if (!benchmark) {
-      console.warn(`[Data Integrity] Site benchmark set item references missing benchmark`, {
+      console.error(`[Data Integrity Error] Site benchmark set item references missing benchmark`, {
         itemId: item.id,
         setId: item.setId,
         benchmarkId: item.benchmarkId,
         benchmarkType: item.benchmarkType,
+        message: 'This indicates a data corruption issue or race condition. The benchmark may have been deleted.',
       });
     }
 
     return {
       ...item,
       benchmark: benchmark || null,
+      // Include error flag for easier debugging in API responses
+      _error: benchmark ? undefined : 'MISSING_BENCHMARK',
     };
   });
 }
 
 /**
- * Fetch benchmark details for set items
- * Uses batched queries to avoid N+1 performance issues
- * @param items - The benchmark set items to enrich
- * @param organizationId - Organization ID for scoping custom benchmarks
+ * Enrich organization-level benchmark set items with full benchmark details
+ *
+ * Uses a dual-batched query strategy to fetch both site and custom benchmarks in two
+ * separate database queries, preventing N+1 query performance issues. This function
+ * handles the polymorphic relationship where items can reference either site_benchmarks
+ * or custom_benchmarks based on their benchmarkType field.
+ *
+ * **Performance optimization:**
+ * - Separates items by type (site vs custom) for targeted queries
+ * - Two batched queries instead of N individual queries
+ * - Results stored in separate Maps for O(1) lookup by type
+ * - Scales efficiently even with mixed sets of 100+ benchmarks
+ *
+ * **Security:**
+ * - Custom benchmarks are scoped to organizationId
+ * - Prevents cross-organization data leakage
+ * - Site benchmarks are global (no org scoping needed)
+ *
+ * **Data integrity:**
+ * - Logs ERROR-level messages if benchmarks are missing
+ * - Includes detailed context (itemId, setId, benchmarkId, type, orgId)
+ * - Includes `_error` flag in response for debugging
+ * - Missing benchmarks return null (graceful degradation)
+ *
+ * @param items - Raw benchmark set items from database
+ * @param organizationId - Organization ID for scoping custom benchmarks (security boundary)
+ * @returns Promise resolving to items enriched with benchmark details and error flags
+ *
+ * @example
+ * ```typescript
+ * const items = await db.select().from(benchmarkSetItems).where(...);
+ * const enriched = await enrichSetItems(items, 'org-123');
+ * // enriched[0].benchmark contains full benchmark data (site or custom)
+ * // enriched[0]._error === 'MISSING_BENCHMARK' if benchmark was deleted
+ * ```
  */
 async function enrichSetItems(
   items: typeof benchmarkSetItems.$inferSelect[],
@@ -230,18 +295,21 @@ async function enrichSetItems(
 
     // Log data integrity warning if benchmark is missing
     if (!benchmark) {
-      console.warn(`[Data Integrity] Benchmark set item references missing benchmark`, {
+      console.error(`[Data Integrity Error] Benchmark set item references missing benchmark`, {
         itemId: item.id,
         setId: item.setId,
         benchmarkId: item.benchmarkId,
         benchmarkType: item.benchmarkType,
         organizationId,
+        message: 'This indicates a data corruption issue or race condition. The benchmark may have been deleted or access was revoked.',
       });
     }
 
     return {
       ...item,
       benchmark: benchmark || null,
+      // Include error flag for easier debugging in API responses
+      _error: benchmark ? undefined : 'MISSING_BENCHMARK',
     };
   });
 }
