@@ -135,34 +135,59 @@ export function BenchmarkSetDetail({ organizationId, setId }: BenchmarkSetDetail
     );
 
     const results = await Promise.allSettled(
-      benchmarksToAdd.map(benchmark =>
-        addMutation.mutateAsync({
-          benchmarkId: benchmark.benchmarkId,
-          benchmarkType: benchmark.benchmarkType as 'site' | 'custom',
-        })
-      )
+      benchmarksToAdd.map(async (benchmark, index) => {
+        try {
+          return await addMutation.mutateAsync({
+            benchmarkId: benchmark.benchmarkId,
+            benchmarkType: benchmark.benchmarkType as 'site' | 'custom',
+          });
+        } catch (error) {
+          // Re-throw with benchmark context for better error reporting
+          throw { benchmark, error, index };
+        }
+      })
     );
 
     const successCount = results.filter(r => r.status === 'fulfilled').length;
-    const failureCount = results.filter(r => r.status === 'rejected').length;
+    const failures = results
+      .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+      .map(r => r.reason as { benchmark: typeof benchmarksToAdd[0]; error: Error });
 
-    if (failureCount === 0) {
+    if (failures.length === 0) {
       toast({
         title: "Benchmarks Added",
         description: `Added ${successCount} benchmark${successCount !== 1 ? 's' : ''} to the set.`,
       });
-    } else if (successCount > 0) {
-      toast({
-        title: "Partially Added",
-        description: `Added ${successCount} benchmark${successCount !== 1 ? 's' : ''}, but ${failureCount} failed.`,
-        variant: "destructive",
-      });
     } else {
-      toast({
-        title: "Failed to Add Benchmarks",
-        description: "All benchmarks failed to add.",
-        variant: "destructive",
-      });
+      // Log detailed failure information for debugging
+      console.error('Failed to add benchmarks:', failures.map(f => ({
+        benchmarkId: f.benchmark.benchmarkId,
+        name: f.benchmark.customName || f.benchmark.name,
+        error: f.error instanceof Error ? f.error.message : String(f.error),
+      })));
+
+      // Get names of failed benchmarks for user feedback
+      const failedNames = failures
+        .map(f => f.benchmark.customName || f.benchmark.name)
+        .slice(0, 3);
+      const moreCount = failures.length > 3 ? failures.length - 3 : 0;
+      const failedDescription = moreCount > 0
+        ? `Failed: ${failedNames.join(', ')} and ${moreCount} more`
+        : `Failed: ${failedNames.join(', ')}`;
+
+      if (successCount > 0) {
+        toast({
+          title: "Partially Added",
+          description: `Added ${successCount}, but ${failures.length} failed. ${failedDescription}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Failed to Add Benchmarks",
+          description: failedDescription,
+          variant: "destructive",
+        });
+      }
     }
 
     setSelectedBenchmarkIds(new Set());

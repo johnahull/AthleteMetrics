@@ -151,10 +151,24 @@ async function enrichSiteSetItems(
     siteBenchmarkResults.forEach(b => siteBenchmarksMap.set(b.id, b));
   }
 
-  return items.map(item => ({
-    ...item,
-    benchmark: siteBenchmarksMap.get(item.benchmarkId) || null,
-  }));
+  return items.map(item => {
+    const benchmark = siteBenchmarksMap.get(item.benchmarkId);
+
+    // Log data integrity warning if benchmark is missing
+    if (!benchmark) {
+      console.warn(`[Data Integrity] Site benchmark set item references missing benchmark`, {
+        itemId: item.id,
+        setId: item.setId,
+        benchmarkId: item.benchmarkId,
+        benchmarkType: item.benchmarkType,
+      });
+    }
+
+    return {
+      ...item,
+      benchmark: benchmark || null,
+    };
+  });
 }
 
 /**
@@ -208,13 +222,28 @@ async function enrichSetItems(
     customBenchmarkResults.forEach(b => customBenchmarksMap.set(b.id, b));
   }
 
-  // Map items to enriched items
-  return items.map(item => ({
-    ...item,
-    benchmark: item.benchmarkType === 'site'
-      ? siteBenchmarksMap.get(item.benchmarkId) || null
-      : customBenchmarksMap.get(item.benchmarkId) || null,
-  }));
+  // Map items to enriched items with data integrity logging
+  return items.map(item => {
+    const benchmark = item.benchmarkType === 'site'
+      ? siteBenchmarksMap.get(item.benchmarkId)
+      : customBenchmarksMap.get(item.benchmarkId);
+
+    // Log data integrity warning if benchmark is missing
+    if (!benchmark) {
+      console.warn(`[Data Integrity] Benchmark set item references missing benchmark`, {
+        itemId: item.id,
+        setId: item.setId,
+        benchmarkId: item.benchmarkId,
+        benchmarkType: item.benchmarkType,
+        organizationId,
+      });
+    }
+
+    return {
+      ...item,
+      benchmark: benchmark || null,
+    };
+  });
 }
 
 export function registerBenchmarkSetRoutes(app: Express) {

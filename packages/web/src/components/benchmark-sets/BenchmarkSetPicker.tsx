@@ -20,7 +20,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Layers, ChevronRight, Check, Loader2 } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Layers, ChevronRight, Check, Loader2, AlertCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import type { BenchmarkSet, BenchmarkSetWithItems } from "@shared/schema";
 
 interface BenchmarkSetPickerProps {
@@ -43,10 +45,10 @@ export function BenchmarkSetPicker({
   placeholder = "Select a benchmark set",
   className,
 }: BenchmarkSetPickerProps) {
-  const { data: sets, isLoading } = useBenchmarkSets(organizationId);
+  const { data: sets, isLoading, error: setsError } = useBenchmarkSets(organizationId);
 
   // Fetch full set details when one is selected
-  const { data: selectedSet, isLoading: isLoadingDetails } = useBenchmarkSet(
+  const { data: selectedSet, isLoading: isLoadingDetails, error: setDetailsError } = useBenchmarkSet(
     organizationId,
     selectedSetId ?? ''
   );
@@ -57,6 +59,24 @@ export function BenchmarkSetPicker({
       onSelect(selectedSet);
     }
   }, [selectedSetId, selectedSet, isLoadingDetails, onSelect]);
+
+  // Show error state if sets failed to load
+  if (setsError) {
+    return (
+      <div className={className}>
+        {label && <label className="text-sm font-medium mb-2 block">{label}</label>}
+        <Alert variant="destructive" className="py-2">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription className="text-sm">
+            Failed to load benchmark sets. Please try again.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
+  // Show inline error if selected set details failed to load
+  const showDetailsError = selectedSetId && setDetailsError && !isLoadingDetails;
 
   const handleSelect = (setId: string) => {
     // Selection is handled by updating the parent's selectedSetId prop
@@ -111,6 +131,11 @@ export function BenchmarkSetPicker({
           )}
         </SelectContent>
       </Select>
+      {showDetailsError && (
+        <p className="text-sm text-destructive mt-1">
+          Failed to load set details. Please try selecting again.
+        </p>
+      )}
     </div>
   );
 }
@@ -133,9 +158,10 @@ export function BenchmarkSetQuickLoad({
   const [open, setOpen] = useState(false);
   const [selectedSetId, setSelectedSetId] = useState<string | null>(null);
   const [isLoadingSet, setIsLoadingSet] = useState(false);
+  const { toast } = useToast();
 
-  const { data: sets, isLoading: isLoadingSets } = useBenchmarkSets(organizationId);
-  const { data: selectedSet } = useBenchmarkSet(
+  const { data: sets, isLoading: isLoadingSets, error: setsError } = useBenchmarkSets(organizationId);
+  const { data: selectedSet, error: setDetailsError } = useBenchmarkSet(
     organizationId,
     selectedSetId ?? ''
   );
@@ -153,6 +179,19 @@ export function BenchmarkSetQuickLoad({
       setIsLoadingSet(false);
     }
   }, [selectedSetId, selectedSet, isLoadingSet, onLoadSet]);
+
+  // Handle errors when loading set details
+  useEffect(() => {
+    if (selectedSetId && setDetailsError && isLoadingSet) {
+      toast({
+        title: "Failed to load benchmark set",
+        description: setDetailsError instanceof Error ? setDetailsError.message : "Please try again",
+        variant: "destructive",
+      });
+      setSelectedSetId(null);
+      setIsLoadingSet(false);
+    }
+  }, [selectedSetId, setDetailsError, isLoadingSet, toast]);
 
   const handleSelectSet = useCallback((setId: string) => {
     setSelectedSetId(setId);
@@ -174,7 +213,12 @@ export function BenchmarkSetQuickLoad({
             Select a benchmark set to load all its benchmarks
           </p>
           <div className="max-h-64 overflow-y-auto space-y-1 mt-2">
-            {isLoadingSets ? (
+            {setsError ? (
+              <div className="flex items-center gap-2 py-4 text-destructive">
+                <AlertCircle className="h-4 w-4" />
+                <span className="text-sm">Failed to load sets. Please try again.</span>
+              </div>
+            ) : isLoadingSets ? (
               <div className="flex items-center justify-center py-4">
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
                 <span className="text-sm text-muted-foreground">Loading sets...</span>

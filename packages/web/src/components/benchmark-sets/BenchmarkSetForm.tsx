@@ -61,7 +61,7 @@ export function BenchmarkSetForm({
   const isEditing = !!benchmarkSet;
 
   // Fetch available sports
-  const { data: sports = [] } = useSports();
+  const { data: sports = [], isError: sportsError } = useSports();
 
   const createMutation = useCreateBenchmarkSet(organizationId);
   const updateMutation = useUpdateBenchmarkSet(organizationId, benchmarkSet?.id ?? '');
@@ -195,7 +195,13 @@ export function BenchmarkSetForm({
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    Filter this set for a specific sport
+                    {sportsError ? (
+                      <span className="text-yellow-600">
+                        Unable to load sports list. You can still create the set without a sport filter.
+                      </span>
+                    ) : (
+                      "Filter this set for a specific sport"
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
