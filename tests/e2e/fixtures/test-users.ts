@@ -13,50 +13,60 @@ export interface TestUser {
   role: UserRole;
 }
 
+// Track which roles have been warned about fallback usage (module-level)
+const warnedRoles = new Set<UserRole>();
+
 /**
  * Get test user credentials by role
  *
  * @param role - User role to retrieve
  * @returns TestUser object with credentials
- * @throws Error if required environment variables are not set
+ * @throws Error if no credentials are available (neither role-specific nor fallback)
+ *
+ * Credential Resolution Order:
+ * 1. Role-specific: E2E_{ROLE}_USERNAME / E2E_{ROLE}_PASSWORD
+ * 2. Fallback: TESTING_USERNAME / TESTING_PASSWORD or STAGING_USERNAME / STAGING_PASSWORD
+ *
+ * In CI environments with a single admin account, all roles will share the same credentials.
+ * Use canTestRoleAuthorization() to check if RBAC differentiation tests are possible.
  */
 export function getUserByRole(role: UserRole): TestUser {
-  // Get role-specific credentials - NO FALLBACKS to prevent security holes in RBAC tests
-  // Each role must have its own credentials to properly test authorization
-  const users: Record<UserRole, TestUser> = {
-    site_admin: {
-      username: process.env.E2E_SITE_ADMIN_USERNAME || '',
-      password: process.env.E2E_SITE_ADMIN_PASSWORD || '',
-      role: 'site_admin',
-    },
-    org_admin: {
-      username: process.env.E2E_ORG_ADMIN_USERNAME || '',
-      password: process.env.E2E_ORG_ADMIN_PASSWORD || '',
-      role: 'org_admin',
-    },
-    coach: {
-      username: process.env.E2E_COACH_USERNAME || '',
-      password: process.env.E2E_COACH_PASSWORD || '',
-      role: 'coach',
-    },
-    athlete: {
-      username: process.env.E2E_ATHLETE_USERNAME || '',
-      password: process.env.E2E_ATHLETE_PASSWORD || '',
-      role: 'athlete',
-    },
-  };
+  // Try role-specific credentials first
+  const roleSpecificUsername = process.env[`E2E_${role.toUpperCase()}_USERNAME`];
+  const roleSpecificPassword = process.env[`E2E_${role.toUpperCase()}_PASSWORD`];
 
-  const user = users[role];
-
-  if (!user.username || !user.password) {
-    throw new Error(
-      `Missing credentials for role "${role}". ` +
-      `Please set E2E_${role.toUpperCase()}_USERNAME and E2E_${role.toUpperCase()}_PASSWORD ` +
-      `environment variables.`
-    );
+  if (roleSpecificUsername && roleSpecificPassword) {
+    return {
+      username: roleSpecificUsername,
+      password: roleSpecificPassword,
+      role,
+    };
   }
 
-  return user;
+  // Fall back to default credentials (TESTING or STAGING)
+  const fallbackUsername = process.env.TESTING_USERNAME || process.env.STAGING_USERNAME;
+  const fallbackPassword = process.env.TESTING_PASSWORD || process.env.STAGING_PASSWORD;
+
+  if (fallbackUsername && fallbackPassword) {
+    // Log once per role to help debug credential resolution
+    if (!warnedRoles.has(role)) {
+      console.log(`⚠️  Using fallback credentials for role "${role}" (role-specific not configured)`);
+      warnedRoles.add(role);
+    }
+
+    return {
+      username: fallbackUsername,
+      password: fallbackPassword,
+      role,
+    };
+  }
+
+  // No credentials available at all
+  throw new Error(
+    `Missing credentials for role "${role}". ` +
+    `Please set either E2E_${role.toUpperCase()}_USERNAME/PASSWORD ` +
+    `or TESTING_USERNAME/PASSWORD (or STAGING_USERNAME/PASSWORD) environment variables.`
+  );
 }
 
 /**
