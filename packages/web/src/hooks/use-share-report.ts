@@ -126,3 +126,73 @@ export function useReportShares(reportId: string) {
     enabled: !!reportId,
   });
 }
+
+// Types for bulk distribute (different from bulk share!)
+// Bulk distribute: sends MANY individual reports to their RESPECTIVE athletes
+// Bulk share: sends ONE report to MANY athletes
+interface BulkDistributeParams {
+  reportIds: string[];
+  message?: string;
+}
+
+interface BulkDistributeResult {
+  summary: {
+    sent: number;
+    alreadySent: number;
+    skipped: number;
+  };
+  results: Array<{
+    reportId: string;
+    reportName: string;
+    athleteId: string;
+    athleteName: string;
+    status: 'sent' | 'already_sent' | 'skipped';
+    reason?: string;
+  }>;
+  skippedReports: Array<{
+    reportId: string;
+    reportName: string;
+    reason: string;
+  }>;
+}
+
+export function useBulkDistributeReports() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ reportIds, message }: BulkDistributeParams) => {
+      const res = await apiRequest("POST", "/api/reports/bulk-distribute", {
+        reportIds,
+        message,
+      });
+      return res.json() as Promise<BulkDistributeResult>;
+    },
+    onSuccess: (data) => {
+      // Invalidate reports list to refresh sentToAthlete status
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+
+      const { sent, alreadySent, skipped } = data.summary;
+
+      let description = `Sent ${sent} report${sent !== 1 ? 's' : ''} to athletes`;
+      if (alreadySent > 0) {
+        description += `, ${alreadySent} already sent`;
+      }
+      if (skipped > 0) {
+        description += `, ${skipped} skipped`;
+      }
+
+      toast({
+        title: "Success",
+        description,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to distribute reports",
+        variant: "destructive",
+      });
+    },
+  });
+}

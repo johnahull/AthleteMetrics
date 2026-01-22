@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
 import { useDeleteReport } from "@/hooks/use-reports";
 import { useReportFilters } from "@/hooks/use-report-filters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus } from "lucide-react";
+import { Plus, CheckSquare, X, Send } from "lucide-react";
 import { ReportWizard } from "@/components/reports/ReportWizard";
 import { ReportsFilterBar } from "@/components/reports/ReportsFilterBar";
 import { PinnedReportsSection } from "@/components/reports/PinnedReportsSection";
 import { RecentReportsSection } from "@/components/reports/RecentReportsSection";
+import { BulkDistributeReportsDialog } from "@/components/reports/BulkDistributeReportsDialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,14 +23,50 @@ import {
 } from "@/components/ui/alert-dialog";
 import type { Report } from "@shared/schema";
 
+// Extended report type with sentToAthlete status from API
+interface ReportWithSentStatus extends Report {
+  targetAthleteName?: string;
+  sentToAthlete?: {
+    sentAt: string;
+    athleteName: string;
+  } | null;
+}
+
 export default function Reports() {
   const { user, organizationContext } = useAuth();
   const [, setLocation] = useLocation();
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
 
+  // Selection mode state
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedReports, setSelectedReports] = useState<Map<string, ReportWithSentStatus>>(new Map());
+  const [showDistributeDialog, setShowDistributeDialog] = useState(false);
+
   const { filters, updateFilters, resetFilters, activeFilterCount } = useReportFilters();
   const deleteReport = useDeleteReport();
+
+  // Selection handlers
+  const handleToggleSelection = useCallback((report: ReportWithSentStatus) => {
+    setSelectedReports((prev) => {
+      const next = new Map(prev);
+      if (next.has(report.id)) {
+        next.delete(report.id);
+      } else {
+        next.set(report.id, report);
+      }
+      return next;
+    });
+  }, []);
+
+  const handleClearSelection = useCallback(() => {
+    setSelectedReports(new Map());
+  }, []);
+
+  const handleExitSelectionMode = useCallback(() => {
+    setIsSelectionMode(false);
+    setSelectedReports(new Map());
+  }, []);
 
   // Check access
   if (!user) {
@@ -51,6 +88,11 @@ export default function Reports() {
   const canCreateReports = user.isSiteAdmin || user.role === "coach" || user.role === "org_admin";
 
   const handleViewReport = (report: Report) => {
+    // In selection mode, toggle selection instead of navigating
+    if (isSelectionMode) {
+      handleToggleSelection(report as ReportWithSentStatus);
+      return;
+    }
     setLocation(`/reports/${report.id}`);
   };
 
@@ -76,12 +118,25 @@ export default function Reports() {
             Create and manage coach and individual reports
           </p>
         </div>
-        {canCreateReports && (
-          <Button onClick={() => setShowWizard(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Report
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Selection mode toggle */}
+          {canCreateReports && (
+            <Button
+              variant={isSelectionMode ? "secondary" : "outline"}
+              onClick={() => isSelectionMode ? handleExitSelectionMode() : setIsSelectionMode(true)}
+              data-testid="toggle-selection-mode"
+            >
+              <CheckSquare className="h-4 w-4 mr-2" />
+              {isSelectionMode ? "Cancel" : "Select"}
+            </Button>
+          )}
+          {canCreateReports && !isSelectionMode && (
+            <Button onClick={() => setShowWizard(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Create Report
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filter Bar */}
@@ -98,6 +153,9 @@ export default function Reports() {
         organizationId={organizationContext || undefined}
         onReportClick={handleViewReport}
         onDelete={handleRequestDelete}
+        isSelectionMode={isSelectionMode}
+        selectedReportIds={new Set(selectedReports.keys())}
+        onToggleSelection={handleToggleSelection}
       />
 
       {/* Recent Reports Section */}
@@ -106,7 +164,39 @@ export default function Reports() {
         filters={filters}
         onReportClick={handleViewReport}
         onDelete={handleRequestDelete}
+        isSelectionMode={isSelectionMode}
+        selectedReportIds={new Set(selectedReports.keys())}
+        onToggleSelection={handleToggleSelection}
       />
+
+      {/* Floating action bar when reports are selected */}
+      {isSelectionMode && selectedReports.size > 0 && (
+        <div
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-background border rounded-lg shadow-lg p-4 flex items-center gap-4 z-50"
+          data-testid="selection-action-bar"
+        >
+          <span className="text-sm font-medium">
+            {selectedReports.size} report{selectedReports.size !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleClearSelection}
+            data-testid="clear-selection"
+          >
+            <X className="h-4 w-4 mr-1" />
+            Clear
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => setShowDistributeDialog(true)}
+            data-testid="send-to-athletes-button"
+          >
+            <Send className="h-4 w-4 mr-2" />
+            Send to Athletes
+          </Button>
+        </div>
+      )}
 
       {showWizard && (
         <ReportWizard
@@ -138,6 +228,19 @@ export default function Reports() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Bulk Distribute Dialog */}
+      <BulkDistributeReportsDialog
+        open={showDistributeDialog}
+        onOpenChange={setShowDistributeDialog}
+        reports={Array.from(selectedReports.values()).map((report) => ({
+          id: report.id,
+          name: report.name,
+          athleteName: report.targetAthleteName || report.sentToAthlete?.athleteName,
+          sentToAthlete: report.sentToAthlete,
+        }))}
+        onSuccess={handleExitSelectionMode}
+      />
     </div>
   );
 }

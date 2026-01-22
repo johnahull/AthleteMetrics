@@ -117,8 +117,17 @@ const bulkShareReportSchema = z.object({
   message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
 });
 
+// Schema for bulk distributing individual reports to their respective athletes
+const bulkDistributeReportsSchema = z.object({
+  reportIds: z.array(z.string().uuid()).min(1, "At least one report ID is required").max(100, "Cannot distribute more than 100 reports at once"),
+  message: z.string().max(1000, "Message cannot exceed 1000 characters").optional(),
+});
+
 // Maximum athletes that can be shared with in a single bulk request
 const MAX_BULK_SHARE = 100;
+
+// Maximum reports that can be distributed in a single bulk request
+const MAX_BULK_DISTRIBUTE = 100;
 
 // PDF Generation Constants
 const PDF_LIMITS = {
@@ -509,8 +518,90 @@ export function registerReportRoutes(app: Express) {
 
       const totalCount = Number(totalCountResult[0]?.count || 0);
 
+      // For individual reports, add sentToAthlete status and targetAthlete name
+      // This tells the UI which reports have already been sent to their target athlete
+      // OPTIMIZATION: Batch query all shares and athlete names in bulk instead of N+1
+
+      // Step 1: Collect all individual report IDs and their target athlete IDs
+      const individualReportIds: string[] = [];
+      const reportAthleteMap = new Map<string, string>(); // reportId -> athleteId
+      const allAthleteIds = new Set<string>(); // All unique athlete IDs
+
+      for (const report of reportsList) {
+        if (report.reportType === 'individual') {
+          const config = report.config as IndividualReportConfig;
+          if (config?.athleteId) {
+            individualReportIds.push(report.id);
+            reportAthleteMap.set(report.id, config.athleteId);
+            allAthleteIds.add(config.athleteId);
+          }
+        }
+      }
+
+      // Step 2: Batch query all athlete names for individual reports
+      const athleteNameMap = new Map<string, string>(); // athleteId -> fullName
+
+      if (allAthleteIds.size > 0) {
+        const athleteRecords = await db
+          .select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+          })
+          .from(users)
+          .where(inArray(users.id, [...allAthleteIds]));
+
+        for (const athlete of athleteRecords) {
+          athleteNameMap.set(athlete.id, `${athlete.firstName} ${athlete.lastName}`);
+        }
+      }
+
+      // Step 3: Batch query all shares for these reports
+      const sharesMap = new Map<string, { sentAt: Date; athleteName: string }>();
+
+      if (individualReportIds.length > 0) {
+        const shareRecords = await db
+          .select({
+            reportId: reportShares.reportId,
+            athleteId: reportShares.athleteId,
+            sentAt: reportShares.createdAt,
+          })
+          .from(reportShares)
+          .where(inArray(reportShares.reportId, individualReportIds));
+
+        // Build a map of reportId -> share info (only if athleteId matches config)
+        for (const share of shareRecords) {
+          const expectedAthleteId = reportAthleteMap.get(share.reportId);
+          if (expectedAthleteId === share.athleteId) {
+            const athleteName = athleteNameMap.get(share.athleteId) || 'Unknown Athlete';
+            sharesMap.set(share.reportId, {
+              sentAt: share.sentAt,
+              athleteName,
+            });
+          }
+        }
+      }
+
+      // Step 4: Enrich reports with sentToAthlete status and targetAthlete name
+      const reportsWithSentStatus = reportsList.map((report) => {
+        if (report.reportType !== 'individual') {
+          return report;
+        }
+
+        const config = report.config as IndividualReportConfig;
+        const athleteId = config?.athleteId;
+        const targetAthleteName = athleteId ? athleteNameMap.get(athleteId) : undefined;
+        const shareInfo = sharesMap.get(report.id);
+
+        return {
+          ...report,
+          targetAthleteName: targetAthleteName || undefined,
+          sentToAthlete: shareInfo || null,
+        };
+      });
+
       res.json({
-        reports: reportsList,
+        reports: reportsWithSentStatus,
         pagination: {
           total: totalCount,
           limit,
@@ -1884,6 +1975,346 @@ export function registerReportRoutes(app: Express) {
         }
         console.error("Error bulk sharing report:", error);
         res.status(500).json({ message: "Failed to bulk share report" });
+      }
+    }
+  );
+
+  /**
+   * Bulk distribute individual reports to their respective athletes
+   * POST /api/reports/bulk-distribute
+   *
+   * Unlike share-bulk (which shares ONE report with MANY athletes),
+   * this endpoint sends MANY individual reports to their RESPECTIVE athletes
+   * (each report goes to its configured athleteId).
+   */
+  app.post(
+    "/api/reports/bulk-distribute",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Validate request body
+        const validatedData = bulkDistributeReportsSchema.parse(req.body);
+        const { reportIds, message } = validatedData;
+
+        // Fetch all requested reports in one query
+        const targetReports = await db
+          .select()
+          .from(reports)
+          .where(inArray(reports.id, reportIds));
+
+        if (targetReports.length === 0) {
+          return res.status(404).json({ message: "No reports found" });
+        }
+
+        // Get unique organization IDs from the reports to validate access
+        const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
+
+        // Validate user has access to all organizations
+        for (const orgId of orgIds) {
+          const hasAccess = await reportService["validateOrganizationAccess"](
+            user.id,
+            orgId
+          );
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied to one or more report organizations",
+            });
+          }
+        }
+
+        // Build a map of athleteId -> report for individual reports
+        const reportAthleteMap: Map<string, { reportId: string; reportName: string; athleteId: string; organizationId: string }> = new Map();
+        const skippedReports: Array<{ reportId: string; reportName: string; reason: string }> = [];
+
+        for (const report of targetReports) {
+          // Only process individual reports
+          if (report.reportType !== 'individual') {
+            skippedReports.push({
+              reportId: report.id,
+              reportName: report.name,
+              reason: 'Not an individual report',
+            });
+            continue;
+          }
+
+          const config = report.config as IndividualReportConfig;
+          const athleteId = config?.athleteId;
+
+          if (!athleteId) {
+            skippedReports.push({
+              reportId: report.id,
+              reportName: report.name,
+              reason: 'No athlete ID configured',
+            });
+            continue;
+          }
+
+          reportAthleteMap.set(report.id, {
+            reportId: report.id,
+            reportName: report.name,
+            athleteId,
+            organizationId: report.organizationId,
+          });
+        }
+
+        if (reportAthleteMap.size === 0) {
+          return res.status(400).json({
+            message: "No valid individual reports to distribute",
+            skipped: skippedReports,
+          });
+        }
+
+        // Get all unique athlete IDs and fetch their details
+        const athleteIds = [...new Set([...reportAthleteMap.values()].map((r) => r.athleteId))];
+
+        const athletes = await db
+          .select({
+            id: users.id,
+            firstName: users.firstName,
+            lastName: users.lastName,
+            fullName: users.fullName,
+            emails: users.emails,
+          })
+          .from(users)
+          .where(inArray(users.id, athleteIds));
+
+        const athleteMap = new Map(athletes.map((a) => [a.id, a]));
+
+        // Check which report-athlete pairs already have shares
+        const reportIdsToCheck = [...reportAthleteMap.keys()];
+        const existingShares = await db
+          .select({
+            reportId: reportShares.reportId,
+            athleteId: reportShares.athleteId,
+          })
+          .from(reportShares)
+          .where(inArray(reportShares.reportId, reportIdsToCheck));
+
+        // Create a set of "reportId:athleteId" for quick lookup
+        const existingShareSet = new Set(
+          existingShares.map((s) => `${s.reportId}:${s.athleteId}`)
+        );
+
+        // Prepare results and shares to insert
+        const results: Array<{
+          reportId: string;
+          reportName: string;
+          athleteId: string;
+          athleteName: string;
+          status: 'sent' | 'already_sent' | 'skipped';
+          reason?: string;
+        }> = [];
+        const sharesToInsert: Array<{
+          reportId: string;
+          athleteId: string;
+          sharedBy: string;
+          organizationId: string;
+          message: string | null;
+        }> = [];
+
+        for (const [reportId, reportInfo] of reportAthleteMap) {
+          const athlete = athleteMap.get(reportInfo.athleteId);
+          const athleteName = athlete
+            ? athlete.fullName || `${athlete.firstName} ${athlete.lastName}`
+            : 'Unknown Athlete';
+
+          // Check if already shared
+          if (existingShareSet.has(`${reportId}:${reportInfo.athleteId}`)) {
+            results.push({
+              reportId,
+              reportName: reportInfo.reportName,
+              athleteId: reportInfo.athleteId,
+              athleteName,
+              status: 'already_sent',
+            });
+            continue;
+          }
+
+          // Verify athlete exists
+          if (!athlete) {
+            results.push({
+              reportId,
+              reportName: reportInfo.reportName,
+              athleteId: reportInfo.athleteId,
+              athleteName,
+              status: 'skipped',
+              reason: 'Athlete not found',
+            });
+            continue;
+          }
+
+          // Add to batch insert
+          sharesToInsert.push({
+            reportId,
+            athleteId: reportInfo.athleteId,
+            sharedBy: user.id,
+            organizationId: reportInfo.organizationId,
+            message: message || null,
+          });
+        }
+
+        // Insert all shares in a single transaction
+        let sent = 0;
+        if (sharesToInsert.length > 0) {
+          try {
+            await db.transaction(async (tx) => {
+              await tx.insert(reportShares).values(sharesToInsert);
+            });
+
+            // Mark all as sent in results
+            for (const share of sharesToInsert) {
+              const reportInfo = reportAthleteMap.get(share.reportId);
+              const athlete = athleteMap.get(share.athleteId);
+              const athleteName = athlete
+                ? athlete.fullName || `${athlete.firstName} ${athlete.lastName}`
+                : 'Unknown Athlete';
+
+              results.push({
+                reportId: share.reportId,
+                reportName: reportInfo?.reportName || 'Unknown Report',
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'sent',
+              });
+              sent++;
+            }
+
+            // Send notifications asynchronously (fire and forget)
+            // OPTIMIZATION: Batch query all organization names and notification preferences upfront
+            const coach = await db
+              .select({ fullName: users.fullName })
+              .from(users)
+              .where(eq(users.id, user.id))
+              .limit(1)
+              .then((rows) => rows[0]);
+
+            // Batch query organization names
+            const uniqueOrgIds = [...new Set(sharesToInsert.map(s => s.organizationId))];
+            const orgRecords = await db
+              .select({ id: organizations.id, name: organizations.name })
+              .from(organizations)
+              .where(inArray(organizations.id, uniqueOrgIds));
+            const orgNameMap = new Map(orgRecords.map(o => [o.id, o.name]));
+
+            // Batch query notification preferences
+            const uniqueAthleteIds = [...new Set(sharesToInsert.map(s => s.athleteId))];
+            const prefsRecords = await db
+              .select()
+              .from(notificationPreferences)
+              .where(inArray(notificationPreferences.userId, uniqueAthleteIds));
+            const prefsMap = new Map(prefsRecords.map(p => [p.userId, p]));
+
+            const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
+
+            Promise.all(
+              sharesToInsert.map(async (share) => {
+                try {
+                  const athlete = athleteMap.get(share.athleteId);
+                  if (!athlete) return;
+
+                  const reportInfo = reportAthleteMap.get(share.reportId);
+                  if (!reportInfo) return;
+
+                  const organizationName = orgNameMap.get(share.organizationId) || 'Your organization';
+                  const prefs = prefsMap.get(share.athleteId);
+
+                  const pushEnabled = prefs?.pushEnabled ?? true;
+                  const emailEnabled = prefs?.emailEnabled ?? true;
+                  const pushReportShared = prefs?.pushReportShared ?? true;
+                  const emailReportShared = prefs?.emailReportShared ?? true;
+
+                  // Send email notification
+                  if (emailEnabled && emailReportShared && athlete.emails && athlete.emails.length > 0) {
+                    try {
+                      await emailService.sendReportSharedNotification(athlete.emails[0], {
+                        athleteName: athlete.fullName || `${athlete.firstName} ${athlete.lastName}`,
+                        coachName: coach?.fullName || 'Your coach',
+                        organizationName,
+                        reportName: reportInfo.reportName,
+                        message: share.message || undefined,
+                        viewUrl: `${appUrl}/my-reports`,
+                      });
+                    } catch (emailError) {
+                      console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                    }
+                  }
+
+                  // Send push notification
+                  if (pushEnabled && pushReportShared) {
+                    try {
+                      const pushService = getPushNotificationService(db);
+                      const notificationPayload: NotificationPayload = {
+                        type: 'report_shared',
+                        title: 'New Performance Report',
+                        body: `${coach?.fullName || 'Your coach'} shared "${reportInfo.reportName}" with you`,
+                        url: '/my-reports',
+                        data: {
+                          reportId: share.reportId,
+                        },
+                      };
+                      await pushService.sendToUser(share.athleteId, notificationPayload, share.organizationId);
+                    } catch (pushError) {
+                      console.error(`Failed to send push notification to athlete ${share.athleteId}:`, pushError);
+                    }
+                  }
+                } catch (notificationError) {
+                  console.error(`Failed to send notifications for report ${share.reportId}:`, notificationError);
+                }
+              })
+            ).catch((err) => {
+              console.error('Error in bulk distribute notification sending:', err);
+            });
+          } catch (insertError: any) {
+            console.error('Failed to bulk insert shares for distribute:', insertError);
+            // If transaction fails, mark all pending as failed
+            for (const share of sharesToInsert) {
+              const reportInfo = reportAthleteMap.get(share.reportId);
+              const athlete = athleteMap.get(share.athleteId);
+              const athleteName = athlete
+                ? athlete.fullName || `${athlete.firstName} ${athlete.lastName}`
+                : 'Unknown Athlete';
+
+              results.push({
+                reportId: share.reportId,
+                reportName: reportInfo?.reportName || 'Unknown Report',
+                athleteId: share.athleteId,
+                athleteName,
+                status: 'skipped',
+                reason: insertError.message || 'Database transaction failed',
+              });
+            }
+          }
+        }
+
+        // Calculate summary
+        const alreadySent = results.filter((r) => r.status === 'already_sent').length;
+        const skipped = results.filter((r) => r.status === 'skipped').length + skippedReports.length;
+
+        res.status(200).json({
+          summary: {
+            sent,
+            alreadySent,
+            skipped,
+          },
+          results,
+          skippedReports,
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error bulk distributing reports:", error);
+        res.status(500).json({ message: "Failed to bulk distribute reports" });
       }
     }
   );
