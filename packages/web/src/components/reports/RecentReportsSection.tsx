@@ -27,6 +27,7 @@ interface RecentReportsSectionProps {
     dateTo?: string;
     metrics?: string[];
     teamIds?: string[];
+    includeArchived?: boolean;
   };
   onReportClick?: (report: Report) => void;
   onDelete?: (reportId: string, e: React.MouseEvent) => void;
@@ -60,7 +61,8 @@ export function RecentReportsSection({
     metrics: filters?.metrics,
     teamIds: filters?.teamIds,
     pinned: false,
-  }), [filters?.search, filters?.reportType, filters?.dateFrom, filters?.dateTo, filters?.metrics, filters?.teamIds]);
+    includeArchived: filters?.includeArchived,
+  }), [filters?.search, filters?.reportType, filters?.dateFrom, filters?.dateTo, filters?.metrics, filters?.teamIds, filters?.includeArchived]);
 
   // Memoize pagination params to ensure stable reference
   const paginationParams = useMemo(() => ({

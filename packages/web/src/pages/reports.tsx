@@ -186,6 +186,7 @@ export default function Reports() {
         onReportClick={handleViewReport}
         onDelete={handleRequestDelete}
         onArchive={handleRequestArchive}
+        includeArchived={filters.includeArchived}
         isSelectionMode={isSelectionMode}
         selectedReportIds={new Set(selectedReports.keys())}
         onToggleSelection={handleToggleSelection}

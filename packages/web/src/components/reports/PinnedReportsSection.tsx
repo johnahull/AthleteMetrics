@@ -29,6 +29,7 @@ interface PinnedReportsSectionProps {
   onDelete?: (reportId: string, e: React.MouseEvent) => void;
   onArchive?: (reportId: string, e: React.MouseEvent) => void;
   defaultCollapsed?: boolean;
+  includeArchived?: boolean;
   // Selection mode props
   isSelectionMode?: boolean;
   selectedReportIds?: Set<string>;
@@ -41,6 +42,7 @@ export function PinnedReportsSection({
   onDelete,
   onArchive,
   defaultCollapsed = false,
+  includeArchived = false,
   isSelectionMode = false,
   selectedReportIds,
   onToggleSelection,
@@ -50,7 +52,7 @@ export function PinnedReportsSection({
   // Fetch only pinned reports
   const { data, isLoading, error } = useReportsWithFilters(
     organizationId || '',
-    { pinned: true },
+    { pinned: true, includeArchived },
     { limit: 10, offset: 0 }
   );
 
