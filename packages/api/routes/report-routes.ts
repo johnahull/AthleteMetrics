@@ -182,6 +182,21 @@ const aiGenerationLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// Stricter rate limiting for bulk operations (sharing/distributing to many athletes)
+const bulkOperationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: 15, // Stricter limit to prevent notification spam and resource exhaustion
+  message: {
+    message: "Too many bulk operation requests, please try again later.",
+  },
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  handler: (req, res) => {
+    console.warn(`Rate limit exceeded for bulk operations - IP: ${req.ip}, User: ${req.session.user?.id || 'unauthenticated'}`);
+    res.status(429).json({ message: "Too many bulk operation requests, please try again later." });
+  },
+});
+
 export function registerReportRoutes(app: Express) {
   const reportService = new ReportService();
 
@@ -1779,7 +1794,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/:id/share-bulk",
-    reportLimiter,
+    bulkOperationLimiter,
     requireAuth,
     requireRole('coach'),
     async (req, res) => {
@@ -2106,7 +2121,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/bulk-distribute",
-    reportLimiter,
+    bulkOperationLimiter,
     requireAuth,
     requireRole('coach'),
     async (req, res) => {

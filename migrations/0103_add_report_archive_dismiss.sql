@@ -1,6 +1,6 @@
 -- Migration: Add archive and dismiss columns to reports system
 -- Description: Enables soft-hide functionality for coaches (archive reports) and athletes (dismiss shared reports)
--- Feature: Report Archive & Dismiss (PR #xxx)
+-- Feature: Report Archive & Dismiss (PR #298)
 
 -- Add archived_at column to reports table (for coach archive functionality)
 ALTER TABLE reports ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP;
