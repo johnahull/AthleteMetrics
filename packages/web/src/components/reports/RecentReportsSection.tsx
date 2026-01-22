@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Clock, Pin, FileText, Loader2, Trash2, CheckCircle } from 'lucide-react';
+import { Clock, Pin, FileText, Loader2, Trash2, CheckCircle, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, usePinReport } from '@/hooks/use-reports';
 import type { Report } from '@shared/schema';
@@ -30,6 +30,7 @@ interface RecentReportsSectionProps {
   };
   onReportClick?: (report: Report) => void;
   onDelete?: (reportId: string, e: React.MouseEvent) => void;
+  onArchive?: (reportId: string, e: React.MouseEvent) => void;
   limit?: number;
   // Selection mode props
   isSelectionMode?: boolean;
@@ -42,6 +43,7 @@ export function RecentReportsSection({
   filters,
   onReportClick,
   onDelete,
+  onArchive,
   limit = 25,
   isSelectionMode = false,
   selectedReportIds,
@@ -206,6 +208,20 @@ export function RecentReportsSection({
                         >
                           <Pin className="h-4 w-4 text-muted-foreground hover:text-primary" />
                         </Button>
+
+                        {/* Archive button */}
+                        {onArchive && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 flex-shrink-0"
+                            onClick={(e) => onArchive(report.id, e)}
+                            title="Archive report"
+                            aria-label="Archive report"
+                          >
+                            <Archive className="h-4 w-4 text-muted-foreground hover:text-primary" />
+                          </Button>
+                        )}
 
                         {/* Delete button */}
                         {onDelete && (

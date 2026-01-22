@@ -59,6 +59,9 @@ export const reports = pgTable("reports", {
   isPinned: boolean("is_pinned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
+
+  // Soft-hide: Coach can archive reports without deleting (athletes still see shared reports)
+  archivedAt: timestamp("archived_at"),
 }, (table) => ({
   orgIdx: index("reports_org_idx").on(table.organizationId),
   createdByIdx: index("reports_created_by_idx").on(table.createdBy),
@@ -142,6 +145,9 @@ export const reportShares = pgTable("report_shares", {
   message: text("message"), // Optional message from coach
   viewedAt: timestamp("viewed_at"), // When athlete first viewed
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Soft-hide: Athlete can dismiss shared reports without affecting coach view
+  dismissedAt: timestamp("dismissed_at"),
 }, (table) => ({
   // Prevent duplicate shares of same report to same athlete
   uniqueReportAthlete: unique("report_shares_unique_report_athlete").on(table.reportId, table.athleteId),

@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ChevronRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronRight, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface SharedReportCardProps {
@@ -13,6 +14,7 @@ interface SharedReportCardProps {
   createdAt: string;
   isNew: boolean;
   onView: () => void;
+  onDismiss?: () => void;
 }
 
 export function SharedReportCard({
@@ -23,7 +25,13 @@ export function SharedReportCard({
   createdAt,
   isNew,
   onView,
+  onDismiss,
 }: SharedReportCardProps) {
+  const handleDismiss = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    onDismiss?.();
+  };
+
   return (
     <Card
       className="hover:bg-accent/50 cursor-pointer transition-colors"
@@ -56,7 +64,21 @@ export function SharedReportCard({
               </p>
             )}
           </div>
-          <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 ml-2" />
+          <div className="flex items-center gap-1 shrink-0 ml-2">
+            {onDismiss && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                onClick={handleDismiss}
+                title="Dismiss report"
+                data-testid="dismiss-report-button"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </div>
         </div>
       </CardContent>
     </Card>

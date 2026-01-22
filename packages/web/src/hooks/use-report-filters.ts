@@ -9,6 +9,7 @@ export interface ReportFilters {
   metrics: string[];
   teamIds: string[];
   pinned?: boolean;
+  includeArchived?: boolean; // Show archived reports when true
   sortBy: string;
   sortOrder: 'asc' | 'desc';
 }
@@ -21,6 +22,7 @@ const DEFAULT_FILTERS: ReportFilters = {
   metrics: [],
   teamIds: [],
   pinned: undefined,
+  includeArchived: false,
   sortBy: 'createdAt',
   sortOrder: 'desc',
 };
@@ -42,6 +44,7 @@ export function useReportFilters() {
   const [metrics, setMetrics] = useState<string[]>([]);
   const [teamIds, setTeamIds] = useState<string[]>([]);
   const [pinned, setPinned] = useState<boolean | undefined>(undefined);
+  const [includeArchived, setIncludeArchived] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<string>('createdAt');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
 
@@ -89,6 +92,11 @@ export function useReportFilters() {
       setPinned(false);
     }
 
+    const archivedParam = params.get('includeArchived');
+    if (archivedParam === 'true') {
+      setIncludeArchived(true);
+    }
+
     const sortByParam = params.get('sortBy');
     if (sortByParam) {
       setSortBy(sortByParam);
@@ -132,6 +140,10 @@ export function useReportFilters() {
       params.set('pinned', String(pinned));
     }
 
+    if (includeArchived) {
+      params.set('includeArchived', 'true');
+    }
+
     if (sortBy !== DEFAULT_FILTERS.sortBy) {
       params.set('sortBy', sortBy);
     }
@@ -144,7 +156,7 @@ export function useReportFilters() {
     const newUrl = queryString ? `/reports?${queryString}` : '/reports';
 
     window.history.pushState({}, '', newUrl);
-  }, [debouncedSearch, reportType, dateFrom, dateTo, metrics, teamIds, pinned, sortBy, sortOrder]);
+  }, [debouncedSearch, reportType, dateFrom, dateTo, metrics, teamIds, pinned, includeArchived, sortBy, sortOrder]);
 
   // Combined filters object
   const filters: ReportFilters = useMemo(() => ({
@@ -155,9 +167,10 @@ export function useReportFilters() {
     metrics,
     teamIds,
     pinned,
+    includeArchived,
     sortBy,
     sortOrder,
-  }), [debouncedSearch, reportType, dateFrom, dateTo, metrics, teamIds, pinned, sortBy, sortOrder]);
+  }), [debouncedSearch, reportType, dateFrom, dateTo, metrics, teamIds, pinned, includeArchived, sortBy, sortOrder]);
 
   // Active filter count (excluding defaults and sort)
   const activeFilterCount = useMemo(() => {
@@ -182,6 +195,7 @@ export function useReportFilters() {
     setMetrics([]);
     setTeamIds([]);
     setPinned(undefined);
+    setIncludeArchived(false);
     setSortBy(DEFAULT_FILTERS.sortBy);
     setSortOrder(DEFAULT_FILTERS.sortOrder);
   }, []);
@@ -195,6 +209,7 @@ export function useReportFilters() {
     if (updates.metrics !== undefined) setMetrics(updates.metrics);
     if (updates.teamIds !== undefined) setTeamIds(updates.teamIds);
     if (updates.pinned !== undefined) setPinned(updates.pinned);
+    if (updates.includeArchived !== undefined) setIncludeArchived(updates.includeArchived);
     if (updates.sortBy !== undefined) setSortBy(updates.sortBy);
     if (updates.sortOrder !== undefined) setSortOrder(updates.sortOrder);
   }, []);
@@ -211,6 +226,7 @@ export function useReportFilters() {
     setMetrics,
     setTeamIds,
     setPinned,
+    setIncludeArchived,
     setSortBy,
     setSortOrder,
     reset,

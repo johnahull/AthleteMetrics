@@ -1,11 +1,11 @@
 import { useState, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/lib/auth";
-import { useDeleteReport } from "@/hooks/use-reports";
+import { useDeleteReport, useArchiveReport, useBulkArchiveReports, useBulkDeleteReports } from "@/hooks/use-reports";
 import { useReportFilters } from "@/hooks/use-report-filters";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Plus, CheckSquare, X, Send } from "lucide-react";
+import { Plus, CheckSquare, X, Send, Archive, Trash2 } from "lucide-react";
 import { ReportWizard } from "@/components/reports/ReportWizard";
 import { ReportsFilterBar } from "@/components/reports/ReportsFilterBar";
 import { PinnedReportsSection } from "@/components/reports/PinnedReportsSection";
@@ -37,14 +37,20 @@ export default function Reports() {
   const [, setLocation] = useLocation();
   const [showWizard, setShowWizard] = useState(false);
   const [deleteReportId, setDeleteReportId] = useState<string | null>(null);
+  const [archiveReportId, setArchiveReportId] = useState<string | null>(null);
 
   // Selection mode state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedReports, setSelectedReports] = useState<Map<string, ReportWithSentStatus>>(new Map());
   const [showDistributeDialog, setShowDistributeDialog] = useState(false);
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
 
   const { filters, updateFilters, resetFilters, activeFilterCount } = useReportFilters();
   const deleteReport = useDeleteReport();
+  const archiveReport = useArchiveReport();
+  const bulkArchive = useBulkArchiveReports();
+  const bulkDelete = useBulkDeleteReports();
 
   // Selection handlers
   const handleToggleSelection = useCallback((report: ReportWithSentStatus) => {
@@ -108,6 +114,32 @@ export default function Reports() {
     }
   };
 
+  const handleRequestArchive = (reportId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card click
+    setArchiveReportId(reportId);
+  };
+
+  const handleArchiveReport = async () => {
+    if (archiveReportId) {
+      await archiveReport.mutateAsync(archiveReportId);
+      setArchiveReportId(null);
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    const reportIds = Array.from(selectedReports.keys());
+    await bulkArchive.mutateAsync(reportIds);
+    setShowBulkArchiveDialog(false);
+    handleExitSelectionMode();
+  };
+
+  const handleBulkDelete = async () => {
+    const reportIds = Array.from(selectedReports.keys());
+    await bulkDelete.mutateAsync(reportIds);
+    setShowBulkDeleteDialog(false);
+    handleExitSelectionMode();
+  };
+
   return (
     <div className="container mx-auto py-8 space-y-8">
       {/* Header */}
@@ -153,6 +185,7 @@ export default function Reports() {
         organizationId={organizationContext || undefined}
         onReportClick={handleViewReport}
         onDelete={handleRequestDelete}
+        onArchive={handleRequestArchive}
         isSelectionMode={isSelectionMode}
         selectedReportIds={new Set(selectedReports.keys())}
         onToggleSelection={handleToggleSelection}
@@ -164,6 +197,7 @@ export default function Reports() {
         filters={filters}
         onReportClick={handleViewReport}
         onDelete={handleRequestDelete}
+        onArchive={handleRequestArchive}
         isSelectionMode={isSelectionMode}
         selectedReportIds={new Set(selectedReports.keys())}
         onToggleSelection={handleToggleSelection}
@@ -186,6 +220,25 @@ export default function Reports() {
           >
             <X className="h-4 w-4 mr-1" />
             Clear
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBulkArchiveDialog(true)}
+            data-testid="bulk-archive-button"
+          >
+            <Archive className="h-4 w-4 mr-2" />
+            Archive
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBulkDeleteDialog(true)}
+            className="text-destructive hover:text-destructive"
+            data-testid="bulk-delete-button"
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
           </Button>
           <Button
             size="sm"
@@ -225,6 +278,69 @@ export default function Reports() {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteReport}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Archive Dialog */}
+      <AlertDialog open={!!archiveReportId} onOpenChange={() => setArchiveReportId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Report</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archive this report? Archived reports will be hidden from your view but athletes who received them can still see them.
+              You can view and restore archived reports from the filter menu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleArchiveReport} disabled={archiveReport.isPending}>
+              {archiveReport.isPending ? "Archiving..." : "Archive"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Archive Dialog */}
+      <AlertDialog open={showBulkArchiveDialog} onOpenChange={setShowBulkArchiveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Archive Reports</AlertDialogTitle>
+            <AlertDialogDescription>
+              Archive {selectedReports.size} report{selectedReports.size !== 1 ? "s" : ""}?
+              Archived reports will be hidden from your view but athletes who received them can still see them.
+              You can view and restore archived reports from the filter menu.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleBulkArchive} disabled={bulkArchive.isPending}>
+              {bulkArchive.isPending ? "Archiving..." : "Archive"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Reports Permanently</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {selectedReports.size} report{selectedReports.size !== 1 ? "s" : ""}?
+              This will remove them for everyone, including athletes who received them.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={bulkDelete.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDelete.isPending ? "Deleting..." : "Delete Permanently"}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

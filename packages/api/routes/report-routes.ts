@@ -386,6 +386,7 @@ export function registerReportRoutes(app: Express) {
         metrics,
         teamIds,
         pinned,
+        includeArchived, // New: set to 'true' to include archived reports
         sortBy = 'createdAt',
         sortOrder = 'desc',
         limit: limitParam = '25',
@@ -479,6 +480,12 @@ export function registerReportRoutes(app: Express) {
         conditions.push(eq(reports.isPinned, true));
       } else if (pinned === 'false') {
         conditions.push(eq(reports.isPinned, false));
+      }
+
+      // Archived filter: exclude archived reports by default
+      // Only include archived reports when explicitly requested with includeArchived=true
+      if (includeArchived !== 'true') {
+        conditions.push(isNull(reports.archivedAt));
       }
 
       // Build the WHERE clause
@@ -886,6 +893,116 @@ export function registerReportRoutes(app: Express) {
       } catch (error) {
         console.error("Error unpinning report:", error);
         res.status(500).json({ message: "Failed to unpin report" });
+      }
+    }
+  );
+
+  /**
+   * Archive a report (soft-hide from coach view, athletes still see shared reports)
+   * PATCH /api/reports/:id/archive
+   */
+  app.patch(
+    "/api/reports/:id/archive",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Check if report exists and user has access
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Archive the report
+        await db
+          .update(reports)
+          .set({ archivedAt: new Date() })
+          .where(eq(reports.id, reportId));
+
+        res.json({ message: "Report archived successfully", archivedAt: new Date() });
+      } catch (error) {
+        console.error("Error archiving report:", error);
+        res.status(500).json({ message: "Failed to archive report" });
+      }
+    }
+  );
+
+  /**
+   * Unarchive a report (restore to active view)
+   * PATCH /api/reports/:id/unarchive
+   */
+  app.patch(
+    "/api/reports/:id/unarchive",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const reportId = req.params.id;
+
+        // Check if report exists and user has access
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Validate organization access
+        const hasAccess = await reportService["validateOrganizationAccess"](
+          user.id,
+          report.organizationId
+        );
+        if (!hasAccess) {
+          return res
+            .status(403)
+            .json({ message: "Access denied to this report" });
+        }
+
+        // Unarchive the report
+        await db
+          .update(reports)
+          .set({ archivedAt: null })
+          .where(eq(reports.id, reportId));
+
+        res.json({ message: "Report unarchived successfully", archivedAt: null });
+      } catch (error) {
+        console.error("Error unarchiving report:", error);
+        res.status(500).json({ message: "Failed to unarchive report" });
       }
     }
   );
@@ -2319,6 +2436,217 @@ export function registerReportRoutes(app: Express) {
     }
   );
 
+  // Zod schema for bulk report operations
+  const bulkReportIdsSchema = z.object({
+    reportIds: z.array(z.string().uuid()).min(1, "At least one report ID is required").max(100, "Cannot process more than 100 reports at once"),
+  });
+
+  /**
+   * Bulk archive multiple reports
+   * POST /api/reports/bulk-archive
+   */
+  app.post(
+    "/api/reports/bulk-archive",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Validate request body
+        const validatedData = bulkReportIdsSchema.parse(req.body);
+        const { reportIds } = validatedData;
+
+        // Fetch all requested reports to validate access
+        const targetReports = await db
+          .select()
+          .from(reports)
+          .where(inArray(reports.id, reportIds));
+
+        if (targetReports.length === 0) {
+          return res.status(404).json({ message: "No reports found" });
+        }
+
+        // Get unique organization IDs to validate access
+        const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
+
+        // Validate user has access to all organizations
+        for (const orgId of orgIds) {
+          const hasAccess = await reportService["validateOrganizationAccess"](
+            user.id,
+            orgId
+          );
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied to one or more report organizations",
+            });
+          }
+        }
+
+        // Archive all reports
+        const archivedAt = new Date();
+        await db
+          .update(reports)
+          .set({ archivedAt })
+          .where(inArray(reports.id, reportIds));
+
+        res.json({
+          message: "Reports archived successfully",
+          archived: targetReports.length,
+          archivedAt,
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error bulk archiving reports:", error);
+        res.status(500).json({ message: "Failed to bulk archive reports" });
+      }
+    }
+  );
+
+  /**
+   * Bulk unarchive multiple reports
+   * POST /api/reports/bulk-unarchive
+   */
+  app.post(
+    "/api/reports/bulk-unarchive",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Validate request body
+        const validatedData = bulkReportIdsSchema.parse(req.body);
+        const { reportIds } = validatedData;
+
+        // Fetch all requested reports to validate access
+        const targetReports = await db
+          .select()
+          .from(reports)
+          .where(inArray(reports.id, reportIds));
+
+        if (targetReports.length === 0) {
+          return res.status(404).json({ message: "No reports found" });
+        }
+
+        // Get unique organization IDs to validate access
+        const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
+
+        // Validate user has access to all organizations
+        for (const orgId of orgIds) {
+          const hasAccess = await reportService["validateOrganizationAccess"](
+            user.id,
+            orgId
+          );
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied to one or more report organizations",
+            });
+          }
+        }
+
+        // Unarchive all reports
+        await db
+          .update(reports)
+          .set({ archivedAt: null })
+          .where(inArray(reports.id, reportIds));
+
+        res.json({
+          message: "Reports unarchived successfully",
+          unarchived: targetReports.length,
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error bulk unarchiving reports:", error);
+        res.status(500).json({ message: "Failed to bulk unarchive reports" });
+      }
+    }
+  );
+
+  /**
+   * Bulk delete multiple reports
+   * POST /api/reports/bulk-delete
+   */
+  app.post(
+    "/api/reports/bulk-delete",
+    reportLimiter,
+    requireAuth,
+    requireRole('coach'),
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        // Validate request body
+        const validatedData = bulkReportIdsSchema.parse(req.body);
+        const { reportIds } = validatedData;
+
+        // Fetch all requested reports to validate access
+        const targetReports = await db
+          .select()
+          .from(reports)
+          .where(inArray(reports.id, reportIds));
+
+        if (targetReports.length === 0) {
+          return res.status(404).json({ message: "No reports found" });
+        }
+
+        // Get unique organization IDs to validate access
+        const orgIds = [...new Set(targetReports.map((r) => r.organizationId))];
+
+        // Validate user has access to all organizations
+        for (const orgId of orgIds) {
+          const hasAccess = await reportService["validateOrganizationAccess"](
+            user.id,
+            orgId
+          );
+          if (!hasAccess) {
+            return res.status(403).json({
+              message: "Access denied to one or more report organizations",
+            });
+          }
+        }
+
+        // Delete all reports (cascades to snapshots, benchmarks, and shares)
+        await db.delete(reports).where(inArray(reports.id, reportIds));
+
+        res.json({
+          message: "Reports deleted successfully",
+          deleted: targetReports.length,
+        });
+      } catch (error) {
+        if (error instanceof ZodError) {
+          return res.status(400).json({
+            message: "Validation error",
+            errors: error.errors,
+          });
+        }
+        console.error("Error bulk deleting reports:", error);
+        res.status(500).json({ message: "Failed to bulk delete reports" });
+      }
+    }
+  );
+
   /**
    * Get reports shared with the authenticated athlete
    * GET /api/my/reports
@@ -2331,6 +2659,7 @@ export function registerReportRoutes(app: Express) {
       }
 
       // Get all shares for this athlete with joined report and coach info
+      // Filter out dismissed reports (dismissedAt IS NULL)
       const shares = await db
         .select({
           shareId: reportShares.id,
@@ -2348,7 +2677,12 @@ export function registerReportRoutes(app: Express) {
         .from(reportShares)
         .innerJoin(reports, eq(reportShares.reportId, reports.id))
         .leftJoin(users, eq(reportShares.sharedBy, users.id))
-        .where(eq(reportShares.athleteId, user.id))
+        .where(
+          and(
+            eq(reportShares.athleteId, user.id),
+            isNull(reportShares.dismissedAt)
+          )
+        )
         .orderBy(desc(reportShares.createdAt));
 
       // Format response
@@ -2393,13 +2727,15 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Count unread reports using efficient query
+        // Only count non-dismissed reports
         const result = await db
           .select({ count: sql<number>`count(*)` })
           .from(reportShares)
           .where(
             and(
               eq(reportShares.athleteId, user.id),
-              isNull(reportShares.viewedAt)
+              isNull(reportShares.viewedAt),
+              isNull(reportShares.dismissedAt)
             )
           );
 
@@ -2573,6 +2909,70 @@ export function registerReportRoutes(app: Express) {
       } catch (error) {
         console.error("Error marking report as viewed:", error);
         res.status(500).json({ message: "Failed to mark report as viewed" });
+      }
+    }
+  );
+
+  /**
+   * Dismiss a shared report (athlete soft-hide)
+   * DELETE /api/my/reports/:shareId
+   *
+   * This removes the report from the athlete's view without affecting
+   * the coach's ability to see the share or the original report.
+   */
+  app.delete(
+    "/api/my/reports/:shareId",
+    reportLimiter,
+    requireAuth,
+    async (req, res) => {
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        const shareId = req.params.shareId;
+
+        // Validate shareId is a valid UUID
+        const uuidSchema = z.string().uuid();
+        const parseResult = uuidSchema.safeParse(shareId);
+        if (!parseResult.success) {
+          return res.status(400).json({ message: "Invalid share ID format" });
+        }
+
+        // Get share
+        const [share] = await db
+          .select()
+          .from(reportShares)
+          .where(eq(reportShares.id, shareId))
+          .limit(1);
+
+        if (!share) {
+          return res.status(404).json({ message: "Share not found" });
+        }
+
+        // Verify this share belongs to the authenticated user
+        if (share.athleteId !== user.id) {
+          return res.status(403).json({
+            message: "You can only dismiss your own reports",
+          });
+        }
+
+        // Dismiss the report (soft-hide)
+        const dismissedAt = new Date();
+        await db
+          .update(reportShares)
+          .set({ dismissedAt })
+          .where(eq(reportShares.id, shareId));
+
+        res.json({
+          success: true,
+          message: "Report dismissed successfully",
+          dismissedAt: dismissedAt.toISOString(),
+        });
+      } catch (error) {
+        console.error("Error dismissing report:", error);
+        res.status(500).json({ message: "Failed to dismiss report" });
       }
     }
   );

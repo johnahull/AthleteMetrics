@@ -133,4 +133,5 @@ export interface Report {
   coachingInsights?: string | null;
   coachingInsightsGeneratedAt?: string | null;
   coachingInsightsModel?: string | null;
+  archivedAt?: string | null;
 }
