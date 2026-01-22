@@ -31,6 +31,7 @@ describe('useReportFilters', () => {
       metrics: [],
       teamIds: [],
       pinned: undefined,
+      includeArchived: false,
       sortBy: 'createdAt',
       sortOrder: 'desc',
     });
@@ -163,6 +164,7 @@ describe('useReportFilters', () => {
       metrics: [],
       teamIds: [],
       pinned: undefined,
+      includeArchived: false,
       sortBy: 'createdAt',
       sortOrder: 'desc',
     });
