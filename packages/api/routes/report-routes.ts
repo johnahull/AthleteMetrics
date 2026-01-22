@@ -1732,7 +1732,10 @@ export function registerReportRoutes(app: Express) {
                   viewUrl: `${appUrl}/my-reports`,
                 });
               } catch (emailError) {
-                console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                console.error(
+                  `Failed to send email notification - Coach: ${user.id}, Athlete: ${athlete.emails[0]}, Org: ${report.organizationId}`,
+                  emailError
+                );
               }
             }
 
@@ -1753,11 +1756,17 @@ export function registerReportRoutes(app: Express) {
                 const result = await pushService.sendToUser(athleteId, notificationPayload, report.organizationId);
                 pushSent = result.successful > 0;
               } catch (pushError) {
-                console.error(`Failed to send push notification to athlete ${athleteId}:`, pushError);
+                console.error(
+                  `Failed to send push notification - Coach: ${user.id}, Athlete: ${athleteId}, Org: ${report.organizationId}`,
+                  pushError
+                );
               }
             }
           } catch (notificationError) {
-            console.error('Failed to send notifications:', notificationError);
+            console.error(
+              `Failed to send notifications - Coach: ${user.id}, Athlete: ${athleteId}, Org: ${report.organizationId}`,
+              notificationError
+            );
             // Don't fail the request if notifications fail
           }
 
@@ -1791,6 +1800,43 @@ export function registerReportRoutes(app: Express) {
   /**
    * Share a report with multiple athletes (bulk)
    * POST /api/reports/:id/share-bulk
+   *
+   * @description
+   * Shares a SINGLE report with MULTIPLE athletes in a single transaction.
+   * Duplicate shares are skipped using database unique constraints.
+   * Notifications are sent asynchronously after successful database operations.
+   *
+   * @security
+   * - Rate limited: 15 requests per 15 minutes (bulkOperationLimiter)
+   * - Authentication: requireAuth
+   * - Authorization: requireRole('coach')
+   * - Organization access: Validates coach has access to report's organization
+   * - Athlete access: Validates all athletes belong to the same organization as report
+   *
+   * @performance
+   * - Batch queries used to prevent N+1 issues (athletes, preferences, notifications)
+   * - Single transaction for all share inserts (ACID guarantees)
+   * - Fire-and-forget notification sending to avoid blocking response
+   * - For 100 athletes: ~200-400ms for DB operations, 5-30s for notifications (async)
+   *
+   * @input
+   * - reportId (URL param): UUID of report to share
+   * - athleteIds (body): Array of athlete UUIDs (max 100)
+   * - message (body, optional): Custom message to include (max 1000 chars)
+   *
+   * @returns
+   * {
+   *   shared: number,           // Successfully shared count
+   *   skipped: number,          // Already shared count (duplicates)
+   *   alreadyShared: number     // Same as skipped for backwards compatibility
+   * }
+   *
+   * @example
+   * POST /api/reports/123e4567-e89b-12d3-a456-426614174000/share-bulk
+   * {
+   *   "athleteIds": ["uuid1", "uuid2", "uuid3"],
+   *   "message": "Great job this week!"
+   * }
    */
   app.post(
     "/api/reports/:id/share-bulk",
@@ -2049,7 +2095,10 @@ export function registerReportRoutes(app: Express) {
                           viewUrl: `${appUrl}/my-reports`,
                         });
                       } catch (emailError) {
-                        console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                        console.error(
+                          `Failed to send email notification - Coach: ${user.id}, Athlete: ${athlete.emails[0]}, Org: ${report.organizationId}`,
+                          emailError
+                        );
                       }
                     }
 
@@ -2068,11 +2117,17 @@ export function registerReportRoutes(app: Express) {
                         };
                         await pushService.sendToUser(share.athleteId, notificationPayload, report.organizationId);
                       } catch (pushError) {
-                        console.error(`Failed to send push notification to athlete ${share.athleteId}:`, pushError);
+                        console.error(
+                          `Failed to send push notification - Coach: ${user.id}, Athlete: ${share.athleteId}, Org: ${report.organizationId}`,
+                          pushError
+                        );
                       }
                     }
                   } catch (notificationError) {
-                    console.error(`Failed to send notifications to athlete ${share.athleteId}:`, notificationError);
+                    console.error(
+                      `Failed to send notifications - Coach: ${user.id}, Athlete: ${share.athleteId}, Org: ${report.organizationId}`,
+                      notificationError
+                    );
                   }
                 })
               ).catch((err) => {
@@ -2118,9 +2173,47 @@ export function registerReportRoutes(app: Express) {
    * Bulk distribute individual reports to their respective athletes
    * POST /api/reports/bulk-distribute
    *
-   * Unlike share-bulk (which shares ONE report with MANY athletes),
-   * this endpoint sends MANY individual reports to their RESPECTIVE athletes
-   * (each report goes to its configured athleteId).
+   * @description
+   * Distributes MULTIPLE individual reports to their RESPECTIVE athletes.
+   * Unlike share-bulk (ONE report → MANY athletes), this endpoint handles
+   * MANY reports → THEIR CONFIGURED athletes (each report has one athleteId).
+   * Each report is only sent to its designated athlete.
+   *
+   * @use-case
+   * - Coach generates 50 individual athlete reports from template
+   * - Coach clicks "Send All" to distribute to each athlete
+   * - Each athlete receives only their own personalized report
+   *
+   * @security
+   * - Rate limited: 15 requests per 15 minutes (bulkOperationLimiter)
+   * - Authentication: requireAuth
+   * - Authorization: requireRole('coach')
+   * - Organization access: Validates coach has access to all reports' organizations
+   * - Report validation: Only sends reports with valid athleteId (IndividualReportConfig)
+   *
+   * @performance
+   * - Batch queries for reports, athletes, preferences, organizations
+   * - Single transaction for all share inserts (ACID guarantees)
+   * - Fire-and-forget notification sending to avoid blocking response
+   * - For 100 reports: ~300-500ms for DB operations, 7-30s for notifications (async)
+   *
+   * @input
+   * - reportIds (body): Array of report UUIDs (max 100)
+   * - message (body, optional): Custom message to include (max 1000 chars)
+   *
+   * @returns
+   * {
+   *   distributed: number,      // Successfully distributed count
+   *   skipped: number,          // Already distributed count (duplicates)
+   *   failed: number            // Failed count (invalid athleteId, access denied, etc.)
+   * }
+   *
+   * @example
+   * POST /api/reports/bulk-distribute
+   * {
+   *   "reportIds": ["uuid1", "uuid2", "uuid3"],
+   *   "message": "Here is your personalized report!"
+   * }
    */
   app.post(
     "/api/reports/bulk-distribute",
@@ -2377,7 +2470,10 @@ export function registerReportRoutes(app: Express) {
                         viewUrl: `${appUrl}/my-reports`,
                       });
                     } catch (emailError) {
-                      console.error(`Failed to send email notification to ${athlete.emails[0]}:`, emailError);
+                      console.error(
+                        `Failed to send email notification - Coach: ${user.id}, Athlete: ${athlete.emails[0]}, Report: ${share.reportId}, Org: ${share.organizationId}`,
+                        emailError
+                      );
                     }
                   }
 
@@ -2396,11 +2492,17 @@ export function registerReportRoutes(app: Express) {
                       };
                       await pushService.sendToUser(share.athleteId, notificationPayload, share.organizationId);
                     } catch (pushError) {
-                      console.error(`Failed to send push notification to athlete ${share.athleteId}:`, pushError);
+                      console.error(
+                        `Failed to send push notification - Coach: ${user.id}, Athlete: ${share.athleteId}, Report: ${share.reportId}, Org: ${share.organizationId}`,
+                        pushError
+                      );
                     }
                   }
                 } catch (notificationError) {
-                  console.error(`Failed to send notifications for report ${share.reportId}:`, notificationError);
+                  console.error(
+                    `Failed to send notifications - Coach: ${user.id}, Athlete: ${share.athleteId}, Report: ${share.reportId}, Org: ${share.organizationId}`,
+                    notificationError
+                  );
                 }
               })
             ).catch((err) => {
@@ -2462,6 +2564,27 @@ export function registerReportRoutes(app: Express) {
   /**
    * Bulk archive multiple reports
    * POST /api/reports/bulk-archive
+   *
+   * @description
+   * Archives multiple reports by setting their archivedAt timestamp.
+   * Archived reports are hidden from default views but can be restored.
+   * Returns 200 with count:0 if no reports match (not 404).
+   *
+   * @security
+   * - Rate limited: 15 requests per 15 minutes (bulkOperationLimiter)
+   * - Authentication: requireAuth
+   * - Authorization: requireRole('coach')
+   * - Organization access: Validates coach has access to all reports' organizations
+   *
+   * @input
+   * - reportIds (body): Array of report UUIDs to archive
+   *
+   * @returns
+   * {
+   *   message: string,
+   *   archived: number,
+   *   archivedAt?: Date
+   * }
    */
   app.post(
     "/api/reports/bulk-archive",
@@ -2486,7 +2609,10 @@ export function registerReportRoutes(app: Express) {
           .where(inArray(reports.id, reportIds));
 
         if (targetReports.length === 0) {
-          return res.status(404).json({ message: "No reports found" });
+          return res.json({
+            message: "No reports to archive",
+            archived: 0
+          });
         }
 
         // Get unique organization IDs to validate access
@@ -2533,6 +2659,26 @@ export function registerReportRoutes(app: Express) {
   /**
    * Bulk unarchive multiple reports
    * POST /api/reports/bulk-unarchive
+   *
+   * @description
+   * Restores multiple archived reports by clearing their archivedAt timestamp.
+   * Unarchived reports return to default views.
+   * Returns 200 with count:0 if no reports match (not 404).
+   *
+   * @security
+   * - Rate limited: 15 requests per 15 minutes (bulkOperationLimiter)
+   * - Authentication: requireAuth
+   * - Authorization: requireRole('coach')
+   * - Organization access: Validates coach has access to all reports' organizations
+   *
+   * @input
+   * - reportIds (body): Array of report UUIDs to unarchive
+   *
+   * @returns
+   * {
+   *   message: string,
+   *   unarchived: number
+   * }
    */
   app.post(
     "/api/reports/bulk-unarchive",
@@ -2557,7 +2703,10 @@ export function registerReportRoutes(app: Express) {
           .where(inArray(reports.id, reportIds));
 
         if (targetReports.length === 0) {
-          return res.status(404).json({ message: "No reports found" });
+          return res.json({
+            message: "No reports to unarchive",
+            unarchived: 0
+          });
         }
 
         // Get unique organization IDs to validate access
