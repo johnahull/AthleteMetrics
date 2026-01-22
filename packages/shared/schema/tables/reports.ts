@@ -69,6 +69,10 @@ export const reports = pgTable("reports", {
   orgTypeIdx: index("reports_org_type_idx").on(table.organizationId, table.reportType),
   pinnedIdx: index("reports_pinned_idx").on(table.isPinned),
   orgPinnedIdx: index("reports_org_pinned_idx").on(table.organizationId, table.isPinned),
+  archivedAtIdx: index("reports_archived_at_idx").on(table.archivedAt),
+  orgNotArchivedIdx: index("reports_org_not_archived_idx")
+    .on(table.organizationId)
+    .where(sql`${table.archivedAt} IS NULL`),
 }));
 
 export const reportSnapshots = pgTable("report_snapshots", {
@@ -154,4 +158,8 @@ export const reportShares = pgTable("report_shares", {
   reportIdx: index("report_shares_report_idx").on(table.reportId),
   athleteIdx: index("report_shares_athlete_idx").on(table.athleteId),
   orgIdx: index("report_shares_org_idx").on(table.organizationId),
+  dismissedAtIdx: index("report_shares_dismissed_at_idx").on(table.dismissedAt),
+  athleteNotDismissedIdx: index("report_shares_athlete_not_dismissed_idx")
+    .on(table.athleteId)
+    .where(sql`${table.dismissedAt} IS NULL`),
 }));

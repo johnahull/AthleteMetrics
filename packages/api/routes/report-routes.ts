@@ -2011,19 +2011,22 @@ export function registerReportRoutes(app: Express) {
 
               const appUrl = process.env.APP_URL || 'https://athletemetrics.app';
 
+              // Batch fetch notification preferences for all athletes to avoid N+1 query
+              const uniqueAthleteIds = sharesToInsert.map((s) => s.athleteId);
+              const prefsRecords = await db
+                .select()
+                .from(notificationPreferences)
+                .where(inArray(notificationPreferences.userId, uniqueAthleteIds));
+              const prefsMap = new Map(prefsRecords.map((p) => [p.userId, p]));
+
               // Send notifications asynchronously (fire and forget)
               // Note: Notification failures are logged but don't block the response.
               // Athletes can still see shared reports in "My Reports" even if notifications fail.
               Promise.all(
                 sharesToInsert.map(async (share) => {
                   try {
-                    // Get athlete's notification preferences
-                    const prefs = await db
-                      .select()
-                      .from(notificationPreferences)
-                      .where(eq(notificationPreferences.userId, share.athleteId))
-                      .limit(1)
-                      .then((rows) => rows[0]);
+                    // Get athlete's notification preferences from the batch-fetched map
+                    const prefs = prefsMap.get(share.athleteId);
 
                     const pushEnabled = prefs?.pushEnabled ?? true;
                     const emailEnabled = prefs?.emailEnabled ?? true;
@@ -2462,7 +2465,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/bulk-archive",
-    reportLimiter,
+    bulkOperationLimiter,
     requireAuth,
     requireRole('coach'),
     async (req, res) => {
@@ -2533,7 +2536,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/bulk-unarchive",
-    reportLimiter,
+    bulkOperationLimiter,
     requireAuth,
     requireRole('coach'),
     async (req, res) => {
