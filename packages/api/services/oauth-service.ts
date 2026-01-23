@@ -117,10 +117,21 @@ export class OAuthService extends BaseService {
         return { success: true, userId: existingOAuthUser.id };
       }
 
-      // 2. Check if user exists with this email
-      const existingEmailUser = await this.storage.getUserByEmail(profile.email);
+      // 2. Check if user(s) exist with this email - use getUsersByEmail
+      const existingEmailUsers = await this.storage.getUsersByEmail(profile.email);
 
-      if (existingEmailUser) {
+      if (existingEmailUsers.length > 1) {
+        // Multiple users with same email - log warning for investigation
+        console.warn('[OAuth] Multiple users found with email, using first:', {
+          email: profile.email,
+          userIds: existingEmailUsers.map(u => u.id),
+          userCount: existingEmailUsers.length
+        });
+      }
+
+      if (existingEmailUsers.length > 0) {
+        const existingEmailUser = existingEmailUsers[0];
+
         // Validate user has email address
         if (!existingEmailUser.emails || existingEmailUser.emails.length === 0) {
           console.error('[OAuth Security] User account missing email array:', { userId: existingEmailUser.id });

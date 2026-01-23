@@ -53,6 +53,7 @@ export interface IStorage {
   authenticateUser(username: string, password: string): Promise<User | null>;
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUsersByEmail(email: string): Promise<User[]>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByAppleId(appleId: string): Promise<User | null>;
@@ -457,6 +458,18 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getUsersByEmail(email: string): Promise<User[]> {
+    // Use PostgreSQL array search with ANY operator to find ALL users with the email
+    // Order by createdAt ASC for deterministic results (oldest user first)
+    const matchingUsers = await db.select().from(users).where(
+      and(
+        sql`${email} = ANY(${users.emails})`,
+        whereUserNotDeleted() // Exclude soft-deleted users
+      )
+    ).orderBy(asc(users.createdAt));
+    return matchingUsers;
+  }
+
   async getUserByUsername(username: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(
       and(
@@ -651,7 +664,8 @@ export class DatabaseStorage implements IStorage {
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
       'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
-      'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding'
+      'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding',
+      'legalAcceptedAt', 'legalAcceptedVersion'
     ];
 
     const updateData: any = {};
@@ -1701,34 +1715,72 @@ export class DatabaseStorage implements IStorage {
 
         console.log("Updated existing athlete with credentials:", user.id);
       } else {
-        // Create a new user - for non-athlete invitations or new athletes
-        // Note: role is also stored in user_organizations for organization-specific roles
-        const createUserData = {
-          username: userInfo.username,
-          emails: [invitation.email],
-          password: userInfo.password,
-          firstName: userInfo.firstName,
-          lastName: userInfo.lastName,
-          role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
-          ...legalData
-        };
+        // Check if a user with this email already exists
+        const existingUser = await this.getUserByEmail(invitation.email);
 
-        console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+        if (existingUser) {
+          // User exists - add them to new org instead of creating duplicate
+          console.log("[Invitation] Found existing user with email:", {
+            userId: existingUser.id,
+            email: invitation.email,
+            invitationOrg: invitation.organizationId
+          });
 
-        // Validate user data against schema before creating user
-        try {
-          insertUserSchema.parse(createUserData);
-        } catch (error) {
-          console.error("User data validation failed:", error);
-          throw error;
-        }
+          // Log if provided username differs from existing (username will be preserved)
+          if (existingUser.username !== userInfo.username) {
+            console.log("[Invitation] Ignoring provided username for existing user:", {
+              providedUsername: userInfo.username,
+              existingUsername: existingUser.username
+            });
+          }
 
-        try {
-          user = await this.createUser(createUserData);
-          console.log("User created successfully:", user.id);
-        } catch (error) {
-          console.error("Error creating user:", error);
-          throw error;
+          // Build update data: legal acceptance + optional password for OAuth-only users
+          const updateData: any = { ...legalData };
+
+          // Update password if user doesn't have one (OAuth-only user)
+          if (!existingUser.password) {
+            updateData.password = userInfo.password;
+            updateData.isActive = true;
+            console.log("[Invitation] Updating OAuth-only user with password");
+          }
+
+          // Only update if there's something to update
+          if (Object.keys(updateData).length > 0) {
+            user = await this.updateUser(existingUser.id, updateData);
+            console.log("[Invitation] Updated existing user for invitation:", user.id);
+          } else {
+            user = existingUser;
+            console.log("[Invitation] Using existing user without updates:", user.id);
+          }
+        } else {
+          // No existing user - create new one (existing code path)
+          const createUserData = {
+            username: userInfo.username,
+            emails: [invitation.email],
+            password: userInfo.password,
+            firstName: userInfo.firstName,
+            lastName: userInfo.lastName,
+            role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
+            ...legalData
+          };
+
+          console.log("Creating new user with data:", { username: createUserData.username, email: createUserData.emails[0], firstName: createUserData.firstName });
+
+          // Validate user data against schema before creating user
+          try {
+            insertUserSchema.parse(createUserData);
+          } catch (error) {
+            console.error("User data validation failed:", error);
+            throw error;
+          }
+
+          try {
+            user = await this.createUser(createUserData);
+            console.log("User created successfully:", user.id);
+          } catch (error) {
+            console.error("Error creating user:", error);
+            throw error;
+          }
         }
       }
 
