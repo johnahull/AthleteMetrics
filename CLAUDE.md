@@ -170,6 +170,28 @@ gh pr create --base develop --title "feat: add new feature"
 gh pr create --base main  # ❌ Wrong for feature branches
 ```
 
+### Comparing Branches (Squash Merge Workflow)
+
+This repository uses **squash merges** when merging `develop` → `main`. This keeps `main` clean (one commit per release) but means commit SHAs differ between branches.
+
+**Important:** When checking what's different between `develop` and `main`, use the correct commands:
+
+```bash
+# ❌ MISLEADING - counts ancestor commits, not actual differences
+git log main..develop --oneline | wc -l  # Shows 150+ commits even if branches are similar
+
+# ✅ CORRECT - shows actual file/content differences
+git diff main develop --stat              # Summary of changed files
+git diff main develop                     # Full diff
+```
+
+**Why this matters:**
+- `git log main..develop` lists commits reachable from `develop` but not `main`
+- After a squash merge, individual commits remain "not in main" even though their *changes* are
+- `git diff` compares the actual tree state, ignoring commit history
+
+**When creating release PRs** (develop → main), always use `git diff` to assess the true scope of changes.
+
 ## Development Commands
 
 ### Core Development
