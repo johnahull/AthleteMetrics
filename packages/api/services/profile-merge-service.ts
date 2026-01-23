@@ -16,6 +16,7 @@
 import { BaseService } from "./base-service";
 import { db } from "../db";
 import { eq, and, sql, inArray } from "drizzle-orm";
+import { z } from "zod";
 import {
   users,
   measurements,
@@ -296,6 +297,10 @@ export class ProfileMergeService extends BaseService {
         throw new Error("Source user has already been deleted. Another merge may have completed.");
       }
 
+      // TOCTOU fix: Re-validate authorization inside transaction
+      // This prevents race conditions where actor permissions change between initial check and merge execution
+      await this.validateMergeAuthorization(orgId, actorId);
+
       const summary = {
         measurementsTransferred: 0,
         teamMembershipsTransferred: 0,
@@ -426,12 +431,13 @@ export class ProfileMergeService extends BaseService {
       const targetEmails = new Set((targetUser.emails || []).map(e => e.toLowerCase()));
       const newEmails: string[] = [];
 
-      // Email validation regex (basic but sufficient for most cases)
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      // Use Zod for robust email validation (consistent with codebase patterns)
+      const emailSchema = z.string().email();
 
       for (const email of sourceEmails) {
         // Validate email format before merging
-        if (!emailRegex.test(email)) {
+        const validationResult = emailSchema.safeParse(email);
+        if (!validationResult.success) {
           console.warn(`[Profile Merge] Skipping invalid email during merge: ${email}`);
           continue;
         }

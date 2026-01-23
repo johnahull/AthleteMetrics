@@ -167,6 +167,7 @@ export function ProfileMergeSelect({
             onClick={onSwap}
             className="gap-2"
             data-testid="swap-profiles-button"
+            aria-label={`Swap source profile (${sourceAthlete.fullName}) and target profile (${targetAthlete.fullName})`}
           >
             <ArrowLeftRight className="h-4 w-4" />
             Swap Source and Target
