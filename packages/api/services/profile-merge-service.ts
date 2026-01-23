@@ -190,6 +190,10 @@ export class ProfileMergeService extends BaseService {
       warnings.push("Both profiles are linked to the same Global Athlete - link will be consolidated");
     }
 
+    // Check for indicators that these might be different people
+    const differentPeopleWarnings = this.detectDifferentPeopleIndicators(sourceUser, targetUser);
+    warnings.push(...differentPeopleWarnings);
+
     return {
       source: {
         id: sourceUserId,
@@ -887,6 +891,89 @@ export class ProfileMergeService extends BaseService {
     if (user.googleId) providers.push("google");
     if (user.appleId) providers.push("apple");
     return providers;
+  }
+
+  /**
+   * Detect indicators that suggest these might be different people
+   * Returns warnings to display to the admin before they proceed
+   */
+  private detectDifferentPeopleIndicators(sourceUser: User, targetUser: User): string[] {
+    const warnings: string[] = [];
+
+    // Check for different birth years (strong indicator of different people)
+    if (sourceUser.birthYear && targetUser.birthYear &&
+        sourceUser.birthYear !== targetUser.birthYear) {
+      const yearDiff = Math.abs(sourceUser.birthYear - targetUser.birthYear);
+      if (yearDiff >= 2) {
+        warnings.push(
+          `⚠️ CAUTION: Birth years differ by ${yearDiff} years (${sourceUser.birthYear} vs ${targetUser.birthYear}). ` +
+          `These may be different athletes who share a contact email.`
+        );
+      } else {
+        warnings.push(
+          `Birth years differ slightly (${sourceUser.birthYear} vs ${targetUser.birthYear}). ` +
+          `Verify these are the same person.`
+        );
+      }
+    }
+
+    // Check for different genders
+    if (sourceUser.gender && targetUser.gender &&
+        sourceUser.gender !== targetUser.gender &&
+        sourceUser.gender !== "Not Specified" && targetUser.gender !== "Not Specified") {
+      warnings.push(
+        `⚠️ CAUTION: Genders differ (${sourceUser.gender} vs ${targetUser.gender}). ` +
+        `These may be different athletes.`
+      );
+    }
+
+    // Check for significantly different names
+    const sourceName = (sourceUser.fullName || "").toLowerCase().trim();
+    const targetName = (targetUser.fullName || "").toLowerCase().trim();
+
+    if (sourceName && targetName && !this.namesAreSimilar(sourceName, targetName)) {
+      warnings.push(
+        `⚠️ CAUTION: Names are significantly different ("${sourceUser.fullName}" vs "${targetUser.fullName}"). ` +
+        `Ensure these profiles belong to the same person.`
+      );
+    }
+
+    return warnings;
+  }
+
+  /**
+   * Simple heuristic to check if two names are similar enough to be the same person
+   * Accounts for nicknames, typos, and name variations
+   */
+  private namesAreSimilar(name1: string, name2: string): boolean {
+    // Exact match
+    if (name1 === name2) return true;
+
+    // Split into parts and check for overlap
+    const parts1 = name1.split(/\s+/).filter(p => p.length > 1);
+    const parts2 = name2.split(/\s+/).filter(p => p.length > 1);
+
+    // Check if last names match (most reliable)
+    const lastName1 = parts1[parts1.length - 1];
+    const lastName2 = parts2[parts2.length - 1];
+
+    if (lastName1 && lastName2 && lastName1 !== lastName2) {
+      // Last names don't match - likely different people
+      return false;
+    }
+
+    // Check if at least one name part is shared
+    const sharedParts = parts1.filter(p => parts2.includes(p));
+    if (sharedParts.length === 0 && parts1.length > 0 && parts2.length > 0) {
+      // No shared name parts - check for first name initial match
+      const firstInitial1 = parts1[0]?.[0];
+      const firstInitial2 = parts2[0]?.[0];
+      if (firstInitial1 && firstInitial2 && firstInitial1 !== firstInitial2) {
+        return false;
+      }
+    }
+
+    return true;
   }
 }
 

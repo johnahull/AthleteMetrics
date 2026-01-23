@@ -121,16 +121,38 @@ export function ProfileMergePreview({
         </Alert>
       )}
 
-      {/* Warnings */}
-      {preview.warnings.length > 0 && (
+      {/* Caution Warnings - Different People Indicators */}
+      {preview.warnings.filter(w => w.includes("CAUTION")).length > 0 && (
+        <Alert variant="destructive" className="border-orange-300 bg-orange-50">
+          <AlertTriangle className="h-4 w-4 text-orange-600" />
+          <AlertTitle className="text-orange-800">Possible Different Athletes</AlertTitle>
+          <AlertDescription className="text-orange-700">
+            <p className="mb-2 font-medium">
+              Review these indicators carefully. Merging different athletes will combine their data incorrectly.
+            </p>
+            <ul className="list-disc list-inside space-y-1">
+              {preview.warnings
+                .filter(w => w.includes("CAUTION"))
+                .map((warning, idx) => (
+                  <li key={idx}>{warning.replace("⚠️ CAUTION: ", "")}</li>
+                ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Transfer Summary Warnings */}
+      {preview.warnings.filter(w => !w.includes("CAUTION")).length > 0 && (
         <Alert className="border-blue-200 bg-blue-50">
           <CheckCircle className="h-4 w-4 text-blue-600" />
           <AlertTitle className="text-blue-800">Transfer Summary</AlertTitle>
           <AlertDescription className="text-blue-700">
             <ul className="list-disc list-inside mt-2 space-y-1">
-              {preview.warnings.map((warning, idx) => (
-                <li key={idx}>{warning}</li>
-              ))}
+              {preview.warnings
+                .filter(w => !w.includes("CAUTION"))
+                .map((warning, idx) => (
+                  <li key={idx}>{warning}</li>
+                ))}
             </ul>
           </AlertDescription>
         </Alert>

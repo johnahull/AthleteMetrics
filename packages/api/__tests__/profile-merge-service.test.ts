@@ -41,6 +41,7 @@ vi.mock('../db', () => ({
         chain.from = vi.fn().mockReturnValue(chain);
         chain.where = vi.fn().mockReturnValue(chain);
         chain.set = vi.fn().mockReturnValue(chain);
+        chain.for = vi.fn().mockResolvedValue(resolveValue); // FOR UPDATE locking
         chain.returning = vi.fn().mockResolvedValue(resolveValue);
         chain.then = (resolve: any) => resolve(resolveValue);
         // Make the chain itself awaitable
