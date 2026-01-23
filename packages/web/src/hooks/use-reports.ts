@@ -308,6 +308,11 @@ export function useReportsWithFilters(
         params.set('sortOrder', filters.sortOrder);
       }
 
+      // Add archived filter
+      if (filters?.includeArchived) {
+        params.set('includeArchived', 'true');
+      }
+
       // Add pagination
       if (pagination?.limit) {
         params.set('limit', String(pagination.limit));
@@ -369,6 +374,151 @@ export function useUnpinReport() {
       toast({
         title: "Success",
         description: "Report unpinned successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for archiving a report (soft-hide from coach view)
+ */
+export function useArchiveReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      const res = await apiRequest("PATCH", `/api/reports/${reportId}/archive`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Report Archived",
+        description: "Report has been archived. You can view it in the archived reports section.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for unarchiving a report (restore to active view)
+ */
+export function useUnarchiveReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportId: string) => {
+      const res = await apiRequest("PATCH", `/api/reports/${reportId}/unarchive`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Report Restored",
+        description: "Report has been restored to your active reports.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for bulk archiving multiple reports
+ */
+export function useBulkArchiveReports() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportIds: string[]) => {
+      const res = await apiRequest("POST", "/api/reports/bulk-archive", { reportIds });
+      return res.json();
+    },
+    onSuccess: (data: { archived: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Reports Archived",
+        description: `${data.archived} report${data.archived !== 1 ? 's' : ''} archived successfully.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for bulk unarchiving multiple reports
+ */
+export function useBulkUnarchiveReports() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportIds: string[]) => {
+      const res = await apiRequest("POST", "/api/reports/bulk-unarchive", { reportIds });
+      return res.json();
+    },
+    onSuccess: (data: { unarchived: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Reports Restored",
+        description: `${data.unarchived} report${data.unarchived !== 1 ? 's' : ''} restored successfully.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+/**
+ * Hook for bulk deleting multiple reports
+ */
+export function useBulkDeleteReports() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (reportIds: string[]) => {
+      const res = await apiRequest("POST", "/api/reports/bulk-delete", { reportIds });
+      return res.json();
+    },
+    onSuccess: (data: { deleted: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/reports"] });
+      toast({
+        title: "Reports Deleted",
+        description: `${data.deleted} report${data.deleted !== 1 ? 's' : ''} deleted permanently.`,
       });
     },
     onError: (error: Error) => {

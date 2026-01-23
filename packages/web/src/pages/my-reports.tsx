@@ -1,13 +1,25 @@
+import { useState } from "react";
 import { useAuth } from "@/lib/auth";
-import { useMyReports } from "@/hooks/use-my-reports";
+import { useMyReports, useDismissReport } from "@/hooks/use-my-reports";
 import { SharedReportCard } from "@/components/reports/SharedReportCard";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, AlertCircle, FileText } from "lucide-react";
 import { Redirect, useLocation } from "wouter";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function MyReportsPage() {
   const { user, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
+  const [dismissShareId, setDismissShareId] = useState<string | null>(null);
 
   // Fetch shared reports
   const {
@@ -16,6 +28,8 @@ export default function MyReportsPage() {
     isError,
     error,
   } = useMyReports();
+
+  const dismissReport = useDismissReport();
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -65,6 +79,14 @@ export default function MyReportsPage() {
     setLocation(`/my-reports/${shareId}`);
   };
 
+  // Handle confirming dismiss
+  const handleConfirmDismiss = async () => {
+    if (dismissShareId) {
+      await dismissReport.mutateAsync(dismissShareId);
+      setDismissShareId(null);
+    }
+  };
+
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 space-y-6">
       {/* Header */}
@@ -107,6 +129,7 @@ export default function MyReportsPage() {
               createdAt={report.createdAt}
               isNew={report.isNew}
               onView={() => handleViewReport(report.shareId)}
+              onDismiss={() => setDismissShareId(report.shareId)}
             />
           ))}
         </div>
@@ -121,6 +144,24 @@ export default function MyReportsPage() {
           &larr; Back to Dashboard
         </a>
       </div>
+
+      {/* Dismiss Confirmation Dialog */}
+      <AlertDialog open={!!dismissShareId} onOpenChange={() => setDismissShareId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Dismiss Report</AlertDialogTitle>
+            <AlertDialogDescription>
+              Remove this report from your list? You won't see it anymore, but your coach can still see that they shared it with you.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDismiss} disabled={dismissReport.isPending}>
+              {dismissReport.isPending ? "Dismissing..." : "Dismiss"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

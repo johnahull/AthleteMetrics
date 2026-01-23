@@ -43,6 +43,7 @@ export default mergeConfig(
 
         // API integration tests that require database
         'packages/api/__tests__/organization-type-api.test.ts',
+        'packages/api/__tests__/site-benchmark-sets.test.ts',
       ],
     },
   })

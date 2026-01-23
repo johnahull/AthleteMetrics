@@ -245,7 +245,7 @@ describe.skip("OAuth Service", () => {
       await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.userId, existingEmailUserId));
     });
 
-    it("should trigger account linking for existing email with Google", async () => {
+    it("should trigger account linking for single existing email with Google", async () => {
       const googleProfile = {
         id: "new_google_id",
         emails: [{ value: existingEmail, verified: true }],
@@ -287,6 +287,73 @@ describe.skip("OAuth Service", () => {
         "apple",
         expect.any(String)
       );
+    });
+
+    it("should log warning and use first user when multiple users share the same email", async () => {
+      const sharedEmail = `shared${testSuffix}@example.com`;
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // Create first user with the shared email
+      const [user1] = await db.insert(users).values({
+        username: `shared1${testSuffix}`,
+        emails: [sharedEmail],
+        firstName: "First",
+        lastName: "User",
+        fullName: "First User",
+        password: "hashedpassword1",
+        isEmailVerified: true,
+      }).returning();
+
+      // Create second user with the same email (data integrity issue)
+      const [user2] = await db.insert(users).values({
+        username: `shared2${testSuffix}`,
+        emails: [sharedEmail],
+        firstName: "Second",
+        lastName: "User",
+        fullName: "Second User",
+        password: "hashedpassword2",
+        isEmailVerified: true,
+      }).returning();
+
+      try {
+        const googleProfile = {
+          id: "new_google_for_shared",
+          emails: [{ value: sharedEmail, verified: true }],
+          name: { givenName: "OAuth", familyName: "User" },
+        };
+
+        const result = await oauthService.handleGoogleAuth(googleProfile);
+
+        // Should still trigger linking flow (not fail)
+        expect(result.success).toBe(false);
+        expect(result.requiresLinking).toBe(true);
+
+        // Verify warning was logged about multiple users
+        expect(consoleWarnSpy).toHaveBeenCalledWith(
+          '[OAuth] Multiple users found with email, using first:',
+          expect.objectContaining({
+            email: sharedEmail,
+            userIds: expect.arrayContaining([user1.id, user2.id]),
+            userCount: 2
+          })
+        );
+
+        // Verify linking email was sent to the FIRST user
+        const mockEmailService = oauthService["emailService"] as any;
+        expect(mockEmailService.sendAccountLinkingEmail).toHaveBeenCalledWith(
+          sharedEmail,
+          "First", // First user's firstName
+          "google",
+          expect.any(String)
+        );
+      } finally {
+        // Clean up
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.userId, user1.id));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.userId, user2.id));
+        await db.delete(users).where(eq(users.id, user1.id));
+        await db.delete(users).where(eq(users.id, user2.id));
+        consoleWarnSpy.mockRestore();
+      }
     });
 
     it("should create linking token with 1-hour expiry", async () => {

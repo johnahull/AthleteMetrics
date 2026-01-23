@@ -24,7 +24,7 @@ export type {
   // Metrics
   SiteMetric, OrganizationMetric, CustomOrgMetric, InsertCustomOrgMetric, UpdateCustomOrgMetric, SiteSport, SitePosition,
   // Benchmarks
-  SiteBenchmark, CustomBenchmark, OrganizationBenchmark,
+  SiteBenchmark, CustomBenchmark, OrganizationBenchmark, BenchmarkSet, BenchmarkSetItem, OrganizationBenchmarkSet,
   // Measurements
   Measurement, PeerPercentileCache,
   // Membership
@@ -57,6 +57,7 @@ export type {
   // Enriched/composite types
   SiteSportWithPositions, SiteSportUsage, SitePositionUsage,
   OrganizationBenchmarkWithDetails, EventWithCounts, EventMetricWithDetails,
+  BenchmarkSetWithItems,
 } from "./types";
 
 // Re-export the type aliases that share names with constants

@@ -81,6 +81,9 @@ const Benchmarks = React.lazy(() => import("./pages/benchmarks"));
 const OrganizationBenchmarks = React.lazy(() => import("./pages/organization-benchmarks"));
 const CustomBenchmarks = React.lazy(() => import("./pages/custom-benchmarks"));
 const AthleteBenchmarks = React.lazy(() => import("./pages/athlete-benchmarks"));
+const BenchmarkSets = React.lazy(() => import("./pages/benchmark-sets"));
+const BenchmarkSetDetail = React.lazy(() => import("./pages/benchmark-set-detail"));
+const SiteBenchmarkSetDetail = React.lazy(() => import("./pages/site-benchmark-set-detail"));
 
 // Lazy load custom metrics page
 const CustomMetrics = React.lazy(() => import("./pages/custom-metrics"));
@@ -372,6 +375,11 @@ function Router() {
           <Benchmarks />
         </RouteWrapper>
       </Route>
+      <Route path="/benchmark-sets/:setId">
+        <RouteWrapper loadingText="Loading Benchmark Set...">
+          <SiteBenchmarkSetDetail />
+        </RouteWrapper>
+      </Route>
       <Route path="/organizations/:id/custom-benchmarks">
         <RouteWrapper loadingText="Loading Custom Benchmarks...">
           <CustomBenchmarks />
@@ -391,6 +399,17 @@ function Router() {
       <Route path="/organizations/:id/benchmarks">
         <RouteWrapper loadingText="Loading Organization Benchmarks...">
           <OrganizationBenchmarks />
+        </RouteWrapper>
+      </Route>
+      {/* Benchmark set detail must come before list (more specific route first) */}
+      <Route path="/organizations/:id/benchmark-sets/:setId">
+        <RouteWrapper loadingText="Loading Benchmark Set...">
+          <BenchmarkSetDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/organizations/:id/benchmark-sets">
+        <RouteWrapper loadingText="Loading Benchmark Sets...">
+          <BenchmarkSets />
         </RouteWrapper>
       </Route>
       <Route path="/athletes/:id/benchmarks">

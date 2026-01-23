@@ -59,6 +59,9 @@ export const reports = pgTable("reports", {
   isPinned: boolean("is_pinned").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at"),
+
+  // Soft-hide: Coach can archive reports without deleting (athletes still see shared reports)
+  archivedAt: timestamp("archived_at"),
 }, (table) => ({
   orgIdx: index("reports_org_idx").on(table.organizationId),
   createdByIdx: index("reports_created_by_idx").on(table.createdBy),
@@ -66,6 +69,13 @@ export const reports = pgTable("reports", {
   orgTypeIdx: index("reports_org_type_idx").on(table.organizationId, table.reportType),
   pinnedIdx: index("reports_pinned_idx").on(table.isPinned),
   orgPinnedIdx: index("reports_org_pinned_idx").on(table.organizationId, table.isPinned),
+  archivedAtIdx: index("reports_archived_at_idx").on(table.archivedAt),
+  orgNotArchivedIdx: index("reports_org_not_archived_idx")
+    .on(table.organizationId)
+    .where(sql`${table.archivedAt} IS NULL`),
+  orgPinnedNotArchivedIdx: index("reports_org_pinned_not_archived_idx")
+    .on(table.organizationId, table.isPinned)
+    .where(sql`${table.archivedAt} IS NULL`),
 }));
 
 export const reportSnapshots = pgTable("report_snapshots", {
@@ -142,10 +152,17 @@ export const reportShares = pgTable("report_shares", {
   message: text("message"), // Optional message from coach
   viewedAt: timestamp("viewed_at"), // When athlete first viewed
   createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Soft-hide: Athlete can dismiss shared reports without affecting coach view
+  dismissedAt: timestamp("dismissed_at"),
 }, (table) => ({
   // Prevent duplicate shares of same report to same athlete
   uniqueReportAthlete: unique("report_shares_unique_report_athlete").on(table.reportId, table.athleteId),
   reportIdx: index("report_shares_report_idx").on(table.reportId),
   athleteIdx: index("report_shares_athlete_idx").on(table.athleteId),
   orgIdx: index("report_shares_org_idx").on(table.organizationId),
+  dismissedAtIdx: index("report_shares_dismissed_at_idx").on(table.dismissedAt),
+  athleteNotDismissedIdx: index("report_shares_athlete_not_dismissed_idx")
+    .on(table.athleteId)
+    .where(sql`${table.dismissedAt} IS NULL`),
 }));

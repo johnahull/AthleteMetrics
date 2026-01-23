@@ -105,6 +105,11 @@ export {
   archiveTeamSchema,
   updateTeamMembershipSchema,
   createSiteAdminSchema,
+  insertBenchmarkSetSchema,
+  updateBenchmarkSetSchema,
+  insertBenchmarkSetItemSchema,
+  updateBenchmarkSetItemSchema,
+  reorderBenchmarkSetItemsSchema,
 } from "./schema-original";
 
 // Re-export validation types
@@ -163,6 +168,11 @@ export type {
   UpdateEventRegistration,
   InsertEventInvitation,
   InsertEventMetric,
+  InsertBenchmarkSet,
+  UpdateBenchmarkSet,
+  InsertBenchmarkSetItem,
+  UpdateBenchmarkSetItem,
+  ReorderBenchmarkSetItems,
 } from "./schema-original";
 
 // Note: Complex types (SiteSportWithPositions, EventWithCounts, etc.)

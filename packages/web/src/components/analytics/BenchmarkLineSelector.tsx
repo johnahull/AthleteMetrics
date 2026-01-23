@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { BenchmarkSetQuickLoad } from '@/components/benchmark-sets';
 
 interface BenchmarkLineSelectorProps {
   organizationId: string;
@@ -75,6 +76,25 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
       const currentMetricIds = new Set(benchmarks.map(b => b.id));
       // Keep selections from other metrics
       onSelectionChange(selectedBenchmarkIds.filter(id => !currentMetricIds.has(id)));
+    }
+  }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
+
+  // Handle loading benchmarks from a set - filters to only include benchmarks available for this metric
+  const handleLoadFromSet = useCallback((setBenchmarkIds: { id: string; type: 'site' | 'custom' }[]) => {
+    if (benchmarks) {
+      // Get benchmark IDs from the set (these are the benchmark identifiers)
+      const setIds = new Set(setBenchmarkIds.map(b => b.id));
+
+      // Filter to only benchmarks available for this metric
+      // The benchmark's `id` is the identifier we need to match against
+      const validBenchmarkIds = benchmarks
+        .filter(b => setIds.has(b.id))
+        .map(b => b.id);
+
+      // Keep existing selections from other metrics, add matching benchmarks from set
+      const currentMetricIds = new Set(benchmarks.map(b => b.id));
+      const existingOtherMetrics = selectedBenchmarkIds.filter(id => !currentMetricIds.has(id));
+      onSelectionChange([...existingOtherMetrics, ...validBenchmarkIds]);
     }
   }, [benchmarks, selectedBenchmarkIds, onSelectionChange]);
 
@@ -161,11 +181,15 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
   return (
     <div className="space-y-3">
       {/* Header with controls */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="text-sm font-medium" id={selectorId}>
           {displayLabel} ({selectedCount} of {benchmarks.length} selected)
         </div>
-        <div className="flex gap-2" role="group" aria-label="Benchmark selection actions">
+        <div className="flex gap-2 flex-wrap" role="group" aria-label="Benchmark selection actions">
+          <BenchmarkSetQuickLoad
+            organizationId={organizationId}
+            onLoadSet={handleLoadFromSet}
+          />
           <Button
             variant="outline"
             size="sm"

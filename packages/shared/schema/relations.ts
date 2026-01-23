@@ -55,6 +55,8 @@ const {
   eventInvitations,
   eventMetrics,
   eventFreezeOverrides,
+  benchmarkSets,
+  benchmarkSetItems,
 } = tables;
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -74,6 +76,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   customOrgMetrics: many(customOrgMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
+  benchmarkSets: many(benchmarkSets),
   reports: many(reports),
   wellnessTemplates: many(wellnessTemplates),
   wellnessRequests: many(wellnessRequests),
@@ -551,5 +554,26 @@ export const eventFreezeOverridesRelations = relations(eventFreezeOverrides, ({ 
   overriddenByUser: one(users, {
     fields: [eventFreezeOverrides.overriddenBy],
     references: [users.id],
+  }),
+}));
+
+
+export const benchmarkSetsRelations = relations(benchmarkSets, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [benchmarkSets.organizationId],
+    references: [organizations.id],
+  }),
+  createdByUser: one(users, {
+    fields: [benchmarkSets.createdBy],
+    references: [users.id],
+  }),
+  items: many(benchmarkSetItems),
+}));
+
+
+export const benchmarkSetItemsRelations = relations(benchmarkSetItems, ({ one }) => ({
+  set: one(benchmarkSets, {
+    fields: [benchmarkSetItems.setId],
+    references: [benchmarkSets.id],
   }),
 }));

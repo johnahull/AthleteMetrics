@@ -25,8 +25,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown } from "lucide-react";
+import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
+import { SendReportToMultipleAthletesDialog } from "./SendReportToMultipleAthletesDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
@@ -52,6 +53,7 @@ interface TeamReportViewProps {
 export function TeamReportView({ report }: TeamReportViewProps) {
   const labels = useContextualLabels();
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [showMultiSendDialog, setShowMultiSendDialog] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<TeamReportData | null>(null);
   const { toast } = useToast();
@@ -173,6 +175,10 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               <Button variant="outline" onClick={() => setShowShareDialog(true)}>
                 <Share2 className="h-4 w-4 mr-2" />
                 Share
+              </Button>
+              <Button variant="outline" onClick={() => setShowMultiSendDialog(true)} data-testid="send-to-athletes-button">
+                <Send className="h-4 w-4 mr-2" />
+                Send to Athletes
               </Button>
             </div>
           </div>
@@ -528,6 +534,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           onClose={() => setShowShareDialog(false)}
         />
       )}
+
+      {/* Multi-athlete send dialog */}
+      <SendReportToMultipleAthletesDialog
+        open={showMultiSendDialog}
+        onOpenChange={setShowMultiSendDialog}
+        reportId={report.id}
+        reportName={report.name}
+        organizationId={report.organizationId}
+      />
     </div>
   );
 }
