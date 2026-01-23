@@ -17,6 +17,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Benchmark sport/position filter bugs
 
+## [0.15.1] - 2026-01-23
+
+### Security
+- Resolve critical security and data integrity issues from v0.15.0 release
+
+### Fixed
+- Remove leftover merge conflict markers and duplicate declarations
+
+### Tests
+- Update OAuth tests for multi-user security blocking behavior
+
+## [0.15.0] - 2026-01-21
+
+### Added
+- **Benchmark Sets** - Group benchmarks into sets for easier management (#297)
+- **Profile Merge** - Org admins can merge duplicate athlete profiles (#299)
+- **Report Multi-Share** - Share reports with multiple athletes simultaneously (#298)
+
+### Fixed
+- OAuth duplicate user prevention and multi-account linking (#300)
+- Critical security and data integrity issues in release process
+
 ## [0.2.0] - 2024-12
 
 ### Added
@@ -51,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wellness module with customizable templates
 - OCR support for measurement photo uploads
 
-[Unreleased]: https://github.com/johnahull/AthleteMetrics/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/johnahull/AthleteMetrics/compare/v0.15.1...HEAD
+[0.15.1]: https://github.com/johnahull/AthleteMetrics/compare/v0.15.0...v0.15.1
+[0.15.0]: https://github.com/johnahull/AthleteMetrics/compare/v0.2.0...v0.15.0
 [0.2.0]: https://github.com/johnahull/AthleteMetrics/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/johnahull/AthleteMetrics/releases/tag/v0.1.0
