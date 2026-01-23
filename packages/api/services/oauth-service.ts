@@ -290,7 +290,8 @@ export class OAuthService extends BaseService {
         return { success: false, error: 'This linking token has been invalidated due to too many failed attempts', shouldIncrementFailedAttempts: false };
       }
 
-      // Link OAuth account to existing user
+      // Link OAuth account to existing user and activate them
+      // (mirrors invitation acceptance flow where athletes are activated on account claim)
       await this.storage.updateUser(linkingToken.userId, {
         googleId: linkingToken.provider === 'google' ? linkingToken.providerId : undefined,
         appleId: linkingToken.provider === 'apple' ? linkingToken.providerId : undefined,
@@ -298,6 +299,7 @@ export class OAuthService extends BaseService {
         oauthEmail: linkingToken.providerEmail,
         oauthEmailVerified: true,
         accountLinkedAt: new Date(),
+        isActive: true,
       });
 
       // Mark token as used
