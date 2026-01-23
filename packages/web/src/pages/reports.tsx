@@ -21,16 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import type { Report } from "@shared/schema";
-
-// Extended report type with sentToAthlete status from API
-interface ReportWithSentStatus extends Report {
-  targetAthleteName?: string;
-  sentToAthlete?: {
-    sentAt: string;
-    athleteName: string;
-  } | null;
-}
+import type { Report, ReportWithSentStatus } from "@/types/report-types";
 
 export default function Reports() {
   const { user, organizationContext } = useAuth();

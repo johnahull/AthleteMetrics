@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pin, ChevronDown, ChevronRight, Loader2, Trash2, CheckCircle, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, useUnpinReport } from '@/hooks/use-reports';
-import type { Report } from '@shared/schema';
+import type { Report, ReportWithSentStatus } from '@/types/report-types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,15 +13,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
-
-// Extended report type with sentToAthlete status
-interface ReportWithSentStatus extends Report {
-  targetAthleteName?: string;
-  sentToAthlete?: {
-    sentAt: string;
-    athleteName: string;
-  } | null;
-}
 
 interface PinnedReportsSectionProps {
   organizationId?: string;

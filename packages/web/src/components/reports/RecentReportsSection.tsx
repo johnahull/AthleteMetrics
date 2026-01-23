@@ -2,21 +2,12 @@ import { useState, useMemo } from 'react';
 import { Clock, Pin, FileText, Loader2, Trash2, CheckCircle, Archive } from 'lucide-react';
 import { format } from 'date-fns';
 import { useReportsWithFilters, usePinReport } from '@/hooks/use-reports';
-import type { Report } from '@shared/schema';
+import type { Report, ReportWithSentStatus } from '@/types/report-types';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
-
-// Extended report type with sentToAthlete status
-interface ReportWithSentStatus extends Report {
-  targetAthleteName?: string;
-  sentToAthlete?: {
-    sentAt: string;
-    athleteName: string;
-  } | null;
-}
 
 interface RecentReportsSectionProps {
   organizationId?: string;
