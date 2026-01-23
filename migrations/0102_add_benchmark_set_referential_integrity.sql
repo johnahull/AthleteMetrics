@@ -14,11 +14,13 @@ CREATE OR REPLACE FUNCTION validate_benchmark_set_item_reference()
 RETURNS TRIGGER AS $$
 BEGIN
   IF NEW.benchmark_type = 'site' THEN
-    IF NOT EXISTS (SELECT 1 FROM site_benchmarks WHERE id = NEW.benchmark_id) THEN
+    PERFORM 1 FROM site_benchmarks WHERE id = NEW.benchmark_id FOR SHARE;
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'Referenced site benchmark % does not exist', NEW.benchmark_id;
     END IF;
   ELSIF NEW.benchmark_type = 'custom' THEN
-    IF NOT EXISTS (SELECT 1 FROM custom_benchmarks WHERE id = NEW.benchmark_id) THEN
+    PERFORM 1 FROM custom_benchmarks WHERE id = NEW.benchmark_id FOR SHARE;
+    IF NOT FOUND THEN
       RAISE EXCEPTION 'Referenced custom benchmark % does not exist', NEW.benchmark_id;
     END IF;
   END IF;
@@ -46,12 +48,12 @@ $$ LANGUAGE plpgsql;
 
 -- Apply cascade delete trigger for site benchmarks
 CREATE TRIGGER cascade_delete_site_benchmark_items
-AFTER DELETE ON site_benchmarks
+BEFORE DELETE ON site_benchmarks
 FOR EACH ROW EXECUTE FUNCTION delete_benchmark_set_items_for_benchmark('site');
 
 -- Apply cascade delete trigger for custom benchmarks
 CREATE TRIGGER cascade_delete_custom_benchmark_items
-AFTER DELETE ON custom_benchmarks
+BEFORE DELETE ON custom_benchmarks
 FOR EACH ROW EXECUTE FUNCTION delete_benchmark_set_items_for_benchmark('custom');
 
 -- ============================================================================

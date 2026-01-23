@@ -25,3 +25,27 @@ CREATE INDEX IF NOT EXISTS org_benchmark_sets_org_enabled_idx ON organization_be
 
 -- Add comment for documentation
 COMMENT ON TABLE organization_benchmark_sets IS 'Tracks org-level visibility of site benchmark sets. No row = visible (default), is_enabled=false = hidden.';
+
+-- ============================================================================
+-- Validation trigger: Ensure site_set_id references a site-level template
+-- ============================================================================
+CREATE OR REPLACE FUNCTION validate_site_benchmark_set()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM benchmark_sets
+    WHERE id = NEW.site_set_id
+    AND organization_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'site_set_id must reference a site-level template (organization_id IS NULL)';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_site_set_before_insert
+BEFORE INSERT OR UPDATE ON organization_benchmark_sets
+FOR EACH ROW EXECUTE FUNCTION validate_site_benchmark_set();
+
+COMMENT ON FUNCTION validate_site_benchmark_set() IS
+  'Validates that site_set_id in organization_benchmark_sets references a site-level template (organization_id IS NULL)';

@@ -121,12 +121,15 @@ export class OAuthService extends BaseService {
       const existingEmailUsers = await this.storage.getUsersByEmail(profile.email);
 
       if (existingEmailUsers.length > 1) {
-        // Multiple users with same email - log warning for investigation
-        console.warn('[OAuth] Multiple users found with email, using first:', {
+        // Multiple users with same email - security risk, block OAuth linking
+        console.warn('[OAuth Security] Multiple users found with email:', {
           email: profile.email,
-          userIds: existingEmailUsers.map(u => u.id),
           userCount: existingEmailUsers.length
         });
+        return {
+          success: false,
+          error: 'Multiple accounts with this email exist. Please contact support to link your account.',
+        };
       }
 
       if (existingEmailUsers.length > 0) {
@@ -175,22 +178,11 @@ export class OAuthService extends BaseService {
   private async createOAuthUser(profile: OAuthProfile): Promise<User> {
     const userId = crypto.randomUUID();
 
-    // Generate username from email with random suffix (ensure uniqueness and prevent enumeration)
-    let username = profile.email.split('@')[0];
-    let attempts = 0;
-    const maxAttempts = 5;
-
-    while (await this.storage.getUserByUsername(username) && attempts < maxAttempts) {
-      // Use cryptographically random suffix to prevent enumeration attacks
-      const randomSuffix = crypto.randomBytes(3).toString('hex');
-      username = `${profile.email.split('@')[0]}_${randomSuffix}`;
-      attempts++;
-    }
-
-    // If we exhausted attempts, fail gracefully
-    if (attempts >= maxAttempts) {
-      throw new Error('Failed to generate unique username');
-    }
+    // Generate username from email with UUID suffix (guaranteed unique)
+    // Use first 8 characters of UUID for readability while ensuring uniqueness
+    const baseUsername = profile.email.split('@')[0];
+    const uniqueSuffix = crypto.randomUUID().split('-')[0]; // 8 hex chars
+    const username = `${baseUsername}_${uniqueSuffix}`;
 
     // Set legal acceptance fields for new OAuth users
     const now = new Date();

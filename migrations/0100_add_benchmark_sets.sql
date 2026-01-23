@@ -26,9 +26,13 @@ CREATE INDEX IF NOT EXISTS benchmark_sets_org_idx ON benchmark_sets(organization
 CREATE INDEX IF NOT EXISTS benchmark_sets_active_idx ON benchmark_sets(is_active);
 
 -- Unique constraint: name must be unique within an organization
--- Note: NULL organization_id values are treated as distinct by PostgreSQL unique constraints
+-- For org-level sets: name unique within organization
 CREATE UNIQUE INDEX IF NOT EXISTS benchmark_sets_unique_org_name
-    ON benchmark_sets(organization_id, name);
+    ON benchmark_sets(organization_id, name) WHERE organization_id IS NOT NULL;
+
+-- For site-level templates: name globally unique (prevent duplicate templates)
+CREATE UNIQUE INDEX IF NOT EXISTS benchmark_sets_unique_site_name
+    ON benchmark_sets(name) WHERE organization_id IS NULL;
 
 -- ============================================================================
 -- Table: benchmark_set_items
@@ -46,6 +50,8 @@ CREATE TABLE IF NOT EXISTS benchmark_set_items (
 
 -- Indexes for benchmark_set_items
 CREATE INDEX IF NOT EXISTS benchmark_set_items_set_idx ON benchmark_set_items(set_id);
+CREATE INDEX IF NOT EXISTS benchmark_set_items_benchmark_idx ON benchmark_set_items(benchmark_id, benchmark_type);
+CREATE INDEX IF NOT EXISTS benchmark_set_items_set_order_idx ON benchmark_set_items(set_id, display_order);
 
 -- Unique constraint: a benchmark can only appear once per set (same benchmark_id + type)
 CREATE UNIQUE INDEX IF NOT EXISTS benchmark_set_items_unique
