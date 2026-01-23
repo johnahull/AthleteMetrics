@@ -160,4 +160,4 @@ END $$;
 
 -- Add comment documenting the change
 COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS
-  'Valid audit log actions - added organization_join_code_set and organization_type_accessed (migration 0104)';
+  'Valid audit log actions - added organization_join_code_set (used in membership-request-routes.ts /regenerate-join-code) and organization_type_accessed (used in organization-type-middleware.ts /custom-metrics) - migration 0104';
