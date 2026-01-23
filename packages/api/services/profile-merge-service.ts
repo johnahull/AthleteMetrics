@@ -282,9 +282,11 @@ export class ProfileMergeService extends BaseService {
     // Execute merge in a serializable transaction
     const result = await db.transaction(async (tx) => {
       // Race condition check: Verify source user hasn't been deleted by another concurrent merge
+      // Use FOR UPDATE to lock the row and prevent concurrent modifications
       const [sourceUserCheck] = await tx.select({ deletedAt: users.deletedAt })
         .from(users)
-        .where(eq(users.id, sourceUserId));
+        .where(eq(users.id, sourceUserId))
+        .for('update');
 
       if (!sourceUserCheck || sourceUserCheck.deletedAt) {
         throw new Error("Source user has already been deleted. Another merge may have completed.");
@@ -419,7 +421,17 @@ export class ProfileMergeService extends BaseService {
       const sourceEmails = sourceUser.emails || [];
       const targetEmails = new Set((targetUser.emails || []).map(e => e.toLowerCase()));
       const newEmails: string[] = [];
+
+      // Email validation regex (basic but sufficient for most cases)
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
       for (const email of sourceEmails) {
+        // Validate email format before merging
+        if (!emailRegex.test(email)) {
+          console.warn(`[Profile Merge] Skipping invalid email during merge: ${email}`);
+          continue;
+        }
+
         if (!targetEmails.has(email.toLowerCase())) {
           newEmails.push(email);
         }

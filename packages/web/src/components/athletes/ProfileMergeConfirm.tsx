@@ -14,6 +14,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle, Trash2, CheckCircle, Loader2, ArrowRight } from "lucide-react";
 import { Label } from "@/components/ui/label";
 
+// Confirmation text constant for type-to-confirm safety mechanism
+const MERGE_CONFIRMATION_TEXT = "MERGE";
+
 interface MergePreview {
   source: {
     id: string;
@@ -63,7 +66,7 @@ export function ProfileMergeConfirm({
   isLoading,
 }: ProfileMergeConfirmProps) {
   const [confirmText, setConfirmText] = useState("");
-  const isConfirmValid = confirmText.toUpperCase() === "MERGE";
+  const isConfirmValid = confirmText.toUpperCase() === MERGE_CONFIRMATION_TEXT;
 
   const totalDataTransferred =
     preview.source.measurementCount +
@@ -176,14 +179,14 @@ export function ProfileMergeConfirm({
           <div className="space-y-4">
             <div className="text-center">
               <Label htmlFor="confirm-text" className="text-base">
-                Type <span className="font-bold text-red-600">MERGE</span> to confirm
+                Type <span className="font-bold text-red-600">{MERGE_CONFIRMATION_TEXT}</span> to confirm
               </Label>
             </div>
             <Input
               id="confirm-text"
               value={confirmText}
               onChange={(e) => setConfirmText(e.target.value)}
-              placeholder="Type MERGE here..."
+              placeholder={`Type ${MERGE_CONFIRMATION_TEXT} here...`}
               className={`text-center text-lg font-mono ${
                 confirmText.length > 0
                   ? isConfirmValid
