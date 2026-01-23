@@ -10,9 +10,13 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  * Used by GET /api/athletes endpoint
  */
 export const athleteQuerySchema = z.object({
+  // teamId can be a valid UUID or 'none' for independent athletes (no team)
   teamId: z
     .string()
-    .regex(UUID_REGEX, 'Team ID must be a valid UUID')
+    .refine(
+      (val) => val === 'none' || UUID_REGEX.test(val),
+      'Team ID must be a valid UUID or "none"'
+    )
     .optional(),
 
   organizationId: z

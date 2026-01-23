@@ -6,6 +6,7 @@ import type { Express } from "express";
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { OrganizationService } from "../services/organization-service";
 import { OrganizationTypeService } from "../services/organization-type-service";
+import { profileMergeService } from "../services/profile-merge-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import type { OrganizationType } from "@shared/schema";
@@ -72,6 +73,8 @@ const RATE_LIMITS = {
   USER_DELETION: 10,
   /** Very conservative: Destructive operation requiring extra caution */
   ORG_DELETION: 5,
+  /** Very conservative: Profile merges are high-impact operations */
+  PROFILE_MERGE: 5,
 } as const;
 
 // Rate limiting for organization creation
@@ -136,6 +139,26 @@ const orgDeleteLimiter = rateLimit({
   // - CSRF protection prevents automated attacks without valid session
   // - User account-based limiting (userId in key) prevents single-user abuse
   // - For advanced protection, consider: device fingerprinting, behavior analysis, or CAPTCHA
+  keyGenerator: (req) => {
+    const userId = req.session?.user?.id;
+    const ip = req.ip || 'unknown';
+    const normalizedIp = ipKeyGenerator(ip);
+    return userId ? `${normalizedIp}-${userId}` : normalizedIp;
+  },
+});
+
+// Rate limiting for profile merge operations (high-impact, destructive)
+const profileMergeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  limit: RATE_LIMITS.PROFILE_MERGE,
+  message: { message: "Too many profile merge attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  skip: (req) => {
+    const isProduction = process.env.NODE_ENV === 'production';
+    if (isProduction) return false;
+    return process.env.BYPASS_GENERAL_RATE_LIMIT === 'true';
+  },
   keyGenerator: (req) => {
     const userId = req.session?.user?.id;
     const ip = req.ip || 'unknown';
@@ -818,6 +841,126 @@ export function registerOrganizationRoutes(app: Express) {
       const statusCode = message.includes("Unauthorized") ? 403
         : message.includes("not found") ? 404
         : message.includes("dependencies") || message.includes("confirmation") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Preview profile merge (org admin only)
+   * Returns what would happen if two athlete profiles were merged
+   * POST /api/organizations/:orgId/merge-profiles/preview
+   */
+  app.post("/api/organizations/:orgId/merge-profiles/preview", profileMergeLimiter, requireAuth, async (req, res) => {
+    try {
+      const { orgId } = req.params;
+      const { sourceUserId, targetUserId } = req.body;
+
+      // Validate UUID formats
+      if (!isValidUUID(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+      if (!sourceUserId || !isValidUUID(sourceUserId)) {
+        return res.status(400).json({ message: "Invalid source user ID format" });
+      }
+      if (!targetUserId || !isValidUUID(targetUserId)) {
+        return res.status(400).json({ message: "Invalid target user ID format" });
+      }
+
+      // Fail-fast authorization check (before calling service)
+      const user = req.session.user!;
+      if (!user.isSiteAdmin) {
+        // Check if user is org admin for this organization
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
+
+        if (!orgMembership || orgMembership.role !== "org_admin") {
+          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
+        }
+      }
+
+      const preview = await profileMergeService.previewMerge(
+        orgId,
+        sourceUserId,
+        targetUserId,
+        req.session.user!.id
+      );
+
+      res.json(preview);
+    } catch (error) {
+      console.error("Profile merge preview error:", error);
+      const message = sanitizeError(error, "Failed to preview profile merge");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("not a member") ? 400
+        : message.includes("Can only merge") ? 400
+        : 500;
+      res.status(statusCode).json({ message });
+    }
+  });
+
+  /**
+   * Execute profile merge (org admin only)
+   * Merges source athlete profile into target, then soft-deletes source
+   * POST /api/organizations/:orgId/merge-profiles
+   */
+  app.post("/api/organizations/:orgId/merge-profiles", profileMergeLimiter, requireAuth, async (req, res) => {
+    try {
+      const { orgId } = req.params;
+      const { sourceUserId, targetUserId, conflictResolution, dryRun } = req.body;
+
+      // Validate UUID formats
+      if (!isValidUUID(orgId)) {
+        return res.status(400).json({ message: "Invalid organization ID format" });
+      }
+      if (!sourceUserId || !isValidUUID(sourceUserId)) {
+        return res.status(400).json({ message: "Invalid source user ID format" });
+      }
+      if (!targetUserId || !isValidUUID(targetUserId)) {
+        return res.status(400).json({ message: "Invalid target user ID format" });
+      }
+
+      // Prevent merging same user (fail-fast validation)
+      if (sourceUserId === targetUserId) {
+        return res.status(400).json({ message: "Cannot merge a user with themselves" });
+      }
+
+      // Fail-fast authorization check (before calling service)
+      const user = req.session.user!;
+      if (!user.isSiteAdmin) {
+        // Check if user is org admin for this organization
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
+
+        if (!orgMembership || orgMembership.role !== "org_admin") {
+          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
+        }
+      }
+
+      // Capture request context for audit logging
+      const context = {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      };
+
+      const result = await profileMergeService.mergeProfiles(
+        orgId,
+        sourceUserId,
+        targetUserId,
+        req.session.user!.id,
+        { dryRun, conflictResolution },
+        context
+      );
+
+      res.json(result);
+    } catch (error) {
+      console.error("Profile merge error:", error);
+      const message = sanitizeError(error, "Failed to merge profiles");
+      const statusCode = message.includes("Unauthorized") ? 403
+        : message.includes("not found") ? 404
+        : message.includes("Cannot merge") ? 400
+        : message.includes("not a member") ? 400
+        : message.includes("Can only merge") ? 400
         : 500;
       res.status(statusCode).json({ message });
     }

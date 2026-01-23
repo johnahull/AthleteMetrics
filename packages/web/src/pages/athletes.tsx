@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X, ArrowUpDown, ArrowUp, ArrowDown, GitMerge } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -21,6 +21,7 @@ import { useResponsiveMode } from "@/hooks/use-mobile";
 import { AthletesCardView } from "@/components/athletes-card-view";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useSports, usePositionsForSports } from "@/lib/sports-api";
+import { ProfileMergeWizard } from "@/components/athletes";
 
 export default function Athletes() {
   const responsiveMode = useResponsiveMode();
@@ -70,6 +71,7 @@ export default function Athletes() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showMergeWizard, setShowMergeWizard] = useState(false);
   const [editingAthlete, setEditingAthlete] = useState(null);
   const [filters, setFilters] = useState({
     teamId: "all",
@@ -1445,6 +1447,29 @@ export default function Athletes() {
         />
       )}
 
+      {/* Profile Merge Wizard */}
+      {effectiveOrganizationId && (
+        <ProfileMergeWizard
+          open={showMergeWizard}
+          onOpenChange={(open) => {
+            setShowMergeWizard(open);
+            if (!open) {
+              // Clear selection after merge
+              clearSelection();
+            }
+          }}
+          organizationId={effectiveOrganizationId}
+          athletes={athletes}
+          preselectedAthletes={
+            selectedAthletes.size === 2
+              ? (Array.from(selectedAthletes)
+                  .map((id) => athletes.find((a: any) => a.id === id))
+                  .filter(Boolean) as [any, any])
+              : null
+          }
+        />
+      )}
+
       {/* Floating Action Bar */}
       {selectedAthletes.size > 0 && (
         <div className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
@@ -1465,6 +1490,18 @@ export default function Athletes() {
               <X className="h-4 w-4 mr-2" />
               Clear
             </Button>
+            {selectedAthletes.size === 2 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowMergeWizard(true)}
+                className="text-white hover:bg-purple-600 bg-purple-700"
+                data-testid="button-merge-profiles"
+              >
+                <GitMerge className="h-4 w-4 mr-2" />
+                Merge Profiles
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
