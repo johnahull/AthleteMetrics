@@ -76,6 +76,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   customOrgMetrics: many(customOrgMetrics),
   customBenchmarks: many(customBenchmarks),
   organizationBenchmarks: many(organizationBenchmarks),
+<<<<<<< HEAD
   benchmarkSets: many(benchmarkSets),
   reports: many(reports),
   wellnessTemplates: many(wellnessTemplates),
@@ -556,6 +557,7 @@ export const eventFreezeOverridesRelations = relations(eventFreezeOverrides, ({ 
     references: [users.id],
   }),
 }));
+<<<<<<< HEAD
 
 
 export const benchmarkSetsRelations = relations(benchmarkSets, ({ one, many }) => ({
@@ -577,3 +579,5 @@ export const benchmarkSetItemsRelations = relations(benchmarkSetItems, ({ one })
     references: [benchmarkSets.id],
   }),
 }));
+=======
+>>>>>>> origin/main

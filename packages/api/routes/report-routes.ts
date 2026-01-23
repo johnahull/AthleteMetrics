@@ -129,6 +129,7 @@ const MAX_BULK_SHARE = 100;
 // Maximum reports that can be distributed in a single bulk request
 const MAX_BULK_DISTRIBUTE = 100;
 
+
 // PDF Generation Constants
 const PDF_LIMITS = {
   MAX_ATHLETES_PER_METRIC: 50,
