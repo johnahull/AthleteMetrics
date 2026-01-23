@@ -2509,8 +2509,10 @@ export function registerReportRoutes(app: Express) {
               console.error('Error in bulk distribute notification sending:', err);
             });
           } catch (insertError: any) {
+            // Log detailed error server-side for debugging
             console.error('Failed to bulk insert shares for distribute:', insertError);
-            // If transaction fails, mark all pending as failed
+            // If transaction fails, mark all pending as failed with generic message
+            // (avoid exposing internal error details to client)
             for (const share of sharesToInsert) {
               const reportInfo = reportAthleteMap.get(share.reportId);
               const athlete = athleteMap.get(share.athleteId);
@@ -2524,7 +2526,7 @@ export function registerReportRoutes(app: Express) {
                 athleteId: share.athleteId,
                 athleteName,
                 status: 'skipped',
-                reason: insertError.message || 'Database transaction failed',
+                reason: 'Failed to share report',
               });
             }
           }
@@ -2631,12 +2633,14 @@ export function registerReportRoutes(app: Express) {
           }
         }
 
-        // Archive all reports
+        // Archive all reports in a transaction for consistency
         const archivedAt = new Date();
-        await db
-          .update(reports)
-          .set({ archivedAt })
-          .where(inArray(reports.id, reportIds));
+        await db.transaction(async (tx) => {
+          await tx
+            .update(reports)
+            .set({ archivedAt })
+            .where(inArray(reports.id, reportIds));
+        });
 
         res.json({
           message: "Reports archived successfully",
@@ -2725,11 +2729,13 @@ export function registerReportRoutes(app: Express) {
           }
         }
 
-        // Unarchive all reports
-        await db
-          .update(reports)
-          .set({ archivedAt: null })
-          .where(inArray(reports.id, reportIds));
+        // Unarchive all reports in a transaction for consistency
+        await db.transaction(async (tx) => {
+          await tx
+            .update(reports)
+            .set({ archivedAt: null })
+            .where(inArray(reports.id, reportIds));
+        });
 
         res.json({
           message: "Reports unarchived successfully",
@@ -2754,7 +2760,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/bulk-delete",
-    reportLimiter,
+    bulkOperationLimiter,
     requireAuth,
     requireRole('coach'),
     async (req, res) => {
