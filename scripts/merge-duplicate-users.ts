@@ -99,22 +99,37 @@ async function findDuplicateEmails(): Promise<DuplicateGroup[]> {
 
   // Find emails that appear in multiple user records
   // Uses PostgreSQL unnest to expand email arrays and find duplicates
-  const duplicateEmailQuery = sql`
-    WITH email_unnested AS (
+  const duplicateEmailQuery = EMAIL_FILTER
+    ? sql`
+      WITH email_unnested AS (
+        SELECT
+          u.id as user_id,
+          LOWER(TRIM(unnest(u.emails))) as email
+        FROM users u
+        WHERE u.deleted_at IS NULL
+      )
       SELECT
-        u.id as user_id,
-        LOWER(TRIM(unnest(u.emails))) as email
-      FROM users u
-      WHERE u.deleted_at IS NULL
-    )
-    SELECT
-      email,
-      array_agg(user_id) as user_ids
-    FROM email_unnested
-    GROUP BY email
-    HAVING COUNT(DISTINCT user_id) > 1
-    ${EMAIL_FILTER ? sql`AND email = ${EMAIL_FILTER.toLowerCase()}` : sql``}
-  `;
+        email,
+        array_agg(user_id) as user_ids
+      FROM email_unnested
+      GROUP BY email
+      HAVING COUNT(DISTINCT user_id) > 1 AND email = ${EMAIL_FILTER.toLowerCase()}
+    `
+    : sql`
+      WITH email_unnested AS (
+        SELECT
+          u.id as user_id,
+          LOWER(TRIM(unnest(u.emails))) as email
+        FROM users u
+        WHERE u.deleted_at IS NULL
+      )
+      SELECT
+        email,
+        array_agg(user_id) as user_ids
+      FROM email_unnested
+      GROUP BY email
+      HAVING COUNT(DISTINCT user_id) > 1
+    `;
 
   const duplicatesResult = await db.execute(duplicateEmailQuery);
   // Handle both array and object-with-rows return formats

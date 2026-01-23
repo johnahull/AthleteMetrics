@@ -1716,9 +1716,20 @@ export class DatabaseStorage implements IStorage {
         console.log("Updated existing athlete with credentials:", user.id);
       } else {
         // Check if a user with this email already exists
-        const existingUser = await this.getUserByEmail(invitation.email);
+        const existingUsers = await this.getUsersByEmail(invitation.email);
 
-        if (existingUser) {
+        if (existingUsers.length > 0) {
+          // Warn if multiple users found (should be rare after migration)
+          if (existingUsers.length > 1) {
+            console.warn("[Invitation] Multiple users found with email, using oldest:", {
+              email: invitation.email,
+              userIds: existingUsers.map(u => u.id),
+              userCount: existingUsers.length
+            });
+          }
+
+          const existingUser = existingUsers[0]; // Use oldest user (deterministic ordering)
+
           // User exists - add them to new org instead of creating duplicate
           console.log("[Invitation] Found existing user with email:", {
             userId: existingUser.id,
@@ -1784,7 +1795,13 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
-      // Add user to organization with the invitation role (this will remove any existing roles first)
+      // Add user to organization with the invitation role
+      // Note: addUserToOrganization will automatically replace any existing role for this user in this org
+      console.log("[Invitation] Adding user to organization:", {
+        userId: user.id,
+        organizationId: invitation.organizationId,
+        role: invitation.role
+      });
       await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
 
       // Add user to teams if specified
