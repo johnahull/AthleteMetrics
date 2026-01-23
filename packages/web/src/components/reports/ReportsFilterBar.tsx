@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Search, Filter, X, Calendar as CalendarIcon } from 'lucide-react';
+import { Search, Filter, X, Calendar as CalendarIcon, Archive } from 'lucide-react';
 import { format } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
 import type { ReportFilters } from '@/hooks/use-report-filters';
 import { useTeams } from '@/hooks/use-teams';
 import { useMetrics } from '@/hooks/use-metrics';
@@ -275,6 +276,23 @@ export function ReportsFilterBar({
             </div>
           </PopoverContent>
         </Popover>
+
+        {/* Show Archived Toggle */}
+        <div className="flex items-center gap-2 ml-2">
+          <Switch
+            id="show-archived"
+            checked={filters.includeArchived || false}
+            onCheckedChange={(checked) => updateFilters({ includeArchived: checked })}
+            aria-label="Show archived reports"
+          />
+          <Label
+            htmlFor="show-archived"
+            className="text-sm font-normal cursor-pointer flex items-center gap-1"
+          >
+            <Archive className="h-3.5 w-3.5" />
+            Show Archived
+          </Label>
+        </div>
 
         {/* Active Filter Count Badge */}
         {activeFilterCount > 0 && (

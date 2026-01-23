@@ -78,3 +78,34 @@ export function useUnreadReportCount() {
     staleTime: UNREAD_COUNT_STALE_TIME,
   });
 }
+
+/**
+ * Hook for dismissing a shared report (soft-hide from athlete view)
+ * The report remains visible to the coach who shared it
+ */
+export function useDismissReport() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (shareId: string) => {
+      const res = await apiRequest("DELETE", `/api/my/reports/${shareId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["my-reports", "unread-count"] });
+      toast({
+        title: "Report Dismissed",
+        description: "This report has been removed from your list.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to dismiss report",
+        variant: "destructive",
+      });
+    },
+  });
+}

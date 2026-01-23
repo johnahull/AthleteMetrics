@@ -133,4 +133,17 @@ export interface Report {
   coachingInsights?: string | null;
   coachingInsightsGeneratedAt?: string | null;
   coachingInsightsModel?: string | null;
+  archivedAt?: string | null;
+}
+
+/**
+ * Extended Report type with sent-to-athlete tracking information.
+ * Used in report list views to show which reports have been shared.
+ */
+export interface ReportWithSentStatus extends Report {
+  targetAthleteName?: string;
+  sentToAthlete?: {
+    sentAt: string;
+    athleteName: string;
+  } | null;
 }

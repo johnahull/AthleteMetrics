@@ -3,7 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PinnedReportsSection } from '../PinnedReportsSection';
-import { useReportsWithFilters, usePinReport, useUnpinReport } from '@/hooks/use-reports';
+import { useReportsWithFilters, usePinReport, useUnpinReport, useArchiveReport } from '@/hooks/use-reports';
 import type { Report } from '@shared/schema';
 
 // Mock the hooks
@@ -36,6 +36,7 @@ const mockPinnedReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    archivedAt: null,
   },
   {
     id: 'report-2',
@@ -52,12 +53,14 @@ const mockPinnedReports: Report[] = [
     coachingInsights: null,
     coachingInsightsGeneratedAt: null,
     coachingInsightsModel: null,
+    archivedAt: null,
   },
 ];
 
 describe('PinnedReportsSection', () => {
   const mockPinReport = vi.fn();
   const mockUnpinReport = vi.fn();
+  const mockArchiveReport = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -70,6 +73,11 @@ describe('PinnedReportsSection', () => {
 
     (useUnpinReport as any).mockReturnValue({
       mutate: mockUnpinReport,
+      isPending: false,
+    });
+
+    (useArchiveReport as any).mockReturnValue({
+      mutate: mockArchiveReport,
       isPending: false,
     });
   });
@@ -183,6 +191,7 @@ describe('PinnedReportsSection', () => {
       coachingInsights: null,
       coachingInsightsGeneratedAt: null,
       coachingInsightsModel: null,
+    archivedAt: null,
     }));
 
     (useReportsWithFilters as any).mockReturnValue({
@@ -215,6 +224,7 @@ describe('PinnedReportsSection', () => {
       coachingInsights: null,
       coachingInsightsGeneratedAt: null,
       coachingInsightsModel: null,
+    archivedAt: null,
     }));
 
     (useReportsWithFilters as any).mockReturnValue({
@@ -316,6 +326,143 @@ describe('PinnedReportsSection', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Spring Training Report')).toBeInTheDocument();
+    });
+  });
+
+  describe('Archive functionality', () => {
+    it('displays archive button on report cards when not in selection mode', () => {
+      (useReportsWithFilters as any).mockReturnValue({
+        data: {
+          reports: mockPinnedReports,
+          pagination: { total: 2, limit: 10, offset: 0, hasMore: false },
+        },
+        isLoading: false,
+        error: null,
+      });
+
+      const mockOnArchive = vi.fn();
+      render(
+        <PinnedReportsSection organizationId="org-1" onArchive={mockOnArchive} />,
+        { wrapper: createWrapper() }
+      );
+
+      const archiveButtons = screen.getAllByRole('button', { name: /archive report/i });
+      expect(archiveButtons.length).toBe(2);
+    });
+
+    it('hides archive button when in selection mode', () => {
+      (useReportsWithFilters as any).mockReturnValue({
+        data: {
+          reports: mockPinnedReports,
+          pagination: { total: 2, limit: 10, offset: 0, hasMore: false },
+        },
+        isLoading: false,
+        error: null,
+      });
+
+      render(
+        <PinnedReportsSection
+          organizationId="org-1"
+          isSelectionMode={true}
+          selectedReportIds={new Set()}
+          onToggleSelection={vi.fn()}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      const archiveButtons = screen.queryAllByRole('button', { name: /archive report/i });
+      expect(archiveButtons.length).toBe(0);
+    });
+
+    it('calls onArchive when archive button is clicked', async () => {
+      const user = userEvent.setup();
+      const mockOnArchive = vi.fn();
+
+      (useReportsWithFilters as any).mockReturnValue({
+        data: {
+          reports: mockPinnedReports,
+          pagination: { total: 2, limit: 10, offset: 0, hasMore: false },
+        },
+        isLoading: false,
+        error: null,
+      });
+
+      render(
+        <PinnedReportsSection organizationId="org-1" onArchive={mockOnArchive} />,
+        { wrapper: createWrapper() }
+      );
+
+      const archiveButtons = screen.getAllByRole('button', { name: /archive report/i });
+      await user.click(archiveButtons[0]);
+
+      expect(mockOnArchive).toHaveBeenCalledWith('report-1', expect.any(Object));
+    });
+
+    it('archive button has proper aria-label for accessibility', () => {
+      (useReportsWithFilters as any).mockReturnValue({
+        data: {
+          reports: mockPinnedReports,
+          pagination: { total: 2, limit: 10, offset: 0, hasMore: false },
+        },
+        isLoading: false,
+        error: null,
+      });
+
+      const mockOnArchive = vi.fn();
+      render(
+        <PinnedReportsSection organizationId="org-1" onArchive={mockOnArchive} />,
+        { wrapper: createWrapper() }
+      );
+
+      const archiveButtons = screen.getAllByRole('button', { name: /archive report/i });
+      archiveButtons.forEach((button) => {
+        expect(button).toHaveAttribute('aria-label', 'Archive report');
+      });
+    });
+
+    it('displays archive button between unpin and delete buttons', () => {
+      (useReportsWithFilters as any).mockReturnValue({
+        data: {
+          reports: mockPinnedReports,
+          pagination: { total: 2, limit: 10, offset: 0, hasMore: false },
+        },
+        isLoading: false,
+        error: null,
+      });
+
+      const mockOnDelete = vi.fn();
+      const mockOnArchive = vi.fn();
+      render(
+        <PinnedReportsSection
+          organizationId="org-1"
+          onDelete={mockOnDelete}
+          onArchive={mockOnArchive}
+        />,
+        { wrapper: createWrapper() }
+      );
+
+      // Get all button groups (one per report card)
+      const cards = screen.getAllByTestId(/report-/);
+      expect(cards.length).toBe(2);
+
+      // Check that each card has unpin, archive, and delete buttons in order
+      cards.forEach((card) => {
+        const buttons = card.querySelectorAll('button[aria-label]');
+        const buttonLabels = Array.from(buttons).map((btn) => btn.getAttribute('aria-label'));
+
+        // Should contain all three buttons
+        expect(buttonLabels).toContain('Unpin report');
+        expect(buttonLabels).toContain('Archive report');
+        expect(buttonLabels).toContain('Delete report');
+
+        // Archive should be between Unpin and Delete
+        const unpinIndex = buttonLabels.indexOf('Unpin report');
+        const archiveIndex = buttonLabels.indexOf('Archive report');
+        const deleteIndex = buttonLabels.indexOf('Delete report');
+
+        expect(archiveIndex).toBeGreaterThan(unpinIndex);
+        expect(deleteIndex).toBeGreaterThan(archiveIndex);
+      });
     });
   });
 });
