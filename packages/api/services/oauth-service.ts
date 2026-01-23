@@ -327,11 +327,13 @@ export class OAuthService extends BaseService {
 
   /**
    * Update last login timestamp and auth method
+   * Also activates the user - if they can authenticate via OAuth, they should be active
    */
   private async updateLastLogin(userId: string, authMethod: 'google' | 'apple'): Promise<void> {
     await this.storage.updateUser(userId, {
       lastLoginAt: new Date(),
       lastAuthMethod: authMethod,
+      isActive: true,
     });
   }
 
