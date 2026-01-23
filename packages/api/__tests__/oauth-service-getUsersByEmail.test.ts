@@ -77,7 +77,7 @@ describe("OAuth Service - getUsersByEmail Integration", () => {
     );
   });
 
-  it("should log warning and use first user when multiple users share the same email", async () => {
+  it("should block OAuth linking when multiple users share the same email (security)", async () => {
     const sharedEmail = `shared-${timestamp}@example.com`;
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -113,33 +113,29 @@ describe("OAuth Service - getUsersByEmail Integration", () => {
 
     const result = await oauthService.handleGoogleAuth(googleProfile);
 
-    // Should still trigger linking flow (not fail)
+    // Should block linking entirely for security (multiple users with same email)
     expect(result.success).toBe(false);
-    expect(result.requiresLinking).toBe(true);
+    expect(result.requiresLinking).toBeUndefined();
+    expect(result.error).toContain("Multiple accounts with this email exist");
+    expect(result.error).toContain("contact support");
 
-    // Verify warning was logged about multiple users
+    // Verify security warning was logged
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      '[OAuth] Multiple users found with email, using first:',
+      '[OAuth Security] Multiple users found with email:',
       expect.objectContaining({
         email: sharedEmail,
-        userIds: expect.arrayContaining([user1.id, user2.id]),
         userCount: 2
       })
     );
 
-    // Verify linking email was sent to the FIRST user
+    // Verify NO linking email was sent (blocked for security)
     const mockEmailService = oauthService["emailService"] as any;
-    expect(mockEmailService.sendAccountLinkingEmail).toHaveBeenCalledWith(
-      sharedEmail,
-      "First", // First user's firstName
-      "google",
-      expect.any(String)
-    );
+    expect(mockEmailService.sendAccountLinkingEmail).not.toHaveBeenCalled();
 
     consoleWarnSpy.mockRestore();
   });
 
-  it("should handle three users with the same email and use the first one", async () => {
+  it("should block OAuth linking when three users share the same email (security)", async () => {
     const sharedEmail = `triple-${timestamp}@example.com`;
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -185,28 +181,24 @@ describe("OAuth Service - getUsersByEmail Integration", () => {
 
     const result = await oauthService.handleAppleAuth(appleProfile);
 
-    // Should still trigger linking flow
+    // Should block linking entirely for security
     expect(result.success).toBe(false);
-    expect(result.requiresLinking).toBe(true);
+    expect(result.requiresLinking).toBeUndefined();
+    expect(result.error).toContain("Multiple accounts with this email exist");
+    expect(result.error).toContain("contact support");
 
-    // Verify warning was logged with count of 3
+    // Verify security warning was logged with count of 3
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      '[OAuth] Multiple users found with email, using first:',
+      '[OAuth Security] Multiple users found with email:',
       expect.objectContaining({
         email: sharedEmail,
-        userIds: expect.arrayContaining([user1.id, user2.id, user3.id]),
         userCount: 3
       })
     );
 
-    // Verify linking email was sent to the FIRST user
+    // Verify NO linking email was sent (blocked for security)
     const mockEmailService = oauthService["emailService"] as any;
-    expect(mockEmailService.sendAccountLinkingEmail).toHaveBeenCalledWith(
-      sharedEmail,
-      "First", // First user's firstName
-      "apple",
-      expect.any(String)
-    );
+    expect(mockEmailService.sendAccountLinkingEmail).not.toHaveBeenCalled();
 
     consoleWarnSpy.mockRestore();
   });
