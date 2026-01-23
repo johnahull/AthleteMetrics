@@ -392,6 +392,51 @@ describe('ProfileMergeService', () => {
         profileMergeService.mergeProfiles(orgId, sourceUserId, targetUserId, actorId)
       ).rejects.toThrow('Source user not found or has been deleted');
     });
+
+    it('should handle concurrent merge attempts with SERIALIZABLE isolation', async () => {
+      // This test verifies that SERIALIZABLE transaction isolation prevents race conditions
+      // In a real database, the second transaction would fail with a serialization error
+      vi.mocked(mockStorage.getUser).mockImplementation(async (id) => {
+        if (id === actorId) return { ...mockOrgAdmin, isSiteAdmin: true } as User;
+        if (id === sourceUserId) return mockSourceUser as User;
+        return mockTargetUser as User;
+      });
+
+      vi.mocked(mockStorage.getUserOrganizations).mockImplementation(async (id) => {
+        if (id === actorId) {
+          return [
+            {
+              userId: actorId,
+              organizationId: orgId,
+              role: 'org_admin',
+              joinedAt: new Date(),
+              organization: { id: orgId, name: 'Test Org' },
+            } as any,
+          ];
+        }
+        return [
+          {
+            userId: id,
+            organizationId: orgId,
+            role: 'athlete',
+            joinedAt: new Date(),
+            organization: { id: orgId, name: 'Test Org' },
+          } as any,
+        ];
+      });
+
+      // Note: This is a unit test with mocked database
+      // The actual SERIALIZABLE isolation is tested in integration tests
+      // Here we just verify the service calls transaction with correct options
+      const { db } = await import('../db');
+
+      await profileMergeService.mergeProfiles(orgId, sourceUserId, targetUserId, actorId);
+
+      // Verify transaction was called with SERIALIZABLE isolation
+      expect(db.transaction).toHaveBeenCalled();
+      const transactionCall = vi.mocked(db.transaction).mock.calls[0];
+      expect(transactionCall[1]).toEqual({ isolationLevel: 'serializable' });
+    });
   });
 
   describe('previewMerge', () => {

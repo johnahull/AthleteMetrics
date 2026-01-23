@@ -515,15 +515,20 @@ export class ProfileMergeService extends BaseService {
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, sourceUserId));
 
-      for (const membership of otherOrgMemberships) {
-        const [existing] = await tx.select()
-          .from(userOrganizations)
-          .where(and(
-            eq(userOrganizations.userId, targetUserId),
-            eq(userOrganizations.organizationId, membership.organizationId)
-          ));
+      // Batch query for target's org memberships
+      const otherOrgIds = otherOrgMemberships.map(m => m.organizationId);
+      const targetOrgMemberships = otherOrgIds.length > 0
+        ? await tx.select()
+            .from(userOrganizations)
+            .where(and(
+              eq(userOrganizations.userId, targetUserId),
+              inArray(userOrganizations.organizationId, otherOrgIds)
+            ))
+        : [];
+      const targetOrgIds = new Set(targetOrgMemberships.map(m => m.organizationId));
 
-        if (existing) {
+      for (const membership of otherOrgMemberships) {
+        if (targetOrgIds.has(membership.organizationId)) {
           await tx.delete(userOrganizations).where(eq(userOrganizations.id, membership.id));
         } else {
           await tx.update(userOrganizations)
@@ -592,15 +597,8 @@ export class ProfileMergeService extends BaseService {
         })
         .where(eq(users.id, sourceUserId));
 
-      return summary;
-    }, {
-      isolationLevel: "serializable",
-    });
-
-    // Create audit log (outside transaction to ensure merge completes even if audit fails)
-    let auditLogId: string | null = null;
-    try {
-      const auditLogResult = await db.insert(auditLogs).values({
+      // 19. Create audit log inside transaction to ensure atomicity
+      const auditLogResult = await tx.insert(auditLogs).values({
         userId: actorId,
         action: "profile_merge",
         resourceType: "user",
@@ -610,30 +608,27 @@ export class ProfileMergeService extends BaseService {
           sourceUserId,
           targetUserId,
           organizationId: orgId,
-          summary: result,
+          summary,
           sourceUserFullName: sourceUser.fullName,
           targetUserFullName: targetUser.fullName,
         }),
         ipAddress: context?.ipAddress ?? null,
         userAgent: context?.userAgent ?? null,
       }).returning({ id: auditLogs.id });
-      auditLogId = auditLogResult[0]?.id ?? null;
-    } catch (auditError) {
-      // Log critical audit failure but don't fail the response - merge already succeeded
-      console.error("CRITICAL: Audit log failed for profile merge", {
-        mergeId,
-        sourceUserId,
-        targetUserId,
-        orgId,
-        error: auditError instanceof Error ? auditError.message : auditError,
-      });
-    }
+
+      return {
+        summary,
+        auditLogId: auditLogResult[0]?.id ?? mergeId,
+      };
+    }, {
+      isolationLevel: "serializable",
+    });
 
     return {
       success: true,
       mergeId,
-      summary: result,
-      auditLogId: auditLogId ?? mergeId, // Fallback to mergeId if audit failed
+      summary: result.summary,
+      auditLogId: result.auditLogId,
       targetUserId,
       sourceUserSoftDeleted: true,
     };
@@ -821,7 +816,8 @@ export class ProfileMergeService extends BaseService {
     }
 
     // Check for measurement conflicts (same metric on same date) - informational
-    const measurementConflicts = await db.select({
+    // Get source measurements
+    const sourceMeasurements = await db.select({
       metric: measurements.metric,
       date: measurements.date,
     })
@@ -829,11 +825,26 @@ export class ProfileMergeService extends BaseService {
       .where(and(
         eq(measurements.userId, sourceUserId),
         eq(measurements.organizationId, orgId)
-      ))
-      .innerJoin(
-        sql`(SELECT metric, date FROM ${measurements} WHERE user_id = ${targetUserId} AND organization_id = ${orgId}) t`,
-        sql`${measurements.metric} = t.metric AND ${measurements.date} = t.date`
-      );
+      ));
+
+    // Get target measurements
+    const targetMeasurements = await db.select({
+      metric: measurements.metric,
+      date: measurements.date,
+    })
+      .from(measurements)
+      .where(and(
+        eq(measurements.userId, targetUserId),
+        eq(measurements.organizationId, orgId)
+      ));
+
+    // Find conflicts by comparing in-memory
+    const targetMeasurementSet = new Set(
+      targetMeasurements.map(m => `${m.metric}:${m.date}`)
+    );
+    const measurementConflicts = sourceMeasurements.filter(sm =>
+      targetMeasurementSet.has(`${sm.metric}:${sm.date}`)
+    );
 
     if (measurementConflicts.length > 0) {
       conflicts.push({

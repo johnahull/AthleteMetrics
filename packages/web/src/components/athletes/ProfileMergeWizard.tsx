@@ -255,7 +255,7 @@ export function ProfileMergeWizard({
         </DialogHeader>
 
         {/* Step indicator */}
-        <div className="flex items-center justify-center gap-2 py-4">
+        <div className="flex items-center justify-center gap-2 py-4" role="navigation" aria-label="Merge wizard steps">
           {[1, 2, 3].map((s) => (
             <div
               key={s}
@@ -266,11 +266,13 @@ export function ProfileMergeWizard({
                   ? "bg-primary/20 text-primary"
                   : "bg-muted text-muted-foreground"
               }`}
+              aria-label={`Step ${s}${s === step ? ' (current)' : s < step ? ' (completed)' : ' (upcoming)'}`}
+              aria-current={s === step ? 'step' : undefined}
             >
               {s}
             </div>
           ))}
-          <span className="ml-2 text-sm text-muted-foreground" data-testid="wizard-step-indicator">
+          <span className="ml-2 text-sm text-muted-foreground" data-testid="wizard-step-indicator" aria-live="polite">
             Step {step} of 3
           </span>
         </div>
