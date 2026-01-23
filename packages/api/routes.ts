@@ -687,7 +687,7 @@ export async function registerRoutes(app: Express) {
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"], // Allow inline styles and Google Fonts
         scriptSrc: ["'self'"],
         imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'"],
+        connectSrc: ["'self'", "https://fonts.googleapis.com", "https://fonts.gstatic.com"], // Allow Google Fonts (googleapis.com for CSS, gstatic.com for font files) for service worker caching
         fontSrc: ["'self'", "https://fonts.gstatic.com"], // Allow Google Fonts CDN
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],
