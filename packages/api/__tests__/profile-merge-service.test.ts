@@ -17,9 +17,14 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 // Mock the database module before imports
 vi.mock('../db', () => ({
   db: {
-    select: vi.fn().mockReturnThis(),
+    // For non-transaction queries like detectConflicts, resolve to empty array
+    select: vi.fn().mockImplementation(() => ({
+      from: vi.fn().mockReturnValue({
+        where: vi.fn().mockResolvedValue([]),
+      }),
+    })),
     from: vi.fn().mockReturnThis(),
-    where: vi.fn().mockReturnThis(),
+    where: vi.fn().mockResolvedValue([]),
     innerJoin: vi.fn().mockReturnThis(),
     update: vi.fn().mockReturnThis(),
     set: vi.fn().mockReturnThis(),
@@ -28,24 +33,40 @@ vi.mock('../db', () => ({
     values: vi.fn().mockReturnThis(),
     returning: vi.fn().mockResolvedValue([{ id: 'audit-123' }]),
     transaction: vi.fn().mockImplementation(async (callback) => {
-      const tx = {
-        select: vi.fn().mockReturnThis(),
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        update: vi.fn().mockReturnThis(),
-        set: vi.fn().mockReturnThis(),
-        delete: vi.fn().mockReturnThis(),
-        insert: vi.fn().mockReturnThis(),
-        values: vi.fn().mockReturnThis(),
-        returning: vi.fn().mockResolvedValue([{ id: 'audit-123' }]),
-        then: vi.fn(),
+      let selectCallCount = 0;
+
+      // Helper to create chainable mock that resolves to empty array
+      const createChainableMock = (resolveValue: any = []) => {
+        const chain: any = {};
+        chain.from = vi.fn().mockReturnValue(chain);
+        chain.where = vi.fn().mockReturnValue(chain);
+        chain.set = vi.fn().mockReturnValue(chain);
+        chain.returning = vi.fn().mockResolvedValue(resolveValue);
+        chain.then = (resolve: any) => resolve(resolveValue);
+        // Make the chain itself awaitable
+        chain[Symbol.toStringTag] = 'Promise';
+        return chain;
       };
-      // Set up default empty array returns
-      tx.select.mockImplementation(() => ({
-        from: vi.fn().mockReturnValue({
-          where: vi.fn().mockResolvedValue([]),
+
+      const tx: any = {
+        select: vi.fn().mockImplementation(() => {
+          selectCallCount++;
+          // First call is sourceUserCheck - return non-deleted user
+          if (selectCallCount === 1) {
+            return createChainableMock([{ deletedAt: null }]);
+          }
+          // Subsequent calls return empty arrays
+          return createChainableMock([]);
         }),
-      }));
+        update: vi.fn().mockImplementation(() => createChainableMock([])),
+        delete: vi.fn().mockImplementation(() => createChainableMock([])),
+        insert: vi.fn().mockImplementation(() => ({
+          values: vi.fn().mockReturnValue({
+            returning: vi.fn().mockResolvedValue([{ id: 'audit-123' }]),
+          }),
+        })),
+      };
+
       return callback(tx);
     }),
   },
