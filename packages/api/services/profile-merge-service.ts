@@ -281,6 +281,15 @@ export class ProfileMergeService extends BaseService {
 
     // Execute merge in a serializable transaction
     const result = await db.transaction(async (tx) => {
+      // Race condition check: Verify source user hasn't been deleted by another concurrent merge
+      const [sourceUserCheck] = await tx.select({ deletedAt: users.deletedAt })
+        .from(users)
+        .where(eq(users.id, sourceUserId));
+
+      if (!sourceUserCheck || sourceUserCheck.deletedAt) {
+        throw new Error("Source user has already been deleted. Another merge may have completed.");
+      }
+
       const summary = {
         measurementsTransferred: 0,
         teamMembershipsTransferred: 0,

@@ -867,6 +867,18 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid target user ID format" });
       }
 
+      // Fail-fast authorization check (before calling service)
+      const user = req.session.user!;
+      if (!user.isSiteAdmin) {
+        // Check if user is org admin for this organization
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
+
+        if (!orgMembership || orgMembership.role !== "org_admin") {
+          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
+        }
+      }
+
       const preview = await profileMergeService.previewMerge(
         orgId,
         sourceUserId,
@@ -906,6 +918,23 @@ export function registerOrganizationRoutes(app: Express) {
       }
       if (!targetUserId || !isValidUUID(targetUserId)) {
         return res.status(400).json({ message: "Invalid target user ID format" });
+      }
+
+      // Prevent merging same user (fail-fast validation)
+      if (sourceUserId === targetUserId) {
+        return res.status(400).json({ message: "Cannot merge a user with themselves" });
+      }
+
+      // Fail-fast authorization check (before calling service)
+      const user = req.session.user!;
+      if (!user.isSiteAdmin) {
+        // Check if user is org admin for this organization
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
+
+        if (!orgMembership || orgMembership.role !== "org_admin") {
+          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
+        }
       }
 
       // Capture request context for audit logging
