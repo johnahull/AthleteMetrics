@@ -14,6 +14,10 @@ CREATE INDEX IF NOT EXISTS reports_archived_at_idx ON reports(archived_at);
 -- Create composite index for querying non-archived reports by organization
 CREATE INDEX IF NOT EXISTS reports_org_not_archived_idx ON reports(organization_id) WHERE archived_at IS NULL;
 
+-- Create composite index for querying non-archived pinned/unpinned reports by organization
+-- Optimizes the common query pattern: WHERE organization_id = ? AND is_pinned = ? AND archived_at IS NULL
+CREATE INDEX IF NOT EXISTS reports_org_pinned_not_archived_idx ON reports(organization_id, is_pinned) WHERE archived_at IS NULL;
+
 -- Create index for efficient filtering of dismissed shares
 CREATE INDEX IF NOT EXISTS report_shares_dismissed_at_idx ON report_shares(dismissed_at);
 

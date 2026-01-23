@@ -73,6 +73,9 @@ export const reports = pgTable("reports", {
   orgNotArchivedIdx: index("reports_org_not_archived_idx")
     .on(table.organizationId)
     .where(sql`${table.archivedAt} IS NULL`),
+  orgPinnedNotArchivedIdx: index("reports_org_pinned_not_archived_idx")
+    .on(table.organizationId, table.isPinned)
+    .where(sql`${table.archivedAt} IS NULL`),
 }));
 
 export const reportSnapshots = pgTable("report_snapshots", {

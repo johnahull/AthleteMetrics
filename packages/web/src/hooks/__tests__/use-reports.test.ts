@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
-import { useReports, useCreateReport } from '../use-reports';
+import { useReports, useCreateReport, useArchiveReport, useUnarchiveReport, useBulkArchiveReports } from '../use-reports';
 
 // Mock apiRequest
 const mockApiRequest = vi.fn();
@@ -306,6 +306,209 @@ describe('useReports Hook', () => {
       expect(payload.config.benchmarks).toBeDefined();
       expect(payload.config.compositeIndex).toBeDefined();
       expect(payload.config.filters).toBeDefined();
+    });
+  });
+
+  describe('useArchiveReport - Archive/Unarchive operations', () => {
+    it('should archive a report successfully', async () => {
+      const mockResponse = {
+        id: 'report-123',
+        archivedAt: '2026-01-23T04:00:00Z',
+      };
+
+      mockApiRequest.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const { result } = renderHook(() => useArchiveReport(), { wrapper });
+
+      await result.current.mutateAsync('report-123');
+
+      expect(mockApiRequest).toHaveBeenCalledWith('PATCH', '/api/reports/report-123/archive');
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Report Archived',
+          description: 'Report has been archived. You can view it in the archived reports section.',
+        });
+      });
+    });
+
+    it('should handle archive operation failure', async () => {
+      const errorMessage = 'Report not found';
+      mockApiRequest.mockRejectedValueOnce(new Error(errorMessage));
+
+      const { result } = renderHook(() => useArchiveReport(), { wrapper });
+
+      try {
+        await result.current.mutateAsync('report-invalid');
+      } catch (error) {
+        // Expected error
+      }
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      });
+    });
+
+    it('should unarchive a report successfully', async () => {
+      const mockResponse = {
+        id: 'report-123',
+        archivedAt: null,
+      };
+
+      mockApiRequest.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const { result } = renderHook(() => useUnarchiveReport(), { wrapper });
+
+      await result.current.mutateAsync('report-123');
+
+      expect(mockApiRequest).toHaveBeenCalledWith('PATCH', '/api/reports/report-123/unarchive');
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Report Restored',
+          description: 'Report has been restored to your active reports.',
+        });
+      });
+    });
+
+    it('should handle unarchive operation failure', async () => {
+      const errorMessage = 'Access denied';
+      mockApiRequest.mockRejectedValueOnce(new Error(errorMessage));
+
+      const { result } = renderHook(() => useUnarchiveReport(), { wrapper });
+
+      try {
+        await result.current.mutateAsync('report-unauthorized');
+      } catch (error) {
+        // Expected error
+      }
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      });
+    });
+
+    it('should invalidate reports cache after archive', async () => {
+      mockApiRequest.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ id: 'report-123', archivedAt: '2026-01-23T04:00:00Z' }),
+      });
+
+      const { result } = renderHook(() => useArchiveReport(), { wrapper });
+
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+
+      await result.current.mutateAsync('report-123');
+
+      await waitFor(() => {
+        expect(invalidateSpy).toHaveBeenCalledWith({
+          queryKey: ['/api/reports'],
+        });
+      });
+    });
+  });
+
+  describe('useBulkArchiveReports - Bulk archive operations', () => {
+    it('should archive multiple reports successfully', async () => {
+      const mockResponse = {
+        archived: 3,
+        archivedAt: '2026-01-23T04:00:00Z',
+      };
+
+      mockApiRequest.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const { result } = renderHook(() => useBulkArchiveReports(), { wrapper });
+
+      await result.current.mutateAsync(['report-1', 'report-2', 'report-3']);
+
+      expect(mockApiRequest).toHaveBeenCalledWith('POST', '/api/reports/bulk-archive', {
+        reportIds: ['report-1', 'report-2', 'report-3'],
+      });
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Reports Archived',
+          description: '3 reports archived successfully.',
+        });
+      });
+    });
+
+    it('should handle bulk archive operation failure', async () => {
+      const errorMessage = 'Access denied to one or more report organizations';
+      mockApiRequest.mockRejectedValueOnce(new Error(errorMessage));
+
+      const { result } = renderHook(() => useBulkArchiveReports(), { wrapper });
+
+      try {
+        await result.current.mutateAsync(['report-1', 'report-2']);
+      } catch (error) {
+        // Expected error
+      }
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      });
+    });
+
+    it('should handle bulk archive with no reports found', async () => {
+      const mockResponse = {
+        archived: 0,
+      };
+
+      mockApiRequest.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const { result } = renderHook(() => useBulkArchiveReports(), { wrapper });
+
+      await result.current.mutateAsync(['report-nonexistent']);
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Reports Archived',
+          description: '0 reports archived successfully.',
+        });
+      });
+    });
+
+    it('should handle rate limiting error', async () => {
+      const errorMessage = 'Too many requests, please try again later.';
+      mockApiRequest.mockRejectedValueOnce(new Error(errorMessage));
+
+      const { result } = renderHook(() => useBulkArchiveReports(), { wrapper });
+
+      try {
+        await result.current.mutateAsync(['report-1', 'report-2']);
+      } catch (error) {
+        // Expected error
+      }
+
+      await waitFor(() => {
+        expect(mockToast).toHaveBeenCalledWith({
+          title: 'Error',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      });
     });
   });
 });
