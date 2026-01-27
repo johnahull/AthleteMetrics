@@ -240,6 +240,7 @@ export const requestStatusSchema = z.enum([
   'completed',
   'expired',
   'cancelled',
+  'scheduled',
 ]);
 
 // Create Request
@@ -464,6 +465,70 @@ export function generateResponseValidationSchema(
     }
   );
 }
+
+/**
+ * Recurring Schedule Schemas
+ */
+
+export const recurrenceTypeSchema = z.enum(['daily', 'weekly', 'custom']);
+export const scheduleStatusSchema = z.enum(['active', 'paused', 'completed', 'cancelled']);
+
+export const createWellnessScheduleSchema = z.object({
+  templateId: z.string().uuid('Invalid template ID'),
+  distributionMethod: distributionMethodSchema,
+  targetAthleteIds: z.array(z.string().uuid()).optional(),
+  targetTeamIds: z.array(z.string().uuid()).optional(),
+  requiresAuth: z.boolean().default(false),
+  recurrenceType: recurrenceTypeSchema,
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+  customIntervalDays: z.number().int().min(1).max(365).optional(),
+  scheduledTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be in HH:mm format'),
+  timezone: z.string().min(1).max(50).default('America/New_York').refine(
+    (tz) => {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: tz });
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    { message: 'Invalid IANA timezone identifier' }
+  ),
+  endDate: z.coerce.date().optional(),
+  maxOccurrences: z.number().int().min(1).max(1000).optional(),
+}).refine(
+  (data) => {
+    if (data.recurrenceType === 'weekly') {
+      return data.daysOfWeek && data.daysOfWeek.length > 0;
+    }
+    return true;
+  },
+  { message: 'Weekly recurrence requires at least one day of the week', path: ['daysOfWeek'] }
+).refine(
+  (data) => {
+    if (data.recurrenceType === 'custom') {
+      return data.customIntervalDays != null && data.customIntervalDays >= 1;
+    }
+    return true;
+  },
+  { message: 'Custom recurrence requires an interval in days', path: ['customIntervalDays'] }
+).refine(
+  (data) => {
+    // At least one end condition is required
+    return data.endDate != null || data.maxOccurrences != null;
+  },
+  { message: 'Either an end date or max occurrences is required', path: ['endDate'] }
+);
+
+export const updateWellnessScheduleSchema = z.object({
+  status: scheduleStatusSchema.optional(),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).optional(),
+  customIntervalDays: z.number().int().min(1).max(365).optional(),
+  scheduledTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Time must be in HH:mm format').optional(),
+  timezone: z.string().min(1).max(50).optional(),
+  endDate: z.coerce.date().optional().nullable(),
+  maxOccurrences: z.number().int().min(1).max(1000).optional().nullable(),
+});
 
 /**
  * Analytics Filter Schemas

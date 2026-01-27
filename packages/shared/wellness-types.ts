@@ -175,7 +175,7 @@ export type DistributionMethod =
 /**
  * Request Status
  */
-export type RequestStatus = 'active' | 'completed' | 'expired' | 'cancelled';
+export type RequestStatus = 'active' | 'completed' | 'expired' | 'cancelled' | 'scheduled';
 
 /**
  * Wellness Request (from database)
@@ -421,6 +421,35 @@ export interface WellnessCorrelation {
     metricValue: number;
     date: string;
   }[];
+}
+
+/**
+ * Recurring Schedule Types
+ */
+export type RecurrenceType = 'daily' | 'weekly' | 'custom';
+export type ScheduleStatus = 'active' | 'paused' | 'completed' | 'cancelled';
+
+export interface WellnessSchedule {
+  id: string;
+  organizationId: string;
+  templateId: string;
+  createdBy: string;
+  distributionMethod: DistributionMethod;
+  targetAthleteIds: string[] | null;
+  targetTeamIds: string[] | null;
+  requiresAuth: boolean;
+  recurrenceType: RecurrenceType;
+  daysOfWeek: number[] | null;
+  customIntervalDays: number | null;
+  scheduledTime: string; // HH:mm
+  timezone: string;
+  endDate: Date | null;
+  maxOccurrences: number | null;
+  occurrencesSent: number;
+  nextRunAt: Date;
+  status: ScheduleStatus;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 /**

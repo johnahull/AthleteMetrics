@@ -109,6 +109,7 @@ export default function RequestsList({ requests, organizationId }: RequestsListP
       completed: 'secondary',
       expired: 'destructive',
       cancelled: 'outline',
+      scheduled: 'secondary',
     };
     return <Badge variant={variants[status]}>{status}</Badge>;
   };

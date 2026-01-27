@@ -4,6 +4,7 @@ import { log } from "./utils/logger.js";
 import { shutdownSecurityStore } from "./middleware/organization-type-security";
 import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware";
 import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-digest-job";
+import { startWellnessScheduledJob, stopWellnessScheduledJob } from "./jobs/wellness-scheduled-job";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
@@ -301,8 +302,11 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
       } else {
         console.warn('⚠️ Wellness digest job disabled - VAPID keys not configured');
       }
+
+      // Start scheduled wellness request job (processes one-time + recurring schedules)
+      startWellnessScheduledJob(db);
     } catch (error) {
-      console.error('Failed to start wellness digest job:', error);
+      console.error('Failed to start wellness jobs:', error);
     }
   });
 
@@ -316,6 +320,7 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
       try {
         // Stop scheduled jobs
         stopWellnessDigestJob();
+        stopWellnessScheduledJob();
         log('Scheduled jobs stopped');
 
         // Shutdown organization type singletons to prevent memory leaks

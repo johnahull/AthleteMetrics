@@ -36,7 +36,7 @@ export type {
   // Reports
   Report, ReportSnapshot, ReportBenchmark, ReportShare,
   // Wellness
-  WellnessTemplate, WellnessRequest, WellnessResponse,
+  WellnessTemplate, WellnessRequest, WellnessResponse, WellnessSchedule,
   // Gamification
   AchievementDefinition, UserAchievement, Goal,
   // Global Athletes
