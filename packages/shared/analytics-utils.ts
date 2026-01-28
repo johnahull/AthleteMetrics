@@ -54,8 +54,8 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
       std: 0,
       variance: 0,
       percentiles: {
-        p5: 0, p10: 0, p25: 0, p50: 0,
-        p75: 0, p90: 0, p95: 0
+        p5: 0, p10: 0, p20: 0, p25: 0, p30: 0, p40: 0, p50: 0,
+        p60: 0, p70: 0, p75: 0, p80: 0, p90: 0, p95: 0
       }
     };
   }
@@ -72,8 +72,8 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
       std: 0,
       variance: 0,
       percentiles: {
-        p5: value, p10: value, p25: value, p50: value,
-        p75: value, p90: value, p95: value
+        p5: value, p10: value, p20: value, p25: value, p30: value, p40: value, p50: value,
+        p60: value, p70: value, p75: value, p80: value, p90: value, p95: value
       }
     };
   }
@@ -103,9 +103,15 @@ export function calculateStatistics(values: number[]): StatisticalSummary {
     percentiles: {
       p5: calculatePercentile(sortedValues, 5),
       p10: calculatePercentile(sortedValues, 10),
+      p20: calculatePercentile(sortedValues, 20),
       p25: calculatePercentile(sortedValues, 25),
+      p30: calculatePercentile(sortedValues, 30),
+      p40: calculatePercentile(sortedValues, 40),
       p50: median,
+      p60: calculatePercentile(sortedValues, 60),
+      p70: calculatePercentile(sortedValues, 70),
       p75: calculatePercentile(sortedValues, 75),
+      p80: calculatePercentile(sortedValues, 80),
       p90: calculatePercentile(sortedValues, 90),
       p95: calculatePercentile(sortedValues, 95)
     }

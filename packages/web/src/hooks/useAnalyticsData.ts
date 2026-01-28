@@ -305,9 +305,15 @@ function recalculateStatistics(
       percentiles: {
         p5: getPercentile(CHART_CONFIG.PERCENTILES.P5),
         p10: getPercentile(CHART_CONFIG.PERCENTILES.P10),
+        p20: getPercentile(20),
         p25: getPercentile(CHART_CONFIG.PERCENTILES.P25),
+        p30: getPercentile(30),
+        p40: getPercentile(40),
         p50: getPercentile(CHART_CONFIG.PERCENTILES.P50),
+        p60: getPercentile(60),
+        p70: getPercentile(70),
         p75: getPercentile(CHART_CONFIG.PERCENTILES.P75),
+        p80: getPercentile(80),
         p90: getPercentile(CHART_CONFIG.PERCENTILES.P90),
         p95: getPercentile(CHART_CONFIG.PERCENTILES.P95)
       }

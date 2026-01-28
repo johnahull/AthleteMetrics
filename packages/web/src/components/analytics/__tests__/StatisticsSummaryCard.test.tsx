@@ -209,6 +209,125 @@ describe('StatisticsSummaryCard', () => {
       const allThirty = screen.getAllByText(/30/);
       expect(allThirty.length).toBeGreaterThan(0); // Mean
     });
+
+    it('should handle empty measurements with quintiles mode', () => {
+      render(
+        <StatisticsSummaryCard
+          measurements={[]}
+          metric="VERTICAL_JUMP"
+          distributionMode="quintiles"
+        />
+      );
+
+      expect(screen.getByText(/no data available/i)).toBeInTheDocument();
+    });
+
+    it('should handle empty measurements with deciles mode', () => {
+      render(
+        <StatisticsSummaryCard
+          measurements={[]}
+          metric="VERTICAL_JUMP"
+          distributionMode="deciles"
+        />
+      );
+
+      expect(screen.getByText(/no data available/i)).toBeInTheDocument();
+    });
+
+    it('should handle single measurement with quintiles mode', () => {
+      const singleMeasurement: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+      ];
+
+      render(
+        <StatisticsSummaryCard
+          measurements={singleMeasurement}
+          metric="VERTICAL_JUMP"
+          distributionMode="quintiles"
+        />
+      );
+
+      expect(screen.getByText('Count (N)')).toBeInTheDocument();
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+    });
+
+    it('should handle single measurement with deciles mode', () => {
+      const singleMeasurement: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+      ];
+
+      render(
+        <StatisticsSummaryCard
+          measurements={singleMeasurement}
+          metric="VERTICAL_JUMP"
+          distributionMode="deciles"
+        />
+      );
+
+      expect(screen.getByText('Count (N)')).toBeInTheDocument();
+      expect(screen.getByText('P10')).toBeInTheDocument();
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P30')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P50')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P70')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+      expect(screen.getByText('P90')).toBeInTheDocument();
+    });
+  });
+
+  describe('Distribution Modes', () => {
+    const measurements = [
+      createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '20.0', units: 'in' }),
+      createTestMeasurement({ id: '2', metric: 'VERTICAL_JUMP', value: '25.0', units: 'in' }),
+      createTestMeasurement({ id: '3', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+      createTestMeasurement({ id: '4', metric: 'VERTICAL_JUMP', value: '35.0', units: 'in' }),
+      createTestMeasurement({ id: '5', metric: 'VERTICAL_JUMP', value: '40.0', units: 'in' }),
+    ];
+
+    it('should render Q1/Q3/IQR by default (quartiles)', () => {
+      render(
+        <StatisticsSummaryCard measurements={measurements} metric="VERTICAL_JUMP" />
+      );
+      expect(screen.getByText('Q1 (25th)')).toBeInTheDocument();
+      expect(screen.getByText('Q3 (75th)')).toBeInTheDocument();
+      expect(screen.getByText('IQR')).toBeInTheDocument();
+    });
+
+    it('should render P20/P40/P60/P80 for quintiles mode', () => {
+      render(
+        <StatisticsSummaryCard measurements={measurements} metric="VERTICAL_JUMP" distributionMode="quintiles" />
+      );
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+      // Should NOT render quartile labels
+      expect(screen.queryByText('Q1 (25th)')).not.toBeInTheDocument();
+      expect(screen.queryByText('IQR')).not.toBeInTheDocument();
+    });
+
+    it('should render P10–P90 for deciles mode', () => {
+      render(
+        <StatisticsSummaryCard measurements={measurements} metric="VERTICAL_JUMP" distributionMode="deciles" />
+      );
+      expect(screen.getByText('P10')).toBeInTheDocument();
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P30')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P50')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P70')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+      expect(screen.getByText('P90')).toBeInTheDocument();
+      // Should NOT render quartile labels
+      expect(screen.queryByText('Q1 (25th)')).not.toBeInTheDocument();
+      expect(screen.queryByText('IQR')).not.toBeInTheDocument();
+    });
   });
 
   describe('Number Formatting', () => {

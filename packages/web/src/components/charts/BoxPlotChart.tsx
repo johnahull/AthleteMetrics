@@ -505,9 +505,15 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
             percentiles: {
               p5: getPercentile(5),
               p10: getPercentile(10),
+              p20: getPercentile(20),
               p25: getPercentile(25),
+              p30: getPercentile(30),
+              p40: getPercentile(40),
               p50: getPercentile(50),
+              p60: getPercentile(60),
+              p70: getPercentile(70),
               p75: getPercentile(75),
+              p80: getPercentile(80),
               p90: getPercentile(90),
               p95: getPercentile(95)
             }
@@ -761,9 +767,15 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
           percentiles: {
             p5: getPercentile(5),
             p10: getPercentile(10),
+            p20: getPercentile(20),
             p25: getPercentile(25),
+            p30: getPercentile(30),
+            p40: getPercentile(40),
             p50: getPercentile(50),
+            p60: getPercentile(60),
+            p70: getPercentile(70),
             p75: getPercentile(75),
+            p80: getPercentile(80),
             p90: getPercentile(90),
             p95: getPercentile(95)
           }
