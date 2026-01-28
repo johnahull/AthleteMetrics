@@ -81,6 +81,7 @@ test.describe('Sidebar Navigation Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Verify all expected org admin navigation items
+      // Note: Import/Export is now a tab in Data Entry, not a sidebar item
       const expectedItems = [
         'Dashboard',
         'Teams',
@@ -88,7 +89,6 @@ test.describe('Sidebar Navigation Tests', () => {
         'Data Entry',
         'Coach Analytics',
         'Measurements',
-        'Import/Export',
         'Benchmarks',
         'Settings', // Changed from "My Organization"
       ];
@@ -138,6 +138,7 @@ test.describe('Sidebar Navigation Tests', () => {
       await page.waitForLoadState('networkidle');
 
       // Verify expected coach navigation items
+      // Note: Import/Export is now a tab in Data Entry, not a sidebar item
       const expectedItems = [
         'Dashboard',
         'Teams',
@@ -145,7 +146,6 @@ test.describe('Sidebar Navigation Tests', () => {
         'Data Entry',
         'Coach Analytics',
         'Measurements',
-        'Import/Export',
         'Benchmarks',
       ];
 

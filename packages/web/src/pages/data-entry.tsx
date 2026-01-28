@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { FormProvider } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
+import { useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Save, Copy, Trash2, Wand2 } from "lucide-react";
+import { Plus, Save, Copy, Trash2, Wand2, Loader2 } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,12 +25,39 @@ import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/us
 import { useToast } from '@/hooks/use-toast';
 import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
 
+// Lazy load the Import/Export panel to keep initial page load fast
+const ImportExportPanel = lazy(() => import('@/components/import/ImportExportPanel'));
+
 export default function DataEntry() {
   const { toast } = useToast();
   const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('single');
+  const searchString = useSearch();
+
+  // Derive tab from URL query parameter
+  const getTabFromUrl = (search: string) => {
+    const params = new URLSearchParams(search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'batch') return 'batch';
+    if (tabParam === 'import') return 'import';
+    return 'single';
+  };
+
+  const [activeTab, setActiveTab] = useState(() => getTabFromUrl(searchString));
+
+  // Sync tab state when URL changes externally (e.g., browser back/forward)
+  useEffect(() => {
+    const newTab = getTabFromUrl(searchString);
+    setActiveTab(newTab);
+  }, [searchString]);
+
+  // Update URL when tab changes (without adding to history)
+  const handleTabChange = (newTab: string) => {
+    setActiveTab(newTab);
+    const newUrl = newTab === 'single' ? '/data-entry' : `/data-entry?tab=${newTab}`;
+    window.history.replaceState(null, '', newUrl);
+  };
 
   const { data: recentMeasurements = [] } = useQuery({
     queryKey: ["/api/measurements"],
@@ -111,11 +139,12 @@ export default function DataEntry() {
           <h1 className="text-2xl font-semibold text-gray-900">Data Entry</h1>
         </div>
 
-        {/* Tabs for Single vs Batch Entry */}
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+        {/* Tabs for Single, Batch, and Import/Export Entry */}
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-6">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="single">Single Entry</TabsTrigger>
             <TabsTrigger value="batch">Batch Entry</TabsTrigger>
+            <TabsTrigger value="import" data-testid="import-export-tab">Import/Export</TabsTrigger>
           </TabsList>
 
           {/* Single Entry Tab */}
@@ -261,6 +290,22 @@ export default function DataEntry() {
                 onComplete={handleWizardComplete}
               />
             </FormProvider>
+          </TabsContent>
+
+          {/* Import/Export Tab - Lazy Loaded */}
+          <TabsContent value="import">
+            <Suspense fallback={
+              <Card className="bg-white">
+                <CardContent className="p-12 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading Import/Export...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            }>
+              <ImportExportPanel />
+            </Suspense>
           </TabsContent>
         </Tabs>
 

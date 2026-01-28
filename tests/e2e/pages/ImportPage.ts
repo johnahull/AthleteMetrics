@@ -1,5 +1,8 @@
 /**
  * Import/Export Page Object Model
+ *
+ * Note: Import/Export functionality is now a tab within the Data Entry page.
+ * This page object navigates to /data-entry?tab=import.
  */
 
 import { Page } from '@playwright/test';
@@ -11,8 +14,10 @@ export class ImportPage {
   constructor(private page: Page) {}
 
   async goto(): Promise<void> {
-    await this.page.goto(`${STAGING_URL}/import-export`);
-    await this.page.waitForLoadState('networkidle');
+    // Import/Export is now a tab within the Data Entry page
+    await this.page.goto(`${STAGING_URL}/data-entry?tab=import`);
+    // Wait for lazy-loaded content to appear
+    await this.page.waitForSelector('[data-testid="file-drop-zone"]', { timeout: 15000 });
   }
 
   async uploadFile(filePath: string): Promise<void> {

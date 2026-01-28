@@ -204,13 +204,19 @@ export async function goToAnalytics(page: Page): Promise<void> {
 }
 
 /**
- * Navigate to import/export page
+ * Navigate to import/export functionality
+ *
+ * Import/Export is now a tab within the Data Entry page.
+ * This function navigates to Data Entry with the import tab selected
+ * and waits for the lazy-loaded content to appear.
  *
  * @param page - Playwright Page object
  * @returns Promise<void>
  */
 export async function goToImportExport(page: Page): Promise<void> {
-  await navigateTo(page, '/import-export');
+  await navigateTo(page, '/data-entry?tab=import');
+  // Wait for the lazy-loaded Import/Export content to appear
+  await page.waitForSelector('[data-testid="file-drop-zone"]', { timeout: 15000 });
 }
 
 /**
