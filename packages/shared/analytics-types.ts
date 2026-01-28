@@ -126,9 +126,15 @@ export interface StatisticalSummary {
   percentiles: {
     p5: number;
     p10: number;
+    p20: number;
     p25: number;
+    p30: number;
+    p40: number;
     p50: number; // Same as median
+    p60: number;
+    p70: number;
     p75: number;
+    p80: number;
     p90: number;
     p95: number;
   };

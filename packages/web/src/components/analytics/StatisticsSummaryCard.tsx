@@ -8,10 +8,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 
+export type DistributionMode = 'quartiles' | 'quintiles' | 'deciles';
+
 interface StatisticsSummaryCardProps {
   measurements: Array<{ metric: string; value: string }>;
   metric: string;
   title?: string;
+  distributionMode?: DistributionMode;
 }
 
 /**
@@ -34,6 +37,7 @@ export function StatisticsSummaryCard({
   measurements,
   metric,
   title,
+  distributionMode = 'quartiles',
 }: StatisticsSummaryCardProps) {
   // Extract numeric values from measurements (already filtered by caller)
   // Memoize to prevent unnecessary recalculations
@@ -64,6 +68,38 @@ export function StatisticsSummaryCard({
 
   // Calculate IQR from percentiles
   const iqr = stats.percentiles.p75 - stats.percentiles.p25;
+
+  // Distribution breakdown items based on mode
+  const distributionItems = (() => {
+    switch (distributionMode) {
+      case 'quintiles':
+        return [
+          { label: 'P20', value: stats.percentiles.p20 },
+          { label: 'P40', value: stats.percentiles.p40 },
+          { label: 'P60', value: stats.percentiles.p60 },
+          { label: 'P80', value: stats.percentiles.p80 },
+        ];
+      case 'deciles':
+        return [
+          { label: 'P10', value: stats.percentiles.p10 },
+          { label: 'P20', value: stats.percentiles.p20 },
+          { label: 'P30', value: stats.percentiles.p30 },
+          { label: 'P40', value: stats.percentiles.p40 },
+          { label: 'P50', value: stats.percentiles.p50 },
+          { label: 'P60', value: stats.percentiles.p60 },
+          { label: 'P70', value: stats.percentiles.p70 },
+          { label: 'P80', value: stats.percentiles.p80 },
+          { label: 'P90', value: stats.percentiles.p90 },
+        ];
+      case 'quartiles':
+      default:
+        return [
+          { label: 'Q1 (25th)', value: stats.percentiles.p25 },
+          { label: 'Q3 (75th)', value: stats.percentiles.p75 },
+          { label: 'IQR', value: iqr },
+        ];
+    }
+  })();
 
   return (
     <Card>
@@ -104,23 +140,13 @@ export function StatisticsSummaryCard({
             </div>
           </div>
 
-          {/* Q1 (25th percentile) */}
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Q1 (25th)</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.percentiles.p25, 2)}{units}</div>
-          </div>
-
-          {/* Q3 (75th percentile) */}
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">Q3 (75th)</div>
-            <div className="text-2xl font-bold">{formatNumber(stats.percentiles.p75, 2)}{units}</div>
-          </div>
-
-          {/* IQR */}
-          <div className="space-y-1">
-            <div className="text-sm text-muted-foreground">IQR</div>
-            <div className="text-2xl font-bold">{formatNumber(iqr, 2)}{units}</div>
-          </div>
+          {/* Distribution breakdown items */}
+          {distributionItems.map((item) => (
+            <div key={item.label} className="space-y-1">
+              <div className="text-sm text-muted-foreground">{item.label}</div>
+              <div className="text-2xl font-bold">{formatNumber(item.value, 2)}{units}</div>
+            </div>
+          ))}
         </div>
       </CardContent>
     </Card>
