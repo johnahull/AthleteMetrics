@@ -109,3 +109,33 @@ export const wellnessResponses = pgTable("wellness_responses", {
   userSubmittedIdx: index("idx_wellness_responses_user_submitted")
     .on(table.userId, table.submittedAt.desc()),
 }));
+
+export const wellnessSchedules = pgTable("wellness_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  templateId: varchar("template_id").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  // Distribution config
+  distributionMethod: varchar("distribution_method", { length: 50 }).notNull(),
+  targetAthleteIds: text("target_athlete_ids").array(),
+  targetTeamIds: text("target_team_ids").array(),
+  requiresAuth: boolean("requires_auth").notNull().default(false),
+  // Recurrence config
+  recurrenceType: varchar("recurrence_type", { length: 20 }).notNull(), // 'daily', 'weekly', 'custom'
+  daysOfWeek: integer("days_of_week").array(), // 0=Sun..6=Sat (for weekly)
+  customIntervalDays: integer("custom_interval_days"), // e.g. 3 = every 3 days (for custom)
+  scheduledTime: varchar("scheduled_time", { length: 5 }).notNull(), // HH:mm format
+  timezone: varchar("timezone", { length: 50 }).notNull().default('America/New_York'),
+  // End conditions
+  endDate: timestamp("end_date"),
+  maxOccurrences: integer("max_occurrences"),
+  occurrencesSent: integer("occurrences_sent").notNull().default(0),
+  // Lifecycle
+  nextRunAt: timestamp("next_run_at").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default('active'), // 'active', 'paused', 'completed', 'cancelled'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  nextRunIdx: index("wellness_schedules_next_run_idx").on(table.nextRunAt, table.status),
+  orgIdx: index("wellness_schedules_org_idx").on(table.organizationId),
+}));

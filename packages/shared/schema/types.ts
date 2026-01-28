@@ -86,6 +86,7 @@ export type ReportShare = typeof tables.reportShares.$inferSelect;
 export type WellnessTemplate = typeof tables.wellnessTemplates.$inferSelect;
 export type WellnessRequest = typeof tables.wellnessRequests.$inferSelect;
 export type WellnessResponse = typeof tables.wellnessResponses.$inferSelect;
+export type WellnessSchedule = typeof tables.wellnessSchedules.$inferSelect;
 
 // ============================================================================
 // Gamification Tables
