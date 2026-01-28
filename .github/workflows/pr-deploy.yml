@@ -78,59 +78,25 @@ jobs:
             ---
             <sub>🤖 This comment will be updated when deployment completes.</sub>
 
-      - name: Link Railway Project
-        id: link-project
-        run: |
-          echo "🔗 Linking to Railway project..."
-          if ! railway link --project "$RAILWAY_PROJECT_ID"; then
-            echo "::error::Failed to link to Railway project. Check RAILWAY_TOKEN and RAILWAY_PROJECT_ID secrets."
-            exit 1
-          fi
-          echo "✅ Successfully linked to Railway project"
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-
-      - name: Create or Select PR Environment
-        id: create-env
-        run: |
-          PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
-          echo "env_name=${PR_ENV_NAME}" >> "$GITHUB_OUTPUT"
-
-          echo "🔍 Checking for existing environment: ${PR_ENV_NAME}"
-
-          # Try to switch to the environment - if it succeeds, it exists
-          # Railway CLI: `railway environment <name>` switches to that environment
-          if railway environment "${PR_ENV_NAME}" 2>/dev/null; then
-            echo "✅ Environment ${PR_ENV_NAME} already exists"
-            echo "env_created=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "📦 Creating new environment: ${PR_ENV_NAME}"
-            # Use Railway API to create environment since CLI doesn't have direct create command
-            # The `railway environment` command with a non-existent name will fail
-            # We'll create via the deploy step which auto-creates if needed
-            echo "env_created=pending" >> "$GITHUB_OUTPUT"
-          fi
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
-
       - name: Deploy to PR Environment
         id: deploy
         run: |
           PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
-          echo "🚀 Deploying to Railway environment: ${PR_ENV_NAME}"
+          echo "🚀 Deploying to Railway service with environment: ${PR_ENV_NAME}"
+          echo "env_name=${PR_ENV_NAME}" >> "$GITHUB_OUTPUT"
 
           # Deploy with retry logic for transient failures
+          # Use --service flag (like staging workflow) combined with --environment for PR isolation
           MAX_ATTEMPTS=3
           ATTEMPT=1
 
           while [[ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]]; do
             echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            # Deploy to the PR environment (Railway will create if it doesn't exist)
+            # Deploy using service ID (matches staging pattern) with PR environment
             # Capture output and exit code separately
             set +e
-            DEPLOY_OUTPUT=$(railway up --environment "${PR_ENV_NAME}" --detach 2>&1)
+            DEPLOY_OUTPUT=$(railway up --service "$RAILWAY_STAGING_SERVICE_ID" --environment "${PR_ENV_NAME}" --detach 2>&1)
             DEPLOY_EXIT_CODE=$?
             set -e
 
@@ -158,6 +124,7 @@ jobs:
           exit 1
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_STAGING_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
 
       - name: Wait for deployment to be ready
         if: steps.deploy.outputs.deploy_status == 'success'
