@@ -4,6 +4,7 @@
  */
 
 import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { users, siteMetrics, notificationPreferences } from '@shared/schema';
 import { db } from '../db';
 import { getPushNotificationService } from './push-notification-service';
@@ -60,7 +61,7 @@ export async function notifyNewMeasurement(data: NotifyNewMeasurementData): Prom
 
     // Send push notification
     try {
-      const pushService = getPushNotificationService(db as any);
+      const pushService = getPushNotificationService(db as PostgresJsDatabase<any>);
       await pushService.sendToUser(
         data.userId,
         {

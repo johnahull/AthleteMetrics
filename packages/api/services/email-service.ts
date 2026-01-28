@@ -501,7 +501,7 @@ export class EmailService {
               <table width="100%" cellpadding="0" cellspacing="0">
                 <tr>
                   <td align="center">
-                    <a href="${process.env.APP_URL || 'https://athletemetrics.app'}/my-measurements" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
+                    <a href="${sanitizeUrl(`${process.env.APP_URL || 'https://athletemetrics.app'}/my-measurements`)}" style="display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px;">
                       View Your Measurements
                     </a>
                   </td>
