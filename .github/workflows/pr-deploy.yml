@@ -85,43 +85,38 @@ jobs:
           echo "🚀 Deploying to Railway service with environment: ${PR_ENV_NAME}"
           echo "env_name=${PR_ENV_NAME}" >> "$GITHUB_OUTPUT"
 
-          # Deploy with retry logic for transient failures
-          # Use --service flag (like staging workflow) combined with --environment for PR isolation
-          MAX_ATTEMPTS=3
-          ATTEMPT=1
+          # Deploy using service ID (matches staging pattern) with PR environment
+          # Note: This requires Railway's native PR deployments to be enabled in the dashboard
+          # which auto-creates environments. Without it, environments must pre-exist.
+          set +e
+          DEPLOY_OUTPUT=$(railway up --service "$RAILWAY_STAGING_SERVICE_ID" --environment "${PR_ENV_NAME}" --detach 2>&1)
+          DEPLOY_EXIT_CODE=$?
+          set -e
 
-          while [[ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]]; do
-            echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
+          echo "$DEPLOY_OUTPUT"
 
-            # Deploy using service ID (matches staging pattern) with PR environment
-            # Capture output and exit code separately
-            set +e
-            DEPLOY_OUTPUT=$(railway up --service "$RAILWAY_STAGING_SERVICE_ID" --environment "${PR_ENV_NAME}" --detach 2>&1)
-            DEPLOY_EXIT_CODE=$?
-            set -e
-
-            echo "$DEPLOY_OUTPUT"
-
-            if [[ "$DEPLOY_EXIT_CODE" -eq 0 ]]; then
-              echo "✅ Deployment initiated successfully"
-              echo "deploy_status=success" >> "$GITHUB_OUTPUT"
-              exit 0
-            else
-              echo "❌ Deployment attempt $ATTEMPT failed with exit code $DEPLOY_EXIT_CODE"
-
-              if [[ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]]; then
-                WAIT_TIME=$((ATTEMPT * 10))
-                echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
-                sleep "$WAIT_TIME"
-              fi
-            fi
-
-            ATTEMPT=$((ATTEMPT + 1))
-          done
-
-          echo "❌ All deployment attempts failed"
-          echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
-          exit 1
+          if [[ "$DEPLOY_EXIT_CODE" -eq 0 ]]; then
+            echo "✅ Deployment initiated successfully"
+            echo "deploy_status=success" >> "$GITHUB_OUTPUT"
+          elif echo "$DEPLOY_OUTPUT" | grep -q "Environment.*not found"; then
+            echo ""
+            echo "⚠️  PR environment '${PR_ENV_NAME}' does not exist."
+            echo ""
+            echo "📋 To enable PR preview environments, configure Railway's native PR deployments:"
+            echo "   1. Go to Railway Dashboard → Project Settings → Environments"
+            echo "   2. Enable 'PR Environments'"
+            echo "   3. Railway will auto-create environments for each PR"
+            echo ""
+            echo "   See: https://docs.railway.app/guides/environments#pr-environments"
+            echo ""
+            echo "deploy_status=not_configured" >> "$GITHUB_OUTPUT"
+            # Don't fail the workflow - this is a configuration issue, not a code issue
+            exit 0
+          else
+            echo "❌ Deployment failed with exit code $DEPLOY_EXIT_CODE"
+            echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_STAGING_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
@@ -198,6 +193,31 @@ jobs:
 
             ---
             <sub>🤖 Updated at ${{ github.event.pull_request.updated_at }} | Commit ${{ github.event.pull_request.head.sha }}</sub>
+
+      - name: Update comment - PR environments not configured
+        if: steps.deploy.outputs.deploy_status == 'not_configured'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            ### ⚠️ PR Environments Not Configured
+
+            Railway PR environments need to be enabled in the Railway dashboard.
+
+            **To enable PR preview environments:**
+            1. Go to [Railway Dashboard](https://railway.app) → Your Project → Settings
+            2. Navigate to **Environments** section
+            3. Enable **PR Environments**
+            4. Railway will automatically create environments for each PR
+
+            📚 [Railway PR Environments Documentation](https://docs.railway.app/guides/environments#pr-environments)
+
+            ---
+            <sub>🤖 Once enabled, PR previews will be automatically deployed.</sub>
 
       - name: Update comment with failure
         if: failure() || steps.deploy.outputs.deploy_status == 'failed'
