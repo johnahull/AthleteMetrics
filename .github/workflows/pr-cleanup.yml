@@ -49,7 +49,7 @@ jobs:
             # Don't fail - Railway may handle cleanup automatically
           fi
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_STAGING_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
       - name: Find preview comment
         id: find-comment
