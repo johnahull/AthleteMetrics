@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
 import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
 
+/**
+ * Distribution mode for displaying percentile breakdowns
+ * - quartiles: Q1 (25th), Q3 (75th), IQR
+ * - quintiles: P20, P40, P60, P80 (5 equal groups)
+ * - deciles: P10-P90 (10 equal groups)
+ */
 export type DistributionMode = 'quartiles' | 'quintiles' | 'deciles';
 
 interface StatisticsSummaryCardProps {

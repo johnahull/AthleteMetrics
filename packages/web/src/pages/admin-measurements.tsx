@@ -195,7 +195,9 @@ export default function AdminMeasurementsPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [bulkAction, setBulkAction] = useState<'verify' | 'unverify' | null>(null);
   const [showExportConfirm, setShowExportConfirm] = useState(false);
-  const [distributionMode, setDistributionMode] = useState<DistributionMode>('quartiles');
+  const [distributionMode, setDistributionMode] = useState<DistributionMode>(
+    () => (localStorage.getItem('distributionMode') as DistributionMode) || 'quartiles'
+  );
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -1014,9 +1016,15 @@ export default function AdminMeasurementsPage() {
       {/* Statistics Summary */}
       {measurements.length > 0 && (
         <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-muted-foreground">Distribution:</span>
-          <Select value={distributionMode} onValueChange={(v) => setDistributionMode(v as DistributionMode)}>
-            <SelectTrigger className="w-[160px]">
+          <label htmlFor="distribution-mode-select" className="text-sm font-medium text-muted-foreground">
+            Distribution:
+          </label>
+          <Select value={distributionMode} onValueChange={(v) => {
+            const mode = v as DistributionMode;
+            setDistributionMode(mode);
+            localStorage.setItem('distributionMode', mode);
+          }}>
+            <SelectTrigger className="w-[160px]" id="distribution-mode-select">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

@@ -209,6 +209,75 @@ describe('StatisticsSummaryCard', () => {
       const allThirty = screen.getAllByText(/30/);
       expect(allThirty.length).toBeGreaterThan(0); // Mean
     });
+
+    it('should handle empty measurements with quintiles mode', () => {
+      render(
+        <StatisticsSummaryCard
+          measurements={[]}
+          metric="VERTICAL_JUMP"
+          distributionMode="quintiles"
+        />
+      );
+
+      expect(screen.getByText(/no data available/i)).toBeInTheDocument();
+    });
+
+    it('should handle empty measurements with deciles mode', () => {
+      render(
+        <StatisticsSummaryCard
+          measurements={[]}
+          metric="VERTICAL_JUMP"
+          distributionMode="deciles"
+        />
+      );
+
+      expect(screen.getByText(/no data available/i)).toBeInTheDocument();
+    });
+
+    it('should handle single measurement with quintiles mode', () => {
+      const singleMeasurement: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+      ];
+
+      render(
+        <StatisticsSummaryCard
+          measurements={singleMeasurement}
+          metric="VERTICAL_JUMP"
+          distributionMode="quintiles"
+        />
+      );
+
+      expect(screen.getByText('Count (N)')).toBeInTheDocument();
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+    });
+
+    it('should handle single measurement with deciles mode', () => {
+      const singleMeasurement: Measurement[] = [
+        createTestMeasurement({ id: '1', metric: 'VERTICAL_JUMP', value: '30.0', units: 'in' }),
+      ];
+
+      render(
+        <StatisticsSummaryCard
+          measurements={singleMeasurement}
+          metric="VERTICAL_JUMP"
+          distributionMode="deciles"
+        />
+      );
+
+      expect(screen.getByText('Count (N)')).toBeInTheDocument();
+      expect(screen.getByText('P10')).toBeInTheDocument();
+      expect(screen.getByText('P20')).toBeInTheDocument();
+      expect(screen.getByText('P30')).toBeInTheDocument();
+      expect(screen.getByText('P40')).toBeInTheDocument();
+      expect(screen.getByText('P50')).toBeInTheDocument();
+      expect(screen.getByText('P60')).toBeInTheDocument();
+      expect(screen.getByText('P70')).toBeInTheDocument();
+      expect(screen.getByText('P80')).toBeInTheDocument();
+      expect(screen.getByText('P90')).toBeInTheDocument();
+    });
   });
 
   describe('Distribution Modes', () => {
