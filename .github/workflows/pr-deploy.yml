@@ -1,0 +1,249 @@
+name: Deploy PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches:
+      - develop
+      - main
+
+# Explicit permissions following principle of least privilege
+permissions:
+  contents: read
+  pull-requests: write
+
+# Cancel redundant runs for the same PR
+concurrency:
+  group: pr-deploy-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  deploy-preview:
+    name: Deploy PR Preview
+    runs-on: ubuntu-latest
+    # Only run on PRs from the same repository (not forks)
+    # Forks don't have access to secrets needed for Railway deployment
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup project
+        uses: ./.github/actions/setup
+
+      - name: Run TypeScript type check
+        run: npm run check
+
+      - name: Build application
+        run: npm run build
+        env:
+          NODE_ENV: production
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Find existing preview comment
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '🚂 Railway Preview Environment'
+
+      - name: Post deployment starting comment
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            | Resource | Status |
+            |----------|--------|
+            | **Deployment** | ⏳ In Progress... |
+            | **Preview URL** | `https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app` |
+
+            ### ⏳ Deployment Status
+
+            🔄 **Building and deploying...** This typically takes **3-5 minutes**.
+
+            - ✅ Code checked out
+            - ✅ Dependencies installed
+            - ✅ Type check passed
+            - ✅ Build completed
+            - ⏳ Railway deployment in progress...
+
+            ---
+            <sub>🤖 This comment will be updated when deployment completes.</sub>
+
+      - name: Create PR Environment if needed
+        id: create-env
+        run: |
+          PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          echo "env_name=${PR_ENV_NAME}" >> $GITHUB_OUTPUT
+
+          # Check if environment exists, create if not
+          echo "🔍 Checking for existing environment: ${PR_ENV_NAME}"
+
+          # List environments and check if ours exists
+          if railway environment list 2>/dev/null | grep -q "${PR_ENV_NAME}"; then
+            echo "✅ Environment ${PR_ENV_NAME} already exists"
+            echo "env_created=false" >> $GITHUB_OUTPUT
+          else
+            echo "📦 Creating new environment: ${PR_ENV_NAME}"
+            # Create environment - Railway CLI will clone from the base project config
+            if railway environment create "${PR_ENV_NAME}" 2>&1; then
+              echo "✅ Environment created successfully"
+              echo "env_created=true" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Environment may already exist or creation had issues, continuing..."
+              echo "env_created=unknown" >> $GITHUB_OUTPUT
+            fi
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Deploy to PR Environment
+        id: deploy
+        run: |
+          PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          echo "🚀 Deploying to Railway environment: ${PR_ENV_NAME}"
+
+          # Deploy with retry logic for transient failures
+          MAX_ATTEMPTS=3
+          ATTEMPT=1
+
+          while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
+            echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
+
+            # Deploy to the PR environment
+            if railway up --environment "${PR_ENV_NAME}" --detach 2>&1; then
+              echo "✅ Deployment initiated successfully"
+              echo "deploy_status=success" >> $GITHUB_OUTPUT
+              exit 0
+            else
+              EXIT_CODE=$?
+              echo "❌ Deployment attempt $ATTEMPT failed with exit code $EXIT_CODE"
+
+              if [ $ATTEMPT -lt $MAX_ATTEMPTS ]; then
+                WAIT_TIME=$((ATTEMPT * 10))
+                echo "⏳ Waiting ${WAIT_TIME} seconds before retry..."
+                sleep $WAIT_TIME
+              fi
+            fi
+
+            ATTEMPT=$((ATTEMPT + 1))
+          done
+
+          echo "❌ All deployment attempts failed"
+          echo "deploy_status=failed" >> $GITHUB_OUTPUT
+          exit 1
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Wait for deployment to be ready
+        if: steps.deploy.outputs.deploy_status == 'success'
+        run: |
+          PR_URL="https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app"
+          HEALTH_URL="${PR_URL}/api/health/liveness"
+
+          echo "⏳ Waiting for deployment to be ready..."
+          echo "Health check URL: ${HEALTH_URL}"
+
+          # Wait up to 5 minutes for the deployment to become healthy
+          MAX_WAIT=300
+          INTERVAL=15
+          ELAPSED=0
+
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "Checking health... (${ELAPSED}s elapsed)"
+
+            # Use curl with timeout and follow redirects
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${HEALTH_URL}" 2>/dev/null || echo "000")
+
+            if [ "$HTTP_STATUS" = "200" ]; then
+              echo "✅ Deployment is healthy! (HTTP $HTTP_STATUS)"
+              exit 0
+            fi
+
+            echo "  Status: HTTP $HTTP_STATUS (waiting for 200)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          echo "⚠️ Deployment health check timed out after ${MAX_WAIT}s"
+          echo "  The deployment may still be starting - check Railway dashboard"
+          # Don't fail the workflow, just warn
+          exit 0
+
+      - name: Update comment with success
+        if: steps.deploy.outputs.deploy_status == 'success'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            | Resource | Link |
+            |----------|------|
+            | **Preview URL** | https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app |
+            | **Railway Dashboard** | [View Environment](https://railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}) |
+
+            ### ✅ Deployment Complete!
+
+            The preview environment is now available. It may take **1-2 minutes** for the first request to warm up.
+
+            **Environment Details:**
+            - Branch: `${{ github.head_ref }}`
+            - Commit: `${{ github.event.pull_request.head.sha }}`
+            - Database: Testing environment (isolated from staging/production)
+
+            <details>
+            <summary>🔧 Troubleshooting</summary>
+
+            If the preview is not loading:
+            1. Wait 1-2 minutes for cold start warmup
+            2. Check the [Railway dashboard](https://railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}) for deployment logs
+            3. Verify the deployment completed successfully in the logs above
+
+            **Note:** Preview environments use the **testing database** to keep staging data pristine.
+            </details>
+
+            ---
+            <sub>🤖 Updated at ${{ github.event.pull_request.updated_at }} | Commit ${{ github.event.pull_request.head.sha }}</sub>
+
+      - name: Update comment with failure
+        if: failure() || steps.deploy.outputs.deploy_status == 'failed'
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            ### ❌ Deployment Failed
+
+            The preview environment deployment encountered an error.
+
+            **Debug Information:**
+            - Branch: `${{ github.head_ref }}`
+            - Commit: `${{ github.event.pull_request.head.sha }}`
+            - Workflow Run: [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+            <details>
+            <summary>🔧 Common Issues</summary>
+
+            1. **Build errors**: Check TypeScript compilation and build output
+            2. **Railway token issues**: Verify `RAILWAY_TOKEN` secret is valid
+            3. **Environment creation failed**: Railway project may have environment limits
+
+            Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
+            </details>
+
+            ---
+            <sub>🤖 Deployment attempted at ${{ github.event.pull_request.updated_at }}</sub>

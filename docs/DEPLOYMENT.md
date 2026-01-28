@@ -872,55 +872,56 @@ To access staging at `staging.athletemetrics.io`:
 
 ## PR Preview Environments
 
-Railway supports automatic PR preview environments, which create isolated deployments for each pull request. This is especially useful for code review and testing.
-
-### Enabling PR Environments
-
-**Step 1: Enable in Railway Dashboard**
-
-1. Go to your Railway project dashboard
-2. Navigate to **Project Settings** → **Environments** tab
-3. Find the **PR Environments** section
-4. Toggle **"Enable PR Environments"** to ON
-5. Toggle **"Enable Bot PR Environments"** to ON
-   - This enables support for bot-created PRs (Claude Code, Dependabot, etc.)
-
-**Step 2: Select Base Environment**
-
-PR environments clone from a "base environment":
-- **Recommended:** Select `staging` as the base environment
-- This ensures PR environments have appropriate debug settings and smaller memory allocation
-
-**Step 3: Configure PR Environment Variables**
-
-In Railway Dashboard → Project Settings → Environments → PR Environments:
-
-Override these variables for PR environments:
-```bash
-NODE_ENV=testing
-ENABLE_DEBUG_LOGGING=true
-IS_PR_ENVIRONMENT=true
-```
-
-**Step 4: Configure Database for PR Environments**
-
-**Decision:** Use the **testing database** for PR environments.
-
-1. In Railway Dashboard → Project Settings → Environments → PR Environments
-2. Add/override the `DATABASE_URL` variable
-3. Set it to your **testing database** connection string
-
-This keeps staging data pristine while giving PRs real database access for testing.
+PR preview environments create isolated deployments for each pull request, enabling code review and testing in a production-like environment. AthleteMetrics uses **GitHub Actions** to deploy and manage PR environments via the Railway CLI.
 
 ### How PR Environments Work
 
+The deployment is handled by two GitHub Action workflows:
+
+**Deployment (`.github/workflows/pr-deploy.yml`):**
 1. **Developer/Claude Code creates a PR** → `gh pr create --base develop`
-2. **Railway detects the PR** via GitHub webhook
-3. **Railway spins up PR environment** (clones from base environment)
-4. **Services deploy** with PR-specific code
-5. **Automatic domain assigned**: `pr-{number}-athletemetrics.up.railway.app`
-6. **GitHub Actions posts** preview URL comment on PR
-7. **PR closed/merged** → Environment automatically deleted (cost-efficient)
+2. **GitHub Actions triggers** on PR open/sync/reopen
+3. **Workflow builds** the application (type check + build)
+4. **Railway CLI creates** environment `pr-{number}` if it doesn't exist
+5. **Railway CLI deploys** code to the PR environment
+6. **Health check** verifies deployment is ready
+7. **GitHub Actions posts** preview URL comment on PR
+
+**Cleanup (`.github/workflows/pr-cleanup.yml`):**
+1. **PR is closed or merged**
+2. **GitHub Actions triggers** cleanup workflow
+3. **Railway CLI deletes** the `pr-{number}` environment
+4. **PR comment updated** to indicate cleanup
+
+### Required Secrets
+
+Ensure these GitHub repository secrets are configured:
+
+| Secret | Purpose |
+|--------|---------|
+| `RAILWAY_TOKEN` | Railway API token for CLI authentication |
+| `RAILWAY_PROJECT_ID` | Railway project ID (for dashboard links in comments) |
+
+These secrets are also used by `staging-deploy.yml` so they should already be configured.
+
+### PR Environment Configuration
+
+The `railway.json` file defines a `"pr"` environment template:
+
+```json
+{
+  "pr": {
+    "variables": {
+      "NODE_ENV": "testing",
+      "NODE_OPTIONS": "--max-old-space-size=2048",
+      "ENABLE_DEBUG_LOGGING": "true",
+      "IS_PR_ENVIRONMENT": "true"
+    }
+  }
+}
+```
+
+**Database:** PR environments should use the **testing database** (configure `DATABASE_URL` in Railway dashboard for PR environments) to keep staging data pristine.
 
 ### PR Environment Domains
 
@@ -928,14 +929,16 @@ PR environments automatically receive Railway-provided domains:
 - Pattern: `pr-{PR_NUMBER}-athletemetrics.up.railway.app`
 - Example: `pr-42-athletemetrics.up.railway.app`
 
-**Note:** Custom domains are not automatically assigned to PR environments. If you need custom PR domains, configure them manually in Railway.
+**Note:** Custom domains are not automatically assigned to PR environments.
 
 ### PR Preview Comments
 
-A GitHub Action automatically comments on PRs with the preview URL:
-- File: `.github/workflows/pr-preview-comment.yml`
-- Posts deployment link and Railway dashboard link
-- Updates automatically when the PR is synced
+The `pr-deploy.yml` workflow automatically manages PR comments:
+- Posts "deployment in progress" status when build starts
+- Updates with success/failure when deployment completes
+- Includes preview URL, Railway dashboard link, and troubleshooting tips
+- Updates on PR sync to reflect new deployments
+- Marks as "cleaned up" when PR is closed
 
 ### Cost Considerations
 

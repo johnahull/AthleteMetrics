@@ -1,0 +1,73 @@
+name: Cleanup PR Preview
+
+on:
+  pull_request:
+    types: [closed]
+
+# Explicit permissions following principle of least privilege
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  cleanup-preview:
+    name: Cleanup PR Preview Environment
+    runs-on: ubuntu-latest
+    # Only run for PRs from the same repository
+    if: github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Delete PR Environment
+        id: cleanup
+        run: |
+          PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          echo "🧹 Cleaning up Railway environment: ${PR_ENV_NAME}"
+
+          # Attempt to delete the environment
+          # Use --yes to skip confirmation prompt
+          if railway environment delete "${PR_ENV_NAME}" --yes 2>&1; then
+            echo "✅ Environment ${PR_ENV_NAME} deleted successfully"
+            echo "cleanup_status=success" >> $GITHUB_OUTPUT
+          else
+            EXIT_CODE=$?
+            echo "⚠️ Environment deletion returned exit code: $EXIT_CODE"
+            echo "  This may mean the environment didn't exist or was already deleted"
+            echo "cleanup_status=not_found" >> $GITHUB_OUTPUT
+            # Don't fail the workflow if environment doesn't exist
+          fi
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Find preview comment
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: '🚂 Railway Preview Environment'
+
+      - name: Update comment with cleanup status
+        if: steps.find-comment.outputs.comment-id != ''
+        uses: peter-evans/create-or-update-comment@v4
+        with:
+          comment-id: ${{ steps.find-comment.outputs.comment-id }}
+          issue-number: ${{ github.event.pull_request.number }}
+          edit-mode: replace
+          body: |
+            ## 🚂 Railway Preview Environment
+
+            ### 🧹 Environment Cleaned Up
+
+            The preview environment for this PR has been deleted.
+
+            | Detail | Value |
+            |--------|-------|
+            | **PR Status** | ${{ github.event.pull_request.merged && '✅ Merged' || '❌ Closed' }} |
+            | **Environment** | `pr-${{ github.event.pull_request.number }}` (deleted) |
+            | **Cleanup Status** | ${{ steps.cleanup.outputs.cleanup_status == 'success' && '✅ Deleted' || '⚠️ Already removed' }} |
+
+            ---
+            <sub>🤖 Preview environments are automatically cleaned up when PRs are closed or merged.</sub>
