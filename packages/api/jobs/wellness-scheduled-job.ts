@@ -166,7 +166,7 @@ async function processRecurringSchedules(
       // Compute next run
       const newOccurrencesSent = schedule.occurrencesSent + 1;
       const nextRunAt = computeNextRunAt({
-        recurrenceType: schedule.recurrenceType,
+        recurrenceType: schedule.recurrenceType as 'daily' | 'weekly' | 'custom',
         daysOfWeek: schedule.daysOfWeek,
         customIntervalDays: schedule.customIntervalDays,
         scheduledTime: schedule.scheduledTime,

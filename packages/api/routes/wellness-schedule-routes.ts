@@ -159,7 +159,7 @@ export function registerWellnessScheduleRoutes(app: Express) {
         const updateData: ScheduleUpdateData = { ...data };
         if (data.status === 'active' && existing.status === 'paused') {
           const nextRunAt = computeNextRunAt({
-            recurrenceType: existing.recurrenceType,
+            recurrenceType: existing.recurrenceType as 'daily' | 'weekly' | 'custom',
             daysOfWeek: data.daysOfWeek || existing.daysOfWeek,
             customIntervalDays: data.customIntervalDays ?? existing.customIntervalDays,
             scheduledTime: data.scheduledTime || existing.scheduledTime,
