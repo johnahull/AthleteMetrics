@@ -356,6 +356,8 @@ export default function RequestModal({ isOpen, onClose, organizationId, template
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
                           data-testid={`day-toggle-${idx}`}
+                          aria-label={`Select ${label}day`}
+                          aria-pressed={daysOfWeek.includes(idx)}
                         >
                           {label}
                         </button>

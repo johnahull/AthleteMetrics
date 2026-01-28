@@ -6,6 +6,7 @@
  */
 
 import type { Express, Request, Response } from "express";
+import rateLimit from "express-rate-limit";
 import {
   requireAuth,
   requireOrganizationAccess,
@@ -17,6 +18,18 @@ import {
 } from "@shared/wellness-validation";
 import { wellnessRepository } from "../repositories/wellness-repository";
 import { computeNextRunAt } from "../lib/wellness-schedule-utils";
+import type { WellnessSchedule } from "@shared/wellness-types";
+import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+
+// Rate limiter for schedule creation
+const scheduleCreationLimiter = rateLimit({
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  limit: RATE_LIMITS.WELLNESS_SCHEDULE_CREATION,
+  message: { message: "Too many wellness schedule creation attempts, please try again later." },
+  standardHeaders: 'draft-7',
+  skip: (req) => shouldSkipRateLimiting(req, 'general'),
+});
 
 export function registerWellnessScheduleRoutes(app: Express) {
   /**
@@ -26,6 +39,7 @@ export function registerWellnessScheduleRoutes(app: Express) {
   app.post(
     "/api/organizations/:orgId/wellness/schedules",
     requireAuth,
+    scheduleCreationLimiter,
     requireOrganizationAccess("coach"),
     requireWellnessEnabled,
     async (req: Request, res: Response) => {
@@ -139,10 +153,13 @@ export function registerWellnessScheduleRoutes(app: Express) {
         const data = validation.data;
 
         // If resuming from pause, recompute next run
-        const updateData: any = { ...data };
+        type ScheduleUpdateData = Partial<WellnessSchedule> & {
+          nextRunAt?: Date | null;
+        };
+        const updateData: ScheduleUpdateData = { ...data };
         if (data.status === 'active' && existing.status === 'paused') {
           const nextRunAt = computeNextRunAt({
-            recurrenceType: existing.recurrenceType as any,
+            recurrenceType: existing.recurrenceType,
             daysOfWeek: data.daysOfWeek || existing.daysOfWeek,
             customIntervalDays: data.customIntervalDays ?? existing.customIntervalDays,
             scheduledTime: data.scheduledTime || existing.scheduledTime,

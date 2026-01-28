@@ -23,6 +23,13 @@ import { computeNextRunAt } from '../lib/wellness-schedule-utils';
 
 let scheduledTask: ScheduledTask | null = null;
 let isRunning = false;
+let lastRunTimestamp = 0;
+
+// Safety margin: 55 seconds minimum between runs (cron runs every 60s)
+const MIN_RUN_INTERVAL_MS = 55000;
+
+// Recurring requests auto-expire after 24 hours to prevent stale buildup
+const RECURRING_REQUEST_EXPIRY_HOURS = 24;
 
 /**
  * Initialize and start the wellness scheduled request cron job
@@ -36,17 +43,22 @@ export function startWellnessScheduledJob(
   }
 
   scheduledTask = cron.schedule('* * * * *', async () => {
-    if (isRunning) {
+    const now = Date.now();
+
+    // Race condition guard: prevent overlapping executions
+    if (isRunning || (now - lastRunTimestamp) < MIN_RUN_INTERVAL_MS) {
+      console.warn('⏭️ Skipping wellness scheduled job - previous run still active or too recent');
       return;
     }
 
     isRunning = true;
+    lastRunTimestamp = now;
 
     try {
       // Phase 1: Process one-time scheduled requests
       await processScheduledRequests();
 
-      // Phase 2: Process recurring schedules (added in Part B)
+      // Phase 2: Process recurring schedules
       await processRecurringSchedules(db);
     } catch (error) {
       console.error('❌ Wellness scheduled job error:', error);
@@ -121,8 +133,8 @@ async function processRecurringSchedules(
       const publicToken = WellnessAccessService.generateMagicLinkToken();
 
       // Create a new wellness request from the schedule.
-      // Set expiresAt to 24 hours from now so recurring requests don't stay open indefinitely.
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      // Set expiresAt so recurring requests don't stay open indefinitely.
+      const expiresAt = new Date(Date.now() + RECURRING_REQUEST_EXPIRY_HOURS * 60 * 60 * 1000);
 
       const request = await storage.createWellnessRequest({
         organizationId: schedule.organizationId,
@@ -154,7 +166,7 @@ async function processRecurringSchedules(
       // Compute next run
       const newOccurrencesSent = schedule.occurrencesSent + 1;
       const nextRunAt = computeNextRunAt({
-        recurrenceType: schedule.recurrenceType as any,
+        recurrenceType: schedule.recurrenceType,
         daysOfWeek: schedule.daysOfWeek,
         customIntervalDays: schedule.customIntervalDays,
         scheduledTime: schedule.scheduledTime,

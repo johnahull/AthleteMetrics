@@ -5,6 +5,12 @@
  * accounting for timezone, recurrence type, and end conditions.
  */
 
+/**
+ * Maximum days to scan ahead when finding next matching weekday.
+ * Guarantees finding next occurrence even when today's time has passed.
+ */
+const MAX_WEEKDAY_SCAN_DAYS = 14;
+
 interface ScheduleConfig {
   recurrenceType: 'daily' | 'weekly' | 'custom';
   daysOfWeek: number[] | null;       // 0=Sun..6=Sat
@@ -83,13 +89,22 @@ export function computeNextRunAt(config: ScheduleConfig): Date | null {
 
 /**
  * Validate that a timezone string is a valid IANA timezone identifier.
+ *
+ * @param tz - The timezone string to validate
+ * @returns true if valid, false if invalid
+ * @throws Re-throws non-RangeError exceptions for debugging
  */
 export function isValidTimezone(tz: string): boolean {
   try {
     Intl.DateTimeFormat(undefined, { timeZone: tz });
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    // RangeError indicates invalid timezone - this is expected
+    if (error instanceof RangeError) {
+      return false;
+    }
+    // Re-throw unexpected errors for debugging
+    throw error;
   }
 }
 
@@ -122,9 +137,9 @@ function getNextWeekdayTimeInTimezone(
 ): Date {
   const daySet = new Set(daysOfWeek);
 
-  // Scan up to 14 days to guarantee finding the next matching weekday+time,
+  // Scan up to MAX_WEEKDAY_SCAN_DAYS to guarantee finding the next matching weekday+time,
   // even when today is a match but the time has passed.
-  for (let offset = 0; offset < 14; offset++) {
+  for (let offset = 0; offset < MAX_WEEKDAY_SCAN_DAYS; offset++) {
     const candidate = new Date(now);
     candidate.setDate(candidate.getDate() + offset);
 
@@ -146,14 +161,36 @@ function getNextWeekdayTimeInTimezone(
  * Set a specific time (hours, minutes) on a date in a given timezone,
  * returning the equivalent UTC Date.
  *
- * Algorithm:
- * 1. Get the local date components (year/month/day) for `date` in the target timezone
- * 2. Build an ISO string for that local date at the desired HH:mm
- * 3. Determine the UTC offset for that moment in the target timezone
- * 4. Return the correct UTC timestamp
+ * This function solves the challenge of scheduling events in different timezones
+ * without relying on external libraries. It uses the Intl.DateTimeFormat API
+ * to probe timezone offsets.
  *
- * The offset is determined by comparing a known UTC moment with its
- * representation in the target timezone, using only integer arithmetic.
+ * Algorithm (Probe-Based Offset Calculation):
+ * 1. Extract the date components (year/month/day) as they appear in the target timezone
+ * 2. Build an ISO string for that local date at the desired HH:mm (e.g., "2026-01-28T08:00:00")
+ * 3. Interpret this string as UTC (creating a "probe" UTC moment)
+ * 4. Format this probe moment in the target timezone to see how it renders
+ * 5. Calculate the offset by comparing the probe UTC time with its rendered local time
+ * 6. Apply the offset to get the correct UTC timestamp
+ *
+ * Example (for America/New_York, UTC-5):
+ * - Goal: Schedule for 8:00 AM on Jan 28, 2026 in New York
+ * - Probe: Interpret "2026-01-28T08:00:00Z" as UTC
+ * - Render: This UTC time appears as "2026-01-28T03:00:00" in New York (5 hours behind)
+ * - Offset calculation: probe_utc - rendered_local = 08:00 - 03:00 = +5 hours
+ * - Correct UTC: 2026-01-28T08:00:00 - 5h offset = 2026-01-28T13:00:00Z
+ * - Verification: 13:00 UTC = 08:00 EST ✓
+ *
+ * This approach handles:
+ * - Standard time offsets (e.g., UTC-5, UTC+9)
+ * - Daylight saving time transitions automatically
+ * - Historical timezone rule changes (via Intl.DateTimeFormat IANA data)
+ *
+ * @param date - Base date to use (date components will be extracted in target timezone)
+ * @param hours - Hour to set (0-23)
+ * @param minutes - Minute to set (0-59)
+ * @param timezone - IANA timezone identifier (e.g., "America/New_York", "Europe/London")
+ * @returns UTC Date object representing the specified local time in the target timezone
  */
 function setTimeInTimezone(date: Date, hours: number, minutes: number, timezone: string): Date {
   // Step 1: Get the date components as they appear in the target timezone

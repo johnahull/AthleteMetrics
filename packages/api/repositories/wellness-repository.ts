@@ -378,12 +378,17 @@ export class WellnessRepository {
   async getDueScheduledRequests(): Promise<WellnessRequest[]> {
     // Use FOR UPDATE SKIP LOCKED to prevent concurrent cron instances
     // from activating the same request (duplicate notifications).
-    const results = await db.execute(sql`
-      SELECT * FROM wellness_requests
-      WHERE status = 'scheduled' AND scheduled_for <= NOW()
-      FOR UPDATE SKIP LOCKED
-    `);
-    return results as unknown as WellnessRequest[];
+    const now = new Date();
+    const results = await db
+      .select()
+      .from(wellnessRequests)
+      .where(and(
+        eq(wellnessRequests.status, 'scheduled'),
+        lte(wellnessRequests.scheduledFor, now)
+      ))
+      .for('update', { skipLocked: true });
+
+    return results;
   }
 
   /**
@@ -880,17 +885,30 @@ export class WellnessRepository {
   async getSchedulesDueNow(): Promise<WellnessSchedule[]> {
     // Use FOR UPDATE SKIP LOCKED to prevent concurrent cron instances
     // from processing the same schedule (duplicate notifications).
-    const results = await db.execute(sql`
-      SELECT * FROM wellness_schedules
-      WHERE status = 'active' AND next_run_at <= NOW()
-      FOR UPDATE SKIP LOCKED
-    `);
-    return results as unknown as WellnessSchedule[];
+    const now = new Date();
+    const results = await db
+      .select()
+      .from(wellnessSchedules)
+      .where(and(
+        eq(wellnessSchedules.status, 'active'),
+        lte(wellnessSchedules.nextRunAt, now)
+      ))
+      .for('update', { skipLocked: true });
+
+    return results;
   }
 
   async updateScheduleAfterRun(id: string, nextRunAt: Date | null, occurrencesSent: number): Promise<void> {
     validateUUID(id, 'id');
-    const updateData: any = {
+
+    type ScheduleUpdateData = {
+      occurrencesSent: number;
+      updatedAt: Date;
+      nextRunAt?: Date;
+      status?: 'completed';
+    };
+
+    const updateData: ScheduleUpdateData = {
       occurrencesSent,
       updatedAt: new Date(),
     };
@@ -900,6 +918,7 @@ export class WellnessRepository {
     } else {
       // No more runs — mark as completed
       updateData.status = 'completed';
+      console.log(`✅ Schedule ${id} completed after ${occurrencesSent} occurrences`);
     }
 
     await db

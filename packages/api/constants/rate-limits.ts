@@ -102,6 +102,13 @@ export const RATE_LIMITS = {
    * @default 10 requests per 15-minute window per unique orgIds combination
    */
   CROSS_ORG_QUERY: 10,
+
+  /**
+   * Wellness schedule creation (recurring schedules)
+   * Prevents abuse of scheduled notification system
+   * @default 20 requests per 15-minute window
+   */
+  WELLNESS_SCHEDULE_CREATION: 20,
 } as const;
 
 /**
