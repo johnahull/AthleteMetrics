@@ -23,6 +23,7 @@ import { alias } from 'drizzle-orm/pg-core';
 import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
 import { AchievementService } from './achievement-service';
+import { notifyNewMeasurement } from './measurement-notification-service';
 
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
@@ -333,6 +334,22 @@ export class MeasurementService {
         // Log but don't fail - measurement was already created successfully
         console.error('Achievement check failed:', achievementError);
       }
+    }
+
+    // NOTIFICATIONS: Notify athlete when a coach/admin records their measurement
+    // Fire-and-forget to avoid adding latency to the request path
+    const actualSubmitter = newMeasurement.submittedBy ?? submittedBy;
+    if (actualSubmitter !== newMeasurement.userId) {
+      notifyNewMeasurement({
+        measurementId: newMeasurement.id,
+        userId: newMeasurement.userId,
+        submittedBy: actualSubmitter,
+        metric: newMeasurement.metric,
+        value: newMeasurement.value,
+        units: newMeasurement.units,
+        organizationId: newMeasurement.organizationId,
+        date: newMeasurement.date,
+      }).catch(err => console.error('Measurement notification failed:', err));
     }
 
     return newMeasurement;

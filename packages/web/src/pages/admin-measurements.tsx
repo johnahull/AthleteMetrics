@@ -21,7 +21,8 @@ import { Filter, X, ChevronLeft, ChevronRight, Calendar, Building2, AlertCircle,
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
+import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Measurement type from API (extended from @shared/schema Measurement with joined user data)
 // Note: This is intentionally duplicated rather than importing from shared types because
@@ -194,6 +195,9 @@ export default function AdminMeasurementsPage() {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [bulkAction, setBulkAction] = useState<'verify' | 'unverify' | null>(null);
   const [showExportConfirm, setShowExportConfirm] = useState(false);
+  const [distributionMode, setDistributionMode] = useState<DistributionMode>(
+    () => (localStorage.getItem('distributionMode') as DistributionMode) || 'quartiles'
+  );
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -644,6 +648,7 @@ export default function AdminMeasurementsPage() {
           <StatisticsSummaryCard
             measurements={metricMeasurements}
             metric={watchedFilters.metric}
+            distributionMode={distributionMode}
           />
         </div>
       );
@@ -668,12 +673,13 @@ export default function AdminMeasurementsPage() {
               key={metric}
               measurements={measurements.filter((m) => m.metric === metric)}
               metric={metric}
+              distributionMode={distributionMode}
             />
           ))}
         </div>
       );
     }
-  }, [measurements, watchedFilters.metric]);
+  }, [measurements, watchedFilters.metric, distributionMode]);
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -1008,6 +1014,27 @@ export default function AdminMeasurementsPage() {
       </Card>
 
       {/* Statistics Summary */}
+      {measurements.length > 0 && (
+        <div className="flex items-center gap-3">
+          <label htmlFor="distribution-mode-select" className="text-sm font-medium text-muted-foreground">
+            Distribution:
+          </label>
+          <Select value={distributionMode} onValueChange={(v) => {
+            const mode = v as DistributionMode;
+            setDistributionMode(mode);
+            localStorage.setItem('distributionMode', mode);
+          }}>
+            <SelectTrigger className="w-[160px]" id="distribution-mode-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="quartiles">Quartiles</SelectItem>
+              <SelectItem value="quintiles">Quintiles</SelectItem>
+              <SelectItem value="deciles">Deciles</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
       {statisticsCards}
 
       {/* Results */}

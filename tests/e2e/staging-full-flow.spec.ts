@@ -344,17 +344,18 @@ test.describe('AthleteMetrics Staging E2E Tests', () => {
     await page.screenshot({ path: 'screenshots/athlete-analytics.png', fullPage: true });
   });
 
-  test('should load Import/Export page without errors', async ({ page }) => {
+  test('should load Import/Export tab without errors', async ({ page }) => {
     await login(page);
 
-    await page.goto(`${STAGING_URL}/import-export`);
+    // Import/Export is now a tab within Data Entry page
+    await page.goto(`${STAGING_URL}/data-entry?tab=import`);
 
-    // Wait for main content to be visible
-    await page.waitForSelector('main, [role="main"]', { state: 'visible' });
+    // Wait for the lazy-loaded Import/Export content
+    await page.waitForSelector('[data-testid="file-drop-zone"]', { state: 'visible', timeout: 15000 });
 
-    await expect(page).toHaveURL(/\/import-export/);
+    await expect(page).toHaveURL(/\/data-entry\?tab=import/);
 
-    const hasContent = await page.locator('main, [role="main"]').count() > 0;
+    const hasContent = await page.locator('[data-testid="file-drop-zone"]').count() > 0;
     expect(hasContent).toBeTruthy();
 
     // Check console for errors

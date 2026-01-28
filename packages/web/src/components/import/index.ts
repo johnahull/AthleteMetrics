@@ -9,3 +9,6 @@ export { SelectTypeStep } from './SelectTypeStep';
 export { SelectTeamStep } from './SelectTeamStep';
 export { SelectMetricsStep } from './SelectMetricsStep';
 export { PreviewTemplateStep } from './PreviewTemplateStep';
+
+// Import/Export Panel - can be embedded in other pages
+export { default as ImportExportPanel } from './ImportExportPanel';

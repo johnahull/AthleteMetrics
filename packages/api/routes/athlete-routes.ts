@@ -744,6 +744,14 @@ export function registerAthleteRoutes(app: Express) {
         measurementDate
       );
 
+      // Filter to only teams in orgs the user has access to
+      if (!userIsSiteAdmin) {
+        const userOrgIds = (await getCachedUserOrganizations(req, currentUser.id))
+          .map(org => org.organizationId);
+        const filteredTeams = activeTeams.filter(t => userOrgIds.includes(t.organizationId));
+        return res.json(filteredTeams);
+      }
+
       res.json(activeTeams);
     } catch (error) {
       console.error("Get athlete active teams error:", error);

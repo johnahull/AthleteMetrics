@@ -11,12 +11,14 @@ import {
   wellnessTemplates,
   wellnessRequests,
   wellnessResponses,
+  wellnessSchedules,
   userTeams,
   users,
   userOrganizations,
   type WellnessTemplate,
   type WellnessRequest,
   type WellnessResponse,
+  type WellnessSchedule,
 } from "@shared/schema";
 import type { WellnessResponseData } from "@shared/wellness-types";
 
@@ -366,6 +368,50 @@ export class WellnessRepository {
     await db
       .delete(wellnessRequests)
       .where(eq(wellnessRequests.id, id));
+  }
+
+  // ==================== Scheduled Request Processing ====================
+
+  /**
+   * Get all requests that are scheduled and now due for activation.
+   */
+  async getDueScheduledRequests(): Promise<WellnessRequest[]> {
+    // Use FOR UPDATE SKIP LOCKED to prevent concurrent cron instances
+    // from activating the same request (duplicate notifications).
+    const now = new Date();
+    const results = await db
+      .select()
+      .from(wellnessRequests)
+      .where(and(
+        eq(wellnessRequests.status, 'scheduled'),
+        lte(wellnessRequests.scheduledFor, now)
+      ))
+      .for('update', { skipLocked: true });
+
+    return results;
+  }
+
+  /**
+   * Activate a scheduled request by setting its status to 'active'.
+   */
+  async activateScheduledRequest(id: string): Promise<WellnessRequest> {
+    validateUUID(id, 'id');
+    const [updated] = await db
+      .update(wellnessRequests)
+      .set({ status: 'active' })
+      .where(
+        and(
+          eq(wellnessRequests.id, id),
+          eq(wellnessRequests.status, 'scheduled')
+        )
+      )
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Scheduled wellness request ${id} not found or already activated`);
+    }
+
+    return updated;
   }
 
   // ==================== Wellness Responses ====================
@@ -779,6 +825,106 @@ export class WellnessRepository {
         percentage,
       };
     });
+  }
+  // ==================== Wellness Schedules (Recurring) ====================
+
+  async createWellnessSchedule(schedule: typeof wellnessSchedules.$inferInsert): Promise<WellnessSchedule> {
+    const [created] = await db
+      .insert(wellnessSchedules)
+      .values(schedule)
+      .returning();
+
+    if (!created) {
+      throw new Error('Failed to create wellness schedule');
+    }
+
+    return created;
+  }
+
+  async getWellnessSchedules(organizationId: string): Promise<WellnessSchedule[]> {
+    validateUUID(organizationId, 'organizationId');
+    return await db
+      .select()
+      .from(wellnessSchedules)
+      .where(eq(wellnessSchedules.organizationId, organizationId))
+      .orderBy(desc(wellnessSchedules.createdAt));
+  }
+
+  async getWellnessSchedule(id: string): Promise<WellnessSchedule | undefined> {
+    validateUUID(id, 'id');
+    const [schedule] = await db
+      .select()
+      .from(wellnessSchedules)
+      .where(eq(wellnessSchedules.id, id));
+    return schedule || undefined;
+  }
+
+  async updateWellnessSchedule(id: string, data: Partial<WellnessSchedule>): Promise<WellnessSchedule> {
+    validateUUID(id, 'id');
+    const [updated] = await db
+      .update(wellnessSchedules)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(wellnessSchedules.id, id))
+      .returning();
+
+    if (!updated) {
+      throw new Error(`Wellness schedule ${id} not found`);
+    }
+
+    return updated;
+  }
+
+  async cancelWellnessSchedule(id: string): Promise<void> {
+    validateUUID(id, 'id');
+    await db
+      .update(wellnessSchedules)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(wellnessSchedules.id, id));
+  }
+
+  async getSchedulesDueNow(): Promise<WellnessSchedule[]> {
+    // Use FOR UPDATE SKIP LOCKED to prevent concurrent cron instances
+    // from processing the same schedule (duplicate notifications).
+    const now = new Date();
+    const results = await db
+      .select()
+      .from(wellnessSchedules)
+      .where(and(
+        eq(wellnessSchedules.status, 'active'),
+        lte(wellnessSchedules.nextRunAt, now)
+      ))
+      .for('update', { skipLocked: true });
+
+    return results;
+  }
+
+  async updateScheduleAfterRun(id: string, nextRunAt: Date | null, occurrencesSent: number): Promise<void> {
+    validateUUID(id, 'id');
+
+    type ScheduleUpdateData = {
+      occurrencesSent: number;
+      updatedAt: Date;
+      nextRunAt?: Date;
+      status?: 'completed';
+    };
+
+    const updateData: ScheduleUpdateData = {
+      occurrencesSent,
+      updatedAt: new Date(),
+    };
+
+    if (nextRunAt) {
+      updateData.nextRunAt = nextRunAt;
+    } else {
+      // No more runs — mark as completed
+      updateData.status = 'completed';
+      console.log(`✅ Schedule ${id} completed after ${occurrencesSent} occurrences`);
+    }
+
+    await db
+      .update(wellnessSchedules)
+      .set(updateData)
+      .where(eq(wellnessSchedules.id, id));
   }
 }
 

@@ -17,13 +17,8 @@ describe('Analytics Utils with Tracking Metrics', () => {
       std: 1.0,
       variance: 1.0,
       percentiles: {
-        p5: 3.2,
-        p10: 3.5,
-        p25: 4.0,
-        p50: 5.0,
-        p75: 6.0,
-        p90: 6.5,
-        p95: 6.8,
+        p5: 3.2, p10: 3.5, p20: 3.8, p25: 4.0, p30: 4.2, p40: 4.5,
+        p50: 5.0, p60: 5.5, p70: 5.8, p75: 6.0, p80: 6.2, p90: 6.5, p95: 6.8,
       },
     };
 
@@ -53,7 +48,7 @@ describe('Analytics Utils with Tracking Metrics', () => {
         max: 0,
         std: 0,
         variance: 0,
-        percentiles: { p5: 0, p10: 0, p25: 0, p50: 0, p75: 0, p90: 0, p95: 0 },
+        percentiles: { p5: 0, p10: 0, p20: 0, p25: 0, p30: 0, p40: 0, p50: 0, p60: 0, p70: 0, p75: 0, p80: 0, p90: 0, p95: 0 },
       };
       expect(getBestPerformanceValue('FLY10_TIME', emptyStats)).toBe(0);
     });
