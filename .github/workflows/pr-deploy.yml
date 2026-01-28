@@ -78,46 +78,47 @@ jobs:
             ---
             <sub>🤖 This comment will be updated when deployment completes.</sub>
 
-      - name: Create PR Environment if needed
+      - name: Link Railway Project
+        id: link-project
+        run: |
+          echo "🔗 Linking to Railway project..."
+          if ! railway link --project "$RAILWAY_PROJECT_ID"; then
+            echo "::error::Failed to link to Railway project. Check RAILWAY_TOKEN and RAILWAY_PROJECT_ID secrets."
+            exit 1
+          fi
+          echo "✅ Successfully linked to Railway project"
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+
+      - name: Create or Select PR Environment
         id: create-env
         run: |
           PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
           echo "env_name=${PR_ENV_NAME}" >> "$GITHUB_OUTPUT"
 
-          # Link to the Railway project first (required for environment commands)
-          echo "🔗 Linking to Railway project..."
-          railway link --project "$RAILWAY_PROJECT_ID"
-
-          # Check if environment exists, create if not
           echo "🔍 Checking for existing environment: ${PR_ENV_NAME}"
 
-          # List environments and check if ours exists
-          if railway environment list 2>/dev/null | grep -q "${PR_ENV_NAME}"; then
+          # Try to switch to the environment - if it succeeds, it exists
+          # Railway CLI: `railway environment <name>` switches to that environment
+          if railway environment "${PR_ENV_NAME}" 2>/dev/null; then
             echo "✅ Environment ${PR_ENV_NAME} already exists"
             echo "env_created=false" >> "$GITHUB_OUTPUT"
           else
             echo "📦 Creating new environment: ${PR_ENV_NAME}"
-            # Create environment - Railway CLI will clone from the base project config
-            if railway environment create "${PR_ENV_NAME}" 2>&1; then
-              echo "✅ Environment created successfully"
-              echo "env_created=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "⚠️ Environment may already exist or creation had issues, continuing..."
-              echo "env_created=unknown" >> "$GITHUB_OUTPUT"
-            fi
+            # Use Railway API to create environment since CLI doesn't have direct create command
+            # The `railway environment` command with a non-existent name will fail
+            # We'll create via the deploy step which auto-creates if needed
+            echo "env_created=pending" >> "$GITHUB_OUTPUT"
           fi
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
 
       - name: Deploy to PR Environment
         id: deploy
         run: |
           PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
           echo "🚀 Deploying to Railway environment: ${PR_ENV_NAME}"
-
-          # Link to project (required for deployment)
-          railway link --project "$RAILWAY_PROJECT_ID"
 
           # Deploy with retry logic for transient failures
           MAX_ATTEMPTS=3
@@ -126,14 +127,21 @@ jobs:
           while [[ "$ATTEMPT" -le "$MAX_ATTEMPTS" ]]; do
             echo "Deployment attempt $ATTEMPT of $MAX_ATTEMPTS..."
 
-            # Deploy to the PR environment
-            if railway up --environment "${PR_ENV_NAME}" --detach 2>&1; then
+            # Deploy to the PR environment (Railway will create if it doesn't exist)
+            # Capture output and exit code separately
+            set +e
+            DEPLOY_OUTPUT=$(railway up --environment "${PR_ENV_NAME}" --detach 2>&1)
+            DEPLOY_EXIT_CODE=$?
+            set -e
+
+            echo "$DEPLOY_OUTPUT"
+
+            if [[ "$DEPLOY_EXIT_CODE" -eq 0 ]]; then
               echo "✅ Deployment initiated successfully"
               echo "deploy_status=success" >> "$GITHUB_OUTPUT"
               exit 0
             else
-              EXIT_CODE=$?
-              echo "❌ Deployment attempt $ATTEMPT failed with exit code $EXIT_CODE"
+              echo "❌ Deployment attempt $ATTEMPT failed with exit code $DEPLOY_EXIT_CODE"
 
               if [[ "$ATTEMPT" -lt "$MAX_ATTEMPTS" ]]; then
                 WAIT_TIME=$((ATTEMPT * 10))
@@ -150,7 +158,6 @@ jobs:
           exit 1
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
 
       - name: Wait for deployment to be ready
         if: steps.deploy.outputs.deploy_status == 'success'
@@ -166,19 +173,19 @@ jobs:
           INTERVAL=15
           ELAPSED=0
 
-          while [ $ELAPSED -lt $MAX_WAIT ]; do
+          while [[ "$ELAPSED" -lt "$MAX_WAIT" ]]; do
             echo "Checking health... (${ELAPSED}s elapsed)"
 
             # Use curl with timeout and follow redirects
             HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${HEALTH_URL}" 2>/dev/null || echo "000")
 
-            if [ "$HTTP_STATUS" = "200" ]; then
+            if [[ "$HTTP_STATUS" == "200" ]]; then
               echo "✅ Deployment is healthy! (HTTP $HTTP_STATUS)"
               exit 0
             fi
 
             echo "  Status: HTTP $HTTP_STATUS (waiting for 200)"
-            sleep $INTERVAL
+            sleep "$INTERVAL"
             ELAPSED=$((ELAPSED + INTERVAL))
           done
 

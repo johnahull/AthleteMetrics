@@ -27,16 +27,34 @@ jobs:
           echo "🧹 Cleaning up Railway environment: ${PR_ENV_NAME}"
 
           # Link to the Railway project first (required for environment commands)
-          railway link --project "$RAILWAY_PROJECT_ID"
+          echo "🔗 Linking to Railway project..."
+          set +e
+          LINK_OUTPUT=$(railway link --project "$RAILWAY_PROJECT_ID" 2>&1)
+          LINK_EXIT_CODE=$?
+          set -e
+
+          if [[ "$LINK_EXIT_CODE" -ne 0 ]]; then
+            echo "::warning::Failed to link to Railway project. Environment may already be deleted."
+            echo "$LINK_OUTPUT"
+            echo "cleanup_status=not_found" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "✅ Successfully linked to Railway project"
 
           # Attempt to delete the environment
-          # Use --yes to skip confirmation prompt
-          if railway environment delete "${PR_ENV_NAME}" --yes 2>&1; then
+          # Capture output and exit code separately to avoid if-statement exit code issues
+          set +e
+          DELETE_OUTPUT=$(railway environment delete "${PR_ENV_NAME}" --yes 2>&1)
+          DELETE_EXIT_CODE=$?
+          set -e
+
+          echo "$DELETE_OUTPUT"
+
+          if [[ "$DELETE_EXIT_CODE" -eq 0 ]]; then
             echo "✅ Environment ${PR_ENV_NAME} deleted successfully"
             echo "cleanup_status=success" >> "$GITHUB_OUTPUT"
           else
-            EXIT_CODE=$?
-            echo "⚠️ Environment deletion returned exit code: $EXIT_CODE"
+            echo "⚠️ Environment deletion returned exit code: $DELETE_EXIT_CODE"
             echo "  This may mean the environment didn't exist or was already deleted"
             echo "cleanup_status=not_found" >> "$GITHUB_OUTPUT"
             # Don't fail the workflow if environment doesn't exist
