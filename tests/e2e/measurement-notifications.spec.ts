@@ -26,10 +26,10 @@ test.describe('Measurement Notifications', () => {
     await page.waitForLoadState('networkidle');
 
     // Wait for form to load
-    await page.waitForSelector('[data-testid="select-athlete"], select[name="athleteId"], [placeholder*="Select athlete" i]', { timeout: 10000 });
+    await page.waitForSelector('[data-testid="athlete-select"]', { timeout: 10000 });
 
     // Select an athlete (not the coach themselves)
-    const athleteSelect = page.locator('[data-testid="select-athlete"], select[name="athleteId"], [placeholder*="Select athlete" i]').first();
+    const athleteSelect = page.locator('[data-testid="athlete-select"]').first();
     await athleteSelect.click();
 
     // Wait for dropdown to open and select first athlete
@@ -42,7 +42,7 @@ test.describe('Measurement Notifications', () => {
     });
 
     // Select measurement type (FLY10_TIME)
-    const metricSelect = page.locator('[data-testid="select-metric"], select[name="metric"], [placeholder*="Select metric" i]').first();
+    const metricSelect = page.locator('[data-testid="metric-select"]').first();
     await metricSelect.click();
     await page.waitForTimeout(300);
 
@@ -54,19 +54,19 @@ test.describe('Measurement Notifications', () => {
     });
 
     // Enter measurement value
-    const valueInput = page.locator('[data-testid="input-value"], input[name="value"], input[type="number"]').first();
+    const valueInput = page.locator('[data-testid="measurement-value"]').first();
     await valueInput.fill('1.25');
 
     // Enter date (today)
     const today = new Date().toISOString().split('T')[0];
-    const dateInput = page.locator('[data-testid="input-date"], input[name="date"], input[type="date"]').first();
+    const dateInput = page.locator('[data-testid="input-measurement-date"]').first();
     const dateExists = await dateInput.count();
     if (dateExists > 0) {
       await dateInput.fill(today);
     }
 
     // Submit the form
-    const submitButton = page.locator('button[type="submit"], button:has-text("Add Measurement"), button:has-text("Save")').first();
+    const submitButton = page.locator('[data-testid="submit-measurement"]').first();
     await submitButton.click();
 
     // Wait for success indication
@@ -106,7 +106,7 @@ test.describe('Measurement Notifications', () => {
     await page.waitForTimeout(500);
 
     // Select measurement type
-    const metricSelect = page.locator('[data-testid="select-metric"], select[name="metric"], [placeholder*="Select metric" i]').first();
+    const metricSelect = page.locator('[data-testid="metric-select"]').first();
     const metricExists = await metricSelect.count();
 
     if (metricExists > 0) {
@@ -118,11 +118,11 @@ test.describe('Measurement Notifications', () => {
       await page.keyboard.press('Enter');
 
       // Enter measurement value
-      const valueInput = page.locator('[data-testid="input-value"], input[name="value"], input[type="number"]').first();
+      const valueInput = page.locator('[data-testid="measurement-value"]').first();
       await valueInput.fill('1.30');
 
       // Submit
-      const submitButton = page.locator('button[type="submit"], button:has-text("Add"), button:has-text("Save")').first();
+      const submitButton = page.locator('[data-testid="submit-measurement"]').first();
       await submitButton.click();
 
       // Wait for success
@@ -200,7 +200,7 @@ test.describe('Measurement Notifications', () => {
     }
 
     // Select measurement type
-    const metricSelect = page.locator('[data-testid="select-metric"], select[name="metric"], [placeholder*="Select metric" i]').first();
+    const metricSelect = page.locator('[data-testid="metric-select"]').first();
     await metricSelect.click();
     await page.waitForTimeout(300);
 
