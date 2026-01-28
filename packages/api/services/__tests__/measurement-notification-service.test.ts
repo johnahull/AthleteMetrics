@@ -80,8 +80,13 @@ describe('Measurement Notification Service', () => {
     });
 
     it('should skip when athlete user not found in DB', async () => {
-      // DB returns empty for user lookup
-      mockDb.where.mockResolvedValueOnce([]);
+      // Promise.all returns: [athlete (empty), submitter, metric, prefs]
+      // But since athlete is empty, we return early before using the others
+      // Mock all 4 where calls since Promise.all fires them all
+      mockDb.where.mockResolvedValueOnce([]); // athlete - not found
+      mockDb.where.mockResolvedValueOnce([{ id: 'coach-1', fullName: 'Coach' }]);
+      mockDb.where.mockResolvedValueOnce([{ label: 'Fly' }]);
+      mockDb.where.mockResolvedValueOnce([{ emailNewMeasurements: false }]);
 
       await notifyNewMeasurement({
         measurementId: 'meas-1',
@@ -95,6 +100,131 @@ describe('Measurement Notification Service', () => {
       });
 
       expect(mockPushSendToUser).not.toHaveBeenCalled();
+      expect(mockEmailSendNewMeasurement).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('parallel query failure', () => {
+    it('should catch and log when a DB query in Promise.all rejects', async () => {
+      // Simulate one of the parallel queries failing
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'athlete-1', firstName: 'John', lastName: 'Doe', emails: ['john@test.com'],
+      }]);
+      mockDb.where.mockRejectedValueOnce(new Error('DB connection lost'));
+      mockDb.where.mockResolvedValueOnce([{ label: '10-Yard Fly' }]);
+      mockDb.where.mockResolvedValueOnce([{ emailNewMeasurements: false }]);
+
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Should not throw — outer try-catch handles Promise.all rejection
+      await notifyNewMeasurement({
+        measurementId: 'meas-1',
+        userId: 'athlete-1',
+        submittedBy: 'coach-1',
+        metric: 'FLY10_TIME',
+        value: '1.25',
+        units: 's',
+        organizationId: 'org-1',
+        date: '2025-01-15',
+      });
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        'Failed to process measurement notification:',
+        expect.any(Error)
+      );
+      expect(mockPushSendToUser).not.toHaveBeenCalled();
+      expect(mockEmailSendNewMeasurement).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
+    });
+  });
+
+  describe('submitter fallback', () => {
+    it('should use "A coach" when submitter not found in DB', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'athlete-1', firstName: 'John', lastName: 'Doe', emails: ['john@test.com'],
+      }]);
+      // submitter not found
+      mockDb.where.mockResolvedValueOnce([]);
+      mockDb.where.mockResolvedValueOnce([{ label: '10-Yard Fly' }]);
+      mockDb.where.mockResolvedValueOnce([{ emailNewMeasurements: false }]);
+
+      mockPushSendToUser.mockResolvedValue({ successful: 1, failed: 0 });
+
+      await notifyNewMeasurement({
+        measurementId: 'meas-1',
+        userId: 'athlete-1',
+        submittedBy: 'deleted-coach',
+        metric: 'FLY10_TIME',
+        value: '1.25',
+        units: 's',
+        organizationId: 'org-1',
+        date: '2025-01-15',
+      });
+
+      expect(mockPushSendToUser).toHaveBeenCalledWith(
+        'athlete-1',
+        expect.objectContaining({
+          body: 'A coach recorded your 10-Yard Fly: 1.25 s',
+        }),
+        'org-1'
+      );
+    });
+  });
+
+  describe('missing athlete email', () => {
+    it('should skip email when athlete has empty emails array', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'athlete-1', firstName: 'John', lastName: 'Doe', emails: [],
+      }]);
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'coach-1', fullName: 'Coach Smith',
+      }]);
+      mockDb.where.mockResolvedValueOnce([{ label: 'Vertical Jump' }]);
+      mockDb.where.mockResolvedValueOnce([{ emailNewMeasurements: true }]);
+
+      mockPushSendToUser.mockResolvedValue({ successful: 1, failed: 0 });
+
+      await notifyNewMeasurement({
+        measurementId: 'meas-1',
+        userId: 'athlete-1',
+        submittedBy: 'coach-1',
+        metric: 'VERTICAL_JUMP',
+        value: '32.5',
+        units: 'in',
+        organizationId: 'org-1',
+        date: '2025-01-15',
+      });
+
+      // Push should still be sent
+      expect(mockPushSendToUser).toHaveBeenCalled();
+      // Email should be skipped despite opt-in
+      expect(mockEmailSendNewMeasurement).not.toHaveBeenCalled();
+    });
+
+    it('should skip email when athlete emails is null', async () => {
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'athlete-1', firstName: 'John', lastName: 'Doe', emails: null,
+      }]);
+      mockDb.where.mockResolvedValueOnce([{
+        id: 'coach-1', fullName: 'Coach Smith',
+      }]);
+      mockDb.where.mockResolvedValueOnce([{ label: 'Vertical Jump' }]);
+      mockDb.where.mockResolvedValueOnce([{ emailNewMeasurements: true }]);
+
+      mockPushSendToUser.mockResolvedValue({ successful: 1, failed: 0 });
+
+      await notifyNewMeasurement({
+        measurementId: 'meas-1',
+        userId: 'athlete-1',
+        submittedBy: 'coach-1',
+        metric: 'VERTICAL_JUMP',
+        value: '32.5',
+        units: 'in',
+        organizationId: 'org-1',
+        date: '2025-01-15',
+      });
+
+      expect(mockPushSendToUser).toHaveBeenCalled();
       expect(mockEmailSendNewMeasurement).not.toHaveBeenCalled();
     });
   });
