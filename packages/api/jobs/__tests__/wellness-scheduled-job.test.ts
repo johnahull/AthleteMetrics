@@ -68,6 +68,7 @@ import {
   startWellnessScheduledJob,
   stopWellnessScheduledJob,
   isScheduledJobRunning,
+  __resetJobStateForTesting,
 } from '../wellness-scheduled-job';
 
 describe('Wellness Scheduled Job', () => {
@@ -81,6 +82,7 @@ describe('Wellness Scheduled Job', () => {
     mockSendWellnessRequestNotifications.mockResolvedValue({});
     mockGenerateMagicLinkToken.mockReturnValue('mock-token');
     stopWellnessScheduledJob();
+    __resetJobStateForTesting(); // Reset job state between tests
   });
 
   afterEach(() => {

@@ -206,3 +206,12 @@ export function stopWellnessScheduledJob(): void {
 export function isScheduledJobRunning(): boolean {
   return isRunning;
 }
+
+/**
+ * Reset job state for testing purposes.
+ * INTERNAL USE ONLY - for unit tests.
+ */
+export function __resetJobStateForTesting(): void {
+  isRunning = false;
+  lastRunTimestamp = 0;
+}
