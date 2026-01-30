@@ -24,6 +24,7 @@ import { computeNextRunAt } from '../lib/wellness-schedule-utils';
 let scheduledTask: ScheduledTask | null = null;
 let isRunning = false;
 let lastRunTimestamp = 0;
+let tableVerified = false;
 
 // Safety margin: 55 seconds minimum between runs (cron runs every 60s)
 const MIN_RUN_INTERVAL_MS = 55000;
@@ -55,6 +56,20 @@ export function startWellnessScheduledJob(
     lastRunTimestamp = now;
 
     try {
+      // Verify the wellness_schedules table exists on first run
+      if (!tableVerified) {
+        const result = await db.execute(
+          `SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'wellness_schedules') AS exists`
+        );
+        const exists = result[0]?.exists === true || result[0]?.exists === 't';
+        if (!exists) {
+          console.warn('⚠️ wellness_schedules table does not exist — stopping wellness scheduled job. Run migrations to enable.');
+          stopWellnessScheduledJob();
+          return;
+        }
+        tableVerified = true;
+      }
+
       // Phase 1: Process one-time scheduled requests
       await processScheduledRequests();
 
