@@ -92,15 +92,15 @@ export function registerCustomOrgMetricRoutes(app: Express) {
 
         res.json(metrics);
       } catch (error) {
-        console.error("Error listing custom metrics:", error);
         if (error instanceof Error) {
-          if (error.message.includes('Unauthorized')) {
-            return res.status(403).json({ error: error.message });
-          }
           if (error.message.includes('not enabled')) {
             return res.status(403).json({ error: error.message });
           }
+          if (error.message.includes('Unauthorized')) {
+            return res.status(403).json({ error: error.message });
+          }
         }
+        console.error("Error listing custom metrics:", error);
         res.status(500).json({ error: "Failed to list custom metrics" });
       }
     }

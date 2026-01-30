@@ -62,6 +62,10 @@ export async function fetchCustomOrgMetrics(
     `/api/organizations/${organizationId}/custom-metrics?${params.toString()}`
   );
   if (!response.ok) {
+    // Feature not enabled for this org — return empty array instead of erroring
+    if (response.status === 403) {
+      return [];
+    }
     const error = await response.json().catch(() => ({ error: 'Failed to fetch custom metrics' }));
     throw new Error(error.error || 'Failed to fetch custom metrics');
   }
