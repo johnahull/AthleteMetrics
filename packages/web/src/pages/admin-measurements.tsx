@@ -14,6 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { isLowerBetter } from "@/lib/report-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
@@ -198,6 +199,10 @@ export default function AdminMeasurementsPage() {
   const [distributionMode, setDistributionMode] = useState<DistributionMode>(
     () => (localStorage.getItem('distributionMode') as DistributionMode) || 'quartiles'
   );
+  const [statisticsMode, setStatisticsMode] = useState<'best' | 'all'>(() => {
+    const stored = localStorage.getItem('statisticsMode');
+    return (stored === 'best' || stored === 'all') ? stored : 'best';
+  });
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -634,26 +639,47 @@ export default function AdminMeasurementsPage() {
     [watchedFilters]
   );
 
+  // Filter to best measurement per athlete per metric
+  const filterToBest = useCallback((items: Measurement[], metric: string): Measurement[] => {
+    const lowerBetter = isLowerBetter(metric);
+    const bestByPlayer = new Map<string, Measurement>();
+    for (const m of items) {
+      const key = m.userId;
+      const existing = bestByPlayer.get(key);
+      if (!existing) {
+        bestByPlayer.set(key, m);
+      } else {
+        const curr = parseFloat(m.value);
+        const prev = parseFloat(existing.value);
+        if (lowerBetter ? curr < prev : curr > prev) {
+          bestByPlayer.set(key, m);
+        }
+      }
+    }
+    return Array.from(bestByPlayer.values());
+  }, []);
+
   // Memoized statistics cards
   const statisticsCards = useMemo(() => {
     if (measurements.length === 0) return null;
 
+    const applyMode = (items: Measurement[], metric: string) =>
+      statisticsMode === 'best' ? filterToBest(items, metric) : items;
+
     if (watchedFilters.metric) {
-      // Show statistics for the selected metric
       const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
       if (metricMeasurements.length === 0) return null;
 
       return (
         <div className="grid grid-cols-1 gap-6">
           <StatisticsSummaryCard
-            measurements={metricMeasurements}
+            measurements={applyMode(metricMeasurements, watchedFilters.metric)}
             metric={watchedFilters.metric}
             distributionMode={distributionMode}
           />
         </div>
       );
     } else {
-      // Show statistics for the top 2 metrics with the most measurements
       const metricCounts = measurements.reduce((acc, m) => {
         acc[m.metric] = (acc[m.metric] || 0) + 1;
         return acc;
@@ -671,7 +697,7 @@ export default function AdminMeasurementsPage() {
           {topMetrics.map((metric) => (
             <StatisticsSummaryCard
               key={metric}
-              measurements={measurements.filter((m) => m.metric === metric)}
+              measurements={applyMode(measurements.filter((m) => m.metric === metric), metric)}
               metric={metric}
               distributionMode={distributionMode}
             />
@@ -679,7 +705,7 @@ export default function AdminMeasurementsPage() {
         </div>
       );
     }
-  }, [measurements, watchedFilters.metric, distributionMode]);
+  }, [measurements, watchedFilters.metric, distributionMode, statisticsMode]);
 
   // Access control check
   if (!user?.isSiteAdmin) {
@@ -1015,7 +1041,23 @@ export default function AdminMeasurementsPage() {
 
       {/* Statistics Summary */}
       {measurements.length > 0 && (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <label htmlFor="statistics-mode-select" className="text-sm font-medium text-muted-foreground">
+            Statistics:
+          </label>
+          <Select value={statisticsMode} onValueChange={(v) => {
+            const mode = v as 'best' | 'all';
+            setStatisticsMode(mode);
+            localStorage.setItem('statisticsMode', mode);
+          }}>
+            <SelectTrigger className="w-[180px]" id="statistics-mode-select">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="best">Best per Athlete</SelectItem>
+              <SelectItem value="all">All Measurements</SelectItem>
+            </SelectContent>
+          </Select>
           <label htmlFor="distribution-mode-select" className="text-sm font-medium text-muted-foreground">
             Distribution:
           </label>
