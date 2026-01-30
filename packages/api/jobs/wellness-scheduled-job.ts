@@ -229,4 +229,5 @@ export function isScheduledJobRunning(): boolean {
 export function __resetJobStateForTesting(): void {
   isRunning = false;
   lastRunTimestamp = 0;
+  tableVerified = false;
 }
