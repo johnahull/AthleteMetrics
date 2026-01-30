@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useAuth } from "@/lib/auth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { isLowerBetter } from "@/lib/report-utils";
+import { filterToBestPerPlayer } from "@shared/analytics-utils";
 import { useToast } from "@/hooks/use-toast";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
@@ -639,32 +639,14 @@ export default function AdminMeasurementsPage() {
     [watchedFilters]
   );
 
-  // Filter to best measurement per athlete per metric
-  const filterToBest = useCallback((items: Measurement[], metric: string): Measurement[] => {
-    const lowerBetter = isLowerBetter(metric);
-    const bestByPlayer = new Map<string, Measurement>();
-    for (const m of items) {
-      const key = m.userId;
-      const existing = bestByPlayer.get(key);
-      if (!existing) {
-        bestByPlayer.set(key, m);
-      } else {
-        const curr = parseFloat(m.value);
-        const prev = parseFloat(existing.value);
-        if (lowerBetter ? curr < prev : curr > prev) {
-          bestByPlayer.set(key, m);
-        }
-      }
-    }
-    return Array.from(bestByPlayer.values());
-  }, []);
-
   // Memoized statistics cards
   const statisticsCards = useMemo(() => {
     if (measurements.length === 0) return null;
 
     const applyMode = (items: Measurement[], metric: string) =>
-      statisticsMode === 'best' ? filterToBest(items, metric) : items;
+      statisticsMode === 'best'
+        ? filterToBestPerPlayer(items, metric, (m) => m.userId, (m) => parseFloat(m.value))
+        : items;
 
     if (watchedFilters.metric) {
       const metricMeasurements = measurements.filter((m) => m.metric === watchedFilters.metric);
