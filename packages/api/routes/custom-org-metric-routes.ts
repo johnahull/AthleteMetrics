@@ -92,10 +92,15 @@ export function registerCustomOrgMetricRoutes(app: Express) {
 
         res.json(metrics);
       } catch (error) {
-        console.error("Error listing custom metrics:", error);
-        if (error instanceof Error && error.message.includes('Unauthorized')) {
-          return res.status(403).json({ error: error.message });
+        if (error instanceof Error) {
+          if (error.message.includes('not enabled')) {
+            return res.status(403).json({ error: error.message });
+          }
+          if (error.message.includes('Unauthorized')) {
+            return res.status(403).json({ error: error.message });
+          }
         }
+        console.error("Error listing custom metrics:", error);
         res.status(500).json({ error: "Failed to list custom metrics" });
       }
     }
@@ -131,8 +136,10 @@ export function registerCustomOrgMetricRoutes(app: Express) {
         res.json(metric);
       } catch (error) {
         console.error("Error getting custom metric:", error);
-        if (error instanceof Error && error.message.includes('Unauthorized')) {
-          return res.status(403).json({ error: error.message });
+        if (error instanceof Error) {
+          if (error.message.includes('Unauthorized') || error.message.includes('not enabled')) {
+            return res.status(403).json({ error: error.message });
+          }
         }
         res.status(500).json({ error: "Failed to get custom metric" });
       }
@@ -180,7 +187,7 @@ export function registerCustomOrgMetricRoutes(app: Express) {
       } catch (error) {
         console.error("Error creating custom metric:", error);
         if (error instanceof Error) {
-          if (error.message.includes('Unauthorized')) {
+          if (error.message.includes('Unauthorized') || error.message.includes('not enabled')) {
             return res.status(403).json({ error: error.message });
           }
           if (error.message.includes('already exists') || error.message.includes('duplicate')) {
@@ -237,7 +244,7 @@ export function registerCustomOrgMetricRoutes(app: Express) {
       } catch (error) {
         console.error("Error updating custom metric:", error);
         if (error instanceof Error) {
-          if (error.message.includes('Unauthorized')) {
+          if (error.message.includes('Unauthorized') || error.message.includes('not enabled')) {
             return res.status(403).json({ error: error.message });
           }
           if (error.message.includes('not found')) {
@@ -280,7 +287,7 @@ export function registerCustomOrgMetricRoutes(app: Express) {
       } catch (error) {
         console.error("Error archiving custom metric:", error);
         if (error instanceof Error) {
-          if (error.message.includes('Unauthorized')) {
+          if (error.message.includes('Unauthorized') || error.message.includes('not enabled')) {
             return res.status(403).json({ error: error.message });
           }
           if (error.message.includes('not found')) {
@@ -320,7 +327,7 @@ export function registerCustomOrgMetricRoutes(app: Express) {
       } catch (error) {
         console.error("Error restoring custom metric:", error);
         if (error instanceof Error) {
-          if (error.message.includes('Unauthorized')) {
+          if (error.message.includes('Unauthorized') || error.message.includes('not enabled')) {
             return res.status(403).json({ error: error.message });
           }
           if (error.message.includes('not found')) {

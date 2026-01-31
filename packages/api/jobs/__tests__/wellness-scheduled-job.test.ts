@@ -72,7 +72,9 @@ import {
 } from '../wellness-scheduled-job';
 
 describe('Wellness Scheduled Job', () => {
-  const mockDb = {} as any;
+  const mockDb = {
+    execute: vi.fn().mockResolvedValue([{ exists: true }]),
+  } as any;
 
   beforeEach(() => {
     vi.clearAllMocks();

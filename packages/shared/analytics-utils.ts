@@ -183,6 +183,40 @@ export function filterToBestMeasurements(data: ChartDataPoint[]): ChartDataPoint
 }
 
 /**
+ * Generic best-per-player filter for any measurement-like object.
+ * Groups items by playerId accessor, picks the best value per group
+ * based on metric direction (lower_is_better → min, otherwise → max).
+ */
+export function filterToBestPerPlayer<T>(
+  items: T[],
+  metric: string,
+  getPlayerId: (item: T) => string,
+  getValue: (item: T) => number,
+): T[] {
+  if (items.length === 0) return [];
+
+  const metricType = getMetricTypeWithFallback(metric);
+  const bestByPlayer = new Map<string, T>();
+
+  for (const item of items) {
+    const playerId = getPlayerId(item);
+    const existing = bestByPlayer.get(playerId);
+    if (!existing) {
+      bestByPlayer.set(playerId, item);
+    } else {
+      const curr = getValue(item);
+      const prev = getValue(existing);
+      const isBetter = metricType === 'lower_is_better' ? curr < prev : curr > prev;
+      if (isBetter) {
+        bestByPlayer.set(playerId, item);
+      }
+    }
+  }
+
+  return Array.from(bestByPlayer.values());
+}
+
+/**
  * Filters data to best measurements per athlete per date (for 'trends' data type)
  */
 export function filterToBestMeasurementsPerDate(data: ChartDataPoint[]): ChartDataPoint[] {
