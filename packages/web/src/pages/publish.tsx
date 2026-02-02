@@ -20,7 +20,7 @@ import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
-import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
+import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 export default function Publish() {
@@ -49,6 +49,9 @@ export default function Publish() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [distributionMode, setDistributionMode] = useState<DistributionMode>(
+    () => (localStorage.getItem('distributionMode') as DistributionMode) || 'quartiles'
+  );
 
   const { data: teams = [] } = useQuery({
     queryKey: ["/api/teams"],
@@ -636,11 +639,31 @@ export default function Publish() {
 
       {/* Statistics Summary */}
       {filters.metric && sortedMeasurements && sortedMeasurements.length > 0 && (
-        <StatisticsSummaryCard
-          key={`stats-${filters.metric}-${sortedMeasurements.length}`}
-          measurements={sortedMeasurements}
-          metric={filters.metric}
-        />
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-muted-foreground">Distribution:</label>
+            <Select value={distributionMode} onValueChange={(v) => {
+              const mode = v as DistributionMode;
+              setDistributionMode(mode);
+              localStorage.setItem('distributionMode', mode);
+            }}>
+              <SelectTrigger className="w-[160px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="quartiles">Quartiles</SelectItem>
+                <SelectItem value="quintiles">Quintiles</SelectItem>
+                <SelectItem value="deciles">Deciles</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <StatisticsSummaryCard
+            key={`stats-${filters.metric}-${sortedMeasurements.length}-${distributionMode}`}
+            measurements={sortedMeasurements}
+            metric={filters.metric}
+            distributionMode={distributionMode}
+          />
+        </div>
       )}
 
       {/* Bulk Actions Toolbar */}
