@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -318,6 +318,14 @@ function StepConfiguration({
   onDateChange,
   onMeasurementsChange,
 }: StepConfigurationProps) {
+  // Local state allows typing intermediate values (e.g., clearing to type "5")
+  const [inputValue, setInputValue] = useState(String(measurementsPerAthlete));
+
+  // Sync local state when parent value changes (e.g., from +/- buttons)
+  useEffect(() => {
+    setInputValue(String(measurementsPerAthlete));
+  }, [measurementsPerAthlete]);
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">Step 3: Configuration</h3>
@@ -384,12 +392,27 @@ function StepConfiguration({
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    min={1}
-                    max={10}
-                    value={measurementsPerAthlete}
+                    value={inputValue}
                     onChange={(e) => {
-                      const val = parseInt(e.target.value);
-                      if (!isNaN(val)) onMeasurementsChange(Math.min(10, Math.max(1, val)));
+                      // Allow only digits, let user type freely
+                      const raw = e.target.value.replace(/\D/g, '');
+                      setInputValue(raw);
+                      // Update parent immediately if valid
+                      const val = parseInt(raw);
+                      if (!isNaN(val) && val >= 1 && val <= 10) {
+                        onMeasurementsChange(val);
+                      }
+                    }}
+                    onBlur={() => {
+                      // On blur, clamp to valid range or reset to 1
+                      const val = parseInt(inputValue);
+                      if (isNaN(val) || val < 1) {
+                        onMeasurementsChange(1);
+                        setInputValue('1');
+                      } else if (val > 10) {
+                        onMeasurementsChange(10);
+                        setInputValue('10');
+                      }
                     }}
                     data-testid="wizard-measurements-per-athlete"
                     className="text-center"
