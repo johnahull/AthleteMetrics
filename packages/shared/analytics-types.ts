@@ -545,7 +545,7 @@ export const CHART_COLOR_SCHEMES = {
 export interface BenchmarkLine {
   id: string;
   name: string;
-  value: number;              // Keep for backwards compatibility (single-value benchmarks)
+  value: number | null;       // Allow null for tier group benchmarks (they use minValue/maxValue instead)
   minValue?: number;          // For range benchmarks
   maxValue?: number;          // For range benchmarks
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';

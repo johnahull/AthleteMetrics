@@ -479,9 +479,15 @@ function AthleteTeamReportView({ report }: { report: Report }) {
               </TableHeader>
               <TableBody>
                 {teamStatistics.map((stat: TeamStatistic) => {
-                  const benchmarkMap = new Map<string, number>();
+                  // Create a map of benchmark data for this metric (supports both single-value and range benchmarks)
+                  const benchmarkMap = new Map<string, { value: number | null; minValue?: number | null; maxValue?: number | null; tierColor?: string }>();
                   if (stat.benchmarks && Array.isArray(stat.benchmarks)) {
-                    stat.benchmarks.forEach((b) => benchmarkMap.set(b.name, b.value));
+                    stat.benchmarks.forEach((b) => benchmarkMap.set(b.name, {
+                      value: b.value,
+                      minValue: b.minValue,
+                      maxValue: b.maxValue,
+                      tierColor: b.tierColor,
+                    }));
                   }
 
                   return (
@@ -494,13 +500,31 @@ function AthleteTeamReportView({ report }: { report: Report }) {
                               : `${stat.average.toFixed(2)} ${stat.units || ""}`)
                           : "N/A"}
                       </TableCell>
-                      {benchmarkColumns.map((name) => (
-                        <TableCell key={name}>
-                          {benchmarkMap.has(name)
-                            ? `${benchmarkMap.get(name)!.toFixed(2)} ${stat.units || ""}`
-                            : "-"}
-                        </TableCell>
-                      ))}
+                      {benchmarkColumns.map((name) => {
+                        const benchmarkData = benchmarkMap.get(name);
+                        if (!benchmarkData) {
+                          return <TableCell key={name}>-</TableCell>;
+                        }
+                        // Range benchmark: display "min - max" with optional color
+                        if (benchmarkData.minValue != null && benchmarkData.maxValue != null) {
+                          return (
+                            <TableCell key={name}>
+                              <span style={benchmarkData.tierColor ? { color: benchmarkData.tierColor } : undefined}>
+                                {`${benchmarkData.minValue.toFixed(2)} - ${benchmarkData.maxValue.toFixed(2)} ${stat.units || ""}`}
+                              </span>
+                            </TableCell>
+                          );
+                        }
+                        // Single-value benchmark
+                        if (benchmarkData.value != null) {
+                          return (
+                            <TableCell key={name}>
+                              {`${benchmarkData.value.toFixed(2)} ${stat.units || ""}`}
+                            </TableCell>
+                          );
+                        }
+                        return <TableCell key={name}>-</TableCell>;
+                      })}
                       <TableCell>
                         {stat.topPerformer ? (
                           <div>
