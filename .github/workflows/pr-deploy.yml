@@ -21,9 +21,9 @@ jobs:
   deploy-preview:
     name: Deploy PR Preview
     runs-on: ubuntu-latest
-    # Only run on PRs from the same repository (not forks)
-    # Forks don't have access to secrets needed for Railway deployment
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    # DISABLED: Railway PR preview environments are temporarily disabled
+    # To re-enable, remove the `false &&` condition below
+    if: false && github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
