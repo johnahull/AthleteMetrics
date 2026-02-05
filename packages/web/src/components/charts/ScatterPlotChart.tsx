@@ -28,6 +28,7 @@ import { useMetricConfig } from '@/hooks/use-metric-config';
 import { CHART_CONFIG } from '@/constants/chart-config';
 import { safeNumber } from '@shared/utils/number-conversion';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { parseColorToRgba } from '@/lib/color-utils';
 
 // Constants for athlete name rendering
 const ATHLETE_NAME_CONSTANTS = {
@@ -491,55 +492,6 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
     return isNaN(result) || !isFinite(result) ? null : result;
   }, [scatterData?.points]);
 
-  // Helper to parse any color format to rgba with specified opacity
-  const parseColorToRgba = (color: string, opacity: number): string => {
-    // Named colors map
-    const namedColors: Record<string, [number, number, number]> = {
-      red: [255, 0, 0],
-      green: [0, 128, 0],
-      blue: [0, 0, 255],
-      yellow: [255, 255, 0],
-      orange: [255, 165, 0],
-      purple: [128, 0, 128],
-      pink: [255, 192, 203],
-      black: [0, 0, 0],
-      white: [255, 255, 255],
-      gray: [128, 128, 128],
-      grey: [128, 128, 128],
-      gold: [255, 215, 0],
-      silver: [192, 192, 192],
-      bronze: [205, 127, 50],
-      cyan: [0, 255, 255],
-      magenta: [255, 0, 255],
-    };
-
-    // Try rgba/rgb match
-    const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
-    if (rgbaMatch) {
-      return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
-    }
-
-    // Try hex match
-    const hexMatch = color.match(/^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$/);
-    if (hexMatch) {
-      const hex = hexMatch[1];
-      const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
-      const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
-      const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-
-    // Try named color
-    const lowerColor = color.toLowerCase();
-    if (namedColors[lowerColor]) {
-      const [r, g, b] = namedColors[lowerColor];
-      return `rgba(${r}, ${g}, ${b}, ${opacity})`;
-    }
-
-    // Default fallback - use a visible pink color
-    return `rgba(255, 99, 132, ${opacity})`;
-  };
-
   // Generate benchmark annotations for both X and Y axes
   // Benchmarks are matched to their corresponding axis based on metricCode
   const benchmarkAnnotations = useMemo(() => {
@@ -549,7 +501,17 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
     const annotations: Record<string, AnnotationOptions> = {};
 
-    benchmarks.forEach((benchmark, index) => {
+    // Filter out invalid benchmarks before processing
+    const validBenchmarks = benchmarks.filter((benchmark) => {
+      // Range benchmarks need minValue and maxValue
+      if (benchmark.comparisonOperator === 'range') {
+        return benchmark.minValue != null && benchmark.maxValue != null;
+      }
+      // Single-value benchmarks need a value
+      return benchmark.value != null;
+    });
+
+    validBenchmarks.forEach((benchmark, index) => {
       const defaultColor = 'rgba(255, 99, 132, 0.8)';
       const color = benchmark.color || defaultColor;
       const backgroundColor = parseColorToRgba(color, 0.15);
@@ -607,14 +569,16 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         }
       } else {
         // Single-value benchmark: render as line annotation
+        // value is guaranteed to be non-null here due to the filter above
+        const value = benchmark.value as number;
         const borderDash = benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [];
 
         if (targetAxis === 'y' || isYMetric) {
           // Y-axis line: horizontal line
           annotations[`benchmark-y-${index}`] = {
             type: 'line',
-            yMin: benchmark.value,
-            yMax: benchmark.value,
+            yMin: value,
+            yMax: value,
             borderColor: color,
             borderWidth: 2,
             borderDash,
@@ -634,8 +598,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           // X-axis line: vertical line
           annotations[`benchmark-x-${index}`] = {
             type: 'line',
-            xMin: benchmark.value,
-            xMax: benchmark.value,
+            xMin: value,
+            xMax: value,
             borderColor: color,
             borderWidth: 2,
             borderDash,

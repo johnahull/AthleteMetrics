@@ -1,6 +1,13 @@
 export interface Benchmark {
   name: string;
-  value: number;
+  value: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+  comparisonOperator?: 'lte' | 'gte' | 'eq' | 'range';
+  tierName?: string;
+  tierColor?: string;
+  tierGroupId?: string;
+  tierOrder?: number;
 }
 
 export interface TopPerformer {

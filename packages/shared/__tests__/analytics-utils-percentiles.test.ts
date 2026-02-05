@@ -4,7 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { calculateStatistics } from '../analytics-utils';
+import { calculateStatistics, filterToBestPerPlayer } from '../analytics-utils';
 
 describe('Expanded Percentiles', () => {
   it('should return all expanded percentile keys for empty array', () => {
@@ -62,5 +62,49 @@ describe('Expanded Percentiles', () => {
     expect(result.percentiles).toHaveProperty('p60');
     expect(result.percentiles).toHaveProperty('p70');
     expect(result.percentiles).toHaveProperty('p80');
+  });
+});
+
+describe('filterToBestPerPlayer direction awareness', () => {
+  interface Item { id: string; playerId: string; value: number; }
+  const getId = (i: Item) => i.playerId;
+  const getValue = (i: Item) => i.value;
+
+  it('should pick lowest value for lower_is_better metric (FLY10_TIME)', () => {
+    const items: Item[] = [
+      { id: '1', playerId: 'p1', value: 1.15 },
+      { id: '2', playerId: 'p1', value: 1.08 },
+      { id: '3', playerId: 'p1', value: 1.20 },
+    ];
+    const result = filterToBestPerPlayer(items, 'FLY10_TIME', getId, getValue);
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBe(1.08);
+  });
+
+  it('should pick highest value for higher_is_better metric (VERTICAL_JUMP)', () => {
+    const items: Item[] = [
+      { id: '1', playerId: 'p1', value: 28 },
+      { id: '2', playerId: 'p1', value: 34 },
+      { id: '3', playerId: 'p1', value: 31 },
+    ];
+    const result = filterToBestPerPlayer(items, 'VERTICAL_JUMP', getId, getValue);
+    expect(result).toHaveLength(1);
+    expect(result[0].value).toBe(34);
+  });
+
+  it('should handle multiple players with mixed directions', () => {
+    const items: Item[] = [
+      { id: '1', playerId: 'p1', value: 4.5 },
+      { id: '2', playerId: 'p1', value: 4.3 },
+      { id: '3', playerId: 'p2', value: 4.8 },
+      { id: '4', playerId: 'p2', value: 4.6 },
+    ];
+    // DASH_40YD is lower_is_better
+    const result = filterToBestPerPlayer(items, 'DASH_40YD', getId, getValue);
+    expect(result).toHaveLength(2);
+    const p1Best = result.find(r => r.playerId === 'p1');
+    const p2Best = result.find(r => r.playerId === 'p2');
+    expect(p1Best?.value).toBe(4.3);
+    expect(p2Best?.value).toBe(4.6);
   });
 });

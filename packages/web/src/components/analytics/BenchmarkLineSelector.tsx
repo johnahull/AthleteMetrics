@@ -249,9 +249,11 @@ export const BenchmarkLineSelector = React.memo(function BenchmarkLineSelector({
                   className="flex items-center gap-2 mt-1"
                 >
                   <span className="text-sm text-muted-foreground">
-                    {benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined
+                    {benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null
                       ? `Target: ${benchmark.minValue} - ${benchmark.maxValue}${unit}`
-                      : `Target: ${benchmark.benchmarkValue}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
+                      : benchmark.benchmarkValue != null
+                        ? `Target: ${benchmark.benchmarkValue}${unit} (${benchmark.comparisonOperator === 'lte' ? '≤' : benchmark.comparisonOperator === 'gte' ? '≥' : '='})`
+                        : 'Range benchmark'
                     }
                   </span>
                   {filterBadges.length > 0 && (

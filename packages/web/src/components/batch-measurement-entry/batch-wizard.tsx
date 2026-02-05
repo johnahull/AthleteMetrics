@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Wand2, Calendar, Hash, Users, Target, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Wand2, Calendar, Hash, Users, Target, CheckCircle, AlertTriangle, Minus, Plus } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { TeamAthleteSelector } from '@/components/ui/team-athlete-selector';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
@@ -318,6 +318,14 @@ function StepConfiguration({
   onDateChange,
   onMeasurementsChange,
 }: StepConfigurationProps) {
+  // Local state allows typing intermediate values (e.g., clearing to type "5")
+  const [inputValue, setInputValue] = useState(String(measurementsPerAthlete));
+
+  // Sync local state when parent value changes (e.g., from +/- buttons)
+  useEffect(() => {
+    setInputValue(String(measurementsPerAthlete));
+  }, [measurementsPerAthlete]);
+
   return (
     <div>
       <h3 className="text-lg font-semibold mb-4">Step 3: Configuration</h3>
@@ -367,16 +375,60 @@ function StepConfiguration({
                 <p className="text-sm text-muted-foreground mt-1 mb-3">
                   How many times will each athlete be measured for each metric? (Max: 10)
                 </p>
-                <Input
-                  id="wizard-measurements-per-athlete"
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={measurementsPerAthlete}
-                  onChange={(e) => onMeasurementsChange(Math.min(10, Math.max(1, parseInt(e.target.value) || 1)))}
-                  data-testid="wizard-measurements-per-athlete"
-                  className="max-w-xs"
-                />
+                <div className="flex items-center gap-2 max-w-xs">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0"
+                    disabled={measurementsPerAthlete <= 1}
+                    onClick={() => onMeasurementsChange(Math.max(1, measurementsPerAthlete - 1))}
+                    aria-label="Decrease measurements"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </Button>
+                  <Input
+                    id="wizard-measurements-per-athlete"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={inputValue}
+                    onChange={(e) => {
+                      // Allow only digits, let user type freely
+                      const raw = e.target.value.replace(/\D/g, '');
+                      setInputValue(raw);
+                      // Update parent immediately if valid
+                      const val = parseInt(raw);
+                      if (!isNaN(val) && val >= 1 && val <= 10) {
+                        onMeasurementsChange(val);
+                      }
+                    }}
+                    onBlur={() => {
+                      // On blur, clamp to valid range or reset to 1
+                      const val = parseInt(inputValue);
+                      if (isNaN(val) || val < 1) {
+                        onMeasurementsChange(1);
+                        setInputValue('1');
+                      } else if (val > 10) {
+                        onMeasurementsChange(10);
+                        setInputValue('10');
+                      }
+                    }}
+                    data-testid="wizard-measurements-per-athlete"
+                    className="text-center"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0"
+                    disabled={measurementsPerAthlete >= 10}
+                    onClick={() => onMeasurementsChange(Math.min(10, measurementsPerAthlete + 1))}
+                    aria-label="Increase measurements"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
                 <p className="text-xs text-muted-foreground mt-2">
                   Use this for multiple trials (e.g., 3 attempts at vertical jump, best of 3)
                 </p>
