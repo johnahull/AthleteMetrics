@@ -38,7 +38,7 @@ const NAMED_COLORS: Record<string, [number, number, number]> = {
  * - RGB/RGBA strings (rgb(255, 0, 0), rgba(255, 0, 0, 0.5))
  *
  * @param color - The color string to parse
- * @param opacity - The desired opacity (0-1)
+ * @param opacity - The desired opacity (0-1, will be clamped to valid range)
  * @returns An rgba() string with the specified opacity
  *
  * @example
@@ -47,10 +47,12 @@ const NAMED_COLORS: Record<string, [number, number, number]> = {
  * parseColorToRgba('rgb(0, 128, 0)', 0.8) // 'rgba(0, 128, 0, 0.8)'
  */
 export function parseColorToRgba(color: string, opacity: number): string {
+  // Clamp opacity to valid CSS range [0, 1]
+  const validOpacity = Math.max(0, Math.min(1, opacity));
   // Try rgba/rgb match
   const rgbaMatch = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*[\d.]+)?\)/);
   if (rgbaMatch) {
-    return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${opacity})`;
+    return `rgba(${rgbaMatch[1]}, ${rgbaMatch[2]}, ${rgbaMatch[3]}, ${validOpacity})`;
   }
 
   // Try hex match (supports both 3 and 6 character hex)
@@ -60,16 +62,16 @@ export function parseColorToRgba(color: string, opacity: number): string {
     const r = parseInt(hex.length === 3 ? hex[0] + hex[0] : hex.slice(0, 2), 16);
     const g = parseInt(hex.length === 3 ? hex[1] + hex[1] : hex.slice(2, 4), 16);
     const b = parseInt(hex.length === 3 ? hex[2] + hex[2] : hex.slice(4, 6), 16);
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    return `rgba(${r}, ${g}, ${b}, ${validOpacity})`;
   }
 
   // Try named color
   const lowerColor = color.toLowerCase();
   if (NAMED_COLORS[lowerColor]) {
     const [r, g, b] = NAMED_COLORS[lowerColor];
-    return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+    return `rgba(${r}, ${g}, ${b}, ${validOpacity})`;
   }
 
   // Default fallback - Chart.js default pink color
-  return `rgba(255, 99, 132, ${opacity})`;
+  return `rgba(255, 99, 132, ${validOpacity})`;
 }
