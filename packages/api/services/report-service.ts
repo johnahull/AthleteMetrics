@@ -1172,7 +1172,17 @@ export class ReportService extends BaseService {
     metrics: string[],
     compositeIndexConfig: CompositeIndexConfig | undefined,
     reportId: string,
-    benchmarksByMetric?: Record<string, Array<{ name: string; value: number }>>,
+    benchmarksByMetric?: Record<string, Array<{
+      name: string;
+      value: number | null;
+      minValue?: number;
+      maxValue?: number;
+      comparisonOperator?: 'lte' | 'gte' | 'eq' | 'range';
+      tierName?: string;
+      tierColor?: string;
+      tierGroupId?: string;
+      tierOrder?: number;
+    }>>,
     includeEventPercentiles?: boolean
   ): Promise<AthletePerformance[]> {
     // Group measurements by athlete
@@ -1263,13 +1273,39 @@ export class ReportService extends BaseService {
 
           const metricInfo = await this.getMetricInfo(metric);
 
-          athlete.benchmarkComparisons[metric] = benchmarks.map(benchmark => ({
-            benchmarkName: benchmark.name,
-            benchmarkValue: benchmark.value,
-            meetsOrExceeds: metricInfo.lowerIsBetter
-              ? value <= benchmark.value
-              : value >= benchmark.value
-          }));
+          athlete.benchmarkComparisons[metric] = benchmarks.map(benchmark => {
+            // Handle range benchmarks (tier groups)
+            if (benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null) {
+              // For range benchmarks, check if value is within the range
+              const meetsOrExceeds = value >= benchmark.minValue && value <= benchmark.maxValue;
+              return {
+                benchmarkName: benchmark.name,
+                benchmarkValue: benchmark.value,
+                minValue: benchmark.minValue,
+                maxValue: benchmark.maxValue,
+                meetsOrExceeds,
+                tierName: benchmark.tierName,
+                tierColor: benchmark.tierColor,
+              };
+            }
+
+            // Handle single-value benchmarks (skip if value is null)
+            if (benchmark.value == null) {
+              return {
+                benchmarkName: benchmark.name,
+                benchmarkValue: null,
+                meetsOrExceeds: false,
+              };
+            }
+
+            return {
+              benchmarkName: benchmark.name,
+              benchmarkValue: benchmark.value,
+              meetsOrExceeds: metricInfo.lowerIsBetter
+                ? value <= benchmark.value
+                : value >= benchmark.value
+            };
+          });
         }
       }
     }
@@ -1362,8 +1398,28 @@ export class ReportService extends BaseService {
     benchmarkConfig: ReportConfig['benchmarks'],
     organizationId: string,
     reportId: string
-  ): Promise<Record<string, Array<{ name: string; value: number }>>> {
-    const benchmarksByMetric: Record<string, Array<{ name: string; value: number }>> = {};
+  ): Promise<Record<string, Array<{
+    name: string;
+    value: number | null;
+    minValue?: number;
+    maxValue?: number;
+    comparisonOperator?: 'lte' | 'gte' | 'eq' | 'range';
+    tierName?: string;
+    tierColor?: string;
+    tierGroupId?: string;
+    tierOrder?: number;
+  }>>> {
+    const benchmarksByMetric: Record<string, Array<{
+      name: string;
+      value: number | null;
+      minValue?: number;
+      maxValue?: number;
+      comparisonOperator?: 'lte' | 'gte' | 'eq' | 'range';
+      tierName?: string;
+      tierColor?: string;
+      tierGroupId?: string;
+      tierOrder?: number;
+    }>> = {};
 
     if (!benchmarkConfig) {
       return benchmarksByMetric;
@@ -1406,15 +1462,33 @@ export class ReportService extends BaseService {
         );
 
       for (const { benchmark } of siteBenchmarksList) {
-        // Skip range benchmarks (they don't have a single benchmarkValue)
-        if (!benchmark.benchmarkValue) continue;
         if (!benchmarksByMetric[benchmark.metricCode]) {
           benchmarksByMetric[benchmark.metricCode] = [];
         }
-        benchmarksByMetric[benchmark.metricCode].push({
-          name: benchmark.name,
-          value: parseFloat(benchmark.benchmarkValue),
-        });
+
+        // Handle tier groups and range benchmarks (minValue/maxValue)
+        if (benchmark.minValue != null && benchmark.maxValue != null) {
+          benchmarksByMetric[benchmark.metricCode].push({
+            name: benchmark.tierName || benchmark.name,
+            value: null, // No single value for range benchmarks
+            minValue: parseFloat(String(benchmark.minValue)),
+            maxValue: parseFloat(String(benchmark.maxValue)),
+            comparisonOperator: 'range',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
+          });
+        }
+        // Handle single-value benchmarks
+        else if (benchmark.benchmarkValue != null) {
+          benchmarksByMetric[benchmark.metricCode].push({
+            name: benchmark.name,
+            value: parseFloat(String(benchmark.benchmarkValue)),
+            comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+          });
+        }
+        // Skip benchmarks with neither (invalid data)
       }
     }
 
@@ -1443,15 +1517,33 @@ export class ReportService extends BaseService {
         );
 
       for (const { benchmark } of customBenchmarksList) {
-        // Skip range benchmarks (they don't have a single benchmarkValue)
-        if (!benchmark.benchmarkValue) continue;
         if (!benchmarksByMetric[benchmark.metricCode]) {
           benchmarksByMetric[benchmark.metricCode] = [];
         }
-        benchmarksByMetric[benchmark.metricCode].push({
-          name: benchmark.name,
-          value: parseFloat(benchmark.benchmarkValue),
-        });
+
+        // Handle tier groups and range benchmarks (minValue/maxValue)
+        if (benchmark.minValue != null && benchmark.maxValue != null) {
+          benchmarksByMetric[benchmark.metricCode].push({
+            name: benchmark.tierName || benchmark.name,
+            value: null, // No single value for range benchmarks
+            minValue: parseFloat(String(benchmark.minValue)),
+            maxValue: parseFloat(String(benchmark.maxValue)),
+            comparisonOperator: 'range',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
+          });
+        }
+        // Handle single-value benchmarks
+        else if (benchmark.benchmarkValue != null) {
+          benchmarksByMetric[benchmark.metricCode].push({
+            name: benchmark.name,
+            value: parseFloat(String(benchmark.benchmarkValue)),
+            comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+          });
+        }
+        // Skip benchmarks with neither (invalid data)
       }
     }
 

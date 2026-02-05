@@ -549,7 +549,17 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
 
     const annotations: Record<string, AnnotationOptions> = {};
 
-    benchmarks.forEach((benchmark, index) => {
+    // Filter out invalid benchmarks before processing
+    const validBenchmarks = benchmarks.filter((benchmark) => {
+      // Range benchmarks need minValue and maxValue
+      if (benchmark.comparisonOperator === 'range') {
+        return benchmark.minValue != null && benchmark.maxValue != null;
+      }
+      // Single-value benchmarks need a value
+      return benchmark.value != null;
+    });
+
+    validBenchmarks.forEach((benchmark, index) => {
       const defaultColor = 'rgba(255, 99, 132, 0.8)';
       const color = benchmark.color || defaultColor;
       const backgroundColor = parseColorToRgba(color, 0.15);
@@ -607,14 +617,16 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
         }
       } else {
         // Single-value benchmark: render as line annotation
+        // value is guaranteed to be non-null here due to the filter above
+        const value = benchmark.value as number;
         const borderDash = benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [];
 
         if (targetAxis === 'y' || isYMetric) {
           // Y-axis line: horizontal line
           annotations[`benchmark-y-${index}`] = {
             type: 'line',
-            yMin: benchmark.value,
-            yMax: benchmark.value,
+            yMin: value,
+            yMax: value,
             borderColor: color,
             borderWidth: 2,
             borderDash,
@@ -634,8 +646,8 @@ export const ScatterPlotChart = React.memo(function ScatterPlotChart({
           // X-axis line: vertical line
           annotations[`benchmark-x-${index}`] = {
             type: 'line',
-            xMin: benchmark.value,
-            xMax: benchmark.value,
+            xMin: value,
+            xMax: value,
             borderColor: color,
             borderWidth: 2,
             borderDash,

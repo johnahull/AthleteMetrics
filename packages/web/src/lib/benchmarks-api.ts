@@ -643,7 +643,7 @@ export async function fetchBenchmarksForMetric(
 ): Promise<Array<{
   id: string;
   name: string;
-  benchmarkValue: number;
+  benchmarkValue: number | null;  // Allow null for tier group benchmarks (they use minValue/maxValue instead)
   minValue?: number;          // For range benchmarks
   maxValue?: number;          // For range benchmarks
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';

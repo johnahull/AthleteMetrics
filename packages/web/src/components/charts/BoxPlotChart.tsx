@@ -1040,43 +1040,54 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
       return [];
     }
 
-    return benchmarks.map((benchmark): AnnotationOptions => {
-      const defaultColor = 'rgba(255, 99, 132, 0.8)';
-      const color = benchmark.color || defaultColor;
-      const backgroundColor = parseColorToRgba(color, 0.15);
+    return benchmarks
+      .filter((benchmark) => {
+        // Range benchmarks need minValue and maxValue
+        if (benchmark.comparisonOperator === 'range') {
+          return benchmark.minValue != null && benchmark.maxValue != null;
+        }
+        // Single-value benchmarks need a value
+        return benchmark.value != null;
+      })
+      .map((benchmark): AnnotationOptions => {
+        const defaultColor = 'rgba(255, 99, 132, 0.8)';
+        const color = benchmark.color || defaultColor;
+        const backgroundColor = parseColorToRgba(color, 0.15);
 
-      // Range benchmark - render as box annotation
-      if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+        // Range benchmark - render as box annotation
+        if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+          return {
+            type: 'box',
+            yMin: benchmark.minValue,
+            yMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            borderDash: [5, 5],
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'end',
+              color: color,
+              font: {
+                size: 11,
+                weight: 'bold'
+              },
+              padding: 4
+            }
+          };
+        }
+
+        // Single-value benchmark - render as line annotation
+        // value is guaranteed to be non-null here due to the filter above
+        const value = benchmark.value as number;
         return {
-          type: 'box',
-          yMin: benchmark.minValue,
-          yMax: benchmark.maxValue,
-          backgroundColor,
+          type: 'line',
+          yMin: value,
+          yMax: value,
           borderColor: color,
-          borderWidth: 1,
-          borderDash: [5, 5],
-          label: {
-            display: true,
-            content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
-            position: 'end',
-            color: color,
-            font: {
-              size: 11,
-              weight: 'bold'
-            },
-            padding: 4
-          }
-        };
-      }
-
-      // Single-value benchmark - render as line annotation
-      return {
-        type: 'line',
-        yMin: benchmark.value,
-        yMax: benchmark.value,
-        borderColor: color,
-        borderWidth: 2,
-        borderDash: benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [],
+          borderWidth: 2,
+          borderDash: benchmark.lineStyle === 'dashed' ? [6, 6] : benchmark.lineStyle === 'dotted' ? [2, 2] : [],
         label: {
           display: true,
           content: benchmark.name,

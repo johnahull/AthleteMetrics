@@ -343,7 +343,16 @@ export function LineChart({
       return [];
     }
 
-    return benchmarks.map((benchmark): AnnotationOptions => {
+    return benchmarks
+      .filter((benchmark) => {
+        // Range benchmarks need minValue and maxValue
+        if (benchmark.comparisonOperator === 'range') {
+          return benchmark.minValue != null && benchmark.maxValue != null;
+        }
+        // Single-value benchmarks need a value
+        return benchmark.value != null;
+      })
+      .map((benchmark): AnnotationOptions => {
       const defaultColor = 'rgba(255, 99, 132, 0.8)';
       const color = benchmark.color || defaultColor;
       const backgroundColor = parseColorToRgba(color, 0.15);
@@ -379,10 +388,12 @@ export function LineChart({
       }
       // If lineStyle is 'solid' or undefined, borderDash remains undefined (solid line)
 
+      // value is guaranteed to be non-null here due to the filter above
+      const value = benchmark.value as number;
       return {
         type: 'line',
-        yMin: benchmark.value,
-        yMax: benchmark.value,
+        yMin: value,
+        yMax: value,
         borderColor: color,
         borderWidth: 2,
         borderDash,
