@@ -202,6 +202,80 @@ export function BarChart({
       });
   }, [benchmarks, showBenchmarks]);
 
+  // Generate benchmark annotations for Chart.js annotation plugin
+  // For horizontal bar charts, benchmarks are VERTICAL lines (xMin/xMax instead of yMin/yMax)
+  const benchmarkAnnotations = useMemo<AnnotationOptions[]>(() => {
+    if (!showBenchmarks || !benchmarks || benchmarks.length === 0) {
+      return [];
+    }
+
+    return benchmarks
+      .filter((benchmark) => {
+        // Range benchmarks need minValue and maxValue
+        if (benchmark.comparisonOperator === 'range') {
+          return benchmark.minValue != null && benchmark.maxValue != null;
+        }
+        // Single-value benchmarks need a value
+        return benchmark.value != null;
+      })
+      .map((benchmark): AnnotationOptions => {
+        const defaultColor = 'rgba(255, 99, 132, 0.8)';
+        const color = benchmark.color || defaultColor;
+        const backgroundColor = parseColorToRgba(color, 0.15);
+
+        // Range benchmark: render as vertical box annotation
+        if (benchmark.comparisonOperator === 'range' && benchmark.minValue !== undefined && benchmark.maxValue !== undefined) {
+          return {
+            type: 'box',
+            xMin: benchmark.minValue,
+            xMax: benchmark.maxValue,
+            backgroundColor,
+            borderColor: color,
+            borderWidth: 1,
+            label: {
+              display: true,
+              content: `${benchmark.name}: ${benchmark.minValue} - ${benchmark.maxValue}`,
+              position: 'start',
+              color: color,
+              padding: 4,
+              font: {
+                size: 10
+              }
+            }
+          };
+        }
+
+        // Single-value benchmark: render as vertical line annotation
+        let borderDash: number[] | undefined;
+        if (benchmark.lineStyle === 'dashed') {
+          borderDash = [5, 5];
+        } else if (benchmark.lineStyle === 'dotted') {
+          borderDash = [2, 2];
+        }
+
+        const value = benchmark.value as number;
+        return {
+          type: 'line',
+          xMin: value,
+          xMax: value,
+          borderColor: color,
+          borderWidth: 2,
+          borderDash,
+          label: {
+            display: true,
+            content: benchmark.name,
+            position: 'start',
+            backgroundColor: color,
+            color: 'white',
+            padding: 4,
+            font: {
+              size: 10
+            }
+          }
+        };
+      });
+  }, [benchmarks, showBenchmarks]);
+
   // Chart options
   const options: ChartOptions<'bar'> = {
     responsive: true,
