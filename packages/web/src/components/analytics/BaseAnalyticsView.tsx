@@ -37,6 +37,7 @@ const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
   'scatter_plot',
   'connected_scatter',
   'time_series_box_swarm',
+  'bar_chart',
 ];
 
 interface BaseAnalyticsViewProps {
@@ -615,10 +616,11 @@ function BaseAnalyticsViewContent({
                       selectedAthleteIds={state.analysisType === 'intra_group' && chartType === 'line_chart' ? state.selectedAthleteIds : undefined}
                       onAthleteSelectionChange={state.analysisType === 'intra_group' && chartType === 'line_chart' ? setSelectedAthleteIds : undefined}
                       selectedDates={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.selectedDates : undefined}
-                      metric={['time_series_box_swarm', 'time_series_violin'].includes(chartType) ? state.metrics.primary : undefined}
+                      metric={state.metrics.primary}
                       onExport={handleExport}
                       selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                       benchmarks={selectedBenchmarks}
+                      organizationId={effectiveOrganizationId ?? undefined}
                     />
                   </Suspense>
                 ))}
@@ -646,10 +648,11 @@ function BaseAnalyticsViewContent({
                   selectedAthleteIds={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? state.selectedAthleteIds : undefined}
                   onAthleteSelectionChange={state.analysisType === 'intra_group' && state.selectedChartType === 'line_chart' ? setSelectedAthleteIds : undefined}
                   selectedDates={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.selectedDates : undefined}
-                  metric={['time_series_box_swarm', 'time_series_violin'].includes(state.selectedChartType) ? state.metrics.primary : undefined}
+                  metric={state.metrics.primary}
                   onExport={handleExport}
                   selectedGroups={state.analysisType === 'multi_group' ? selectedGroups : undefined}
                   benchmarks={selectedBenchmarks}
+                  organizationId={effectiveOrganizationId ?? undefined}
                 />
               </Suspense>
             )}
