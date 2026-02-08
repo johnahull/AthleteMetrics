@@ -34,6 +34,7 @@ import { devLog } from '@/utils/dev-logger';
 const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
   'line_chart',
   'box_plot',
+  'box_swarm_combo',
   'scatter_plot',
   'connected_scatter',
   'time_series_box_swarm',

@@ -107,10 +107,10 @@ export function BarChart({
         'rgba(16, 185, 129, 1)' : 'rgba(59, 130, 246, 1)'
     );
 
-    const config = getMetricConfig(primaryMetric);
-    const unit = config?.unit || '';
-    const label = config?.label || primaryMetric;
-    const isLowerBetter = config?.lowerIsBetter;
+    const metricInfo = getMetricConfig(primaryMetric);
+    const unit = metricInfo?.unit || '';
+    const label = metricInfo?.label || primaryMetric;
+    const isLowerBetter = metricInfo?.lowerIsBetter;
 
     return {
       labels,
@@ -126,7 +126,7 @@ export function BarChart({
       primaryMetric,
       isLowerBetter
     };
-  }, [data, statistics, highlightAthlete]);
+  }, [data, statistics, highlightAthlete, getMetricConfig]);
 
   // Generate benchmark annotations for Chart.js annotation plugin
   // For horizontal bar charts, benchmarks are VERTICAL lines (xMin/xMax instead of yMin/yMax)
@@ -244,12 +244,14 @@ export function BarChart({
             const stats = statistics?.[barData?.primaryMetric || ''];
             
             if (!athlete || !stats) return [];
-            
+
             // Calculate percentile rank
             const allValues = data
               .filter(d => d.metric === barData?.primaryMetric)
               .map(d => d.value)
               .sort((a, b) => barData?.isLowerBetter ? a - b : b - a);
+
+            if (allValues.length === 0) return [];
 
             const rank = allValues.findIndex(v => v === athlete.value) + 1;
             const percentile = ((allValues.length - rank + 1) / allValues.length) * 100;
