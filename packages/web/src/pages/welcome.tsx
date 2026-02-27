@@ -46,7 +46,7 @@ export default function Welcome() {
               AthleteMetrics
             </h1>
             <p className="text-gray-600 text-sm">
-              Track, analyze, and improve athletic performance
+              Your data. Your D1 path.
             </p>
           </div>
 
@@ -89,22 +89,22 @@ export default function Welcome() {
           <div className="pt-4 space-y-3" role="list" aria-label="Key features">
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <Users className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span>{labels.team} Management</span>
+              <span>See where you stand vs. D1 standards</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span>Performance Analytics</span>
+              <span>Track speed, power, and agility over time</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <TrendingUp className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span>Data-Driven Insights</span>
+              <span>AI-powered insights after every assessment</span>
             </div>
           </div>
 
           {/* Footer Text */}
           <div className="text-center pt-4">
             <p className="text-xs text-gray-500">
-              For coaches, admins, and athletes
+              Developed by Big Time Athletes · Austin, TX
             </p>
           </div>
         </CardContent>

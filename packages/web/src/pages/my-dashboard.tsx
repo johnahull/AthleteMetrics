@@ -175,6 +175,22 @@ export default function MyDashboardPage() {
         lastMeasurementDate={dashboardData.lastMeasurementDate}
       />
 
+      {/* Book Session CTA */}
+      <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <div>
+          <p className="text-sm font-medium text-blue-900">Ready for your next session?</p>
+          <p className="text-xs text-blue-700">Book with Coach John and keep the momentum going.</p>
+        </div>
+        <a
+          href="https://bigtimeathletes.com/book"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-sm font-medium text-blue-700 hover:text-blue-900 whitespace-nowrap"
+        >
+          Book a Session <ArrowRight className="h-3.5 w-3.5" />
+        </a>
+      </div>
+
       {/* Pending Tasks Banner - shows wellness questionnaires to complete */}
       {isWellnessEnabled && <PendingTasksBanner />}
 
