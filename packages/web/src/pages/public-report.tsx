@@ -59,12 +59,12 @@ export default function PublicReport() {
         {/* Watermark */}
         <div className="flex justify-between items-center border-b pb-4">
           <div>
-            <h1 className="text-2xl font-bold">AthleteMetrics — Performance Report</h1>
+            <h1 className="text-2xl font-bold">Big Time Athletes — Performance Report</h1>
             <p className="text-sm text-muted-foreground">
               Generated on {format(new Date(generatedAt), "PPP")} · Athletic development for the Data-Driven Path to D1
             </p>
           </div>
-          <Badge variant="outline">AthleteMetrics</Badge>
+          <Badge variant="outline">Big Time Athletes</Badge>
         </div>
 
         {/* Coach Report View */}

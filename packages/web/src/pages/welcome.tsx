@@ -104,7 +104,7 @@ export default function Welcome() {
           {/* Footer Text */}
           <div className="text-center pt-4">
             <p className="text-xs text-gray-500">
-              Powered by AthleteMetrics
+              Developed by Big Time Athletes · Austin, TX
             </p>
           </div>
         </CardContent>
