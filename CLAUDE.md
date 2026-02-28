@@ -23,11 +23,45 @@ When ENABLED:
 - Multiple agents are coordinated in parallel when needed
 - Enhanced domain-specific expertise is applied automatically
 
+### Primary Entry Point: Lead Developer Agent
+
+#### Lead Developer Agent (`lead-developer-agent`) 🎯
+**Auto-invoke:** ALL development requests — features, bug fixes, refactors, architectural decisions, code review, sprint planning
+**Role:** Project-intelligent first responder. Brings architectural judgment, enforces conventions, translates intent into phased plans, and coordinates specialist agents. Routes to other agents with enriched context.
+
+**Invoke first for:**
+- Any feature request or new functionality
+- Bug fixes requiring more than a single-file change
+- Architectural or design questions
+- Sprint and milestone planning
+- Code review and PR assessment
+- Any request where the right approach isn't immediately obvious
+
+**The lead developer agent then coordinates:**
+- Specialist agents for domain-specific implementation
+- `athletemetrics-orchestrator` for multi-domain tasks
+- GSD skills for roadmap/milestone planning
+- `pr-lifecycle-agent` for detailed code review
+
+---
+
 ### Available Specialized Agents
 
 #### PR Lifecycle Agent (`pr-lifecycle-agent`) 🔄
 **Auto-invoke:** PR review, automated fixes, multi-iteration review→fix cycles, merge assessment
 **Keywords:** `pull request`, `PR review`, `code review`, `merge`, `@claude fix`, `@claude merge`
+
+#### QA Lead Agent (`qa-lead-agent`) 🧪
+**Auto-invoke:** Test coverage assessment, quality gates, bug triage, regression planning, test strategy ownership
+**Keywords:** `test coverage`, `quality gate`, `regression`, `bug triage`, `ready to ship`, `qa`, `test strategy`, `untested`
+
+#### Release Manager Agent (`release-manager-agent`) 🚢
+**Auto-invoke:** develop→main releases, changelog generation, semantic versioning, GitHub releases, hotfix workflows, release readiness
+**Keywords:** `release`, `changelog`, `version`, `hotfix`, `ship`, `tag`, `github release`, `release notes`, `ready to release`
+
+#### Documentation Agent (`documentation-agent`) 📝
+**Auto-invoke:** API docs, ADRs, JSDoc/TSDoc, README updates, CLAUDE.md maintenance, onboarding documentation
+**Keywords:** `document`, `docs`, `readme`, `adr`, `jsdoc`, `tsdoc`, `api docs`, `architecture decision`, `onboarding`
 
 #### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
 **Auto-invoke:** Test-first/TDD feature implementation, unit/integration tests, test coverage, mocking, autonomous workflows
@@ -130,6 +164,9 @@ When ENABLED:
 | CI/CD, GitHub Actions, releases, Railway deployments, repo settings | `devops-infrastructure-agent` |
 | Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
 | Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
+| Test strategy, coverage gaps, quality gates, bug triage | `qa-lead-agent` |
+| Releases, changelogs, versioning, hotfixes, GitHub releases | `release-manager-agent` |
+| API docs, ADRs, JSDoc, README, CLAUDE.md maintenance | `documentation-agent` |
 
 ## Git Workflow
 
