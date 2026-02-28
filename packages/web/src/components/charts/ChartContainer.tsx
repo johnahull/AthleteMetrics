@@ -128,6 +128,7 @@ interface ChartContainerProps {
   onExport?: (format: ExportFormat, chartRef?: any, containerRef?: HTMLElement | null) => Promise<ShareResult | void> | void;
   onFullscreen?: () => void;
   className?: string;
+  organizationId?: string;
 }
 
 export function ChartContainer({
@@ -151,7 +152,8 @@ export function ChartContainer({
   benchmarks,
   onExport,
   onFullscreen,
-  className
+  className,
+  organizationId
 }: ChartContainerProps) {
   // Fullscreen state
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
@@ -591,6 +593,8 @@ export function ChartContainer({
         selectedGroups={selectedGroups}
         benchmarks={benchmarks}
         showBenchmarks={!!benchmarks && benchmarks.length > 0}
+        organizationId={organizationId}
+        metricCode={metric}
       />
     </Card>
   );

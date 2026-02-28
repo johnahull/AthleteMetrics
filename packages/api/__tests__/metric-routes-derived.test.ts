@@ -218,6 +218,7 @@ describe('Metric Routes - Derived Metrics', () => {
           isDerived: true,
           formula: '10 / TEST_SOURCE_1 * 100',
           dependentMetrics: ['TEST_SOURCE_1'],
+          calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' },
           createdBy: testUserId,
         },
         {
@@ -229,6 +230,7 @@ describe('Metric Routes - Derived Metrics', () => {
           isDerived: true,
           formula: 'TEST_SOURCE_2 * TEST_DERIVED_1',
           dependentMetrics: ['TEST_SOURCE_2', 'TEST_DERIVED_1'],
+          calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' },
           createdBy: testUserId,
         },
       ]);
@@ -328,6 +330,7 @@ describe('Metric Routes - Derived Metrics', () => {
         isDerived: true,
         formula: '10 / TEST_BASE_METRIC',
         dependentMetrics: ['TEST_BASE_METRIC'],
+        calculationConfig: { dateMatchStrategy: 'same_date', missingSourceBehavior: 'skip' },
         createdBy: testUserId,
       });
 

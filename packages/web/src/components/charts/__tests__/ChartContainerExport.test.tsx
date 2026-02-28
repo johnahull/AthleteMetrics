@@ -38,6 +38,16 @@ vi.mock('../BarChart', () => ({
   BarChart: vi.fn(() => <div data-testid="bar-chart">Bar Chart</div>)
 }));
 
+// Mock benchmarks API (FullscreenChartDialog uses useBenchmarksForMetric, a React Query hook)
+vi.mock('@/lib/benchmarks-api', () => ({
+  useBenchmarksForMetric: () => ({ data: [], isLoading: false }),
+}));
+
+// Mock BenchmarkLineSelector component
+vi.mock('../../analytics/BenchmarkLineSelector', () => ({
+  BenchmarkLineSelector: () => null,
+}));
+
 describe('ChartContainer Export Functionality - TDD', () => {
   const mockData: ChartDataPoint[] = [
     {

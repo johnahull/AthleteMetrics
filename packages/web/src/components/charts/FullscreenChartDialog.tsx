@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState, useMemo, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,8 @@ import type {
   BenchmarkLine
 } from '@shared/analytics-types';
 import { getChartDataForType } from './chartDataUtils';
+import { BenchmarkLineSelector } from '../analytics/BenchmarkLineSelector';
+import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -57,6 +59,17 @@ const ZOOM_SUPPORTED_CHARTS: ChartType[] = [
   'violin_plot'
 ];
 
+// Chart types that support benchmark line overlays
+const BENCHMARK_COMPATIBLE_CHART_TYPES: ChartType[] = [
+  'line_chart',
+  'box_plot',
+  'box_swarm_combo',
+  'scatter_plot',
+  'connected_scatter',
+  'time_series_box_swarm',
+  'bar_chart',
+];
+
 interface FullscreenChartDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,6 +90,8 @@ interface FullscreenChartDialogProps {
   selectedGroups?: GroupDefinition[];
   benchmarks?: BenchmarkLine[];
   showBenchmarks?: boolean;
+  organizationId?: string;
+  metricCode?: string;
 }
 
 export function FullscreenChartDialog({
@@ -97,11 +112,57 @@ export function FullscreenChartDialog({
   selectedDates,
   metric,
   selectedGroups,
-  benchmarks,
-  showBenchmarks = true
+  benchmarks: initialBenchmarks,
+  showBenchmarks = true,
+  organizationId,
+  metricCode
 }: FullscreenChartDialogProps) {
   // Ref to access chart container for zoom reset
   const chartContainerRef = useRef<HTMLDivElement>(null);
+
+  // Local state for benchmark selection (initialized from parent's selection)
+  const [localSelectedBenchmarkIds, setLocalSelectedBenchmarkIds] = useState<string[]>(
+    () => initialBenchmarks?.map(b => b.id) || []
+  );
+
+  // Sync local state when initial benchmarks change (e.g., when dialog opens with new data)
+  useEffect(() => {
+    if (initialBenchmarks) {
+      setLocalSelectedBenchmarkIds(initialBenchmarks.map(b => b.id));
+    }
+  }, [initialBenchmarks]);
+
+  // Fetch available benchmarks for the metric
+  const { data: availableBenchmarks } = useBenchmarksForMetric(
+    organizationId || '',
+    metricCode || ''
+  );
+
+  // Check if benchmark selection should be shown
+  const supportsBenchmarks = BENCHMARK_COMPATIBLE_CHART_TYPES.includes(chartType);
+  const hasBenchmarksAvailable = availableBenchmarks && availableBenchmarks.length > 0;
+
+  // Convert selected benchmark IDs to BenchmarkLine objects
+  const effectiveBenchmarks = useMemo<BenchmarkLine[]>(() => {
+    if (!availableBenchmarks || localSelectedBenchmarkIds.length === 0) {
+      return initialBenchmarks || [];
+    }
+
+    return availableBenchmarks
+      .filter(b => localSelectedBenchmarkIds.includes(b.id))
+      .map(b => ({
+        id: b.id,
+        name: b.name,
+        value: b.benchmarkValue ?? 0,
+        minValue: b.minValue ?? undefined,
+        maxValue: b.maxValue ?? undefined,
+        comparisonOperator: b.comparisonOperator,
+        color: b.color ?? undefined,
+        lineStyle: 'dashed' as const,
+        metricCode: metricCode || '',
+        filters: b.filters
+      }));
+  }, [availableBenchmarks, localSelectedBenchmarkIds, initialBenchmarks, metricCode]);
 
   // Determine which data to pass based on chart type
   const chartData = React.useMemo(
@@ -192,8 +253,8 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
             showAllPoints={chartType === 'box_swarm_combo'}
             selectedGroups={selectedGroups}
-            benchmarks={benchmarks}
-            showBenchmarks={showBenchmarks && !!benchmarks && benchmarks.length > 0}
+            benchmarks={effectiveBenchmarks}
+            showBenchmarks={showBenchmarks && effectiveBenchmarks.length > 0}
           />
         );
 
@@ -220,6 +281,8 @@ export function FullscreenChartDialog({
             config={fullscreenConfig}
             statistics={statistics || {}}
             highlightAthlete={highlightAthlete}
+            benchmarks={effectiveBenchmarks}
+            showBenchmarks={showBenchmarks && effectiveBenchmarks.length > 0}
           />
         );
 
@@ -235,8 +298,8 @@ export function FullscreenChartDialog({
             highlightAthlete={highlightAthlete}
             selectedAthleteIds={selectedAthleteIds}
             onAthleteSelectionChange={onAthleteSelectionChange}
-            benchmarks={benchmarks}
-            showBenchmarks={showBenchmarks && !!benchmarks && benchmarks.length > 0}
+            benchmarks={effectiveBenchmarks}
+            showBenchmarks={showBenchmarks && effectiveBenchmarks.length > 0}
           />
         );
 
@@ -392,6 +455,17 @@ export function FullscreenChartDialog({
               <p className="text-xs text-muted-foreground mt-1">
                 Press <kbd className="px-1 py-0.5 text-xs font-semibold bg-muted rounded">ESC</kbd> to close fullscreen view.
               </p>
+              {/* Benchmark Selector - only show for compatible chart types with available benchmarks */}
+              {supportsBenchmarks && hasBenchmarksAvailable && organizationId && metricCode && (
+                <div className="mt-3">
+                  <BenchmarkLineSelector
+                    organizationId={organizationId}
+                    metricCode={metricCode}
+                    selectedBenchmarkIds={localSelectedBenchmarkIds}
+                    onSelectionChange={setLocalSelectedBenchmarkIds}
+                  />
+                </div>
+              )}
             </div>
             {supportsZoom && (
               <Button

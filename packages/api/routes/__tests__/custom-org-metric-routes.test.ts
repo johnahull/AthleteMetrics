@@ -191,6 +191,7 @@ describe("Custom Org Metrics API Routes", () => {
           code: `ORG_${testOrgId.substring(0, 8).toUpperCase()}_METRIC_A`,
           label: 'Metric A',
           metricType: 'lower_is_better',
+          unit: 's',
           category: 'speed',
           isActive: true,
           createdBy: orgAdminUserId,
@@ -200,6 +201,7 @@ describe("Custom Org Metrics API Routes", () => {
           code: `ORG_${testOrgId.substring(0, 8).toUpperCase()}_METRIC_B`,
           label: 'Metric B',
           metricType: 'higher_is_better',
+          unit: 'lbs',
           category: 'power',
           isActive: true,
           createdBy: orgAdminUserId,
@@ -209,6 +211,7 @@ describe("Custom Org Metrics API Routes", () => {
           code: `ORG_${testOrgId.substring(0, 8).toUpperCase()}_ARCHIVED`,
           label: 'Archived Metric',
           metricType: 'tracking',
+          unit: 'count',
           isActive: false,
           archivedAt: new Date(),
           createdBy: orgAdminUserId,
@@ -284,6 +287,7 @@ describe("Custom Org Metrics API Routes", () => {
         code: testMetricCode,
         label: 'Single Metric',
         metricType: 'tracking',
+        unit: 'count',
         isActive: true,
         createdBy: orgAdminUserId,
       });
@@ -340,6 +344,7 @@ describe("Custom Org Metrics API Routes", () => {
         .send({
           label: 'Site Admin Metric',
           metricType: 'higher_is_better',
+          unit: 'count',
         })
         .expect(201);
 
@@ -384,6 +389,7 @@ describe("Custom Org Metrics API Routes", () => {
         code: testMetricCode,
         label: 'Update Me',
         metricType: 'tracking',
+        unit: 'count',
         isActive: true,
         createdBy: orgAdminUserId,
       });
@@ -428,6 +434,7 @@ describe("Custom Org Metrics API Routes", () => {
         code: testMetricCode,
         label: 'Archive Me',
         metricType: 'tracking',
+        unit: 'count',
         isActive: true,
         createdBy: orgAdminUserId,
       });
@@ -455,6 +462,7 @@ describe("Custom Org Metrics API Routes", () => {
         code: testMetricCode,
         label: 'Restore Me',
         metricType: 'tracking',
+        unit: 'count',
         isActive: false,
         archivedAt: new Date(),
         createdBy: orgAdminUserId,

@@ -215,7 +215,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
       // Create a metric first
       await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'List Test Metric', metricType: 'tracking' },
+        { label: 'List Test Metric', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -234,7 +234,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
     it('should allow updating custom metrics when feature is enabled', async () => {
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Update Test', metricType: 'tracking' },
+        { label: 'Update Test', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -256,7 +256,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
 
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgIdDisabled,
-        { label: 'Disable After Create', metricType: 'tracking' },
+        { label: 'Disable After Create', metricType: 'tracking', unit: 'count' },
         disabledOrgAdminUserId
       );
 
@@ -278,7 +278,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
     it('should allow archiving custom metrics when feature is enabled', async () => {
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Archive Test', metricType: 'tracking' },
+        { label: 'Archive Test', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -296,7 +296,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
 
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgIdDisabled,
-        { label: 'Disable Before Archive', metricType: 'tracking' },
+        { label: 'Disable Before Archive', metricType: 'tracking', unit: 'count' },
         disabledOrgAdminUserId
       );
 
@@ -324,7 +324,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
 
       await customMetricService.createCustomOrgMetric(
         testOrgIdDisabled,
-        { label: 'Site Admin View Test', metricType: 'tracking' },
+        { label: 'Site Admin View Test', metricType: 'tracking', unit: 'count' },
         disabledOrgAdminUserId
       );
 
@@ -354,7 +354,7 @@ describe('Custom Metrics Feature Flag (customMetricsEnabled)', () => {
 
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgIdDisabled,
-        { label: 'Preserved Metric', metricType: 'tracking' },
+        { label: 'Preserved Metric', metricType: 'tracking', unit: 'count' },
         disabledOrgAdminUserId
       );
 
