@@ -275,6 +275,12 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
     });
 
     // Create derived measurements (with intentionally wrong values to test recalculation)
+    const placeholderMetadata = {
+      formula: derivedMetric.formula ?? '',
+      sourceValues: {},
+      calculatedAt: new Date().toISOString(),
+    };
+
     await db.insert(measurements).values({
       userId: athlete1Org1.id,
       submittedBy: orgAdmin1User.id,
@@ -287,6 +293,7 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
       organizationId: testOrg1.id,
       isCalculated: true,
       calculatedFromMeasurementIds: [],
+      calculationMetadata: placeholderMetadata,
     });
 
     await db.insert(measurements).values({
@@ -301,6 +308,7 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
       organizationId: testOrg1.id,
       isCalculated: true,
       calculatedFromMeasurementIds: [],
+      calculationMetadata: placeholderMetadata,
     });
 
     await db.insert(measurements).values({
@@ -315,6 +323,7 @@ describe('Organization-Scoped Derived Metrics Recalculation', () => {
       organizationId: testOrg2.id,
       isCalculated: true,
       calculatedFromMeasurementIds: [],
+      calculationMetadata: placeholderMetadata,
     });
   });
 

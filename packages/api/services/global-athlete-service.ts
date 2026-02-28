@@ -130,10 +130,14 @@ export class GlobalAthleteService extends BaseService {
       }
     } else {
       // Global athlete exists but has disabled cross-org linking
-      // Create a new separate global athlete for this user
+      // Create a new separate global athlete for this user.
+      // We do NOT set primaryEmail here because the unique constraint on
+      // primaryEmail prevents two global athletes from sharing the same email
+      // address. PostgreSQL allows multiple NULLs in a UNIQUE column, so
+      // leaving primaryEmail null creates a valid isolated identity.
+      // The verifiedEmails array still records the email for audit purposes.
       const [newGlobalAthlete] = await db.insert(globalAthletes).values({
         verifiedEmails: [email],
-        primaryEmail: email,
         canonicalFirstName: user.firstName,
         canonicalLastName: user.lastName,
         canonicalFullName: user.fullName,

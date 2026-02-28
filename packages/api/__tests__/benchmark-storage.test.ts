@@ -714,6 +714,7 @@ describe('Benchmark Storage', () => {
         metricCode: testMetricCode,
         name: `Forward Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.00,
+        sport: 'Soccer',
         position: 'Forward',
       }, siteAdminUserId);
       createdBenchmarkIds.push(forwardBenchmark.id);
@@ -722,6 +723,7 @@ describe('Benchmark Storage', () => {
         metricCode: testMetricCode,
         name: `Defender Benchmark ${uniqueSuffix}`,
         benchmarkValue: 1.10,
+        sport: 'Soccer',
         position: 'Defender',
       }, siteAdminUserId);
       createdBenchmarkIds.push(defenderBenchmark.id);
@@ -797,6 +799,7 @@ describe('Benchmark Storage', () => {
         gender: 'Male',
         ageMin: 18,
         ageMax: 25,
+        sport: 'Soccer',
         position: 'Forward',
       }, siteAdminUserId);
       createdBenchmarkIds.push(specificBenchmark.id);
@@ -809,6 +812,7 @@ describe('Benchmark Storage', () => {
         gender: 'Female',
         ageMin: 14,
         ageMax: 17,
+        sport: 'Soccer',
         position: 'Defender',
       }, siteAdminUserId);
       createdBenchmarkIds.push(mismatchBenchmark.id);

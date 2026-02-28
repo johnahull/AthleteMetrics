@@ -126,7 +126,11 @@ describe('DerivedMetricCalculator', () => {
     await db.delete(measurements).where(eq(measurements.userId, testUser.id));
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, testUser.id));
     await db.delete(users).where(eq(users.id, testUser.id));
-    // Don't delete metrics - they're shared across tests and might be system defaults
+    // Clean up test-only non-system metrics (may be leftover from failed tests)
+    await db.delete(siteMetrics).where(eq(siteMetrics.code, 'DUMMY_METRIC'));
+    await db.delete(siteMetrics).where(eq(siteMetrics.code, 'DUMMY2_METRIC'));
+    await db.delete(siteMetrics).where(eq(siteMetrics.code, 'SPEED_SCORE'));
+    // Don't delete system default metrics - they're shared across tests
     await db.delete(organizations).where(eq(organizations.id, testOrg.id));
   });
 
