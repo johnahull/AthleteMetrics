@@ -37,6 +37,22 @@ export function registerAuthRoutes(app: Express) {
 
       const user = result.user!;
 
+      // COPPA check: block login for under-13 athletes without parental consent.
+      // IMPORTANT: This check runs AFTER password validation to prevent leaking
+      // whether an account exists via different error codes on wrong passwords.
+      if (['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(user.coppaStatus)) {
+        const codeMap: Record<string, string> = {
+          pending_consent: 'coppa_pending_consent',
+          needs_parent_email: 'coppa_needs_parent_email',
+          consent_revoked: 'coppa_consent_revoked',
+        };
+        return res.status(403).json({
+          code: codeMap[user.coppaStatus],
+          coppaStatus: user.coppaStatus,
+          message: "Account access requires parental consent.",
+        });
+      }
+
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 

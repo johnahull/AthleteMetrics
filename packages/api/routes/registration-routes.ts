@@ -16,6 +16,8 @@ import {
   MISSING_ACCEPTANCE_MESSAGE,
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
+import { coppaService } from "../services/coppa-service";
+import { isUnder13 } from "@shared/coppa-utils";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -71,6 +73,37 @@ const registrationSchema = z.object({
       (val) => validateLegalAcceptanceTimestamp(val),
       INVALID_TIMESTAMP_MESSAGE
     ),
+  // COPPA fields — birthDate is required; parentEmail required if under 13
+  birthDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format")
+    .optional(),
+  parentEmail: z.string()
+    .email("Parent email must be a valid email address")
+    .max(255)
+    .toLowerCase()
+    .trim()
+    .optional(),
+}).superRefine((data, ctx) => {
+  // If under-13, parentEmail is required and must differ from athlete email
+  if (data.birthDate) {
+    let under13 = false;
+    try { under13 = isUnder13(data.birthDate); } catch { /* invalid date handled below */ }
+    if (under13) {
+      if (!data.parentEmail) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['parentEmail'],
+          message: "Parent or guardian email is required for athletes under 13.",
+        });
+      } else if (data.parentEmail === data.email) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['parentEmail'],
+          message: "Parent email must be different from the athlete's email.",
+        });
+      }
+    }
+  }
 });
 
 // Validation schema for resend verification
@@ -103,7 +136,21 @@ export function registerRegistrationRoutes(app: Express) {
         });
       }
 
-      const { firstName, lastName, email, username, password, legalAcceptedAt } = validationResult.data;
+      const { firstName, lastName, email, username, password, legalAcceptedAt, birthDate, parentEmail } = validationResult.data;
+
+      // Determine COPPA status before creating the user
+      let isMinorRegistration = false;
+      if (birthDate) {
+        try {
+          isMinorRegistration = isUnder13(birthDate);
+        } catch {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid birthDate provided.",
+            errors: [{ field: 'birthDate', message: 'Invalid date format or future date.' }],
+          });
+        }
+      }
 
       // Check if username is already taken
       const existingUsername = await storage.getUserByUsername(username);
@@ -143,6 +190,11 @@ export function registerRegistrationRoutes(app: Express) {
         isSiteAdmin: false,
         legalAcceptedAt: legalAcceptedAtDate,
         legalAcceptedVersion,
+        birthDate: birthDate ?? undefined,
+        // COPPA: set initial status — will be updated by initiateConsent if under-13
+        coppaStatus: isMinorRegistration ? 'pending_consent' : 'not_applicable',
+        isMinor: isMinorRegistration,
+        parentEmail: isMinorRegistration ? (parentEmail ?? undefined) : undefined,
         // No organization membership - user is independent
       });
 
@@ -192,6 +244,26 @@ export function registerRegistrationRoutes(app: Express) {
         return res.status(500).json({
           success: false,
           message: "Registration failed due to system error. Please try again."
+        });
+      }
+
+      // COPPA branch: under-13 athletes cannot receive a session.
+      // Initiate VPC flow and return early — NO session cookie set.
+      if (isMinorRegistration && parentEmail) {
+        const coppaResult = await coppaService.initiateConsent({
+          athleteUserId: userId,
+          parentEmail,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+        });
+
+        console.log(`[Registration] Minor registered: ${username}, VPC initiated: ${coppaResult.success}`);
+
+        return res.status(201).json({
+          success: true,
+          requiresParentalConsent: true,
+          message: `Your account has been created. A consent email has been sent to ${parentEmail}. You'll be able to log in once a parent or guardian approves your account.`,
+          parentEmail,
         });
       }
 

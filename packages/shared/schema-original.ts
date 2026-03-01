@@ -1491,6 +1491,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   // Onboarding tracking - defaults to false for new users
   hasCompletedOnboarding: z.boolean().optional(),
+  // COPPA compliance fields
+  coppaStatus: z.enum(['not_applicable', 'pending_consent', 'needs_parent_email', 'consented', 'consent_revoked']).optional(),
+  isMinor: z.boolean().optional(),
+  parentEmail: z.string().email().optional(),
+  parentConsentId: z.string().optional(),
+  coppaConsentConfirmedAt: z.date().optional(),
 });
 
 // Schema for creating OAuth users (password is optional for OAuth-only accounts)
