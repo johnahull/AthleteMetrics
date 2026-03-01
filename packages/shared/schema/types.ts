@@ -235,6 +235,21 @@ export type BenchmarkSetWithItems = BenchmarkSet & {
 };
 
 // ============================================================================
+// COPPA Tables
+// ============================================================================
+
+export type ParentalConsent = typeof tables.parentalConsents.$inferSelect;
+export type InsertParentalConsent = typeof tables.parentalConsents.$inferInsert;
+export type ParentAthleteLink = typeof tables.parentAthleteLinks.$inferSelect;
+export type CoppaAuditLog = typeof tables.coppaAuditLog.$inferSelect;
+export type DataDeletionRequest = typeof tables.dataDeletionRequests.$inferSelect;
+export type DataExportRequest = typeof tables.dataExportRequests.$inferSelect;
+
+// COPPA enum types
+export type CoppaStatus = (typeof enums.coppaStatusEnum)[number];
+export type ConsentStatus = (typeof enums.consentStatusEnum)[number];
+
+// ============================================================================
 // Onboarding Types
 // ============================================================================
 

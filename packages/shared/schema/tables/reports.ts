@@ -110,6 +110,12 @@ export const reportSnapshots = pgTable("report_snapshots", {
   viewCount: integer("view_count").default(0).notNull(),
   lastViewedAt: timestamp("last_viewed_at"),
 
+  // COPPA compliance flags (added in migration 0024_coppa_compliance)
+  // Set at snapshot creation time based on athlete ages AT TIME OF DATA COLLECTION.
+  // Never updated retroactively after the fact — use age-at-collection, not current age.
+  containsMinorData: boolean("contains_minor_data").default(false).notNull(),
+  publicAccessRestricted: boolean("public_access_restricted").default(false).notNull(),
+
   // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => ({

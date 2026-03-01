@@ -19,6 +19,9 @@ export * from "./constants";
 
 // Types - selectively export to avoid conflicts with constants
 export type {
+  // COPPA
+  ParentalConsent, InsertParentalConsent, ParentAthleteLink, CoppaAuditLog,
+  DataDeletionRequest, DataExportRequest, CoppaStatus, ConsentStatus,
   // Core
   Organization, Team, User, AthleteProfile, UserTeam,
   // Metrics
