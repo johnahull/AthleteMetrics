@@ -262,8 +262,7 @@ export function registerRegistrationRoutes(app: Express) {
         return res.status(201).json({
           success: true,
           requiresParentalConsent: true,
-          message: `Your account has been created. A consent email has been sent to ${parentEmail}. You'll be able to log in once a parent or guardian approves your account.`,
-          parentEmail,
+          message: "Your account has been created. A consent email has been sent to your parent or guardian. You'll be able to log in once they approve your account.",
         });
       }
 

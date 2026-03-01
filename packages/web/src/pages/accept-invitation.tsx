@@ -176,7 +176,7 @@ export default function AcceptInvitation() {
 
       // COPPA: under-13 athletes await parental consent — no redirect to dashboard
       if (data.requiresParentalConsent) {
-        setConsentParentEmail(data.parentEmail || formData.parentEmail);
+        setConsentParentEmail(formData.parentEmail);
         setConsentEmailSent(true);
         return;
       }

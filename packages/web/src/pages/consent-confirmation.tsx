@@ -5,7 +5,7 @@
  *
  * Route: /consent/:token
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,9 @@ export default function ConsentConfirmation() {
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitError, setSubmitError] = useState('');
+  // Synchronous guard prevents double-click from firing two requests before
+  // React state update (setSubmitStatus) disables the buttons
+  const submittingRef = useRef(false);
 
   // Verify the token on mount
   useEffect(() => {
@@ -55,6 +58,8 @@ export default function ConsentConfirmation() {
   }, [token]);
 
   const handleSubmit = async (granted: boolean) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitStatus('submitting');
     setSubmitError('');
     try {
@@ -69,10 +74,12 @@ export default function ConsentConfirmation() {
         const body = await res.json().catch(() => ({}));
         setSubmitError(body.message || 'Something went wrong. Please try again.');
         setSubmitStatus('idle');
+        submittingRef.current = false;
       }
     } catch {
       setSubmitError('Network error. Please check your connection and try again.');
       setSubmitStatus('idle');
+      submittingRef.current = false;
     }
   };
 

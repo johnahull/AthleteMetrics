@@ -221,7 +221,7 @@ export default function Register() {
       // COPPA: minor registration — show "consent sent" state, no redirect
       if (data.requiresParentalConsent) {
         setConsentEmailSent(true);
-        setConsentParentEmail(data.parentEmail || formData.parentEmail);
+        setConsentParentEmail(formData.parentEmail);
         return;
       }
 

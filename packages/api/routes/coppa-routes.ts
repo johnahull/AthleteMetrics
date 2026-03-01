@@ -15,7 +15,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { users } from "@shared/schema/tables/core";
 import { eq, and, inArray } from "drizzle-orm";
-import { isUnder13, COPPA_ACTIONS } from "@shared/coppa-utils";
+import { isUnder13, wasUnder13At, COPPA_ACTIONS } from "@shared/coppa-utils";
 
 // Rate limiter for consent mutation endpoints (strict — prevents email flooding)
 const consentMutateLimiter = rateLimit({
@@ -200,14 +200,15 @@ export function registerCoppaRoutes(app: Express) {
         return res.status(400).json({ message: "athleteUserId is required" });
       }
 
-      // Verify actor has authority: must be site admin OR org admin for same org as athlete
+      // Verify actor has authority: site admin OR org_admin sharing an org with the athlete
       if (!actor.isSiteAdmin) {
         const actorOrgs = await storage.getUserOrganizations(actor.id);
         const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
-        const sharedOrg = actorOrgs.some(ao =>
+        const authorizedOrg = actorOrgs.some(ao =>
+          ao.role === 'org_admin' &&
           athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
         );
-        if (!sharedOrg) {
+        if (!authorizedOrg) {
           return res.status(403).json({ message: "Insufficient permissions" });
         }
       }
@@ -234,14 +235,15 @@ export function registerCoppaRoutes(app: Express) {
       const actor = req.session.user!;
       const { athleteUserId } = req.params;
 
-      // Authorization: site admin OR org admin sharing an org with the athlete
+      // Authorization: site admin OR org_admin sharing an org with the athlete
       if (!actor.isSiteAdmin) {
         const actorOrgs = await storage.getUserOrganizations(actor.id);
         const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
-        const sharedOrg = actorOrgs.some(ao =>
+        const authorizedOrg = actorOrgs.some(ao =>
+          ao.role === 'org_admin' &&
           athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
         );
-        if (!sharedOrg) {
+        if (!authorizedOrg) {
           return res.status(403).json({ message: "Insufficient permissions" });
         }
       }
@@ -268,13 +270,16 @@ export function registerCoppaRoutes(app: Express) {
     try {
       const { scanAll = false, organizationId } = req.body;
 
-      // Find users who are under 13 but not yet in the COPPA flow
+      // Find users who are not yet in the COPPA flow
+      // Use age-at-registration (createdAt), not current age — COPPA obligations
+      // attach at the time of data collection, not today.
       const allUsers = await db.select({
         id: users.id,
         birthDate: users.birthDate,
         coppaStatus: users.coppaStatus,
         parentEmail: users.parentEmail,
         emails: users.emails,
+        createdAt: users.createdAt,
       })
       .from(users)
       .where(eq(users.coppaStatus, 'not_applicable'));
@@ -282,7 +287,9 @@ export function registerCoppaRoutes(app: Express) {
       const minors = allUsers.filter(u => {
         if (!u.birthDate) return false;
         try {
-          return isUnder13(u.birthDate);
+          // Was the user under 13 when they registered?
+          const registeredAt = u.createdAt ? new Date(u.createdAt) : new Date();
+          return wasUnder13At(u.birthDate, registeredAt);
         } catch {
           return false;
         }

@@ -42,7 +42,19 @@ export function calculateAge(birthDate: string | Date): number {
     throw new Error('birthDate is required for age calculation');
   }
 
-  const birth = birthDate instanceof Date ? birthDate : new Date(birthDate);
+  // Parse string dates as LOCAL midnight to avoid UTC timezone shifts.
+  // new Date("YYYY-MM-DD") is UTC midnight, which in UTC+ timezones resolves
+  // to the previous local day — incorrect for date-of-birth age calculations.
+  let birth: Date;
+  if (birthDate instanceof Date) {
+    birth = birthDate;
+  } else {
+    const parts = (birthDate as string).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) {
+      throw new Error(`Invalid birthDate: ${String(birthDate)}`);
+    }
+    birth = new Date(parts[0], parts[1] - 1, parts[2]); // local midnight
+  }
 
   if (isNaN(birth.getTime())) {
     throw new Error(`Invalid birthDate: ${String(birthDate)}`);
@@ -67,7 +79,7 @@ export function calculateAge(birthDate: string | Date): number {
 }
 
 /**
- * Returns true if the person is strictly under 13 years old.
+ * Returns true if the person is strictly under 13 years old as of today.
  *
  * LEGAL EXPOSURE: The boundary condition (exactly 13 today) must return false.
  * A person who turns 13 today has had their 13th birthday → not under 13.
@@ -78,6 +90,47 @@ export function calculateAge(birthDate: string | Date): number {
  */
 export function isUnder13(birthDate: string | Date): boolean {
   return calculateAge(birthDate) < COPPA_AGE_THRESHOLD;
+}
+
+/**
+ * Returns true if the person was under 13 at a specific reference date.
+ *
+ * Used for retroactive COPPA scans where age-at-collection (e.g. account
+ * creation date) matters, not current age. A user who was 12 when they
+ * registered but is now 14 was still a minor at the time of data collection.
+ *
+ * @param birthDate - Date of birth
+ * @param referenceDate - The date to calculate age against (e.g. createdAt)
+ * @returns true if the person was under 13 at referenceDate
+ * @throws Error if birthDate is null/undefined or referenceDate is before birthDate
+ */
+export function wasUnder13At(birthDate: string | Date, referenceDate: Date): boolean {
+  if (birthDate === null || birthDate === undefined) {
+    throw new Error('birthDate is required');
+  }
+  let birth: Date;
+  if (birthDate instanceof Date) {
+    birth = birthDate;
+  } else {
+    const parts = (birthDate as string).split('-').map(Number);
+    if (parts.length !== 3 || parts.some(isNaN)) {
+      throw new Error(`Invalid birthDate: ${String(birthDate)}`);
+    }
+    birth = new Date(parts[0], parts[1] - 1, parts[2]); // local midnight
+  }
+  if (isNaN(birth.getTime())) {
+    throw new Error(`Invalid birthDate: ${String(birthDate)}`);
+  }
+  if (birth > referenceDate) {
+    throw new Error('birthDate cannot be after referenceDate');
+  }
+
+  let age = referenceDate.getFullYear() - birth.getFullYear();
+  const monthDiff = referenceDate.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && referenceDate.getDate() < birth.getDate())) {
+    age--;
+  }
+  return age < COPPA_AGE_THRESHOLD;
 }
 
 // ============================================================================

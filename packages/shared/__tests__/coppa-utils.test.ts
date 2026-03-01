@@ -34,7 +34,12 @@ function birthdayRelativeToToday(yearsAgo: number, offsetDays = 0): string {
   const birth = new Date(today);
   birth.setFullYear(birth.getFullYear() - yearsAgo);
   birth.setDate(birth.getDate() + offsetDays);
-  return birth.toISOString().split('T')[0];
+  // Use LOCAL date parts — toISOString() converts to UTC which shifts the
+  // date in UTC+ timezones, breaking age boundary tests.
+  const y = birth.getFullYear();
+  const m = String(birth.getMonth() + 1).padStart(2, '0');
+  const d = String(birth.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // ============================================================================

@@ -868,9 +868,11 @@ export class ReportService extends BaseService {
         containsMinorData = minorCheck.some(u => u.isMinor === true);
       }
     } catch (err) {
-      // Log but don't block snapshot creation — fail open here (restrict access)
+      // Fail-closed: if we can't determine whether the snapshot contains minor
+      // data, conservatively restrict public access. Better to over-restrict
+      // than to expose COPPA-protected data publicly.
       console.error('[COPPA] Failed to check minor data in snapshot:', err);
-      containsMinorData = false;
+      containsMinorData = true;
     }
 
     // Create snapshot
