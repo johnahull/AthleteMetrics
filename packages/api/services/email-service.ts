@@ -1613,6 +1613,220 @@ export class EmailService {
       throw new Error('Failed to generate email template');
     }
   }
+  // ============================================================================
+  // COPPA Email Methods
+  // ============================================================================
+
+  /**
+   * Send the FTC-required parental consent request email.
+   *
+   * FTC requirements (16 C.F.R. § 312.4(b)):
+   * 1. Notice of what information is collected
+   * 2. How it's used
+   * 3. Parent's right to refuse or revoke
+   * 4. AI disclosure (added for AI consent)
+   *
+   * SECURITY: consentToken is the RAW token — it goes in the link only,
+   * never logged or stored in the DB. Approve/Deny links use GET + POST
+   * respectively via the /consent/:token page.
+   */
+  async sendParentalConsentRequest(
+    parentEmail: string,
+    data: {
+      athleteName: string;
+      consentToken: string;
+      consentId: string;
+      expiresAt: Date;
+    }
+  ): Promise<boolean> {
+    if (!isValidEmail(parentEmail)) {
+      console.error('[COPPA Email] Invalid parent email format');
+      return false;
+    }
+
+    const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+    const consentPageUrl = sanitizeUrl(`${baseUrl}/consent/${data.consentToken}`);
+    const expiryStr = escapeHtml(data.expiresAt.toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    }));
+    const athleteName = escapeHtml(data.athleteName);
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Parental Consent Required</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,#3b82f6,#2563eb);">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Parental Consent Required</h1>
+              <p style="margin:8px 0 0;color:#bfdbfe;font-size:14px;">AthleteMetrics — Youth Athlete Platform</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Dear Parent or Guardian,</p>
+
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                <strong>${athleteName}</strong> has registered for an account on AthleteMetrics, an athletic performance
+                tracking platform. Because your child is under 13 years of age, the Children's Online Privacy Protection
+                Act (COPPA) requires us to obtain your verifiable consent before we can activate their account.
+              </p>
+
+              <h2 style="margin:24px 0 8px;color:#2d3748;font-size:16px;">What Information We Collect</h2>
+              <ul style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.8;padding-left:20px;">
+                <li>Name, username, and email address</li>
+                <li>Date of birth (used for age-appropriate content)</li>
+                <li>Athletic performance measurements (times, distances, heights)</li>
+                <li>Team and organization membership</li>
+              </ul>
+
+              <h2 style="margin:24px 0 8px;color:#2d3748;font-size:16px;">How We Use This Information</h2>
+              <ul style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.8;padding-left:20px;">
+                <li>Track and display athletic performance data to coaches and the athlete</li>
+                <li>Generate performance reports and progress summaries</li>
+                <li>Communicate with the athlete about their training data</li>
+              </ul>
+
+              <h2 style="margin:24px 0 8px;color:#2d3748;font-size:16px;">AI Coaching Features (Optional)</h2>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                AthleteMetrics offers optional AI-powered coaching insights. On the next page, you will be
+                asked separately whether to enable AI features for your child's account. This consent is
+                optional and can be changed at any time.
+              </p>
+
+              <h2 style="margin:24px 0 8px;color:#2d3748;font-size:16px;">Your Rights</h2>
+              <ul style="margin:0 0 24px;color:#4a5568;font-size:15px;line-height:1.8;padding-left:20px;">
+                <li>Review your child's information at any time by contacting us</li>
+                <li>Request deletion of your child's data</li>
+                <li>Revoke this consent at any time</li>
+                <li>Refuse to provide consent without penalty (account will not be activated)</li>
+              </ul>
+
+              <p style="margin:0 0 8px;color:#4a5568;font-size:14px;">
+                This link expires on <strong>${expiryStr}</strong>.
+              </p>
+
+              <!-- CTA Buttons -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                <tr>
+                  <td align="center" style="padding:8px;">
+                    <a href="${consentPageUrl}" style="display:inline-block;padding:14px 32px;background:#16a34a;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;margin:4px;">
+                      Review and Respond
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:16px 0 0;color:#718096;font-size:13px;line-height:1.6;">
+                If you did not expect this email, your child may have registered without your knowledge.
+                You can safely ignore this email and the account will not be activated.
+                Questions? Contact us at <a href="mailto:privacy@athletemetrics.app" style="color:#3b82f6;">privacy@athletemetrics.app</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;border-radius:0 0 8px 8px;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">
+                AthleteMetrics | Youth Athlete Performance Platform<br>
+                This email is required by federal law (COPPA, 15 U.S.C. §§ 6501–6506).
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+      const text = `Parental Consent Required for ${data.athleteName}\n\n` +
+        `${data.athleteName} has registered for AthleteMetrics. Because they are under 13, ` +
+        `federal law (COPPA) requires your consent before we can activate their account.\n\n` +
+        `Review and respond here: ${consentPageUrl}\n\n` +
+        `This link expires on ${data.expiresAt.toLocaleDateString()}.\n\n` +
+        `If you did not expect this, you can safely ignore it.`;
+
+      await this.sendEmail({
+        to: parentEmail,
+        subject: `Action Required: Parental Consent for ${athleteName}'s AthleteMetrics Account`,
+        html,
+        text,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[COPPA Email] sendParentalConsentRequest failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Notify athlete that their account is now active (consent confirmed).
+   */
+  async sendConsentConfirmedNotification(
+    athleteEmail: string,
+    data: { athleteName: string }
+  ): Promise<boolean> {
+    if (!athleteEmail || !isValidEmail(athleteEmail)) {
+      console.warn('[COPPA Email] Skipping consent confirmed notification — no valid athlete email');
+      return false;
+    }
+
+    const athleteName = escapeHtml(data.athleteName);
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Account Activated</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <tr>
+          <td style="padding:32px 40px;background:linear-gradient(135deg,#16a34a,#15803d);">
+            <h1 style="margin:0;color:#fff;font-size:22px;">Your Account is Active!</h1>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:32px 40px;">
+            <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Hi ${athleteName},</p>
+            <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+              Great news! A parent or guardian has approved your AthleteMetrics account.
+              You can now log in and start tracking your athletic performance.
+            </p>
+            <p style="margin:0;color:#718096;font-size:14px;">Welcome to the team!</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`.trim();
+
+      await this.sendEmail({
+        to: athleteEmail,
+        subject: 'Your AthleteMetrics Account is Now Active',
+        html,
+        text: `Hi ${data.athleteName},\n\nYour AthleteMetrics account has been approved by a parent or guardian. You can now log in!`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[COPPA Email] sendConsentConfirmedNotification failed:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance
