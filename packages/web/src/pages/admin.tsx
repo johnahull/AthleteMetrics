@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Heart, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
+import { Sparkles, Heart, AlertTriangle, FileText, Bell, Calculator, Loader2, Dumbbell } from "lucide-react";
 import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
 
 export default function AdminPage() {
@@ -19,13 +19,14 @@ export default function AdminPage() {
   const [, setLocation] = useLocation();
 
   // Site Settings - hooks must be called unconditionally (React Rules of Hooks)
-  const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean }>({
+  const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean; trainingModuleEnabled: boolean }>({
     queryKey: ["/api/site-settings"],
     enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
   const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
+  const [trainingEnabled, setTrainingEnabled] = useState<boolean>(false);
 
   // Redirect non-site-admins to home
   useEffect(() => {
@@ -40,6 +41,9 @@ export default function AdminPage() {
     }
     if (siteSettings?.wellnessModuleEnabled !== undefined) {
       setWellnessEnabled(siteSettings.wellnessModuleEnabled);
+    }
+    if (siteSettings?.trainingModuleEnabled !== undefined) {
+      setTrainingEnabled(siteSettings.trainingModuleEnabled);
     }
   }, [siteSettings]);
 
@@ -78,6 +82,29 @@ export default function AdminPage() {
     onError: (error: any) => {
       toast({
         title: "Error updating wellness module",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const updateTrainingMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/site-settings", { trainingModuleEnabled: enabled });
+      return res.json();
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
+      toast({
+        title: enabled ? "Training module enabled" : "Training module disabled",
+        description: enabled
+          ? "Organizations can now be granted access to training features."
+          : "Training features are now disabled for all organizations.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating training module",
         description: error.message,
         variant: "destructive"
       });
@@ -138,6 +165,11 @@ export default function AdminPage() {
   const handleWellnessToggle = (enabled: boolean) => {
     setWellnessEnabled(enabled);
     updateWellnessMutation.mutate(enabled);
+  };
+
+  const handleTrainingToggle = (enabled: boolean) => {
+    setTrainingEnabled(enabled);
+    updateTrainingMutation.mutate(enabled);
   };
 
   const selectedModelData = aiModels.find(m => m.value === selectedModel);
@@ -258,6 +290,51 @@ export default function AdminPage() {
                 <p className="mt-1">
                   All organizations are currently unable to access wellness features.
                   Organization-level settings are frozen until you re-enable this module.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Training Module Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Dumbbell className="h-5 w-5" />
+            Training Module
+            <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+              Experimental
+            </span>
+          </CardTitle>
+          <CardDescription>
+            Control global access to training programs, workout logging, and athlete compliance tracking
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <div className="font-medium">Enable Training Module</div>
+              <div className="text-sm text-muted-foreground">
+                When enabled, organizations can be individually granted access to training features
+              </div>
+            </div>
+            <Switch
+              checked={trainingEnabled}
+              onCheckedChange={handleTrainingToggle}
+              disabled={updateTrainingMutation.isPending}
+              data-testid="training-module-toggle"
+            />
+          </div>
+
+          {!trainingEnabled && (
+            <div className="flex items-start gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium">Training Module Disabled</p>
+                <p className="mt-1">
+                  Training features are unavailable to all organizations.
+                  Organization-level training settings are frozen until you re-enable this module.
                 </p>
               </div>
             </div>

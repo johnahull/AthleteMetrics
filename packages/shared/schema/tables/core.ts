@@ -33,6 +33,8 @@ export const organizations = pgTable("organizations", {
   eventsEnabled: boolean("events_enabled").default(false).notNull(),
   // Custom organization metrics feature flag (added in migration 0093)
   customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
+  // Training module feature flag (added in migration 0024_training_module.sql)
+  trainingEnabled: boolean("training_enabled").default(false).notNull(),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

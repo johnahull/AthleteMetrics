@@ -333,12 +333,38 @@ export function registerOrganizationRoutes(app: Express) {
         userAgent: req.get('user-agent')
       };
 
+      // Validate trainingEnabled: cannot enable at org level if global flag is off
+      if (req.body.trainingEnabled === true) {
+        const globalSettings = await storage.getSiteSettings();
+        if (!globalSettings?.trainingModuleEnabled) {
+          return res.status(422).json({
+            message: "Training module must be enabled globally by site administrator before enabling per organization"
+          });
+        }
+      }
+
       const updatedOrganization = await organizationService.updateOrganization(
         organizationId,
         req.body,
         req.session.user!.id,
         context
       );
+
+      // Audit log for training flag change
+      if (req.body.trainingEnabled !== undefined) {
+        const org = await storage.getOrganization(organizationId);
+        await storage.createAuditLog({
+          userId: req.session.user!.id,
+          action: req.body.trainingEnabled ? 'org_training_enabled' : 'org_training_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            newEnabled: req.body.trainingEnabled,
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      }
 
       // Invalidate organization type caches when organization is updated
       // This ensures cached metrics/benchmarks reflect any org type changes

@@ -114,6 +114,16 @@ const MyRequests = React.lazy(() => import("./pages/my-requests"));
 // Lazy load notification settings page
 const NotificationSettings = React.lazy(() => import("./pages/notification-settings"));
 
+// Lazy load training pages (coach + athlete)
+const TrainingPrograms = React.lazy(() => import("./pages/training-programs"));
+const TrainingProgramBuilder = React.lazy(() => import("./pages/training-program-builder"));
+const TrainingExercises = React.lazy(() => import("./pages/training-exercises"));
+const TrainingAssignments = React.lazy(() => import("./pages/training-assignments"));
+const TrainingAthleteDetail = React.lazy(() => import("./pages/training-athlete-detail"));
+const TrainingCompliance = React.lazy(() => import("./pages/training-compliance"));
+const MyTraining = React.lazy(() => import("./pages/my-training"));
+const MyWorkoutLog = React.lazy(() => import("./pages/my-workout-log"));
+
 // Lazy load event pages
 const Events = React.lazy(() => import("./pages/events"));
 const MyEvents = React.lazy(() => import("./pages/my-events"));
@@ -508,6 +518,49 @@ function Router() {
           <MyEvents />
         </RouteWrapper>
       </Route>
+      {/* Training routes — specific routes before generic (programId before list) */}
+      <Route path="/training/programs/:programId">
+        <RouteWrapper loadingText="Loading Program Builder...">
+          <TrainingProgramBuilder />
+        </RouteWrapper>
+      </Route>
+      <Route path="/training/programs">
+        <RouteWrapper loadingText="Loading Training Programs...">
+          <TrainingPrograms />
+        </RouteWrapper>
+      </Route>
+      <Route path="/training/exercises">
+        <RouteWrapper loadingText="Loading Exercise Library...">
+          <TrainingExercises />
+        </RouteWrapper>
+      </Route>
+      <Route path="/training/assignments">
+        <RouteWrapper loadingText="Loading Assignments...">
+          <TrainingAssignments />
+        </RouteWrapper>
+      </Route>
+      <Route path="/training/athletes/:athleteId">
+        <RouteWrapper loadingText="Loading Athlete Training...">
+          <TrainingAthleteDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/training/compliance">
+        <RouteWrapper loadingText="Loading Consistency Overview...">
+          <TrainingCompliance />
+        </RouteWrapper>
+      </Route>
+      {/* Athlete training routes — specific before generic */}
+      <Route path="/my-training/log/:workoutId">
+        <RouteWrapper loadingText="Loading Workout Log...">
+          <MyWorkoutLog />
+        </RouteWrapper>
+      </Route>
+      <Route path="/my-training">
+        <RouteWrapper loadingText="Loading My Training...">
+          <MyTraining />
+        </RouteWrapper>
+      </Route>
+
       {/* Component test pages (development) */}
       <Route path="/component-test/team-selector">
         <RouteWrapper loadingText="Loading Component Test...">

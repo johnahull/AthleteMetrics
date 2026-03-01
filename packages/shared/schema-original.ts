@@ -1410,6 +1410,7 @@ export const updateOrganizationSchema = z.object({
   wellnessEnabled: z.boolean().optional(), // Org admin can set this (only effective when site wellness enabled)
   eventsEnabled: z.boolean().optional(), // Org admin can enable/disable events module
   customMetricsEnabled: z.boolean().optional(), // Site admin only - enable/disable custom metrics feature
+  trainingEnabled: z.boolean().optional(), // Site admin can enable/disable training module per org
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
@@ -2597,6 +2598,7 @@ export type AIModel = typeof AI_MODELS[number];
 export const updateSiteSettingsSchema = z.object({
   aiModel: z.enum(AI_MODELS).optional(),
   wellnessModuleEnabled: z.boolean().optional(),
+  trainingModuleEnabled: z.boolean().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

@@ -465,6 +465,9 @@ export const requireWellnessAccess = (requireAuth: boolean = false) => {
 // Wellness feature flag middleware - checks if wellness module is enabled
 export { requireWellnessEnabled, checkWellnessEnabled } from './middleware/require-wellness-enabled';
 
+// Training module feature flag middleware - checks if training module is enabled
+export { requireTrainingEnabled, checkTrainingEnabled } from './middleware/require-training-enabled';
+
 // Error handling middleware
 export const errorHandler = (error: any, req: Request, res: Response, next: NextFunction) => {
   console.error('API Error:', error);
