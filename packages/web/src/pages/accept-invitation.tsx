@@ -11,6 +11,7 @@ import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lu
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
+import { isUnder13 } from '@shared/coppa-utils';
 
 interface InvitationData {
   email: string;
@@ -50,11 +51,20 @@ export default function AcceptInvitation() {
     username: '',
     password: '',
     confirmPassword: '',
-    termsAccepted: false
+    termsAccepted: false,
+    birthDate: '',
+    parentEmail: '',
   });
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [consentEmailSent, setConsentEmailSent] = useState(false);
+  const [consentParentEmail, setConsentParentEmail] = useState('');
+
+  const isMinor = (() => {
+    if (!formData.birthDate) return false;
+    try { return isUnder13(formData.birthDate); } catch { return false; }
+  })();
 
   // Extract token from URL on mount
   useEffect(() => {
@@ -153,13 +163,22 @@ export default function AcceptInvitation() {
           username: formData.username,
           password: formData.password,
           legalAcceptedAt: new Date().toISOString(),
+          birthDate: formData.birthDate || undefined,
+          parentEmail: isMinor ? formData.parentEmail.trim().toLowerCase() : undefined,
         }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Failed to accept invitation');
+      }
+
+      // COPPA: under-13 athletes await parental consent — no redirect to dashboard
+      if (data.requiresParentalConsent) {
+        setConsentParentEmail(data.parentEmail || formData.parentEmail);
+        setConsentEmailSent(true);
+        return;
       }
 
       toast({
@@ -241,6 +260,34 @@ export default function AcceptInvitation() {
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading invitation...</span>
         </div>
+      </div>
+    );
+  }
+
+  // COPPA: show consent-sent holding state for under-13 athletes
+  if (consentEmailSent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-6 w-6 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">Consent Email Sent</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-gray-600">
+              Because you're under 13, federal law (COPPA) requires parental consent before you can access AthleteMetrics.
+              A consent request has been sent to <strong>{consentParentEmail}</strong>.
+            </p>
+            <p className="text-sm text-gray-500">
+              Ask your parent or guardian to check their email and click the approval link. Once approved, you'll be able to log in.
+            </p>
+            <Button variant="outline" className="w-full" onClick={() => setLocation('/login')}>
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -348,6 +395,42 @@ export default function AcceptInvitation() {
               </div>
             </div>
             
+            {/* Date of Birth — COPPA age gate */}
+            <div>
+              <Label htmlFor="birthDate">Date of Birth</Label>
+              <Input
+                id="birthDate"
+                type="date"
+                value={formData.birthDate}
+                onChange={handleInputChange('birthDate')}
+                max={new Date().toISOString().split('T')[0]}
+                required
+              />
+            </div>
+
+            {/* Parent/Guardian Email — shown for under-13 athletes */}
+            {isMinor && (
+              <div>
+                <Label htmlFor="parentEmail">
+                  Parent or Guardian Email <span className="text-red-500">*</span>
+                </Label>
+                <Alert className="mb-2 border-amber-200 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    Federal law (COPPA) requires parental consent for users under 13. A parent or guardian must approve before you can log in.
+                  </AlertDescription>
+                </Alert>
+                <Input
+                  id="parentEmail"
+                  type="email"
+                  value={formData.parentEmail}
+                  onChange={handleInputChange('parentEmail')}
+                  placeholder="parent@example.com"
+                  required={isMinor}
+                />
+              </div>
+            )}
+
             <div>
               <Label htmlFor="username">Username</Label>
               <div className="relative">

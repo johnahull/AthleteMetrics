@@ -21,6 +21,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { validatePassword, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { isUnder13 } from '@shared/coppa-utils';
 
 interface PasswordRequirement {
   label: string;
@@ -34,6 +35,8 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const [consentEmailSent, setConsentEmailSent] = useState(false);
+  const [consentParentEmail, setConsentParentEmail] = useState('');
 
   // Form data
   const [formData, setFormData] = useState({
@@ -43,8 +46,16 @@ export default function Register() {
     username: '',
     password: '',
     confirmPassword: '',
+    birthDate: '',
+    parentEmail: '',
     termsAccepted: false
   });
+
+  // COPPA: compute whether the entered birthDate is under-13
+  const isMinor = (() => {
+    if (!formData.birthDate) return false;
+    try { return isUnder13(formData.birthDate); } catch { return false; }
+  })();
 
   // Validation states
   const [usernameChecking, setUsernameChecking] = useState(false);
@@ -196,6 +207,8 @@ export default function Register() {
           username: formData.username.trim().toLowerCase(),
           password: formData.password,
           legalAcceptedAt: new Date().toISOString(),
+          birthDate: formData.birthDate || undefined,
+          parentEmail: isMinor ? formData.parentEmail.trim().toLowerCase() : undefined,
         }),
       });
 
@@ -203,6 +216,13 @@ export default function Register() {
 
       if (!response.ok) {
         throw new Error(data.message || 'Registration failed');
+      }
+
+      // COPPA: minor registration — show "consent sent" state, no redirect
+      if (data.requiresParentalConsent) {
+        setConsentEmailSent(true);
+        setConsentParentEmail(data.parentEmail || formData.parentEmail);
+        return;
       }
 
       // Success!
@@ -218,6 +238,36 @@ export default function Register() {
       setSubmitting(false);
     }
   };
+
+  // COPPA consent sent state — minor awaiting parental approval
+  if (consentEmailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">Consent Email Sent</CardTitle>
+            <CardDescription>
+              We've sent a parental consent request to <strong>{consentParentEmail}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertDescription className="text-sm text-gray-700">
+                Because you're under 13, federal law (COPPA) requires a parent or guardian to approve your account
+                before you can log in. Please ask them to check their email.
+              </AlertDescription>
+            </Alert>
+            <p className="text-xs text-gray-500 text-center">
+              Once a parent or guardian clicks the approval link in the email, your account will be activated.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   // Success state - show verification message
   if (success) {
@@ -340,6 +390,42 @@ export default function Register() {
                 />
               </div>
             </div>
+
+            {/* Date of Birth — required for COPPA age gate */}
+            <div className="space-y-2">
+              <Label htmlFor="birthDate">Date of Birth</Label>
+              <Input
+                id="birthDate"
+                type="date"
+                value={formData.birthDate}
+                onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                max={new Date().toISOString().split('T')[0]}
+                required
+              />
+            </div>
+
+            {/* Parent/Guardian Email — shown conditionally for under-13 athletes (COPPA) */}
+            {isMinor && (
+              <div className="space-y-2">
+                <Label htmlFor="parentEmail">
+                  Parent or Guardian Email <span className="text-red-500">*</span>
+                </Label>
+                <Alert className="border-amber-200 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertDescription className="text-amber-800 text-sm">
+                    Federal law (COPPA) requires parental consent for users under 13. A consent email will be sent to your parent or guardian. You'll be able to log in once they approve.
+                  </AlertDescription>
+                </Alert>
+                <Input
+                  id="parentEmail"
+                  type="email"
+                  value={formData.parentEmail}
+                  onChange={(e) => setFormData({ ...formData, parentEmail: e.target.value })}
+                  placeholder="parent@example.com"
+                  required={isMinor}
+                />
+              </div>
+            )}
 
             {/* Email field */}
             <div className="space-y-2">

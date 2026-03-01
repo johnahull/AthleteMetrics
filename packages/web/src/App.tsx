@@ -60,6 +60,8 @@ const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
 const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
 const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
+const ParentalConsentWaiting = React.lazy(() => import("./pages/parental-consent"));
+const ConsentConfirmation = React.lazy(() => import("./pages/consent-confirmation"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -167,6 +169,16 @@ function Router() {
       <Route path="/terms">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <TermsOfService />
+        </Suspense>
+      </Route>
+      <Route path="/parental-consent">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentalConsentWaiting />
+        </Suspense>
+      </Route>
+      <Route path="/consent/:token">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ConsentConfirmation />
         </Suspense>
       </Route>
       <Route path="/join/:code">

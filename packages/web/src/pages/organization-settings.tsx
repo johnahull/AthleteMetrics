@@ -62,6 +62,8 @@ export default function OrganizationSettings() {
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
       customMetricsEnabled: organization.customMetricsEnabled || false,
+      coppaEnabled: organization.coppaEnabled || false,
+      coppaContactEmail: organization.coppaContactEmail || '',
     } : undefined,
   });
 
@@ -101,6 +103,13 @@ export default function OrganizationSettings() {
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
       }
+      if (data.coppaEnabled !== organization?.coppaEnabled) {
+        changedFields.coppaEnabled = data.coppaEnabled;
+      }
+      if (data.coppaContactEmail !== (organization?.coppaContactEmail || '')) {
+        changedFields.coppaContactEmail = data.coppaContactEmail || null;
+      }
+
       // If no changes, don't make API call
       if (Object.keys(changedFields).length === 0) {
         toast({
@@ -436,6 +445,59 @@ export default function OrganizationSettings() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* COPPA / Minor Athletes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>COPPA / Minor Athletes</CardTitle>
+              <CardDescription>
+                Configure parental consent flow for athletes under 13. Required when your organization serves youth athletes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <FormField
+                control={form.control}
+                name="coppaEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Enable Minor Athlete Consent Flow</FormLabel>
+                      <FormDescription>
+                        When enabled, athletes under 13 must obtain parental consent before using the platform.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coppaContactEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>COPPA Contact Email</FormLabel>
+                    <FormDescription>
+                      Email address parents can contact for privacy inquiries related to minor athletes in this organization.
+                    </FormDescription>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="privacy@yourorg.com"
+                        {...field}
+                        value={field.value ?? ''}
+                      />
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

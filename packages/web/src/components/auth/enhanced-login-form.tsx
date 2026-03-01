@@ -215,6 +215,21 @@ export function EnhancedLoginForm() {
             type: 'general',
             message: 'Please verify your email address before logging in. Check your inbox for a verification link.'
           });
+        } else if (result.code === 'coppa_pending_consent') {
+          setError({
+            type: 'general',
+            message: 'Your account is awaiting parental consent. Please ask a parent or guardian to check their email and approve your account.'
+          });
+        } else if (result.code === 'coppa_needs_parent_email') {
+          setError({
+            type: 'general',
+            message: 'Your account requires a parent or guardian email address. Please contact support to complete your registration.'
+          });
+        } else if (result.code === 'coppa_consent_revoked') {
+          setError({
+            type: 'general',
+            message: 'Your account access has been restricted. Please have a parent or guardian contact support.'
+          });
         } else {
           setError({
             type: step === 'mfa' ? 'mfa' : 'general',
