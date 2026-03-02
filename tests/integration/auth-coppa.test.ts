@@ -50,6 +50,9 @@ const CORRECT_PASSWORD = 'ValidPass1!';
 let consentRevokedUserId: string;
 let consentRevokedUsername: string;
 
+let needsParentEmailUserId: string;
+let needsParentEmailUsername: string;
+
 let consentedUserId: string;
 let consentedUsername: string;
 
@@ -104,7 +107,25 @@ beforeAll(async () => {
   consentRevokedUserId = revokedUser.id;
 
   // ----------------------------------------------------------------
-  // 3. fully consented user — login should succeed normally
+  // 3. needs_parent_email user — parent email not yet collected
+  // ----------------------------------------------------------------
+  needsParentEmailUsername = `coppa-needsemail-${ts}`;
+  const [needsEmailUser] = await db.insert(users).values({
+    username: needsParentEmailUsername,
+    firstName: 'Needs',
+    lastName: 'ParentEmail',
+    fullName: 'Needs ParentEmail',
+    emails: [`coppa-needsemail-${ts}@testcoppa.local`],
+    password: hashedPassword,
+    isSiteAdmin: false,
+    coppaStatus: 'needs_parent_email',
+    isMinor: true,
+    isEmailVerified: true,
+  }).returning({ id: users.id });
+  needsParentEmailUserId = needsEmailUser.id;
+
+  // ----------------------------------------------------------------
+  // 4. fully consented user — login should succeed normally
   // ----------------------------------------------------------------
   consentedUsername = `coppa-consented-${ts}`;
   const [consentedUser] = await db.insert(users).values({
@@ -123,7 +144,7 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  const idsToDelete = [pendingConsentUserId, consentRevokedUserId, consentedUserId].filter(Boolean);
+  const idsToDelete = [pendingConsentUserId, consentRevokedUserId, needsParentEmailUserId, consentedUserId].filter(Boolean);
   for (const id of idsToDelete) {
     try {
       await db.delete(users).where(eq(users.id, id));
@@ -168,6 +189,28 @@ describe('POST /api/auth/login — COPPA blocks', () => {
     expect(res.body.code).toBe('coppa_consent_revoked');
     expect(res.body.coppaStatus).toBe('consent_revoked');
 
+    const setCookieHeader = res.headers['set-cookie'];
+    const hasSessionCookie = Array.isArray(setCookieHeader)
+      ? setCookieHeader.some((c: string) => c.startsWith('connect.sid'))
+      : typeof setCookieHeader === 'string' && setCookieHeader.startsWith('connect.sid');
+    expect(hasSessionCookie).toBe(false);
+  });
+
+  /**
+   * SHIP BLOCKER: A user in needs_parent_email state (minor whose parent email
+   * has not yet been collected) with the correct password MUST receive 403 with
+   * code 'coppa_needs_parent_email'. No session cookie must be set.
+   */
+  it('[LEGAL] needs_parent_email + correct password → 403, code: coppa_needs_parent_email, NO Set-Cookie', async () => {
+    const res = await request(app)
+      .post('/api/auth/login')
+      .send({ username: needsParentEmailUsername, password: CORRECT_PASSWORD });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('coppa_needs_parent_email');
+    expect(res.body.coppaStatus).toBe('needs_parent_email');
+
+    // LEGAL: No session cookie must be established for blocked accounts
     const setCookieHeader = res.headers['set-cookie'];
     const hasSessionCookie = Array.isArray(setCookieHeader)
       ? setCookieHeader.some((c: string) => c.startsWith('connect.sid'))

@@ -10,6 +10,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   calculateAge,
   isUnder13,
+  wasUnder13At,
   getConsentTokenExpiry,
   getAuditRetentionDate,
   COPPA_AGE_THRESHOLD,
@@ -185,6 +186,105 @@ describe('isUnder13() — LEGAL EXPOSURE', () => {
   it('throws for undefined', () => {
     // @ts-expect-error — testing runtime path
     expect(() => isUnder13(undefined)).toThrow();
+  });
+});
+
+// ============================================================================
+// wasUnder13At() — LEGAL EXPOSURE: retroactive age-at-collection check
+// ============================================================================
+
+describe('wasUnder13At() — LEGAL EXPOSURE', () => {
+  /**
+   * Build a referenceDate that is exactly `yearsAfterBirth` years and
+   * `offsetDays` days after a birth date expressed as local-midnight.
+   *
+   * Returns { birthDate, referenceDate } where birthDate is a YYYY-MM-DD string
+   * and referenceDate is a Date object.
+   */
+  function buildScenario(ageAtReference: number, offsetDays = 0) {
+    // Pick a fixed anchor so tests are deterministic regardless of today's date.
+    // Use 2010-06-15 as the birth date to avoid Feb-29 leap-year edge cases.
+    const birth = new Date(2010, 5, 15); // June 15 2010, local midnight
+    const birthDate = '2010-06-15';
+
+    const ref = new Date(birth);
+    ref.setFullYear(ref.getFullYear() + ageAtReference);
+    ref.setDate(ref.getDate() + offsetDays);
+
+    return { birthDate, referenceDate: ref };
+  }
+
+  /**
+   * SHIP BLOCKER: User was 12 years 364 days at referenceDate — must return true.
+   * One day before the 13th birthday the person is still under 13.
+   */
+  it('[LEGAL] returns true when user was 12y 364d at referenceDate (day before 13th birthday)', () => {
+    // ageAtReference=13 then offsetDays=-1 means ref is one day before the 13th birthday
+    // i.e. the user is exactly 12 years 364 days old at referenceDate
+    const { birthDate, referenceDate } = buildScenario(13, -1);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(true);
+  });
+
+  /**
+   * SHIP BLOCKER: User turned exactly 13 on referenceDate — must return false.
+   * "A child who turns 13 today is NOT under 13."
+   */
+  it('[LEGAL] returns false when user turned exactly 13 on referenceDate (birthday)', () => {
+    const { birthDate, referenceDate } = buildScenario(13, 0);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(false);
+  });
+
+  it('returns false when user was 15 at referenceDate', () => {
+    const { birthDate, referenceDate } = buildScenario(15, 0);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(false);
+  });
+
+  it('returns true when user was 5 at referenceDate', () => {
+    const { birthDate, referenceDate } = buildScenario(5, 0);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(true);
+  });
+
+  it('throws when birthDate is null', () => {
+    const ref = new Date(2020, 0, 1);
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => wasUnder13At(null, ref)).toThrow('birthDate is required');
+  });
+
+  it('throws when birthDate is undefined', () => {
+    const ref = new Date(2020, 0, 1);
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => wasUnder13At(undefined, ref)).toThrow('birthDate is required');
+  });
+
+  /**
+   * Edge case: reference date is the day before the 13th birthday → true.
+   * Identical intent to the 12y364d test above but stated explicitly as an
+   * edge case for clarity in legal review.
+   */
+  it('[LEGAL] edge case: reference date is the day before 13th birthday → true', () => {
+    const { birthDate, referenceDate } = buildScenario(13, -1);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(true);
+  });
+
+  /**
+   * Edge case: reference date IS the 13th birthday → false.
+   * The person has completed 13 years; they are no longer under 13.
+   */
+  it('[LEGAL] edge case: reference date is the day of 13th birthday → false', () => {
+    const { birthDate, referenceDate } = buildScenario(13, 0);
+    expect(wasUnder13At(birthDate, referenceDate)).toBe(false);
+  });
+
+  it('accepts Date objects as birthDate', () => {
+    const birth = new Date(2010, 5, 15); // June 15 2010
+    const ref = new Date(2022, 5, 14);  // June 14 2022 — 11y 364d → under 13
+    expect(wasUnder13At(birth, ref)).toBe(true);
+  });
+
+  it('throws when birthDate is after referenceDate', () => {
+    const birth = new Date(2020, 0, 1);
+    const ref = new Date(2019, 0, 1); // ref is before birth
+    expect(() => wasUnder13At(birth, ref)).toThrow();
   });
 });
 

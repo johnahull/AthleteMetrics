@@ -73,6 +73,7 @@ async function createUser(suffix: string, role: string = 'athlete') {
     username: `${TEST_PREFIX}${suffix}_${id}`,
     firstName: 'Test',
     lastName: 'User',
+    fullName: 'Test User',
     emails: [`${TEST_PREFIX}${suffix}_${id}@example.com`],
     password: await bcrypt.hash(VALID_PASSWORD, BCRYPT_SALT_ROUNDS),
     role: role as any,
@@ -272,5 +273,51 @@ describe('GET /api/parent/children/:athleteId/reports', () => {
       .set('Cookie', cookie);
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body)).toBe(true);
+  });
+});
+
+// ============================================================================
+// Email-only parent links (parentUserId IS NULL) — C3 coverage gap
+// ============================================================================
+
+describe('requireParentAccess — email-only links (parentUserId IS NULL) are denied', () => {
+  /**
+   * DESIGN NOTE (from parent-middleware.ts):
+   * "Email-only links (parentUserId IS NULL) do NOT grant access until the
+   *  parent registers an account via POST /api/auth/register/parent."
+   *
+   * The middleware queries parentAthleteLinks by parentUserId. When
+   * parentUserId is NULL the row will never match a session user's id, so
+   * the middleware correctly returns 403. This test pins that contract.
+   */
+  it('returns 403 when parent link exists with matching parentEmail but parentUserId IS NULL', async () => {
+    // Create a fresh parent user and athlete user for this isolated test
+    const emailOnlyParent = await createUser('emailonly_parent', 'parent');
+    const emailOnlyAthlete = await createUser('emailonly_athlete', 'athlete');
+    createdIds.push(emailOnlyParent.id, emailOnlyAthlete.id);
+
+    // Insert an email-only link: parentEmail matches the user's email but
+    // parentUserId is explicitly null (the parent has not yet registered).
+    const [emailOnlyLink] = await db.insert(parentAthleteLinks).values({
+      parentEmail: emailOnlyParent.emails[0],
+      parentUserId: null,          // email-only — no account link
+      athleteUserId: emailOnlyAthlete.id,
+      isActive: true,
+    }).returning();
+
+    try {
+      const cookie = await loginAs(app, emailOnlyParent);
+      const res = await request(app)
+        .get(`/api/parent/children/${emailOnlyAthlete.id}/profile`)
+        .set('Cookie', cookie);
+
+      // The middleware must reject because the link is email-only (parentUserId IS NULL)
+      expect(res.status).toBe(403);
+    } finally {
+      // Clean up the email-only link regardless of test outcome
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, emailOnlyLink.id))
+        .catch(() => {});
+    }
   });
 });
