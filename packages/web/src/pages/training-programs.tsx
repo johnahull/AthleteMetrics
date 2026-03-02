@@ -22,6 +22,7 @@ import {
 import { useTrainingAccess } from "@/hooks/use-training-access";
 import { useTrainingPrograms, useCreateProgram, useArchiveProgram } from "@/hooks/useTrainingPrograms";
 import { ProgramMetaForm, type ProgramMetaValues } from "@/components/training/ProgramMetaForm";
+import { useSports } from "@/lib/sports-api";
 import { useToast } from "@/hooks/use-toast";
 
 export default function TrainingProgramsPage() {
@@ -37,8 +38,11 @@ export default function TrainingProgramsPage() {
   }, [isEnabled, isLoading, navigate]);
 
   const { data: programs = [], isLoading: programsLoading } = useTrainingPrograms(organizationId);
+  const { data: sports = [] } = useSports();
   const createProgram = useCreateProgram();
   const archiveProgram = useArchiveProgram();
+
+  const sportNameMap = new Map(sports.map((s) => [s.code, s.name]));
 
   if (isLoading || !isEnabled) return null;
 
@@ -117,8 +121,8 @@ export default function TrainingProgramsPage() {
                         <div>
                           <CardTitle className="text-base">{program.name}</CardTitle>
                           {program.sport && (
-                            <CardDescription className="text-xs mt-0.5 capitalize">
-                              {program.sport}
+                            <CardDescription className="text-xs mt-0.5">
+                              {sportNameMap.get(program.sport) ?? program.sport}
                             </CardDescription>
                           )}
                         </div>

@@ -29,6 +29,7 @@ import {
 } from "@/hooks/useTrainingPrograms";
 import { useExercises } from "@/hooks/useExercises";
 import { ProgramMetaForm, type ProgramMetaValues } from "@/components/training/ProgramMetaForm";
+import { useSports } from "@/lib/sports-api";
 import { ProgramWorkoutList } from "@/components/training/ProgramWorkoutList";
 import type { ProgramWorkoutExercise } from "@/components/training/ProgramWorkoutExerciseRow";
 import { useToast } from "@/hooks/use-toast";
@@ -53,6 +54,11 @@ export default function TrainingProgramBuilderPage() {
 
   const { data: program, isLoading: programLoading } = useTrainingProgram(programId ?? null);
   const { data: exercises = [] } = useExercises(organizationId);
+  const { data: sports = [] } = useSports();
+
+  const sportNameMap = new Map(sports.map((s) => [s.code, s.name]));
+  // Resolve legacy free-text values to codes (e.g. "Football" → "FOOTBALL")
+  const sportCodeMap = new Map(sports.map((s) => [s.name.toLowerCase(), s.code]));
 
   const updateProgram = useUpdateProgram(programId ?? "");
   const addWorkoutDay = useAddWorkoutDay(programId ?? "");
@@ -141,7 +147,7 @@ export default function TrainingProgramBuilderPage() {
 
       {/* Program meta summary */}
       <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
-        {program.sport && <span>Sport: <strong className="text-foreground">{program.sport}</strong></span>}
+        {program.sport && <span>Sport: <strong className="text-foreground">{sportNameMap.get(program.sport) ?? program.sport}</strong></span>}
         <span>Duration: <strong className="text-foreground">{program.durationWeeks} weeks</strong></span>
         <span>{program.workouts?.length ?? 0} workout days</span>
         <Button
@@ -227,7 +233,9 @@ export default function TrainingProgramBuilderPage() {
             defaultValues={{
               name: program.name,
               description: program.description ?? "",
-              sport: program.sport ?? "",
+              sport: program.sport
+                ? (sportNameMap.has(program.sport) ? program.sport : sportCodeMap.get(program.sport.toLowerCase()) ?? "")
+                : "",
               durationWeeks: program.durationWeeks,
             }}
             onSubmit={handleUpdateMeta}

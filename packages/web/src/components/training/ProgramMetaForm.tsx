@@ -2,7 +2,7 @@
  * ProgramMetaForm
  *
  * Form fields for training program metadata:
- * name, description, sport (text), durationWeeks (number).
+ * name, description, sport (dropdown from site sports), durationWeeks (number).
  * Used at the top of the program builder page.
  * Integrates with React Hook Form via Controller pattern.
  */
@@ -17,10 +17,18 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useSports } from "@/lib/sports-api";
 
 const programMetaSchema = z.object({
   name: z.string().min(1, "Program name is required").max(200),
@@ -44,6 +52,7 @@ export function ProgramMetaForm({
   isSubmitting = false,
   submitLabel = "Save Program",
 }: ProgramMetaFormProps) {
+  const { data: sports = [] } = useSports();
   const form = useForm<ProgramMetaValues>({
     resolver: zodResolver(programMetaSchema),
     defaultValues: {
@@ -101,13 +110,24 @@ export function ProgramMetaForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Sport</FormLabel>
-                <FormControl>
-                  <Input
-                    placeholder="e.g. Football, Track"
-                    {...field}
-                    data-testid="program-sport-input"
-                  />
-                </FormControl>
+                <Select
+                  value={field.value || "__none__"}
+                  onValueChange={(val) => field.onChange(val === "__none__" ? "" : val)}
+                >
+                  <FormControl>
+                    <SelectTrigger data-testid="program-sport-input">
+                      <SelectValue placeholder="Select a sport" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="__none__">No sport</SelectItem>
+                    {sports.map((sport) => (
+                      <SelectItem key={sport.code} value={sport.code}>
+                        {sport.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <FormMessage />
               </FormItem>
             )}
