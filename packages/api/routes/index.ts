@@ -46,6 +46,9 @@ import { registerNotificationPreferencesRoutes } from "./notification-preference
 import { registerOrgNotificationRoutes } from "./org-notification-routes";
 import { registerAdminNotificationRoutes } from "./admin-notification-routes";
 import { registerCoppaRoutes } from "./coppa-routes";
+import { registerCoppaDeletionRoutes } from "./coppa-deletion-routes";
+import { registerCoppaExportRoutes } from "./coppa-export-routes";
+import { registerParentRoutes } from "./parent-routes";
 
 /**
  * Register all application routes
@@ -181,6 +184,15 @@ export function registerAllRoutes(app: Express) {
 
   // COPPA compliance routes (VPC flow, parental consent management)
   registerCoppaRoutes(app);
+
+  // COPPA data deletion routes (parent data deletion requests)
+  registerCoppaDeletionRoutes(app);
+
+  // COPPA data export routes (parent data review/download)
+  registerCoppaExportRoutes(app);
+
+  // Parent account routes (linked children, read-only access)
+  registerParentRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

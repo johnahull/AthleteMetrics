@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,15 @@ export default function AcceptInvitation() {
     if (!formData.birthDate) return false;
     try { return isUnder13(formData.birthDate); } catch { return false; }
   })();
+
+  // D1: Clear parentEmail when isMinor transitions from true → false
+  const prevIsMinorRef = useRef(isMinor);
+  useEffect(() => {
+    if (prevIsMinorRef.current === true && !isMinor && formData.parentEmail) {
+      setFormData(prev => ({ ...prev, parentEmail: '' }));
+    }
+    prevIsMinorRef.current = isMinor;
+  }, [isMinor]);
 
   // Extract token from URL on mount
   useEffect(() => {

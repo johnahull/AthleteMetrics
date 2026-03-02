@@ -195,6 +195,24 @@ export const COPPA_ACTIONS = {
 
   /** Token replay attempt detected (second use of already-used token) */
   TOKEN_REPLAY_ATTEMPT: 'coppa_token_replay_attempt',
+
+  /** Parent requested data export for their child's account */
+  DATA_EXPORT_REQUESTED: 'coppa_data_export_requested',
+
+  /** Data export was downloaded (one-time token consumed) */
+  DATA_EXPORT_DELIVERED: 'coppa_data_export_delivered',
+
+  /** Parent/admin initiated data deletion request */
+  DATA_DELETION_REQUESTED: 'coppa_data_deletion_requested',
+
+  /** Site admin completed cascade data deletion for an athlete */
+  DATA_DELETION_COMPLETED: 'coppa_data_deletion_completed',
+
+  /** Data deletion request was rejected by site admin */
+  DATA_DELETION_REJECTED: 'coppa_data_deletion_rejected',
+
+  /** Public snapshot access blocked because snapshot contains minor data */
+  SNAPSHOT_ACCESS_BLOCKED: 'coppa_snapshot_access_blocked',
 } as const;
 
 export type CoppaAction = typeof COPPA_ACTIONS[keyof typeof COPPA_ACTIONS];

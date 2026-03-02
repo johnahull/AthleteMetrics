@@ -18,6 +18,9 @@ import {
 } from "@shared/legal-acceptance";
 import { coppaService } from "../services/coppa-service";
 import { isUnder13 } from "@shared/coppa-utils";
+import { db } from "../db";
+import { parentalConsents } from "@shared/schema/tables/coppa";
+import { eq } from "drizzle-orm";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
 const registrationLimiter = rateLimit({
@@ -104,6 +107,44 @@ const registrationSchema = z.object({
       }
     }
   }
+});
+
+// Validation schema for parent registration
+const parentRegistrationSchema = z.object({
+  firstName: z.string()
+    .min(1, "First name is required")
+    .max(50, "First name must be 50 characters or less")
+    .trim(),
+  lastName: z.string()
+    .min(1, "Last name is required")
+    .max(50, "Last name must be 50 characters or less")
+    .trim(),
+  email: z.string()
+    .email("Invalid email address")
+    .max(255, "Email must be 255 characters or less")
+    .toLowerCase()
+    .trim(),
+  username: z.string()
+    .min(3, "Username must be at least 3 characters")
+    .max(30, "Username must be 30 characters or less")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
+    .toLowerCase()
+    .trim(),
+  password: z.string()
+    .min(12, "Password must be at least 12 characters")
+    .max(128, "Password must be 128 characters or less")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^a-zA-Z0-9]/, "Password must contain at least one special character"),
+  legalAcceptedAt: z.string()
+    .min(1, MISSING_ACCEPTANCE_MESSAGE)
+    .refine(
+      (val) => validateLegalAcceptanceTimestamp(val),
+      INVALID_TIMESTAMP_MESSAGE
+    ),
+  // consentId links this registration to a pre-existing VPC consent record
+  consentId: z.string().optional(),
 });
 
 // Validation schema for resend verification
@@ -288,6 +329,161 @@ export function registerRegistrationRoutes(app: Express) {
         success: false,
         message: "Registration failed. Please try again later."
       });
+    }
+  });
+
+  /**
+   * Register a parent/guardian account
+   *
+   * Creates a user with role 'parent' and no organization membership.
+   * If a consentId is provided, validates the consent record belongs to the
+   * same parentEmail and then calls linkParentAccount() to upgrade the
+   * email-only parentAthleteLinks rows to a full FK reference.
+   *
+   * Security invariants:
+   * - consentId is validated server-side (parentEmail must match the consent record)
+   * - No session is set — parent must verify email before logging in
+   * - Rate limited at same rate as athlete registration (5/15 min)
+   */
+  app.post("/api/auth/register/parent", registrationLimiter, async (req: Request, res: Response) => {
+    try {
+      const validationResult = parentRegistrationSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        const errors = validationResult.error.errors.map(e => ({
+          field: e.path.join('.'),
+          message: e.message,
+        }));
+        return res.status(400).json({ success: false, message: "Validation failed", errors });
+      }
+
+      const { firstName, lastName, email, username, password, legalAcceptedAt, consentId } = validationResult.data;
+
+      // Check username uniqueness
+      const existingUsername = await storage.getUserByUsername(username);
+      if (existingUsername) {
+        return res.status(409).json({ success: false, message: "Username is already taken", field: "username" });
+      }
+
+      // Check email uniqueness
+      const existingEmail = await storage.getUserByEmail(email);
+      if (existingEmail) {
+        return res.status(409).json({ success: false, message: "An account with this email already exists", field: "email" });
+      }
+
+      // If consentId provided, validate it belongs to this parent email
+      if (consentId) {
+        const [consent] = await db.select({
+          id: parentalConsents.id,
+          parentEmail: parentalConsents.parentEmail,
+          status: parentalConsents.status,
+        })
+          .from(parentalConsents)
+          .where(eq(parentalConsents.id, consentId))
+          .limit(1);
+
+        if (!consent) {
+          return res.status(400).json({
+            success: false,
+            message: "Invalid consent ID",
+            errors: [{ field: 'consentId', message: 'Consent record not found.' }],
+          });
+        }
+
+        // Validate email matches the consent record
+        if (consent.parentEmail.toLowerCase() !== email.toLowerCase()) {
+          return res.status(400).json({
+            success: false,
+            message: "Email does not match consent record",
+            errors: [{ field: 'email', message: 'The email you entered does not match the consent record.' }],
+          });
+        }
+      }
+
+      const legalAcceptedVersion = getLegalAcceptanceTimestamp();
+      const legalAcceptedAtDate = new Date(legalAcceptedAt);
+
+      // Create parent user account — no org membership, role 'parent'
+      const user = await storage.createUser({
+        username,
+        firstName,
+        lastName,
+        emails: [email],
+        password,
+        role: 'parent',
+        isEmailVerified: false,
+        isSiteAdmin: false,
+        legalAcceptedAt: legalAcceptedAtDate,
+        legalAcceptedVersion,
+        coppaStatus: 'not_applicable',
+        isMinor: false,
+      });
+
+      const userId = user.id;
+
+      // Create audit logs
+      const auditLogBase = {
+        userId,
+        resourceType: 'user' as const,
+        resourceId: userId,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      };
+
+      try {
+        await storage.createAuditLog({
+          ...auditLogBase,
+          action: 'user_registered',
+          details: JSON.stringify({ username, email, registrationType: 'parent_registration' }),
+        });
+
+        await storage.createAuditLog({
+          ...auditLogBase,
+          action: AUDIT_ACTION_LEGAL_ACCEPTED,
+          details: JSON.stringify({ version: legalAcceptedVersion, acceptedAt: legalAcceptedAt, method: 'registration' }),
+        });
+      } catch (auditError) {
+        console.error('[CRITICAL] Parent registration — failed to create audit logs:', auditError);
+        try {
+          await storage.deleteUser(userId);
+        } catch (cleanupError) {
+          console.error('[CRITICAL] Failed to cleanup parent user after audit log failure:', cleanupError);
+        }
+        return res.status(500).json({ success: false, message: "Registration failed due to system error. Please try again." });
+      }
+
+      // Link parent account to existing parentAthleteLinks rows (upgrade email → FK)
+      let linkedCount = 0;
+      if (consentId) {
+        linkedCount = await coppaService.linkParentAccount(userId, email);
+        console.log(`[ParentRegistration] Linked ${linkedCount} athlete(s) to parent ${username} via consentId`);
+      } else {
+        // Link by email even without consentId (parent may have received multiple consent emails)
+        linkedCount = await coppaService.linkParentAccount(userId, email);
+        if (linkedCount > 0) {
+          console.log(`[ParentRegistration] Linked ${linkedCount} athlete(s) to parent ${username} by email`);
+        }
+      }
+
+      // Send email verification
+      const { token: verificationToken } = await storage.createEmailVerificationToken(userId, email);
+      const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;
+      const emailSent = await emailService.sendEmailVerification(email, {
+        userName: firstName,
+        verificationLink,
+      });
+
+      console.log(`[ParentRegistration] Parent registered: ${username} (${email}), linkedAthletes: ${linkedCount}, emailSent: ${emailSent}`);
+
+      return res.status(201).json({
+        success: true,
+        message: "Parent account created. Please check your email to verify your account.",
+        linkedAthletes: linkedCount,
+        emailSent,
+      });
+
+    } catch (error) {
+      console.error("[ParentRegistration] Error:", error);
+      return res.status(500).json({ success: false, message: "Registration failed. Please try again later." });
     }
   });
 

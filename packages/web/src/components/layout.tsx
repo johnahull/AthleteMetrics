@@ -44,7 +44,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     '/terms',
     '/wellness/submit',
     '/public/reports',
-    '/events/join'
+    '/events/join',
+    '/parental-consent',
+    '/coppa/collect-parent-email',
   ];
 
   const isPublicRoute = PUBLIC_ROUTES.some(route =>

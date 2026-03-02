@@ -1827,6 +1827,377 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Send data export ready notification to a parent.
+   * Includes a one-time download link (expires in 7 days).
+   */
+  async sendExportReadyNotification(
+    parentEmail: string,
+    data: {
+      athleteName: string;
+      downloadUrl: string;
+      expiresAt: Date;
+    }
+  ): Promise<boolean> {
+    if (!isValidEmail(parentEmail)) {
+      console.error('[COPPA Email] Invalid parent email for export notification');
+      return false;
+    }
+
+    const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+    const downloadUrl = sanitizeUrl(data.downloadUrl);
+    const expiryStr = escapeHtml(data.expiresAt.toLocaleDateString('en-US', {
+      year: 'numeric', month: 'long', day: 'numeric'
+    }));
+    const athleteName = escapeHtml(data.athleteName);
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Data Export Ready</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,#3b82f6,#2563eb);">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Data Export Ready</h1>
+              <p style="margin:8px 0 0;color:#bfdbfe;font-size:14px;">AthleteMetrics — Youth Athlete Platform</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Dear Parent or Guardian,</p>
+
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                Your data export request for <strong>${athleteName}</strong> is ready to download.
+                This file contains all personal information AthleteMetrics holds for this account,
+                including profile data, performance measurements, wellness responses, and event participation.
+              </p>
+
+              <p style="margin:0 0 8px;color:#718096;font-size:14px;">
+                <strong>Important:</strong> This download link is for one-time use and expires on
+                <strong>${expiryStr}</strong>. After you click the link, it cannot be used again.
+              </p>
+
+              <!-- CTA Button -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                <tr>
+                  <td align="center" style="padding:8px;">
+                    <a href="${downloadUrl}" style="display:inline-block;padding:14px 32px;background:#3b82f6;color:#fff;text-decoration:none;border-radius:6px;font-weight:600;font-size:16px;">
+                      Download Data Export
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:16px 0 0;color:#4a5568;font-size:14px;line-height:1.6;">
+                The export file is in JSON format. If you requested this export by mistake or have questions,
+                contact us at <a href="mailto:privacy@athletemetrics.app" style="color:#3b82f6;">privacy@athletemetrics.app</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;border-radius:0 0 8px 8px;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">
+                AthleteMetrics | Youth Athlete Performance Platform<br>
+                Your data rights are protected under COPPA (15 U.S.C. §§ 6501–6506).
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+      const text = `Data Export Ready for ${data.athleteName}\n\n` +
+        `Your data export is ready. Download it at: ${data.downloadUrl}\n\n` +
+        `This is a one-time download link. It expires on ${expiryStr}.\n\n` +
+        `Questions? Contact privacy@athletemetrics.app`;
+
+      await this.sendEmail({
+        to: parentEmail,
+        subject: `Data Export Ready — ${data.athleteName}`,
+        html,
+        text,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[COPPA Email] sendExportReadyNotification failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send a parent invitation email.
+   *
+   * Sent when an org admin invites a parent/guardian via the invitation system.
+   * Includes the athlete's name so the parent knows whose account they're linking.
+   */
+  async sendParentInvitation(
+    parentEmail: string,
+    data: {
+      parentName?: string;
+      athleteName: string;
+      organizationName: string;
+      invitationLink: string;
+      expiryDays: number;
+    }
+  ): Promise<boolean> {
+    if (!isValidEmail(parentEmail)) {
+      console.error('[Email] Invalid parent email for parent invitation');
+      return false;
+    }
+
+    const invitationLink = sanitizeUrl(data.invitationLink, 'invitation');
+    const parentName = escapeHtml(data.parentName || 'Parent/Guardian');
+    const athleteName = escapeHtml(data.athleteName);
+    const orgName = escapeHtml(data.organizationName);
+    const expiryDays = Math.max(1, Math.min(90, data.expiryDays));
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Parent Account Invitation</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="background:#4f46e5;padding:32px 40px;">
+              <h1 style="margin:0;color:#fff;font-size:24px;">AthleteMetrics</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:40px;">
+              <h2 style="margin:0 0 16px;color:#1a202c;font-size:20px;">Parent Account Invitation</h2>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:16px;">
+                Hello ${parentName},
+              </p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:16px;">
+                You have been invited to create a parent account on AthleteMetrics to monitor
+                <strong>${athleteName}</strong>'s athletic progress at <strong>${orgName}</strong>.
+              </p>
+              <p style="margin:0 0 24px;color:#4a5568;font-size:16px;">
+                As a parent, you will have read-only access to view ${athleteName}'s measurements,
+                reports, and performance history.
+              </p>
+              <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+                <tr>
+                  <td style="background:#4f46e5;border-radius:6px;padding:14px 28px;">
+                    <a href="${invitationLink}" style="color:#fff;text-decoration:none;font-size:16px;font-weight:600;">
+                      Create Your Parent Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:0 0 8px;color:#718096;font-size:14px;">
+                This invitation expires in ${expiryDays} day${expiryDays !== 1 ? 's' : ''}.
+              </p>
+              <p style="margin:0;color:#718096;font-size:14px;">
+                If you did not expect this invitation, you can safely ignore this email.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f7fafc;padding:24px 40px;border-top:1px solid #e2e8f0;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;text-align:center;">
+                AthleteMetrics — Athlete Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+    return this.sendEmail({
+      to: parentEmail,
+      subject: `You're invited to monitor ${data.athleteName}'s progress on AthleteMetrics`,
+      html,
+    });
+  }
+
+  /**
+   * Send data deletion request confirmation to the parent/requester.
+   * Confirms that the request was received and is pending site admin review.
+   */
+  async sendDeletionRequestConfirmation(
+    toEmail: string,
+    data: {
+      athleteName: string;
+      requestId: string;
+    }
+  ): Promise<boolean> {
+    if (!isValidEmail(toEmail)) {
+      console.error('[COPPA Email] Invalid email for deletion request confirmation');
+      return false;
+    }
+
+    const athleteName = escapeHtml(data.athleteName);
+    const requestId = escapeHtml(data.requestId);
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Data Deletion Request Received</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,#dc2626,#b91c1c);">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Data Deletion Request Received</h1>
+              <p style="margin:8px 0 0;color:#fecaca;font-size:14px;">AthleteMetrics — Youth Athlete Platform</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Dear Parent or Guardian,</p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                We have received your request to delete the AthleteMetrics account and data for
+                <strong>${athleteName}</strong>. Your request is now under review by our team.
+              </p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                <strong>Request ID:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:13px;">${requestId}</code>
+              </p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                Once the deletion is processed, you will receive a confirmation email. Per COPPA requirements,
+                a minimal audit record will be retained for compliance purposes.
+              </p>
+              <p style="margin:0;color:#718096;font-size:13px;line-height:1.6;">
+                Questions? Contact us at <a href="mailto:privacy@athletemetrics.app" style="color:#3b82f6;">privacy@athletemetrics.app</a>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">
+                AthleteMetrics | Youth Athlete Performance Platform
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+      await this.sendEmail({
+        to: toEmail,
+        subject: `Data Deletion Request Received for ${data.athleteName}`,
+        html,
+        text: `Data Deletion Request Received\n\nWe received your request to delete data for ${data.athleteName}.\nRequest ID: ${data.requestId}\n\nYou will receive a confirmation once the deletion is processed.\nContact: privacy@athletemetrics.app`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[COPPA Email] sendDeletionRequestConfirmation failed:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Notify the parent/requester that data deletion has been completed.
+   * Includes a summary of what was deleted and the audit trail note.
+   */
+  async sendDeletionCompletedNotification(
+    toEmail: string,
+    data: {
+      requestId: string;
+      deletedCategories: string[];
+    }
+  ): Promise<boolean> {
+    if (!isValidEmail(toEmail)) {
+      console.error('[COPPA Email] Invalid email for deletion completed notification');
+      return false;
+    }
+
+    const requestId = escapeHtml(data.requestId);
+    const categoryList = data.deletedCategories
+      .map(c => `<li style="color:#4a5568;font-size:14px;line-height:1.8;">${escapeHtml(c)}</li>`)
+      .join('');
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Data Deletion Complete</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,#16a34a,#15803d);">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Data Deletion Complete</h1>
+              <p style="margin:8px 0 0;color:#bbf7d0;font-size:14px;">AthleteMetrics — Youth Athlete Platform</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Dear Parent or Guardian,</p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                The data deletion request <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;font-size:13px;">${requestId}</code>
+                has been completed. The following data categories were deleted:
+              </p>
+              <ul style="margin:0 0 16px;padding-left:20px;">
+                ${categoryList}
+              </ul>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:14px;line-height:1.6;">
+                Per COPPA requirements and FTC guidelines, a minimal audit record has been retained for
+                5 years for compliance purposes. This record contains only the fact that a deletion occurred,
+                not any performance data.
+              </p>
+              <p style="margin:0;color:#718096;font-size:13px;line-height:1.6;">
+                Questions? Contact us at <a href="mailto:privacy@athletemetrics.app" style="color:#3b82f6;">privacy@athletemetrics.app</a>.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">
+                AthleteMetrics | Youth Athlete Performance Platform
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+      await this.sendEmail({
+        to: toEmail,
+        subject: 'Data Deletion Complete — AthleteMetrics',
+        html,
+        text: `Data Deletion Complete\n\nRequest ID: ${data.requestId}\n\nDeleted categories:\n${data.deletedCategories.map(c => `- ${c}`).join('\n')}\n\nA minimal audit record is retained for 5 years per COPPA requirements.\nContact: privacy@athletemetrics.app`,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[COPPA Email] sendDeletionCompletedNotification failed:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

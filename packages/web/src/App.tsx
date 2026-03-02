@@ -62,6 +62,9 @@ const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
 const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
 const ParentalConsentWaiting = React.lazy(() => import("./pages/parental-consent"));
 const ConsentConfirmation = React.lazy(() => import("./pages/consent-confirmation"));
+const CoppaCollectParentEmail = React.lazy(() => import("./pages/coppa-collect-parent-email"));
+const ParentDashboard = React.lazy(() => import("./pages/parent-dashboard"));
+const ParentChildDetail = React.lazy(() => import("./pages/parent-child-detail"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -180,6 +183,21 @@ function Router() {
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <ConsentConfirmation />
         </Suspense>
+      </Route>
+      <Route path="/coppa/collect-parent-email">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <CoppaCollectParentEmail />
+        </Suspense>
+      </Route>
+      <Route path="/parent/children/:athleteId">
+        <RouteWrapper loadingText="Loading Athlete...">
+          <ParentChildDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/parent-dashboard">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <ParentDashboard />
+        </RouteWrapper>
       </Route>
       <Route path="/join/:code">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>

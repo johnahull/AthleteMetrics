@@ -12,7 +12,7 @@
  */
 
 import crypto from 'crypto';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
@@ -469,6 +469,29 @@ export class CoppaService extends BaseService {
       details: detailsJson,
       retainUntil,
     });
+  }
+
+  /**
+   * Link a registered parent user account to all parentAthleteLinks matching their email.
+   *
+   * Called after a parent registers via POST /api/auth/register/parent.
+   * Finds all rows where parentEmail matches AND parentUserId is null, then
+   * sets parentUserId so session-based access checks work for the parent.
+   *
+   * @param parentUserId - The newly registered parent user's ID
+   * @param parentEmail  - The email that was used during consent flow
+   * @returns Number of rows updated
+   */
+  async linkParentAccount(parentUserId: string, parentEmail: string): Promise<number> {
+    const result = await db.update(parentAthleteLinks)
+      .set({ parentUserId })
+      .where(and(
+        eq(parentAthleteLinks.parentEmail, parentEmail),
+        isNull(parentAthleteLinks.parentUserId),
+      ))
+      .returning({ id: parentAthleteLinks.id });
+
+    return result.length;
   }
 
   /**

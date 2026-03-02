@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -32,6 +32,12 @@ export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  // Parse query params for parent registration mode
+  const searchParams = new URLSearchParams(window.location.search);
+  const isParentMode = searchParams.get('role') === 'parent';
+  const prefilledEmail = searchParams.get('email') || '';
+  const prefilledConsentId = searchParams.get('consent') || '';
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
@@ -42,7 +48,7 @@ export default function Register() {
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
+    email: isParentMode ? prefilledEmail : '',
     username: '',
     password: '',
     confirmPassword: '',
@@ -51,11 +57,20 @@ export default function Register() {
     termsAccepted: false
   });
 
-  // COPPA: compute whether the entered birthDate is under-13
+  // COPPA: compute whether the entered birthDate is under-13 (only relevant for athlete mode)
   const isMinor = (() => {
-    if (!formData.birthDate) return false;
+    if (isParentMode || !formData.birthDate) return false;
     try { return isUnder13(formData.birthDate); } catch { return false; }
   })();
+
+  // D1: Clear parentEmail when isMinor transitions from true → false
+  const prevIsMinor = useRef(isMinor);
+  useEffect(() => {
+    if (prevIsMinor.current === true && !isMinor && formData.parentEmail) {
+      setFormData(prev => ({ ...prev, parentEmail: '' }));
+    }
+    prevIsMinor.current = isMinor;
+  }, [isMinor]);
 
   // Validation states
   const [usernameChecking, setUsernameChecking] = useState(false);
@@ -195,21 +210,29 @@ export default function Register() {
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/register', {
+      const endpoint = isParentMode ? '/api/auth/register/parent' : '/api/auth/register';
+      const body: Record<string, unknown> = {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        username: formData.username.trim().toLowerCase(),
+        password: formData.password,
+        legalAcceptedAt: new Date().toISOString(),
+      };
+
+      if (!isParentMode) {
+        body.birthDate = formData.birthDate || undefined;
+        body.parentEmail = isMinor ? formData.parentEmail.trim().toLowerCase() : undefined;
+      } else if (prefilledConsentId) {
+        body.consentId = prefilledConsentId;
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          email: formData.email.trim().toLowerCase(),
-          username: formData.username.trim().toLowerCase(),
-          password: formData.password,
-          legalAcceptedAt: new Date().toISOString(),
-          birthDate: formData.birthDate || undefined,
-          parentEmail: isMinor ? formData.parentEmail.trim().toLowerCase() : undefined,
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
@@ -336,26 +359,33 @@ export default function Register() {
             alt="AthleteMetrics logo"
             className="h-16 w-16 mx-auto mb-4"
           />
-          <CardTitle className="text-2xl">Create your account</CardTitle>
+          <CardTitle className="text-2xl">
+            {isParentMode ? 'Create Parent Account' : 'Create your account'}
+          </CardTitle>
           <CardDescription>
-            Join AthleteMetrics to track your athletic performance
+            {isParentMode
+              ? 'Create an account to monitor your child\'s athletic progress'
+              : 'Join AthleteMetrics to track your athletic performance'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* OAuth buttons */}
-          <OAuthButtons />
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-muted-foreground">
-                Or continue with email
-              </span>
-            </div>
-          </div>
+          {/* OAuth buttons (only for athlete registration) */}
+          {!isParentMode && (
+            <>
+              <OAuthButtons />
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-muted-foreground">
+                    Or continue with email
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           {error && (
             <Alert variant="destructive" className="mb-4">
@@ -391,21 +421,23 @@ export default function Register() {
               </div>
             </div>
 
-            {/* Date of Birth — required for COPPA age gate */}
-            <div className="space-y-2">
-              <Label htmlFor="birthDate">Date of Birth</Label>
-              <Input
-                id="birthDate"
-                type="date"
-                value={formData.birthDate}
-                onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
-                max={new Date().toISOString().split('T')[0]}
-                required
-              />
-            </div>
+            {/* Date of Birth — required for COPPA age gate (athlete mode only) */}
+            {!isParentMode && (
+              <div className="space-y-2">
+                <Label htmlFor="birthDate">Date of Birth</Label>
+                <Input
+                  id="birthDate"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                  max={new Date().toISOString().split('T')[0]}
+                  required
+                />
+              </div>
+            )}
 
-            {/* Parent/Guardian Email — shown conditionally for under-13 athletes (COPPA) */}
-            {isMinor && (
+            {/* Parent/Guardian Email — shown conditionally for under-13 athletes (COPPA, athlete mode only) */}
+            {!isParentMode && isMinor && (
               <div className="space-y-2">
                 <Label htmlFor="parentEmail">
                   Parent or Guardian Email <span className="text-red-500">*</span>
@@ -436,9 +468,10 @@ export default function Register() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => !isParentMode && setFormData({ ...formData, email: e.target.value })}
                   placeholder="you@example.com"
-                  className="pl-10"
+                  className={`pl-10 ${isParentMode && prefilledEmail ? 'bg-gray-50' : ''}`}
+                  readOnly={isParentMode && !!prefilledEmail}
                   required
                 />
                 {emailChecking && (

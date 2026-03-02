@@ -14,9 +14,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import { ArrowLeft, Save, Settings } from "lucide-react";
 import { Link } from "wouter";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
@@ -66,6 +68,11 @@ export default function OrganizationSettings() {
       coppaContactEmail: organization.coppaContactEmail || '',
     } : undefined,
   });
+
+  // Watch coppaEnabled so we can conditionally enforce coppaContactEmail
+  const coppaEnabled = useWatch({ control: form.control, name: 'coppaEnabled' });
+  const wasOriginallyEnabled = organization?.coppaEnabled ?? false;
+  const isDisablingCoppa = wasOriginallyEnabled && coppaEnabled === false;
 
   // Handle form submission
   const onSubmit = async (data: UpdateOrganization) => {
@@ -460,6 +467,14 @@ export default function OrganizationSettings() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {isDisablingCoppa && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Disabling COPPA will stop the parental consent flow for minor athletes. Existing consent records will be preserved, but new under-13 athletes will not be required to obtain parental consent.
+                  </AlertDescription>
+                </Alert>
+              )}
               <FormField
                 control={form.control}
                 name="coppaEnabled"
@@ -485,9 +500,13 @@ export default function OrganizationSettings() {
                 name="coppaContactEmail"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>COPPA Contact Email</FormLabel>
+                    <FormLabel>
+                      COPPA Contact Email
+                      {coppaEnabled && <span className="text-destructive ml-1">*</span>}
+                    </FormLabel>
                     <FormDescription>
                       Email address parents can contact for privacy inquiries related to minor athletes in this organization.
+                      {coppaEnabled && ' Required when the consent flow is enabled.'}
                     </FormDescription>
                     <FormControl>
                       <Input
@@ -495,6 +514,7 @@ export default function OrganizationSettings() {
                         placeholder="privacy@yourorg.com"
                         {...field}
                         value={field.value ?? ''}
+                        required={coppaEnabled === true}
                       />
                     </FormControl>
                     <FormMessage />

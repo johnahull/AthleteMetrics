@@ -6,13 +6,14 @@
  * Route: /consent/:token
  */
 import { useState, useEffect, useRef } from 'react';
-import { useParams } from 'wouter';
+import { useParams, useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { Shield, CheckCircle2, XCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Shield, CheckCircle2, XCircle, AlertCircle, Loader2, UserPlus } from 'lucide-react';
+import { CONSENT_TOKEN_EXPIRY_DAYS } from '@shared/coppa-utils';
 
 type TokenStatus = 'loading' | 'valid' | 'expired' | 'used' | 'invalid';
 type SubmitStatus = 'idle' | 'submitting' | 'granted' | 'denied';
@@ -20,16 +21,20 @@ type SubmitStatus = 'idle' | 'submitting' | 'granted' | 'denied';
 interface ConsentData {
   athleteName: string;
   expiresAt: string;
+  consentId?: string;
+  parentEmail?: string;
 }
 
 export default function ConsentConfirmation() {
   const { token } = useParams<{ token: string }>();
+  const [, setLocation] = useLocation();
 
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading');
   const [consentData, setConsentData] = useState<ConsentData | null>(null);
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitError, setSubmitError] = useState('');
+  const [showParentAccountCta, setShowParentAccountCta] = useState(true);
   // Synchronous guard prevents double-click from firing two requests before
   // React state update (setSubmitStatus) disables the buttons
   const submittingRef = useRef(false);
@@ -98,7 +103,7 @@ export default function ConsentConfirmation() {
         icon={<AlertCircle className="h-8 w-8 text-amber-600" />}
         iconBg="bg-amber-100"
         title="Link Expired"
-        description="This parental consent link has expired (links are valid for 30 days)."
+        description={`This parental consent link has expired (links are valid for ${CONSENT_TOKEN_EXPIRY_DAYS} days).`}
       >
         <Alert className="border-amber-200 bg-amber-50">
           <AlertDescription className="text-amber-800 text-sm">
@@ -141,19 +146,52 @@ export default function ConsentConfirmation() {
 
   // ── Post-submit states ──
   if (submitStatus === 'granted') {
+    const athleteName = consentData?.athleteName ?? 'the athlete';
+    const parentEmail = consentData?.parentEmail ?? '';
+    const consentId = consentData?.consentId ?? '';
+
+    const registerUrl = `/register?role=parent${parentEmail ? `&email=${encodeURIComponent(parentEmail)}` : ''}${consentId ? `&consent=${encodeURIComponent(consentId)}` : ''}`;
+
     return (
       <ConsentStatusCard
         icon={<CheckCircle2 className="h-8 w-8 text-green-600" />}
         iconBg="bg-green-100"
         title="Permission Granted"
-        description={`You've approved ${consentData?.athleteName ?? 'the athlete'}'s AthleteMetrics account.`}
+        description={`You've approved ${athleteName}'s AthleteMetrics account.`}
       >
         <Alert className="border-green-200 bg-green-50">
           <AlertDescription className="text-green-800 text-sm">
-            {consentData?.athleteName ?? 'The athlete'} can now log in and use AthleteMetrics.
+            {athleteName} can now log in and use AthleteMetrics.
             {aiConsentGranted && ' AI-powered coaching insights have also been enabled for their account.'}
           </AlertDescription>
         </Alert>
+
+        {showParentAccountCta && (
+          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200 space-y-3 mt-2">
+            <p className="text-sm font-medium text-blue-900">
+              Would you like to create a parent account to track {athleteName}'s progress?
+            </p>
+            <p className="text-xs text-blue-700">
+              A parent account lets you monitor measurements, view reports, and stay informed about your child's athletic development.
+            </p>
+            <div className="flex flex-col gap-2">
+              <Button
+                className="w-full bg-blue-600 hover:bg-blue-700"
+                onClick={() => setLocation(registerUrl)}
+              >
+                <UserPlus className="mr-2 h-4 w-4" />
+                Create Parent Account
+              </Button>
+              <Button
+                variant="ghost"
+                className="w-full text-sm text-blue-600"
+                onClick={() => setShowParentAccountCta(false)}
+              >
+                No thanks
+              </Button>
+            </div>
+          </div>
+        )}
       </ConsentStatusCard>
     );
   }

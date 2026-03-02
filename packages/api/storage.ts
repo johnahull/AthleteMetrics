@@ -1771,7 +1771,7 @@ export class DatabaseStorage implements IStorage {
             password: userInfo.password,
             firstName: userInfo.firstName,
             lastName: userInfo.lastName,
-            role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
+            role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" | "parent",
             ...legalData
           };
 

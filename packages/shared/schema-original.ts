@@ -1478,7 +1478,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
     .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]).default("athlete"),
+  role: z.enum(["site_admin", "org_admin", "coach", "athlete", "parent"]).default("athlete"),
   isSiteAdmin: z.boolean().default(false).optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;
@@ -1600,7 +1600,7 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   isUsed: true,
 }).extend({
   email: z.string().email("Invalid email format"),
-  role: z.enum(["athlete", "coach", "org_admin"]), // Removed site_admin from invitations
+  role: z.enum(["athlete", "coach", "org_admin", "parent"]), // Removed site_admin from invitations
   teamIds: z.array(z.string()).optional(),
 });
 

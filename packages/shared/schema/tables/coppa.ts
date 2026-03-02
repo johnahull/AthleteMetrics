@@ -69,6 +69,8 @@ export const parentalConsents = pgTable("parental_consents", {
 export const parentAthleteLinks = pgTable("parent_athlete_links", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   parentEmail: text("parent_email").notNull(),
+  // Populated when a parent registers an account (C2 — links email record to user account)
+  parentUserId: varchar("parent_user_id").references(() => users.id, { onDelete: 'set null' }),
   athleteUserId: varchar("athlete_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'set null' }),
   consentId: varchar("consent_id"), // References parentalConsents.id (plain varchar to avoid circular)
@@ -77,6 +79,7 @@ export const parentAthleteLinks = pgTable("parent_athlete_links", {
 }, (table) => ({
   athleteIdx: index("parent_athlete_links_athlete_idx").on(table.athleteUserId),
   parentEmailIdx: index("parent_athlete_links_parent_email_idx").on(table.parentEmail),
+  parentUserIdx: index("parent_athlete_links_parent_user_idx").on(table.parentUserId),
 }));
 
 /**

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,6 +23,7 @@ interface LoginError {
 }
 
 export function EnhancedLoginForm() {
+  const [, setLocation] = useLocation();
   const [formData, setFormData] = useState<LoginFormData>({
     username: '',
     password: '',
@@ -221,10 +223,8 @@ export function EnhancedLoginForm() {
             message: 'Your account is awaiting parental consent. Please ask a parent or guardian to check their email and approve your account.'
           });
         } else if (result.code === 'coppa_needs_parent_email') {
-          setError({
-            type: 'general',
-            message: 'Your account requires a parent or guardian email address. Please contact support to complete your registration.'
-          });
+          // D4: Redirect to collect-parent-email page with username in query param
+          setLocation(`/coppa/collect-parent-email?username=${encodeURIComponent(formData.username)}`);
         } else if (result.code === 'coppa_consent_revoked') {
           setError({
             type: 'general',

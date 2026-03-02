@@ -31,6 +31,7 @@ import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm"
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents } from "@shared/schema/tables/coppa";
+import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -1227,13 +1228,24 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Snapshot not found" });
       }
 
-      // COPPA: if snapshot contains minor data and public access is restricted,
-      // require authentication to view.
-      if ((snapshot as any).containsMinorData && (snapshot as any).publicAccessRestricted) {
+      // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
+      // from an org with COPPA enabled), public link access is never permitted.
+      // Authenticated users may still view the report in the app.
+      if ((snapshot as any).publicAccessRestricted) {
+        // Write audit log regardless of whether user is authenticated
+        coppaService.writeCoppaAudit({
+          action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+          details: { token: req.params.token, authenticated: !!req.session?.user },
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
+        });
+
         if (!req.session?.user) {
-          return res.status(401).json({
-            code: 'auth_required_for_minor_data',
-            message: "This report contains data about minor athletes and requires authentication to view.",
+          return res.status(403).json({
+            code: 'minor_data_restricted',
+            message: 'This report contains data for athletes under 13 and cannot be shared via public link.',
           });
         }
       }

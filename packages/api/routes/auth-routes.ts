@@ -5,8 +5,10 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
+import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { COPPA_ACTIONS } from "@shared/coppa-utils";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -46,6 +48,20 @@ export function registerAuthRoutes(app: Express) {
           needs_parent_email: 'coppa_needs_parent_email',
           consent_revoked: 'coppa_consent_revoked',
         };
+
+        // Write audit log for blocked login (fire-and-forget — never fails the request)
+        const auditAction = user.coppaStatus === 'consent_revoked'
+          ? COPPA_ACTIONS.LOGIN_BLOCKED_REVOKED
+          : COPPA_ACTIONS.LOGIN_BLOCKED_PENDING;
+        coppaService.writeCoppaAudit({
+          action: auditAction,
+          athleteUserId: user.id,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write login block audit log:', err);
+        });
+
         return res.status(403).json({
           code: codeMap[user.coppaStatus],
           coppaStatus: user.coppaStatus,
@@ -78,6 +94,8 @@ export function registerAuthRoutes(app: Express) {
         redirectUrl = '/admin';
       } else if (roleContext.role === 'athlete') {
         redirectUrl = '/my-dashboard';
+      } else if (roleContext.role === 'parent') {
+        redirectUrl = '/parent-dashboard';
       }
       // org_admin, coach, and others default to /dashboard
 

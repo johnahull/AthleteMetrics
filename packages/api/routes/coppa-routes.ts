@@ -87,6 +87,18 @@ export function registerCoppaRoutes(app: Express) {
         return res.status(500).json({ message: result.error || "Failed to initiate consent" });
       }
 
+      // Audit log for resent consent email (fire-and-forget)
+      coppaService.writeCoppaAudit({
+        action: COPPA_ACTIONS.CONSENT_EMAIL_RESENT,
+        athleteUserId,
+        actorUserId: athleteUserId,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: { parentEmail },
+      }).catch((err) => {
+        console.error('[COPPA] Failed to write consent email resent audit log:', err);
+      });
+
       res.json({ success: true, message: "Consent email sent to parent." });
     } catch (error) {
       console.error("[COPPA] POST /consent/initiate error:", error);
@@ -122,6 +134,7 @@ export function registerCoppaRoutes(app: Express) {
         consentId: consent.id,
         athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
         expiresAt: consent.expiresAt.toISOString(),
+        parentEmail: consent.parentEmail,
       });
     } catch (error) {
       console.error("[COPPA] GET /consent/verify/:token error:", error);
@@ -350,6 +363,155 @@ export function registerCoppaRoutes(app: Express) {
       });
     } catch (error) {
       console.error("[COPPA] POST /admin/coppa/retroactive error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/admin/coppa/re-initiate/:athleteId
+   * Org admin or site admin endpoint — re-initiates consent for a consent_revoked athlete.
+   * Used in D5: Consent Denial Recovery.
+   * Body: { parentEmail: string }
+   */
+  app.post("/api/admin/coppa/re-initiate/:athleteId", requireAuth, consentMutateLimiter, async (req, res) => {
+    try {
+      const actorUser = req.session.user;
+      if (!actorUser) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const { athleteId } = req.params;
+      const { parentEmail } = req.body;
+
+      if (!parentEmail || typeof parentEmail !== 'string') {
+        return res.status(400).json({ message: "parentEmail is required" });
+      }
+
+      // Load the athlete user to check their COPPA status
+      const athlete = await storage.getUser(athleteId);
+      if (!athlete) {
+        return res.status(404).json({ message: "Athlete not found" });
+      }
+
+      if (!['consent_revoked', 'pending_consent'].includes(athlete.coppaStatus)) {
+        return res.status(400).json({
+          message: "Consent re-initiation is only available for athletes with consent_revoked or pending_consent status.",
+        });
+      }
+
+      // Verify actor has access: must be site admin OR org admin of the athlete's org
+      if (!actorUser.isSiteAdmin) {
+        const actorOrgs = await storage.getUserOrganizations(actorUser.id);
+        const athleteOrgs = await storage.getUserOrganizations(athleteId);
+        const sharedOrg = actorOrgs.find(ao =>
+          ao.role === 'org_admin' &&
+          athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
+        );
+        if (!sharedOrg) {
+          return res.status(403).json({ message: "You do not have permission to manage this athlete's consent." });
+        }
+      }
+
+      const result = await coppaService.initiateConsent({
+        athleteUserId: athleteId,
+        parentEmail: parentEmail.toLowerCase(),
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      if (!result.success) {
+        return res.status(500).json({ message: result.error || "Failed to re-initiate consent" });
+      }
+
+      coppaService.writeCoppaAudit({
+        action: COPPA_ACTIONS.CONSENT_INITIATED,
+        athleteUserId: athleteId,
+        actorUserId: actorUser.id,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: { parentEmail: parentEmail.toLowerCase(), source: 'admin_re_initiate' },
+      }).catch((err) => {
+        console.error('[COPPA] Failed to write admin re-initiate audit log:', err);
+      });
+
+      res.json({ success: true, message: "Consent email re-sent to parent." });
+    } catch (error) {
+      console.error("[COPPA] POST /admin/coppa/re-initiate/:athleteId error:", error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
+  /**
+   * POST /api/coppa/consent/update-parent-email
+   * Public endpoint — for users with coppaStatus='needs_parent_email'.
+   * Allows providing a parent email without being logged in.
+   * Rate limited to prevent enumeration/abuse.
+   *
+   * Body: { username: string, parentEmail: string }
+   */
+  app.post("/api/coppa/consent/update-parent-email", consentMutateLimiter, async (req, res) => {
+    try {
+      const { username, parentEmail } = req.body;
+
+      if (!username || typeof username !== 'string') {
+        return res.status(400).json({ message: "username is required" });
+      }
+      if (!parentEmail || typeof parentEmail !== 'string') {
+        return res.status(400).json({ message: "parentEmail is required" });
+      }
+
+      // Basic email format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(parentEmail)) {
+        return res.status(400).json({ message: "parentEmail must be a valid email address" });
+      }
+
+      // Look up user by username
+      const user = await storage.getUserByUsername(username.toLowerCase());
+      if (!user) {
+        // Return success to prevent username enumeration
+        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
+      }
+
+      if (user.coppaStatus !== 'needs_parent_email') {
+        return res.status(400).json({
+          message: "This action is not available for your account status.",
+        });
+      }
+
+      // Prevent parent email being same as athlete email
+      if (parentEmail.toLowerCase() === (user.emails?.[0] || '').toLowerCase()) {
+        return res.status(400).json({
+          code: 'parent_email_must_differ',
+          message: "Parent email must be different from the athlete's email address.",
+        });
+      }
+
+      const result = await coppaService.initiateConsent({
+        athleteUserId: user.id,
+        parentEmail: parentEmail.toLowerCase(),
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+      });
+
+      if (!result.success) {
+        return res.status(500).json({ message: result.error || "Failed to initiate consent" });
+      }
+
+      // Audit log
+      coppaService.writeCoppaAudit({
+        action: COPPA_ACTIONS.CONSENT_INITIATED,
+        athleteUserId: user.id,
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        details: { parentEmail, source: 'update_parent_email_endpoint' },
+      }).catch((err) => {
+        console.error('[COPPA] Failed to write update-parent-email audit log:', err);
+      });
+
+      res.json({ success: true, message: "Consent email sent to parent." });
+    } catch (error) {
+      console.error("[COPPA] POST /consent/update-parent-email error:", error);
       res.status(500).json({ message: "Internal server error" });
     }
   });

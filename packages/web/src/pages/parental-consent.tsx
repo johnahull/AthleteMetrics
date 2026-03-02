@@ -3,18 +3,28 @@
  * Shown to under-13 athletes after registration while they await parental approval.
  * The athlete cannot log in until the parent/guardian approves via the email link.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Mail, Clock, Shield } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
+import { CONSENT_TOKEN_EXPIRY_DAYS } from '@shared/coppa-utils';
 
 export default function ParentalConsentWaiting() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [resending, setResending] = useState(false);
+
+  // D2: Redirect away if user's COPPA status is not pending_consent
+  useEffect(() => {
+    if (user && user.coppaStatus !== 'pending_consent') {
+      setLocation('/login');
+    }
+  }, [user, setLocation]);
 
   const handleResendConsent = async () => {
     setResending(true);
@@ -74,7 +84,7 @@ export default function ParentalConsentWaiting() {
             </div>
             <div className="flex items-start gap-2">
               <Clock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
-              <p>The consent link expires in 30 days. If it expires, you'll need to request a new one.</p>
+              <p>The consent link expires in {CONSENT_TOKEN_EXPIRY_DAYS} days. If it expires, you'll need to request a new one.</p>
             </div>
           </div>
 
