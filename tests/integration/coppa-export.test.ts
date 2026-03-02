@@ -31,8 +31,9 @@ import express, { type Express } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import { db } from '../../packages/api/db';
-import { users } from '@shared/schema/tables/core';
+import { users, organizations } from '@shared/schema/tables/core';
 import { parentalConsents, dataExportRequests } from '@shared/schema/tables/coppa';
+import { userOrganizations } from '@shared/schema/tables/membership';
 import { eq, like, and } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
@@ -478,6 +479,37 @@ describe('GET /api/coppa/data-export/download/:downloadToken', () => {
     expect(res.status).toBe(410);
   });
 
+  // NTH-4: Pending/processing export status download
+  it('export in pending status → 400 not ready', async () => {
+    const { rawDownloadToken } = await insertExportRequest({
+      athleteUserId: minorAthleteId,
+      requestedByEmail: `parent-export-pending-${Date.now()}@testcoppaexport.local`,
+      status: 'pending',
+    });
+
+    const res = await request(app)
+      .get(`/api/coppa/data-export/download/${rawDownloadToken}`);
+
+    // pending status is not 'ready', not 'delivered', and not expired —
+    // the service returns 400 "Export is not ready for download."
+    expect(res.status).toBe(400);
+  });
+
+  it('export in processing status → 400 not ready', async () => {
+    const { rawDownloadToken } = await insertExportRequest({
+      athleteUserId: minorAthleteId,
+      requestedByEmail: `parent-export-processing-${Date.now()}@testcoppaexport.local`,
+      status: 'processing',
+    });
+
+    const res = await request(app)
+      .get(`/api/coppa/data-export/download/${rawDownloadToken}`);
+
+    // processing status is not 'ready', not 'delivered', and not expired —
+    // the service returns 400 "Export is not ready for download."
+    expect(res.status).toBe(400);
+  });
+
   it('export bundle includes athlete profile with key PII fields', async () => {
     const { rawDownloadToken } = await insertExportRequest({
       athleteUserId: minorAthleteId,
@@ -547,5 +579,123 @@ describe('COPPA audit log for export operations', () => {
 
     const recent = auditEntries.find(e => e.createdAt >= before);
     expect(recent).toBeDefined();
+  });
+});
+
+// ============================================================================
+// NTH-3: Org admin with shared org can request export
+// ============================================================================
+
+describe('Org admin with shared org — export happy path', () => {
+  let sharedExportOrgId: string;
+  let sharedExportOrgAdminId: string;
+  let sharedExportOrgAdminCookie: string;
+  let sharedExportMinorId: string;
+
+  beforeAll(async () => {
+    const orgTs = `exportorg-${Date.now()}`;
+    const hashedPw = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
+
+    // Create the shared organization
+    const [org] = await db.insert(organizations).values({
+      name: `export-shared-org-${orgTs}`,
+      slug: `export-shared-org-${orgTs}`,
+    }).returning({ id: organizations.id });
+    sharedExportOrgId = org.id;
+
+    // Create an org admin user
+    const [orgAdminUser] = await db.insert(users).values({
+      username: `export-orgadmin-shared-${orgTs}`,
+      firstName: 'ExportShared',
+      lastName: 'OrgAdmin',
+      fullName: 'ExportShared OrgAdmin',
+      emails: [`export-orgadmin-shared-${orgTs}@testcoppaexport.local`],
+      password: hashedPw,
+      isSiteAdmin: false,
+      isEmailVerified: true,
+      coppaStatus: 'not_applicable',
+    }).returning({ id: users.id });
+    sharedExportOrgAdminId = orgAdminUser.id;
+
+    // Enroll org admin as org_admin of the shared org
+    await db.insert(userOrganizations).values({
+      userId: sharedExportOrgAdminId,
+      organizationId: sharedExportOrgId,
+      role: 'org_admin',
+    });
+
+    // Create the minor athlete who is also a member of the same org
+    const [sharedMinor] = await db.insert(users).values({
+      username: `export-sharedminor-${orgTs}`,
+      firstName: 'ExportShared',
+      lastName: 'Minor',
+      fullName: 'ExportShared Minor',
+      emails: [`export-sharedminor-${orgTs}@testcoppaexport.local`],
+      password: hashedPw,
+      isSiteAdmin: false,
+      coppaStatus: 'consented',
+      isMinor: true,
+      parentEmail: `parent-export-shared-${orgTs}@testcoppaexport.local`,
+      isEmailVerified: true,
+    }).returning({ id: users.id });
+    sharedExportMinorId = sharedMinor.id;
+
+    // Enroll the minor in the same org
+    await db.insert(userOrganizations).values({
+      userId: sharedExportMinorId,
+      organizationId: sharedExportOrgId,
+      role: 'athlete',
+    });
+
+    // Insert a confirmed consent record for the minor
+    await insertConsentRecord({
+      athleteUserId: sharedExportMinorId,
+      parentEmail: `parent-export-shared-${orgTs}@testcoppaexport.local`,
+      status: 'confirmed',
+    });
+
+    // Log in as the org admin
+    const loginRes = await request(app)
+      .post('/api/auth/login')
+      .send({ username: `export-orgadmin-shared-${orgTs}`, password: CORRECT_PASSWORD });
+
+    if (loginRes.status === 200 && loginRes.headers['set-cookie']) {
+      sharedExportOrgAdminCookie = loginRes.headers['set-cookie'][0];
+    }
+  });
+
+  afterAll(async () => {
+    const idsToClean = [sharedExportOrgAdminId, sharedExportMinorId].filter(Boolean);
+
+    for (const id of idsToClean) {
+      try {
+        await db.delete(dataExportRequests).where(eq(dataExportRequests.athleteUserId, id));
+        await db.delete(userOrganizations).where(eq(userOrganizations.userId, id));
+        await db.delete(parentalConsents).where(eq(parentalConsents.athleteUserId, id));
+        await db.delete(users).where(eq(users.id, id));
+      } catch { /* best-effort */ }
+    }
+
+    if (sharedExportOrgId) {
+      try {
+        await db.delete(organizations).where(eq(organizations.id, sharedExportOrgId));
+      } catch { /* best-effort */ }
+    }
+  });
+
+  it('org admin with shared org can request export for athlete → 200', async () => {
+    const orgTs = `exportorg-${Date.now()}`;
+
+    const res = await request(app)
+      .post('/api/coppa/data-export/request')
+      .set('Cookie', sharedExportOrgAdminCookie)
+      .send({
+        athleteUserId: sharedExportMinorId,
+        requestedByEmail: `export-orgadmin-shared-${orgTs}@testcoppaexport.local`,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.exportRequestId).toBeTruthy();
   });
 });

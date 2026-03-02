@@ -534,6 +534,69 @@ describe('POST /api/coppa/consent/revoke', () => {
 
     expect(res.status).toBe(403);
   });
+
+  it('revokeAiOnly=true only clears aiConsentGranted and leaves coppaStatus as consented', async () => {
+    const ts = Date.now();
+
+    // Create a fresh consented minor for this test to avoid state bleed from previous revoke tests
+    const hashedPassword = await bcrypt.hash(CORRECT_PASSWORD, BCRYPT_SALT_ROUNDS);
+    const [aiRevokeMinor] = await db.insert(users).values({
+      username: `coppa-airevoke-${ts}`,
+      firstName: 'AIRevoke',
+      lastName: 'Minor',
+      fullName: 'AIRevoke Minor',
+      emails: [`coppa-airevoke-${ts}@testcoppa.local`],
+      password: hashedPassword,
+      isSiteAdmin: false,
+      coppaStatus: 'consented',
+      isMinor: true,
+      isEmailVerified: true,
+    }).returning({ id: users.id });
+
+    const aiRevokeMinorId = aiRevokeMinor.id;
+
+    // Insert a confirmed consent record with AI consent granted
+    const { consentId: aiConsentId } = await insertConsentRecord({
+      athleteUserId: aiRevokeMinorId,
+      parentEmail: `parent-airevoke-${ts}@testcoppa.local`,
+      status: 'confirmed',
+      confirmedAt: new Date(),
+      aiConsentGranted: true,
+    });
+
+    // Site admin revokes with revokeAiOnly=true
+    const res = await request(app)
+      .post('/api/coppa/consent/revoke')
+      .set('Cookie', siteAdminCookie)
+      .send({ athleteUserId: aiRevokeMinorId, revokeAiOnly: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // Verify coppaStatus is still 'consented' (NOT changed by AI-only revoke)
+    const [updatedUser] = await db.select({ coppaStatus: users.coppaStatus })
+      .from(users)
+      .where(eq(users.id, aiRevokeMinorId))
+      .limit(1);
+    expect(updatedUser.coppaStatus).toBe('consented');
+
+    // Verify aiConsentGranted is now false on the consent record
+    const [updatedConsent] = await db.select({
+      aiConsentGranted: parentalConsents.aiConsentGranted,
+      status: parentalConsents.status,
+    })
+    .from(parentalConsents)
+    .where(eq(parentalConsents.id, aiConsentId))
+    .limit(1);
+    expect(updatedConsent.aiConsentGranted).toBe(false);
+    // The consent record status should remain 'confirmed' (not revoked)
+    expect(updatedConsent.status).toBe('confirmed');
+
+    // Cleanup
+    await db.delete(parentAthleteLinks).where(eq(parentAthleteLinks.athleteUserId, aiRevokeMinorId));
+    await db.delete(parentalConsents).where(eq(parentalConsents.athleteUserId, aiRevokeMinorId));
+    await db.delete(users).where(eq(users.id, aiRevokeMinorId));
+  });
 });
 
 // ============================================================================
@@ -911,6 +974,18 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
     const res = await request(app)
       .get(`/api/public/reports/${restrictedToken}`)
       .set('Cookie', siteAdminCookie);
+
+    expect(res.status).toBe(200);
+  });
+
+  // NTH-9: Non-admin authenticated user can also access a restricted snapshot
+  it('restricted snapshot with non-admin authenticated user → 200', async () => {
+    // orgAdminCookie is an authenticated user who is NOT a site admin.
+    // Any authenticated session should be allowed through — the restriction
+    // only blocks completely unauthenticated (anonymous) requests.
+    const res = await request(app)
+      .get(`/api/public/reports/${restrictedToken}`)
+      .set('Cookie', orgAdminCookie);
 
     expect(res.status).toBe(200);
   });
