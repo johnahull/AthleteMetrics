@@ -10,15 +10,20 @@ import { cn } from '@/lib/utils';
 interface WizardStepIndicatorProps {
   currentStep: number;
   totalSteps: number;
-  importType: 'athletes' | 'measurements';
+  importType?: 'athletes' | 'measurements';
+  stepLabels?: string[];
 }
 
 export function WizardStepIndicator({
   currentStep,
   totalSteps,
-  importType
+  importType,
+  stepLabels,
 }: WizardStepIndicatorProps) {
   const getStepLabel = (step: number): string => {
+    if (stepLabels) {
+      return stepLabels[step - 1] || '';
+    }
     if (importType === 'athletes') {
       const labels = ['Select Type', 'Select Teams', 'Preview Template'];
       return labels[step - 1] || '';
