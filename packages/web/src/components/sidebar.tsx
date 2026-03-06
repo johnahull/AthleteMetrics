@@ -25,7 +25,8 @@ import {
   Link,
   UserPlus,
   Calendar,
-  Ruler
+  Ruler,
+  Upload
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -61,6 +62,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
       { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
       { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+      { name: "Device Import", href: "/import/device", icon: Upload, tourId: "device-import" },
       { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
     ]
   },
@@ -74,6 +76,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+    { name: "Device Import", href: "/import/device", icon: Upload, tourId: "device-import" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
     { name: "Metrics", href: "/organizations/__ORG_ID__/metrics", icon: Ruler, tourId: "metrics" },
     { name: "Settings", href: "/organizations/__ORG_ID__/settings/admin", icon: Settings, tourId: "settings" }
@@ -88,6 +91,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+    { name: "Device Import", href: "/import/device", icon: Upload, tourId: "device-import" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
   ],
   athlete: (invitationBadge?: number, reportBadge?: number) => [

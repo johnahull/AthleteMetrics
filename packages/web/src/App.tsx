@@ -131,6 +131,9 @@ const EventInvite = React.lazy(() => import("./pages/event-invite"));
 const EventDataEntry = React.lazy(() => import("./pages/event-data-entry"));
 const EventResults = React.lazy(() => import("./pages/event-results"));
 
+// Lazy load device import page
+const DeviceImport = React.lazy(() => import("./pages/device-import"));
+
 function Router() {
   return (
     <Switch>
@@ -496,6 +499,12 @@ function Router() {
       <Route path="/reports">
         <RouteWrapper loadingText="Loading Reports...">
           <Reports />
+        </RouteWrapper>
+      </Route>
+      {/* Device import - standalone (no event context) */}
+      <Route path="/import/device">
+        <RouteWrapper loadingText="Loading Device Import...">
+          <DeviceImport />
         </RouteWrapper>
       </Route>
       {/* Event routes - specific routes must come before generic */}

@@ -826,6 +826,7 @@ export default function EventDetail() {
         <TabsContent value="results">
           <EventResultsTab
             eventId={eventId!}
+            organizationId={event.organizationId || undefined}
             isFrozen={event.isFrozen}
             eventStatus={event.status}
             resultsPublishedAt={event.resultsPublishedAt}
