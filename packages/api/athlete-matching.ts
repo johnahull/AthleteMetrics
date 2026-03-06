@@ -32,7 +32,7 @@ export interface MatchResult {
 /**
  * Calculate Levenshtein distance between two strings
  */
-function levenshteinDistance(str1: string, str2: string): number {
+export function levenshteinDistance(str1: string, str2: string): number {
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
   
   for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
@@ -55,7 +55,7 @@ function levenshteinDistance(str1: string, str2: string): number {
 /**
  * Calculate string similarity as a percentage (0-100)
  */
-function stringSimilarity(str1: string, str2: string): number {
+export function stringSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0;
   
   const cleanStr1 = str1.toLowerCase().trim();
@@ -72,7 +72,7 @@ function stringSimilarity(str1: string, str2: string): number {
 /**
  * Normalize names for comparison (handle common variations)
  */
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   if (!name || typeof name !== 'string') return '';
   
   return name
@@ -88,7 +88,7 @@ function normalizeName(name: string): string {
 /**
  * Score an athlete match based on firstName + lastName + team criteria
  */
-function calculateMatchScore(criteria: MatchingCriteria, athlete: any): AthleteMatchCandidate {
+export function calculateMatchScore(criteria: MatchingCriteria, athlete: any): AthleteMatchCandidate {
   let score = 0;
   let matchReasons: string[] = [];
   
@@ -199,13 +199,12 @@ export function findBestAthleteMatch(
   const bestCandidate = candidates[0];
   const secondBest = candidates[1];
   
-  // Handle case where all candidates have 0 score
+  // Handle case where best candidate has 0 score
   if (!bestCandidate || bestCandidate.matchScore === 0) {
     return {
       type: 'none',
       confidence: 0,
       requiresManualReview: false,
-      alternatives: candidates.length > 1 ? candidates.slice(0, 3) : undefined
     };
   }
   

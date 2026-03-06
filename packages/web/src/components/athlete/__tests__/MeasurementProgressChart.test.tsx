@@ -52,6 +52,8 @@ function createMockMeasurement(overrides: Partial<Measurement> = {}): Measuremen
     eventId: null,
     eventNameSnapshot: null,
     eventDateSnapshot: null,
+    importSource: null,
+    importBatchId: null,
     ...overrides,
   };
 }

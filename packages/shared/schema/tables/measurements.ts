@@ -48,6 +48,9 @@ export const measurements = pgTable("measurements", {
       sourceMeasurementId?: string; // Source measurement that triggered the calculation
     };
   }>(),
+  // Device import tracking
+  importSource: varchar("import_source", { length: 50 }), // "dashr_csv", "ovr_csv", etc.
+  importBatchId: varchar("import_batch_id"), // References import_batches.id (no FK — historical reference)
   // Event context - immutable snapshot at measurement time (no FK - historical reference)
   eventId: varchar("event_id"), // Event ID when measurement was taken at an event
   eventNameSnapshot: text("event_name_snapshot"), // Event name at time of measurement
@@ -60,6 +63,8 @@ export const measurements = pgTable("measurements", {
   userMetricDateIdx: index("measurements_user_metric_date_idx").on(table.userId, table.metric, table.date),
   // Event-based measurement queries (added in migration 0081)
   eventIdx: index("measurements_event_idx").on(table.eventId, table.date),
+  // Device import batch lookups (for rollback)
+  importBatchIdx: index("measurements_import_batch_idx").on(table.importBatchId),
   // Derived metrics indexes (partial indexes: WHERE is_calculated = true / is_verified = true)
   isCalculatedIdx: index("idx_measurements_is_calculated").on(table.isCalculated).where(sql`${table.isCalculated} = true`),
   // Note: idx_measurements_calculated_from is a GIN index (USING GIN) created in migration 0083

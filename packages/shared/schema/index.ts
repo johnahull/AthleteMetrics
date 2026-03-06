@@ -49,6 +49,8 @@ export type {
   PushSubscriptionRecord, NotificationPreferencesRecord, NotificationHistoryRecord, OrgNotificationSettingsRecord,
   // Events
   Event, EventRegistration, EventInvitation, EventMetric, EventFreezeOverride,
+  // Imports
+  ImportBatch,
   // Enum types (aliased from enums, not conflicting with constants)
   SportCode, MembershipRequestStatus, MembershipRequestDiscoveryMethod,
   AchievementCategory, AchievementRarity, GoalType, GoalStatus,

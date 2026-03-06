@@ -125,6 +125,9 @@ export type EventInvitation = typeof tables.eventInvitations.$inferSelect;
 export type EventMetric = typeof tables.eventMetrics.$inferSelect;
 export type EventFreezeOverride = typeof tables.eventFreezeOverrides.$inferSelect;
 
+// Imports
+export type ImportBatch = typeof tables.importBatches.$inferSelect;
+
 // ============================================================================
 // Enum Types
 // ============================================================================
