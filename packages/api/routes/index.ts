@@ -50,6 +50,7 @@ import { registerCoppaDeletionRoutes } from "./coppa-deletion-routes";
 import { registerCoppaExportRoutes } from "./coppa-export-routes";
 import { registerParentRoutes } from "./parent-routes";
 import { registerParentLinkRequestRoutes } from "./parent-link-request-routes";
+import { registerDeviceImportRoutes } from "./device-import-routes";
 
 /**
  * Register all application routes
@@ -138,6 +139,9 @@ export function registerAllRoutes(app: Express) {
 
   // Import/Export routes (CSV/photo import and data export)
   registerImportExportRoutes(app);
+
+  // Device import routes (Dashr, OVR timing gate imports)
+  registerDeviceImportRoutes(app);
 
   // Profile and user management routes
   registerProfileRoutes(app);
