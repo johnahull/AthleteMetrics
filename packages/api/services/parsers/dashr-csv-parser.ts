@@ -43,7 +43,7 @@ interface DashrRow {
  * Parse a CSV line with RFC 4180 quote-aware splitting.
  * Handles quoted fields that may contain commas or escaped quotes.
  */
-function parseCsvLine(line: string): string[] {
+export function parseCsvLine(line: string): string[] {
   const fields: string[] = [];
   let current = '';
   let inQuotes = false;

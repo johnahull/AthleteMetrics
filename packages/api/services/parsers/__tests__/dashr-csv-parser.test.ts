@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { DashrCsvParser, parseSpeedValue } from '../dashr-csv-parser';
+import { DashrCsvParser, parseSpeedValue, parseCsvLine } from '../dashr-csv-parser';
 
 const parser = new DashrCsvParser();
 
@@ -333,5 +333,51 @@ describe('RSI handling', () => {
       expect(rsi.value).toBe(1.5);
     }
     // RSI may or may not be parsed depending on column alignment
+  });
+});
+
+// ============================================================================
+// RFC 4180 CSV Line Parsing
+// ============================================================================
+
+describe('parseCsvLine (RFC 4180)', () => {
+  it('splits simple unquoted fields', () => {
+    expect(parseCsvLine('a,b,c')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('handles quoted field containing a comma', () => {
+    expect(parseCsvLine('"Smith, Jr",John,30')).toEqual(['Smith, Jr', 'John', '30']);
+  });
+
+  it('handles escaped double-quote inside quoted field', () => {
+    expect(parseCsvLine('"He said ""hello""",world')).toEqual(['He said "hello"', 'world']);
+  });
+
+  it('handles mixed quoted and unquoted fields', () => {
+    expect(parseCsvLine('plain,"quoted,with,commas",another')).toEqual([
+      'plain', 'quoted,with,commas', 'another',
+    ]);
+  });
+
+  it('handles empty quoted field', () => {
+    expect(parseCsvLine('"",value,""')).toEqual(['', 'value', '']);
+  });
+
+  it('handles empty unquoted fields', () => {
+    expect(parseCsvLine('a,,c,')).toEqual(['a', '', 'c', '']);
+  });
+
+  it('trims whitespace from unquoted fields', () => {
+    expect(parseCsvLine(' a , b , c ')).toEqual(['a', 'b', 'c']);
+  });
+
+  it('handles a full Dashr-like row without corruption', () => {
+    const line = '12/27/2025 14:25:26,Christian,Austin,Hull,Dash,,Imperial,,1.110000,5.000000,9.21 (MPH)';
+    const fields = parseCsvLine(line);
+    expect(fields[0]).toBe('12/27/2025 14:25:26');
+    expect(fields[1]).toBe('Christian');
+    expect(fields[3]).toBe('Hull');
+    expect(fields[4]).toBe('Dash');
+    expect(fields[10]).toBe('9.21 (MPH)');
   });
 });

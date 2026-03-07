@@ -271,10 +271,11 @@ export function registerDeviceImportRoutes(app: Express) {
           return res.status(401).json({ message: "User not authenticated" });
         }
 
-        const organizationId = req.body.organizationId as string;
-        if (!organizationId) {
+        const body = orgQuerySchema.safeParse(req.body);
+        if (!body.success) {
           return res.status(400).json({ message: "organizationId required" });
         }
+        const { organizationId } = body.data;
 
         // Permission check: must be coach or admin in the org
         if (!isSiteAdmin(user)) {
