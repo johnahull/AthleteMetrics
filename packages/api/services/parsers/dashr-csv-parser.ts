@@ -40,10 +40,43 @@ interface DashrRow {
 }
 
 /**
- * Parse a CSV line handling basic quoting (no embedded commas in Dashr exports)
+ * Parse a CSV line with RFC 4180 quote-aware splitting.
+ * Handles quoted fields that may contain commas or escaped quotes.
  */
 function parseCsvLine(line: string): string[] {
-  return line.split(',').map(v => v.trim().replace(/^"|"$/g, ''));
+  const fields: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+
+    if (inQuotes) {
+      if (ch === '"') {
+        // Check for escaped quote ("")
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++; // skip next quote
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        fields.push(current.trim());
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+
+  fields.push(current.trim());
+  return fields;
 }
 
 /**

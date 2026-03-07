@@ -325,9 +325,14 @@ export function DeviceImportDialog({
   };
 
   const handleSessionConfirm = () => {
-    if (!selectedSessionDate) return;
-    // Re-parse with the chosen session date if needed (re-use cached batch)
-    setStep('review');
+    if (!selectedSessionDate || !selectedFile) return;
+    // Re-parse with the chosen session date to filter athletes/drills
+    setStep('parsing');
+    parseMutation.mutate({
+      file: selectedFile,
+      source,
+      sessionDate: selectedSessionDate,
+    });
   };
 
   const handleCommit = () => {

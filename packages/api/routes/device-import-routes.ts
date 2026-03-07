@@ -59,6 +59,10 @@ const parseRequestSchema = z.object({
   sessionDate: z.string().optional(),
 });
 
+const orgQuerySchema = z.object({
+  organizationId: z.string().min(1),
+});
+
 const commitRequestSchema = z.object({
   batchId: z.string().min(1),
   organizationId: z.string().min(1),
@@ -149,6 +153,16 @@ export function registerDeviceImportRoutes(app: Express) {
 
         const { batchId, organizationId, duplicateStrategy, addMissingEventMetrics, athletes } = body.data;
 
+        // Permission check: must be coach or admin in the org
+        if (!isSiteAdmin(user)) {
+          const roles = await storage.getUserRoles(user.id, organizationId);
+          if (!roles.includes('org_admin') && !roles.includes('coach')) {
+            return res.status(403).json({
+              message: "Access denied. Coach or admin role required.",
+            });
+          }
+        }
+
         const result = await importService.commitBatch({
           batchId,
           duplicateStrategy,
@@ -182,9 +196,20 @@ export function registerDeviceImportRoutes(app: Express) {
           return res.status(401).json({ message: "User not authenticated" });
         }
 
-        const organizationId = req.query.organizationId as string;
-        if (!organizationId) {
+        const query = orgQuerySchema.safeParse(req.query);
+        if (!query.success) {
           return res.status(400).json({ message: "organizationId required" });
+        }
+        const { organizationId } = query.data;
+
+        // Permission check: must be coach or admin in the org
+        if (!isSiteAdmin(user)) {
+          const roles = await storage.getUserRoles(user.id, organizationId);
+          if (!roles.includes('org_admin') && !roles.includes('coach')) {
+            return res.status(403).json({
+              message: "Access denied. Coach or admin role required.",
+            });
+          }
         }
 
         const batches = await importService.getBatches(organizationId);
@@ -206,9 +231,20 @@ export function registerDeviceImportRoutes(app: Express) {
           return res.status(401).json({ message: "User not authenticated" });
         }
 
-        const organizationId = req.query.organizationId as string;
-        if (!organizationId) {
+        const query = orgQuerySchema.safeParse(req.query);
+        if (!query.success) {
           return res.status(400).json({ message: "organizationId required" });
+        }
+        const { organizationId } = query.data;
+
+        // Permission check: must be coach or admin in the org
+        if (!isSiteAdmin(user)) {
+          const roles = await storage.getUserRoles(user.id, organizationId);
+          if (!roles.includes('org_admin') && !roles.includes('coach')) {
+            return res.status(403).json({
+              message: "Access denied. Coach or admin role required.",
+            });
+          }
         }
 
         const batch = await importService.getBatchDetail(req.params.batchId, organizationId);
@@ -238,6 +274,16 @@ export function registerDeviceImportRoutes(app: Express) {
         const organizationId = req.body.organizationId as string;
         if (!organizationId) {
           return res.status(400).json({ message: "organizationId required" });
+        }
+
+        // Permission check: must be coach or admin in the org
+        if (!isSiteAdmin(user)) {
+          const roles = await storage.getUserRoles(user.id, organizationId);
+          if (!roles.includes('org_admin') && !roles.includes('coach')) {
+            return res.status(403).json({
+              message: "Access denied. Coach or admin role required.",
+            });
+          }
         }
 
         await importService.rollbackBatch(req.params.batchId, user.id, organizationId);

@@ -243,127 +243,128 @@ export class DeviceImportService {
     const importedAthleteIds = new Set<string>();
     const recalcPairs = new Set<string>(); // "userId|metric" pairs
 
-    // Process each athlete
-    for (const previewAthlete of preview.athletes) {
-      const override = overrideMap.get(previewAthlete.csvName);
-      const included = override?.included ?? previewAthlete.included;
-      if (!included) continue;
+    // Wrap all measurement operations in a transaction for atomicity
+    await db.transaction(async (tx) => {
+      // Process each athlete
+      for (const previewAthlete of preview.athletes) {
+        const override = overrideMap.get(previewAthlete.csvName);
+        const included = override?.included ?? previewAthlete.included;
+        if (!included) continue;
 
-      const athleteId = override?.matchedAthleteId ?? previewAthlete.matchedAthleteId;
-      if (!athleteId) continue;
+        const athleteId = override?.matchedAthleteId ?? previewAthlete.matchedAthleteId;
+        if (!athleteId) continue;
 
-      importedAthleteIds.add(athleteId);
+        importedAthleteIds.add(athleteId);
 
-      for (const drill of previewAthlete.drills) {
-        const date = batch.sessionDate ?? new Date().toISOString().split('T')[0];
+        for (const drill of previewAthlete.drills) {
+          const date = batch.sessionDate ?? new Date().toISOString().split('T')[0];
 
-        // Check for duplicates
-        const duplicateQuery = db
-          .select({ id: measurements.id })
-          .from(measurements)
-          .where(and(
-            eq(measurements.userId, athleteId),
-            eq(measurements.metric, drill.metric),
-            eq(measurements.date, date),
-            batch.eventId
-              ? eq(measurements.eventId, batch.eventId)
-              : isNull(measurements.eventId),
-          ));
+          // Check for duplicates
+          const existing = await tx
+            .select({ id: measurements.id })
+            .from(measurements)
+            .where(and(
+              eq(measurements.userId, athleteId),
+              eq(measurements.metric, drill.metric),
+              eq(measurements.date, date),
+              batch.eventId
+                ? eq(measurements.eventId, batch.eventId)
+                : isNull(measurements.eventId),
+            ));
 
-        const existing = await duplicateQuery;
-
-        if (existing.length > 0) {
-          if (duplicateStrategy === 'skip') {
-            skipped++;
-            continue;
-          }
-          // Replace: delete existing
-          await db.delete(measurements)
-            .where(inArray(measurements.id, existing.map(e => e.id)));
-          replaced += existing.length;
-        }
-
-        // Create measurement via service
-        try {
-          await this.measurementService.createMeasurement(
-            {
-              userId: athleteId,
-              metric: drill.metric,
-              value: String(drill.value),
-              date,
-              units: drill.units,
-              eventId: batch.eventId ?? undefined,
-              organizationId,
-              importSource: batch.source,
-              importBatchId: batchId,
-              notes: `Imported from ${batch.fileName}`,
-              isCalculated: false,
-              calculationMetadata: {
-                formula: 'direct_import',
-                sourceValues: {},
-                calculatedAt: new Date().toISOString(),
-                triggeredBy: {
-                  event: 'bulk_import',
-                  userId: committedBy,
-                },
-              },
-            } as any,
-            committedBy,
-            'coach',
-          );
-          created++;
-          recalcPairs.add(`${athleteId}|${drill.metric}`);
-
-          // Also create measurements for splits
-          if (drill.splits) {
-            for (const split of drill.splits) {
-              await this.measurementService.createMeasurement(
-                {
-                  userId: athleteId,
-                  metric: split.metric,
-                  value: String(split.value),
-                  date,
-                  units: split.units,
-                  eventId: batch.eventId ?? undefined,
-                  organizationId,
-                  importSource: batch.source,
-                  importBatchId: batchId,
-                  notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
-                  isCalculated: false,
-                } as any,
-                committedBy,
-                'coach',
-              );
-              created++;
-              recalcPairs.add(`${athleteId}|${split.metric}`);
+          if (existing.length > 0) {
+            if (duplicateStrategy === 'skip') {
+              skipped++;
+              continue;
             }
+            // Replace: delete existing, count as 1 replacement per drill
+            await tx.delete(measurements)
+              .where(inArray(measurements.id, existing.map(e => e.id)));
+            replaced++;
           }
-        } catch (err: any) {
-          // Log but continue — don't fail the whole batch for one measurement
-          console.error(`Failed to create measurement for ${previewAthlete.csvName} ${drill.metric}:`, err.message);
-          skipped++;
+
+          // Create measurement via service
+          try {
+            await this.measurementService.createMeasurement(
+              {
+                userId: athleteId,
+                metric: drill.metric,
+                value: String(drill.value),
+                date,
+                units: drill.units,
+                eventId: batch.eventId ?? undefined,
+                organizationId,
+                importSource: batch.source,
+                importBatchId: batchId,
+                notes: `Imported from ${batch.fileName}`,
+                isCalculated: false,
+                calculationMetadata: {
+                  formula: 'direct_import',
+                  sourceValues: {},
+                  calculatedAt: new Date().toISOString(),
+                  triggeredBy: {
+                    event: 'bulk_import',
+                    userId: committedBy,
+                  },
+                },
+              } as any,
+              committedBy,
+              'coach',
+            );
+            created++;
+            recalcPairs.add(`${athleteId}|${drill.metric}`);
+
+            // Also create measurements for splits
+            if (drill.splits) {
+              for (const split of drill.splits) {
+                await this.measurementService.createMeasurement(
+                  {
+                    userId: athleteId,
+                    metric: split.metric,
+                    value: String(split.value),
+                    date,
+                    units: split.units,
+                    eventId: batch.eventId ?? undefined,
+                    organizationId,
+                    importSource: batch.source,
+                    importBatchId: batchId,
+                    notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
+                    isCalculated: false,
+                  } as any,
+                  committedBy,
+                  'coach',
+                );
+                created++;
+                recalcPairs.add(`${athleteId}|${split.metric}`);
+              }
+            }
+          } catch (err: any) {
+            // Log but continue — don't fail the whole batch for one measurement
+            console.error(`Failed to create measurement for ${previewAthlete.csvName} ${drill.metric}:`, err.message);
+            skipped++;
+          }
         }
       }
-    }
 
-    // Add missing event metrics if requested
-    if (addMissingEventMetrics && batch.eventId) {
-      await this.addMissingEventMetrics(batch.eventId, preview.athletes);
-    }
+      // Add missing event metrics if requested
+      if (addMissingEventMetrics && batch.eventId) {
+        await this.addMissingEventMetrics(batch.eventId, preview.athletes);
+      }
 
-    // Update batch status
-    await db.update(importBatches)
-      .set({
-        status: 'completed',
-        committedBy,
-        committedAt: new Date(),
-        measurementsCreated: created,
-        measurementsSkipped: skipped,
-        measurementsReplaced: replaced,
-        athletesImported: importedAthleteIds.size,
-        parsedPreview: null, // Clear preview data to save space
-      })
-      .where(eq(importBatches.id, batchId));
+      // Update batch status within the same transaction
+      await tx.update(importBatches)
+        .set({
+          status: 'completed',
+          committedBy,
+          committedAt: new Date(),
+          measurementsCreated: created,
+          measurementsSkipped: skipped,
+          measurementsReplaced: replaced,
+          athletesImported: importedAthleteIds.size,
+          parsedPreview: null, // Clear preview data to save space
+        })
+        .where(eq(importBatches.id, batchId));
+    });
 
     // Recalculate derived metrics per unique athlete/metric pair
     const calculator = new DerivedMetricCalculator(db);
@@ -418,20 +419,21 @@ export class DeviceImportService {
       recalcPairs.add(`${m.userId}|${m.metric}`);
     }
 
-    // Step 2: Bulk delete in single transaction
-    if (batchMeasurements.length > 0) {
-      await db.delete(measurements)
-        .where(eq(measurements.importBatchId, batchId));
-    }
+    // Step 2: Bulk delete + status update in a single transaction
+    await db.transaction(async (tx) => {
+      if (batchMeasurements.length > 0) {
+        await tx.delete(measurements)
+          .where(eq(measurements.importBatchId, batchId));
+      }
 
-    // Update batch status
-    await db.update(importBatches)
-      .set({
-        status: 'rolled_back',
-        rolledBackBy: userId,
-        rolledBackAt: new Date(),
-      })
-      .where(eq(importBatches.id, batchId));
+      await tx.update(importBatches)
+        .set({
+          status: 'rolled_back',
+          rolledBackBy: userId,
+          rolledBackAt: new Date(),
+        })
+        .where(eq(importBatches.id, batchId));
+    });
 
     // Step 3: Recalculate derived metrics
     const calculator = new DerivedMetricCalculator(db);
