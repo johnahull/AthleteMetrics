@@ -48,7 +48,7 @@ jobs:
 
       - name: Deploy to Railway preview environment
         id: deploy
-        uses: ayungavis/railway-preview-deploy@v1.0.2
+        uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2
         with:
           railway_api_token: ${{ secrets.RAILWAY_API_TOKEN }}
           project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
@@ -70,6 +70,7 @@ jobs:
             | | |
             |---|---|
             | **Status** | ${{ steps.deploy.outcome == 'success' && 'Deployed' || 'Failed' }} |
+            | **Preview** | ${{ steps.deploy.outputs.service_domain && format('https://{0}', steps.deploy.outputs.service_domain) || 'See Railway dashboard' }} |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
             | **Logs** | [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
@@ -77,14 +78,16 @@ jobs:
   cleanup-preview:
     name: Cleanup PR Preview
     runs-on: ubuntu-latest
-    if: github.event.action == 'closed'
+    if: >
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
       - name: Cleanup Railway preview environment
-        uses: ayungavis/railway-preview-deploy@v1.0.2
+        uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2
         with:
           railway_api_token: ${{ secrets.RAILWAY_API_TOKEN }}
           project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
