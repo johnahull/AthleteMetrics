@@ -84,9 +84,6 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
       - name: Cleanup Railway preview environment
         continue-on-error: true
         uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2

@@ -23,6 +23,9 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Note: No continue-on-error — review failures (including timeouts) surface
+      # as red CI. This is intentional: silent failures previously masked broken
+      # auth for weeks. Transient Claude API issues are rare and worth the signal.
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12
