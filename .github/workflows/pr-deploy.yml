@@ -48,6 +48,7 @@ jobs:
 
       - name: Deploy to Railway preview environment
         id: deploy
+        continue-on-error: true
         uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2
         with:
           railway_api_token: ${{ secrets.RAILWAY_API_TOKEN }}
