@@ -23,40 +23,56 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Note: No continue-on-error — review failures (including timeouts) surface
+      # as red CI. This is intentional: silent failures previously masked broken
+      # auth for weeks. Transient Claude API issues are rare and worth the signal.
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12
-        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
 
           prompt: |
-            You are performing an automated code review for PR #${{ github.event.pull_request.number }}.
+            Review PR #${{ github.event.pull_request.number }}.
 
-            Read the agent definition at .claude/agents/pr-lifecycle-agent.md for review guidelines.
+            Steps:
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to get the diff
+            2. Only read full files when surrounding context is needed to judge correctness
+            3. Review the diff against this checklist:
+               - Bugs, logic errors, off-by-one, null/undefined risks
+               - Security: injection, auth bypass, secret exposure, unsafe input handling
+               - TypeScript: incorrect types, unsafe casts, missing null checks
+               - Performance: N+1 queries, missing indexes, unbounded loops, memory leaks
+               - Test coverage: new logic without tests, missing edge cases
+               - AthleteMetrics conventions from CLAUDE.md (org scoping, permission checks, Drizzle patterns)
+            4. Post a single review comment via `gh pr comment ${{ github.event.pull_request.number }} --body "..."`
 
-            Tasks:
-            1. Fetch PR diff: `gh pr diff ${{ github.event.pull_request.number }}`
-            2. Read all changed files for context
-            3. Perform comprehensive code review covering:
-               - Code quality & best practices
-               - Security vulnerabilities (OWASP Top 10)
-               - Performance considerations
-               - Test coverage
-               - TypeScript type safety
-               - AthleteMetrics conventions (from CLAUDE.md)
-            4. Invoke specialized agents for domain-specific review if needed
-            5. Post review comment using the format from pr-lifecycle-agent.md
+            Review format:
+            ```
+            ## Code Review — PR #<number>
 
-            Use `gh pr comment ${{ github.event.pull_request.number }} --body "..."` to post your review.
+            **What is Good**
+            - [list strengths briefly]
 
-            Important:
-            - Follow AthleteMetrics patterns from CLAUDE.md
-            - Use TodoWrite to track review tasks
-            - Be constructive and specific in feedback
+            **Issues Found**
 
-          claude_args: --max-turns 30 --allowed-tools "Bash(gh:*),Read,Grep,Glob,Task,TodoWrite"
+            **Important (Should Fix)**
+            - file:line — description and suggested fix
+
+            **Minor (Nice to Have)**
+            - file:line — description
+
+            If no issues: "No issues found. LGTM."
+            ```
+
+            Rules:
+            - Be concise — focus on what matters, skip nitpicks and style preferences
+            - Categorize issues by severity so authors know what to prioritize
+            - Do not read .claude/agents/ or invoke sub-agents
+
+          claude_args: --max-turns 15 --allowed-tools "Bash(gh:*),Read,Grep,Glob"
 
           additional_permissions: |
             actions: read
