@@ -32,31 +32,34 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
 
           prompt: |
-            You are performing an automated code review for PR #${{ github.event.pull_request.number }}.
+            Review PR #${{ github.event.pull_request.number }}.
 
-            Read the agent definition at .claude/agents/pr-lifecycle-agent.md for review guidelines.
+            Steps:
+            1. Run `gh pr diff ${{ github.event.pull_request.number }}` to get the diff
+            2. Only read full files if the diff lacks sufficient context
+            3. Review for: bugs, security issues, correctness, and convention violations
+            4. Post a single review comment via `gh pr comment ${{ github.event.pull_request.number }} --body "..."`
 
-            Tasks:
-            1. Fetch PR diff: `gh pr diff ${{ github.event.pull_request.number }}`
-            2. Read all changed files for context
-            3. Perform comprehensive code review covering:
-               - Code quality & best practices
-               - Security vulnerabilities (OWASP Top 10)
-               - Performance considerations
-               - Test coverage
-               - TypeScript type safety
-               - AthleteMetrics conventions (from CLAUDE.md)
-            4. Invoke specialized agents for domain-specific review if needed
-            5. Post review comment using the format from pr-lifecycle-agent.md
+            Review format:
+            ```
+            ## Code Review — PR #<number>
 
-            Use `gh pr comment ${{ github.event.pull_request.number }} --body "..."` to post your review.
+            **What is Good**
+            - [list strengths briefly]
 
-            Important:
-            - Follow AthleteMetrics patterns from CLAUDE.md
-            - Use TodoWrite to track review tasks
-            - Be constructive and specific in feedback
+            **Issues Found**
+            - [Important] file:line — description and suggested fix
+            - [Minor] file:line — description
 
-          claude_args: --max-turns 30 --allowed-tools "Bash(gh:*),Read,Grep,Glob,Task,TodoWrite"
+            If no issues: "No issues found. LGTM."
+            ```
+
+            Rules:
+            - Be concise — focus on what matters, skip nitpicks
+            - Only flag real issues, not style preferences
+            - Do not read .claude/agents/ or invoke sub-agents
+
+          claude_args: --max-turns 15 --allowed-tools "Bash(gh:*),Read,Grep,Glob"
 
           additional_permissions: |
             actions: read
