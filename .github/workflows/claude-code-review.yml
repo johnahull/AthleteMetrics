@@ -36,8 +36,14 @@ jobs:
 
             Steps:
             1. Run `gh pr diff ${{ github.event.pull_request.number }}` to get the diff
-            2. Only read full files if the diff lacks sufficient context
-            3. Review for: bugs, security issues, correctness, and convention violations
+            2. Only read full files when surrounding context is needed to judge correctness
+            3. Review the diff against this checklist:
+               - Bugs, logic errors, off-by-one, null/undefined risks
+               - Security: injection, auth bypass, secret exposure, unsafe input handling
+               - TypeScript: incorrect types, unsafe casts, missing null checks
+               - Performance: N+1 queries, missing indexes, unbounded loops, memory leaks
+               - Test coverage: new logic without tests, missing edge cases
+               - AthleteMetrics conventions from CLAUDE.md (org scoping, permission checks, Drizzle patterns)
             4. Post a single review comment via `gh pr comment ${{ github.event.pull_request.number }} --body "..."`
 
             Review format:
@@ -48,15 +54,19 @@ jobs:
             - [list strengths briefly]
 
             **Issues Found**
-            - [Important] file:line — description and suggested fix
-            - [Minor] file:line — description
+
+            **Important (Should Fix)**
+            - file:line — description and suggested fix
+
+            **Minor (Nice to Have)**
+            - file:line — description
 
             If no issues: "No issues found. LGTM."
             ```
 
             Rules:
-            - Be concise — focus on what matters, skip nitpicks
-            - Only flag real issues, not style preferences
+            - Be concise — focus on what matters, skip nitpicks and style preferences
+            - Categorize issues by severity so authors know what to prioritize
             - Do not read .claude/agents/ or invoke sub-agents
 
           claude_args: --max-turns 15 --allowed-tools "Bash(gh:*),Read,Grep,Glob"
