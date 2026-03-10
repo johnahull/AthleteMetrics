@@ -354,9 +354,9 @@ describe('Dashboard Filtering - Backend Integration', () => {
       expect(res.body).toHaveProperty('athletes');
       expect(res.body).toHaveProperty('measurements');
 
-      // Trends endpoint counts athletes created during the period, not total count
-      // Test athletes were created in beforeAll (before current period), so current = 0
-      expect(res.body.athletes.current).toBe(0);
+      // Trends endpoint counts athletes created during the current period
+      // Test athletes were created in beforeAll (during the current month), so current = 1
+      expect(res.body.athletes.current).toBe(1);
     });
   });
 
