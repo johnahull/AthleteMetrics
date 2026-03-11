@@ -36,6 +36,14 @@ This master agent analyzes incoming development tasks and automatically routes t
 
 **Keywords:** `auth`, `authentication`, `security`, `permission`, `role`, `rbac`, `session`, `mfa`, `password`, `login`, `access control`, `organization`, `admin`, `coach`, `athlete`
 
+### 4. Product Manager Agent (`product-manager-agent`)
+**Triggers:**
+- Feature proposals, PRDs, user story writing, acceptance criteria
+- Product strategy, prioritization, feature review
+- Roadmap planning, product-market fit analysis
+
+**Keywords:** `feature proposal`, `prd`, `product requirements`, `user story`, `acceptance criteria`, `prioritize`, `product strategy`, `roadmap`, `feature review`, `product manager`, `persona`, `user value`
+
 ## Orchestration Logic
 
 ### Task Analysis Process
