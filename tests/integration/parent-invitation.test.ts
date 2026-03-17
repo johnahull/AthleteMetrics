@@ -71,6 +71,7 @@ async function createUser(suffix: string, role: string = 'athlete') {
     username: `${TEST_PREFIX}${suffix}_${id}`,
     firstName: 'Test',
     lastName: 'User',
+    fullName: 'Test User',
     emails: [`${TEST_PREFIX}${suffix}_${id}@example.com`],
     password: await bcrypt.hash(VALID_PASSWORD, BCRYPT_SALT_ROUNDS),
     role: role as any,
@@ -84,7 +85,7 @@ async function createUser(suffix: string, role: string = 'athlete') {
 async function createOrg(name: string) {
   const [org] = await db.insert(organizations).values({
     name,
-    type: 'club',
+    orgType: 'club',
   }).returning();
   return org;
 }

@@ -537,7 +537,7 @@ describe('GET /api/coppa/data-export/download/:downloadToken', () => {
 
 describe('COPPA audit log for export operations', () => {
   it('requesting an export writes a DATA_EXPORT_REQUESTED audit entry', async () => {
-    const { default: { coppaAuditLog } } = await import('@shared/schema/tables/coppa');
+    const { coppaAuditLog } = await import('@shared/schema/tables/coppa');
 
     const before = new Date();
 
@@ -599,7 +599,6 @@ describe('Org admin with shared org — export happy path', () => {
     // Create the shared organization
     const [org] = await db.insert(organizations).values({
       name: `export-shared-org-${orgTs}`,
-      slug: `export-shared-org-${orgTs}`,
     }).returning({ id: organizations.id });
     sharedExportOrgId = org.id;
 

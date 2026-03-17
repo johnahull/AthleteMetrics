@@ -70,7 +70,7 @@ function adultPayload(overrides: Record<string, unknown> = {}): Record<string, u
     lastName: 'User',
     email: `adult-reg-${ts}@testcoppa.local`,
     username: `adultreg${ts}`,
-    password: 'ValidPass1!',
+    password: 'ValidPass1!!',
     legalAcceptedAt: validLegalAcceptedAt(),
     birthDate: exactlyAge(30),
     ...overrides,
@@ -85,7 +85,7 @@ function minorPayload(overrides: Record<string, unknown> = {}): Record<string, u
     lastName: 'Athlete',
     email: `minor-reg-${ts}@testcoppa.local`,
     username: `minorreg${ts}`,
-    password: 'ValidPass1!',
+    password: 'ValidPass1!!',
     legalAcceptedAt: validLegalAcceptedAt(),
     birthDate: ageWithOffset(13, 1), // birthday tomorrow → still 12 (under 13)
     parentEmail: `parent-${ts}@testcoppa.local`,

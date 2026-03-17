@@ -76,6 +76,7 @@ async function createTestAthleteUser(prefix: string) {
     username: `${prefix}athlete_${id}`,
     firstName: 'Test',
     lastName: 'Athlete',
+    fullName: 'Test Athlete',
     emails: [`${prefix}athlete_${id}@example.com`],
     password: await bcrypt.hash('TestPassword1!', BCRYPT_SALT_ROUNDS),
     role: 'athlete',

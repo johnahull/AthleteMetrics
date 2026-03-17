@@ -65,7 +65,7 @@ export default function OrganizationSettings() {
       wellnessEnabled: organization.wellnessEnabled ?? true,
       customMetricsEnabled: organization.customMetricsEnabled || false,
       coppaEnabled: organization.coppaEnabled || false,
-      coppaContactEmail: organization.coppaContactEmail || '',
+      coppaContactEmail: organization.coppaContactEmail || undefined,
     } : undefined,
   });
 
@@ -113,7 +113,7 @@ export default function OrganizationSettings() {
       if (data.coppaEnabled !== organization?.coppaEnabled) {
         changedFields.coppaEnabled = data.coppaEnabled;
       }
-      if (data.coppaContactEmail !== (organization?.coppaContactEmail || '')) {
+      if ((data.coppaContactEmail || null) !== (organization?.coppaContactEmail || null)) {
         changedFields.coppaContactEmail = data.coppaContactEmail || null;
       }
 
