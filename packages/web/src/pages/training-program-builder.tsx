@@ -121,12 +121,12 @@ export default function TrainingProgramBuilderPage() {
     await addExerciseToWorkout.mutateAsync({ workoutId, exerciseId });
   }
 
-  async function handleUpdateExercise(prescriptionId: string, updates: Partial<ProgramWorkoutExercise>) {
-    await updateExercisePrescription.mutateAsync({ prescriptionId, updates });
+  async function handleUpdateExercise(workoutId: string, prescriptionId: string, updates: Partial<ProgramWorkoutExercise>) {
+    await updateExercisePrescription.mutateAsync({ workoutId, prescriptionId, updates });
   }
 
-  async function handleRemoveExercise(prescriptionId: string) {
-    await removeExerciseFromWorkout.mutateAsync(prescriptionId);
+  async function handleRemoveExercise(workoutId: string, prescriptionId: string) {
+    await removeExerciseFromWorkout.mutateAsync({ workoutId, prescriptionId });
   }
 
   return (

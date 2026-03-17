@@ -17,8 +17,8 @@ interface ProgramWorkoutListProps {
   availableExercises: Exercise[];
   onReorder: (orderedIds: string[]) => Promise<void>;
   onAddExercise: (workoutId: string, exerciseId: string) => Promise<void>;
-  onUpdateExercise: (exerciseId: string, updates: Partial<ProgramWorkoutExercise>) => Promise<void>;
-  onRemoveExercise: (programWorkoutExerciseId: string) => Promise<void>;
+  onUpdateExercise: (workoutId: string, exerciseId: string, updates: Partial<ProgramWorkoutExercise>) => Promise<void>;
+  onRemoveExercise: (workoutId: string, programWorkoutExerciseId: string) => Promise<void>;
 }
 
 export function ProgramWorkoutList({

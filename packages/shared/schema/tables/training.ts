@@ -24,7 +24,7 @@ export const exercises = pgTable("exercises", {
   category: varchar("category", { length: 100 }), // e.g. "strength", "speed", "plyometric"
   exerciseType: varchar("exercise_type", { length: 30 }).notNull(), // 'weighted' | 'bodyweight' | 'speed' | 'plyometric' | 'timed'
   defaultSets: integer("default_sets"),
-  defaultReps: integer("default_reps"),
+  defaultReps: varchar("default_reps", { length: 30 }), // supports '8-10', 'AMRAP', '30s', etc.
   defaultWeightLbs: decimal("default_weight_lbs", { precision: 6, scale: 2 }),
   defaultDurationSeconds: integer("default_duration_seconds"),
   videoUrl: varchar("video_url", { length: 500 }), // YouTube/Vimeo URL only
@@ -86,7 +86,7 @@ export const programWorkoutExercises = pgTable("program_workout_exercises", {
   displayOrder: integer("display_order").notNull().default(0),
   // Prescription fields
   prescribedSets: integer("prescribed_sets"),
-  prescribedReps: integer("prescribed_reps"),
+  prescribedReps: varchar("prescribed_reps", { length: 30 }), // supports '8-10', 'AMRAP', '30s'
   prescribedWeightLbs: decimal("prescribed_weight_lbs", { precision: 6, scale: 2 }),
   prescribedDurationSeconds: integer("prescribed_duration_seconds"),
   restSeconds: integer("rest_seconds"),
@@ -108,6 +108,7 @@ export const athletePrograms = pgTable("athlete_programs", {
   programId: varchar("program_id").notNull().references(() => trainingPrograms.id, { onDelete: 'restrict' }),
   organizationId: varchar("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: 'set null' }),
+  athleteNameSnapshot: varchar("athlete_name_snapshot", { length: 255 }),
   startDate: date("start_date").notNull(),
   // status: 'active' | 'completed' | 'cancelled'
   status: varchar("status", { length: 20 }).notNull().default('active'),
@@ -135,6 +136,10 @@ export const workoutLogs = pgTable("workout_logs", {
   programWorkoutId: varchar("program_workout_id").notNull().references(() => programWorkouts.id, { onDelete: 'restrict' }),
   // Historical reference — no FK (athlete may be removed from org)
   loggedBy: varchar("logged_by"), // user who submitted the log (coach or athlete)
+  // Name snapshots — historical integrity if athlete/workout names change
+  athleteNameSnapshot: varchar("athlete_name_snapshot", { length: 200 }),
+  programWorkoutNameSnapshot: varchar("program_workout_name_snapshot", { length: 200 }),
+  loggedByNameSnapshot: varchar("logged_by_name_snapshot", { length: 200 }),
   // status: 'completed' | 'partial' | 'skipped'
   status: varchar("status", { length: 20 }).notNull().default('completed'),
   loggedAt: timestamp("logged_at").defaultNow().notNull(),

@@ -20,7 +20,7 @@ export interface ProgramWorkoutExercise {
   isArchived?: boolean;
   displayOrder: number;
   prescribedSets: number | null;
-  prescribedReps: number | null;
+  prescribedReps: string | null;
   prescribedWeightLbs: string | null;
   prescribedDurationSeconds: number | null;
   restSeconds: number | null;
@@ -64,7 +64,7 @@ export function ProgramWorkoutExerciseRow({
     try {
       await onUpdate(exercise.id, {
         prescribedSets: editValues.prescribedSets ? parseInt(editValues.prescribedSets) : null,
-        prescribedReps: editValues.prescribedReps ? parseInt(editValues.prescribedReps) : null,
+        prescribedReps: editValues.prescribedReps || null,
         prescribedWeightLbs: editValues.prescribedWeightLbs || null,
         prescribedDurationSeconds: editValues.prescribedDurationSeconds
           ? parseInt(editValues.prescribedDurationSeconds)
@@ -133,11 +133,10 @@ export function ProgramWorkoutExerciseRow({
           <div>
             <label className="text-xs text-muted-foreground">Reps</label>
             <Input
-              type="number"
-              min={1}
+              type="text"
               value={editValues.prescribedReps}
               onChange={(e) => setEditValues((v) => ({ ...v, prescribedReps: e.target.value }))}
-              placeholder="Reps"
+              placeholder="e.g. 8, 8-10, AMRAP"
               className="h-8 text-sm"
               data-testid={`exercise-row-reps-${exercise.id}`}
             />

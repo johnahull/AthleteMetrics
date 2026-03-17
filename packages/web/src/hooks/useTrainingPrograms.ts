@@ -149,7 +149,7 @@ export function useAddExerciseToWorkout(programId: string) {
     mutationFn: async ({ workoutId, exerciseId }: { workoutId: string; exerciseId: string }) => {
       const response = await apiRequest(
         "POST",
-        `/api/training/workouts/${workoutId}/exercises`,
+        `/api/training/programs/${programId}/workouts/${workoutId}/exercises`,
         { exerciseId }
       );
       return response.json();
@@ -165,15 +165,17 @@ export function useUpdateExercisePrescription(programId: string) {
 
   return useMutation({
     mutationFn: async ({
+      workoutId,
       prescriptionId,
       updates,
     }: {
+      workoutId: string;
       prescriptionId: string;
       updates: Partial<ProgramWorkoutExercise>;
     }) => {
       const response = await apiRequest(
         "PUT",
-        `/api/training/workout-exercises/${prescriptionId}`,
+        `/api/training/programs/${programId}/workouts/${workoutId}/exercises/${prescriptionId}`,
         updates
       );
       return response.json();
@@ -188,10 +190,10 @@ export function useRemoveExerciseFromWorkout(programId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (prescriptionId: string) => {
+    mutationFn: async ({ workoutId, prescriptionId }: { workoutId: string; prescriptionId: string }) => {
       const response = await apiRequest(
         "DELETE",
-        `/api/training/workout-exercises/${prescriptionId}`
+        `/api/training/programs/${programId}/workouts/${workoutId}/exercises/${prescriptionId}`
       );
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));

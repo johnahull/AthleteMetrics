@@ -98,7 +98,7 @@ const createExerciseSchema = z.object({
   category: z.string().max(100).optional(),
   exerciseType: exerciseTypeEnum,
   defaultSets: z.number().int().positive().optional(),
-  defaultReps: z.number().int().positive().optional(),
+  defaultReps: z.string().max(30).optional(), // supports '8-10', 'AMRAP', '30s', or plain numbers
   defaultWeightLbs: z.number().positive().optional(),
   defaultDurationSeconds: z.number().int().positive().optional(),
   videoUrl: z.string().url().max(500).optional(),
@@ -124,7 +124,7 @@ const addWorkoutDaySchema = z.object({
 const addExerciseToPrescriptionSchema = z.object({
   exerciseId: z.string(),
   prescribedSets: z.number().int().positive().optional(),
-  prescribedReps: z.number().int().positive().optional(),
+  prescribedReps: z.string().max(30).optional(),
   prescribedWeightLbs: z.number().positive().optional(),
   prescribedDurationSeconds: z.number().int().positive().optional(),
   restSeconds: z.number().int().positive().optional(),
@@ -556,10 +556,17 @@ export function registerTrainingRoutes(app: Express) {
 
       const sessionUser = (req.session as any)?.user || req.user as any;
 
+      // Resolve athlete name snapshot for historical integrity
+      const athlete = await trainingService.getUserById(validated.athleteId);
+      const athleteNameSnapshot = athlete
+        ? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim()
+        : undefined;
+
       const assignment = await trainingService.assignProgram({
         ...validated,
         organizationId: orgId,
         assignedBy: sessionUser?.id,
+        athleteNameSnapshot: athleteNameSnapshot || undefined,
       });
 
       res.status(201).json(assignment);
@@ -718,12 +725,25 @@ export function registerTrainingRoutes(app: Express) {
         }
       }
 
+      // Resolve name snapshots for historical log integrity
+      const assignment = await trainingService.getAssignment(athleteProgramId!);
+      const athlete = assignment?.athleteId
+        ? await trainingService.getUserById(assignment.athleteId)
+        : null;
+      const workout = await trainingService.getWorkoutDay(validated.programWorkoutId);
+      const logger = sessionUser?.id
+        ? await trainingService.getUserById(sessionUser.id)
+        : null;
+
       const log = await trainingService.logWorkout({
         athleteProgramId: athleteProgramId!,
         programWorkoutId: validated.programWorkoutId,
         loggedBy: sessionUser?.id,
         status: validated.status,
         notes: validated.notes,
+        athleteNameSnapshot: athlete ? `${athlete.firstName ?? ''} ${athlete.lastName ?? ''}`.trim() : undefined,
+        programWorkoutNameSnapshot: workout?.name ?? undefined,
+        loggedByNameSnapshot: logger ? `${logger.firstName ?? ''} ${logger.lastName ?? ''}`.trim() : undefined,
         entries: validated.entries,
       });
 

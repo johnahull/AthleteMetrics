@@ -60,7 +60,7 @@ export default function TrainingExercisesPage() {
       category: values.category,
       exerciseType: values.exerciseType,
       defaultSets: values.defaultSets === "" ? null : (values.defaultSets as number | undefined) ?? null,
-      defaultReps: values.defaultReps === "" ? null : (values.defaultReps as number | undefined) ?? null,
+      defaultReps: values.defaultReps === "" ? null : (values.defaultReps as string | undefined) ?? null,
       defaultWeightLbs: values.defaultWeightLbs === "" ? null : String(values.defaultWeightLbs ?? ""),
       defaultDurationSeconds: values.defaultDurationSeconds === "" ? null : (values.defaultDurationSeconds as number | undefined) ?? null,
       notes: values.notes ?? null,

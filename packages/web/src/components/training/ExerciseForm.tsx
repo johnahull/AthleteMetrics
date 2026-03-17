@@ -52,7 +52,7 @@ const exerciseFormSchema = z.object({
     required_error: "Exercise type is required",
   }),
   defaultSets: z.coerce.number().int().positive().optional().or(z.literal("")),
-  defaultReps: z.coerce.number().int().positive().optional().or(z.literal("")),
+  defaultReps: z.string().max(30).optional().or(z.literal("")), // supports '8-10', 'AMRAP', '30s', plain numbers
   defaultWeightLbs: z.coerce.number().positive().optional().or(z.literal("")),
   defaultDurationSeconds: z.coerce.number().int().positive().optional().or(z.literal("")),
   notes: z.string().optional(),
@@ -199,9 +199,8 @@ export function ExerciseForm({
                     <FormLabel>Default Reps</FormLabel>
                     <FormControl>
                       <Input
-                        type="number"
-                        min={1}
-                        placeholder="e.g. 8"
+                        type="text"
+                        placeholder="e.g. 8, 8-10, AMRAP"
                         {...field}
                         value={field.value === "" ? "" : field.value}
                         data-testid="exercise-default-reps-input"

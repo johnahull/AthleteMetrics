@@ -22,6 +22,7 @@ import {
   workoutLogEntries,
   measurements,
   siteBenchmarks,
+  users,
 } from "@shared/schema";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import { workoutSetSchema } from "@shared/schema/validation";
@@ -219,7 +220,7 @@ export class TrainingService extends BaseService {
     category?: string;
     exerciseType: string;
     defaultSets?: number;
-    defaultReps?: number;
+    defaultReps?: string;
     defaultWeightLbs?: number;
     defaultDurationSeconds?: number;
     videoUrl?: string;
@@ -241,7 +242,7 @@ export class TrainingService extends BaseService {
     category: string;
     exerciseType: string;
     defaultSets: number;
-    defaultReps: number;
+    defaultReps: string;
     defaultWeightLbs: number;
     defaultDurationSeconds: number;
     videoUrl: string;
@@ -470,7 +471,7 @@ export class TrainingService extends BaseService {
     programWorkoutId: string;
     exerciseId: string;
     prescribedSets?: number;
-    prescribedReps?: number;
+    prescribedReps?: string;
     prescribedWeightLbs?: number;
     prescribedDurationSeconds?: number;
     restSeconds?: number;
@@ -497,7 +498,7 @@ export class TrainingService extends BaseService {
 
   async updatePrescription(prescriptionId: string, programWorkoutId: string, data: Partial<{
     prescribedSets: number;
-    prescribedReps: number;
+    prescribedReps: string;
     prescribedWeightLbs: number;
     prescribedDurationSeconds: number;
     restSeconds: number;
@@ -562,6 +563,7 @@ export class TrainingService extends BaseService {
     assignedBy: string;
     startDate: string;
     notes?: string;
+    athleteNameSnapshot?: string;
   }) {
     // Enforce one-active-per-athlete at app layer
     await this.checkNoActiveAssignment(data.athleteId, data.organizationId);
@@ -697,6 +699,9 @@ export class TrainingService extends BaseService {
     loggedBy: string;
     status: 'completed' | 'partial' | 'skipped';
     notes?: string;
+    athleteNameSnapshot?: string;
+    programWorkoutNameSnapshot?: string;
+    loggedByNameSnapshot?: string;
     entries: Array<{
       exerciseId: string;
       exerciseNameSnapshot: string;
@@ -740,6 +745,9 @@ export class TrainingService extends BaseService {
           loggedBy: data.loggedBy,
           status: data.status,
           notes: data.notes,
+          athleteNameSnapshot: data.athleteNameSnapshot ?? null,
+          programWorkoutNameSnapshot: data.programWorkoutNameSnapshot ?? null,
+          loggedByNameSnapshot: data.loggedByNameSnapshot ?? null,
         })
         .returning();
 
@@ -1029,5 +1037,29 @@ export class TrainingService extends BaseService {
     }, null as string | null);
 
     return { metrics, lastMeasuredAt };
+  }
+
+  /** Look up a user by ID for name snapshot resolution. Returns null if not found. */
+  async getUserById(userId: string) {
+    const [user] = await db
+      .select({
+        id: users.id,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return user ?? null;
+  }
+
+  /** Look up a single workout day by ID. Returns null if not found. */
+  async getWorkoutDay(workoutId: string) {
+    const [workout] = await db
+      .select()
+      .from(programWorkouts)
+      .where(eq(programWorkouts.id, workoutId))
+      .limit(1);
+    return workout ?? null;
   }
 }

@@ -34,8 +34,8 @@ interface ProgramWorkoutCardProps {
   workout: ProgramWorkout;
   availableExercises: Exercise[];
   onAddExercise: (workoutId: string, exerciseId: string) => Promise<void>;
-  onUpdateExercise: (exerciseId: string, updates: Partial<ProgramWorkoutExercise>) => Promise<void>;
-  onRemoveExercise: (programWorkoutExerciseId: string) => Promise<void>;
+  onUpdateExercise: (workoutId: string, exerciseId: string, updates: Partial<ProgramWorkoutExercise>) => Promise<void>;
+  onRemoveExercise: (workoutId: string, programWorkoutExerciseId: string) => Promise<void>;
   dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
 }
 
@@ -130,8 +130,8 @@ export function ProgramWorkoutCard({
                     <ProgramWorkoutExerciseRow
                       key={exercise.id}
                       exercise={exercise}
-                      onUpdate={onUpdateExercise}
-                      onRemove={onRemoveExercise}
+                      onUpdate={(id, updates) => onUpdateExercise(workout.id, id, updates)}
+                      onRemove={(id) => onRemoveExercise(workout.id, id)}
                     />
                   ))}
               </div>

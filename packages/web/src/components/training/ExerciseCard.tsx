@@ -17,7 +17,7 @@ export interface Exercise {
   category: string | null;
   exerciseType: string;
   defaultSets: number | null;
-  defaultReps: number | null;
+  defaultReps: string | null;
   defaultWeightLbs: string | null;
   defaultDurationSeconds: number | null;
   videoUrl: string | null;
