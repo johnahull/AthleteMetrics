@@ -785,6 +785,9 @@ describe('AI access invariants (canAccessAI)', () => {
 
 describe('B1: audit log emitted on COPPA login block', () => {
   it('login with pending_consent status → 403 AND writes LOGIN_BLOCKED_PENDING audit entry', async () => {
+    // Reset coppaStatus — earlier consent verification tests may have changed it to 'consented'
+    await db.update(users).set({ coppaStatus: 'pending_consent' }).where(eq(users.id, pendingMinorId));
+
     const before = new Date();
 
     // pendingMinorId has coppaStatus 'pending_consent', correct password stored
@@ -796,7 +799,9 @@ describe('B1: audit log emitted on COPPA login block', () => {
     expect(loginRes.status).toBe(403);
     expect(loginRes.body.code).toBe('coppa_pending_consent');
 
-    // Give DB a moment (login is async but supertest awaits the response)
+    // Audit write is fire-and-forget in auth-routes.ts — wait for it to flush
+    await new Promise(resolve => setTimeout(resolve, 500));
+
     const auditEntries = await db.select()
       .from(coppaAuditLog)
       .where(
@@ -835,6 +840,9 @@ describe('B1: audit log emitted on COPPA login block', () => {
 
       expect(loginRes.status).toBe(403);
       expect(loginRes.body.code).toBe('coppa_consent_revoked');
+
+      // Audit write is fire-and-forget in auth-routes.ts — wait for it to flush
+      await new Promise(resolve => setTimeout(resolve, 500));
 
       const auditEntries = await db.select()
         .from(coppaAuditLog)
@@ -1002,6 +1010,9 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
 
     await request(app)
       .get(`/api/public/reports/${restrictedToken}`);
+
+    // Audit write is fire-and-forget in report-routes.ts — wait for it to flush
+    await new Promise(resolve => setTimeout(resolve, 500));
 
     const auditEntries = await db.select()
       .from(coppaAuditLog)
