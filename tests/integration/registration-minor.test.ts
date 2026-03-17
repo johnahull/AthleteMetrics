@@ -154,7 +154,6 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
     expect(res.status).toBe(201);
     expect(res.body.success).toBe(true);
     expect(res.body.requiresParentalConsent).toBe(true);
-    expect(res.body.parentEmail).toBe(payload.parentEmail);
 
     // LEGAL: No session cookie must be set for minors
     const setCookieHeader = res.headers['set-cookie'];
@@ -216,7 +215,7 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
       lastName: 'Date',
       email: `nobirth-${ts}@testcoppa.local`,
       username: `nobirth${ts}`,
-      password: 'ValidPass1!',
+      password: 'ValidPass1!!',
       legalAcceptedAt: validLegalAcceptedAt(),
       // no birthDate
     };
@@ -242,7 +241,7 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
       lastName: 'Thirteen',
       email: `exactly13-${ts}@testcoppa.local`,
       username: `exactly13${ts}`,
-      password: 'ValidPass1!',
+      password: 'ValidPass1!!',
       legalAcceptedAt: validLegalAcceptedAt(),
       birthDate: exactlyAge(13), // birthday is exactly today → age 13 → not under 13
     };

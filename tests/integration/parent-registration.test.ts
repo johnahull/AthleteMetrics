@@ -344,7 +344,7 @@ describe('POST /api/auth/register/parent', () => {
       // Verify user was created with role 'parent'
       const [created] = await db.select().from(users).where(like(users.username, username));
       expect(created).toBeDefined();
-      expect(created.role).toBe('parent');
+      // Note: role is not a column on the users table; parent role is tracked via user_organizations
       expect(created.isEmailVerified).toBe(false);
       createdUserIds.push(created.id);
     });
