@@ -50,14 +50,24 @@ export function DeviceImportButton({
 
   if (!canImport) return null;
 
+  // Device import only applies to testing_day events (per spec §8.2)
+  const isWrongEventType = eventId != null && eventType !== 'testing_day';
+  const isDisabled = isFrozen || isWrongEventType;
+
+  const disabledReason = isFrozen
+    ? 'Event is frozen'
+    : isWrongEventType
+      ? 'Device import is only available for Testing Day events'
+      : undefined;
+
   const button = (
     <Button
       variant={variant}
       size="sm"
       className={className}
-      disabled={isFrozen}
+      disabled={isDisabled}
       onClick={() => {
-        if (!isFrozen) setDialogOpen(true);
+        if (!isDisabled) setDialogOpen(true);
       }}
     >
       <Upload className="mr-2 h-4 w-4" />
@@ -67,14 +77,14 @@ export function DeviceImportButton({
 
   return (
     <>
-      {isFrozen ? (
+      {disabledReason ? (
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>
               {/* Wrap in a span so the tooltip fires on disabled button */}
               <span className="inline-flex">{button}</span>
             </TooltipTrigger>
-            <TooltipContent>Event is frozen</TooltipContent>
+            <TooltipContent>{disabledReason}</TooltipContent>
           </Tooltip>
         </TooltipProvider>
       ) : (

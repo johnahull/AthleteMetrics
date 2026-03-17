@@ -6,6 +6,7 @@
  * best-attempt selection, and outlier detection.
  */
 
+import * as iconv from 'iconv-lite';
 import { MetricType } from '@shared/schema/constants';
 import type {
   DeviceImportParser,
@@ -80,10 +81,32 @@ export function parseCsvLine(line: string): string[] {
 }
 
 /**
- * Strip BOM and normalize line endings
+ * Detect if a buffer contains Windows-1252 specific bytes (0x80-0x9F range).
+ * These byte values are valid in Windows-1252 but invalid in UTF-8 and ISO-8859-1,
+ * making them a reliable signal for Windows-1252 encoding.
+ */
+function isLikelyWindows1252(buffer: Buffer): boolean {
+  for (let i = 0; i < buffer.length; i++) {
+    const byte = buffer[i];
+    if (byte >= 0x80 && byte <= 0x9F) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Decode buffer to string, handling BOM stripping and Windows-1252 encoding.
  */
 function normalizeBuffer(buffer: Buffer): string {
-  let text = buffer.toString('utf-8');
+  let text: string;
+
+  if (isLikelyWindows1252(buffer)) {
+    text = iconv.decode(buffer, 'win1252');
+  } else {
+    text = buffer.toString('utf-8');
+  }
+
   // Strip UTF-8 BOM
   if (text.charCodeAt(0) === 0xFEFF) {
     text = text.slice(1);

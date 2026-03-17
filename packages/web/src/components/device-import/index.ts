@@ -1,5 +1,6 @@
 export { DeviceImportButton } from './DeviceImportButton';
 export { DeviceImportDialog } from './DeviceImportDialog';
+export { ImportBatchHistory } from './ImportBatchHistory';
 export type {
   DeviceImportStep,
   ParsePreview,

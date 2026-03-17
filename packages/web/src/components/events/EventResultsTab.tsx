@@ -38,6 +38,7 @@ import { format } from "date-fns";
 interface EventResultsTabProps {
   eventId: string;
   organizationId?: string;
+  eventType?: string | null;
   isFrozen?: boolean;
   eventStatus?: string;
   resultsPublishedAt?: string | Date | null;
@@ -63,6 +64,7 @@ const visibilityLabels: Record<ResultsVisibilityMode, { label: string; descripti
 export function EventResultsTab({
   eventId,
   organizationId,
+  eventType,
   isFrozen = false,
   eventStatus,
   resultsPublishedAt,
@@ -323,6 +325,7 @@ export function EventResultsTab({
                 <DeviceImportButton
                   organizationId={organizationId}
                   eventId={eventId}
+                  eventType={eventType ?? undefined}
                   isFrozen={isFrozen}
                 />
               )}

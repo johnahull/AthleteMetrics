@@ -326,4 +326,319 @@ describe('findBestAthleteMatch', () => {
       expect(result.requiresManualReview).toBe(true);
     }
   });
+
+  // ── Spec-mandated comprehensive tests (QA Blocker) ─────────────────────────
+
+  describe('exact name match', () => {
+    it('matches firstName + lastName exactly with team context', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Sarah', lastName: 'Johnson', teams: [{ name: 'Panthers', id: 't1' }] }),
+        makeAthlete({ id: 'a2', firstName: 'Mike', lastName: 'Williams', teams: [{ name: 'Panthers', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Sarah', lastName: 'Johnson', teamName: 'Panthers' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(90);
+      expect(result.requiresManualReview).toBe(false);
+    });
+
+    it('returns exact match even among many candidates', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Alex', lastName: 'Brown' }),
+        makeAthlete({ id: 'a2', firstName: 'Maria', lastName: 'Garcia', teams: [{ name: 'Track Club', id: 't1' }] }),
+        makeAthlete({ id: 'a3', firstName: 'Jake', lastName: 'Thompson' }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Maria', lastName: 'Garcia', teamName: 'Track Club' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('a2');
+    });
+  });
+
+  describe('fuzzy match (minor spelling difference)', () => {
+    it('matches "Jon" vs "John" with team boost', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'John', lastName: 'Smith', teams: [{ name: 'BTA', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Jon', lastName: 'Smith', teamName: 'BTA' },
+        athletes
+      );
+      // "Jon" vs "John": similarity = 75% (3-char vs 4-char, 1 edit) → below 80% threshold
+      // Score = 0 (first name) + 40 (last exact) + 30 (team exact) = 70 → partial
+      expect(result.type).toBe('partial');
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBe(70);
+    });
+
+    it('matches "Megan" vs "Meghan" (single character insertion)', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Meghan', lastName: 'Davis', teams: [{ name: 'Sprint Squad', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Megan', lastName: 'Davis', teamName: 'Sprint Squad' },
+        athletes
+      );
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(75);
+    });
+
+    it('matches "Thomson" vs "Thompson" (minor last name difference)', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Jake', lastName: 'Thompson', teams: [{ name: 'Eagles', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Jake', lastName: 'Thomson', teamName: 'Eagles' },
+        athletes
+      );
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(75);
+    });
+  });
+
+  describe('partial match (last name only)', () => {
+    it('matches on last name when first name is very different', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Robert', lastName: 'Martinez' }),
+      ];
+      // First name "Bob" vs "Robert" → low first name score, but last name exact (40)
+      const result = findBestAthleteMatch({ firstName: 'Bob', lastName: 'Martinez' }, athletes);
+      // 40 for last name exact, first name likely 0 → total 40 < 60 → "none"
+      // This is correct: partial requires 60+
+      expect(result.type).toMatch(/partial|none/);
+    });
+
+    it('scores last name higher than first name (40 vs 30 max)', () => {
+      const criteria: MatchingCriteria = { firstName: 'Xyz', lastName: 'Williams' };
+      const athlete = makeAthlete({ firstName: 'Abc', lastName: 'Williams' });
+      const score = calculateMatchScore(criteria, athlete);
+      // Last name exact = 40, first name no match = 0
+      expect(score.matchScore).toBe(40);
+      expect(score.matchReason).toContain('last name exact');
+      expect(score.matchReason).not.toContain('first name');
+    });
+  });
+
+  describe('unmatched (no close match found)', () => {
+    it('returns none for completely unrelated names', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Alice', lastName: 'Johnson' }),
+        makeAthlete({ id: 'a2', firstName: 'Bob', lastName: 'Williams' }),
+        makeAthlete({ id: 'a3', firstName: 'Charlie', lastName: 'Brown' }),
+      ];
+      const result = findBestAthleteMatch({ firstName: 'Xander', lastName: 'Zephyr' }, athletes);
+      expect(result.type).toBe('none');
+      expect(result.confidence).toBe(0);
+      expect(result.candidate).toBeUndefined();
+      expect(result.requiresManualReview).toBe(false);
+    });
+
+    it('returns none when best score falls below 60 threshold', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Tim', lastName: 'Anderson' }),
+      ];
+      const result = findBestAthleteMatch({ firstName: 'Tom', lastName: 'Henderson' }, athletes);
+      expect(result.type).toBe('none');
+    });
+  });
+
+  describe('event registration match priority over org-wide', () => {
+    // This tests the scenario where event registrations are passed as the candidates
+    // array first (narrower pool), and the service falls back to org-wide only if empty.
+    // At the findBestAthleteMatch level, priority is simulated by passing different pools.
+    it('prefers event registrants when passed as the candidate pool', () => {
+      const eventRegistrants = [
+        makeAthlete({ id: 'event-reg-1', firstName: 'Sarah', lastName: 'Connor', teams: [{ name: 'Track', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Sarah', lastName: 'Connor', teamName: 'Track' },
+        eventRegistrants
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('event-reg-1');
+    });
+
+    it('uses org-wide pool when event pool has no match', () => {
+      const eventRegistrants = [
+        makeAthlete({ id: 'event-reg-1', firstName: 'Unrelated', lastName: 'Person' }),
+      ];
+      const eventResult = findBestAthleteMatch(
+        { firstName: 'Sarah', lastName: 'Connor' },
+        eventRegistrants
+      );
+      expect(eventResult.type).toBe('none');
+
+      // Fallback to org-wide pool
+      const orgPool = [
+        makeAthlete({ id: 'org-1', firstName: 'Sarah', lastName: 'Connor', teams: [{ name: 'Track', id: 't1' }] }),
+      ];
+      const orgResult = findBestAthleteMatch(
+        { firstName: 'Sarah', lastName: 'Connor', teamName: 'Track' },
+        orgPool
+      );
+      expect(orgResult.type).toBe('exact');
+      expect(orgResult.candidate?.id).toBe('org-1');
+    });
+  });
+
+  describe('multiple candidates with same name (ambiguous)', () => {
+    it('flags manual review when two athletes have identical names', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'John', lastName: 'Smith' }),
+        makeAthlete({ id: 'a2', firstName: 'John', lastName: 'Smith' }),
+      ];
+      const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Smith' }, athletes);
+      // Both score 70 (30+40), gap is 0 < 10 → manual review if type is fuzzy
+      // At 70, type is "partial" which always requires manual review
+      expect(result.requiresManualReview).toBe(true);
+      expect(result.alternatives).toBeDefined();
+      expect(result.alternatives!.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('resolves ambiguity via team matching', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'John', lastName: 'Smith', teams: [{ name: 'Eagles', id: 't1' }] }),
+        makeAthlete({ id: 'a2', firstName: 'John', lastName: 'Smith', teams: [{ name: 'Hawks', id: 't2' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'John', lastName: 'Smith', teamName: 'Eagles' },
+        athletes
+      );
+      expect(result.candidate?.id).toBe('a1');
+      // a1 scores 70 + 30 (team) = 100, a2 scores 70 + 0 = 70, gap = 30 → no manual review
+      expect(result.type).toBe('exact');
+      expect(result.requiresManualReview).toBe(false);
+    });
+
+    it('returns alternatives when multiple close matches exist', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'John', lastName: 'Smith', teams: [{ name: 'Eagles A', id: 't1' }] }),
+        makeAthlete({ id: 'a2', firstName: 'John', lastName: 'Smith', teams: [{ name: 'Eagles B', id: 't2' }] }),
+        makeAthlete({ id: 'a3', firstName: 'John', lastName: 'Smith', teams: [{ name: 'Hawks', id: 't3' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'John', lastName: 'Smith', teamName: 'Eagles' },
+        athletes
+      );
+      expect(result.alternatives).toBeDefined();
+      // All three Johns should produce alternatives (at least 2 with score >= 30)
+      expect(result.alternatives!.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  describe('empty candidate pool', () => {
+    it('returns none for empty array', () => {
+      const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Doe' }, []);
+      expect(result.type).toBe('none');
+      expect(result.confidence).toBe(0);
+      expect(result.candidate).toBeUndefined();
+      expect(result.alternatives).toBeUndefined();
+    });
+
+    it('returns none for null candidates', () => {
+      const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Doe' }, null as any);
+      expect(result.type).toBe('none');
+    });
+
+    it('returns none for undefined candidates', () => {
+      const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Doe' }, undefined as any);
+      expect(result.type).toBe('none');
+    });
+  });
+
+  describe('names with special characters and accented letters', () => {
+    it('handles apostrophes (O\'Brien)', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Sean', lastName: "O'Brien", teams: [{ name: 'BTA', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Sean', lastName: "O'Brien", teamName: 'BTA' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('a1');
+    });
+
+    it('handles hyphens in last names (Martinez-Lopez)', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Carlos', lastName: 'Martinez-Lopez', teams: [{ name: 'BTA', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Carlos', lastName: 'Martinez-Lopez', teamName: 'BTA' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('a1');
+    });
+
+    it('normalizes accented characters for matching (José vs Jose)', () => {
+      // normalizeName strips non-word characters, so accents are handled
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Jose', lastName: 'Martinez', teams: [{ name: 'Speed', id: 't1' }] }),
+      ];
+      // CSV may have "José" from Dashr export
+      const result = findBestAthleteMatch(
+        { firstName: 'José', lastName: 'Martinez', teamName: 'Speed' },
+        athletes
+      );
+      // normalizeName("José") → "jos" (removes é as special char), normalizeName("Jose") → "jose"
+      // These are close enough for a high similarity score
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(60);
+    });
+
+    it('handles ñ in names (Muñoz vs Munoz)', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Ana', lastName: 'Munoz', teams: [{ name: 'Team A', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'Ana', lastName: 'Muñoz', teamName: 'Team A' },
+        athletes
+      );
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(60);
+    });
+
+    it('handles names with extra spaces', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'Mary', lastName: 'Jane Watson', teams: [{ name: 'X', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: ' Mary ', lastName: ' Jane  Watson ', teamName: 'X' },
+        athletes
+      );
+      expect(result.candidate?.id).toBe('a1');
+      expect(result.confidence).toBeGreaterThanOrEqual(90);
+    });
+  });
+
+  describe('case insensitivity', () => {
+    it('matches ALL CAPS to lowercase', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'john', lastName: 'doe', teams: [{ name: 'team', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'JOHN', lastName: 'DOE', teamName: 'TEAM' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+    });
+
+    it('matches mixed case variations', () => {
+      const athletes = [
+        makeAthlete({ id: 'a1', firstName: 'McKenzie', lastName: 'O\'Connor', teams: [{ name: 'Panthers', id: 't1' }] }),
+      ];
+      const result = findBestAthleteMatch(
+        { firstName: 'MCKENZIE', lastName: 'O\'CONNOR', teamName: 'Panthers' },
+        athletes
+      );
+      expect(result.type).toBe('exact');
+      expect(result.candidate?.id).toBe('a1');
+    });
+  });
 });

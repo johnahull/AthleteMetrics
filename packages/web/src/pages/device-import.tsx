@@ -6,7 +6,7 @@
 import { useAuth } from "@/lib/auth";
 import { useQuery } from "@tanstack/react-query";
 import type { UserOrganization } from "@shared/schema";
-import { DeviceImportDialog } from "@/components/device-import";
+import { DeviceImportDialog, ImportBatchHistory } from "@/components/device-import";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Upload, AlertCircle } from "lucide-react";
 import { useState } from "react";
@@ -64,6 +64,8 @@ export default function DeviceImportPage() {
           />
         </CardContent>
       </Card>
+
+      <ImportBatchHistory organizationId={organizationId} />
     </div>
   );
 }
