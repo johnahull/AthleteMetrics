@@ -8,8 +8,9 @@
  *
  * Route: /parent/children/:athleteId
  */
+import { useState } from 'react';
 import { useParams, useLocation } from 'wouter';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import {
   Card,
   CardContent,
@@ -30,6 +31,17 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   ArrowLeft,
   AlertCircle,
   User,
@@ -38,8 +50,13 @@ import {
   Activity,
   FileText,
   ClipboardList,
+  Download,
+  Trash2,
+  ShieldOff,
+  CheckCircle2,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
+import { apiRequest } from '@/lib/queryClient';
 
 interface ChildProfile {
   id: string;
@@ -90,7 +107,36 @@ function ProfileSkeletons() {
 export default function ParentChildDetail() {
   const { athleteId } = useParams<{ athleteId: string }>();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const [exportSuccess, setExportSuccess] = useState(false);
+  const [deletionSuccess, setDeletionSuccess] = useState(false);
+
+  // Data rights mutations
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/coppa/data-export/request', { athleteUserId: athleteId });
+      return res.json();
+    },
+    onSuccess: () => setExportSuccess(true),
+  });
+
+  const deletionMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/coppa/data-deletion/request', { athleteUserId: athleteId });
+      return res.json();
+    },
+    onSuccess: () => setDeletionSuccess(true),
+  });
+
+  const revokeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', '/api/coppa/consent/revoke', { athleteUserId: athleteId });
+      return res.json();
+    },
+    onSuccess: () => {
+      logout();
+    },
+  });
 
   const {
     data: profile,
@@ -364,6 +410,117 @@ export default function ParentChildDetail() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* COPPA Data Rights */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Your Parental Rights</CardTitle>
+          <CardDescription>
+            Under COPPA, you have the right to review, export, and request deletion of your child's data, or revoke consent at any time.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Export */}
+          {exportSuccess ? (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                Export request submitted. You will receive an email with a download link when your child's data is ready.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              disabled={exportMutation.isPending}
+              onClick={() => exportMutation.mutate()}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              {exportMutation.isPending ? 'Requesting...' : "Download My Child's Data"}
+            </Button>
+          )}
+          {exportMutation.isError && (
+            <p className="text-sm text-red-600">Failed to request export. Please try again.</p>
+          )}
+
+          {/* Deletion */}
+          {deletionSuccess ? (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                Deletion request submitted and is pending administrator review. You will be notified when it is processed.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                  disabled={deletionMutation.isPending}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  {deletionMutation.isPending ? 'Requesting...' : 'Request Data Deletion'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Request Data Deletion</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This will submit a request to delete all of {childName}'s data from the platform. This action requires administrator approval and cannot be undone once processed.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => deletionMutation.mutate()}
+                  >
+                    Submit Deletion Request
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          {deletionMutation.isError && (
+            <p className="text-sm text-red-600">Failed to request deletion. Please try again.</p>
+          )}
+
+          {/* Revoke Consent */}
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
+                disabled={revokeMutation.isPending}
+              >
+                <ShieldOff className="mr-2 h-4 w-4" />
+                {revokeMutation.isPending ? 'Revoking...' : 'Revoke Consent'}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Revoke Parental Consent</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Revoking consent will immediately restrict {childName}'s account. They will no longer be able to log in until consent is re-granted. You will be logged out after revoking.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={() => revokeMutation.mutate()}
+                >
+                  Revoke Consent
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          {revokeMutation.isError && (
+            <p className="text-sm text-red-600">Failed to revoke consent. Please try again.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

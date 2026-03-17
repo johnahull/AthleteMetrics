@@ -74,8 +74,13 @@ describe('calculateAge()', () => {
   });
 
   it('returns 0 for someone born today', () => {
-    const today = new Date().toISOString().split('T')[0];
-    expect(calculateAge(today)).toBe(0);
+    const now = new Date();
+    // Use local midnight to avoid UTC offset making "today" appear as "tomorrow"
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    expect(calculateAge(`${y}-${m}-${d}`)).toBe(0);
   });
 
   it('accepts Date objects as well as strings', () => {

@@ -1423,10 +1423,9 @@ export function registerReportRoutes(app: Express) {
       }
 
       // COPPA: check AI consent for any minor athletes in this report.
-      // For individual reports (reportType === 'individual'), check the specific athlete.
       // canAccessAI fails closed: null/undefined/false → blocked.
       if (report.reportType === 'individual') {
-        // Find the athlete for this individual report from config filters or athletes in org
+        // For individual reports, check the specific athlete.
         const config = report.config as any;
         const athleteId = config?.filters?.athleteId || config?.athleteId;
         if (athleteId) {
@@ -1437,9 +1436,32 @@ export function registerReportRoutes(app: Express) {
               return res.status(403).json({
                 code: 'ai_consent_required',
                 message: "AI coaching insights require parental consent for AI features for this athlete.",
+                featureDisabled: true,
+                reason: 'minor_without_ai_consent',
               });
             }
           }
+        }
+      } else if (report.reportType === 'team') {
+        // For team/org reports, check ALL athletes in the organization.
+        // If any minor lacks AI consent, block the report generation.
+        const orgUsers = await storage.getOrganizationUsers(report.organizationId);
+        const minorsWithoutConsent: string[] = [];
+        for (const orgUser of orgUsers) {
+          if (orgUser.user?.isMinor) {
+            const canAccess = await coppaService.canAccessAI(orgUser.user.id);
+            if (!canAccess) {
+              minorsWithoutConsent.push(orgUser.user.id);
+            }
+          }
+        }
+        if (minorsWithoutConsent.length > 0) {
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: `AI coaching insights blocked: ${minorsWithoutConsent.length} minor athlete(s) in this report lack parental consent for AI features.`,
+            featureDisabled: true,
+            reason: 'minor_without_ai_consent',
+          });
         }
       }
 
