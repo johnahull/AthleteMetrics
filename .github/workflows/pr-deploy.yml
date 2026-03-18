@@ -18,10 +18,8 @@ concurrency:
 env:
   RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
   PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-  # Staging environment ID (source for duplicating PR environments)
-  STAGING_ENV_ID: b3355483-7d9d-4aac-9b40-f3be817ea0c4
-  # Service ID for athletemetrics-staging
-  SERVICE_ID: f1c8d358-979a-46ef-a716-e62b5b8a70be
+  STAGING_ENV_ID: ${{ vars.RAILWAY_STAGING_ENV_ID }}
+  SERVICE_ID: ${{ vars.RAILWAY_STAGING_SERVICE_ID }}
 
 jobs:
   deploy-preview:
@@ -117,18 +115,25 @@ jobs:
         run: |
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          # Query service domain for this environment
-          DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name serviceInstances { edges { node { domains { serviceDomains { domain } } environmentId } } } } } } } }\"}" \
-            | jq -r ".data.project.services.edges[] | select(.node.id==\"$SERVICE_ID\") | .node.serviceInstances.edges[] | select(.node.environmentId==\"$ENV_ID\") | .node.domains.serviceDomains[0].domain // empty")
+          # Query service domain (retry since Railway provisions domains asynchronously)
+          for ATTEMPT in 1 2 3; do
+            DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name serviceInstances { edges { node { domains { serviceDomains { domain } } environmentId } } } } } } } }\"}" \
+              | jq -r ".data.project.services.edges[] | select(.node.id==\"$SERVICE_ID\") | .node.serviceInstances.edges[] | select(.node.environmentId==\"$ENV_ID\") | .node.domains.serviceDomains[0].domain // empty")
 
-          if [ -n "$DOMAIN" ]; then
-            echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
-            echo "Preview URL: https://$DOMAIN"
-          else
-            echo "No domain found for environment"
+            if [ -n "$DOMAIN" ]; then
+              echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
+              echo "Preview URL: https://$DOMAIN"
+              break
+            fi
+            echo "Domain not yet provisioned (attempt $ATTEMPT/3), waiting 10s..."
+            sleep 10
+          done
+
+          if [ -z "$DOMAIN" ]; then
+            echo "Domain not available yet — check Railway dashboard"
           fi
 
       - name: Update comment with result
@@ -182,7 +187,7 @@ jobs:
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "{\"query\": \"mutation { environmentDelete(id: \\\"$ENV_ID\\\") }\"}")
 
-          if echo "$RESULT" | jq -e '.data.environmentDelete' > /dev/null 2>&1; then
+          if echo "$RESULT" | jq -e '.data.environmentDelete == true' > /dev/null 2>&1; then
             echo "Environment '$ENV_NAME' deleted"
           else
             echo "::warning::Failed to delete environment: $RESULT"
