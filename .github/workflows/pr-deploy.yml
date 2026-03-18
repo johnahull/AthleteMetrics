@@ -64,6 +64,9 @@ jobs:
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
           echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
+          # Link to project (required in CI — no ~/.railway/config.json)
+          railway link --project "${{ env.PROJECT_ID }}"
+
           # Create environment by duplicating staging; handle "already exists" gracefully
           OUTPUT=$(railway environment new "$ENV_NAME" --duplicate staging 2>&1) && {
             echo "created=true" >> "$GITHUB_OUTPUT"
@@ -86,6 +89,9 @@ jobs:
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
+          # Link to project (each step runs in a fresh shell)
+          railway link --project "${{ env.PROJECT_ID }}"
+
           # Upload source and trigger build on Railway (Dockerfile-based)
           railway up --detach \
             --environment "$ENV_NAME" \
@@ -98,6 +104,8 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
+
+          railway link --project "${{ env.PROJECT_ID }}"
 
           # Query actual domain from Railway
           DOMAIN=$(railway domain \
