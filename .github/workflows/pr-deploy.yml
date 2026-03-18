@@ -127,11 +127,16 @@ jobs:
           ENV_ID="${{ steps.env.outputs.env_id }}"
           COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
 
-          # Trigger deployment for the commit SHA
-          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"mutation { serviceInstanceDeploy(environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", commitSha: \\\"$COMMIT_SHA\\\") }\"}")
+          # Trigger deployment for the commit SHA (retry once on transient failure)
+          for ATTEMPT in 1 2; do
+            PAYLOAD=$(jq -n --arg q "mutation { serviceInstanceDeploy(environmentId: \"$ENV_ID\", serviceId: \"$SERVICE_ID\", commitSha: \"$COMMIT_SHA\") }" '{query: $q}')
+            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$PAYLOAD") && break
+            echo "Deploy API call failed (attempt $ATTEMPT/2), retrying in 5s..."
+            sleep 5
+          done
 
           SUCCESS=$(echo "$RESULT" | jq -r '.data.serviceInstanceDeploy // empty')
           if [ "$SUCCESS" != "true" ]; then
@@ -218,6 +223,13 @@ jobs:
           if [ -z "$ENV_ID" ]; then
             echo "Environment '$ENV_NAME' not found, nothing to clean up"
             exit 0
+          fi
+
+          # Validate ENV_ID before interpolating into delete mutation
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
+            exit 1
           fi
 
           # Delete environment
