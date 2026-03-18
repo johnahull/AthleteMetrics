@@ -97,11 +97,11 @@ jobs:
           # PR environments don't have their own database service.
           # Override DATABASE_URL to use testing DB's public endpoint.
           # Testing env is purpose-built for throwaway workloads — safe for concurrent PRs.
-          ESCAPED_URL=$(echo "$TESTING_DB_URL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          JSON_VALUE=$(jq -Rr @json <<< "$TESTING_DB_URL")
           RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"mutation { variableUpsert(input: { projectId: \\\"$PROJECT_ID\\\", environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", name: \\\"DATABASE_URL\\\", value: \\\"$ESCAPED_URL\\\" }) }\"}")
+            -d "{\"query\": \"mutation { variableUpsert(input: { projectId: \\\"$PROJECT_ID\\\", environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", name: \\\"DATABASE_URL\\\", value: $JSON_VALUE }) }\"}")
 
           if echo "$RESULT" | jq -e '.data.variableUpsert' > /dev/null 2>&1; then
             echo "DATABASE_URL configured for preview environment"
