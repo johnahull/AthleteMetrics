@@ -688,3 +688,35 @@ The application runs as a **single-process Node.js server** without clustering:
   - **Safety Margin**: 90s provides 6x safety margin for cold starts
   - **Platform Alignment**: Railway's default timeout is 100s, so 90s aligns with platform limits
   - **Documentation**: See `railway.json` for current configuration
+
+## UI Screenshot Verification (REQUIRED)
+
+When any code change affects the UI (new components, layout changes, styling updates, page modifications, etc.), you **MUST** capture screenshots of the affected pages/components before finishing.
+
+### How
+1. Use Playwright to launch the app and screenshot the affected views:
+   ```ts
+   import { chromium } from 'playwright';
+   const browser = await chromium.launch();
+   const page = await browser.newPage();
+   await page.goto('http://localhost:5173/affected-route');
+   await page.screenshot({ path: 'screenshots/<descriptive-name>.png', fullPage: true });
+   await browser.close();
+   ```
+2. Or use the existing Playwright test infrastructure with `page.screenshot()`.
+3. Save screenshots to `screenshots/` in the project root (create the dir if needed).
+4. Name them descriptively: `screenshots/dashboard-new-chart.png`, `screenshots/athlete-profile-mobile.png`, etc.
+5. Include both desktop (1280×720) and mobile (375×667) viewports if the change is layout-related.
+
+### When
+- Any new UI component or page
+- Any change to existing component layout, styling, or behavior
+- Any responsive/mobile changes
+- Theme or color changes
+
+### What to capture
+- The full page showing the change
+- Before/after if modifying existing UI (screenshot the current state first)
+- Multiple viewports if layout-related
+
+Screenshots will be reviewed by the project owner before merge. Do not skip this step.
