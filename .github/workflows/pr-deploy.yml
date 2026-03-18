@@ -106,7 +106,9 @@ jobs:
           # LIMITATION: All open PR previews share this database. PRs that include
           # schema migrations will affect every other open preview. Ensure migrations
           # are backwards-compatible, or coordinate destructive migrations manually.
-          PAYLOAD=$(jq -n --arg q "mutation { variableUpsert(input: { projectId: \"$PROJECT_ID\", environmentId: \"$ENV_ID\", serviceId: \"$SERVICE_ID\", name: \"DATABASE_URL\", value: \"$TESTING_DB_URL\" }) }" '{query: $q}')
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg dburl "$TESTING_DB_URL" \
+            '{query: "mutation { variableUpsert(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\", name: \"DATABASE_URL\", value: \"\($dburl)\" }) }"}')
           RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
@@ -129,7 +131,9 @@ jobs:
 
           # Trigger deployment for the commit SHA (retry once on transient failure)
           for ATTEMPT in 1 2; do
-            PAYLOAD=$(jq -n --arg q "mutation { serviceInstanceDeploy(environmentId: \"$ENV_ID\", serviceId: \"$SERVICE_ID\", commitSha: \"$COMMIT_SHA\") }" '{query: $q}')
+            PAYLOAD=$(jq -n \
+              --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg sha "$COMMIT_SHA" \
+              '{query: "mutation { serviceInstanceDeploy(environmentId: \"\($eid)\", serviceId: \"\($sid)\", commitSha: \"\($sha)\") }"}')
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
