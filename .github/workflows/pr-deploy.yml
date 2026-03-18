@@ -19,6 +19,8 @@ jobs:
   deploy-preview:
     name: Deploy PR Preview
     runs-on: ubuntu-latest
+    # Preview deployments are informational — don't block PR mergeability
+    continue-on-error: true
     if: >
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
@@ -29,6 +31,16 @@ jobs:
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
+
+      - name: Verify Railway authentication
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          if ! railway whoami 2>/dev/null; then
+            echo "::error::RAILWAY_API_TOKEN is invalid or expired. Regenerate it in Railway dashboard → Account Settings → Tokens, then update the GitHub secret."
+            exit 1
+          fi
+          echo "Railway authentication verified"
 
       - name: Find existing preview comment
         id: find-comment
@@ -52,13 +64,12 @@ jobs:
       - name: Create or reuse preview environment
         id: env
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
           echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
-          # Create the environment by duplicating staging; handle "already exists" gracefully
-          # Project token implicitly knows which project to target
+          # Create environment by duplicating staging; handle "already exists" gracefully
           OUTPUT=$(railway environment new "$ENV_NAME" --duplicate staging 2>&1) && {
             echo "created=true" >> "$GITHUB_OUTPUT"
             echo "Environment '$ENV_NAME' created from staging"
@@ -75,7 +86,7 @@ jobs:
       - name: Deploy to Railway preview environment
         id: deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
@@ -86,12 +97,13 @@ jobs:
 
       - name: Get preview domain
         id: domain
+        if: steps.deploy.outcome == 'success'
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
-          # Query actual domain from Railway instead of assuming naming convention
+          # Query actual domain from Railway
           DOMAIN=$(railway domain \
             --environment "$ENV_NAME" \
             --service athletemetrics-staging \
@@ -141,7 +153,7 @@ jobs:
       - name: Delete preview environment
         continue-on-error: true
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
           railway environment delete "$ENV_NAME" --yes
