@@ -17,6 +17,9 @@ import { users } from "@shared/schema/tables/core";
 import { eq, and, inArray } from "drizzle-orm";
 import { isUnder13, wasUnder13At, COPPA_ACTIONS } from "@shared/coppa-utils";
 
+// Small delay between consent emails to avoid rate-limit bursts
+const RETROACTIVE_EMAIL_DELAY_MS = 100;
+
 // Rate limiter for consent mutation endpoints (strict — prevents email flooding)
 const consentMutateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -283,10 +286,14 @@ export function registerCoppaRoutes(app: Express) {
     try {
       const { scanAll = false, organizationId } = req.body;
 
-      // Find users who are not yet in the COPPA flow
+      // Pagination params — default to a safe batch size to prevent OOM on large DBs
+      const limit = Math.min(Number(req.body.limit) || 50, 200);
+      const offset = Math.max(Number(req.body.offset) || 0, 0);
+
+      // Find users who are not yet in the COPPA flow — paginated to avoid full-table load
       // Use age-at-registration (createdAt), not current age — COPPA obligations
       // attach at the time of data collection, not today.
-      const allUsers = await db.select({
+      const pageUsers = await db.select({
         id: users.id,
         birthDate: users.birthDate,
         coppaStatus: users.coppaStatus,
@@ -295,9 +302,11 @@ export function registerCoppaRoutes(app: Express) {
         createdAt: users.createdAt,
       })
       .from(users)
-      .where(eq(users.coppaStatus, 'not_applicable'));
+      .where(eq(users.coppaStatus, 'not_applicable'))
+      .limit(limit)
+      .offset(offset);
 
-      const minors = allUsers.filter(u => {
+      const minors = pageUsers.filter(u => {
         if (!u.birthDate) return false;
         try {
           // Was the user under 13 when they registered?
@@ -333,6 +342,8 @@ export function registerCoppaRoutes(app: Express) {
 
           if (result.success) {
             initiated++;
+            // Small delay between email sends to avoid rate-limit bursts
+            await new Promise(resolve => setTimeout(resolve, RETROACTIVE_EMAIL_DELAY_MS));
           } else {
             errors.push(`${minor.id}: ${result.error}`);
           }
@@ -351,6 +362,8 @@ export function registerCoppaRoutes(app: Express) {
           initiated,
           skipped,
           errorCount: errors.length,
+          offset,
+          limit,
         },
       });
 
@@ -360,6 +373,11 @@ export function registerCoppaRoutes(app: Express) {
         initiated,
         skipped,
         errors: errors.slice(0, 10), // Return first 10 errors max
+        pagination: {
+          offset,
+          limit,
+          nextOffset: pageUsers.length === limit ? offset + limit : null,
+        },
       });
     } catch (error) {
       console.error("[COPPA] POST /admin/coppa/retroactive error:", error);

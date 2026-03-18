@@ -19,17 +19,13 @@
  */
 
 import type { Express } from "express";
-import crypto from "crypto";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { coppaDeletionService } from "../services/coppa-deletion-service";
 import { coppaService } from "../services/coppa-service";
 import { storage } from "../storage";
-import { db } from "../db";
-import { parentalConsents } from "@shared/schema/tables/coppa";
 
 // ============================================================================
 // Rate limiters
@@ -119,43 +115,20 @@ export function registerCoppaDeletionRoutes(app: Express) {
             }
           }
         } else if (consentToken) {
-          // Public token-gated path: verify the consent token proves parent identity
+          // Public token-gated path: verify the consent token proves parent identity.
+          // Uses verifyConfirmedToken() which returns a typed result — no error string parsing.
           if (typeof consentToken !== 'string' || consentToken.length > 128) {
             return res.status(400).json({ message: "Invalid consent token format" });
           }
 
-          const verifyResult = await coppaService.verifyConsentToken(consentToken);
+          const confirmedResult = await coppaService.verifyConfirmedToken(consentToken);
 
-          // Allow verified confirmed tokens (re-verify returns 400 for "already used"
-          // which is actually what we expect for a confirmed consent — parent is authenticated)
-          if (!verifyResult.valid) {
-            // A confirmed consent shows as "already used" (400) — that's fine for deletion
-            // A truly invalid/expired/not-found token is not acceptable
-            if (verifyResult.statusCode === 400 && verifyResult.error?.includes('already been used')) {
-              // This is a confirmed consent token — parent is authenticated. Proceed.
-              // But we must also verify the token belongs to the athleteUserId in the body.
-              const tokenHash = crypto.createHash('sha256').update(consentToken).digest('hex');
-              const [consentRecord] = await db.select({
-                id: parentalConsents.id,
-                athleteUserId: parentalConsents.athleteUserId,
-                status: parentalConsents.status,
-              })
-              .from(parentalConsents)
-              .where(eq(parentalConsents.tokenHash, tokenHash))
-              .limit(1);
+          if (!confirmedResult.confirmed) {
+            return res.status(401).json({ message: "Invalid or expired consent token" });
+          }
 
-              if (!consentRecord || consentRecord.athleteUserId !== athleteUserId) {
-                return res.status(401).json({ message: "Consent token does not match athlete" });
-              }
-            } else {
-              // Truly invalid, expired, or not found
-              return res.status(401).json({ message: "Invalid or expired consent token" });
-            }
-          } else {
-            // Token is still in pending state — also valid, just confirm athleteUserId matches
-            if (verifyResult.consent?.athleteUserId !== athleteUserId) {
-              return res.status(401).json({ message: "Consent token does not match athlete" });
-            }
+          if (confirmedResult.consent.athleteUserId !== athleteUserId) {
+            return res.status(401).json({ message: "Consent token does not match athlete" });
           }
         } else {
           // Neither authenticated nor token-gated

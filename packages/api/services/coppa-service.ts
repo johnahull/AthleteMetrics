@@ -57,6 +57,11 @@ export interface VerifyTokenResult {
   statusCode?: number;
 }
 
+/** Typed result for verifyConfirmedToken — avoids coupling to error message strings */
+export type VerifyConfirmedTokenResult =
+  | { confirmed: true; consent: ParentalConsent }
+  | { confirmed: false; reason: 'not_found' | 'expired' | 'pending' | 'error' };
+
 export interface ConfirmConsentParams {
   consentId: string;
   aiConsentGranted: boolean;
@@ -222,6 +227,46 @@ export class CoppaService extends BaseService {
     } catch (error) {
       console.error('[COPPA] verifyConsentToken failed:', error);
       return { valid: false, error: 'Failed to verify consent link.', statusCode: 500 };
+    }
+  }
+
+  /**
+   * Verify that a raw consent token belongs to a *confirmed* consent record.
+   *
+   * Unlike verifyConsentToken() (which only accepts pending tokens), this method
+   * is designed for post-confirmation flows (e.g. deletion requests) where the
+   * parent already completed the consent step and the token is expected to be
+   * in a 'confirmed' state.  Returns a typed result — callers should not parse
+   * error message strings to determine the outcome.
+   */
+  async verifyConfirmedToken(rawToken: string): Promise<VerifyConfirmedTokenResult> {
+    try {
+      const tokenHash = this.hashToken(rawToken);
+
+      const [consent] = await db.select()
+        .from(parentalConsents)
+        .where(eq(parentalConsents.tokenHash, tokenHash))
+        .limit(1);
+
+      if (!consent) {
+        return { confirmed: false, reason: 'not_found' };
+      }
+
+      if (consent.status === 'expired') {
+        return { confirmed: false, reason: 'expired' };
+      }
+
+      if (consent.status === 'pending') {
+        // Token exists but consent was never completed
+        return { confirmed: false, reason: 'pending' };
+      }
+
+      // status is 'confirmed' (or 'revoked' — both mean the parent acted, so we
+      // can treat them as authenticated for data-rights requests)
+      return { confirmed: true, consent: consent as ParentalConsent };
+    } catch (error) {
+      console.error('[COPPA] verifyConfirmedToken failed:', error);
+      return { confirmed: false, reason: 'error' };
     }
   }
 

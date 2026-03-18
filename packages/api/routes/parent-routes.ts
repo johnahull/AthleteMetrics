@@ -19,13 +19,13 @@
  */
 
 import type { Express } from "express";
-import { eq, and, isNull, inArray } from "drizzle-orm";
+import { eq, and, isNull } from "drizzle-orm";
 import { db } from "../db";
 import { requireAuth } from "../middleware";
 import { requireParentAccess } from "../permissions/parent-middleware";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { storage } from "../storage";
-import { reports } from "@shared/schema";
+import { reports, reportShares } from "@shared/schema";
 
 export function registerParentRoutes(app: Express) {
   /**
@@ -166,17 +166,9 @@ export function registerParentRoutes(app: Express) {
       try {
         const { athleteId } = req.params;
 
-        // Get athlete's organizations so we can find org-level reports
-        const userOrgs = await storage.getUserOrganizations(athleteId);
-        const orgIds = userOrgs.map(o => o.organizationId);
-
-        if (orgIds.length === 0) {
-          return res.json([]);
-        }
-
-        // Query reports for the athlete's organizations that are not archived
-        // and have the athlete included (via config.athleteIds or org-wide scope)
-        const orgReports = await db.select({
+        // Query only reports explicitly shared with this specific athlete via reportShares.
+        // Using org-level filtering alone would expose reports for other athletes in the org.
+        const sharedReports = await db.select({
           id: reports.id,
           name: reports.name,
           description: reports.description,
@@ -186,13 +178,15 @@ export function registerParentRoutes(app: Express) {
           updatedAt: reports.updatedAt,
           isPinned: reports.isPinned,
         })
-          .from(reports)
+          .from(reportShares)
+          .innerJoin(reports, eq(reportShares.reportId, reports.id))
           .where(and(
-            inArray(reports.organizationId, orgIds),
+            eq(reportShares.athleteId, athleteId),
+            isNull(reportShares.dismissedAt),
             isNull(reports.archivedAt),
           ));
 
-        return res.json(orgReports);
+        return res.json(sharedReports);
       } catch (error) {
         console.error("[parent-routes] GET /children/:athleteId/reports error:", error);
         return res.status(500).json({ message: "Failed to fetch reports" });
