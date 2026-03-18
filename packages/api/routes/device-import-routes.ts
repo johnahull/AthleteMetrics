@@ -19,6 +19,34 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { storage } from "../storage";
 
+// Known safe error messages that can be surfaced to clients (validation / business logic)
+const SAFE_ERROR_PATTERNS = [
+  'Unsupported import source',
+  'File does not match expected format',
+  'Import session has expired',
+  'Cannot import to a frozen event',
+  'Batch has no parsed data',
+  'Import batch not found',
+  'Can only rollback completed batches',
+  'Batch is',
+  'Invalid file type',
+  'No file uploaded',
+  'organizationId required',
+];
+
+function isSafeError(message: string): boolean {
+  return SAFE_ERROR_PATTERNS.some(pattern => message.includes(pattern));
+}
+
+function handleRouteError(res: Response, error: any, defaultStatus = 500): Response {
+  const message: string = error?.message ?? 'Unknown error';
+  if (isSafeError(message)) {
+    return res.status(400).json({ message });
+  }
+  // Unexpected error — log full details but return generic message to client
+  return res.status(defaultStatus).json({ message: 'An unexpected error occurred. Please try again.' });
+}
+
 const importService = new DeviceImportService();
 
 // Rate limiter for device imports
@@ -127,7 +155,7 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json(result);
       } catch (error: any) {
         console.error('Device import parse error:', error);
-        return res.status(400).json({ message: error.message });
+        return handleRouteError(res, error);
       }
     }
   );
@@ -175,13 +203,14 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json(result);
       } catch (error: any) {
         console.error('Device import commit error:', error);
-        if (error.message.includes('expired')) {
-          return res.status(410).json({ message: error.message });
+        const message: string = error?.message ?? '';
+        if (message.includes('expired')) {
+          return res.status(410).json({ message });
         }
-        if (error.message.includes('frozen')) {
-          return res.status(409).json({ message: error.message });
+        if (message.includes('frozen')) {
+          return res.status(409).json({ message });
         }
-        return res.status(400).json({ message: error.message });
+        return handleRouteError(res, error);
       }
     }
   );
@@ -216,7 +245,7 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json({ batches });
       } catch (error: any) {
         console.error('Device import list batches error:', error);
-        return res.status(500).json({ message: error.message });
+        return handleRouteError(res, error);
       }
     }
   );
@@ -255,7 +284,7 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json(batch);
       } catch (error: any) {
         console.error('Device import batch detail error:', error);
-        return res.status(500).json({ message: error.message });
+        return handleRouteError(res, error);
       }
     }
   );
@@ -292,7 +321,7 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json({ message: "Import rolled back successfully" });
       } catch (error: any) {
         console.error('Device import rollback error:', error);
-        return res.status(400).json({ message: error.message });
+        return handleRouteError(res, error);
       }
     }
   );

@@ -20,9 +20,11 @@ import {
 import { eq, and, inArray, isNull, sql, desc } from 'drizzle-orm';
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
-import { MeasurementService } from './measurement-service';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
 import type { DeviceImportParser, ParsedImportData, ParsedSessionData } from './parsers/types';
+
+// Drizzle transaction type (same query interface as db)
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const PARSE_SESSION_TTL_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -72,7 +74,6 @@ export interface BatchSummary {
 }
 
 export class DeviceImportService {
-  private measurementService = new MeasurementService();
 
   /**
    * Parse a device CSV and match athletes. Returns a preview for review.
@@ -237,13 +238,57 @@ export class DeviceImportService {
       overrideMap.set(a.csvName, { matchedAthleteId: a.matchedAthleteId, included: a.included });
     }
 
+    // Pre-fetch all included athlete IDs (for bulk birth date + metric unit lookups)
+    const allAthleteIds = new Set<string>();
+    const allMetricCodes = new Set<string>();
+    for (const previewAthlete of preview.athletes) {
+      const override = overrideMap.get(previewAthlete.csvName);
+      const included = override?.included ?? previewAthlete.included;
+      if (!included) continue;
+      const athleteId = override?.matchedAthleteId ?? previewAthlete.matchedAthleteId;
+      if (athleteId) allAthleteIds.add(athleteId);
+      for (const drill of previewAthlete.drills) {
+        allMetricCodes.add(drill.metric);
+        if (drill.splits) drill.splits.forEach(s => allMetricCodes.add(s.metric));
+      }
+    }
+
+    // Bulk-fetch birth dates and metric units before opening the transaction
+    const [userRows, metricRows] = await Promise.all([
+      allAthleteIds.size > 0
+        ? db.select({ id: users.id, birthDate: users.birthDate }).from(users)
+            .where(inArray(users.id, [...allAthleteIds]))
+        : Promise.resolve([]),
+      allMetricCodes.size > 0
+        ? db.select({ code: siteMetrics.code, unit: siteMetrics.unit }).from(siteMetrics)
+            .where(inArray(siteMetrics.code, [...allMetricCodes]))
+        : Promise.resolve([]),
+    ]);
+
+    const birthDateMap = new Map(userRows.map(u => [u.id, u.birthDate]));
+    const unitMap = new Map(metricRows.map(m => [m.code, m.unit]));
+
+    // Helper: compute age from athlete birth date and measurement date string
+    const computeAge = (athleteId: string, dateStr: string): number => {
+      const birthDate = birthDateMap.get(athleteId);
+      if (!birthDate) return 0;
+      const measurementDate = new Date(dateStr);
+      const bd = new Date(birthDate);
+      let age = measurementDate.getFullYear() - bd.getFullYear();
+      const birthdayThisYear = new Date(measurementDate.getFullYear(), bd.getMonth(), bd.getDate());
+      if (measurementDate < birthdayThisYear) age -= 1;
+      return age;
+    };
+
     let created = 0;
     let skipped = 0;
     let replaced = 0;
     const importedAthleteIds = new Set<string>();
     const recalcPairs = new Set<string>(); // "userId|metric" pairs
 
-    // Wrap all measurement operations in a transaction for atomicity
+    // Wrap all measurement operations in a single transaction for atomicity.
+    // Measurements are inserted directly via tx (not via MeasurementService which uses its
+    // own internal db.transaction and would be outside this transaction boundary).
     await db.transaction(async (tx) => {
       // Process each athlete
       for (const previewAthlete of preview.athletes) {
@@ -277,78 +322,78 @@ export class DeviceImportService {
               skipped++;
               continue;
             }
-            // Replace: delete existing, count as 1 replacement per drill
+            // Replace: delete existing (inside tx for atomicity), then insert replacement below
             await tx.delete(measurements)
               .where(inArray(measurements.id, existing.map(e => e.id)));
             replaced++;
           }
 
-          // Create measurement via service
+          // Insert measurement directly via tx — stays inside this transaction
           try {
-            await this.measurementService.createMeasurement(
-              {
-                userId: athleteId,
-                metric: drill.metric,
-                value: String(drill.value),
-                date,
-                units: drill.units,
-                eventId: batch.eventId ?? undefined,
-                organizationId,
-                importSource: batch.source,
-                importBatchId: batchId,
-                notes: `Imported from ${batch.fileName}`,
-                isCalculated: false,
-                calculationMetadata: {
-                  formula: 'direct_import',
-                  sourceValues: {},
-                  calculatedAt: new Date().toISOString(),
-                  triggeredBy: {
-                    event: 'bulk_import',
-                    userId: committedBy,
-                  },
+            await tx.insert(measurements).values({
+              userId: athleteId,
+              submittedBy: committedBy,
+              metric: drill.metric,
+              value: String(drill.value),
+              date,
+              age: computeAge(athleteId, date),
+              units: unitMap.get(drill.metric) ?? drill.units ?? 'in',
+              eventId: batch.eventId ?? null,
+              organizationId,
+              importSource: batch.source,
+              importBatchId: batchId,
+              notes: `Imported from ${batch.fileName}`,
+              isCalculated: false,
+              isVerified: false,
+              teamContextAuto: false,
+              calculationMetadata: {
+                formula: 'direct_import',
+                sourceValues: {},
+                calculatedAt: new Date().toISOString(),
+                triggeredBy: {
+                  event: 'bulk_import',
+                  userId: committedBy,
                 },
-              } as any,
-              committedBy,
-              'coach',
-            );
+              },
+            });
             created++;
             recalcPairs.add(`${athleteId}|${drill.metric}`);
 
-            // Also create measurements for splits
+            // Also insert split measurements inside the same transaction
             if (drill.splits) {
               for (const split of drill.splits) {
-                await this.measurementService.createMeasurement(
-                  {
-                    userId: athleteId,
-                    metric: split.metric,
-                    value: String(split.value),
-                    date,
-                    units: split.units,
-                    eventId: batch.eventId ?? undefined,
-                    organizationId,
-                    importSource: batch.source,
-                    importBatchId: batchId,
-                    notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
-                    isCalculated: false,
-                  } as any,
-                  committedBy,
-                  'coach',
-                );
+                await tx.insert(measurements).values({
+                  userId: athleteId,
+                  submittedBy: committedBy,
+                  metric: split.metric,
+                  value: String(split.value),
+                  date,
+                  age: computeAge(athleteId, date),
+                  units: unitMap.get(split.metric) ?? split.units ?? 'in',
+                  eventId: batch.eventId ?? null,
+                  organizationId,
+                  importSource: batch.source,
+                  importBatchId: batchId,
+                  notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
+                  isCalculated: false,
+                  isVerified: false,
+                  teamContextAuto: false,
+                });
                 created++;
                 recalcPairs.add(`${athleteId}|${split.metric}`);
               }
             }
           } catch (err: any) {
             // Log but continue — don't fail the whole batch for one measurement
-            console.error(`Failed to create measurement for ${previewAthlete.csvName} ${drill.metric}:`, err.message);
+            console.error(`Failed to insert measurement for ${previewAthlete.csvName} ${drill.metric}:`, err.message);
             skipped++;
           }
         }
       }
 
-      // Add missing event metrics if requested
+      // Add missing event metrics inside the same transaction
       if (addMissingEventMetrics && batch.eventId) {
-        await this.addMissingEventMetrics(batch.eventId, preview.athletes);
+        await this.addMissingEventMetrics(batch.eventId, preview.athletes, tx);
       }
 
       // Update batch status within the same transaction
@@ -495,6 +540,9 @@ export class DeviceImportService {
    * Get athletes registered for a specific event
    */
   private async getEventRegistrationCandidates(eventId: string, organizationId: string) {
+    // Security: join through events to verify the event belongs to this organization.
+    // Without this, a coach in Org A who knows an event ID from Org B could leak
+    // athlete names from Org B's registrations.
     const registrations = await db
       .select({
         id: users.id,
@@ -506,8 +554,10 @@ export class DeviceImportService {
       })
       .from(eventRegistrations)
       .innerJoin(users, eq(eventRegistrations.userId, users.id))
+      .innerJoin(events, eq(eventRegistrations.eventId, events.id))
       .where(and(
         eq(eventRegistrations.eventId, eventId),
+        eq(events.organizationId, organizationId), // Verify event belongs to this org
         inArray(eventRegistrations.status, ['approved', 'checked_in', 'completed']),
       ));
 
@@ -538,9 +588,10 @@ export class DeviceImportService {
   }
 
   /**
-   * Add missing event metrics for metrics found in the import
+   * Add missing event metrics for metrics found in the import.
+   * Accepts a transaction so additions are part of the same atomic commit as measurements.
    */
-  private async addMissingEventMetrics(eventId: string, athletes: any[]) {
+  private async addMissingEventMetrics(eventId: string, athletes: any[], tx: Tx) {
     // Collect all unique metric codes from the import
     const metricCodes = new Set<string>();
     for (const athlete of athletes) {
@@ -554,30 +605,27 @@ export class DeviceImportService {
       }
     }
 
-    // Get existing event metrics
-    const existingMetrics = await db
-      .select({ metricCode: eventMetrics.metricCode })
-      .from(eventMetrics)
-      .where(eq(eventMetrics.eventId, eventId));
+    if (metricCodes.size === 0) return;
+
+    // Get existing event metrics and verify metric codes — both inside the transaction
+    const [existingMetrics, validMetrics] = await Promise.all([
+      tx.select({ metricCode: eventMetrics.metricCode })
+        .from(eventMetrics)
+        .where(eq(eventMetrics.eventId, eventId)),
+      tx.select({ code: siteMetrics.code })
+        .from(siteMetrics)
+        .where(inArray(siteMetrics.code, [...metricCodes])),
+    ]);
 
     const existingCodes = new Set(existingMetrics.map(m => m.metricCode));
+    const validCodes = new Set(validMetrics.map(m => m.code));
 
-    // Add missing ones
-    for (const code of metricCodes) {
-      if (!existingCodes.has(code)) {
-        // Verify the metric exists in siteMetrics
-        const [metric] = await db
-          .select({ code: siteMetrics.code })
-          .from(siteMetrics)
-          .where(eq(siteMetrics.code, code));
-
-        if (metric) {
-          await db.insert(eventMetrics).values({
-            eventId,
-            metricCode: code,
-          }).onConflictDoNothing();
-        }
-      }
+    // Add missing valid metrics in one batch insert
+    const toAdd = [...metricCodes].filter(code => !existingCodes.has(code) && validCodes.has(code));
+    if (toAdd.length > 0) {
+      await tx.insert(eventMetrics)
+        .values(toAdd.map(code => ({ eventId, metricCode: code })))
+        .onConflictDoNothing();
     }
   }
 }
