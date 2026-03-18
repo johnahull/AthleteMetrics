@@ -18,8 +18,8 @@ concurrency:
 env:
   RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
   PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
-  STAGING_ENV_ID: ${{ vars.RAILWAY_STAGING_ENV_ID }}
-  SERVICE_ID: ${{ vars.RAILWAY_STAGING_SERVICE_ID }}
+  TESTING_ENV_ID: ${{ vars.RAILWAY_TESTING_ENV_ID }}
+  SERVICE_ID: ${{ vars.RAILWAY_TESTING_SERVICE_ID }}
 
 jobs:
   deploy-preview:
@@ -69,11 +69,11 @@ jobs:
           if [ -n "$ENV_ID" ]; then
             echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
           else
-            # Create by duplicating staging (ephemeral = auto-cleanup eligible)
+            # Create by duplicating testing env (ephemeral = auto-cleanup eligible)
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$STAGING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
 
             ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
             if [ -z "$ENV_ID" ]; then
@@ -89,15 +89,15 @@ jobs:
       - name: Configure preview database
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          STAGING_DB_URL: ${{ secrets.STAGING_DATABASE_PUBLIC_URL }}
+          TESTING_DB_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
         run: |
           set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
           # PR environments don't have their own database service.
-          # Override DATABASE_URL to use staging DB's public endpoint.
-          # Note: concurrent PRs share the staging database — avoid destructive migrations.
-          ESCAPED_URL=$(echo "$STAGING_DB_URL" | sed 's/\\/\\\\/g; s/"/\\"/g')
+          # Override DATABASE_URL to use testing DB's public endpoint.
+          # Testing env is purpose-built for throwaway workloads — safe for concurrent PRs.
+          ESCAPED_URL=$(echo "$TESTING_DB_URL" | sed 's/\\/\\\\/g; s/"/\\"/g')
           RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
