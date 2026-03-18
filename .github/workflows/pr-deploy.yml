@@ -74,7 +74,7 @@ jobs:
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: false, stageInitialChanges: false }) { id name } }\"}")
 
             ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
             if [ -z "$ENV_ID" ]; then
@@ -82,6 +82,8 @@ jobs:
               exit 1
             fi
             echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+            # Give Railway time to initialize the service instance
+            sleep 5
           fi
 
           # Validate ENV_ID is a UUID before interpolating into subsequent queries
@@ -142,6 +144,7 @@ jobs:
             sleep 5
           done
 
+          echo "Deploy API response: $RESULT"
           SUCCESS=$(echo "$RESULT" | jq -r '.data.serviceInstanceDeploy // empty')
           if [ "$SUCCESS" != "true" ]; then
             echo "::error::Failed to trigger deployment: $RESULT"
@@ -149,6 +152,14 @@ jobs:
           fi
 
           echo "Deployment triggered for commit $COMMIT_SHA"
+
+          # Verify deployment was actually created (not just acknowledged)
+          sleep 5
+          CHECK=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ deployments(first: 1, input: { environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\" }) { edges { node { id status } } } }\"}")
+          echo "Deployment check: $CHECK"
 
       - name: Get preview domain
         id: domain
