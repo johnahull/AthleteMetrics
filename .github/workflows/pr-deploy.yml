@@ -32,9 +32,6 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@v3
@@ -80,7 +77,7 @@ jobs:
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\" }) { id name } }\"}")
 
             ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
             if [ -z "$ENV_ID" ]; then
@@ -126,27 +123,46 @@ jobs:
             echo "::warning::Failed to set DATABASE_URL: $RESULT"
           fi
 
-      - name: Install Railway CLI and deploy
+      - name: Trigger deployment
         id: deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          # Install Railway CLI
-          curl -fsSL https://railway.com/install.sh | sh
-          export PATH="$HOME/.railway/bin:$PATH"
-          railway --version
+          # Use environmentTriggersDeploy — the correct mutation for triggering
+          # new deployments (serviceInstanceDeploy is a no-op for fresh environments)
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
 
-          # Deploy using Railway CLI (uploads code and builds via Dockerfile)
-          echo "Deploying to environment: ${{ steps.env.outputs.env_name }}"
-          railway up \
-            --environment "${{ steps.env.outputs.env_name }}" \
-            --service athletemetrics-testing \
-            --detach \
-            2>&1 | tee /tmp/railway-deploy.log
+          echo "Deploy API response: $RESULT"
+          SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Failed to trigger deployment: $RESULT"
+            exit 1
+          fi
 
-          echo "Railway deploy initiated"
+          echo "Deployment triggered for environment $ENV_ID"
+
+          # Verify deployment was actually created
+          sleep 10
+          CHECK=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$(jq -n --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+              '{query: "{ deployments(first: 1, input: { environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) { edges { node { id status } } } }"}')")
+          echo "Deployment check: $CHECK"
+          DEPLOY_STATUS=$(echo "$CHECK" | jq -r '.data.deployments.edges[0].node.status // "NONE"')
+          echo "Deployment status: $DEPLOY_STATUS"
+          if [ "$DEPLOY_STATUS" = "NONE" ]; then
+            echo "::warning::No deployment found after trigger — check Railway dashboard"
+          fi
 
       - name: Get preview domain
         id: domain
