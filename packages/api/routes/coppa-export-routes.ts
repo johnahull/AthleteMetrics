@@ -135,8 +135,7 @@ export function registerCoppaExportRoutes(app: Express) {
       // Verify the parent owns this consent record
       const ownershipCheck = await coppaExportService.verifyConsentOwnership(consentId, parentEmail);
       if (!ownershipCheck.valid) {
-        // Return 404 for "not found" cases, 403 for email mismatch
-        const statusCode = ownershipCheck.error?.includes('not found') ? 404 : 403;
+        const statusCode = ownershipCheck.reason === 'not_found' ? 404 : 403;
         return res.status(statusCode).json({ message: ownershipCheck.error });
       }
 

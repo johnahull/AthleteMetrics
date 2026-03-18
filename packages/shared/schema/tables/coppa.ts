@@ -59,7 +59,7 @@ export const parentalConsents = pgTable("parental_consents", {
   athleteIdx: index("parental_consents_athlete_idx").on(table.athleteUserId),
   statusIdx: index("parental_consents_status_idx").on(table.status),
   expiresIdx: index("parental_consents_expires_idx").on(table.expiresAt),
-  tokenHashIdx: index("parental_consents_token_hash_idx").on(table.tokenHash),
+  // tokenHash already has a UNIQUE constraint which creates an implicit index
 }));
 
 /**

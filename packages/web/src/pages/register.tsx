@@ -194,6 +194,12 @@ export default function Register() {
       return;
     }
 
+    // Validate parent email for minors (defense-in-depth alongside HTML required)
+    if (isMinor && !formData.parentEmail?.trim()) {
+      setError('Parent or guardian email is required for users under 13');
+      return;
+    }
+
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');

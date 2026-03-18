@@ -12,7 +12,7 @@
  */
 
 import crypto from 'crypto';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, isNull, sql, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
@@ -47,6 +47,7 @@ export interface InitiateConsentResult {
   success: boolean;
   consentId?: string;
   error?: string;
+  emailSent?: boolean;
 }
 
 export interface VerifyTokenResult {
@@ -167,19 +168,23 @@ export class CoppaService extends BaseService {
 
       // Send parental consent email — pass raw token (used in link, not stored)
       const athlete = await this.storage.getUser(athleteUserId);
-      await this.emailService.sendParentalConsentRequest(parentEmail, {
+      const emailSent = await this.emailService.sendParentalConsentRequest(parentEmail, {
         athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
         consentToken: rawToken,
         consentId: consent.id,
         expiresAt,
       });
 
-      return { success: true, consentId: consent.id };
+      if (!emailSent) {
+        console.error(`[COPPA] Consent email failed to send for athlete ${athleteUserId} to ${parentEmail}`);
+      }
+
+      return { success: true, consentId: consent.id, emailSent };
     } catch (error) {
       console.error('[COPPA] initiateConsent failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to initiate consent',
+        error: 'Failed to initiate consent',
       };
     }
   }
@@ -342,7 +347,7 @@ export class CoppaService extends BaseService {
       console.error('[COPPA] confirmConsent failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to confirm consent',
+        error: 'Failed to confirm consent',
       };
     }
   }
@@ -396,7 +401,7 @@ export class CoppaService extends BaseService {
       console.error('[COPPA] denyConsent failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to deny consent',
+        error: 'Failed to deny consent',
       };
     }
   }
@@ -414,12 +419,17 @@ export class CoppaService extends BaseService {
     try {
       if (revokeAiOnly) {
         // Find the active consent record and update only AI consent
-        await db.update(parentalConsents)
+        const updated = await db.update(parentalConsents)
           .set({ aiConsentGranted: false })
           .where(and(
             eq(parentalConsents.athleteUserId, athleteUserId),
             eq(parentalConsents.status, 'confirmed'),
-          ));
+          ))
+          .returning({ id: parentalConsents.id });
+
+        if (updated.length === 0) {
+          return { success: false, error: 'No active consent found to revoke' };
+        }
 
         await this.writeCoppaAudit({
           action: COPPA_ACTIONS.AI_CONSENT_DENIED,
@@ -430,12 +440,17 @@ export class CoppaService extends BaseService {
         });
       } else {
         // Full consent revocation
-        await db.update(parentalConsents)
+        const updated = await db.update(parentalConsents)
           .set({ status: 'revoked' as ConsentStatus, revokedAt: new Date() })
           .where(and(
             eq(parentalConsents.athleteUserId, athleteUserId),
             eq(parentalConsents.status, 'confirmed'),
-          ));
+          ))
+          .returning({ id: parentalConsents.id });
+
+        if (updated.length === 0) {
+          return { success: false, error: 'No active consent found to revoke' };
+        }
 
         await db.update(users)
           .set({ coppaStatus: 'consent_revoked' })
@@ -455,7 +470,7 @@ export class CoppaService extends BaseService {
       console.error('[COPPA] revokeConsent failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to revoke consent',
+        error: 'Failed to revoke consent',
       };
     }
   }
@@ -489,6 +504,44 @@ export class CoppaService extends BaseService {
 
     // Fail closed: null/undefined/false → cannot access AI
     return consent?.aiConsentGranted === true;
+  }
+
+  /**
+   * Batch-check AI access for multiple minor athlete IDs.
+   * Returns the set of IDs that CANNOT access AI (fail-closed).
+   * Uses 2 queries total instead of 2*N for N athletes.
+   */
+  async getMinorsWithoutAIConsent(minorUserIds: string[]): Promise<string[]> {
+    if (minorUserIds.length === 0) return [];
+
+    // 1. Find which of these minors have coppaStatus === 'consented'
+    const consentedUsers = await db.select({ id: users.id })
+      .from(users)
+      .where(and(
+        inArray(users.id, minorUserIds),
+        eq(users.coppaStatus, 'consented'),
+      ));
+    const consentedIds = new Set(consentedUsers.map(u => u.id));
+
+    // Anyone not consented is already blocked
+    const blockedNonConsented = minorUserIds.filter(id => !consentedIds.has(id));
+
+    if (consentedIds.size === 0) return blockedNonConsented;
+
+    // 2. Of the consented users, find who has aiConsentGranted = true
+    const aiGranted = await db.select({ athleteUserId: parentalConsents.athleteUserId })
+      .from(parentalConsents)
+      .where(and(
+        inArray(parentalConsents.athleteUserId, [...consentedIds]),
+        eq(parentalConsents.status, 'confirmed'),
+        eq(parentalConsents.aiConsentGranted, true),
+      ));
+    const aiGrantedIds = new Set(aiGranted.map(r => r.athleteUserId));
+
+    // Consented but no AI grant → also blocked
+    const blockedNoAI = [...consentedIds].filter(id => !aiGrantedIds.has(id));
+
+    return [...blockedNonConsented, ...blockedNoAI];
   }
 
   /**

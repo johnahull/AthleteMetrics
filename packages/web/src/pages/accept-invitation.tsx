@@ -150,6 +150,12 @@ export default function AcceptInvitation() {
       return;
     }
 
+    // Validate parent email for minors (defense-in-depth alongside HTML required)
+    if (isMinor && !formData.parentEmail?.trim()) {
+      setError('Parent or guardian email is required for users under 13');
+      return;
+    }
+
     // Validate password against shared requirements
     const passwordValidation = validatePassword(formData.password);
     if (!passwordValidation.valid) {

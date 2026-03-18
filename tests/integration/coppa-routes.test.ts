@@ -1220,7 +1220,7 @@ describe('C4: POST /api/coppa/consent/update-parent-email', () => {
     expect(res.body.message).toMatch(/valid email/i);
   });
 
-  it('parentEmail same as athlete email → 400 with parent_email_must_differ code', async () => {
+  it('parentEmail same as athlete email → 200 generic response (enumeration prevention)', async () => {
     // Reset the user's coppaStatus back to needs_parent_email in case a prior test
     // called initiateConsent (which transitions the status to pending_consent).
     await db.update(users)
@@ -1231,22 +1231,21 @@ describe('C4: POST /api/coppa/consent/update-parent-email', () => {
       .post('/api/coppa/consent/update-parent-email')
       .send({ username: needsParentEmailUsername, parentEmail: needsParentEmailUserEmail });
 
-    expect(res.status).toBe(400);
-    expect(res.body.code).toBe('parent_email_must_differ');
+    // Returns 200 with generic message to prevent enumeration — same as non-existent user
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 
   it('username with non-needs_parent_email status (not_applicable) → 200 (enumeration prevention)', async () => {
     // orgAdminUsername has coppaStatus: 'not_applicable'
-    // The endpoint should return 200 even for users with wrong status to prevent status enumeration
+    // The endpoint returns 200 with generic message regardless of user status to prevent enumeration
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
       .send({ username: orgAdminUsername, parentEmail: 'parent@example.com' });
 
-    // Endpoint returns 400 for wrong status — this reveals the user exists.
-    // Per the implementation, the endpoint returns 400 with "not available for your account status"
-    // NOTE: The implementation does NOT mask the wrong-status case as 200, so we verify 400 here.
-    // (Only non-existent users get the 200 enumeration-prevention response.)
-    expect(res.status).toBe(400);
+    // Returns 200 with same generic response as non-existent user — prevents status enumeration
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
   });
 });
 

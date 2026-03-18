@@ -1231,7 +1231,7 @@ export function registerReportRoutes(app: Express) {
       // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
       // from an org with COPPA enabled), public link access is never permitted.
       // Authenticated users may still view the report in the app.
-      if ((snapshot as any).publicAccessRestricted) {
+      if (snapshot.publicAccessRestricted) {
         // Write audit log regardless of whether user is authenticated
         coppaService.writeCoppaAudit({
           action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
@@ -1443,18 +1443,14 @@ export function registerReportRoutes(app: Express) {
           }
         }
       } else if (report.reportType === 'team') {
-        // For team/org reports, check ALL athletes in the organization.
+        // For team/org reports, check ALL minor athletes in the organization.
         // If any minor lacks AI consent, block the report generation.
+        // Uses batch query (2 queries) instead of per-user queries (2*N).
         const orgUsers = await storage.getOrganizationUsers(report.organizationId);
-        const minorsWithoutConsent: string[] = [];
-        for (const orgUser of orgUsers) {
-          if (orgUser.user?.isMinor) {
-            const canAccess = await coppaService.canAccessAI(orgUser.user.id);
-            if (!canAccess) {
-              minorsWithoutConsent.push(orgUser.user.id);
-            }
-          }
-        }
+        const minorIds = orgUsers
+          .filter(ou => ou.user?.isMinor)
+          .map(ou => ou.user!.id);
+        const minorsWithoutConsent = await coppaService.getMinorsWithoutAIConsent(minorIds);
         if (minorsWithoutConsent.length > 0) {
           return res.status(403).json({
             code: 'ai_consent_required',

@@ -208,7 +208,7 @@ export class CoppaExportService extends BaseService {
       console.error('[COPPA Export] requestExport failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to create export request',
+        error: 'Failed to create export request',
       };
     }
   }
@@ -411,7 +411,7 @@ export class CoppaExportService extends BaseService {
   async verifyConsentOwnership(
     consentId: string,
     parentEmail: string,
-  ): Promise<{ valid: boolean; athleteUserId?: string; error?: string }> {
+  ): Promise<{ valid: boolean; athleteUserId?: string; error?: string; reason?: 'not_found' | 'email_mismatch' | 'not_confirmed' }> {
     const [consent] = await db.select({
       id: parentalConsents.id,
       athleteUserId: parentalConsents.athleteUserId,
@@ -423,15 +423,15 @@ export class CoppaExportService extends BaseService {
       .limit(1);
 
     if (!consent) {
-      return { valid: false, error: 'Consent record not found.' };
+      return { valid: false, reason: 'not_found' as const, error: 'Consent record not found.' };
     }
 
     if (consent.parentEmail.toLowerCase() !== parentEmail.toLowerCase()) {
-      return { valid: false, error: 'Email does not match consent record.' };
+      return { valid: false, reason: 'email_mismatch' as const, error: 'Email does not match consent record.' };
     }
 
     if (consent.status !== 'confirmed') {
-      return { valid: false, error: 'Consent must be confirmed to request export.' };
+      return { valid: false, reason: 'not_confirmed' as const, error: 'Consent must be confirmed to request export.' };
     }
 
     return { valid: true, athleteUserId: consent.athleteUserId };

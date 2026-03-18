@@ -56,23 +56,28 @@ export function requireParentAccess(athleteIdParam = 'athleteId') {
       return res.status(400).json({ message: 'Athlete ID is required' });
     }
 
-    // Check for an active link where this user is the parent
-    const [link] = await db.select({ id: parentAthleteLinks.id, isActive: parentAthleteLinks.isActive })
-      .from(parentAthleteLinks)
-      .where(and(
-        eq(parentAthleteLinks.parentUserId, user.id),
-        eq(parentAthleteLinks.athleteUserId, athleteId),
-      ))
-      .limit(1);
+    try {
+      // Check for an active link where this user is the parent
+      const [link] = await db.select({ id: parentAthleteLinks.id, isActive: parentAthleteLinks.isActive })
+        .from(parentAthleteLinks)
+        .where(and(
+          eq(parentAthleteLinks.parentUserId, user.id),
+          eq(parentAthleteLinks.athleteUserId, athleteId),
+        ))
+        .limit(1);
 
-    if (!link) {
-      return res.status(403).json({ message: 'Access denied: no parent link found for this athlete' });
+      if (!link) {
+        return res.status(403).json({ message: 'Access denied: no parent link found for this athlete' });
+      }
+
+      if (!link.isActive) {
+        return res.status(403).json({ message: 'Access denied: parent link is inactive' });
+      }
+
+      return next();
+    } catch (error) {
+      console.error('[COPPA] Parent access middleware error:', error);
+      return res.status(500).json({ message: 'Internal server error' });
     }
-
-    if (!link.isActive) {
-      return res.status(403).json({ message: 'Access denied: parent link is inactive' });
-    }
-
-    return next();
   };
 }

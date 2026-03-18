@@ -167,7 +167,7 @@ export class CoppaDeletionService extends BaseService {
       console.error('[COPPA Deletion] initiateDeletionRequest failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to initiate deletion request',
+        error: 'Failed to initiate deletion request',
         statusCode: 500,
       };
     }
@@ -374,19 +374,23 @@ export class CoppaDeletionService extends BaseService {
       });
 
       // STEP 12: Send completion notification email (outside transaction —
-      // email failures should not roll back the deletion)
-      await this.emailService.sendDeletionCompletedNotification(request.requestedByEmail, {
-        requestId,
-        deletedCategories,
-      });
+      // email failures should not roll back the deletion or report failure)
+      try {
+        await this.emailService.sendDeletionCompletedNotification(request.requestedByEmail, {
+          requestId,
+          deletedCategories,
+        });
+      } catch (emailErr) {
+        console.error('[COPPA Deletion] Deletion succeeded but notification email failed:', emailErr);
+      }
 
       return { success: true, deletedCategories };
     } catch (error) {
-      // Transaction automatically rolled back — request stays 'pending'
+      // Transaction rolled back — request stays in prior state
       console.error('[COPPA Deletion] processDeletion failed:', error);
       return {
         success: false,
-        error: error instanceof Error ? error.message : 'Failed to process deletion',
+        error: 'Failed to process deletion',
         statusCode: 500,
       };
     }

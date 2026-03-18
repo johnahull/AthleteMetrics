@@ -1496,9 +1496,9 @@ export const insertUserSchema = createInsertSchema(users).omit({
   // COPPA compliance fields
   coppaStatus: z.enum(['not_applicable', 'pending_consent', 'needs_parent_email', 'consented', 'consent_revoked']).optional(),
   isMinor: z.boolean().optional(),
-  parentEmail: z.string().email().optional(),
+  parentEmail: z.string().email().optional().nullable(),
   parentConsentId: z.string().optional(),
-  coppaConsentConfirmedAt: z.date().optional(),
+  coppaConsentConfirmedAt: z.coerce.date().optional().nullable(),
 });
 
 // Schema for creating OAuth users (password is optional for OAuth-only accounts)

@@ -280,12 +280,10 @@ export function registerCoppaRoutes(app: Express) {
    * POST /api/admin/coppa/retroactive
    * Site admin only. Scans DB for under-13 athletes and initiates VPC flow.
    * Idempotent — skips athletes already in coppa flow or already consented.
-   * Body: { scanAll?: boolean, organizationId?: string }
+   * Body: { limit?: number, offset?: number }
    */
   app.post("/api/admin/coppa/retroactive", requireAuth, requireSiteAdmin, async (req, res) => {
     try {
-      const { scanAll = false, organizationId } = req.body;
-
       // Pagination params — default to a safe batch size to prevent OOM on large DBs
       const limit = Math.min(Number(req.body.limit) || 50, 200);
       const offset = Math.max(Number(req.body.offset) || 0, 0);
@@ -306,20 +304,23 @@ export function registerCoppaRoutes(app: Express) {
       .limit(limit)
       .offset(offset);
 
+      let initiated = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+
       const minors = pageUsers.filter(u => {
         if (!u.birthDate) return false;
         try {
           // Was the user under 13 when they registered?
           const registeredAt = u.createdAt ? new Date(u.createdAt) : new Date();
           return wasUnder13At(u.birthDate, registeredAt);
-        } catch {
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : 'Unknown error';
+          console.error(`[COPPA] Failed to check age for user ${u.id}:`, msg);
+          errors.push(`${u.id}: age check failed — ${msg}`);
           return false;
         }
       });
-
-      let initiated = 0;
-      let skipped = 0;
-      const errors: string[] = [];
 
       for (const minor of minors) {
         // Only process if they have a parentEmail on file
@@ -492,17 +493,14 @@ export function registerCoppaRoutes(app: Express) {
       }
 
       if (user.coppaStatus !== 'needs_parent_email') {
-        return res.status(400).json({
-          message: "This action is not available for your account status.",
-        });
+        // Return same response as user-not-found to prevent enumeration
+        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
 
       // Prevent parent email being same as athlete email
       if (parentEmail.toLowerCase() === (user.emails?.[0] || '').toLowerCase()) {
-        return res.status(400).json({
-          code: 'parent_email_must_differ',
-          message: "Parent email must be different from the athlete's email address.",
-        });
+        // Return same response as user-not-found to prevent enumeration
+        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
 
       const result = await coppaService.initiateConsent({
