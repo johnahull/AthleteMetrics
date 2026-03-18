@@ -16,8 +16,12 @@ concurrency:
   cancel-in-progress: ${{ github.event.action != 'closed' }}
 
 env:
-  PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
   RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
+  PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+  # Staging environment ID (source for duplicating PR environments)
+  STAGING_ENV_ID: b3355483-7d9d-4aac-9b40-f3be817ea0c4
+  # Service ID for athletemetrics-staging
+  SERVICE_ID: f1c8d358-979a-46ef-a716-e62b5b8a70be
 
 jobs:
   deploy-preview:
@@ -30,12 +34,6 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@v3
@@ -58,44 +56,58 @@ jobs:
       - name: Create or reuse preview environment
         id: env
         env:
-          # RAILWAY_API_TOKEN is an account-level token (supports environment management)
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
-          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
-          # Link to project (required in CI — no ~/.railway/config.json)
-          railway link --project "${{ env.PROJECT_ID }}"
+          # Check if environment already exists
+          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
+            | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
 
-          # Create environment by duplicating staging; handle "already exists" gracefully
-          OUTPUT=$(railway environment new "$ENV_NAME" --duplicate staging 2>&1) && {
-            echo "created=true" >> "$GITHUB_OUTPUT"
-            echo "Environment '$ENV_NAME' created from staging"
-          } || {
-            if echo "$OUTPUT" | grep -qi "already exists"; then
-              echo "created=false" >> "$GITHUB_OUTPUT"
-              echo "Environment '$ENV_NAME' already exists, reusing"
-            else
-              echo "::error::Failed to create environment '$ENV_NAME': $OUTPUT"
+          if [ -n "$ENV_ID" ]; then
+            echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
+          else
+            # Create by duplicating staging (ephemeral = auto-cleanup eligible)
+            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$STAGING_ENV_ID\\\" }) { id name } }\"}")
+
+            ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
+            if [ -z "$ENV_ID" ]; then
+              echo "::error::Failed to create environment: $RESULT"
               exit 1
             fi
-          }
+            echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+          fi
 
-      - name: Deploy to Railway preview environment
+          echo "env_id=$ENV_ID" >> "$GITHUB_OUTPUT"
+          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger deployment
         id: deploy
         env:
-          # RAILWAY_API_TOKEN for railway up (account token can deploy to any environment)
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
 
-          # Link to project (each step runs in a fresh shell)
-          railway link --project "${{ env.PROJECT_ID }}"
+          # Trigger deployment for the commit SHA
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"mutation { serviceInstanceDeploy(environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", commitSha: \\\"$COMMIT_SHA\\\") }\"}")
 
-          # Upload source and trigger build on Railway (Dockerfile-based)
-          railway up --detach \
-            --environment "$ENV_NAME" \
-            --service athletemetrics-staging
+          SUCCESS=$(echo "$RESULT" | jq -r '.data.serviceInstanceDeploy // empty')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Failed to trigger deployment: $RESULT"
+            exit 1
+          fi
+
+          echo "Deployment triggered for commit $COMMIT_SHA"
 
       - name: Get preview domain
         id: domain
@@ -103,26 +115,20 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+          ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          railway link --project "${{ env.PROJECT_ID }}"
-
-          # Query actual domain from Railway
-          DOMAIN=$(railway domain \
-            --environment "$ENV_NAME" \
-            --service athletemetrics-staging \
-            --json 2>/dev/null | jq -r '.[0] // empty' 2>/dev/null || true)
+          # Query service domain for this environment
+          DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name serviceInstances { edges { node { domains { serviceDomains { domain } } environmentId } } } } } } } }\"}" \
+            | jq -r ".data.project.services.edges[] | select(.node.id==\"$SERVICE_ID\") | .node.serviceInstances.edges[] | select(.node.environmentId==\"$ENV_ID\") | .node.domains.serviceDomains[0].domain // empty")
 
           if [ -n "$DOMAIN" ]; then
             echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
+            echo "Preview URL: https://$DOMAIN"
           else
-            # Fallback: generate a domain if none exists
-            DOMAIN=$(railway domain \
-              --environment "$ENV_NAME" \
-              --service athletemetrics-staging 2>/dev/null || true)
-            if [ -n "$DOMAIN" ]; then
-              echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
-            fi
+            echo "No domain found for environment"
           fi
 
       - name: Update comment with result
@@ -158,12 +164,11 @@ jobs:
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
-          # Get environment ID via GraphQL API
-          # (railway environment delete has a TTY bug with API tokens, so use the API directly)
-          ENV_ID=$(curl -sf -X POST "${{ env.RAILWAY_API_URL }}" \
+          # Find environment ID
+          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"{ project(id: \\\"${{ env.PROJECT_ID }}\\\") { environments { edges { node { id name } } } } }\"}" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
             | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
 
           if [ -z "$ENV_ID" ]; then
@@ -171,8 +176,8 @@ jobs:
             exit 0
           fi
 
-          # Delete via GraphQL mutation
-          RESULT=$(curl -sf -X POST "${{ env.RAILWAY_API_URL }}" \
+          # Delete environment
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "{\"query\": \"mutation { environmentDelete(id: \\\"$ENV_ID\\\") }\"}")
@@ -180,7 +185,7 @@ jobs:
           if echo "$RESULT" | jq -e '.data.environmentDelete' > /dev/null 2>&1; then
             echo "Environment '$ENV_NAME' deleted"
           else
-            echo "::warning::Failed to delete environment '$ENV_NAME': $RESULT"
+            echo "::warning::Failed to delete environment: $RESULT"
           fi
 
       - name: Find preview comment
