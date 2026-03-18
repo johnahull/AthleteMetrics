@@ -85,6 +85,8 @@ jobs:
               exit 1
             fi
             echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+            # Give Railway time to initialize the service instance
+            sleep 5
           fi
 
           # Validate ENV_ID is a UUID before interpolating into subsequent queries
@@ -228,6 +230,14 @@ jobs:
             echo "::error::No deployment created after trigger"
             exit 1
           fi
+
+          # Verify deployment was actually created (not just acknowledged)
+          sleep 5
+          CHECK=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ deployments(first: 1, input: { environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\" }) { edges { node { id status } } } }\"}")
+          echo "Deployment check: $CHECK"
 
       - name: Get preview domain
         id: domain
