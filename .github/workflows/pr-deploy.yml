@@ -57,6 +57,7 @@ jobs:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -o pipefail
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
           # Check if environment already exists
@@ -83,6 +84,12 @@ jobs:
             echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
           fi
 
+          # Validate ENV_ID is a UUID before interpolating into subsequent queries
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
+            exit 1
+          fi
+
           echo "env_id=$ENV_ID" >> "$GITHUB_OUTPUT"
           echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
@@ -95,13 +102,15 @@ jobs:
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
           # PR environments don't have their own database service.
-          # Override DATABASE_URL to use testing DB's public endpoint.
-          # Testing env is purpose-built for throwaway workloads — safe for concurrent PRs.
-          JSON_VALUE=$(jq -Rr @json <<< "$TESTING_DB_URL")
+          # Override DATABASE_URL to use the testing DB's public endpoint.
+          # LIMITATION: All open PR previews share this database. PRs that include
+          # schema migrations will affect every other open preview. Ensure migrations
+          # are backwards-compatible, or coordinate destructive migrations manually.
+          PAYLOAD=$(jq -n --arg q "mutation { variableUpsert(input: { projectId: \"$PROJECT_ID\", environmentId: \"$ENV_ID\", serviceId: \"$SERVICE_ID\", name: \"DATABASE_URL\", value: \"$TESTING_DB_URL\" }) }" '{query: $q}')
           RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"mutation { variableUpsert(input: { projectId: \\\"$PROJECT_ID\\\", environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\", name: \\\"DATABASE_URL\\\", value: $JSON_VALUE }) }\"}")
+            -d "$PAYLOAD")
 
           if echo "$RESULT" | jq -e '.data.variableUpsert' > /dev/null 2>&1; then
             echo "DATABASE_URL configured for preview environment"
@@ -143,7 +152,7 @@ jobs:
 
           # Query service domain (retry since Railway provisions domains asynchronously)
           DOMAIN=""
-          for ATTEMPT in 1 2 3; do
+          for ATTEMPT in 1 2 3 4 5; do
             DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
@@ -155,8 +164,8 @@ jobs:
               echo "Preview URL: https://$DOMAIN"
               break
             fi
-            echo "Domain not yet provisioned (attempt $ATTEMPT/3), waiting 10s..."
-            if [ "$ATTEMPT" -lt 3 ]; then
+            echo "Domain not yet provisioned (attempt $ATTEMPT/5), waiting 10s..."
+            if [ "$ATTEMPT" -lt 5 ]; then
               sleep 10
             fi
           done
