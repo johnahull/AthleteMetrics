@@ -135,10 +135,6 @@ When ENABLED:
 **Auto-invoke:** Dynamic metric definitions, custom test builders, sport-specific measurements, validation rules
 **Keywords:** `custom metric`, `test configuration`, `validation rules`, `sport-specific`, `metric builder`
 
-#### Product Manager Agent (`product-manager-agent`) 📋
-**Auto-invoke:** Feature proposals, PRDs, user story writing, acceptance criteria, feature review, product strategy, prioritization
-**Keywords:** `feature proposal`, `prd`, `product requirements`, `user story`, `acceptance criteria`, `prioritize`, `product strategy`, `roadmap`, `feature review`, `product manager`
-
 ### Agent Usage Rules
 
 1. **Proactive**: Auto-invoke agents when task keywords match
@@ -168,7 +164,6 @@ When ENABLED:
 | CI/CD, GitHub Actions, releases, Railway deployments, repo settings | `devops-infrastructure-agent` |
 | Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
 | Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
-| Feature proposals, PRDs, user stories, product strategy | `product-manager-agent` |
 | Test strategy, coverage gaps, quality gates, bug triage | `qa-lead-agent` |
 | Releases, changelogs, versioning, hotfixes, GitHub releases | `release-manager-agent` |
 | API docs, ADRs, JSDoc, README, CLAUDE.md maintenance | `documentation-agent` |

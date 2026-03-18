@@ -15,18 +15,23 @@ concurrency:
   group: pr-deploy-${{ github.event.pull_request.number }}
   cancel-in-progress: ${{ github.event.action != 'closed' }}
 
+env:
+  RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
+  PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+  TESTING_ENV_ID: ${{ vars.RAILWAY_TESTING_ENV_ID }}
+  SERVICE_ID: ${{ vars.RAILWAY_TESTING_SERVICE_ID }}
+
 jobs:
   deploy-preview:
     name: Deploy PR Preview
     runs-on: ubuntu-latest
+    # Preview deployments are informational — don't block PR mergeability
+    continue-on-error: true
     if: >
       github.event.action != 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@v3
@@ -46,17 +51,137 @@ jobs:
 
             Deploying `${{ github.head_ref }}` @ `${{ github.event.pull_request.head.sha }}`...
 
-      - name: Deploy to Railway preview environment
+      - name: Create or reuse preview environment
+        id: env
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+
+          # Check if environment already exists
+          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
+            | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
+
+          if [ -n "$ENV_ID" ]; then
+            echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
+          else
+            # Create by duplicating testing env (ephemeral = auto-cleanup eligible)
+            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
+
+            ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
+            if [ -z "$ENV_ID" ]; then
+              echo "::error::Failed to create environment: $RESULT"
+              exit 1
+            fi
+            echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+          fi
+
+          # Validate ENV_ID is a UUID before interpolating into subsequent queries
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
+            exit 1
+          fi
+
+          echo "env_id=$ENV_ID" >> "$GITHUB_OUTPUT"
+          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Configure preview database
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          TESTING_DB_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+
+          # PR environments don't have their own database service.
+          # Override DATABASE_URL to use the testing DB's public endpoint.
+          # LIMITATION: All open PR previews share this database. PRs that include
+          # schema migrations will affect every other open preview. Ensure migrations
+          # are backwards-compatible, or coordinate destructive migrations manually.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg dburl "$TESTING_DB_URL" \
+            '{query: "mutation { variableUpsert(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\", name: \"DATABASE_URL\", value: \"\($dburl)\" }) }"}')
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
+
+          if echo "$RESULT" | jq -e '.data.variableUpsert' > /dev/null 2>&1; then
+            echo "DATABASE_URL configured for preview environment"
+          else
+            echo "::warning::Failed to set DATABASE_URL: $RESULT"
+          fi
+
+      - name: Trigger deployment
         id: deploy
-        continue-on-error: true
-        uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2
-        with:
-          railway_api_token: ${{ secrets.RAILWAY_API_TOKEN }}
-          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
-          environment_name: 'staging'
-          preview_environment_name: 'pr-${{ github.event.pull_request.number }}'
-          branch_name: ${{ github.head_ref }}
-          reuse_preview_environment: true
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
+
+          # Trigger deployment for the commit SHA (retry once on transient failure)
+          for ATTEMPT in 1 2; do
+            PAYLOAD=$(jq -n \
+              --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg sha "$COMMIT_SHA" \
+              '{query: "mutation { serviceInstanceDeploy(environmentId: \"\($eid)\", serviceId: \"\($sid)\", commitSha: \"\($sha)\") }"}')
+            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$PAYLOAD") && break
+            echo "Deploy API call failed (attempt $ATTEMPT/2), retrying in 5s..."
+            sleep 5
+          done
+
+          SUCCESS=$(echo "$RESULT" | jq -r '.data.serviceInstanceDeploy // empty')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Failed to trigger deployment: $RESULT"
+            exit 1
+          fi
+
+          echo "Deployment triggered for commit $COMMIT_SHA"
+
+      - name: Get preview domain
+        id: domain
+        if: steps.deploy.outcome == 'success'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+
+          # Query service domain (retry since Railway provisions domains asynchronously)
+          DOMAIN=""
+          for ATTEMPT in 1 2 3 4 5; do
+            DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name serviceInstances { edges { node { domains { serviceDomains { domain } } environmentId } } } } } } } }\"}" \
+              | jq -r ".data.project.services.edges[] | select(.node.id==\"$SERVICE_ID\") | .node.serviceInstances.edges[] | select(.node.environmentId==\"$ENV_ID\") | .node.domains.serviceDomains[0].domain // empty")
+
+            if [ -n "$DOMAIN" ]; then
+              echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
+              echo "Preview URL: https://$DOMAIN"
+              break
+            fi
+            echo "Domain not yet provisioned (attempt $ATTEMPT/5), waiting 10s..."
+            if [ "$ATTEMPT" -lt 5 ]; then
+              sleep 10
+            fi
+          done
+
+          if [ -z "$DOMAIN" ]; then
+            echo "Domain not available yet — check Railway dashboard"
+          fi
 
       - name: Update comment with result
         if: always()
@@ -71,7 +196,7 @@ jobs:
             | | |
             |---|---|
             | **Status** | ${{ steps.deploy.outcome == 'success' && 'Deployed' || 'Failed' }} |
-            | **Preview** | ${{ steps.deploy.outputs.service_domain && format('https://{0}', steps.deploy.outputs.service_domain) || 'See Railway dashboard' }} |
+            | **Preview** | ${{ steps.domain.outputs.url || 'See Railway dashboard' }} |
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
             | **Logs** | [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
@@ -84,16 +209,44 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Cleanup Railway preview environment
+      - name: Delete preview environment
         continue-on-error: true
-        uses: ayungavis/railway-preview-deploy@10f7ea1ca8cb3222effaf7184776ad2898d80ba7  # v1.0.2
-        with:
-          railway_api_token: ${{ secrets.RAILWAY_API_TOKEN }}
-          project_id: ${{ secrets.RAILWAY_PROJECT_ID }}
-          environment_name: 'staging'
-          preview_environment_name: 'pr-${{ github.event.pull_request.number }}'
-          branch_name: ${{ github.head_ref }}
-          cleanup: true
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
+
+          # Find environment ID
+          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
+            | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
+
+          if [ -z "$ENV_ID" ]; then
+            echo "Environment '$ENV_NAME' not found, nothing to clean up"
+            exit 0
+          fi
+
+          # Validate ENV_ID before interpolating into delete mutation
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
+            exit 1
+          fi
+
+          # Delete environment
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"mutation { environmentDelete(id: \\\"$ENV_ID\\\") }\"}")
+
+          if echo "$RESULT" | jq -e '.data.environmentDelete == true' > /dev/null 2>&1; then
+            echo "Environment '$ENV_NAME' deleted"
+          else
+            echo "::warning::Failed to delete environment: $RESULT"
+          fi
 
       - name: Find preview comment
         id: find-comment
