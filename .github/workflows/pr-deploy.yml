@@ -32,6 +32,9 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@v3
@@ -61,11 +64,14 @@ jobs:
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
           # Check if environment already exists
-          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
+          RESPONSE=$(curl -sf -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
-            | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}")
+          echo "Environment list response: $RESPONSE"
+
+          ENV_ID=$(echo "$RESPONSE" | jq -r --arg name "$ENV_NAME" \
+            '.data.project.environments.edges[] | select(.node.name==$name) | .node.id')
 
           if [ -n "$ENV_ID" ]; then
             echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
@@ -74,7 +80,7 @@ jobs:
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: false, stageInitialChanges: false }) { id name } }\"}")
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\", skipInitialDeploys: true, stageInitialChanges: false }) { id name } }\"}")
 
             ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
             if [ -z "$ENV_ID" ]; then
@@ -82,8 +88,6 @@ jobs:
               exit 1
             fi
             echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
-            # Give Railway time to initialize the service instance
-            sleep 5
           fi
 
           # Validate ENV_ID is a UUID before interpolating into subsequent queries
@@ -122,44 +126,27 @@ jobs:
             echo "::warning::Failed to set DATABASE_URL: $RESULT"
           fi
 
-      - name: Trigger deployment
+      - name: Install Railway CLI and deploy
         id: deploy
         env:
-          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -o pipefail
-          ENV_ID="${{ steps.env.outputs.env_id }}"
-          COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
 
-          # Trigger deployment for the commit SHA (retry once on transient failure)
-          for ATTEMPT in 1 2; do
-            PAYLOAD=$(jq -n \
-              --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg sha "$COMMIT_SHA" \
-              '{query: "mutation { serviceInstanceDeploy(environmentId: \"\($eid)\", serviceId: \"\($sid)\", commitSha: \"\($sha)\") }"}')
-            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "$PAYLOAD") && break
-            echo "Deploy API call failed (attempt $ATTEMPT/2), retrying in 5s..."
-            sleep 5
-          done
+          # Install Railway CLI
+          curl -fsSL https://railway.com/install.sh | sh
+          export PATH="$HOME/.railway/bin:$PATH"
+          railway --version
 
-          echo "Deploy API response: $RESULT"
-          SUCCESS=$(echo "$RESULT" | jq -r '.data.serviceInstanceDeploy // empty')
-          if [ "$SUCCESS" != "true" ]; then
-            echo "::error::Failed to trigger deployment: $RESULT"
-            exit 1
-          fi
+          # Deploy using Railway CLI (uploads code and builds via Dockerfile)
+          echo "Deploying to environment: ${{ steps.env.outputs.env_name }}"
+          railway up \
+            --environment "${{ steps.env.outputs.env_name }}" \
+            --service athletemetrics-testing \
+            --detach \
+            2>&1 | tee /tmp/railway-deploy.log
 
-          echo "Deployment triggered for commit $COMMIT_SHA"
-
-          # Verify deployment was actually created (not just acknowledged)
-          sleep 5
-          CHECK=$(curl -sf -X POST "$RAILWAY_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"{ deployments(first: 1, input: { environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\" }) { edges { node { id status } } } }\"}")
-          echo "Deployment check: $CHECK"
+          echo "Railway deploy initiated"
 
       - name: Get preview domain
         id: domain
@@ -233,7 +220,8 @@ jobs:
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
-            | jq -r ".data.project.environments.edges[] | select(.node.name==\"$ENV_NAME\") | .node.id")
+            | jq -r --arg name "$ENV_NAME" \
+              '.data.project.environments.edges[] | select(.node.name==$name) | .node.id')
 
           if [ -z "$ENV_ID" ]; then
             echo "Environment '$ENV_NAME' not found, nothing to clean up"
