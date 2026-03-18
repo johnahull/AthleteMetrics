@@ -119,6 +119,7 @@ jobs:
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
           # Query service domain (retry since Railway provisions domains asynchronously)
+          DOMAIN=""
           for ATTEMPT in 1 2 3; do
             DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
@@ -132,7 +133,9 @@ jobs:
               break
             fi
             echo "Domain not yet provisioned (attempt $ATTEMPT/3), waiting 10s..."
-            sleep 10
+            if [ "$ATTEMPT" -lt 3 ]; then
+              sleep 10
+            fi
           done
 
           if [ -z "$DOMAIN" ]; then
