@@ -74,7 +74,7 @@ jobs:
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$STAGING_ENV_ID\\\" }) { id name } }\"}")
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$STAGING_ENV_ID\\\", skipInitialDeploys: false, stageInitialChanges: false }) { id name } }\"}")
 
             ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
             if [ -z "$ENV_ID" ]; then
