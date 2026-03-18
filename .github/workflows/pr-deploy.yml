@@ -56,6 +56,7 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
+          set -o pipefail
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
           # Check if environment already exists
@@ -90,6 +91,7 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
+          set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
           COMMIT_SHA="${{ github.event.pull_request.head.sha }}"
 
@@ -113,6 +115,7 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
+          set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
           # Query service domain (retry since Railway provisions domains asynchronously)
@@ -167,6 +170,7 @@ jobs:
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
+          set -o pipefail
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
           # Find environment ID
