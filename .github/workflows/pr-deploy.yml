@@ -52,15 +52,13 @@ jobs:
       - name: Create or reuse preview environment
         id: env
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
           echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
-          # Link to the project
-          railway link --project "${{ secrets.RAILWAY_PROJECT_ID }}"
-
           # Create the environment by duplicating staging; handle "already exists" gracefully
+          # Project token implicitly knows which project to target
           OUTPUT=$(railway environment new "$ENV_NAME" --duplicate staging 2>&1) && {
             echo "created=true" >> "$GITHUB_OUTPUT"
             echo "Environment '$ENV_NAME' created from staging"
@@ -77,7 +75,7 @@ jobs:
       - name: Deploy to Railway preview environment
         id: deploy
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
@@ -89,7 +87,7 @@ jobs:
       - name: Get preview domain
         id: domain
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
@@ -143,11 +141,9 @@ jobs:
       - name: Delete preview environment
         continue-on-error: true
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
         run: |
           ENV_NAME="pr-${{ github.event.pull_request.number }}"
-
-          railway link --project "${{ secrets.RAILWAY_PROJECT_ID }}"
           railway environment delete "$ENV_NAME" --yes
 
       - name: Find preview comment
