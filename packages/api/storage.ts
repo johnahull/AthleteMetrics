@@ -1797,12 +1797,15 @@ export class DatabaseStorage implements IStorage {
 
       // Add user to organization with the invitation role
       // Note: addUserToOrganization will automatically replace any existing role for this user in this org
+      // Parent role is a user-level role, not an org-level role. Map parent → athlete for org membership.
+      // Parents access child data through parentAthleteLinks, not org roles.
+      const orgRole = invitation.role === 'parent' ? 'athlete' : invitation.role;
       console.log("[Invitation] Adding user to organization:", {
         userId: user.id,
         organizationId: invitation.organizationId,
-        role: invitation.role
+        role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole);
 
       // Add user to teams if specified
       if (invitation.teamIds && invitation.teamIds.length > 0) {
