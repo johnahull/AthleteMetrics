@@ -33,7 +33,7 @@
     },
     "pr": {
       "deploy": {
-        "startCommand": "node scripts/diagnose-startup.mjs"
+        "startCommand": "sh scripts/docker-entrypoint.sh"
       },
       "variables": {
         "NODE_ENV": "testing",
