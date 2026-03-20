@@ -38,6 +38,8 @@ RUN npm prune --omit=dev
 # Only api and shared — web deps are frontend-only and not needed at runtime.
 # Note: workspace versions intentionally overwrite root-hoisted versions. This is safe
 # because the workspace version is what the package's own code was tested against.
+# Note: shell glob * excludes dotfiles (.bin/) which is intentional —
+# no workspace CLI shims are needed at runtime, only importable packages.
 RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null; \
     cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null; \
     true
@@ -91,8 +93,9 @@ EXPOSE 5000
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Railway handles healthchecks via railway.json - no Docker HEALTHCHECK needed
-# (Docker HEALTHCHECK can conflict with Railway's healthcheck system)
+# Railway handles healthchecks via railway.json — no Docker HEALTHCHECK here.
+# Docker HEALTHCHECK can conflict with Railway's healthcheck system.
+# For local Docker usage, add: HEALTHCHECK CMD wget -qO- http://localhost:5000/api/health/liveness || exit 1
 
 # Start the application via entrypoint script
 # Migrations are non-fatal (PR environments share testing DB where migrations are already applied)

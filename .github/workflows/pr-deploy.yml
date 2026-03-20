@@ -159,6 +159,13 @@ jobs:
             -d "$PAYLOAD")
           echo "Trigger create: $RESULT"
 
+          # Distinguish "trigger already exists" (benign) from real API errors.
+          # GraphQL errors have an "errors" key; a benign duplicate returns null data without errors.
+          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::error::deploymentTriggerCreate failed: $RESULT"
+            exit 1
+          fi
+
           TRIGGER_ID=$(echo "$RESULT" | jq -r '.data.deploymentTriggerCreate.id // empty')
           if [ -z "$TRIGGER_ID" ]; then
             echo "Trigger already exists (reused environment) — Railway auto-deploys on push"
