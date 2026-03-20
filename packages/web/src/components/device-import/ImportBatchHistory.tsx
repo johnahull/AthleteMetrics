@@ -43,12 +43,14 @@ function formatDate(dateStr: string): string {
 
 function statusBadge(status: string) {
   switch (status) {
-    case 'committed':
-      return <Badge variant="default">Committed</Badge>;
+    case 'completed':
+      return <Badge variant="default">Completed</Badge>;
     case 'rolled_back':
       return <Badge variant="secondary">Rolled Back</Badge>;
     case 'pending':
       return <Badge variant="outline">Pending</Badge>;
+    case 'expired':
+      return <Badge variant="outline" className="text-muted-foreground">Expired</Badge>;
     default:
       return <Badge variant="outline">{status}</Badge>;
   }
@@ -59,7 +61,7 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
   const [confirmBatch, setConfirmBatch] = useState<ImportBatch | null>(null);
   const { batches, isLoading, rollback, isRollingBack, rollingBackBatchId } = useImportBatches(organizationId);
 
-  const committedBatches = batches.filter(b => b.status === 'committed');
+  const committedBatches = batches.filter(b => b.status === 'completed');
 
   return (
     <>
@@ -126,7 +128,7 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
                         </div>
                       </div>
 
-                      {batch.status === 'committed' && (
+                      {batch.status === 'completed' && (
                         <Button
                           variant="ghost"
                           size="sm"

@@ -253,6 +253,25 @@ export class DeviceImportService {
       }
     }
 
+    // Security: validate all client-supplied athlete IDs belong to this organization.
+    // This prevents a coach from assigning measurements to athletes from a different org
+    // by supplying a foreign athleteId in the override map.
+    if (allAthleteIds.size > 0) {
+      const orgMembers = await db
+        .select({ userId: userOrganizations.userId })
+        .from(userOrganizations)
+        .where(and(
+          eq(userOrganizations.organizationId, organizationId),
+          inArray(userOrganizations.userId, [...allAthleteIds]),
+        ));
+      const orgMemberIds = new Set(orgMembers.map(m => m.userId));
+      for (const id of allAthleteIds) {
+        if (!orgMemberIds.has(id)) {
+          throw new Error(`Athlete ${id} does not belong to organization ${organizationId}`);
+        }
+      }
+    }
+
     // Bulk-fetch birth dates and metric units before opening the transaction
     const [userRows, metricRows] = await Promise.all([
       allAthleteIds.size > 0
@@ -286,7 +305,9 @@ export class DeviceImportService {
     const importedAthleteIds = new Set<string>();
     const recalcPairs = new Set<string>(); // "userId|metric" pairs
 
-    // Wrap all measurement operations in a single transaction for atomicity.
+    // Wrap all measurement operations in a single transaction so that either all succeed
+    // or all are rolled back together. Individual measurement insert failures are caught
+    // and counted as skipped (best-effort) rather than aborting the entire batch.
     // Measurements are inserted directly via tx (not via MeasurementService which uses its
     // own internal db.transaction and would be outside this transaction boundary).
     await db.transaction(async (tx) => {

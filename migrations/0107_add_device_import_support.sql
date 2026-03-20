@@ -1,4 +1,4 @@
--- Migration: 0024_add_device_import_support
+-- Migration: 0107_add_device_import_support
 -- Description: Add import_batches table and import tracking columns to measurements
 -- Date: 2026-03-06
 
