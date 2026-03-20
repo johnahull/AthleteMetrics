@@ -30,7 +30,7 @@ import { db } from "../db";
 import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
-import { parentalConsents } from "@shared/schema/tables/coppa";
+import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
@@ -1230,7 +1230,8 @@ export function registerReportRoutes(app: Express) {
 
       // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
       // from an org with COPPA enabled), public link access is never permitted.
-      // Authenticated users may still view the report in the app.
+      // Only authenticated users who belong to the report's org (or are a site_admin,
+      // or are a parent of an athlete in that org) may access the data.
       if (snapshot.publicAccessRestricted) {
         // Write audit log regardless of whether user is authenticated
         coppaService.writeCoppaAudit({
@@ -1242,11 +1243,54 @@ export function registerReportRoutes(app: Express) {
           console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
         });
 
-        if (!req.session?.user) {
+        const sessionUser = req.session?.user;
+        if (!sessionUser) {
           return res.status(403).json({
             code: 'minor_data_restricted',
             message: 'This report contains data for athletes under 13 and cannot be shared via public link.',
           });
+        }
+
+        // Site admins may always access restricted snapshots.
+        if (!sessionUser.isSiteAdmin) {
+          // Resolve the report's owning organization so we can check membership.
+          const [reportRow] = await db
+            .select({ organizationId: reports.organizationId })
+            .from(reports)
+            .where(eq(reports.id, snapshot.reportId))
+            .limit(1);
+
+          if (!reportRow) {
+            return res.status(403).json({
+              code: 'minor_data_restricted',
+              message: 'This report contains data for athletes under 13. Access is restricted.',
+            });
+          }
+
+          const orgId = reportRow.organizationId;
+          const userOrgs = await storage.getUserOrganizations(sessionUser.id);
+          const isMember = userOrgs.some((o) => o.organizationId === orgId);
+
+          if (!isMember) {
+            // Check if the authenticated user is a parent of an athlete in this org.
+            const [parentLink] = await db
+              .select({ id: parentAthleteLinks.id })
+              .from(parentAthleteLinks)
+              .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
+              .where(and(
+                eq(parentAthleteLinks.parentUserId, sessionUser.id),
+                eq(parentAthleteLinks.isActive, true),
+                eq(userOrganizations.organizationId, orgId),
+              ))
+              .limit(1);
+
+            if (!parentLink) {
+              return res.status(403).json({
+                code: 'minor_data_restricted',
+                message: 'This report contains data for athletes under 13. Access is restricted to organization members.',
+              });
+            }
+          }
         }
       }
 

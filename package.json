@@ -88,8 +88,7 @@
     "vite-plugin-pwa": "^1.1.0",
     "vitest": "^3.2.4",
     "workbox-precaching": "^7.3.0",
-    "workbox-window": "^7.3.0",
-    "better-sqlite3": "^12.5.0"
+    "workbox-window": "^7.3.0"
   },
   "overrides": {
     "esbuild": "^0.25.0",

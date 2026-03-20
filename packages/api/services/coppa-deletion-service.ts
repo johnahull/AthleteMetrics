@@ -26,7 +26,7 @@
  *   not lost via user FK cascade (athleteUserId → users.id onDelete: cascade)
  */
 
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../db';
 import { BaseService } from './base-service';
 import { EmailService } from './email-service';
@@ -311,15 +311,17 @@ export class CoppaDeletionService extends BaseService {
         }
 
         // STEP 8: Revoke parental consent records (NOT deleted — retained for audit)
-        const [updatedConsent] = await tx.update(parentalConsents)
+        // Update both 'confirmed' AND 'pending' consents so no record stays in an
+        // open state after the athlete's data is deleted.
+        const updatedConsents = await tx.update(parentalConsents)
           .set({ status: 'revoked', revokedAt: new Date() })
           .where(and(
             eq(parentalConsents.athleteUserId, athleteUserId),
-            eq(parentalConsents.status, 'confirmed'),
+            inArray(parentalConsents.status, ['confirmed', 'pending']),
           ))
           .returning({ id: parentalConsents.id });
-        if (updatedConsent) {
-          deletedCategories.push('parental_consent_revoked (retained for audit)');
+        if (updatedConsents.length > 0) {
+          deletedCategories.push(`parental_consent_revoked (${updatedConsents.length}, retained for audit)`);
         }
 
         // STEP 9: Write completion audit log BEFORE soft-deleting user.
