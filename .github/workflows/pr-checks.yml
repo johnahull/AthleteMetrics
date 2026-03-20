@@ -331,9 +331,9 @@ jobs:
           # npm workspace hoisting puts some packages in packages/*/node_modules/
           # when version conflicts exist. dist/index.js (esbuild external) resolves
           # from root node_modules only, so flatten nested deps into root.
+          # Only api and shared — web deps are frontend-only and not needed at runtime.
           cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true
           cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
-          cp -r packages/web/node_modules/* node_modules/ 2>/dev/null || true
 
       - name: Start server in background
         run: |

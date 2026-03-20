@@ -35,9 +35,9 @@ RUN npm prune --omit=dev
 # npm workspace hoisting puts some packages in packages/*/node_modules/ when there
 # are version conflicts. Since dist/index.js runs from /app/dist/, it can only find
 # packages in /app/node_modules/ (not packages/api/node_modules/). Copy them to root.
+# Only api and shared — web deps are frontend-only and not needed at runtime.
 RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null; \
     cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null; \
-    cp -r packages/web/node_modules/* node_modules/ 2>/dev/null; \
     true
 
 # Stage 2: Production stage
