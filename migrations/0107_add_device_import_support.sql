@@ -49,3 +49,5 @@ CREATE TABLE IF NOT EXISTS import_batches (
 CREATE INDEX IF NOT EXISTS import_batches_org_idx ON import_batches (organization_id);
 CREATE INDEX IF NOT EXISTS import_batches_status_idx ON import_batches (status);
 CREATE INDEX IF NOT EXISTS import_batches_created_at_idx ON import_batches (created_at);
+-- TTL cleanup index: supports periodic purge of expired pending rows and getBatches filter
+CREATE INDEX IF NOT EXISTS import_batches_expires_at_idx ON import_batches (expires_at);

@@ -17,7 +17,7 @@ import {
   siteMetrics,
   type Measurement,
 } from '@shared/schema';
-import { eq, and, inArray, isNull, sql, desc } from 'drizzle-orm';
+import { eq, and, inArray, isNull, sql, desc, ne, or, gt } from 'drizzle-orm';
 import { findBestAthleteMatch, type MatchingCriteria } from '../athlete-matching';
 import { DashrCsvParser } from './parsers/dashr-csv-parser';
 import { DerivedMetricCalculator } from './derived-metric-calculator';
@@ -302,7 +302,9 @@ export class DeviceImportService {
         importedAthleteIds.add(athleteId);
 
         for (const drill of previewAthlete.drills) {
-          const date = batch.sessionDate ?? new Date().toISOString().split('T')[0];
+          // Fall back to the batch creation date (upload time) rather than commit time,
+          // so the measurement date reflects when the data was uploaded, not when it was confirmed.
+          const date = batch.sessionDate ?? batch.createdAt.toISOString().split('T')[0];
 
           // Check for duplicates
           const existing = await tx
@@ -328,65 +330,62 @@ export class DeviceImportService {
             replaced++;
           }
 
-          // Insert measurement directly via tx — stays inside this transaction
-          try {
-            await tx.insert(measurements).values({
-              userId: athleteId,
-              submittedBy: committedBy,
-              metric: drill.metric,
-              value: String(drill.value),
-              date,
-              age: computeAge(athleteId, date),
-              units: unitMap.get(drill.metric) ?? drill.units ?? 'in',
-              eventId: batch.eventId ?? null,
-              organizationId,
-              importSource: batch.source,
-              importBatchId: batchId,
-              notes: `Imported from ${batch.fileName}`,
-              isCalculated: false,
-              isVerified: false,
-              teamContextAuto: false,
-              calculationMetadata: {
-                formula: 'direct_import',
-                sourceValues: {},
-                calculatedAt: new Date().toISOString(),
-                triggeredBy: {
-                  event: 'bulk_import',
-                  userId: committedBy,
-                },
+          // Insert measurement directly via tx — stays inside this transaction.
+          // No inner try/catch: any error here aborts the PostgreSQL transaction
+          // (the tx enters an error state and all subsequent statements fail), so we
+          // let it propagate and the outer db.transaction() will roll back atomically.
+          await tx.insert(measurements).values({
+            userId: athleteId,
+            submittedBy: committedBy,
+            metric: drill.metric,
+            value: String(drill.value),
+            date,
+            age: computeAge(athleteId, date),
+            units: unitMap.get(drill.metric) ?? drill.units ?? 'in',
+            eventId: batch.eventId ?? null,
+            organizationId,
+            importSource: batch.source,
+            importBatchId: batchId,
+            notes: `Imported from ${batch.fileName}`,
+            isCalculated: false,
+            isVerified: false,
+            teamContextAuto: false,
+            calculationMetadata: {
+              formula: 'direct_import',
+              sourceValues: {},
+              calculatedAt: new Date().toISOString(),
+              triggeredBy: {
+                event: 'bulk_import',
+                userId: committedBy,
               },
-            });
-            created++;
-            recalcPairs.add(`${athleteId}|${drill.metric}`);
+            },
+          });
+          created++;
+          recalcPairs.add(`${athleteId}|${drill.metric}`);
 
-            // Also insert split measurements inside the same transaction
-            if (drill.splits) {
-              for (const split of drill.splits) {
-                await tx.insert(measurements).values({
-                  userId: athleteId,
-                  submittedBy: committedBy,
-                  metric: split.metric,
-                  value: String(split.value),
-                  date,
-                  age: computeAge(athleteId, date),
-                  units: unitMap.get(split.metric) ?? split.units ?? 'in',
-                  eventId: batch.eventId ?? null,
-                  organizationId,
-                  importSource: batch.source,
-                  importBatchId: batchId,
-                  notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
-                  isCalculated: false,
-                  isVerified: false,
-                  teamContextAuto: false,
-                });
-                created++;
-                recalcPairs.add(`${athleteId}|${split.metric}`);
-              }
+          // Also insert split measurements inside the same transaction
+          if (drill.splits) {
+            for (const split of drill.splits) {
+              await tx.insert(measurements).values({
+                userId: athleteId,
+                submittedBy: committedBy,
+                metric: split.metric,
+                value: String(split.value),
+                date,
+                age: computeAge(athleteId, date),
+                units: unitMap.get(split.metric) ?? split.units ?? 'in',
+                eventId: batch.eventId ?? null,
+                organizationId,
+                importSource: batch.source,
+                importBatchId: batchId,
+                notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
+                isCalculated: false,
+                isVerified: false,
+                teamContextAuto: false,
+              });
+              created++;
+              recalcPairs.add(`${athleteId}|${split.metric}`);
             }
-          } catch (err: any) {
-            // Log but continue — don't fail the whole batch for one measurement
-            console.error(`Failed to insert measurement for ${previewAthlete.csvName} ${drill.metric}:`, err.message);
-            skipped++;
           }
         }
       }
@@ -512,7 +511,14 @@ export class DeviceImportService {
         committedAt: importBatches.committedAt,
       })
       .from(importBatches)
-      .where(eq(importBatches.organizationId, organizationId))
+      .where(and(
+        eq(importBatches.organizationId, organizationId),
+        // Exclude pending batches whose TTL has elapsed — they are unusable stale entries
+        or(
+          ne(importBatches.status, 'pending'),
+          gt(importBatches.expiresAt, sql`NOW()`),
+        ),
+      ))
       .orderBy(desc(importBatches.createdAt))
       .limit(50);
 
