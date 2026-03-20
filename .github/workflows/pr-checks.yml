@@ -332,6 +332,7 @@ jobs:
           # when version conflicts exist. dist/index.js (esbuild external) resolves
           # from root node_modules only, so flatten nested deps into root.
           # Only api and shared — web deps are frontend-only and not needed at runtime.
+          # Workspace versions intentionally overwrite root — they're what the package tested against.
           cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true
           cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
 

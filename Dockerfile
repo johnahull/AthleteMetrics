@@ -36,6 +36,8 @@ RUN npm prune --omit=dev
 # are version conflicts. Since dist/index.js runs from /app/dist/, it can only find
 # packages in /app/node_modules/ (not packages/api/node_modules/). Copy them to root.
 # Only api and shared — web deps are frontend-only and not needed at runtime.
+# Note: workspace versions intentionally overwrite root-hoisted versions. This is safe
+# because the workspace version is what the package's own code was tested against.
 RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null; \
     cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null; \
     true
