@@ -160,19 +160,20 @@ jobs:
           echo "Trigger create: $RESULT"
 
           # Distinguish "trigger already exists" (benign) from real API errors.
-          # GraphQL errors have an "errors" key; a benign duplicate returns null data without errors.
-          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
-            echo "::error::deploymentTriggerCreate failed: $RESULT"
-            exit 1
-          fi
-
+          # Railway returns a GraphQL error for duplicates: "Only a single deployment
+          # trigger is allowed per (environment, service) pair" — treat this as benign.
           TRIGGER_ID=$(echo "$RESULT" | jq -r '.data.deploymentTriggerCreate.id // empty')
-          if [ -z "$TRIGGER_ID" ]; then
+          HAS_ERRORS=$(echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1 && echo "true" || echo "false")
+
+          if [ -n "$TRIGGER_ID" ]; then
+            echo "Deployment trigger created (id: $TRIGGER_ID) for branch $BRANCH"
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          elif [ "$HAS_ERRORS" = "true" ] && echo "$RESULT" | jq -r '.errors[0].message' | grep -q "single deployment trigger"; then
             echo "Trigger already exists (reused environment) — Railway auto-deploys on push"
             echo "is_new=false" >> "$GITHUB_OUTPUT"
           else
-            echo "Deployment trigger created (id: $TRIGGER_ID) for branch $BRANCH"
-            echo "is_new=true" >> "$GITHUB_OUTPUT"
+            echo "::error::deploymentTriggerCreate failed: $RESULT"
+            exit 1
           fi
 
       - name: Trigger deployment
