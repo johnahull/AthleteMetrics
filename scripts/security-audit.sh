@@ -11,6 +11,8 @@ set -e
 #   AthleteMetrics uses glob programmatically through tailwindcss/sucrase,
 #   never as a CLI tool. No upstream fix available.
 #   Dependency chain: tailwindcss → sucrase → glob
+# - GHSA-mmgp-wc2j-qcv7 (@anthropic-ai/claude-code workspace trust bypass)
+#   Dev-only CLI tool, not shipped in production. Does not affect app security.
 
 echo "🔍 Running npm security audit..."
 
@@ -22,7 +24,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2"
+EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
@@ -69,7 +71,7 @@ if command -v jq &> /dev/null; then
     echo ""
     echo "📋 Excluded false positives:"
     for advisory in $EXCLUDED_ADVISORIES; do
-      echo "  - $advisory (glob CLI vulnerability - not exploitable in programmatic usage)"
+      echo "  - $advisory (excluded — see script header for rationale)"
     done
   fi
 

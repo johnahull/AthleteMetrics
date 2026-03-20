@@ -124,20 +124,22 @@ jobs:
           fi
 
       - name: Connect source repo and create deployment trigger
+        id: trigger
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
         run: |
           set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
-          BRANCH="${{ github.head_ref }}"
 
           # The testing service has no GitHub repo connected (deployed via railway up).
           # Connect the source repo and create a deployment trigger for the PR branch.
 
           # Step 1: Connect the service instance to the GitHub repo
           PAYLOAD=$(jq -n \
-            --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
-            '{query: "mutation { serviceInstanceUpdate(environmentId: \"\($eid)\", input: { source: { repo: \"johnahull/AthleteMetrics\" } }, serviceId: \"\($sid)\") }"}')
+            --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg repo "$REPO" \
+            '{query: "mutation { serviceInstanceUpdate(environmentId: \"\($eid)\", input: { source: { repo: \"\($repo)\" } }, serviceId: \"\($sid)\") }"}')
           RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
@@ -145,20 +147,34 @@ jobs:
           echo "Source update: $RESULT"
 
           # Step 2: Create a deployment trigger for the PR branch
+          # If the trigger already exists (reused environment), this returns null
+          # and Railway's auto-deploy webhook handles subsequent pushes.
           PAYLOAD=$(jq -n \
-            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg branch "$BRANCH" \
-            '{query: "mutation { deploymentTriggerCreate(input: { branch: \"\($branch)\", projectId: \"\($pid)\", environmentId: \"\($eid)\", provider: \"github\", repository: \"johnahull/AthleteMetrics\", serviceId: \"\($sid)\" }) { id } }"}')
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            --arg branch "$BRANCH" --arg repo "$REPO" \
+            '{query: "mutation { deploymentTriggerCreate(input: { branch: \"\($branch)\", projectId: \"\($pid)\", environmentId: \"\($eid)\", provider: \"github\", repository: \"\($repo)\", serviceId: \"\($sid)\" }) { id } }"}')
           RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "$PAYLOAD")
           echo "Trigger create: $RESULT"
 
+          # If the trigger was created, use it. Otherwise assume it already exists
+          # (reused environment) and let Railway's auto-deploy webhook handle it.
+          # We warn on errors rather than hard-failing because the trigger already
+          # existing is the most common error, and auto-deploy covers it regardless
+          # of the exact error message Railway returns.
           TRIGGER_ID=$(echo "$RESULT" | jq -r '.data.deploymentTriggerCreate.id // empty')
-          if [ -z "$TRIGGER_ID" ]; then
-            echo "::warning::Could not create trigger (may already exist): $RESULT"
-          else
+
+          if [ -n "$TRIGGER_ID" ]; then
             echo "Deployment trigger created (id: $TRIGGER_ID) for branch $BRANCH"
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          else
+            if echo "$RESULT" | jq -e '(.errors // []) | length > 0' > /dev/null 2>&1; then
+              echo "::warning::deploymentTriggerCreate returned error (likely duplicate): $RESULT"
+            fi
+            echo "Trigger already exists — Railway auto-deploys on push"
+            echo "is_new=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Trigger deployment
@@ -169,26 +185,32 @@ jobs:
           set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          # Fire all deployment triggers for this environment
-          PAYLOAD=$(jq -n \
-            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
-            '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
-          RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "$PAYLOAD")
+          # Only call environmentTriggersDeploy for newly created triggers.
+          # For existing triggers, Railway's auto-deploy webhook already fired
+          # when GitHub pushed — calling this again would create a duplicate build.
+          if [ "${{ steps.trigger.outputs.is_new }}" = "true" ]; then
+            echo "New trigger — firing explicit deploy..."
+            PAYLOAD=$(jq -n \
+              --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+              '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
+            RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$PAYLOAD")
 
-          echo "Deploy API response: $RESULT"
-          SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
-          if [ "$SUCCESS" != "true" ]; then
-            echo "::error::Failed to trigger deployment: $RESULT"
-            exit 1
+            echo "Deploy API response: $RESULT"
+            SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
+            if [ "$SUCCESS" != "true" ]; then
+              echo "::error::Failed to trigger deployment: $RESULT"
+              exit 1
+            fi
+          else
+            echo "Existing trigger — skipping explicit deploy (auto-deploy handles it)"
           fi
 
-          echo "Deployment triggered for environment $ENV_ID"
-
-          # Verify deployment was actually created (allow up to 30s)
-          for i in 1 2 3; do
+          # Verify deployment was actually created (allow up to 60s)
+          DEPLOY_STATUS="NONE"
+          for i in 1 2 3 4 5 6; do
             sleep 10
             CHECK=$(curl -s -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
