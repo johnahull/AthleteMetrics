@@ -161,7 +161,7 @@ jobs:
             echo "Deployment trigger created (id: $TRIGGER_ID) for branch $BRANCH"
           fi
 
-      - name: Wait for deployment
+      - name: Trigger deployment
         id: deploy
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -169,8 +169,24 @@ jobs:
           set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          # deploymentTriggerCreate (previous step) already starts a build.
-          # Just verify the deployment was created (allow up to 30s).
+          # deploymentTriggerCreate only registers a webhook — it does not start
+          # a build. Fire all triggers explicitly to kick off the first deployment.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
+          RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
+
+          echo "Deploy API response: $RESULT"
+          SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
+          if [ "$SUCCESS" != "true" ]; then
+            echo "::error::Failed to trigger deployment: $RESULT"
+            exit 1
+          fi
+
+          # Verify deployment was actually created (allow up to 30s)
           DEPLOY_STATUS="NONE"
           for i in 1 2 3; do
             sleep 10
