@@ -41,9 +41,8 @@ RUN npm prune --omit=dev
 # Note: glob * skips dotfile entries (e.g. .bin/, .cache/). Currently no
 # dotfile dirs exist in workspace node_modules, but if one appears, verify
 # it isn't needed at runtime before relying on this glob.
-RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null; \
-    cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null; \
-    true
+RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true && \
+    cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
 
 # Stage 2: Production stage
 FROM node:20-alpine

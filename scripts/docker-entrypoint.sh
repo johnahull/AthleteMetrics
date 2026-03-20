@@ -23,7 +23,7 @@ else
   if node scripts/run-migrations.js; then
     echo "[startup] drizzle migrations complete"
   else
-    # $? holds the exit code of the failed `node scripts/run-migrations.js` command
+    # non-zero exit from 'node scripts/run-migrations.js' means migration failed
     echo "[startup] WARN: drizzle migrations failed (exit $?) - continuing anyway"
   fi
 
@@ -31,7 +31,7 @@ else
   if node scripts/apply-manual-migrations.js; then
     echo "[startup] manual migrations complete"
   else
-    # $? holds the exit code of the failed `node scripts/apply-manual-migrations.js` command
+    # non-zero exit from 'node scripts/apply-manual-migrations.js' means migration failed
     echo "[startup] WARN: manual migrations failed (exit $?) - continuing anyway"
   fi
 fi
