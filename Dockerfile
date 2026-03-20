@@ -38,8 +38,9 @@ RUN npm prune --omit=dev
 # Only api and shared — web deps are frontend-only and not needed at runtime.
 # Note: workspace versions intentionally overwrite root-hoisted versions. This is safe
 # because the workspace version is what the package's own code was tested against.
-# Note: shell glob * excludes dotfiles (.bin/) which is intentional —
-# no workspace CLI shims are needed at runtime, only importable packages.
+# Note: glob * skips dotfile entries (e.g. .bin/, .cache/). Currently no
+# dotfile dirs exist in workspace node_modules, but if one appears, verify
+# it isn't needed at runtime before relying on this glob.
 RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null; \
     cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null; \
     true
