@@ -35,8 +35,8 @@ test.describe('Device Import — Standalone Flow', () => {
     // Navigate to dashboard to see sidebar
     await navigateTo(page, '/dashboard');
 
-    // Look for Device Import nav link
-    const navLink = page.locator('nav a:has-text("Device Import"), [role="navigation"] a:has-text("Device Import")');
+    // Look for Device Import nav link (uses data-testid from NavigationMenu component)
+    const navLink = page.locator('[data-testid="nav-device-import"]');
     await expect(navLink.first()).toBeVisible({ timeout: 10000 });
   });
 

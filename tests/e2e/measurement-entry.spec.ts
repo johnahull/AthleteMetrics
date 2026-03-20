@@ -141,10 +141,11 @@ test.describe('Measurement Entry Tests', () => {
     });
 
     // Wait for validation error to appear
-    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 3000 });
+    const measErrorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/required|must|invalid/i'));
+    await measErrorLocator.first().waitFor({ timeout: 3000 });
 
     // Should show validation error
-    const validationError = await page.locator('.error, [role="alert"], text=/required|must|invalid/i').count();
+    const validationError = await measErrorLocator.count();
     expect(validationError).toBeGreaterThan(0);
   });
 

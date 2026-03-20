@@ -160,14 +160,15 @@ test.describe('[ENTITY] CRUD Tests', () => {
     await page.click('button[type="submit"]:has-text("Save"), button:has-text("Add [ENTITY]")');
 
     // Wait for validation errors to appear
-    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i');
+    const crudErrorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/required|must|invalid/i'));
+    await crudErrorLocator.first().waitFor({ timeout: 5000 });
 
     // Should still be on the form (modal visible)
     const modalVisible = await page.locator('[role="dialog"]').count();
     expect(modalVisible).toBeGreaterThan(0);
 
     // Should show validation error messages
-    const errorMessages = await page.locator('.error, [role="alert"], text=/required|must|invalid/i').count();
+    const errorMessages = await crudErrorLocator.count();
     expect(errorMessages).toBeGreaterThan(0);
   });
 

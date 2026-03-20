@@ -370,10 +370,11 @@ test.describe('Batch Measurement Entry Tests', () => {
     await saveButton.click();
 
     // Wait for validation errors
-    await page.waitForSelector('.error, [role="alert"], text=/required|invalid|must/i', { timeout: 5000 });
+    const batchErrorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/required|invalid|must/i'));
+    await batchErrorLocator.first().waitFor({ timeout: 5000 });
 
     // Should show validation errors
-    const errors = await page.locator('.error, [role="alert"], text=/required|invalid|must/i').count();
+    const errors = await batchErrorLocator.count();
     expect(errors).toBeGreaterThan(0);
   });
 
