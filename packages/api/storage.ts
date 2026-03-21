@@ -27,9 +27,10 @@ import {
   type EventMetric, type InsertEventMetric,
   insertUserSchema,
   type OrganizationType,
-  type InsertOAuthUser
+  type InsertOAuthUser,
+  securityEvents,
+  type SecurityEvent,
 } from "@shared/schema";
-import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";

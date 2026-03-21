@@ -556,7 +556,7 @@ export const sessions = pgTable("session", {
 // Email verification tokens
 export const emailVerificationTokens = pgTable("email_verification_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   email: text("email").notNull(),
   token: text("token").notNull().unique(),
   isUsed: boolean("is_used").default(false).notNull(),

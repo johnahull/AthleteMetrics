@@ -5,7 +5,7 @@ import session from 'express-session';
 import { registerAdminSecurityRoutes } from '../admin-security-routes';
 import { db } from '../../db';
 import { users, organizations } from '@shared/schema';
-import { securityEvents } from '@shared/enhanced-auth-schema';
+import { securityEvents } from '@shared/schema';
 import { eq, gte, sql } from 'drizzle-orm';
 
 /**

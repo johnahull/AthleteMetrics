@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { SecurityMetricsService } from '../security-metrics-service';
 import { db } from '../../db';
 import { users, organizations } from '@shared/schema';
-import { securityEvents } from '@shared/enhanced-auth-schema';
+import { securityEvents } from '@shared/schema';
 import { eq, or, isNull, gte, sql } from 'drizzle-orm';
 
 /**

@@ -63,6 +63,7 @@ export type MembershipRequest = typeof tables.membershipRequests.$inferSelect;
 
 export type AuditLog = typeof tables.auditLogs.$inferSelect;
 export type EmailVerificationToken = typeof tables.emailVerificationTokens.$inferSelect;
+export type SecurityEvent = typeof tables.securityEvents.$inferSelect;
 
 // ============================================================================
 // Settings Tables

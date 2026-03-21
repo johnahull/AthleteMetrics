@@ -32,6 +32,7 @@ const {
   sessions,
   emailVerificationTokens,
   accountLinkingTokens,
+  securityEvents,
   siteSettings,
   reports,
   reportSnapshots,
@@ -232,6 +233,13 @@ export const measurementsRelations = relations(measurements, ({ one }) => ({
 export const emailVerificationTokensRelations = relations(emailVerificationTokens, ({ one }) => ({
   user: one(users, {
     fields: [emailVerificationTokens.userId],
+    references: [users.id],
+  }),
+}));
+
+export const securityEventsRelations = relations(securityEvents, ({ one }) => ({
+  user: one(users, {
+    fields: [securityEvents.userId],
     references: [users.id],
   }),
 }));

@@ -53,7 +53,7 @@ export const sessions = pgTable("session", {
 
 export const emailVerificationTokens = pgTable("email_verification_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   email: text("email").notNull(),
   token: text("token").notNull().unique(),
   isUsed: boolean("is_used").default(false).notNull(),
@@ -63,6 +63,17 @@ export const emailVerificationTokens = pgTable("email_verification_tokens", {
   // Index for efficient token lookup
   tokenIdx: sql`CREATE INDEX IF NOT EXISTS email_verification_tokens_token_idx ON ${table} (${table.token})`,
 }));
+
+export const securityEvents = pgTable("security_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: 'set null' }),
+  eventType: text("event_type").notNull(),
+  eventData: text("event_data"),
+  ipAddress: text("ip_address").notNull(),
+  userAgent: text("user_agent"),
+  severity: text("severity").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
 export const accountLinkingTokens = pgTable("account_linking_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

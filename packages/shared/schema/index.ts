@@ -33,7 +33,7 @@ export type {
   // Membership
   UserOrganization, Invitation, MembershipRequest,
   // Auth
-  AuditLog, EmailVerificationToken,
+  AuditLog, EmailVerificationToken, SecurityEvent,
   // Settings
   SiteSettings,
   // Reports

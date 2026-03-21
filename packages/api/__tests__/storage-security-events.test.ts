@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { storage } from '../storage';
 import { db } from '../db';
-import { securityEvents } from '@shared/enhanced-auth-schema';
+import { securityEvents } from '@shared/schema';
 import { eq, desc, isNotNull, sql } from 'drizzle-orm';
 
 /**

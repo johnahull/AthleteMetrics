@@ -4,7 +4,7 @@
  */
 
 import { db } from '../db';
-import { securityEvents } from '@shared/enhanced-auth-schema';
+import { securityEvents } from '@shared/schema';
 import { eq, gte, and, count, desc } from 'drizzle-orm';
 
 /**
