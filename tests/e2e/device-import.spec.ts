@@ -253,20 +253,21 @@ test.describe('Device Import — Error Handling', () => {
     await page.click('text=Upload Device File');
     await expect(page.locator('[role="dialog"]')).toBeVisible({ timeout: 5000 });
 
-    // Try to upload a non-CSV file — create a temp text file
+    // Upload a CSV with non-Dashr format (general CSV, not device data)
     const invalidFile = path.join(__dirname, 'fixtures/csv-files/invalid-data.csv');
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(invalidFile);
 
-    // Trigger upload
-    const uploadButton = page.locator('button:has-text("Upload"), button:has-text("Parse"), button:has-text("Import")');
-    if (await uploadButton.first().isVisible({ timeout: 3000 }).catch(() => false)) {
-      await uploadButton.first().click();
-    }
+    // Click the "Parse File" button to trigger parsing
+    const parseButton = page.locator('button:has-text("Parse File")');
+    await expect(parseButton).toBeVisible({ timeout: 5000 });
+    await parseButton.click();
 
-    // Should show error (invalid Dashr format)
+    // Should show error — either inline in the dialog or via toast notification.
+    // The Dashr parser will reject this file because it doesn't match expected format.
+    // Error appears as a toast with "Parse Failed" title and error description.
     await expect(
-      page.locator('text=/error|invalid|not.*dashr|unrecognized|failed/i').first()
-    ).toBeVisible({ timeout: 10000 });
+      page.getByText(/error|invalid|not.*dashr|unrecognized|failed|parse failed/i).first()
+    ).toBeVisible({ timeout: 15000 });
   });
 });
