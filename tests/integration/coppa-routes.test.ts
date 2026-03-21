@@ -954,10 +954,22 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
       publicAccessRestricted: false,
       createdBy: siteAdminUserId,
     });
+
+    // Add orgAdmin to testOrg so the non-admin auth test can pass the org-membership check
+    await db.insert(userOrganizations).values({
+      userId: orgAdminId,
+      organizationId: testOrgId,
+      role: 'org_admin',
+    });
   });
 
   afterAll(async () => {
-    // Clean up in reverse FK order: snapshots → report → org
+    // Clean up in reverse FK order: membership → snapshots → report → org
+    try {
+      await db.delete(userOrganizations).where(
+        and(eq(userOrganizations.userId, orgAdminId), eq(userOrganizations.organizationId, testOrgId))
+      );
+    } catch { /* best-effort */ }
     try {
       await db.delete(reportSnapshots).where(eq(reportSnapshots.publicToken, restrictedToken));
       await db.delete(reportSnapshots).where(eq(reportSnapshots.publicToken, unrestrictedToken));
@@ -986,11 +998,11 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
     expect(res.status).toBe(200);
   });
 
-  // NTH-9: Non-admin authenticated user can also access a restricted snapshot
+  // NTH-9: Non-admin authenticated user who belongs to the report's org can access a restricted snapshot
   it('restricted snapshot with non-admin authenticated user → 200', async () => {
-    // orgAdminCookie is an authenticated user who is NOT a site admin.
-    // Any authenticated session should be allowed through — the restriction
-    // only blocks completely unauthenticated (anonymous) requests.
+    // orgAdminCookie is an authenticated user who is NOT a site admin but IS
+    // a member of the report's organization. The COPPA restriction blocks
+    // unauthenticated requests and authenticated users outside the org.
     const res = await request(app)
       .get(`/api/public/reports/${restrictedToken}`)
       .set('Cookie', orgAdminCookie);
