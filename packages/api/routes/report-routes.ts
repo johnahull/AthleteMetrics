@@ -21,7 +21,6 @@ import {
   teams,
   auditLogs,
   userOrganizations,
-  siteMetrics,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
@@ -49,7 +48,6 @@ interface IndividualReportConfig {
     customEnd?: string;
   };
   metrics: string[];
-  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[];
     custom?: string[];
@@ -69,7 +67,6 @@ interface TeamReportConfig {
     customEnd?: string;
   };
   metrics: string[];
-  audience?: 'coach' | 'athlete' | 'parent';
   filters?: {
     teamIds?: string[];
     gender?: string;
@@ -1276,8 +1273,13 @@ export function registerReportRoutes(app: Express) {
           );
         }
 
+        // Fetch organization branding
+        const org = report.organizationId
+          ? await db.select().from(organizations).where(eq(organizations.id, report.organizationId)).limit(1).then((rows) => rows[0])
+          : undefined;
+
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1332,8 +1334,13 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // Fetch organization branding
+        const org = report.organizationId
+          ? await db.select().from(organizations).where(eq(organizations.id, report.organizationId)).limit(1).then((rows) => rows[0])
+          : undefined;
+
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -3340,51 +3347,182 @@ function sanitizeFilename(filename: string): string {
 /**
  * Add footer to all pages in the PDF
  */
-function addFooterToAllPages(doc: jsPDF): void {
+/**
+ * Parse hex color string to RGB tuple
+ */
+function hexToRgb(hex: string): [number, number, number] {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return [r, g, b];
+}
+
+function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
   const pageCount = doc.getNumberOfPages();
 
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
-    doc.setTextColor(128, 128, 128); // Gray color
+    doc.setTextColor(128, 128, 128);
 
-    // Add footer text centered at bottom of page
     const pageWidth = doc.internal.pageSize.getWidth();
-    const footerText = 'athletemetrics.io';
-    const textWidth = doc.getTextWidth(footerText);
-    const xPosition = (pageWidth - textWidth) / 2;
 
-    doc.text(footerText, xPosition, 287); // 287 is near bottom of A4 page (297mm height)
+    // Left-aligned: org branding or default
+    const footerText = orgName
+      ? `${orgName} | Powered by AthleteMetrics`
+      : 'athletemetrics.io';
+    doc.text(footerText, 14, 287);
+
+    // Right-aligned: page numbers
+    const pageText = `Page ${i} of ${pageCount}`;
+    const pageTextWidth = doc.getTextWidth(pageText);
+    doc.text(pageText, pageWidth - 14 - pageTextWidth, 287);
   }
 }
 
 /**
  * Generate PDF document from report data
  */
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified'): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: any): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
-  // Color schemes
+  // Color schemes — use org branding colors if available
   const colors = {
-    primary: (isVisual ? [41, 128, 185] : [70, 70, 70]) as [number, number, number],
-    secondary: (isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
+    primary: (org?.brandPrimaryColor ? hexToRgb(org.brandPrimaryColor) : isVisual ? [41, 128, 185] : [70, 70, 70]) as [number, number, number],
+    secondary: (org?.brandSecondaryColor ? hexToRgb(org.brandSecondaryColor) : isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
     accent: (isVisual ? [46, 204, 113] : [120, 120, 120]) as [number, number, number],
     text: [40, 40, 40] as [number, number, number],
   };
 
-  // Add title
-  doc.setFontSize(20);
-  if (isVisual) {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+
+  // --- Cover page for individual reports ---
+  if (reportData.reportType !== 'team') {
+    const athlete = reportData.athlete;
+
+    // Try to embed org logo if available
+    if (org?.brandLogoUrl) {
+      try {
+        const response = await fetch(org.brandLogoUrl);
+        if (response.ok) {
+          const arrayBuffer = await response.arrayBuffer();
+          const base64 = Buffer.from(arrayBuffer).toString('base64');
+          const contentType = response.headers.get('content-type') || 'image/png';
+          const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
+          // Center logo on cover page, max 60mm wide x 40mm tall
+          doc.addImage(`data:${contentType};base64,${base64}`, ext, (pageWidth - 60) / 2, 50, 60, 40);
+        }
+      } catch {
+        // Logo fetch failed — continue without it
+      }
+    }
+
+    // Cover page text
+    const coverY = org?.brandLogoUrl ? 110 : 80;
+
+    if (org?.name) {
+      doc.setFontSize(16);
+      doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      const orgNameWidth = doc.getTextWidth(org.name);
+      doc.text(org.name, (pageWidth - orgNameWidth) / 2, coverY);
+    }
+
+    doc.setFontSize(24);
     doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    const titleText = 'Performance Assessment Report';
+    const titleWidth = doc.getTextWidth(titleText);
+    doc.text(titleText, (pageWidth - titleWidth) / 2, coverY + 20);
+
+    doc.setFontSize(20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    const athleteName = athlete?.userName || 'Athlete';
+    const nameWidth = doc.getTextWidth(athleteName);
+    doc.text(athleteName, (pageWidth - nameWidth) / 2, coverY + 40);
+
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    const dateStr = new Date(reportData.generatedAt).toLocaleDateString();
+    const dateWidth = doc.getTextWidth(dateStr);
+    doc.text(dateStr, (pageWidth - dateWidth) / 2, coverY + 55);
+
+    if (org?.brandTagline) {
+      doc.setFontSize(12);
+      doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+      const taglineWidth = doc.getTextWidth(org.brandTagline);
+      doc.text(org.brandTagline, (pageWidth - taglineWidth) / 2, coverY + 70);
+    }
+
+    // Start report content on next page
+    doc.addPage();
   }
-  doc.text(report.name, 14, 20);
-  doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+  // --- Header with optional logo and branding ---
+  let headerY = 20;
+
+  if (org?.brandLogoUrl && reportData.reportType === 'team') {
+    try {
+      const response = await fetch(org.brandLogoUrl);
+      if (response.ok) {
+        const arrayBuffer = await response.arrayBuffer();
+        const base64 = Buffer.from(arrayBuffer).toString('base64');
+        const contentType = response.headers.get('content-type') || 'image/png';
+        const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
+        // Left-aligned logo, 30mm wide x 20mm tall
+        doc.addImage(`data:${contentType};base64,${base64}`, ext, 14, 10, 30, 20);
+        // Title right-aligned next to logo
+        doc.setFontSize(20);
+        if (isVisual || org?.brandPrimaryColor) {
+          doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+        }
+        doc.text(report.name, 50, 20);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+        if (org?.brandTagline) {
+          doc.setFontSize(10);
+          doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+          doc.text(org.brandTagline, 50, 27);
+          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+          headerY = 35;
+        } else {
+          headerY = 32;
+        }
+      } else {
+        throw new Error('Logo fetch failed');
+      }
+    } catch {
+      // Fallback to standard header
+      doc.setFontSize(20);
+      if (isVisual || org?.brandPrimaryColor) {
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      }
+      doc.text(report.name, 14, 20);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    }
+  } else {
+    // Standard header (no logo)
+    doc.setFontSize(20);
+    if (isVisual || org?.brandPrimaryColor) {
+      doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    }
+    doc.text(report.name, 14, 20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+    if (org?.brandTagline && reportData.reportType === 'team') {
+      doc.setFontSize(10);
+      doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+      doc.text(org.brandTagline, 14, 27);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      headerY = 33;
+    }
+  }
 
   // Add description
   if (report.description) {
     doc.setFontSize(12);
-    doc.text(report.description, 14, 30);
+    doc.text(report.description, 14, headerY + 3);
+    headerY += 10;
   }
 
   // Add generation timestamp
@@ -3392,10 +3530,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   doc.text(
     `Generated: ${new Date(reportData.generatedAt).toLocaleString()}`,
     14,
-    40
+    headerY + 3
   );
 
-  let yPos = 50;
+  let yPos = headerY + 13;
 
   if (reportData.reportType === 'team') {
     // TEAM REPORT SECTIONS
@@ -3740,7 +3878,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   }
 
   // Add footer to all pages
-  addFooterToAllPages(doc);
+  addFooterToAllPages(doc, org?.name);
 
   return doc;
 }
@@ -3972,17 +4110,6 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
 
       // Team report metrics (limited to MAX_METRICS)
       const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
-
-      // Batch query metricType for all codes to avoid N+1 DB queries
-      const teamMetricCodes = statsToProcess.map(s => s.metric);
-      const teamMetricTypes = teamMetricCodes.length > 0
-        ? await db
-            .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
-            .from(siteMetrics)
-            .where(inArray(siteMetrics.code, teamMetricCodes))
-        : [];
-      const teamLowerIsBetterMap = new Map(teamMetricTypes.map(m => [m.code, m.metricType === 'lower_is_better']));
-
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
         const values: number[] = [];
@@ -4002,7 +4129,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
           label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
           values: limitedValues,
           unit: stat.units || "",
-          lowerIsBetter: teamLowerIsBetterMap.get(metricCode) ?? false,
+          lowerIsBetter: isMetricLowerBetter(metricCode),
         });
       }
     } else if (report.reportType === 'individual' && typedReportData.athlete) {
@@ -4010,26 +4137,14 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       const athlete = typedReportData.athlete;
       if (athlete.measurements) {
         const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
-
-        // Batch query unit and metricType for all codes to avoid N+1 DB queries
-        const individualMetricCodes = entries.filter(([, v]) => typeof v === 'number').map(([code]) => code);
-        const individualMetricInfo = individualMetricCodes.length > 0
-          ? await db
-              .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType })
-              .from(siteMetrics)
-              .where(inArray(siteMetrics.code, individualMetricCodes))
-          : [];
-        const individualUnitMap = new Map(individualMetricInfo.map(m => [m.code, m.unit || '']));
-        const individualLowerIsBetterMap = new Map(individualMetricInfo.map(m => [m.code, m.metricType === 'lower_is_better']));
-
         for (const [metricCode, value] of entries) {
           if (typeof value === 'number') {
             metrics.push({
               code: metricCode,
               label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
               values: [value],
-              unit: individualUnitMap.get(metricCode) || '',
-              lowerIsBetter: individualLowerIsBetterMap.get(metricCode) ?? false,
+              unit: getMetricUnit(metricCode),
+              lowerIsBetter: isMetricLowerBetter(metricCode),
               percentile: athlete.percentiles?.[metricCode],
               teamAverage: athlete.teamAverages?.[metricCode],
             });
@@ -4097,16 +4212,6 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       }
     }
 
-    // Extract and validate audience from report config
-    // athlete/parent audiences only apply to individual reports — team reports always use coach
-    const VALID_AUDIENCES = ['coach', 'athlete', 'parent'] as const;
-    const rawAudience = reportConfig?.audience;
-    const audience = report.reportType === 'team'
-      ? 'coach' as const
-      : VALID_AUDIENCES.includes(rawAudience as typeof VALID_AUDIENCES[number])
-        ? (rawAudience as typeof VALID_AUDIENCES[number])
-        : undefined;
-
     // Build final ReportData object
     const aiReportData: import("../services/ai-insights-service").ReportData = {
       reportType: report.reportType as "individual" | "team",
@@ -4117,7 +4222,6 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       improvements,
       concerns,
       benchmarkComparisons,
-      audience,
     };
 
     // Add team-specific data
