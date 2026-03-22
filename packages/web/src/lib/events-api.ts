@@ -1655,3 +1655,76 @@ export function useExportEventReportPDF() {
     }) => exportEventReportPDF(reportId, athleteId),
   });
 }
+
+// ============================================================================
+// Event Finalization API
+// ============================================================================
+
+export interface FinalizeProgress {
+  status: 'processing' | 'completed' | 'failed' | 'not_started';
+  reportsGenerated: number;
+  reportsSent: number;
+  totalAthletes: number;
+  error?: string;
+}
+
+/**
+ * Finalize an event (triggers background report generation + sharing)
+ */
+export async function finalizeEventApi(eventId: string): Promise<{ status: string; eventId: string }> {
+  const response = await fetch(`/api/events/${eventId}/finalize`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to finalize event');
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/**
+ * Check finalization progress
+ */
+export async function fetchFinalizeStatus(eventId: string): Promise<FinalizeProgress> {
+  const response = await fetch(`/api/events/${eventId}/finalize-status`);
+  if (!response.ok) {
+    const message = await getErrorMessage(response, 'Failed to get finalization status');
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+/**
+ * Hook to finalize an event
+ */
+export function useFinalizeEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (eventId: string) => finalizeEventApi(eventId),
+    onSuccess: (_, eventId) => {
+      queryClient.invalidateQueries({ queryKey: ['events'] });
+      queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+    },
+  });
+}
+
+/**
+ * Hook to poll finalization status
+ */
+export function useFinalizeStatus(eventId: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ['events', eventId, 'finalize-status'],
+    queryFn: () => fetchFinalizeStatus(eventId!),
+    enabled: !!eventId && enabled,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      // Stop polling when completed or failed
+      if (data?.status === 'completed' || data?.status === 'failed' || data?.status === 'not_started') {
+        return false;
+      }
+      return 2000; // Poll every 2 seconds while processing
+    },
+  });
+}

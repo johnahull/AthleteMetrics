@@ -42,6 +42,10 @@ function createMockEvent(overrides: Partial<EventWithCounts> = {}): EventWithCou
     frozenAt: null,
     frozenBy: null,
     frozenReason: null,
+    autoShareReports: false,
+    autoShareReportTemplateId: null,
+    autoShareMessage: null,
+    finalizedAt: null,
     ...overrides,
   };
 }

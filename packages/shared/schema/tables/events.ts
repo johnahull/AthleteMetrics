@@ -9,6 +9,7 @@ import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, uni
 import { eventVisibilityEnum, eventStatusEnum, registrationModeEnum, resultsVisibilityEnum, registrationStatusEnum, eventInvitationStatusEnum } from "../enums";
 import { organizations, teams, users } from "./core";
 import { siteMetrics } from "./metrics";
+import { reports } from "./reports";
 
 export const events = pgTable("events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -40,6 +41,12 @@ export const events = pgTable("events", {
   resultsVisibility: text("results_visibility", { enum: resultsVisibilityEnum }).default("after_event").notNull(),
   resultsPublishedAt: timestamp("results_published_at"),
   resultsPublishedBy: varchar("results_published_by").references(() => users.id, { onDelete: 'set null' }),
+
+  // Auto-share reports on finalization
+  autoShareReports: boolean("auto_share_reports").default(false).notNull(),
+  autoShareReportTemplateId: varchar("auto_share_report_template_id").references(() => reports.id, { onDelete: 'set null' }),
+  autoShareMessage: text("auto_share_message"),
+  finalizedAt: timestamp("finalized_at"),
 
   // Freeze mechanism
   isFrozen: boolean("is_frozen").default(false).notNull(),

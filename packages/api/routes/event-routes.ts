@@ -17,6 +17,7 @@ import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { ZodError } from "zod";
 import { storage } from "../storage";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { finalizeEvent, getFinalizeProgress } from "../jobs/event-finalize-job";
 
 // Rate limiting for event endpoints
 const eventLimiter = rateLimit({
@@ -204,6 +205,9 @@ export function registerEventRoutes(app: Express) {
         maxRegistrations: validatedData.maxRegistrations,
         resultsVisibility: validatedData.resultsVisibility as 'immediate' | 'after_event' | 'manual',
         organizationId: validatedData.organizationId,
+        autoShareReports: validatedData.autoShareReports,
+        autoShareReportTemplateId: validatedData.autoShareReportTemplateId,
+        autoShareMessage: validatedData.autoShareMessage,
       };
 
       const event = await eventService.createEvent(eventData, user.id);
@@ -299,6 +303,100 @@ export function registerEventRoutes(app: Express) {
   });
 
   /**
+   * Finalize an event (mark completed, optionally generate + share reports)
+   * POST /api/events/:eventId/finalize
+   * Returns 202 Accepted — processing happens in background
+   */
+  app.post("/api/events/:eventId/finalize", eventMutationLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { eventId } = req.params;
+
+      const existingEvent = await storage.getEvent(eventId);
+      if (!existingEvent) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+
+      if (existingEvent.status === 'completed') {
+        return res.status(409).json({ message: "Event is already finalized" });
+      }
+
+      // Permission check: only org_admin or coach can finalize events
+      if (existingEvent.organizationId) {
+        const canManage = await canManageOrgEvents(user, existingEvent.organizationId);
+        if (!canManage) {
+          return res.status(403).json({
+            message: "Access denied - you must be an org admin or coach to finalize events"
+          });
+        }
+      }
+
+      // Start finalization in background (don't block HTTP response)
+      finalizeEvent(eventId, user.id).catch((err) => {
+        console.error(`[event-finalize] Background finalization failed for event ${eventId}:`, err);
+      });
+
+      res.status(202).json({ status: 'processing', eventId });
+    } catch (error) {
+      console.error("Finalize event error:", error);
+      const message = error instanceof Error ? error.message : "Failed to finalize event";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Check finalization progress
+   * GET /api/events/:eventId/finalize-status
+   */
+  app.get("/api/events/:eventId/finalize-status", eventLimiter, requireAuth, async (req: Request, res: Response) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const { eventId } = req.params;
+
+      const existingEvent = await storage.getEvent(eventId);
+      if (!existingEvent) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+
+      // Permission check
+      if (existingEvent.organizationId) {
+        const canManage = await canManageOrgEvents(user, existingEvent.organizationId);
+        if (!canManage) {
+          return res.status(403).json({ message: "Access denied" });
+        }
+      }
+
+      const progress = getFinalizeProgress(eventId);
+      if (!progress) {
+        // No active finalization — check if event is already completed
+        if (existingEvent.status === 'completed') {
+          return res.json({
+            status: 'completed',
+            reportsGenerated: 0,
+            reportsSent: 0,
+            totalAthletes: 0,
+          });
+        }
+        return res.json({ status: 'not_started' });
+      }
+
+      res.json(progress);
+    } catch (error) {
+      console.error("Finalize status error:", error);
+      const message = error instanceof Error ? error.message : "Failed to get finalization status";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
    * Get event by ID
    * GET /api/events/:eventId
    * MUST be registered AFTER specific paths like /api/events/public
@@ -374,6 +472,9 @@ export function registerEventRoutes(app: Express) {
       if (req.body.registrationClosesAt !== undefined) updates.registrationClosesAt = req.body.registrationClosesAt ? new Date(req.body.registrationClosesAt) : null;
       if (req.body.maxRegistrations !== undefined) updates.maxRegistrations = req.body.maxRegistrations;
       if (req.body.resultsVisibility !== undefined) updates.resultsVisibility = req.body.resultsVisibility;
+      if (req.body.autoShareReports !== undefined) (updates as any).autoShareReports = req.body.autoShareReports;
+      if (req.body.autoShareReportTemplateId !== undefined) (updates as any).autoShareReportTemplateId = req.body.autoShareReportTemplateId || null;
+      if (req.body.autoShareMessage !== undefined) (updates as any).autoShareMessage = req.body.autoShareMessage || null;
 
       const event = await eventService.updateEvent(eventId, updates, user.id);
       res.json(event);

@@ -3284,6 +3284,9 @@ const baseEventSchema = createInsertSchema(events).omit({
   maxRegistrations: z.number().int().positive().optional().nullable(),
   eventCode: z.string().optional().nullable(),
   resultsVisibility: z.enum(resultsVisibilityEnum).default("after_event"),
+  autoShareReports: z.boolean().default(false).optional(),
+  autoShareReportTemplateId: z.string().uuid().nullable().optional(),
+  autoShareMessage: z.string().max(2000).nullable().optional(),
   createdBy: z.string().optional(),
 });
 
@@ -3320,6 +3323,8 @@ export const updateEventSchema = baseEventSchema.partial().extend({
   // Results publishing fields
   resultsPublishedAt: z.coerce.date().nullable().optional(),
   resultsPublishedBy: z.string().nullable().optional(),
+  // Finalization fields
+  finalizedAt: z.coerce.date().nullable().optional(),
   // Audit fields
   updatedAt: z.coerce.date().nullable().optional(),
 });

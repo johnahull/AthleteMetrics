@@ -16,10 +16,12 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 import { Calendar, Users, Settings, Check, ArrowLeft, ArrowRight } from "lucide-react";
 import { MetricsSelector, type SelectedMetric } from "./MetricsSelector";
 import type { InsertEvent, EventVisibility, RegistrationMode, ResultsVisibility } from "@shared/schema";
 import { eventVisibilityEnum, registrationModeEnum, resultsVisibilityEnum } from "@shared/schema";
+import { useReports } from "@/hooks/use-reports";
 
 // Form validation schema
 const eventFormSchema = z.object({
@@ -46,9 +48,12 @@ const eventFormSchema = z.object({
 
 type EventFormValues = z.infer<typeof eventFormSchema>;
 
-// Extended form data that includes selected metrics
+// Extended form data that includes selected metrics and auto-share settings
 export interface EventFormData extends EventFormValues {
   selectedMetrics: SelectedMetric[];
+  autoShareReports?: boolean;
+  autoShareReportTemplateId?: string | null;
+  autoShareMessage?: string | null;
 }
 
 interface EventFormProps {
@@ -79,8 +84,18 @@ const steps = [
 export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organizationId, mode = "create" }: EventFormProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedMetrics, setSelectedMetrics] = useState<SelectedMetric[]>([]);
+  const [autoShareReports, setAutoShareReports] = useState(initialData?.autoShareReports ?? false);
+  const [autoShareTemplateId, setAutoShareTemplateId] = useState<string | null>(
+    (initialData as any)?.autoShareReportTemplateId ?? null
+  );
+  const [autoShareMessage, setAutoShareMessage] = useState(
+    (initialData as any)?.autoShareMessage ?? ""
+  );
 
   const isEditMode = mode === "edit";
+
+  // Fetch report templates for auto-share selector
+  const { data: reportTemplates } = useReports(organizationId);
 
   // Build default values with proper type handling
   const getDefaultEventType = (): EventFormValues["eventType"] => {
@@ -132,6 +147,9 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
       const formData: EventFormData = {
         ...data,
         selectedMetrics,
+        autoShareReports,
+        autoShareReportTemplateId: autoShareReports ? autoShareTemplateId : null,
+        autoShareMessage: autoShareReports ? (autoShareMessage || null) : null,
       };
       onSubmit(formData, isDraft);
     })();
@@ -447,6 +465,7 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
 
         {/* Step 4: Results Visibility */}
         {currentStep === 4 && (
+          <>
           <Card>
             <CardHeader>
               <CardTitle>Results Visibility</CardTitle>
@@ -514,6 +533,72 @@ export function EventForm({ initialData, onSubmit, onCancel, isSubmitting, organ
               </div>
             </CardContent>
           </Card>
+
+          {/* Auto-share Reports */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Auto-Share Reports</CardTitle>
+              <CardDescription>
+                Automatically generate and send individual performance reports when you finalize this event
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex flex-row items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label className="text-base">Auto-share reports after event</Label>
+                  <p className="text-sm text-muted-foreground">
+                    When you finalize this event, individual reports will be generated for each athlete and shared automatically
+                  </p>
+                </div>
+                <Switch
+                  checked={autoShareReports}
+                  onCheckedChange={setAutoShareReports}
+                />
+              </div>
+
+              {autoShareReports && (
+                <div className="space-y-4 pl-4 border-l-2 border-primary/20">
+                  <div className="space-y-2">
+                    <Label>Report Template</Label>
+                    <Select
+                      value={autoShareTemplateId ?? ""}
+                      onValueChange={(value) => setAutoShareTemplateId(value || null)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a report template..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(reportTemplates ?? [])
+                          .filter((r: any) => r.reportType === 'individual' || r.isTemplate)
+                          .map((r: any) => (
+                            <SelectItem key={r.id} value={r.id}>
+                              {r.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-sm text-muted-foreground">
+                      Choose the report template to use for generating individual athlete reports
+                    </p>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Message (optional)</Label>
+                    <Textarea
+                      value={autoShareMessage}
+                      onChange={(e) => setAutoShareMessage(e.target.value)}
+                      placeholder="Add a personal message to include with the reports..."
+                      maxLength={2000}
+                    />
+                    <p className="text-sm text-muted-foreground">
+                      {autoShareMessage.length}/2000 characters
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+          </>
         )}
       </Form>
 

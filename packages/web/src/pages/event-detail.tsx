@@ -18,6 +18,8 @@ import {
   useCancelInvitation,
   useCancelRegistration,
   useMyEventRegistration,
+  useFinalizeEvent,
+  useFinalizeStatus,
 } from "@/lib/events-api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +35,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { EventStatusBadge, EventMetricsTab, EventResultsTab, EventReportsTab, CheckInTab, InviteAthletesModal } from "@/components/events";
 import {
@@ -76,6 +89,8 @@ export default function EventDetail() {
   const [declineReason, setDeclineReason] = useState("");
   const [cancelInvitationDialog, setCancelInvitationDialog] = useState<{ open: boolean; invitationId: string | null }>({ open: false, invitationId: null });
   const [cancelMyRegistrationDialog, setCancelMyRegistrationDialog] = useState(false);
+  const [finalizeDialog, setFinalizeDialog] = useState(false);
+  const [isFinalizing, setIsFinalizing] = useState(false);
 
   // Fetch event data
   const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
@@ -93,6 +108,10 @@ export default function EventDetail() {
   const declineMutation = useDeclineRegistration();
   const cancelInvitationMutation = useCancelInvitation();
   const cancelRegistrationMutation = useCancelRegistration();
+  const finalizeMutation = useFinalizeEvent();
+
+  // Poll finalize status while processing
+  const { data: finalizeStatus } = useFinalizeStatus(eventId, isFinalizing);
 
   // Fetch athlete's own registration (for athlete view)
   const { data: myRegistration } = useMyEventRegistration(eventId);
@@ -270,6 +289,49 @@ export default function EventDetail() {
     }
   };
 
+  // Handle finalize event
+  const handleFinalize = async () => {
+    if (!eventId) return;
+    try {
+      setIsFinalizing(true);
+      await finalizeMutation.mutateAsync(eventId);
+      setFinalizeDialog(false);
+      toast({
+        title: "Event Finalization Started",
+        description: event?.autoShareReports
+          ? "Reports are being generated and shared with athletes."
+          : "Event has been marked as completed.",
+      });
+    } catch {
+      setIsFinalizing(false);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to finalize event.",
+      });
+    }
+  };
+
+  // Stop polling when finalization completes
+  if (isFinalizing && finalizeStatus && (finalizeStatus.status === 'completed' || finalizeStatus.status === 'failed')) {
+    if (finalizeStatus.status === 'completed' && isFinalizing) {
+      setIsFinalizing(false);
+      toast({
+        title: "Event Finalized",
+        description: finalizeStatus.reportsGenerated > 0
+          ? `${finalizeStatus.reportsGenerated} reports generated, ${finalizeStatus.reportsSent} sent.`
+          : "Event has been marked as completed.",
+      });
+    } else if (finalizeStatus.status === 'failed' && isFinalizing) {
+      setIsFinalizing(false);
+      toast({
+        variant: "destructive",
+        title: "Finalization Failed",
+        description: finalizeStatus.error || "An error occurred during finalization.",
+      });
+    }
+  }
+
   // Format date range
   const formatDateRange = () => {
     if (!event) return "";
@@ -372,6 +434,16 @@ export default function EventDetail() {
                 <Edit className="h-4 w-4 mr-2" />
                 Edit Event
               </Button>
+              {event.status !== 'completed' && (
+                <Button
+                  variant="default"
+                  onClick={() => setFinalizeDialog(true)}
+                  disabled={finalizeMutation.isPending || isFinalizing}
+                >
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  {isFinalizing ? "Finalizing..." : "Finalize Event"}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -1010,6 +1082,46 @@ export default function EventDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Finalize Event Confirmation Dialog */}
+      <AlertDialog open={finalizeDialog} onOpenChange={setFinalizeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Finalize Event</AlertDialogTitle>
+            <AlertDialogDescription>
+              {event?.autoShareReports
+                ? `This will mark the event as completed and automatically generate individual performance reports for all athletes with measurements. Reports will be shared via email and push notifications.`
+                : "This will mark the event as completed. This action cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleFinalize} disabled={finalizeMutation.isPending}>
+              {finalizeMutation.isPending ? "Starting..." : "Finalize Event"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Finalization Progress Indicator */}
+      {isFinalizing && finalizeStatus && finalizeStatus.status === 'processing' && (
+        <div className="fixed bottom-4 right-4 z-50 bg-background border rounded-lg shadow-lg p-4 w-80">
+          <div className="space-y-2">
+            <p className="font-medium text-sm">Finalizing Event...</p>
+            <Progress
+              value={
+                finalizeStatus.totalAthletes > 0
+                  ? (finalizeStatus.reportsGenerated / finalizeStatus.totalAthletes) * 100
+                  : 0
+              }
+            />
+            <p className="text-xs text-muted-foreground">
+              {finalizeStatus.reportsGenerated} / {finalizeStatus.totalAthletes} reports generated,{" "}
+              {finalizeStatus.reportsSent} sent
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -49,6 +49,9 @@ export interface CreateEventData {
   maxRegistrations?: number | null;
   resultsVisibility?: 'immediate' | 'after_event' | 'manual';
   organizationId?: string | null;
+  autoShareReports?: boolean;
+  autoShareReportTemplateId?: string | null;
+  autoShareMessage?: string | null;
 }
 
 export interface UpdateEventData {
@@ -124,6 +127,9 @@ export class EventService {
       maxRegistrations: data.maxRegistrations ?? undefined,
       resultsVisibility: data.resultsVisibility || 'after_event',
       organizationId: data.organizationId ?? undefined,
+      autoShareReports: data.autoShareReports ?? false,
+      autoShareReportTemplateId: data.autoShareReportTemplateId ?? undefined,
+      autoShareMessage: data.autoShareMessage ?? undefined,
       eventCode,
       createdBy,
     };
