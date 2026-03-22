@@ -60,6 +60,7 @@ export default function OrganizationSettings() {
       benchmarksEnabled: organization.benchmarksEnabled || false,
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
+      aiPromptContext: organization.aiPromptContext || '',
       wellnessEnabled: organization.wellnessEnabled ?? true,
       customMetricsEnabled: organization.customMetricsEnabled || false,
     } : undefined,
@@ -94,6 +95,9 @@ export default function OrganizationSettings() {
       }
       if (data.aiEnabledBySiteAdmin !== organization?.aiEnabledBySiteAdmin) {
         changedFields.aiEnabledBySiteAdmin = data.aiEnabledBySiteAdmin;
+      }
+      if (data.aiPromptContext !== (organization?.aiPromptContext || '')) {
+        changedFields.aiPromptContext = data.aiPromptContext || null;
       }
       if (data.wellnessEnabled !== organization?.wellnessEnabled) {
         changedFields.wellnessEnabled = data.wellnessEnabled;
@@ -359,6 +363,37 @@ export default function OrganizationSettings() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiPromptContext"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">AI Prompt Context</FormLabel>
+                      <FormDescription>
+                        Customize how AI generates coaching insights for your reports. Describe your training philosophy, methodology, or any context the AI should consider.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="e.g., Our organization focuses on speed development and injury prevention for youth athletes..."
+                        value={field.value || ''}
+                        maxLength={2000}
+                        rows={4}
+                        disabled={!form.watch('aiEnabledBySiteAdmin')}
+                      />
+                    </FormControl>
+                    <div className="flex justify-end">
+                      <span className="text-xs text-muted-foreground">
+                        {(field.value || '').length} / 2000
+                      </span>
+                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

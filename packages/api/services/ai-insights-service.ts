@@ -389,6 +389,7 @@ export interface ReportData {
   reportType: "team" | "individual";
   reportName: string;
   organizationName: string;
+  organizationContext?: string;
 
   // Team report specific
   teamName?: string;
@@ -492,7 +493,21 @@ export function buildPrompt(reportData: ReportData): string {
   const reportName = sanitizeForPrompt(reportData.reportName);
   const organizationName = sanitizeForPrompt(reportData.organizationName);
 
-  let prompt = `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
+  let prompt = '';
+
+  // Prepend organization context if available
+  if (reportData.organizationContext) {
+    const sanitizedContext = reportData.organizationContext
+      .replace(/[#*_`\[\]<>]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 2000);
+    if (sanitizedContext) {
+      prompt += `## Organization Context\n${sanitizedContext}\n\nWhen generating insights, incorporate this context to make recommendations specific to this organization's training philosophy and methodology.\n\n`;
+    }
+  }
+
+  prompt += `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
 
   // Report context
   prompt += `## Report Context\n`;
