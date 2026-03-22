@@ -60,6 +60,7 @@ export interface TeamReportConfig {
   metrics: string[];
   filters?: ReportFilters;
   includeCompositeIndex?: boolean;
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs
@@ -80,6 +81,7 @@ export interface IndividualReportConfig {
   athleteIds?: string[];
   timeframe: TimeframeConfig;
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs

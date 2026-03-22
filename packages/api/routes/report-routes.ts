@@ -48,6 +48,7 @@ interface IndividualReportConfig {
     customEnd?: string;
   };
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[];
     custom?: string[];
@@ -67,6 +68,7 @@ interface TeamReportConfig {
     customEnd?: string;
   };
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   filters?: {
     teamIds?: string[];
     gender?: string;
@@ -4071,6 +4073,9 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       }
     }
 
+    // Extract audience from report config
+    const audience = (reportConfig as any)?.audience as 'coach' | 'athlete' | 'parent' | undefined;
+
     // Build final ReportData object
     const aiReportData: import("../services/ai-insights-service").ReportData = {
       reportType: report.reportType as "individual" | "team",
@@ -4081,6 +4086,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       improvements,
       concerns,
       benchmarkComparisons,
+      audience,
     };
 
     // Add team-specific data
