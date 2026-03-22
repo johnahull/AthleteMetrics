@@ -75,6 +75,28 @@ export interface TeamReportConfig {
   };
 }
 
+export interface ComparisonConfig {
+  enabled: boolean;
+  type: 'previous_event' | 'date_range' | 'baseline';
+  previousEventId?: string;
+  baselineDate?: string;
+}
+
+export interface ProgressComparisonEntry {
+  previousValue: number;
+  currentValue: number;
+  absoluteChange: number;
+  percentageChange: number;
+  direction: 'improved' | 'declined' | 'unchanged';
+  previousDate: string;
+}
+
+export interface TrendDataPoint {
+  date: string;
+  value: number;
+  eventName?: string;
+}
+
 export interface IndividualReportConfig {
   athleteId?: string;
   athleteIds?: string[];
@@ -89,6 +111,8 @@ export interface IndividualReportConfig {
       label: string;
     }>;
   };
+  comparison?: ComparisonConfig;
+  includeTrends?: boolean;
 }
 
 export interface TeamReportData {
@@ -114,6 +138,7 @@ export interface IndividualAthleteData {
   percentiles: Record<string, number>;
   teamAverages?: Record<string, number>;
   benchmarkComparisons: Record<string, BenchmarkComparison[]>;
+  progressComparison?: Record<string, ProgressComparisonEntry>;
 }
 
 export interface IndividualReportData {
@@ -121,6 +146,7 @@ export interface IndividualReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  trendData?: Record<string, TrendDataPoint[]>;
 }
 
 export type PdfFormat = 'visual' | 'simplified';

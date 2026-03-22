@@ -16,14 +16,23 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2, Send } from "lucide-react";
+import { FileDown, Share2, Send, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
-import type { Report } from "@/types/report-types";
+import type { Report, ProgressComparisonEntry, TrendDataPoint } from "@/types/report-types";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
 
 interface IndividualReportViewProps {
   report: Report;
@@ -98,7 +107,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits } = reportData;
+  const { athlete, metricLabels, metricUnits, trendData } = reportData;
+  const hasProgressComparison = athlete.progressComparison && Object.keys(athlete.progressComparison).length > 0;
 
   return (
     <div className="space-y-6">
@@ -177,6 +187,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
+                  {hasProgressComparison && <TableHead>Progress</TableHead>}
                   <TableHead>Team Average</TableHead>
                   <TableHead>Percentile</TableHead>
                   <TableHead>Benchmark Comparisons</TableHead>
@@ -189,6 +200,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
                   const metricLabel = metricLabels?.[metricCode] || metricCode;
                   const unit = metricUnits?.[metricCode] || '';
+                  const progress = athlete.progressComparison?.[metricCode];
 
                   return (
                     <TableRow key={metricCode}>
@@ -200,6 +212,31 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                               : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
                           : "N/A"}
                       </TableCell>
+                      {hasProgressComparison && (
+                        <TableCell>
+                          {progress ? (
+                            <div className="flex items-center gap-1">
+                              {progress.direction === 'improved' ? (
+                                <TrendingUp className="h-4 w-4 text-green-600" />
+                              ) : progress.direction === 'declined' ? (
+                                <TrendingDown className="h-4 w-4 text-red-600" />
+                              ) : (
+                                <Minus className="h-4 w-4 text-muted-foreground" />
+                              )}
+                              <span className={
+                                progress.direction === 'improved' ? 'text-green-600 text-sm' :
+                                progress.direction === 'declined' ? 'text-red-600 text-sm' :
+                                'text-muted-foreground text-sm'
+                              }>
+                                {progress.absoluteChange > 0 ? '+' : ''}{progress.absoluteChange.toFixed(2)}
+                                {' '}({progress.percentageChange.toFixed(1)}%)
+                              </span>
+                            </div>
+                          ) : (
+                            "-"
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell>
                         {teamAverage !== undefined
                           ? (isFly10Metric(metricCode)
@@ -245,6 +282,59 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </Card>
       )}
 
+
+      {/* Trend Charts */}
+      {trendData && Object.keys(trendData).length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Performance Trends</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {Object.entries(trendData).map(([metricCode, points]) => {
+                const pointsArr = points as TrendDataPoint[];
+                if (pointsArr.length < 2) return null;
+                const metricLabel = metricLabels?.[metricCode] || metricCode;
+                const unit = metricUnits?.[metricCode] || '';
+
+                const chartData = pointsArr.map((p) => ({
+                  date: format(new Date(p.date), "MMM d"),
+                  value: p.value,
+                  eventName: p.eventName,
+                }));
+
+                return (
+                  <div key={metricCode}>
+                    <h4 className="text-sm font-medium mb-2">{metricLabel} {unit ? `(${unit})` : ''}</h4>
+                    <ResponsiveContainer width="100%" height={200}>
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                        <YAxis tick={{ fontSize: 11 }} domain={['auto', 'auto']} />
+                        <Tooltip
+                          formatter={(value: any) => [`${Number(value).toFixed(2)} ${unit}`, metricLabel]}
+                          labelFormatter={(label: any, payload: any) => {
+                            const entry = payload?.[0]?.payload;
+                            return entry?.eventName ? `${label} — ${entry.eventName}` : String(label);
+                          }}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          dot={{ r: 4, fill: "hsl(var(--primary))" }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {showShareDialog && (
         <ShareReportDialog

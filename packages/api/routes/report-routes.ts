@@ -3629,23 +3629,82 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     yPos += 5; // Add spacing before measurements table
 
     if (athlete.measurements) {
+      const hasProgress = athlete.progressComparison && Object.keys(athlete.progressComparison).length > 0;
+      const headers = hasProgress
+        ? [["Metric", "Value", "Percentile", "Progress"]]
+        : [["Metric", "Value", "Percentile"]];
+
       const measurementRows = Object.entries(athlete.measurements).map(
-        ([metric, value]: [string, any]) => [
-          metric,
-          value.toFixed(2),
-          athlete.percentiles[metric]?.toFixed(1) || "N/A",
-        ]
+        ([metric, value]: [string, any]) => {
+          const row = [
+            metric,
+            value.toFixed(2),
+            athlete.percentiles[metric]?.toFixed(1) || "N/A",
+          ];
+          if (hasProgress) {
+            const comp = athlete.progressComparison?.[metric];
+            if (comp) {
+              const arrow = comp.direction === 'improved' ? '↑' : comp.direction === 'declined' ? '↓' : '→';
+              const sign = comp.absoluteChange > 0 ? '+' : '';
+              row.push(`${arrow} ${sign}${comp.absoluteChange.toFixed(2)} (${comp.percentageChange.toFixed(1)}%)`);
+            } else {
+              row.push("-");
+            }
+          }
+          return row;
+        }
       );
 
       autoTable(doc, {
         startY: yPos,
-        head: [["Metric", "Value", "Percentile"]],
+        head: headers,
         body: measurementRows,
         theme: isVisual ? "striped" : "grid",
         headStyles: { fillColor: colors.primary },
       });
 
       yPos = (doc as any).lastAutoTable.finalY + 10;
+    }
+
+    // Performance Trends (text-based summary)
+    if (reportData.trendData && Object.keys(reportData.trendData).length > 0) {
+      if (yPos > 220) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      if (isVisual) doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      doc.text("Performance Trends", 14, yPos);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      yPos += 8;
+
+      doc.setFontSize(9);
+      for (const [metric, points] of Object.entries(reportData.trendData) as [string, any[]][]) {
+        if (points.length < 2) continue;
+
+        if (yPos > 275) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        const metricLabel = reportData.metricLabels?.[metric] || metric;
+        const values = points.map((p: any) => p.value.toFixed(2));
+        const first = points[0].value;
+        const last = points[points.length - 1].value;
+        const trendArrow = last < first ? '↓' : last > first ? '↑' : '→';
+        const trendLine = `${metricLabel}: ${values.join(' → ')} (${points.length} assessments, trending ${trendArrow})`;
+
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const lines = doc.splitTextToSize(trendLine, pageWidth - 28);
+        lines.forEach((line: string) => {
+          doc.text(line, 14, yPos);
+          yPos += 4.5;
+        });
+        yPos += 2;
+      }
+
+      yPos += 5;
     }
 
     // Benchmark comparisons
@@ -3951,6 +4010,14 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
         percentiles?: Record<string, number>;
         teamAverages?: Record<string, number>;
         benchmarkComparisons?: Record<string, Array<{ meetsOrExceeds: boolean }>>;
+        progressComparison?: Record<string, {
+          previousValue: number;
+          currentValue: number;
+          absoluteChange: number;
+          percentageChange: number;
+          direction: 'improved' | 'declined' | 'unchanged';
+          previousDate: string;
+        }>;
       };
       benchmarkComparisons?: Array<{
         metric: string;
@@ -4114,6 +4181,16 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       aiReportData.athleteGender = typedReportData.athlete.gender;
       // Extract sport from athlete.sports array (use first sport)
       aiReportData.athleteSport = typedReportData.athlete.sports?.[0] || undefined;
+
+      // Include progress comparison data for AI context
+      if (typedReportData.athlete.progressComparison) {
+        aiReportData.progressComparison = typedReportData.athlete.progressComparison as any;
+      }
+
+      // Include trend data for AI context
+      if ((typedReportData as any).trendData) {
+        aiReportData.trendData = (typedReportData as any).trendData;
+      }
     }
 
     return aiReportData;

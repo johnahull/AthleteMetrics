@@ -427,6 +427,23 @@ export interface ReportData {
     metric: string;
     performance: string;
   }>;
+
+  // Progress comparison data
+  progressComparison?: Record<string, {
+    previousValue: number;
+    currentValue: number;
+    absoluteChange: number;
+    percentageChange: number;
+    direction: 'improved' | 'declined' | 'unchanged';
+    previousDate: string;
+  }>;
+
+  // Trend data (historical measurements)
+  trendData?: Record<string, Array<{
+    date: string;
+    value: number;
+    eventName?: string;
+  }>>;
 }
 
 /**
@@ -572,6 +589,34 @@ function buildPrompt(reportData: ReportData): string {
     reportData.benchmarkComparisons.forEach((item) => {
       prompt += `- ${item.metric}: ${item.performance}\n`;
     });
+    prompt += `\n`;
+  }
+
+  // Progress comparison
+  if (reportData.progressComparison && Object.keys(reportData.progressComparison).length > 0) {
+    prompt += `## Progress Since Previous Assessment\n`;
+    for (const [metricCode, comp] of Object.entries(reportData.progressComparison)) {
+      const metricLabel = reportData.metrics.find(m => m.code === metricCode)?.label || metricCode;
+      const unit = reportData.metrics.find(m => m.code === metricCode)?.unit || '';
+      const arrow = comp.direction === 'improved' ? '↑' : comp.direction === 'declined' ? '↓' : '→';
+      const sign = comp.absoluteChange > 0 ? '+' : '';
+      prompt += `- ${metricLabel}: ${comp.previousValue.toFixed(2)}${unit} → ${comp.currentValue.toFixed(2)}${unit} (${sign}${comp.absoluteChange.toFixed(2)}${unit}, ${comp.percentageChange.toFixed(1)}% ${comp.direction}) ${arrow}\n`;
+    }
+    prompt += `\n`;
+  }
+
+  // Performance trends
+  if (reportData.trendData && Object.keys(reportData.trendData).length > 0) {
+    prompt += `## Performance Trends\n`;
+    for (const [metricCode, points] of Object.entries(reportData.trendData)) {
+      if (points.length < 2) continue;
+      const metricLabel = reportData.metrics.find(m => m.code === metricCode)?.label || metricCode;
+      const unit = reportData.metrics.find(m => m.code === metricCode)?.unit || '';
+      const trendStr = points
+        .map(p => `${p.value.toFixed(2)}${unit} (${new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})`)
+        .join(' → ');
+      prompt += `- ${metricLabel}: ${trendStr}\n`;
+    }
     prompt += `\n`;
   }
 

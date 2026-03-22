@@ -36,6 +36,8 @@ import { ChevronLeft, ChevronRight, Layers, List } from "lucide-react";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useEvents } from "@/lib/events-api";
+import { Switch } from "@/components/ui/switch";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -54,6 +56,11 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   enableCompositeIndex: z.boolean().default(false),
   compositeWeights: z.record(z.string(), z.number()).optional(),
+  comparisonEnabled: z.boolean().default(false),
+  comparisonType: z.enum(["previous_event", "date_range", "baseline"]).optional(),
+  comparisonPreviousEventId: z.string().optional(),
+  comparisonBaselineDate: z.string().optional(),
+  includeTrends: z.boolean().default(true),
 }).superRefine((data, ctx) => {
   if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
     ctx.addIssue({
@@ -101,6 +108,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
+      comparisonEnabled: false,
+      comparisonType: "baseline",
+      includeTrends: true,
     },
   });
 
@@ -139,6 +149,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     organizationContext || "",
     false // includeInactive - only get active benchmarks
   );
+
+  const comparisonEnabled = watch("comparisonEnabled");
+  const comparisonType = watch("comparisonType");
+
+  // Fetch events for comparison selector
+  const { data: eventsData } = useEvents(organizationContext ?? undefined);
 
   // Fetch benchmark sets for the organization
   const { data: benchmarkSets, isLoading: benchmarkSetsLoading } = useBenchmarkSets(
@@ -232,6 +248,19 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       metrics: data.metrics,
       athleteIds: data.athleteIds,
     };
+
+    // Add comparison config for individual reports
+    if (data.reportType === "individual" && data.comparisonEnabled && data.comparisonType) {
+      config.comparison = {
+        enabled: true,
+        type: data.comparisonType,
+        previousEventId: data.comparisonType === "previous_event" ? data.comparisonPreviousEventId : undefined,
+        baselineDate: data.comparisonType === "date_range" ? data.comparisonBaselineDate : undefined,
+      };
+    }
+
+    // Add trends config
+    config.includeTrends = data.includeTrends;
 
     // Handle benchmarks - either from set or individual selection
     if (benchmarkSelectionMode === 'set' && selectedBenchmarkSet?.items?.length) {
@@ -824,10 +853,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 8 for Individual Reports - Summary */}
+          {/* Step 8 for Individual Reports - Summary + Comparison & Trends */}
           {step === 8 && reportType === "individual" && (
             <div className="space-y-4">
-              <Label>Review</Label>
+              <Label>Review & Options</Label>
               <div className="border rounded-lg p-4 space-y-2">
                 <p className="text-sm">
                   <strong>Type:</strong> Individual Report
@@ -835,10 +864,89 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <p className="text-sm">
                   <strong>Metrics:</strong> {selectedMetrics.length} selected
                 </p>
-                <p className="text-sm text-muted-foreground">
-                  Click "Create Report" to finish
-                </p>
               </div>
+
+              {/* Compare to Previous */}
+              <div className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="comparisonEnabled">Compare to Previous</Label>
+                    <p className="text-sm text-muted-foreground">Show progress deltas vs. a prior assessment</p>
+                  </div>
+                  <Switch
+                    id="comparisonEnabled"
+                    checked={comparisonEnabled}
+                    onCheckedChange={(checked) => setValue("comparisonEnabled", checked)}
+                  />
+                </div>
+
+                {comparisonEnabled && (
+                  <div className="space-y-3 pt-2">
+                    <Select
+                      value={comparisonType}
+                      onValueChange={(value) => setValue("comparisonType", value as any)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Comparison type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="baseline">First Assessment (Baseline)</SelectItem>
+                        <SelectItem value="previous_event">Previous Event</SelectItem>
+                        <SelectItem value="date_range">Custom Date</SelectItem>
+                      </SelectContent>
+                    </Select>
+
+                    {comparisonType === "previous_event" && eventsData && (
+                      <Select
+                        value={watch("comparisonPreviousEventId") || ""}
+                        onValueChange={(value) => setValue("comparisonPreviousEventId", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select event" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {eventsData.map((event: any) => (
+                            <SelectItem key={event.id} value={event.id}>
+                              {event.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+
+                    {comparisonType === "date_range" && (
+                      <div>
+                        <Label htmlFor="comparisonBaselineDate">Baseline Date</Label>
+                        <Input
+                          id="comparisonBaselineDate"
+                          type="date"
+                          {...register("comparisonBaselineDate")}
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">Compare to best performance before this date</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Include Trends */}
+              <div className="border rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="includeTrends">Include Trend Data</Label>
+                    <p className="text-sm text-muted-foreground">Show historical performance charts</p>
+                  </div>
+                  <Switch
+                    id="includeTrends"
+                    checked={watch("includeTrends")}
+                    onCheckedChange={(checked) => setValue("includeTrends", checked)}
+                  />
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                Click "Create Report" to finish
+              </p>
             </div>
           )}
 

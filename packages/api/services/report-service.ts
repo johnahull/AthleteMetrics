@@ -44,6 +44,28 @@ interface ReportFilters {
   positions?: string[];
 }
 
+interface ComparisonConfig {
+  enabled: boolean;
+  type: 'previous_event' | 'date_range' | 'baseline';
+  previousEventId?: string;
+  baselineDate?: string;
+}
+
+interface ProgressComparisonEntry {
+  previousValue: number;
+  currentValue: number;
+  absoluteChange: number;
+  percentageChange: number;
+  direction: 'improved' | 'declined' | 'unchanged';
+  previousDate: string;
+}
+
+interface TrendDataPoint {
+  date: string;
+  value: number;
+  eventName?: string;
+}
+
 interface ReportConfig {
   eventId?: string; // Filter measurements to specific event
   includeEventPercentiles?: boolean; // Compare against event participants
@@ -60,6 +82,8 @@ interface ReportConfig {
   };
   compositeIndex?: CompositeIndexConfig;
   filters?: ReportFilters;
+  comparison?: ComparisonConfig;
+  includeTrends?: boolean;
 }
 
 interface AthletePerformance {
@@ -76,6 +100,7 @@ interface AthletePerformance {
   teamAverages: Record<string, number>;
   compositeIndex?: number;
   benchmarkComparisons: Record<string, BenchmarkComparison[]>;
+  progressComparison?: Record<string, ProgressComparisonEntry>;
 }
 
 interface TeamStatistics {
@@ -134,6 +159,7 @@ interface IndividualReportData {
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
   eventContext?: EventContext; // Present when eventId filter is used
+  trendData?: Record<string, TrendDataPoint[]>;
 }
 
 export class ReportService extends BaseService {
@@ -415,6 +441,28 @@ export class ReportService extends BaseService {
       config
     );
 
+    // Calculate progress comparison if enabled
+    let progressComparison: Record<string, ProgressComparisonEntry> | undefined;
+    if (config.comparison?.enabled) {
+      progressComparison = await this.calculateProgressComparison(
+        athleteId,
+        report.organizationId,
+        config.metrics,
+        bestPerformances,
+        config.comparison
+      );
+    }
+
+    // Get trend data (default true for individual reports)
+    let trendData: Record<string, TrendDataPoint[]> | undefined;
+    if (config.includeTrends !== false) {
+      trendData = await this.getAthleteMetricHistory(
+        athleteId,
+        report.organizationId,
+        config.metrics
+      );
+    }
+
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,
       userName: athlete.fullName,
@@ -430,6 +478,7 @@ export class ReportService extends BaseService {
       eventPercentiles,
       teamAverages,
       benchmarkComparisons,
+      progressComparison,
     };
 
     // Get metric display labels and units
@@ -470,6 +519,7 @@ export class ReportService extends BaseService {
       metricLabels,
       metricUnits,
       eventContext,
+      trendData,
     };
   }
 
@@ -1570,6 +1620,182 @@ export class ReportService extends BaseService {
 
     // Cache the result
     this.metricInfoCache.set(metricCode, result);
+    return result;
+  }
+
+  /**
+   * Calculate progress comparison between current and previous performances
+   */
+  async calculateProgressComparison(
+    athleteId: string,
+    organizationId: string,
+    metrics: string[],
+    currentPerformances: Record<string, number>,
+    comparisonConfig: ComparisonConfig
+  ): Promise<Record<string, ProgressComparisonEntry>> {
+    const result: Record<string, ProgressComparisonEntry> = {};
+
+    for (const metric of metrics) {
+      if (currentPerformances[metric] === undefined) continue;
+
+      let previousMeasurement: { value: string; date: Date | string } | undefined;
+
+      if (comparisonConfig.type === 'previous_event' && comparisonConfig.previousEventId) {
+        // Get best measurement from a specific previous event
+        const metricInfo = await this.getMetricInfo(metric);
+        const orderDir = metricInfo.lowerIsBetter ? sql`ASC` : sql`DESC`;
+
+        const rows = await db
+          .select({ value: measurements.value, date: measurements.date })
+          .from(measurements)
+          .where(
+            and(
+              eq(measurements.userId, athleteId),
+              eq(measurements.organizationId, organizationId),
+              eq(measurements.metric, metric),
+              eq(measurements.eventId, comparisonConfig.previousEventId)
+            )
+          )
+          .orderBy(metricInfo.lowerIsBetter ? sql`${measurements.value}::numeric ASC` : sql`${measurements.value}::numeric DESC`)
+          .limit(1);
+
+        previousMeasurement = rows[0];
+      } else if (comparisonConfig.type === 'date_range' && comparisonConfig.baselineDate) {
+        // Get best performance before the baseline date
+        const metricInfo = await this.getMetricInfo(metric);
+
+        const rows = await db
+          .select({ value: measurements.value, date: measurements.date })
+          .from(measurements)
+          .where(
+            and(
+              eq(measurements.userId, athleteId),
+              eq(measurements.organizationId, organizationId),
+              eq(measurements.metric, metric),
+              lte(measurements.date, comparisonConfig.baselineDate)
+            )
+          )
+          .orderBy(metricInfo.lowerIsBetter ? sql`${measurements.value}::numeric ASC` : sql`${measurements.value}::numeric DESC`)
+          .limit(1);
+
+        previousMeasurement = rows[0];
+      } else if (comparisonConfig.type === 'baseline') {
+        // Use earliest measurement as baseline
+        const rows = await db
+          .select({ value: measurements.value, date: measurements.date })
+          .from(measurements)
+          .where(
+            and(
+              eq(measurements.userId, athleteId),
+              eq(measurements.organizationId, organizationId),
+              eq(measurements.metric, metric)
+            )
+          )
+          .orderBy(sql`${measurements.date} ASC`)
+          .limit(1);
+
+        previousMeasurement = rows[0];
+      }
+
+      if (!previousMeasurement) continue;
+
+      const previousValue = parseFloat(previousMeasurement.value);
+      const currentValue = currentPerformances[metric];
+      const absoluteChange = currentValue - previousValue;
+      const percentageChange = previousValue !== 0
+        ? Math.abs((absoluteChange / previousValue) * 100)
+        : 0;
+
+      const metricInfo = await this.getMetricInfo(metric);
+      let direction: 'improved' | 'declined' | 'unchanged';
+      if (Math.abs(absoluteChange) < 0.001) {
+        direction = 'unchanged';
+      } else if (metricInfo.lowerIsBetter) {
+        direction = absoluteChange < 0 ? 'improved' : 'declined';
+      } else {
+        direction = absoluteChange > 0 ? 'improved' : 'declined';
+      }
+
+      result[metric] = {
+        previousValue,
+        currentValue,
+        absoluteChange,
+        percentageChange,
+        direction,
+        previousDate: new Date(previousMeasurement.date).toISOString(),
+      };
+    }
+
+    return result;
+  }
+
+  /**
+   * Get historical measurements for an athlete across given metrics
+   */
+  async getAthleteMetricHistory(
+    athleteId: string,
+    organizationId: string,
+    metrics: string[]
+  ): Promise<Record<string, TrendDataPoint[]>> {
+    const result: Record<string, TrendDataPoint[]> = {};
+
+    for (const metric of metrics) {
+      const rows = await db
+        .select({
+          value: measurements.value,
+          date: measurements.date,
+          eventId: measurements.eventId,
+        })
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, athleteId),
+            eq(measurements.organizationId, organizationId),
+            eq(measurements.metric, metric)
+          )
+        )
+        .orderBy(sql`${measurements.date} ASC`);
+
+      if (rows.length === 0) continue;
+
+      // Collect unique event IDs for name lookup
+      const eventIds = [...new Set(rows.filter(r => r.eventId).map(r => r.eventId!))];
+      const eventNameMap = new Map<string, string>();
+
+      if (eventIds.length > 0) {
+        const eventRows = await db
+          .select({ id: events.id, name: events.name })
+          .from(events)
+          .where(inArray(events.id, eventIds));
+        for (const e of eventRows) {
+          eventNameMap.set(e.id, e.name);
+        }
+      }
+
+      // Use best value per date to avoid duplicate data points
+      const byDate = new Map<string, { value: number; eventName?: string }>();
+      const metricInfo = await this.getMetricInfo(metric);
+
+      for (const row of rows) {
+        const dateKey = new Date(row.date).toISOString().split('T')[0];
+        const value = parseFloat(row.value);
+        const existing = byDate.get(dateKey);
+
+        if (!existing || (metricInfo.lowerIsBetter ? value < existing.value : value > existing.value)) {
+          byDate.set(dateKey, {
+            value,
+            eventName: row.eventId ? eventNameMap.get(row.eventId) : undefined,
+          });
+        }
+      }
+
+      result[metric] = Array.from(byDate.entries()).map(([date, data]) => ({
+        date,
+        value: data.value,
+        eventName: data.eventName,
+      }));
+    }
+
     return result;
   }
 }
