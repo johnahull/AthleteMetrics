@@ -143,6 +143,36 @@ async function seedMetrics() {
         color: 'teal',
         icon: 'Gauge',
       },
+      {
+        code: 'DASH_10YD',
+        label: '10-Yard Dash',
+        category: 'speed',
+        unit: 's',
+        metricType: 'lower_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 0,
+        description: 'Time to sprint 10 yards from a stationary start, measuring acceleration and first-step quickness.',
+        sportAssociations: null, // Available to all sports
+        decimalPrecision: 3,
+        color: 'blue',
+        icon: 'Timer',
+      },
+      {
+        code: 'APPROACH_JUMP',
+        label: 'Approach Jump',
+        category: 'power',
+        unit: 'in',
+        metricType: 'higher_is_better' as const,
+        isSystemDefault: true,
+        isActive: true,
+        displayOrder: 9,
+        description: 'Maximum vertical displacement during an approach/attack jump. Primary volleyball recruiting metric.',
+        sportAssociations: ['Volleyball'], // Volleyball-specific
+        decimalPrecision: 1,
+        color: 'purple',
+        icon: 'ArrowUp',
+      },
     ];
 
     // Insert metrics with conflict handling (idempotent)
@@ -168,7 +198,7 @@ async function seedMetrics() {
         });
     }
 
-    console.log('✅ Successfully seeded 8 default metrics');
+    console.log('✅ Successfully seeded 10 default metrics');
     await client.end();
     process.exit(0);
   } catch (error) {
