@@ -16,13 +16,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { FileDown, Share2, Send } from "lucide-react";
+import { FileDown, Share2, Send, ClipboardList } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
+import { downloadEvalOnePager } from "@/lib/reports-api";
 import type { Report } from "@/types/report-types";
 
 interface IndividualReportViewProps {
@@ -32,6 +33,7 @@ interface IndividualReportViewProps {
 export function IndividualReportView({ report }: IndividualReportViewProps) {
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [showSendDialog, setShowSendDialog] = useState(false);
+  const [isEvalDownloading, setIsEvalDownloading] = useState(false);
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
   const { toast } = useToast();
@@ -79,6 +81,22 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const handleDownloadPDF = () => {
     if (athleteId) {
       downloadPdf({ athleteId });
+    }
+  };
+
+  const handleDownloadEvalReport = async () => {
+    if (!athleteId) return;
+    setIsEvalDownloading(true);
+    try {
+      await downloadEvalOnePager(athleteId);
+    } catch {
+      toast({
+        variant: "destructive",
+        title: "Download Failed",
+        description: "Failed to generate eval report. Please try again.",
+      });
+    } finally {
+      setIsEvalDownloading(false);
     }
   };
 
@@ -139,6 +157,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               </p>
             </div>
             <div className="flex gap-2">
+              <Button variant="outline" onClick={handleDownloadEvalReport} disabled={isEvalDownloading}>
+                <ClipboardList className="h-4 w-4 mr-2" />
+                {isEvalDownloading ? "Generating..." : "Eval Report"}
+              </Button>
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>
                 <FileDown className="h-4 w-4 mr-2" />
                 {isPdfDownloading ? "Downloading..." : "Export PDF"}

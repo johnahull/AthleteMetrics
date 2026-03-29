@@ -66,6 +66,24 @@ async function updateInsights(
   return response.json();
 }
 
+/**
+ * Download Eval Report One-Pager PDF for an athlete
+ */
+export async function downloadEvalOnePager(athleteId: string, sport?: string): Promise<void> {
+  const params = sport ? `?sport=${sport}` : '';
+  const response = await fetch(`/api/reports/eval-onepager/${athleteId}${params}`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Failed to generate eval report');
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `eval-report-${athleteId}.pdf`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 // ============================================================================
 // React Query Hooks
 // ============================================================================

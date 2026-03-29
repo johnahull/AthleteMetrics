@@ -3315,6 +3315,62 @@ export function registerReportRoutes(app: Express) {
       }
     }
   );
+
+  // ============================================================================
+  // EVAL REPORT ONE-PAGER
+  // ============================================================================
+
+  /**
+   * Generate Eval Report One-Pager PDF
+   * GET /api/reports/eval-onepager/:athleteId?sport=SOCCER
+   */
+  app.get(
+    "/api/reports/eval-onepager/:athleteId",
+    requireAuth,
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { athleteId } = req.params;
+        const sportOverride = req.query.sport as string | undefined;
+        const user = req.user!;
+
+        // Get user's active organization
+        const userOrg = await db
+          .select({ organizationId: userOrganizations.organizationId })
+          .from(userOrganizations)
+          .where(eq(userOrganizations.userId, user.id))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!userOrg) {
+          return res.status(400).json({ message: "No organization found for user" });
+        }
+
+        const { assembleEvalReportData } = await import("../services/eval-report-service");
+        const { generateEvalOnePagerPDF } = await import("../utils/eval-report-pdf");
+
+        const evalData = await assembleEvalReportData(
+          athleteId,
+          userOrg.organizationId,
+          sportOverride,
+        );
+
+        const pdf = generateEvalOnePagerPDF(evalData);
+
+        const filename = sanitizeFilename(`Eval-Report-${evalData.athleteName}`);
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${filename}.pdf"`,
+        );
+        res.send(Buffer.from(pdf.output("arraybuffer")));
+      } catch (error) {
+        console.error("Error generating eval onepager PDF:", error);
+        res.status(500).json({
+          message: error instanceof Error ? error.message : "Failed to generate eval report",
+        });
+      }
+    },
+  );
 }
 
 /**
