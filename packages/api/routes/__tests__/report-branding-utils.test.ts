@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { hexToRgb, isSafeLogoUrl } from '../report-branding-utils';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from '../report-branding-utils';
 
 describe('hexToRgb', () => {
   it('converts a valid 6-digit hex color', () => {
@@ -130,5 +130,82 @@ describe('isSafeLogoUrl', () => {
 
   it('blocks empty string', () => {
     expect(isSafeLogoUrl('')).toBe(false);
+  });
+});
+
+describe('fetchLogoBase64', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function makeFetchResponse(opts: {
+    ok?: boolean;
+    contentType?: string;
+    body?: ArrayBuffer;
+  }) {
+    const { ok = true, contentType = 'image/png', body = new ArrayBuffer(100) } = opts;
+    return Promise.resolve({
+      ok,
+      headers: { get: (h: string) => (h === 'content-type' ? contentType : null) },
+      arrayBuffer: () => Promise.resolve(body),
+    } as unknown as Response);
+  }
+
+  it('returns null for an unsafe (HTTP) URL', async () => {
+    expect(await fetchLogoBase64('http://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns null for a private-IP URL', async () => {
+    expect(await fetchLogoBase64('https://192.168.1.1/logo.png')).toBeNull();
+  });
+
+  it('returns null when fetch response is not ok', async () => {
+    vi.stubGlobal('fetch', () => makeFetchResponse({ ok: false }));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns null for unsupported content-type (SVG)', async () => {
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'image/svg+xml' }));
+    expect(await fetchLogoBase64('https://example.com/logo.svg')).toBeNull();
+  });
+
+  it('returns null when image exceeds 2 MB', async () => {
+    const bigBuffer = new ArrayBuffer(3 * 1024 * 1024);
+    vi.stubGlobal('fetch', () => makeFetchResponse({ body: bigBuffer }));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns base64 result for a valid PNG response', async () => {
+    const body = Buffer.from('fakeimagedata');
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'image/png', body: body.buffer }));
+    const result = await fetchLogoBase64('https://example.com/logo.png');
+    expect(result).not.toBeNull();
+    expect(result?.ext).toBe('PNG');
+    expect(result?.mimeType).toBe('image/png');
+    expect(result?.base64).toBe(body.toString('base64'));
+  });
+
+  it('returns base64 result for a valid JPEG response', async () => {
+    const body = Buffer.from('fakejpegdata');
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'image/jpeg', body: body.buffer }));
+    const result = await fetchLogoBase64('https://example.com/logo.jpg');
+    expect(result).not.toBeNull();
+    expect(result?.ext).toBe('JPEG');
+    expect(result?.mimeType).toBe('image/jpeg');
+  });
+
+  it('passes redirect: error to fetch to prevent SSRF via redirect chains', async () => {
+    const fetchSpy = vi.fn(() => makeFetchResponse({}));
+    vi.stubGlobal('fetch', fetchSpy);
+    await fetchLogoBase64('https://example.com/logo.png');
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'https://example.com/logo.png',
+      expect.objectContaining({ redirect: 'error' }),
+    );
+  });
+
+  it('returns null when fetch throws (e.g. redirect error or timeout)', async () => {
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('redirect')));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
   });
 });

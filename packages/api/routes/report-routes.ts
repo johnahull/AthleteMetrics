@@ -36,7 +36,7 @@ import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
-import { hexToRgb, isSafeLogoUrl } from "./report-branding-utils";
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from "./report-branding-utils";
 
 /** Organization branding fields used for PDF generation */
 type ReportOrg = Pick<
@@ -3396,30 +3396,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // --- Cover page for individual reports ---
-  if (reportData.reportType !== 'team') {
+  if (reportData.reportType === 'individual') {
     const athlete = reportData.athlete;
 
     // Try to embed org logo if available
     let logoRendered = false;
-    if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl)) {
-      try {
-        const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
-        if (response.ok) {
-          const contentType = response.headers.get('content-type') || '';
-          const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
-          const isPng = contentType.includes('png');
-          if (!isJpeg && !isPng) throw new Error('Unsupported logo content-type');
-          const arrayBuffer = await response.arrayBuffer();
-          if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
-          const base64 = Buffer.from(arrayBuffer).toString('base64');
-          const ext = isJpeg ? 'JPEG' : 'PNG';
-          const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
-          // Center logo on cover page, max 60mm wide x 40mm tall
-          doc.addImage(`data:${mimeType};base64,${base64}`, ext, (pageWidth - 60) / 2, 50, 60, 40);
-          logoRendered = true;
-        }
-      } catch {
-        // Logo fetch failed — continue without it
+    if (org?.brandLogoUrl) {
+      const logoData = await fetchLogoBase64(org.brandLogoUrl);
+      if (logoData) {
+        // Center logo on cover page, max 60mm wide x 40mm tall
+        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40);
+        logoRendered = true;
       }
     }
 
@@ -3465,43 +3452,30 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   // --- Header with optional logo and branding ---
   let headerY = 20;
 
-  if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl) && reportData.reportType === 'team') {
-    try {
-      const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
-      if (response.ok) {
-        const contentType = response.headers.get('content-type') || '';
-        const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
-        const isPng = contentType.includes('png');
-        if (!isJpeg && !isPng) throw new Error('Unsupported logo content-type');
-        const arrayBuffer = await response.arrayBuffer();
-        if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
-        const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const ext = isJpeg ? 'JPEG' : 'PNG';
-        const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
-        // Left-aligned logo, 30mm wide x 20mm tall
-        doc.addImage(`data:${mimeType};base64,${base64}`, ext, 14, 10, 30, 20);
-        // Title right-aligned next to logo
-        doc.setFontSize(20);
-        if (isVisual || org?.brandPrimaryColor) {
-          doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
-        }
-        doc.text(report.name, 50, 20);
-        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-
-        if (org?.brandTagline) {
-          doc.setFontSize(10);
-          doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-          doc.text(org.brandTagline, 50, 27);
-          doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-          headerY = 35;
-        } else {
-          headerY = 32;
-        }
-      } else {
-        throw new Error('Logo fetch failed');
+  if (org?.brandLogoUrl && reportData.reportType === 'team') {
+    const logoData = await fetchLogoBase64(org.brandLogoUrl);
+    if (logoData) {
+      // Left-aligned logo, 30mm wide x 20mm tall
+      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20);
+      // Title right-aligned next to logo
+      doc.setFontSize(20);
+      if (isVisual || org?.brandPrimaryColor) {
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
       }
-    } catch {
-      // Fallback to standard header
+      doc.text(report.name, 50, 20);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+      if (org?.brandTagline) {
+        doc.setFontSize(10);
+        doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        doc.text(org.brandTagline, 50, 27);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        headerY = 35;
+      } else {
+        headerY = 32;
+      }
+    } else {
+      // Logo fetch failed — fallback to standard header
       doc.setFontSize(20);
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);

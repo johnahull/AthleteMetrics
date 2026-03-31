@@ -25,8 +25,8 @@ export function isSafeLogoUrl(url: string): boolean {
     const hostname = parsed.hostname;
     // Block loopback, unspecified, and common internal hostnames
     if (hostname === 'localhost' || hostname === '0.0.0.0') return false;
-    if (hostname === '127.0.0.1' || hostname === '[::1]') return false;
-    // Block all IPv6 addresses (bracketed) — no legitimate logo CDN uses raw IPv6
+    if (hostname === '127.0.0.1') return false;
+    // Block all IPv6 addresses (bracketed) — covers ::1, ::ffff:*, fc00::/7, fe80::, etc.
     if (hostname.startsWith('[')) return false;
     // Block RFC-1918 private ranges
     if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
@@ -38,5 +38,44 @@ export function isSafeLogoUrl(url: string): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+export interface LogoFetchResult {
+  base64: string;
+  ext: 'JPEG' | 'PNG';
+  mimeType: string;
+}
+
+/**
+ * Fetch a logo image from a URL and return it as a base64-encoded result.
+ * Returns null if the URL is unsafe, the fetch fails, the content-type is not
+ * an allowed image type, or the image exceeds the 2 MB size cap.
+ *
+ * Security: validates the URL with isSafeLogoUrl, disables redirect following
+ * to prevent SSRF via open redirects, and enforces a 5-second timeout.
+ */
+export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | null> {
+  if (!isSafeLogoUrl(url)) return null;
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      redirect: 'error', // Prevent SSRF via redirect chains
+    });
+    if (!response.ok) return null;
+    const contentType = response.headers.get('content-type') || '';
+    const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
+    const isPng = contentType.includes('png');
+    if (!isJpeg && !isPng) return null; // Reject SVG, WebP, etc.
+    const arrayBuffer = await response.arrayBuffer();
+    if (arrayBuffer.byteLength > 2 * 1024 * 1024) return null; // 2 MB cap
+    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    return {
+      base64,
+      ext: isJpeg ? 'JPEG' : 'PNG',
+      mimeType: isJpeg ? 'image/jpeg' : 'image/png',
+    };
+  } catch {
+    return null;
   }
 }
