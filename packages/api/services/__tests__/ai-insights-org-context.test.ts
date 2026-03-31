@@ -53,18 +53,14 @@ describe('buildPrompt – organizationContext', () => {
   });
 
   it('truncates organization context longer than 2000 characters', () => {
-    // sanitizeForPrompt caps individual fields at 500 chars, but the org context
-    // path applies an additional .substring(0, 2000) after sanitization.
-    // Since sanitizeForPrompt already caps at 500, anything over 500 gets cut first.
-    // We test the effective truncation: content beyond 500 chars is removed.
-    const longContext = 'A'.repeat(600);
+    const longContext = 'A'.repeat(2500);
     const data = makeReportData({ organizationContext: longContext });
 
     const prompt = buildPrompt(data);
 
-    // sanitizeForPrompt truncates to 500 first, then .substring(0, 2000) is a no-op
-    expect(prompt).toContain('A'.repeat(500));
-    expect(prompt).not.toContain('A'.repeat(501));
+    // sanitizeForPrompt is called with maxLength=2000 for org context
+    expect(prompt).toContain('A'.repeat(2000));
+    expect(prompt).not.toContain('A'.repeat(2001));
   });
 
   it('appears AFTER the AI role definition', () => {
@@ -162,9 +158,14 @@ describe('sanitizeForPrompt – direct tests', () => {
     expect(sanitizeForPrompt('  hello  ')).toBe('hello');
   });
 
-  it('truncates to 500 characters', () => {
+  it('truncates to 500 characters by default', () => {
     const long = 'x'.repeat(600);
     expect(sanitizeForPrompt(long)).toHaveLength(500);
+  });
+
+  it('truncates to a custom maxLength when provided', () => {
+    const long = 'x'.repeat(2500);
+    expect(sanitizeForPrompt(long, 2000)).toHaveLength(2000);
   });
 
   it('returns empty string for empty input', () => {

@@ -473,14 +473,14 @@ export async function generateCoachingInsights(
  * Sanitize user-generated content before including in AI prompts
  * Prevents potential prompt injection attacks by escaping markdown and special characters
  */
-export function sanitizeForPrompt(input: string): string {
+export function sanitizeForPrompt(input: string, maxLength = 500): string {
   if (!input) return '';
   return input
     .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
     .replace(/\n+/g, ' ') // Convert newlines to spaces
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
-    .substring(0, 500); // Limit length of individual fields
+    .substring(0, maxLength); // Limit length of individual fields
 }
 
 /**
@@ -499,7 +499,7 @@ export function buildPrompt(reportData: ReportData): string {
 
   // Append organization context after role definition
   if (reportData.organizationContext) {
-    const sanitizedContext = sanitizeForPrompt(reportData.organizationContext).substring(0, 2000);
+    const sanitizedContext = sanitizeForPrompt(reportData.organizationContext, 2000);
     if (sanitizedContext) {
       prompt += `## Organization Context\n${sanitizedContext}\n\nWhen generating insights, incorporate this context to make recommendations specific to this organization's training philosophy and methodology.\n\n`;
     }
