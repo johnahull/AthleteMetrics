@@ -472,7 +472,7 @@ export async function generateCoachingInsights(
  * Sanitize user-generated content before including in AI prompts
  * Prevents potential prompt injection attacks by escaping markdown and special characters
  */
-function sanitizeForPrompt(input: string): string {
+export function sanitizeForPrompt(input: string): string {
   if (!input) return '';
   return input
     .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
@@ -485,7 +485,7 @@ function sanitizeForPrompt(input: string): string {
 /**
  * Build the prompt for the AI model based on report data
  */
-function buildPrompt(reportData: ReportData): string {
+export function buildPrompt(reportData: ReportData): string {
   const { reportType } = reportData;
 
   // Sanitize user-provided content to prevent prompt injection
