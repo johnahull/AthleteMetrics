@@ -81,12 +81,13 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).toContain('"you" language');
     });
 
-    it('should be motivating and specific', () => {
+    it('should have energizing tone and avoid clinical language', () => {
       const data = makeBaseReportData({ audience: 'athlete' });
       const prompt = buildPrompt(data);
 
-      expect(prompt).toContain('motivating and specific');
-      expect(prompt).toContain('exactly what to focus on in training');
+      expect(prompt).toContain('Direct, confident, and energizing');
+      expect(prompt).toContain('AVOID');
+      expect(prompt).toContain('Clinical or passive language');
     });
 
     it('should include the four athlete-oriented sections', () => {
@@ -104,6 +105,20 @@ describe('buildPrompt audience branches', () => {
       const prompt = buildPrompt(data);
 
       expect(prompt).toContain('150-200 words');
+    });
+
+    it('should use the athlete first name when available', () => {
+      const data = makeBaseReportData({ audience: 'athlete', athleteName: 'Jordan Smith' });
+      const prompt = buildPrompt(data);
+
+      expect(prompt).toContain("athlete's first name (Jordan)");
+    });
+
+    it('should skip first-name instruction when athleteName is missing', () => {
+      const data = makeBaseReportData({ audience: 'athlete', athleteName: undefined });
+      const prompt = buildPrompt(data);
+
+      expect(prompt).not.toContain("athlete's first name");
     });
 
     it('should not contain parent-specific or coach-specific language', () => {

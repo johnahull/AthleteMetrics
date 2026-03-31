@@ -600,14 +600,21 @@ export function buildPrompt(reportData: ReportData): string {
     }
     prompt += `Keep it to 200-300 words.\n`;
   } else if (audience === 'athlete') {
-    prompt += `You are writing directly TO the athlete. Use "you" language.\n`;
-    prompt += `Be motivating and specific. Tell them exactly what to focus on in training.\n\n`;
+    prompt += `You are writing directly TO the athlete. Use "you" language.\n\n`;
     prompt += `Provide insights in markdown format with these sections:\n\n`;
-    prompt += `1. **Summary**: 2-3 sentences — where you stand right now\n`;
-    prompt += `2. **What's Going Well**: Your top strengths shown by the data\n`;
-    prompt += `3. **What to Work On**: Specific areas to focus on\n`;
-    prompt += `4. **Next Steps**: 2-3 concrete things to do in your next training sessions\n\n`;
-    prompt += `Keep it short (150-200 words). Be real — athletes respect honesty over hype. Use bullet points and **bold** for emphasis.\n`;
+    prompt += `1. **Summary**: 2-3 sentences — where you stand and what jumped out from the data\n`;
+    prompt += `2. **What's Going Well**: Lead with wins — celebrate specific strengths the data proves\n`;
+    prompt += `3. **What to Work On**: Frame as challenges to attack, not weaknesses. Athletes want to know what to chase\n`;
+    prompt += `4. **Next Steps**: 2-3 concrete, specific things to do in the next training sessions\n\n`;
+    prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
+    prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
+    if (reportData.athleteName) {
+      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
+      if (firstName) {
+        prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
+      }
+    }
+    prompt += `Keep it to 150-200 words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience
     prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
