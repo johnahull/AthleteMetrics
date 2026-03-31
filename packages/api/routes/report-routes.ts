@@ -3376,7 +3376,7 @@ function isSafeLogoUrl(url: string): boolean {
     if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
     if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
-    if (hostname === '169.254.169.254') return false;
+    if (/^169\.254\./.test(hostname)) return false;
     if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
     return true;
   } catch {
@@ -3432,8 +3432,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     let logoRendered = false;
     if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl)) {
       try {
-        const response = await fetch(org.brandLogoUrl);
+        const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
         if (response.ok) {
+          const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+          if (contentLength > 2 * 1024 * 1024) throw new Error('Logo too large');
           const arrayBuffer = await response.arrayBuffer();
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           const contentType = response.headers.get('content-type') || 'image/png';
@@ -3491,8 +3493,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
   if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl) && reportData.reportType === 'team') {
     try {
-      const response = await fetch(org.brandLogoUrl);
+      const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
       if (response.ok) {
+        const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+        if (contentLength > 2 * 1024 * 1024) throw new Error('Logo too large');
         const arrayBuffer = await response.arrayBuffer();
         const base64 = Buffer.from(arrayBuffer).toString('base64');
         const contentType = response.headers.get('content-type') || 'image/png';
