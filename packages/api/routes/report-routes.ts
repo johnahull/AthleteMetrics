@@ -3434,9 +3434,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       try {
         const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
         if (response.ok) {
-          const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
-          if (contentLength > 2 * 1024 * 1024) throw new Error('Logo too large');
           const arrayBuffer = await response.arrayBuffer();
+          if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
           const base64 = Buffer.from(arrayBuffer).toString('base64');
           const contentType = response.headers.get('content-type') || 'image/png';
           const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
@@ -3495,9 +3494,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     try {
       const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
       if (response.ok) {
-        const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
-        if (contentLength > 2 * 1024 * 1024) throw new Error('Logo too large');
         const arrayBuffer = await response.arrayBuffer();
+        if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
         const base64 = Buffer.from(arrayBuffer).toString('base64');
         const contentType = response.headers.get('content-type') || 'image/png';
         const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
