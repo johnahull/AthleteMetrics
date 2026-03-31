@@ -4097,8 +4097,12 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       }
     }
 
-    // Extract audience from report config
-    const audience = reportConfig?.audience;
+    // Extract and validate audience from report config
+    const VALID_AUDIENCES = ['coach', 'athlete', 'parent'] as const;
+    const rawAudience = reportConfig?.audience;
+    const audience = VALID_AUDIENCES.includes(rawAudience as typeof VALID_AUDIENCES[number])
+      ? (rawAudience as typeof VALID_AUDIENCES[number])
+      : undefined;
 
     // Build final ReportData object
     const aiReportData: import("../services/ai-insights-service").ReportData = {

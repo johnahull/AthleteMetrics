@@ -112,11 +112,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const reportType = watch("reportType");
   const reportName = watch("name");
 
-  // Debug logging
-  useEffect(() => {
-    console.log('[ReportWizard] State changed - step:', step, 'reportType:', reportType);
-  }, [step, reportType]);
-
   // Default audience based on report type — only if user hasn't manually chosen
   useEffect(() => {
     if (!dirtyFields.audience) {
@@ -173,11 +168,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
-    console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
 
     // Validate report name on step 3 before progressing
     if (step === 3 && (!reportName || reportName.trim() === "")) {
-      console.log('[ReportWizard] Cannot proceed from step 3 - report name is required');
       return;
     }
 
@@ -188,7 +181,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       } else {
         setStep(step + 1);
       }
-      console.log('[ReportWizard] Moving to step:', step + 1);
     }
   };
 
@@ -204,31 +196,21 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const onSubmit = async (data: ReportFormData) => {
-    console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType);
-    console.log('[ReportWizard] Form data:', JSON.stringify(data, null, 2));
-    console.log('[ReportWizard] athleteIds:', data.athleteIds);
-    console.log('[ReportWizard] athleteIds length:', data.athleteIds?.length);
-
     // Prevent submission if not on final step
     if (step !== totalSteps) {
-      console.error('[ReportWizard] Form submitted prematurely on step', step, '- blocking submission');
       return;
     }
 
     if (!organizationContext) {
-      console.log('[ReportWizard] No organizationContext - aborting');
       return;
     }
 
     // Extra validation for individual reports
     if (data.reportType === "individual") {
       if (!data.athleteIds || data.athleteIds.length === 0) {
-        console.error('[ReportWizard] Individual report submitted with no athletes!');
-        console.error('[ReportWizard] This should have been caught by Zod validation');
         // The Zod schema should have prevented this, but double-check
         return;
       }
-      console.log('[ReportWizard] Individual report has', data.athleteIds.length, 'athletes');
     }
 
     const config: any = {
@@ -382,10 +364,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 organizationId={organizationContext!}
                 selectedAthleteIds={watch("athleteIds") || []}
                 onSelectionChange={(ids) => {
-                  console.log('[ReportWizard] Athlete selection changed:', ids);
-                  console.log('[ReportWizard] Setting athleteIds to:', ids);
                   setValue("athleteIds", ids);
-                  console.log('[ReportWizard] Current form value:', watch("athleteIds"));
                 }}
               />
 
@@ -787,7 +766,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               </Label>
               <RadioGroup
                 value={watch("audience")}
-                onValueChange={(value) => setValue("audience", value as "coach" | "athlete" | "parent")}
+                onValueChange={(value) => setValue("audience", value as "coach" | "athlete" | "parent", { shouldDirty: true })}
               >
                 <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
                   <RadioGroupItem value="coach" id="audience-coach" />
