@@ -21,6 +21,7 @@ import {
   teams,
   auditLogs,
   userOrganizations,
+  siteMetrics,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
