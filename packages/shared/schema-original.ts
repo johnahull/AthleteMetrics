@@ -1411,9 +1411,9 @@ export const updateOrganizationSchema = z.object({
   eventsEnabled: z.boolean().optional(), // Org admin can enable/disable events module
   customMetricsEnabled: z.boolean().optional(), // Site admin only - enable/disable custom metrics feature
   brandLogoUrl: z.preprocess(val => val === '' ? null : val, z.string().url("Must be a valid URL").max(2000).nullable()).optional(),
-  brandPrimaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").optional().nullable(),
-  brandSecondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").optional().nullable(),
-  brandTagline: z.string().max(200, "Tagline must be 200 characters or less").optional().nullable(),
+  brandPrimaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
+  brandSecondaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
+  brandTagline: z.preprocess(val => val === '' ? null : val, z.string().max(200, "Tagline must be 200 characters or less").nullable()).optional(),
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
