@@ -88,7 +88,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     watch,
     setValue,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<ReportFormData>({
     resolver: zodResolver(reportConfigSchema),
     defaultValues: {
@@ -117,10 +117,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     console.log('[ReportWizard] State changed - step:', step, 'reportType:', reportType);
   }, [step, reportType]);
 
-  // Default audience based on report type
+  // Default audience based on report type — only if user hasn't manually chosen
   useEffect(() => {
-    setValue("audience", reportType === "individual" ? "parent" : "coach");
-  }, [reportType, setValue]);
+    if (!dirtyFields.audience) {
+      setValue("audience", reportType === "individual" ? "parent" : "coach");
+    }
+  }, [reportType, setValue, dirtyFields.audience]);
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
