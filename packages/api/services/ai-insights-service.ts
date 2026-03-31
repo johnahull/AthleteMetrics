@@ -594,7 +594,9 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
     if (reportData.athleteName) {
       const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
-      prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
+      if (firstName) {
+        prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
+      }
     }
     prompt += `Keep it to 200-300 words.\n`;
   } else if (audience === 'athlete') {

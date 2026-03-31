@@ -202,6 +202,18 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).toContain('PARENTS of youth athletes');
       expect(prompt).not.toContain("athlete's first name");
     });
+
+    it('should skip first-name instruction when sanitized name is empty', () => {
+      // A name composed entirely of markdown special chars sanitizes to ''
+      const data = makeBaseReportData({
+        audience: 'parent',
+        athleteName: '***',
+      });
+      const prompt = buildPrompt(data);
+
+      expect(prompt).not.toContain("athlete's first name ()");
+      expect(prompt).not.toContain("athlete's first name");
+    });
   });
 
   describe('all audiences share common constraints', () => {
