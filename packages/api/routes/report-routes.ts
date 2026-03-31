@@ -37,6 +37,12 @@ import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
 
+/** Organization branding fields used for PDF generation */
+type ReportOrg = Pick<
+  typeof organizations.$inferSelect,
+  'name' | 'brandLogoUrl' | 'brandPrimaryColor' | 'brandSecondaryColor' | 'brandTagline'
+>;
+
 // Type guards for report configs
 interface IndividualReportConfig {
   athleteId?: string;
@@ -3404,7 +3410,7 @@ function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
 /**
  * Generate PDF document from report data
  */
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: any): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
