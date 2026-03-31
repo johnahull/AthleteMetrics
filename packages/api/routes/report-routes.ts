@@ -3351,10 +3351,31 @@ function sanitizeFilename(filename: string): string {
  * Parse hex color string to RGB tuple
  */
 function hexToRgb(hex: string): [number, number, number] {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return [41, 128, 185]; // Fallback to default blue
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return [r, g, b];
+}
+
+/**
+ * Validate that a URL is safe to fetch server-side (prevents SSRF)
+ */
+function isSafeLogoUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname;
+    // Block private/internal ranges
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+    if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
+    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
+    if (hostname === '169.254.169.254') return false;
+    if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
@@ -3396,14 +3417,14 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   };
 
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
 
   // --- Cover page for individual reports ---
   if (reportData.reportType !== 'team') {
     const athlete = reportData.athlete;
 
     // Try to embed org logo if available
-    if (org?.brandLogoUrl) {
+    let logoRendered = false;
+    if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl)) {
       try {
         const response = await fetch(org.brandLogoUrl);
         if (response.ok) {
@@ -3413,14 +3434,15 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
           // Center logo on cover page, max 60mm wide x 40mm tall
           doc.addImage(`data:${contentType};base64,${base64}`, ext, (pageWidth - 60) / 2, 50, 60, 40);
+          logoRendered = true;
         }
       } catch {
         // Logo fetch failed — continue without it
       }
     }
 
-    // Cover page text
-    const coverY = org?.brandLogoUrl ? 110 : 80;
+    // Cover page text — position based on whether logo was actually rendered
+    const coverY = logoRendered ? 110 : 80;
 
     if (org?.name) {
       doc.setFontSize(16);
@@ -3461,7 +3483,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   // --- Header with optional logo and branding ---
   let headerY = 20;
 
-  if (org?.brandLogoUrl && reportData.reportType === 'team') {
+  if (org?.brandLogoUrl && isSafeLogoUrl(org.brandLogoUrl) && reportData.reportType === 'team') {
     try {
       const response = await fetch(org.brandLogoUrl);
       if (response.ok) {
