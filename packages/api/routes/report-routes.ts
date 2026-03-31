@@ -36,6 +36,7 @@ import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
+import { hexToRgb, isSafeLogoUrl } from "./report-branding-utils";
 
 /** Organization branding fields used for PDF generation */
 type ReportOrg = Pick<
@@ -3353,36 +3354,6 @@ function sanitizeFilename(filename: string): string {
 /**
  * Add footer to all pages in the PDF
  */
-/**
- * Parse hex color string to RGB tuple
- */
-function hexToRgb(hex: string): [number, number, number] {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return [41, 128, 185]; // Fallback to default blue
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return [r, g, b];
-}
-
-/**
- * Validate that a URL is safe to fetch server-side (prevents SSRF)
- */
-function isSafeLogoUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname;
-    // Block private/internal ranges
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
-    if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
-    if (/^169\.254\./.test(hostname)) return false;
-    if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
   const pageCount = doc.getNumberOfPages();
@@ -3434,13 +3405,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       try {
         const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
         if (response.ok) {
+          const contentType = response.headers.get('content-type') || '';
+          const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
+          const isPng = contentType.includes('png');
+          if (!isJpeg && !isPng) throw new Error('Unsupported logo content-type');
           const arrayBuffer = await response.arrayBuffer();
           if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
           const base64 = Buffer.from(arrayBuffer).toString('base64');
-          const contentType = response.headers.get('content-type') || 'image/png';
-          const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
+          const ext = isJpeg ? 'JPEG' : 'PNG';
+          const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
           // Center logo on cover page, max 60mm wide x 40mm tall
-          doc.addImage(`data:${contentType};base64,${base64}`, ext, (pageWidth - 60) / 2, 50, 60, 40);
+          doc.addImage(`data:${mimeType};base64,${base64}`, ext, (pageWidth - 60) / 2, 50, 60, 40);
           logoRendered = true;
         }
       } catch {
@@ -3494,13 +3469,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     try {
       const response = await fetch(org.brandLogoUrl, { signal: AbortSignal.timeout(5000) });
       if (response.ok) {
+        const contentType = response.headers.get('content-type') || '';
+        const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
+        const isPng = contentType.includes('png');
+        if (!isJpeg && !isPng) throw new Error('Unsupported logo content-type');
         const arrayBuffer = await response.arrayBuffer();
         if (arrayBuffer.byteLength > 2 * 1024 * 1024) throw new Error('Logo too large');
         const base64 = Buffer.from(arrayBuffer).toString('base64');
-        const contentType = response.headers.get('content-type') || 'image/png';
-        const ext = contentType.includes('jpeg') || contentType.includes('jpg') ? 'JPEG' : 'PNG';
+        const ext = isJpeg ? 'JPEG' : 'PNG';
+        const mimeType = isJpeg ? 'image/jpeg' : 'image/png';
         // Left-aligned logo, 30mm wide x 20mm tall
-        doc.addImage(`data:${contentType};base64,${base64}`, ext, 14, 10, 30, 20);
+        doc.addImage(`data:${mimeType};base64,${base64}`, ext, 14, 10, 30, 20);
         // Title right-aligned next to logo
         doc.setFontSize(20);
         if (isVisual || org?.brandPrimaryColor) {
