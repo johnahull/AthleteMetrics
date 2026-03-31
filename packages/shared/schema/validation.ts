@@ -75,6 +75,29 @@ export {
   toggleSiteSetVisibilitySchema,
 } from "../schema-original";
 
+// Training module Zod schemas (Phase 1)
+import { z } from "zod";
+
+/**
+ * Schema for a single completed set within a workout log entry.
+ * Stored as JSONB in workoutLogEntries.sets column.
+ */
+export const workoutSetSchema = z.object({
+  setNumber: z.number().int().positive(),
+  repsCompleted: z.number().int().positive().nullable(),
+  weightLbs: z.number().positive().nullable(),
+  notes: z.string().optional(),
+});
+
+/**
+ * Enum for exercise types.
+ * Drives log input UX: speed/plyometric show quality rating; weighted/bodyweight show weight; timed shows duration.
+ */
+export const exerciseTypeEnum = z.enum(['weighted', 'bodyweight', 'speed', 'plyometric', 'timed']);
+
+export type WorkoutSet = z.infer<typeof workoutSetSchema>;
+export type ExerciseType = z.infer<typeof exerciseTypeEnum>;
+
 // Insert type exports
 export type {
   InsertOrganization,

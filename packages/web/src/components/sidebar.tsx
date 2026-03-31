@@ -25,7 +25,8 @@ import {
   Link,
   UserPlus,
   Calendar,
-  Ruler
+  Ruler,
+  Dumbbell
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -71,6 +72,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle, tourId: "data-entry" },
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
+    { name: "Training", href: "/training/programs", icon: Dumbbell, tourId: "training" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
@@ -85,6 +87,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Data Entry", href: "/data-entry", icon: PlusCircle, tourId: "data-entry" },
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
+    { name: "Training", href: "/training/programs", icon: Dumbbell, tourId: "training" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
@@ -96,6 +99,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "My Measurements", href: "/my-measurements", icon: ClipboardList, tourId: "my-measurements" },
     { name: "My Reports", href: "/my-reports", icon: FileText, badge: reportBadge, tourId: "my-reports" },
     { name: "My Events", href: "/my-events", icon: Calendar, badge: invitationBadge, tourId: "my-events" },
+    { name: "My Training", href: "/my-training", icon: Dumbbell, tourId: "my-training" },
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users, tourId: "peer-comparison" },
     { name: "My Goals", href: "/my-goals", icon: Target, tourId: "my-goals" },
     { name: "Join Organization", href: "/join", icon: UserPlus, tourId: "join-organization" }
@@ -240,6 +244,17 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
   if (!eventsEnabled) {
     navigation = navigation.filter(item =>
       item.name !== "Events" && item.name !== "My Events"
+    );
+  }
+
+  // Filter out Training links if training module is disabled globally or for organization
+  const trainingModuleEnabled = siteSettings?.trainingModuleEnabled ?? false;
+  const orgTrainingEnabled = organization?.trainingEnabled ?? false;
+  const isTrainingEnabled = trainingModuleEnabled && orgTrainingEnabled;
+
+  if (!isTrainingEnabled) {
+    navigation = navigation.filter(item =>
+      item.name !== "Training" && item.name !== "My Training"
     );
   }
 

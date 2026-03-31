@@ -363,7 +363,7 @@ export interface IStorage {
 
   // Site Settings (Global Settings)
   getSiteSettings(): Promise<SiteSettings | undefined>;
-  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings>;
+  updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; trainingModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings>;
 
   // Reports
   getReport(id: string): Promise<Report | undefined>;
@@ -5448,7 +5448,7 @@ export class DatabaseStorage implements IStorage {
     return settings || undefined;
   }
 
-  async updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings> {
+  async updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; trainingModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
     const existing = await this.getSiteSettings();
 
@@ -5465,6 +5465,10 @@ export class DatabaseStorage implements IStorage {
 
       if (settings.wellnessModuleEnabled !== undefined) {
         updateData.wellnessModuleEnabled = settings.wellnessModuleEnabled;
+      }
+
+      if (settings.trainingModuleEnabled !== undefined) {
+        updateData.trainingModuleEnabled = settings.trainingModuleEnabled;
       }
 
       const [updated] = await db

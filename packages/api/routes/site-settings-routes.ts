@@ -57,6 +57,7 @@ router.get("/public", async (req, res) => {
     // Only return public information
     return res.json({
       wellnessModuleEnabled: settings?.wellnessModuleEnabled ?? true,
+      trainingModuleEnabled: settings?.trainingModuleEnabled ?? false,
     });
   } catch (error) {
     console.error("Error fetching public site settings:", error);
@@ -76,10 +77,11 @@ router.get("/", requireSiteAdmin, async (req, res) => {
     const settings = await storage.getSiteSettings();
 
     if (!settings) {
-      // Return default settings if none exist
+      // Return default settings if none exist — include all feature flags
       return res.json({
         aiModel: "gpt-5-nano",
         wellnessModuleEnabled: true,
+        trainingModuleEnabled: false,
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });
@@ -134,10 +136,16 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
       updateData.wellnessModuleEnabled = validated.wellnessModuleEnabled;
     }
 
+    // Add training module flag if provided
+    if (validated.trainingModuleEnabled !== undefined) {
+      updateData.trainingModuleEnabled = validated.trainingModuleEnabled;
+    }
+
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
     const previousModel = previousSettings?.aiModel || 'gpt-5-nano';
     const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
+    const previousTraining = previousSettings?.trainingModuleEnabled ?? false;
 
     // Update or create settings
     const updatedSettings = await storage.updateSiteSettings(updateData);
@@ -170,6 +178,22 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
         details: JSON.stringify({
           previousEnabled: previousWellness,
           newEnabled: validated.wellnessModuleEnabled,
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+    }
+
+    // Audit log for training module toggle
+    if (user?.id && validated.trainingModuleEnabled !== undefined && previousTraining !== validated.trainingModuleEnabled) {
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'site_training_module_toggled',
+        resourceType: 'site_settings',
+        resourceId: 'global',
+        details: JSON.stringify({
+          previousEnabled: previousTraining,
+          newEnabled: validated.trainingModuleEnabled,
         }),
         ipAddress: req.ip || null,
         userAgent: req.get('user-agent') || null,

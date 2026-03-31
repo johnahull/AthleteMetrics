@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Settings } from "lucide-react";
+import { ArrowLeft, Save, Settings, AlertTriangle } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,6 +24,7 @@ import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
 import { updateOrganizationSchema } from "@shared/schema";
 import type { UpdateOrganization } from "@shared/schema";
 import { OrganizationTypeSelector } from "@/components/organization-type-selector";
+import { useQuery } from "@tanstack/react-query";
 
 // Loading spinner component
 const LoadingSpinner = ({ text }: { text: string }) => (
@@ -45,6 +46,13 @@ export default function OrganizationSettings() {
   // Fetch organization data
   const { data: organization, isLoading, error } = useOrganization(organizationId);
 
+  // Fetch site settings to check global training module status
+  const { data: siteSettings } = useQuery<{ trainingModuleEnabled: boolean }>({
+    queryKey: ["/api/site-settings"],
+    enabled: !!user?.isSiteAdmin,
+  });
+  const globalTrainingEnabled = siteSettings?.trainingModuleEnabled ?? false;
+
   // Update mutation
   const updateMutation = useUpdateOrganization(organizationId!);
 
@@ -62,6 +70,7 @@ export default function OrganizationSettings() {
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
       customMetricsEnabled: organization.customMetricsEnabled || false,
+      trainingEnabled: organization.trainingEnabled ?? false,
     } : undefined,
   });
 
@@ -100,6 +109,9 @@ export default function OrganizationSettings() {
       }
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
+      }
+      if (data.trainingEnabled !== (organization?.trainingEnabled ?? false)) {
+        changedFields.trainingEnabled = data.trainingEnabled;
       }
 
       // If no changes, don't make API call
@@ -400,6 +412,39 @@ export default function OrganizationSettings() {
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="trainingEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <FormLabel className="text-base">Training Module</FormLabel>
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200">
+                          Experimental
+                        </span>
+                      </div>
+                      <FormDescription>
+                        Enable training programs, workout logging, and athlete compliance tracking
+                        {!globalTrainingEnabled && (
+                          <span className="block mt-1 text-yellow-700 font-medium">
+                            Disabled globally — enable the Training Module in Site Settings first
+                          </span>
+                        )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value && globalTrainingEnabled}
+                        onCheckedChange={field.onChange}
+                        disabled={!globalTrainingEnabled}
+                        data-testid="org-training-toggle"
                       />
                     </FormControl>
                   </FormItem>
