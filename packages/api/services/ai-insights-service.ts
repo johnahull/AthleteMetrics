@@ -495,19 +495,15 @@ export function buildPrompt(reportData: ReportData): string {
 
   let prompt = '';
 
-  // Prepend organization context if available
+  prompt += `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
+
+  // Append organization context after role definition
   if (reportData.organizationContext) {
-    const sanitizedContext = reportData.organizationContext
-      .replace(/[#*_`\[\]<>]/g, '')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 2000);
+    const sanitizedContext = sanitizeForPrompt(reportData.organizationContext).substring(0, 2000);
     if (sanitizedContext) {
       prompt += `## Organization Context\n${sanitizedContext}\n\nWhen generating insights, incorporate this context to make recommendations specific to this organization's training philosophy and methodology.\n\n`;
     }
   }
-
-  prompt += `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
 
   // Report context
   prompt += `## Report Context\n`;
