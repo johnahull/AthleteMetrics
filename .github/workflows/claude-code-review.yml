@@ -73,8 +73,7 @@ jobs:
             - Categorize issues by severity so authors know what to prioritize
             - Do not read .claude/agents/ or invoke sub-agents
 
-          model: claude-sonnet-4-6
-          claude_args: --max-turns 40 --allowed-tools "Bash(gh:*),Read,Grep,Glob"
+          claude_args: --model claude-sonnet-4-6 --max-turns 40 --allowed-tools "Bash(gh:*),Read,Grep,Glob"
 
           additional_permissions: |
             actions: read
