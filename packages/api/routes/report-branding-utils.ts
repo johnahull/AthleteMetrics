@@ -25,9 +25,9 @@ export function isSafeLogoUrl(url: string): boolean {
     const hostname = parsed.hostname;
     // Block loopback, unspecified, and common internal hostnames
     if (hostname === 'localhost' || hostname === '0.0.0.0') return false;
-    if (hostname === '127.0.0.1' || hostname === '::1') return false;
-    // Block IPv4-mapped IPv6 addresses (e.g. ::ffff:127.0.0.1)
-    if (/^::ffff:/i.test(hostname)) return false;
+    if (hostname === '127.0.0.1' || hostname === '[::1]') return false;
+    // Block all IPv6 addresses (bracketed) — no legitimate logo CDN uses raw IPv6
+    if (hostname.startsWith('[')) return false;
     // Block RFC-1918 private ranges
     if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
