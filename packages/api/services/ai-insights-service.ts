@@ -593,7 +593,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
     if (reportData.athleteName) {
-      const firstName = reportData.athleteName.split(' ')[0];
+      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
       prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
     }
     prompt += `Keep it to 200-300 words.\n`;
