@@ -1284,9 +1284,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Fetch organization branding
-        const org = report.organizationId
-          ? await db.select().from(organizations).where(eq(organizations.id, report.organizationId)).limit(1).then((rows) => rows[0])
-          : undefined;
+        const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF
         const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org);
@@ -1345,9 +1343,7 @@ export function registerReportRoutes(app: Express) {
         }
 
         // Fetch organization branding
-        const org = report.organizationId
-          ? await db.select().from(organizations).where(eq(organizations.id, report.organizationId)).limit(1).then((rows) => rows[0])
-          : undefined;
+        const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF from snapshot data
         const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org);
@@ -3341,6 +3337,12 @@ export function registerReportRoutes(app: Express) {
  * Sanitize filename for safe PDF download
  * Prevents path traversal, null bytes, Unicode normalization attacks, and other security issues
  */
+/** Fetch organization record for PDF branding */
+async function fetchOrgForBranding(organizationId: string | undefined | null) {
+  if (!organizationId) return undefined;
+  return db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1).then((rows) => rows[0]);
+}
+
 function sanitizeFilename(filename: string): string {
   return filename
     .normalize('NFKD') // Unicode normalization to prevent homograph attacks
@@ -3395,6 +3397,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     text: [40, 40, 40] as [number, number, number],
   };
 
+  const reportName = report.name || 'Performance Report';
   const pageWidth = doc.internal.pageSize.getWidth();
 
   // --- Cover page for individual reports ---
@@ -3434,15 +3437,21 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     doc.setFontSize(14);
     doc.setTextColor(100, 100, 100);
-    const dateStr = new Date(reportData.generatedAt).toLocaleDateString();
+    const dateStr = reportData.generatedAt ? new Date(reportData.generatedAt).toLocaleDateString() : '';
     const dateWidth = doc.getTextWidth(dateStr);
     doc.text(dateStr, (pageWidth - dateWidth) / 2, coverY + 55);
 
     if (org?.brandTagline) {
       doc.setFontSize(12);
       doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-      const taglineWidth = doc.getTextWidth(org.brandTagline);
-      doc.text(org.brandTagline, (pageWidth - taglineWidth) / 2, coverY + 70);
+      const maxTaglineWidth = pageWidth - 28;
+      const taglineLines = doc.splitTextToSize(org.brandTagline, maxTaglineWidth);
+      let tagY = coverY + 70;
+      for (const line of taglineLines) {
+        const lineWidth = doc.getTextWidth(line);
+        doc.text(line, (pageWidth - lineWidth) / 2, tagY);
+        tagY += 6;
+      }
     }
 
     doc.addPage();
@@ -3459,15 +3468,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
       }
-      doc.text(report.name, 50, 20);
+      doc.text(reportName, 50, 20);
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
 
       if (org?.brandTagline) {
         doc.setFontSize(10);
         doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-        doc.text(org.brandTagline, 50, 27);
+        const tagLines = doc.splitTextToSize(org.brandTagline, pageWidth - 64); // 50mm left + 14mm right margin
+        let tagY = 27;
+        for (const tl of tagLines) { doc.text(tl, 50, tagY); tagY += 5; }
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        headerY = 35;
+        headerY = tagY + 3;
       } else {
         headerY = 32;
       }
@@ -3476,7 +3487,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
       }
-      doc.text(report.name, 14, 20);
+      doc.text(reportName, 14, 20);
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
     }
   } else {
@@ -3484,15 +3495,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (isVisual || org?.brandPrimaryColor) {
       doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
     }
-    doc.text(report.name, 14, 20);
+    doc.text(reportName, 14, 20);
     doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
 
     if (org?.brandTagline && reportData.reportType === 'team') {
       doc.setFontSize(10);
       doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
-      doc.text(org.brandTagline, 14, 27);
+      const tagLines = doc.splitTextToSize(org.brandTagline, pageWidth - 28);
+      let tagY = 27;
+      for (const tl of tagLines) { doc.text(tl, 14, tagY); tagY += 5; }
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-      headerY = 33;
+      headerY = tagY + 3;
     }
   }
 
