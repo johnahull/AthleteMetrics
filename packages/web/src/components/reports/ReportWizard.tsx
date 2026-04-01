@@ -33,6 +33,7 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
@@ -777,30 +778,36 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                     </div>
                   </Label>
                 </div>
-                <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
-                  <RadioGroupItem value="athlete" id="audience-athlete" />
-                  <Label htmlFor="audience-athlete" className="cursor-pointer flex-1">
-                    <div className="font-semibold">Athlete</div>
-                    <div className="text-sm text-muted-foreground">
-                      Motivating "you" language — honest, specific, and to the point
+                {/* Athlete and Parent audiences only apply to individual reports */}
+                {reportType === "individual" && (
+                  <>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                      <RadioGroupItem value="athlete" id="audience-athlete" />
+                      <Label htmlFor="audience-athlete" className="cursor-pointer flex-1">
+                        <div className="font-semibold">Athlete</div>
+                        <div className="text-sm text-muted-foreground">
+                          Motivating "you" language — honest, specific, and to the point
+                        </div>
+                      </Label>
                     </div>
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
-                  <RadioGroupItem value="parent" id="audience-parent" />
-                  <Label htmlFor="audience-parent" className="cursor-pointer flex-1">
-                    <div className="font-semibold">Parent</div>
-                    <div className="text-sm text-muted-foreground">
-                      Clear non-technical language explaining what the numbers mean for their child
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                      <RadioGroupItem value="parent" id="audience-parent" />
+                      <Label htmlFor="audience-parent" className="cursor-pointer flex-1">
+                        <div className="font-semibold">Parent</div>
+                        <div className="text-sm text-muted-foreground">
+                          Clear non-technical language explaining what the numbers mean for their child
+                        </div>
+                      </Label>
                     </div>
-                  </Label>
-                </div>
+                  </>
+                )}
               </RadioGroup>
             </div>
           )}
 
           {step === 8 && reportType === "team" && (
             <div className="space-y-4">
+              <Separator />
               <Label>Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
                 Create a weighted composite score across multiple metrics to rank athletes
@@ -864,6 +871,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 </p>
                 <p className="text-sm">
                   <strong>Metrics:</strong> {selectedMetrics.length} selected
+                </p>
+                <p className="text-sm">
+                  <strong>Audience:</strong>{" "}
+                  {watch("audience") === "coach"
+                    ? "Coach"
+                    : watch("audience") === "athlete"
+                    ? "Athlete"
+                    : "Parent"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Click "Create Report" to finish

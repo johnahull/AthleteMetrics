@@ -612,6 +612,9 @@ export function buildPrompt(reportData: ReportData): string {
         prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
       }
     }
+    // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
+    // already implies action (it tells the athlete what to chase). Adding a separate next-steps
+    // block would be redundant and dilute the direct, competitor-facing tone.
     prompt += `Keep it to 150-200 words. Use bullet points and **bold** for emphasis.\n`;
   } else {
     // Default: coach audience
