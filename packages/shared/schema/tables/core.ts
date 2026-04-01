@@ -33,6 +33,11 @@ export const organizations = pgTable("organizations", {
   eventsEnabled: boolean("events_enabled").default(false).notNull(),
   // Custom organization metrics feature flag (added in migration 0093)
   customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
+  // PDF branding fields (added in migration 0106)
+  brandLogoUrl: text("brand_logo_url"),
+  brandPrimaryColor: varchar("brand_primary_color", { length: 7 }),
+  brandSecondaryColor: varchar("brand_secondary_color", { length: 7 }),
+  brandTagline: varchar("brand_tagline", { length: 200 }),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

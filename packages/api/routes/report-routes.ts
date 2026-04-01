@@ -37,6 +37,13 @@ import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
 import { notificationPreferences } from "@shared/schema";
+import { hexToRgb, isSafeLogoUrl, fetchLogoBase64 } from "./report-branding-utils";
+
+/** Organization branding fields used for PDF generation */
+type ReportOrg = Pick<
+  typeof organizations.$inferSelect,
+  'name' | 'brandLogoUrl' | 'brandPrimaryColor' | 'brandSecondaryColor' | 'brandTagline'
+>;
 
 // Type guards for report configs
 interface IndividualReportConfig {
@@ -1276,8 +1283,11 @@ export function registerReportRoutes(app: Express) {
           );
         }
 
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1332,8 +1342,11 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Report not found" });
         }
 
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified');
+        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -3324,6 +3337,12 @@ export function registerReportRoutes(app: Express) {
  * Sanitize filename for safe PDF download
  * Prevents path traversal, null bytes, Unicode normalization attacks, and other security issues
  */
+/** Fetch organization record for PDF branding */
+async function fetchOrgForBranding(organizationId: string | undefined | null) {
+  if (!organizationId) return undefined;
+  return db.select().from(organizations).where(eq(organizations.id, organizationId)).limit(1).then((rows) => rows[0]);
+}
+
 function sanitizeFilename(filename: string): string {
   return filename
     .normalize('NFKD') // Unicode normalization to prevent homograph attacks
@@ -3340,51 +3359,161 @@ function sanitizeFilename(filename: string): string {
 /**
  * Add footer to all pages in the PDF
  */
-function addFooterToAllPages(doc: jsPDF): void {
+function addFooterToAllPages(doc: jsPDF, orgName?: string, startPage = 1): void {
   const pageCount = doc.getNumberOfPages();
 
-  for (let i = 1; i <= pageCount; i++) {
+  for (let i = startPage; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
-    doc.setTextColor(128, 128, 128); // Gray color
+    doc.setTextColor(128, 128, 128);
 
-    // Add footer text centered at bottom of page
     const pageWidth = doc.internal.pageSize.getWidth();
-    const footerText = 'athletemetrics.io';
-    const textWidth = doc.getTextWidth(footerText);
-    const xPosition = (pageWidth - textWidth) / 2;
 
-    doc.text(footerText, xPosition, 287); // 287 is near bottom of A4 page (297mm height)
+    // Left-aligned: org branding or default
+    const footerText = orgName
+      ? `${orgName} | Powered by AthleteMetrics`
+      : 'athletemetrics.io';
+    doc.text(footerText, 14, 287);
+
+    // Right-aligned: page numbers
+    const pageText = `Page ${i} of ${pageCount}`;
+    const pageTextWidth = doc.getTextWidth(pageText);
+    doc.text(pageText, pageWidth - 14 - pageTextWidth, 287);
   }
 }
 
 /**
  * Generate PDF document from report data
  */
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified'): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
-  // Color schemes
+  // Color schemes — use org branding colors if available
   const colors = {
-    primary: (isVisual ? [41, 128, 185] : [70, 70, 70]) as [number, number, number],
-    secondary: (isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
+    primary: (org?.brandPrimaryColor ? hexToRgb(org.brandPrimaryColor) : isVisual ? [41, 128, 185] : [70, 70, 70]) as [number, number, number],
+    secondary: (org?.brandSecondaryColor ? hexToRgb(org.brandSecondaryColor) : isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
     accent: (isVisual ? [46, 204, 113] : [120, 120, 120]) as [number, number, number],
     text: [40, 40, 40] as [number, number, number],
   };
 
-  // Add title
-  doc.setFontSize(20);
-  if (isVisual) {
+  const reportName = report.name || 'Performance Report';
+  const pageWidth = doc.internal.pageSize.getWidth();
+
+  // --- Cover page for individual reports ---
+  if (reportData.reportType === 'individual') {
+    const athlete = reportData.athlete;
+
+    // Try to embed org logo if available
+    let logoRendered = false;
+    if (org?.brandLogoUrl) {
+      const logoData = await fetchLogoBase64(org.brandLogoUrl);
+      if (logoData) {
+        doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40);
+        logoRendered = true;
+      }
+    }
+
+    const coverY = logoRendered ? 110 : 80;
+
+    if (org?.name) {
+      doc.setFontSize(16);
+      doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      const orgNameWidth = doc.getTextWidth(org.name);
+      doc.text(org.name, (pageWidth - orgNameWidth) / 2, coverY);
+    }
+
+    doc.setFontSize(24);
     doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    const titleText = 'Performance Assessment Report';
+    const titleWidth = doc.getTextWidth(titleText);
+    doc.text(titleText, (pageWidth - titleWidth) / 2, coverY + 20);
+
+    doc.setFontSize(20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    const athleteName = athlete?.userName || 'Athlete';
+    const nameWidth = doc.getTextWidth(athleteName);
+    doc.text(athleteName, (pageWidth - nameWidth) / 2, coverY + 40);
+
+    doc.setFontSize(14);
+    doc.setTextColor(100, 100, 100);
+    const dateStr = reportData.generatedAt ? new Date(reportData.generatedAt).toLocaleDateString() : '';
+    const dateWidth = doc.getTextWidth(dateStr);
+    doc.text(dateStr, (pageWidth - dateWidth) / 2, coverY + 55);
+
+    if (org?.brandTagline) {
+      doc.setFontSize(12);
+      doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+      const maxTaglineWidth = pageWidth - 28;
+      const taglineLines = doc.splitTextToSize(org.brandTagline, maxTaglineWidth);
+      let tagY = coverY + 70;
+      for (const line of taglineLines) {
+        const lineWidth = doc.getTextWidth(line);
+        doc.text(line, (pageWidth - lineWidth) / 2, tagY);
+        tagY += 6;
+      }
+    }
+
+    doc.addPage();
   }
-  doc.text(report.name, 14, 20);
-  doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+  // --- Header with optional logo and branding ---
+  let headerY = 20;
+
+  if (org?.brandLogoUrl && reportData.reportType === 'team') {
+    const logoData = await fetchLogoBase64(org.brandLogoUrl);
+    if (logoData) {
+      doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20);
+      doc.setFontSize(20);
+      if (isVisual || org?.brandPrimaryColor) {
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      }
+      doc.text(reportName, 50, 20);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+      if (org?.brandTagline) {
+        doc.setFontSize(10);
+        doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        const tagLines = doc.splitTextToSize(org.brandTagline, pageWidth - 64); // 50mm left + 14mm right margin
+        let tagY = 27;
+        for (const tl of tagLines) { doc.text(tl, 50, tagY); tagY += 5; }
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        headerY = tagY + 3;
+      } else {
+        headerY = 32;
+      }
+    } else {
+      doc.setFontSize(20);
+      if (isVisual || org?.brandPrimaryColor) {
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+      }
+      doc.text(reportName, 14, 20);
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+    }
+  } else {
+    doc.setFontSize(20);
+    if (isVisual || org?.brandPrimaryColor) {
+      doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    }
+    doc.text(reportName, 14, 20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+    if (org?.brandTagline && reportData.reportType === 'team') {
+      doc.setFontSize(10);
+      doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+      const tagLines = doc.splitTextToSize(org.brandTagline, pageWidth - 28);
+      let tagY = 27;
+      for (const tl of tagLines) { doc.text(tl, 14, tagY); tagY += 5; }
+      doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+      headerY = tagY + 3;
+    }
+  }
 
   // Add description
   if (report.description) {
     doc.setFontSize(12);
-    doc.text(report.description, 14, 30);
+    doc.text(report.description, 14, headerY + 3);
+    headerY += 10;
   }
 
   // Add generation timestamp
@@ -3392,10 +3521,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   doc.text(
     `Generated: ${new Date(reportData.generatedAt).toLocaleString()}`,
     14,
-    40
+    headerY + 3
   );
 
-  let yPos = 50;
+  let yPos = headerY + 13;
 
   if (reportData.reportType === 'team') {
     // TEAM REPORT SECTIONS
@@ -3633,11 +3762,16 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     if (athlete.measurements) {
       const measurementRows = Object.entries(athlete.measurements).map(
-        ([metric, value]: [string, any]) => [
-          metric,
-          value.toFixed(2),
-          athlete.percentiles[metric]?.toFixed(1) || "N/A",
-        ]
+        ([metric, value]: [string, any]) => {
+          const label = reportData.metricLabels?.[metric] || metric;
+          const unit = reportData.metricUnits?.[metric] || '';
+          const formatted = `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+          return [
+            label,
+            formatted,
+            athlete.percentiles[metric]?.toFixed(1) || "N/A",
+          ];
+        }
       );
 
       autoTable(doc, {
@@ -3657,12 +3791,14 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
       Object.entries(athlete.benchmarkComparisons).forEach(
         ([metric, comparisons]: [string, any]) => {
+          const label = reportData.metricLabels?.[metric] || metric;
+          const unit = reportData.metricUnits?.[metric] || '';
           comparisons.forEach((comp: any) => {
             allBenchmarks.push([
-              metric,
+              label,
               comp.benchmarkName,
-              comp.benchmarkValue.toFixed(2),
-              comp.athleteValue.toFixed(2),
+              `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+              `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
               comp.meetsOrExceeds ? "Yes" : "No",
             ]);
           });
@@ -3683,6 +3819,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
         });
+
+        // Update yPos to after the table
+        yPos = (doc as any).lastAutoTable.finalY + 10;
       }
     }
   }
@@ -3701,29 +3840,69 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
     yPos += 10;
 
-    // Strip markdown formatting for PDF
-    const plainTextInsights = stripMarkdown(report.coachingInsights);
-
-    // Split insights into lines and add with text wrapping
-    // Use same width as autoTable content area (page width minus left/right margins)
-    // AutoTable default margins are typically 14mm on each side
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margins = { left: 14, right: 14 };
-    const contentWidth = pageWidth - margins.left - margins.right;
+    // Render markdown with structure preserved (headers bold, bullets indented)
+    const insightsPageWidth = doc.internal.pageSize.getWidth();
+    const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
     const lineHeight = 5;
 
-    doc.setFontSize(10);
-    const lines = doc.splitTextToSize(plainTextInsights, contentWidth);
+    doc.setFontSize(8);
+    const markdownLines = report.coachingInsights.split('\n');
 
-    lines.forEach((line: string) => {
-      // Check if we need a new page
+    for (const rawLine of markdownLines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        yPos += 3; // Blank line = paragraph spacing
+        continue;
+      }
+
+      // Check for page break
       if (yPos > 280) {
         doc.addPage();
         yPos = 20;
       }
-      doc.text(line, 14, yPos);
-      yPos += lineHeight;
-    });
+
+      // Headers (## Section Title)
+      if (/^#{1,3}\s+/.test(trimmed)) {
+        const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
+        yPos += 3; // Extra spacing before header
+        doc.setFontSize(9);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+        doc.text(headerText, 14, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.setFontSize(8);
+        yPos += lineHeight + 1;
+        continue;
+      }
+
+      // Bullet points (- or * or •)
+      const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
+      if (bulletMatch) {
+        const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
+        const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
+        for (let i = 0; i < bulletLines.length; i++) {
+          if (yPos > 280) { doc.addPage(); yPos = 20; }
+          if (i === 0) {
+            doc.text('•', 16, yPos);
+            doc.text(bulletLines[i], 22, yPos);
+          } else {
+            doc.text(bulletLines[i], 22, yPos); // Continuation indented
+          }
+          yPos += lineHeight;
+        }
+        continue;
+      }
+
+      // Regular paragraph text — strip bold markers and wrap
+      const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
+      const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
+      for (const wLine of wrappedLines) {
+        if (yPos > 280) { doc.addPage(); yPos = 20; }
+        doc.text(wLine, 14, yPos);
+        yPos += lineHeight;
+      }
+    }
 
     yPos += 5;
 
@@ -3739,8 +3918,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     }
   }
 
-  // Add footer to all pages
-  addFooterToAllPages(doc);
+  // Add footer to content pages — skip page 1 when a cover page was inserted
+  const footerStartPage = reportData.reportType === 'individual' ? 2 : 1;
+  addFooterToAllPages(doc, org?.name, footerStartPage);
 
   return doc;
 }

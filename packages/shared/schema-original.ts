@@ -1410,6 +1410,12 @@ export const updateOrganizationSchema = z.object({
   wellnessEnabled: z.boolean().optional(), // Org admin can set this (only effective when site wellness enabled)
   eventsEnabled: z.boolean().optional(), // Org admin can enable/disable events module
   customMetricsEnabled: z.boolean().optional(), // Site admin only - enable/disable custom metrics feature
+  // z.preprocess normalizes empty strings to null so clearing a field in the form
+  // doesn't trigger a "must be valid URL/hex" error and stores null in the DB consistently.
+  brandLogoUrl: z.preprocess(val => val === '' ? null : val, z.string().url("Must be a valid URL").max(2000).refine(u => u.startsWith('https://'), "Logo URL must use HTTPS").nullable()).optional(),
+  brandPrimaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
+  brandSecondaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
+  brandTagline: z.preprocess(val => val === '' ? null : val, z.string().max(200, "Tagline must be 200 characters or less").nullable()).optional(),
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true

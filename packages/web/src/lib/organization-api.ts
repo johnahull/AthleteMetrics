@@ -46,9 +46,19 @@ export async function updateOrganization(
 /**
  * Update organization settings (Org Admin - limited fields)
  */
+export type OrgAdminSettings = {
+  aiEnabled?: boolean;
+  wellnessEnabled?: boolean;
+  eventsEnabled?: boolean;
+  brandLogoUrl?: string | null;
+  brandPrimaryColor?: string | null;
+  brandSecondaryColor?: string | null;
+  brandTagline?: string | null;
+};
+
 export async function updateOrgAdminSettings(
   organizationId: string,
-  settings: { aiEnabled?: boolean; wellnessEnabled?: boolean; eventsEnabled?: boolean }
+  settings: OrgAdminSettings
 ): Promise<Organization> {
   const response = await fetch(`/api/organizations/${organizationId}/org-settings`, {
     method: 'PATCH',
@@ -108,7 +118,7 @@ export function useUpdateOrgAdminSettings(organizationId: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (settings: { aiEnabled?: boolean; wellnessEnabled?: boolean; eventsEnabled?: boolean }) => updateOrgAdminSettings(organizationId, settings),
+    mutationFn: (settings: OrgAdminSettings) => updateOrgAdminSettings(organizationId, settings),
     onSuccess: (updatedOrg) => {
       // Invalidate and refetch organization queries
       queryClient.invalidateQueries({ queryKey: ['organization', organizationId] });
