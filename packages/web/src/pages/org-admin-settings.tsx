@@ -36,6 +36,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrgAdminSettings } from "@/lib/organization-api";
+import type { OrgAdminSettings as ApiOrgAdminSettings } from "@/lib/organization-api";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { InvitationModal } from "@/components/invitation-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -412,11 +413,39 @@ export default function OrgAdminSettings() {
   // Handle form submission
   const onSubmit = async (data: OrgAdminSettings) => {
     try {
-      await updateMutation.mutateAsync({
-        aiEnabled: data.aiEnabled,
-        wellnessEnabled: data.wellnessEnabled,
-        eventsEnabled: data.eventsEnabled,
-      });
+      const changes: ApiOrgAdminSettings = {};
+
+      if (data.aiEnabled !== (organization?.aiEnabled || false)) {
+        changes.aiEnabled = data.aiEnabled;
+      }
+      if (data.wellnessEnabled !== (organization?.wellnessEnabled ?? true)) {
+        changes.wellnessEnabled = data.wellnessEnabled;
+      }
+      if (data.eventsEnabled !== (organization?.eventsEnabled ?? false)) {
+        changes.eventsEnabled = data.eventsEnabled;
+      }
+      if ((data.brandLogoUrl || null) !== (organization?.brandLogoUrl || null)) {
+        changes.brandLogoUrl = data.brandLogoUrl || null;
+      }
+      if ((data.brandPrimaryColor || null) !== (organization?.brandPrimaryColor || null)) {
+        changes.brandPrimaryColor = data.brandPrimaryColor || null;
+      }
+      if ((data.brandSecondaryColor || null) !== (organization?.brandSecondaryColor || null)) {
+        changes.brandSecondaryColor = data.brandSecondaryColor || null;
+      }
+      if ((data.brandTagline || null) !== (organization?.brandTagline || null)) {
+        changes.brandTagline = data.brandTagline || null;
+      }
+
+      if (Object.keys(changes).length === 0) {
+        toast({
+          title: "No changes",
+          description: "No settings were modified.",
+        });
+        return;
+      }
+
+      await updateMutation.mutateAsync(changes);
 
       toast({
         title: "Settings updated",

@@ -162,12 +162,19 @@ describe('fetchLogoBase64', () => {
   function makeFetchResponse(opts: {
     ok?: boolean;
     contentType?: string;
+    contentLength?: number;
     body?: ArrayBuffer;
   }) {
-    const { ok = true, contentType = 'image/png', body = new ArrayBuffer(100) } = opts;
+    const { ok = true, contentType = 'image/png', contentLength, body = new ArrayBuffer(100) } = opts;
     return Promise.resolve({
       ok,
-      headers: { get: (h: string) => (h === 'content-type' ? contentType : null) },
+      headers: {
+        get: (h: string) => {
+          if (h === 'content-type') return contentType;
+          if (h === 'content-length' && contentLength !== undefined) return String(contentLength);
+          return null;
+        },
+      },
       arrayBuffer: () => Promise.resolve(body),
     } as unknown as Response);
   }
@@ -194,6 +201,21 @@ describe('fetchLogoBase64', () => {
     const bigBuffer = new ArrayBuffer(3 * 1024 * 1024);
     vi.stubGlobal('fetch', () => makeFetchResponse({ body: bigBuffer }));
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns null when Content-Length header exceeds 2 MB (before buffering)', async () => {
+    const fetchSpy = vi.fn(() => makeFetchResponse({ contentLength: 3 * 1024 * 1024 }));
+    vi.stubGlobal('fetch', fetchSpy);
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+    // arrayBuffer should not be called since we rejected early on Content-Length
+    expect(fetchSpy).toHaveBeenCalledOnce();
+  });
+
+  it('does not reject when Content-Length header is absent (relies on post-download cap)', async () => {
+    // No contentLength in opts → header returns null → contentLength parses to 0 → pre-check skipped
+    vi.stubGlobal('fetch', () => makeFetchResponse({ body: new ArrayBuffer(100) }));
+    const result = await fetchLogoBase64('https://example.com/logo.png');
+    expect(result).not.toBeNull();
   });
 
   it('returns base64 result for a valid PNG response', async () => {

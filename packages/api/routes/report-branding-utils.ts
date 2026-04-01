@@ -75,8 +75,11 @@ export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | nu
     const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
     const isPng = contentType.includes('png');
     if (!isJpeg && !isPng) return null; // Reject SVG, WebP, etc.
+    // Fast reject if Content-Length header indicates oversized image (before buffering)
+    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+    if (contentLength > 2 * 1024 * 1024) return null;
     const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength > 2 * 1024 * 1024) return null; // 2 MB cap
+    if (arrayBuffer.byteLength > 2 * 1024 * 1024) return null; // 2 MB cap (handles absent/spoofed content-length)
     const base64 = Buffer.from(arrayBuffer).toString('base64');
     return {
       base64,
