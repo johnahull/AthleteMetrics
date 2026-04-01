@@ -204,11 +204,25 @@ describe('fetchLogoBase64', () => {
   });
 
   it('returns null when Content-Length header exceeds 2 MB (before buffering)', async () => {
-    const fetchSpy = vi.fn(() => makeFetchResponse({ contentLength: 3 * 1024 * 1024 }));
+    const arrayBufferSpy = vi.fn(() => Promise.resolve(new ArrayBuffer(100)));
+    const fetchSpy = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        headers: {
+          get: (h: string) => {
+            if (h === 'content-type') return 'image/png';
+            if (h === 'content-length') return String(3 * 1024 * 1024);
+            return null;
+          },
+        },
+        arrayBuffer: arrayBufferSpy,
+      } as unknown as Response),
+    );
     vi.stubGlobal('fetch', fetchSpy);
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
-    // arrayBuffer should not be called since we rejected early on Content-Length
     expect(fetchSpy).toHaveBeenCalledOnce();
+    // Fast-reject must skip buffering entirely — arrayBuffer should never be called
+    expect(arrayBufferSpy).not.toHaveBeenCalled();
   });
 
   it('does not reject when Content-Length header is absent (relies on post-download cap)', async () => {

@@ -3357,10 +3357,10 @@ function sanitizeFilename(filename: string): string {
 /**
  * Add footer to all pages in the PDF
  */
-function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
+function addFooterToAllPages(doc: jsPDF, orgName?: string, startPage = 1): void {
   const pageCount = doc.getNumberOfPages();
 
-  for (let i = 1; i <= pageCount; i++) {
+  for (let i = startPage; i <= pageCount; i++) {
     doc.setPage(i);
     doc.setFontSize(8);
     doc.setTextColor(128, 128, 128);
@@ -3905,8 +3905,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     }
   }
 
-  // Add footer to all pages
-  addFooterToAllPages(doc, org?.name);
+  // Add footer to content pages — skip page 1 when a cover page was inserted
+  const footerStartPage = reportData.reportType === 'individual' ? 2 : 1;
+  addFooterToAllPages(doc, org?.name, footerStartPage);
 
   return doc;
 }
