@@ -3832,7 +3832,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
     const lineHeight = 5;
 
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     const markdownLines = report.coachingInsights.split('\n');
 
     for (const rawLine of markdownLines) {
@@ -3852,13 +3852,13 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       if (/^#{1,3}\s+/.test(trimmed)) {
         const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
         yPos += 3; // Extra spacing before header
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
         doc.text(headerText, 14, yPos);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
-        doc.setFontSize(9);
+        doc.setFontSize(8);
         yPos += lineHeight + 1;
         continue;
       }
