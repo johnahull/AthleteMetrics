@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, Save, Settings, Palette } from "lucide-react";
+import { ArrowLeft, Save, Settings } from "lucide-react";
 import { Link } from "wouter";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,10 +62,6 @@ export default function OrganizationSettings() {
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
       customMetricsEnabled: organization.customMetricsEnabled || false,
-      brandLogoUrl: organization.brandLogoUrl || '',
-      brandPrimaryColor: organization.brandPrimaryColor || '',
-      brandSecondaryColor: organization.brandSecondaryColor || '',
-      brandTagline: organization.brandTagline || '',
     } : undefined,
   });
 
@@ -105,19 +101,6 @@ export default function OrganizationSettings() {
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
       }
-      if ((data.brandLogoUrl || null) !== (organization?.brandLogoUrl || null)) {
-        changedFields.brandLogoUrl = data.brandLogoUrl || null;
-      }
-      if ((data.brandPrimaryColor || null) !== (organization?.brandPrimaryColor || null)) {
-        changedFields.brandPrimaryColor = data.brandPrimaryColor || null;
-      }
-      if ((data.brandSecondaryColor || null) !== (organization?.brandSecondaryColor || null)) {
-        changedFields.brandSecondaryColor = data.brandSecondaryColor || null;
-      }
-      if ((data.brandTagline || null) !== (organization?.brandTagline || null)) {
-        changedFields.brandTagline = data.brandTagline || null;
-      }
-
       // If no changes, don't make API call
       if (Object.keys(changedFields).length === 0) {
         toast({
@@ -418,125 +401,6 @@ export default function OrganizationSettings() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
-                  </FormItem>
-                )}
-              />
-            </CardContent>
-          </Card>
-
-          {/* PDF Branding */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Palette className="h-5 w-5" />
-                PDF Branding
-              </CardTitle>
-              <CardDescription>
-                Customize the appearance of PDF reports with your organization's branding
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <FormField
-                control={form.control}
-                name="brandLogoUrl"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Logo URL</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="https://example.com/logo.png"
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      URL to your organization logo (PNG or JPEG, recommended 300x200px)
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="brandPrimaryColor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Primary Color</FormLabel>
-                      <div className="flex gap-2">
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="#1a365d"
-                            value={field.value || ''}
-                            maxLength={7}
-                          />
-                        </FormControl>
-                        {field.value && /^#[0-9a-fA-F]{6}$/.test(field.value) && (
-                          <div
-                            className="h-10 w-10 rounded border shrink-0"
-                            style={{ backgroundColor: field.value }}
-                          />
-                        )}
-                      </div>
-                      <FormDescription>
-                        Hex color for table headers and titles (e.g. #1a365d)
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="brandSecondaryColor"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Secondary Color</FormLabel>
-                      <div className="flex gap-2">
-                        <FormControl>
-                          <Input
-                            {...field}
-                            placeholder="#2d8659"
-                            value={field.value || ''}
-                            maxLength={7}
-                          />
-                        </FormControl>
-                        {field.value && /^#[0-9a-fA-F]{6}$/.test(field.value) && (
-                          <div
-                            className="h-10 w-10 rounded border shrink-0"
-                            style={{ backgroundColor: field.value }}
-                          />
-                        )}
-                      </div>
-                      <FormDescription>
-                        Hex color for secondary elements and accents
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="brandTagline"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tagline</FormLabel>
-                    <FormControl>
-                      <Input
-                        {...field}
-                        placeholder="Data-Driven Athletic Development"
-                        value={field.value || ''}
-                        maxLength={200}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {(field.value?.length || 0)}/200 characters — displayed on report cover pages
-                    </FormDescription>
-                    <FormMessage />
                   </FormItem>
                 )}
               />

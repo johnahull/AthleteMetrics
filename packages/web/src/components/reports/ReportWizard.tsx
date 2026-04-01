@@ -802,7 +802,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         </div>
                       </Label>
                     </div>
-                  <>
+                  </>
                 )}
               </RadioGroup>
             </div>

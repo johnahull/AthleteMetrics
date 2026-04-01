@@ -391,11 +391,19 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied. Org admin role required." });
       }
 
-      // Only allow updating aiEnabled, wellnessEnabled, and eventsEnabled fields
-      const { aiEnabled, wellnessEnabled, eventsEnabled } = req.body;
+      // Only allow updating specific org-admin fields
+      const { aiEnabled, wellnessEnabled, eventsEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline } = req.body;
 
       // Build updates object with only the fields that were provided
-      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean; eventsEnabled?: boolean } = {};
+      const updates: {
+        aiEnabled?: boolean;
+        wellnessEnabled?: boolean;
+        eventsEnabled?: boolean;
+        brandLogoUrl?: string | null;
+        brandPrimaryColor?: string | null;
+        brandSecondaryColor?: string | null;
+        brandTagline?: string | null;
+      } = {};
 
       // Validate and handle aiEnabled
       if (aiEnabled !== undefined) {
@@ -439,9 +447,50 @@ export function registerOrganizationRoutes(app: Express) {
         updates.eventsEnabled = eventsEnabled;
       }
 
+      // Validate and handle branding fields
+      if (brandLogoUrl !== undefined) {
+        if (brandLogoUrl === null || brandLogoUrl === '') {
+          updates.brandLogoUrl = null;
+        } else if (typeof brandLogoUrl !== 'string' || !brandLogoUrl.startsWith('https://') || brandLogoUrl.length > 2000) {
+          return res.status(400).json({ message: "Logo URL must be a valid HTTPS URL (max 2000 characters)" });
+        } else {
+          updates.brandLogoUrl = brandLogoUrl;
+        }
+      }
+
+      if (brandPrimaryColor !== undefined) {
+        if (brandPrimaryColor === null || brandPrimaryColor === '') {
+          updates.brandPrimaryColor = null;
+        } else if (typeof brandPrimaryColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(brandPrimaryColor)) {
+          return res.status(400).json({ message: "Primary color must be a valid hex color (e.g. #1a365d)" });
+        } else {
+          updates.brandPrimaryColor = brandPrimaryColor;
+        }
+      }
+
+      if (brandSecondaryColor !== undefined) {
+        if (brandSecondaryColor === null || brandSecondaryColor === '') {
+          updates.brandSecondaryColor = null;
+        } else if (typeof brandSecondaryColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(brandSecondaryColor)) {
+          return res.status(400).json({ message: "Secondary color must be a valid hex color (e.g. #2d8659)" });
+        } else {
+          updates.brandSecondaryColor = brandSecondaryColor;
+        }
+      }
+
+      if (brandTagline !== undefined) {
+        if (brandTagline === null || brandTagline === '') {
+          updates.brandTagline = null;
+        } else if (typeof brandTagline !== 'string' || brandTagline.length > 200) {
+          return res.status(400).json({ message: "Tagline must be 200 characters or less" });
+        } else {
+          updates.brandTagline = brandTagline;
+        }
+      }
+
       // Require at least one field to update
       if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ message: "At least one field (aiEnabled, wellnessEnabled, or eventsEnabled) is required" });
+        return res.status(400).json({ message: "At least one setting field is required" });
       }
 
       // Capture request context for audit logging
