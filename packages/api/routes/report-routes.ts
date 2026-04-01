@@ -21,6 +21,7 @@ import {
   teams,
   auditLogs,
   userOrganizations,
+  siteMetrics,
   MAX_INSIGHTS_LENGTH,
   type Report,
 } from "@shared/schema";
@@ -55,6 +56,7 @@ interface IndividualReportConfig {
     customEnd?: string;
   };
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[];
     custom?: string[];
@@ -74,6 +76,7 @@ interface TeamReportConfig {
     customEnd?: string;
   };
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   filters?: {
     teamIds?: string[];
     gender?: string;
@@ -3354,7 +3357,6 @@ function sanitizeFilename(filename: string): string {
 /**
  * Add footer to all pages in the PDF
  */
-
 function addFooterToAllPages(doc: jsPDF, orgName?: string): void {
   const pageCount = doc.getNumberOfPages();
 
@@ -3404,13 +3406,11 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     if (org?.brandLogoUrl) {
       const logoData = await fetchLogoBase64(org.brandLogoUrl);
       if (logoData) {
-        // Center logo on cover page, max 60mm wide x 40mm tall
         doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, (pageWidth - 60) / 2, 50, 60, 40);
         logoRendered = true;
       }
     }
 
-    // Cover page text — position based on whether logo was actually rendered
     const coverY = logoRendered ? 110 : 80;
 
     if (org?.name) {
@@ -3445,7 +3445,6 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.text(org.brandTagline, (pageWidth - taglineWidth) / 2, coverY + 70);
     }
 
-    // Start report content on next page
     doc.addPage();
   }
 
@@ -3455,9 +3454,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   if (org?.brandLogoUrl && reportData.reportType === 'team') {
     const logoData = await fetchLogoBase64(org.brandLogoUrl);
     if (logoData) {
-      // Left-aligned logo, 30mm wide x 20mm tall
       doc.addImage(`data:${logoData.mimeType};base64,${logoData.base64}`, logoData.ext, 14, 10, 30, 20);
-      // Title right-aligned next to logo
       doc.setFontSize(20);
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
@@ -3475,7 +3472,6 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         headerY = 32;
       }
     } else {
-      // Logo fetch failed — fallback to standard header
       doc.setFontSize(20);
       if (isVisual || org?.brandPrimaryColor) {
         doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
@@ -3484,7 +3480,6 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
     }
   } else {
-    // Standard header (no logo)
     doc.setFontSize(20);
     if (isVisual || org?.brandPrimaryColor) {
       doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
@@ -3754,11 +3749,16 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     if (athlete.measurements) {
       const measurementRows = Object.entries(athlete.measurements).map(
-        ([metric, value]: [string, any]) => [
-          metric,
-          value.toFixed(2),
-          athlete.percentiles[metric]?.toFixed(1) || "N/A",
-        ]
+        ([metric, value]: [string, any]) => {
+          const label = reportData.metricLabels?.[metric] || metric;
+          const unit = reportData.metricUnits?.[metric] || '';
+          const formatted = `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`;
+          return [
+            label,
+            formatted,
+            athlete.percentiles[metric]?.toFixed(1) || "N/A",
+          ];
+        }
       );
 
       autoTable(doc, {
@@ -3778,12 +3778,14 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
       Object.entries(athlete.benchmarkComparisons).forEach(
         ([metric, comparisons]: [string, any]) => {
+          const label = reportData.metricLabels?.[metric] || metric;
+          const unit = reportData.metricUnits?.[metric] || '';
           comparisons.forEach((comp: any) => {
             allBenchmarks.push([
-              metric,
+              label,
               comp.benchmarkName,
-              comp.benchmarkValue.toFixed(2),
-              comp.athleteValue.toFixed(2),
+              `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+              `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
               comp.meetsOrExceeds ? "Yes" : "No",
             ]);
           });
@@ -3804,6 +3806,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
         });
+
+        // Update yPos to after the table
+        yPos = (doc as any).lastAutoTable.finalY + 10;
       }
     }
   }
@@ -3822,29 +3827,68 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
     yPos += 10;
 
-    // Strip markdown formatting for PDF
-    const plainTextInsights = stripMarkdown(report.coachingInsights);
-
-    // Split insights into lines and add with text wrapping
-    // Use same width as autoTable content area (page width minus left/right margins)
-    // AutoTable default margins are typically 14mm on each side
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const margins = { left: 14, right: 14 };
-    const contentWidth = pageWidth - margins.left - margins.right;
+    // Render markdown with structure preserved (headers bold, bullets indented)
+    const insightsPageWidth = doc.internal.pageSize.getWidth();
+    const insightsContentWidth = insightsPageWidth - 28; // 14mm margins each side
     const lineHeight = 5;
 
-    doc.setFontSize(10);
-    const lines = doc.splitTextToSize(plainTextInsights, contentWidth);
+    const markdownLines = report.coachingInsights.split('\n');
 
-    lines.forEach((line: string) => {
-      // Check if we need a new page
+    for (const rawLine of markdownLines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        yPos += 3; // Blank line = paragraph spacing
+        continue;
+      }
+
+      // Check for page break
       if (yPos > 280) {
         doc.addPage();
         yPos = 20;
       }
-      doc.text(line, 14, yPos);
-      yPos += lineHeight;
-    });
+
+      // Headers (## Section Title)
+      if (/^#{1,3}\s+/.test(trimmed)) {
+        const headerText = trimmed.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
+        yPos += 3; // Extra spacing before header
+        doc.setFontSize(11);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+        doc.text(headerText, 14, yPos);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.setFontSize(10);
+        yPos += lineHeight + 1;
+        continue;
+      }
+
+      // Bullet points (- or * or •)
+      const bulletMatch = trimmed.match(/^[-*•]\s+(.*)/);
+      if (bulletMatch) {
+        const bulletText = bulletMatch[1].replace(/\*\*(.*?)\*\*/g, '$1');
+        const bulletLines = doc.splitTextToSize(bulletText, insightsContentWidth - 8);
+        for (let i = 0; i < bulletLines.length; i++) {
+          if (yPos > 280) { doc.addPage(); yPos = 20; }
+          if (i === 0) {
+            doc.text('•', 16, yPos);
+            doc.text(bulletLines[i], 22, yPos);
+          } else {
+            doc.text(bulletLines[i], 22, yPos); // Continuation indented
+          }
+          yPos += lineHeight;
+        }
+        continue;
+      }
+
+      // Regular paragraph text — strip bold markers and wrap
+      const plainText = trimmed.replace(/\*\*(.*?)\*\*/g, '$1');
+      const wrappedLines = doc.splitTextToSize(plainText, insightsContentWidth);
+      for (const wLine of wrappedLines) {
+        if (yPos > 280) { doc.addPage(); yPos = 20; }
+        doc.text(wLine, 14, yPos);
+        yPos += lineHeight;
+      }
+    }
 
     yPos += 5;
 
@@ -4093,6 +4137,17 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
 
       // Team report metrics (limited to MAX_METRICS)
       const statsToProcess = typedReportData.teamStatistics.slice(0, MAX_METRICS);
+
+      // Batch query metricType for all codes to avoid N+1 DB queries
+      const teamMetricCodes = statsToProcess.map(s => s.metric);
+      const teamMetricTypes = teamMetricCodes.length > 0
+        ? await db
+            .select({ code: siteMetrics.code, metricType: siteMetrics.metricType })
+            .from(siteMetrics)
+            .where(inArray(siteMetrics.code, teamMetricCodes))
+        : [];
+      const teamLowerIsBetterMap = new Map(teamMetricTypes.map(m => [m.code, m.metricType === 'lower_is_better']));
+
       for (const stat of statsToProcess) {
         const metricCode = stat.metric;
         const values: number[] = [];
@@ -4112,7 +4167,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
           label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
           values: limitedValues,
           unit: stat.units || "",
-          lowerIsBetter: isMetricLowerBetter(metricCode),
+          lowerIsBetter: teamLowerIsBetterMap.get(metricCode) ?? false,
         });
       }
     } else if (report.reportType === 'individual' && typedReportData.athlete) {
@@ -4120,14 +4175,26 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       const athlete = typedReportData.athlete;
       if (athlete.measurements) {
         const entries = Object.entries(athlete.measurements).slice(0, MAX_METRICS);
+
+        // Batch query unit and metricType for all codes to avoid N+1 DB queries
+        const individualMetricCodes = entries.filter(([, v]) => typeof v === 'number').map(([code]) => code);
+        const individualMetricInfo = individualMetricCodes.length > 0
+          ? await db
+              .select({ code: siteMetrics.code, unit: siteMetrics.unit, metricType: siteMetrics.metricType })
+              .from(siteMetrics)
+              .where(inArray(siteMetrics.code, individualMetricCodes))
+          : [];
+        const individualUnitMap = new Map(individualMetricInfo.map(m => [m.code, m.unit || '']));
+        const individualLowerIsBetterMap = new Map(individualMetricInfo.map(m => [m.code, m.metricType === 'lower_is_better']));
+
         for (const [metricCode, value] of entries) {
           if (typeof value === 'number') {
             metrics.push({
               code: metricCode,
               label: typedReportData.metricLabels?.[metricCode] || metricCode, // Human-readable label
               values: [value],
-              unit: getMetricUnit(metricCode),
-              lowerIsBetter: isMetricLowerBetter(metricCode),
+              unit: individualUnitMap.get(metricCode) || '',
+              lowerIsBetter: individualLowerIsBetterMap.get(metricCode) ?? false,
               percentile: athlete.percentiles?.[metricCode],
               teamAverage: athlete.teamAverages?.[metricCode],
             });
@@ -4195,6 +4262,16 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       }
     }
 
+    // Extract and validate audience from report config
+    // athlete/parent audiences only apply to individual reports — team reports always use coach
+    const VALID_AUDIENCES = ['coach', 'athlete', 'parent'] as const;
+    const rawAudience = reportConfig?.audience;
+    const audience = report.reportType === 'team'
+      ? 'coach' as const
+      : VALID_AUDIENCES.includes(rawAudience as typeof VALID_AUDIENCES[number])
+        ? (rawAudience as typeof VALID_AUDIENCES[number])
+        : undefined;
+
     // Build final ReportData object
     const aiReportData: import("../services/ai-insights-service").ReportData = {
       reportType: report.reportType as "individual" | "team",
@@ -4205,6 +4282,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       improvements,
       concerns,
       benchmarkComparisons,
+      audience,
     };
 
     // Add team-specific data
