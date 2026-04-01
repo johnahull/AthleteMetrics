@@ -10,6 +10,7 @@ import { profileMergeService } from "../services/profile-merge-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import type { OrganizationType } from "@shared/schema";
+import { isSafeLogoUrl } from "./report-branding-utils";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
@@ -451,8 +452,8 @@ export function registerOrganizationRoutes(app: Express) {
       if (brandLogoUrl !== undefined) {
         if (brandLogoUrl === null || brandLogoUrl === '') {
           updates.brandLogoUrl = null;
-        } else if (typeof brandLogoUrl !== 'string' || !brandLogoUrl.startsWith('https://') || brandLogoUrl.length > 2000) {
-          return res.status(400).json({ message: "Logo URL must be a valid HTTPS URL (max 2000 characters)" });
+        } else if (typeof brandLogoUrl !== 'string' || brandLogoUrl.length > 2000 || !isSafeLogoUrl(brandLogoUrl)) {
+          return res.status(400).json({ message: "Logo URL must be a public HTTPS URL (max 2000 characters)" });
         } else {
           updates.brandLogoUrl = brandLogoUrl;
         }
