@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,6 +90,7 @@ type OrganizationProfile = {
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
+  aiPromptContext: z.string().max(2000, "AI prompt context must be 2000 characters or less").optional().default(''),
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
   brandLogoUrl: z.string().optional().default('').refine(
@@ -418,6 +420,7 @@ export default function OrgAdminSettings() {
     resolver: zodResolver(orgAdminSettingsSchema),
     values: organization ? {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
+      aiPromptContext: organization.aiPromptContext || '',
       wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
       eventsEnabled: organization.eventsEnabled ?? false,
       brandLogoUrl: organization.brandLogoUrl || '',
@@ -452,6 +455,9 @@ export default function OrgAdminSettings() {
       }
       if ((data.brandTagline || null) !== (organization?.brandTagline || null)) {
         changes.brandTagline = data.brandTagline || null;
+      }
+      if ((data.aiPromptContext || null) !== (organization?.aiPromptContext || null)) {
+        changes.aiPromptContext = data.aiPromptContext || null;
       }
 
       if (Object.keys(changes).length === 0) {
@@ -602,6 +608,37 @@ export default function OrgAdminSettings() {
                         disabled={!aiEnabledBySiteAdmin}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiPromptContext"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">AI Prompt Context</FormLabel>
+                      <FormDescription>
+                        Customize how AI generates coaching insights for your reports. Describe your training philosophy, methodology, or any context the AI should consider.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="e.g., Our organization focuses on speed development and injury prevention for youth athletes..."
+                        value={field.value || ''}
+                        maxLength={2000}
+                        rows={4}
+                        disabled={!aiEnabledBySiteAdmin}
+                      />
+                    </FormControl>
+                    <div className="flex justify-end">
+                      <span className="text-xs text-muted-foreground">
+                        {(field.value || '').length} / 2000
+                      </span>
+                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

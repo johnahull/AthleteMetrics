@@ -393,7 +393,7 @@ export function registerOrganizationRoutes(app: Express) {
       }
 
       // Only allow updating specific org-admin fields
-      const { aiEnabled, wellnessEnabled, eventsEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline } = req.body;
+      const { aiEnabled, wellnessEnabled, eventsEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext } = req.body;
 
       // Build updates object with only the fields that were provided
       const updates: {
@@ -404,6 +404,7 @@ export function registerOrganizationRoutes(app: Express) {
         brandPrimaryColor?: string | null;
         brandSecondaryColor?: string | null;
         brandTagline?: string | null;
+        aiPromptContext?: string | null;
       } = {};
 
       // Validate and handle aiEnabled
@@ -486,6 +487,19 @@ export function registerOrganizationRoutes(app: Express) {
           return res.status(400).json({ message: "Tagline must be 200 characters or less" });
         } else {
           updates.brandTagline = brandTagline;
+        }
+      }
+
+      // Validate and handle aiPromptContext
+      if (aiPromptContext !== undefined) {
+        if (aiPromptContext === null || aiPromptContext === '') {
+          updates.aiPromptContext = null;
+        } else if (typeof aiPromptContext !== 'string') {
+          return res.status(400).json({ message: "AI prompt context must be a string" });
+        } else if (aiPromptContext.length > 2000) {
+          return res.status(400).json({ message: "AI prompt context must be 2000 characters or less" });
+        } else {
+          updates.aiPromptContext = aiPromptContext;
         }
       }
 
