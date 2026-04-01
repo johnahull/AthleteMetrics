@@ -630,7 +630,7 @@ export default function OrgAdminSettings() {
                         value={field.value || ''}
                         maxLength={2000}
                         rows={4}
-                        disabled={!aiEnabledBySiteAdmin}
+                        disabled={!aiEnabledBySiteAdmin || !form.watch('aiEnabled')}
                       />
                     </FormControl>
                     <div className="flex justify-end">

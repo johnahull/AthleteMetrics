@@ -1396,7 +1396,10 @@ export const updateOrganizationStatusSchema = z.object({
   isActive: z.boolean(),
 });
 
-// Organization general update schema (for settings page)
+// Organization general update schema — used by the site-admin PATCH /api/organizations/:id
+// route (via organizationService.updateOrganization). The org-admin route
+// PATCH /api/organizations/:id/org-settings uses its own manual validation because it
+// exposes a different, more restricted set of fields.
 export const updateOrganizationSchema = z.object({
   name: z.string().min(1, "Organization name is required").max(200, "Organization name must be 200 characters or less").optional(),
   description: z.string().max(1000, "Description must be 1000 characters or less").optional().nullable(),

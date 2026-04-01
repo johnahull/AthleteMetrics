@@ -34,6 +34,9 @@ let app: Express;
 let orgAdminCookie: string;
 let testOrg: any;
 let orgAdminUser: any;
+let otherOrg: any;
+let otherOrgAdminUser: any;
+let otherOrgAdminCookie: string;
 
 beforeAll(async () => {
   app = express();
@@ -84,10 +87,55 @@ beforeAll(async () => {
   }
 
   orgAdminCookie = loginResponse.headers['set-cookie'][0];
+
+  // Create a second (unrelated) org and org admin to test cross-org isolation
+  const ts = Date.now();
+  [otherOrg] = await db.insert(organizations).values({
+    name: `Other AI Context Org ${ts}`,
+    isActive: true,
+    aiEnabledBySiteAdmin: true,
+    aiEnabled: true,
+  }).returning();
+
+  const otherHashedPassword = await bcrypt.hash('OtherAdmin123!', BCRYPT_SALT_ROUNDS);
+  [otherOrgAdminUser] = await db.insert(users).values({
+    username: `other-orgadmin-aiprompt-${ts}`,
+    emails: [`other-orgadmin-aiprompt-${ts}@test.com`],
+    password: otherHashedPassword,
+    firstName: 'Other',
+    lastName: 'Admin',
+    fullName: 'Other Admin',
+    isActive: true,
+  }).returning();
+
+  await db.insert(userOrganizations).values({
+    userId: otherOrgAdminUser.id,
+    organizationId: otherOrg.id,
+    role: 'org_admin',
+  });
+
+  const otherLoginResponse = await request(app)
+    .post('/api/auth/login')
+    .send({ username: otherOrgAdminUser.username, password: 'OtherAdmin123!' });
+
+  if (otherLoginResponse.status !== 200 || !otherLoginResponse.headers['set-cookie']) {
+    throw new Error(
+      `Other org admin login failed (status: ${otherLoginResponse.status}). Response: ${JSON.stringify(otherLoginResponse.body)}`
+    );
+  }
+
+  otherOrgAdminCookie = otherLoginResponse.headers['set-cookie'][0];
 });
 
 afterAll(async () => {
   // Cleanup in reverse order of creation
+  if (otherOrgAdminUser?.id) {
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, otherOrgAdminUser.id));
+    await db.delete(users).where(eq(users.id, otherOrgAdminUser.id));
+  }
+  if (otherOrg?.id) {
+    await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+  }
   if (orgAdminUser?.id) {
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, orgAdminUser.id));
     await db.delete(users).where(eq(users.id, orgAdminUser.id));
@@ -236,5 +284,32 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext', () => 
 
     expect(updated.aiPromptContext).toBe('New context only');
     expect(updated.aiEnabled).toBe(true); // unchanged
+  });
+});
+
+describe('PATCH /api/organizations/:id/org-settings – authorization boundary', () => {
+  it('should forbid an org admin from updating a different org\'s aiPromptContext', async () => {
+    const response = await request(app)
+      .patch(`/api/organizations/${testOrg.id}/org-settings`)
+      .set('Cookie', otherOrgAdminCookie)
+      .send({ aiPromptContext: 'Injected from another org' });
+
+    expect(response.status).toBe(403);
+
+    // Verify the database was not modified
+    const [unchanged] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, testOrg.id));
+
+    expect(unchanged.aiPromptContext).not.toBe('Injected from another org');
+  });
+
+  it('should forbid an unauthenticated request from updating aiPromptContext', async () => {
+    const response = await request(app)
+      .patch(`/api/organizations/${testOrg.id}/org-settings`)
+      .send({ aiPromptContext: 'Unauthenticated injection' });
+
+    expect(response.status).toBe(401);
   });
 });
