@@ -427,6 +427,9 @@ export interface ReportData {
     metric: string;
     performance: string;
   }>;
+
+  // Audience for tailored language
+  audience?: 'coach' | 'athlete' | 'parent';
 }
 
 /**
@@ -469,7 +472,7 @@ export async function generateCoachingInsights(
  * Sanitize user-generated content before including in AI prompts
  * Prevents potential prompt injection attacks by escaping markdown and special characters
  */
-function sanitizeForPrompt(input: string): string {
+export function sanitizeForPrompt(input: string): string {
   if (!input) return '';
   return input
     .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
@@ -482,7 +485,7 @@ function sanitizeForPrompt(input: string): string {
 /**
  * Build the prompt for the AI model based on report data
  */
-function buildPrompt(reportData: ReportData): string {
+export function buildPrompt(reportData: ReportData): string {
   const { reportType } = reportData;
 
   // Sanitize user-provided content to prevent prompt injection
@@ -575,21 +578,61 @@ function buildPrompt(reportData: ReportData): string {
     prompt += `\n`;
   }
 
-  // Instructions
+  // Instructions — tailored by audience
+  const audience = reportData.audience || 'coach';
+
   prompt += `## Instructions\n`;
-  prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
-  prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
-  prompt += `1. **Summary**: 2-3 sentences giving the big picture of this report based on the numbers\n`;
-  prompt += `2. **What's Going Well**: Top strengths shown by the data (metrics meeting or exceeding benchmarks)\n`;
-  prompt += `3. **What to Work On**: Key areas needing attention based on metrics and benchmarks\n`;
-  prompt += `4. **Next Steps**: 2-3 specific, actionable training recommendations to improve the metrics\n\n`;
-  prompt += `IMPORTANT CONSTRAINTS:\n`;
+
+  if (audience === 'parent') {
+    prompt += `You are writing for PARENTS of youth athletes, NOT coaches or trainers.\n\n`;
+    prompt += `Write in clear, non-technical language that a parent with no sports science background can understand. Focus on:\n\n`;
+    prompt += `1. **What the numbers mean** for their child's development\n`;
+    prompt += `2. **What's Going Well** — celebrate specific achievements with context\n`;
+    prompt += `3. **What to Work On** — frame as growth opportunities, not deficiencies\n\n`;
+    prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
+    prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
+    if (reportData.athleteName) {
+      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
+      if (firstName) {
+        prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
+      }
+    }
+    prompt += `Keep it to 200-300 words.\n`;
+  } else if (audience === 'athlete') {
+    prompt += `You are writing directly TO the athlete. Use "you" language.\n\n`;
+    prompt += `Provide insights in markdown format with these sections:\n\n`;
+    prompt += `1. **Summary**: 2-3 sentences — where you stand and what jumped out from the data\n`;
+    prompt += `2. **What's Going Well**: Lead with wins — celebrate specific strengths the data proves\n`;
+    prompt += `3. **What to Work On**: Frame as challenges to attack, not weaknesses. Athletes want to know what to chase\n\n`;
+    prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
+    prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
+    if (reportData.athleteName) {
+      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
+      if (firstName) {
+        prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
+      }
+    }
+    // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
+    // already implies action (it tells the athlete what to chase). Adding a separate next-steps
+    // block would be redundant and dilute the direct, competitor-facing tone.
+    prompt += `Keep it to 150-200 words. Use bullet points and **bold** for emphasis.\n`;
+  } else {
+    // Default: coach audience
+    prompt += `You are writing for sports coaches and athletes, NOT strength & conditioning experts. Use simple, everyday language.\n\n`;
+    prompt += `Provide coaching insights in markdown format with these sections:\n\n`;
+    prompt += `1. **Summary**: 2-3 sentences giving the big picture of this report based on the numbers\n`;
+    prompt += `2. **What's Going Well**: Top strengths shown by the data (metrics meeting or exceeding benchmarks)\n`;
+    prompt += `3. **What to Work On**: Key areas needing attention based on metrics and benchmarks\n`;
+    prompt += `4. **Next Steps**: 2-3 specific, actionable training recommendations to improve the metrics\n\n`;
+    prompt += `Keep it short (150-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.\n`;
+  }
+
+  prompt += `\nIMPORTANT CONSTRAINTS:\n`;
   prompt += `- Base ALL observations strictly on the provided metrics and benchmark data\n`;
   prompt += `- Do NOT comment on effort, attitude, coachability, consistency, or other unmeasured qualities\n`;
   prompt += `- Do NOT make assumptions about behaviors, habits, or character traits\n`;
   prompt += `- Focus only on what the numbers show and specific training actions to improve them\n`;
-  prompt += `- When data is limited, acknowledge it rather than filling gaps with assumptions\n\n`;
-  prompt += `Keep it short (150-250 words total). Be direct and objective. Use bullet points and **bold** for emphasis. Avoid technical jargon.\n`;
+  prompt += `- When data is limited, acknowledge it rather than filling gaps with assumptions\n`;
 
   return prompt;
 }
