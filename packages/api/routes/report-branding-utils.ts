@@ -17,6 +17,12 @@ export function hexToRgb(hex: string): [number, number, number] {
 /**
  * Validate that a URL is safe to fetch server-side (prevents SSRF).
  * Only HTTPS URLs pointing to public internet hosts are allowed.
+ *
+ * Known limitation: DNS rebinding is not mitigated here. A domain could resolve
+ * to a public IP during this hostname check and then resolve to a private IP at
+ * actual fetch time. The blast radius is limited because only org admins can set
+ * brandLogoUrl, but deployments in highly sensitive environments should consider
+ * an egress proxy or allowlist-based approach for complete protection.
  */
 export function isSafeLogoUrl(url: string): boolean {
   try {
@@ -33,6 +39,8 @@ export function isSafeLogoUrl(url: string): boolean {
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
     // Block APIPA / cloud metadata link-local range
     if (/^169\.254\./.test(hostname)) return false;
+    // Block CGNAT shared address space (100.64.0.0/10) — used by some cloud providers for internal routing
+    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return false;
     // Block internal TLDs
     if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
     return true;

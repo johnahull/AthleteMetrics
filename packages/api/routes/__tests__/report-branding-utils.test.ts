@@ -114,6 +114,27 @@ describe('isSafeLogoUrl', () => {
     expect(isSafeLogoUrl('https://169.254.1.1/logo.png')).toBe(false);
   });
 
+  // --- CGNAT shared address space (100.64.0.0/10) ---
+  it('blocks 100.64.0.1 (CGNAT range start)', () => {
+    expect(isSafeLogoUrl('https://100.64.0.1/logo.png')).toBe(false);
+  });
+
+  it('blocks 100.100.0.1 (middle of CGNAT range)', () => {
+    expect(isSafeLogoUrl('https://100.100.0.1/logo.png')).toBe(false);
+  });
+
+  it('blocks 100.127.255.255 (CGNAT range end)', () => {
+    expect(isSafeLogoUrl('https://100.127.255.255/logo.png')).toBe(false);
+  });
+
+  it('allows 100.128.0.1 (just outside CGNAT range)', () => {
+    expect(isSafeLogoUrl('https://100.128.0.1/logo.png')).toBe(true);
+  });
+
+  it('allows 100.63.255.255 (just below CGNAT range)', () => {
+    expect(isSafeLogoUrl('https://100.63.255.255/logo.png')).toBe(true);
+  });
+
   // --- Internal TLDs ---
   it('blocks .internal hostnames', () => {
     expect(isSafeLogoUrl('https://service.internal/logo.png')).toBe(false);
