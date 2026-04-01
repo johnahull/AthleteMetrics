@@ -113,10 +113,13 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const reportType = watch("reportType");
   const reportName = watch("name");
 
-  // Default audience based on report type — only if user hasn't manually chosen
+  // Default audience based on report type — reset to coach for team reports
+  // since athlete/parent audiences only make sense for individual reports
   useEffect(() => {
-    if (!dirtyFields.audience) {
-      setValue("audience", reportType === "individual" ? "parent" : "coach");
+    if (reportType === "team") {
+      setValue("audience", "coach");
+    } else if (!dirtyFields.audience) {
+      setValue("audience", "parent");
     }
   }, [reportType, setValue, dirtyFields.audience]);
   const timeframeType = watch("timeframeType");
@@ -799,7 +802,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         </div>
                       </Label>
                     </div>
-                  </>
+                  <>
                 )}
               </RadioGroup>
             </div>
