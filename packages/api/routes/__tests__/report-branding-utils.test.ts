@@ -219,13 +219,14 @@ describe('fetchLogoBase64', () => {
   });
 
   it('returns base64 result for a valid PNG response', async () => {
-    const body = Buffer.from('fakeimagedata');
-    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'image/png', body: body.buffer }));
+    const data = new TextEncoder().encode('fakeimagedata');
+    const arrayBuffer = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'image/png', body: arrayBuffer }));
     const result = await fetchLogoBase64('https://example.com/logo.png');
     expect(result).not.toBeNull();
     expect(result?.ext).toBe('PNG');
     expect(result?.mimeType).toBe('image/png');
-    expect(result?.base64).toBe(body.toString('base64'));
+    expect(result?.base64).toBe(Buffer.from('fakeimagedata').toString('base64'));
   });
 
   it('returns base64 result for a valid JPEG response', async () => {
