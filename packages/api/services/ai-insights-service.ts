@@ -588,8 +588,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `Write in clear, non-technical language that a parent with no sports science background can understand. Focus on:\n\n`;
     prompt += `1. **What the numbers mean** for their child's development\n`;
     prompt += `2. **What's Going Well** — celebrate specific achievements with context\n`;
-    prompt += `3. **What to Work On** — frame as growth opportunities, not deficiencies\n`;
-    prompt += `4. **Why Continued Training Matters** — connect metrics to real athletic outcomes (making the team, getting faster, reducing injury risk)\n\n`;
+    prompt += `3. **What to Work On** — frame as growth opportunities, not deficiencies\n\n`;
     prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
     if (reportData.athleteName) {
@@ -604,8 +603,7 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `Provide insights in markdown format with these sections:\n\n`;
     prompt += `1. **Summary**: 2-3 sentences — where you stand and what jumped out from the data\n`;
     prompt += `2. **What's Going Well**: Lead with wins — celebrate specific strengths the data proves\n`;
-    prompt += `3. **What to Work On**: Frame as challenges to attack, not weaknesses. Athletes want to know what to chase\n`;
-    prompt += `4. **Next Steps**: 2-3 concrete, specific things to do in the next training sessions\n\n`;
+    prompt += `3. **What to Work On**: Frame as challenges to attack, not weaknesses. Athletes want to know what to chase\n\n`;
     prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
     prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
     if (reportData.athleteName) {

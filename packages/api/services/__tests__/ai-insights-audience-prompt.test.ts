@@ -90,14 +90,14 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).toContain('Clinical or passive language');
     });
 
-    it('should include the four athlete-oriented sections', () => {
+    it('should include the three athlete-oriented sections (no Next Steps)', () => {
       const data = makeBaseReportData({ audience: 'athlete' });
       const prompt = buildPrompt(data);
 
       expect(prompt).toContain('**Summary**');
       expect(prompt).toContain("**What's Going Well**");
       expect(prompt).toContain('**What to Work On**');
-      expect(prompt).toContain('**Next Steps**');
+      expect(prompt).not.toContain('**Next Steps**');
     });
 
     it('should request 150-200 words for athlete audience', () => {
@@ -139,14 +139,15 @@ describe('buildPrompt audience branches', () => {
       expect(prompt).toContain('non-technical language');
     });
 
-    it('should include parent-specific sections', () => {
+    it('should include parent-specific sections (no training recommendations)', () => {
       const data = makeBaseReportData({ audience: 'parent' });
       const prompt = buildPrompt(data);
 
       expect(prompt).toContain("**What the numbers mean**");
       expect(prompt).toContain("**What's Going Well**");
       expect(prompt).toContain('**What to Work On**');
-      expect(prompt).toContain('**Why Continued Training Matters**');
+      expect(prompt).not.toContain('**Why Continued Training Matters**');
+      expect(prompt).not.toContain('**Next Steps**');
     });
 
     it('should use the athlete first name throughout', () => {
