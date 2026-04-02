@@ -32,11 +32,13 @@ import { registerRoutes } from '../../packages/api/routes';
 
 let app: Express;
 let orgAdminCookie: string;
-let testOrg: any;
-let orgAdminUser: any;
-let otherOrg: any;
-let otherOrgAdminUser: any;
+let athleteCookie: string;
 let otherOrgAdminCookie: string;
+let testOrg: any;
+let otherOrg: any;
+let orgAdminUser: any;
+let athleteUser: any;
+let otherOrgAdminUser: any;
 
 beforeAll(async () => {
   app = express();
@@ -88,6 +90,29 @@ beforeAll(async () => {
 
   orgAdminCookie = loginResponse.headers['set-cookie'][0];
 
+  // Create athlete user in the same org
+  const athletePassword = await bcrypt.hash('Athlete123!', BCRYPT_SALT_ROUNDS);
+  [athleteUser] = await db.insert(users).values({
+    username: `athlete-aiprompt-${Date.now()}`,
+    emails: [`athlete-aiprompt-${Date.now()}@test.com`],
+    password: athletePassword,
+    firstName: 'Athlete',
+    lastName: 'Tester',
+    fullName: 'Athlete Tester',
+    isActive: true,
+  }).returning();
+
+  await db.insert(userOrganizations).values({
+    userId: athleteUser.id,
+    organizationId: testOrg.id,
+    role: 'athlete',
+  });
+
+  const athleteLogin = await request(app)
+    .post('/api/auth/login')
+    .send({ username: athleteUser.username, password: 'Athlete123!' });
+  athleteCookie = athleteLogin.headers['set-cookie'][0];
+
   // Create a second (unrelated) org and org admin to test cross-org isolation
   const ts = Date.now();
   [otherOrg] = await db.insert(organizations).values({
@@ -129,19 +154,16 @@ beforeAll(async () => {
 
 afterAll(async () => {
   // Cleanup in reverse order of creation
-  if (otherOrgAdminUser?.id) {
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, otherOrgAdminUser.id));
-    await db.delete(users).where(eq(users.id, otherOrgAdminUser.id));
+  for (const user of [otherOrgAdminUser, athleteUser, orgAdminUser]) {
+    if (user?.id) {
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, user.id));
+      await db.delete(users).where(eq(users.id, user.id));
+    }
   }
-  if (otherOrg?.id) {
-    await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
-  }
-  if (orgAdminUser?.id) {
-    await db.delete(userOrganizations).where(eq(userOrganizations.userId, orgAdminUser.id));
-    await db.delete(users).where(eq(users.id, orgAdminUser.id));
-  }
-  if (testOrg?.id) {
-    await db.delete(organizations).where(eq(organizations.id, testOrg.id));
+  for (const org of [otherOrg, testOrg]) {
+    if (org?.id) {
+      await db.delete(organizations).where(eq(organizations.id, org.id));
+    }
   }
 });
 
@@ -287,7 +309,16 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext', () => 
   });
 });
 
-describe('PATCH /api/organizations/:id/org-settings – authorization boundary', () => {
+describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authorization', () => {
+  it('should reject athlete in the same org', async () => {
+    const response = await request(app)
+      .patch(`/api/organizations/${testOrg.id}/org-settings`)
+      .set('Cookie', athleteCookie)
+      .send({ aiPromptContext: 'Athlete trying to set context' });
+
+    expect(response.status).toBe(403);
+  });
+
   it('should forbid an org admin from updating a different org\'s aiPromptContext', async () => {
     const response = await request(app)
       .patch(`/api/organizations/${testOrg.id}/org-settings`)
@@ -305,10 +336,10 @@ describe('PATCH /api/organizations/:id/org-settings – authorization boundary',
     expect(unchanged.aiPromptContext).not.toBe('Injected from another org');
   });
 
-  it('should forbid an unauthenticated request from updating aiPromptContext', async () => {
+  it('should reject unauthenticated request', async () => {
     const response = await request(app)
       .patch(`/api/organizations/${testOrg.id}/org-settings`)
-      .send({ aiPromptContext: 'Unauthenticated injection' });
+      .send({ aiPromptContext: 'No auth' });
 
     expect(response.status).toBe(401);
   });

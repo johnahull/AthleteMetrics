@@ -633,6 +633,11 @@ export default function OrgAdminSettings() {
                         disabled={!aiEnabledBySiteAdmin || !form.watch('aiEnabled')}
                       />
                     </FormControl>
+                    {aiEnabledBySiteAdmin && !form.watch('aiEnabled') && (
+                      <p className="text-xs text-muted-foreground">
+                        Enable Coaching Insights above to edit this field.
+                      </p>
+                    )}
                     <div className="flex justify-end">
                       <span className="text-xs text-muted-foreground">
                         {(field.value || '').length} / 2000
