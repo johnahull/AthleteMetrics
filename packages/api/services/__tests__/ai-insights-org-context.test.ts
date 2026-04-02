@@ -178,8 +178,14 @@ describe('sanitizeForPrompt – direct tests', () => {
     expect(sanitizeForPrompt(undefined as unknown as string)).toBe('');
   });
 
-  it('strips markdown syntax characters (brackets and parens) from links, leaving plain text and URL body', () => {
-    // [text](url) → strips [] and () only; the URL text itself survives since : and / are not stripped
-    expect(sanitizeForPrompt('[click here](http://evil.com)')).toBe('click herehttp://evil.com');
+  it('strips markdown link syntax [text](url) → text, removing URL entirely', () => {
+    // Targeted regex replaces [text](url) with just the label text — URL is fully removed
+    expect(sanitizeForPrompt('[click here](http://evil.com)')).toBe('click here');
+  });
+
+  it('preserves legitimate parenthetical content', () => {
+    // Parentheses used in normal prose (not markdown links) must not be stripped
+    expect(sanitizeForPrompt('speed training (3x/week)')).toBe('speed training (3x/week)');
+    expect(sanitizeForPrompt('French Contrast (Prilepin chart)')).toBe('French Contrast (Prilepin chart)');
   });
 });
