@@ -178,8 +178,8 @@ describe('sanitizeForPrompt – direct tests', () => {
     expect(sanitizeForPrompt(undefined as unknown as string)).toBe('');
   });
 
-  it('strips parentheses to fully deconstruct markdown links', () => {
-    // [text](url) → after stripping [] and () → texturl
+  it('strips markdown syntax characters (brackets and parens) from links, leaving plain text and URL body', () => {
+    // [text](url) → strips [] and () only; the URL text itself survives since : and / are not stripped
     expect(sanitizeForPrompt('[click here](http://evil.com)')).toBe('click herehttp://evil.com');
   });
 });

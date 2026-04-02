@@ -373,6 +373,13 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authoriz
     const loginResp = await request(app)
       .post('/api/auth/login')
       .send({ username: lockedAdmin.username, password: 'LockedAdmin123!' });
+
+    if (loginResp.status !== 200 || !loginResp.headers['set-cookie']) {
+      throw new Error(
+        `Locked admin login failed (status: ${loginResp.status}). Response: ${JSON.stringify(loginResp.body)}`
+      );
+    }
+
     const lockedAdminCookie = loginResp.headers['set-cookie'][0];
 
     const response = await request(app)
@@ -427,6 +434,13 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authoriz
     const loginResp = await request(app)
       .post('/api/auth/login')
       .send({ username: lockedAdmin.username, password: 'LockedAdmin2123!' });
+
+    if (loginResp.status !== 200 || !loginResp.headers['set-cookie']) {
+      throw new Error(
+        `Locked admin 2 login failed (status: ${loginResp.status}). Response: ${JSON.stringify(loginResp.body)}`
+      );
+    }
+
     const lockedAdminCookie = loginResp.headers['set-cookie'][0];
 
     const response = await request(app)
