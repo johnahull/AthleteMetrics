@@ -4292,6 +4292,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
       reportType: report.reportType as "individual" | "team",
       reportName: report.name,
       organizationName: org?.name || "Unknown Organization",
+      organizationContext: org?.aiPromptContext || undefined,
       timeframe,
       metrics,
       improvements,

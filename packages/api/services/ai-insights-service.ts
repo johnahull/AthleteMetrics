@@ -389,6 +389,7 @@ export interface ReportData {
   reportType: "team" | "individual";
   reportName: string;
   organizationName: string;
+  organizationContext?: string;
 
   // Team report specific
   teamName?: string;
@@ -472,14 +473,15 @@ export async function generateCoachingInsights(
  * Sanitize user-generated content before including in AI prompts
  * Prevents potential prompt injection attacks by escaping markdown and special characters
  */
-export function sanitizeForPrompt(input: string): string {
+export function sanitizeForPrompt(input: string, maxLength = 500): string {
   if (!input) return '';
   return input
-    .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1') // Strip markdown links [text](url) → text (preserves label, removes URL)
+    .replace(/[#*_`\[\]<>]/g, '') // Remove remaining markdown special characters
     .replace(/\n+/g, ' ') // Convert newlines to spaces
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()
-    .substring(0, 500); // Limit length of individual fields
+    .substring(0, maxLength); // Limit length of individual fields
 }
 
 /**
@@ -492,7 +494,17 @@ export function buildPrompt(reportData: ReportData): string {
   const reportName = sanitizeForPrompt(reportData.reportName);
   const organizationName = sanitizeForPrompt(reportData.organizationName);
 
-  let prompt = `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
+  let prompt = '';
+
+  prompt += `You are an expert athletic performance coach. Analyze the following ${reportType} performance report and provide actionable coaching insights.\n\n`;
+
+  // Append organization context after role definition
+  if (reportData.organizationContext) {
+    const sanitizedContext = sanitizeForPrompt(reportData.organizationContext, 2000);
+    if (sanitizedContext) {
+      prompt += `## Organization Context\n${sanitizedContext}\n\nWhen generating insights, incorporate this context to make recommendations specific to this organization's training philosophy and methodology.\n\n`;
+    }
+  }
 
   // Report context
   prompt += `## Report Context\n`;
