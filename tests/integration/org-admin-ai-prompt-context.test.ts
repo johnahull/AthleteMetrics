@@ -343,4 +343,109 @@ describe('PATCH /api/organizations/:id/org-settings – aiPromptContext authoriz
 
     expect(response.status).toBe(401);
   });
+
+  it('should reject setting aiPromptContext when aiEnabledBySiteAdmin is false', async () => {
+    // Create an org where site admin has not enabled AI
+    const [lockedOrg] = await db.insert(organizations).values({
+      name: `AI Locked Org ${Date.now()}`,
+      isActive: true,
+      aiEnabledBySiteAdmin: false,
+      aiEnabled: false,
+    }).returning();
+
+    const hashedPassword = await bcrypt.hash('LockedAdmin123!', BCRYPT_SALT_ROUNDS);
+    const [lockedAdmin] = await db.insert(users).values({
+      username: `locked-orgadmin-${Date.now()}`,
+      emails: [`locked-orgadmin-${Date.now()}@test.com`],
+      password: hashedPassword,
+      firstName: 'Locked',
+      lastName: 'Admin',
+      fullName: 'Locked Admin',
+      isActive: true,
+    }).returning();
+
+    await db.insert(userOrganizations).values({
+      userId: lockedAdmin.id,
+      organizationId: lockedOrg.id,
+      role: 'org_admin',
+    });
+
+    const loginResp = await request(app)
+      .post('/api/auth/login')
+      .send({ username: lockedAdmin.username, password: 'LockedAdmin123!' });
+    const lockedAdminCookie = loginResp.headers['set-cookie'][0];
+
+    const response = await request(app)
+      .patch(`/api/organizations/${lockedOrg.id}/org-settings`)
+      .set('Cookie', lockedAdminCookie)
+      .send({ aiPromptContext: 'Should be rejected' });
+
+    expect(response.status).toBe(403);
+    expect(response.body.message).toContain('site administrator');
+
+    // Verify database was not modified
+    const [unchanged] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, lockedOrg.id));
+
+    expect(unchanged.aiPromptContext).toBeNull();
+
+    // Cleanup
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, lockedAdmin.id));
+    await db.delete(users).where(eq(users.id, lockedAdmin.id));
+    await db.delete(organizations).where(eq(organizations.id, lockedOrg.id));
+  });
+
+  it('should allow clearing aiPromptContext (null) even when aiEnabledBySiteAdmin is false', async () => {
+    // Clearing is always allowed — housekeeping should not be blocked
+    const [lockedOrg] = await db.insert(organizations).values({
+      name: `AI Locked Clear Org ${Date.now()}`,
+      isActive: true,
+      aiEnabledBySiteAdmin: false,
+      aiEnabled: false,
+      aiPromptContext: 'Stale context from before AI was disabled',
+    }).returning();
+
+    const hashedPassword = await bcrypt.hash('LockedAdmin2123!', BCRYPT_SALT_ROUNDS);
+    const [lockedAdmin] = await db.insert(users).values({
+      username: `locked-orgadmin2-${Date.now()}`,
+      emails: [`locked-orgadmin2-${Date.now()}@test.com`],
+      password: hashedPassword,
+      firstName: 'Locked2',
+      lastName: 'Admin',
+      fullName: 'Locked2 Admin',
+      isActive: true,
+    }).returning();
+
+    await db.insert(userOrganizations).values({
+      userId: lockedAdmin.id,
+      organizationId: lockedOrg.id,
+      role: 'org_admin',
+    });
+
+    const loginResp = await request(app)
+      .post('/api/auth/login')
+      .send({ username: lockedAdmin.username, password: 'LockedAdmin2123!' });
+    const lockedAdminCookie = loginResp.headers['set-cookie'][0];
+
+    const response = await request(app)
+      .patch(`/api/organizations/${lockedOrg.id}/org-settings`)
+      .set('Cookie', lockedAdminCookie)
+      .send({ aiPromptContext: '' });
+
+    expect(response.status).toBe(200);
+
+    const [updated] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.id, lockedOrg.id));
+
+    expect(updated.aiPromptContext).toBeNull();
+
+    // Cleanup
+    await db.delete(userOrganizations).where(eq(userOrganizations.userId, lockedAdmin.id));
+    await db.delete(users).where(eq(users.id, lockedAdmin.id));
+    await db.delete(organizations).where(eq(organizations.id, lockedOrg.id));
+  });
 });

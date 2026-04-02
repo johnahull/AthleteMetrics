@@ -476,7 +476,7 @@ export async function generateCoachingInsights(
 export function sanitizeForPrompt(input: string, maxLength = 500): string {
   if (!input) return '';
   return input
-    .replace(/[#*_`\[\]<>]/g, '') // Remove markdown special characters
+    .replace(/[#*_`\[\]<>()]/g, '') // Remove markdown special characters (including parens to deconstruct [text](url) links)
     .replace(/\n+/g, ' ') // Convert newlines to spaces
     .replace(/\s+/g, ' ') // Normalize whitespace
     .trim()

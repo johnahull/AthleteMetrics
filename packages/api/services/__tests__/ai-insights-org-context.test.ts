@@ -177,4 +177,9 @@ describe('sanitizeForPrompt – direct tests', () => {
     expect(sanitizeForPrompt(null as unknown as string)).toBe('');
     expect(sanitizeForPrompt(undefined as unknown as string)).toBe('');
   });
+
+  it('strips parentheses to fully deconstruct markdown links', () => {
+    // [text](url) → after stripping [] and () → texturl
+    expect(sanitizeForPrompt('[click here](http://evil.com)')).toBe('click herehttp://evil.com');
+  });
 });

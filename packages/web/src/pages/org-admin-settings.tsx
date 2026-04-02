@@ -627,12 +627,16 @@ export default function OrgAdminSettings() {
                       <Textarea
                         {...field}
                         placeholder="e.g., Our organization focuses on speed development and injury prevention for youth athletes..."
-                        value={field.value || ''}
                         maxLength={2000}
                         rows={4}
                         disabled={!aiEnabledBySiteAdmin || !form.watch('aiEnabled')}
                       />
                     </FormControl>
+                    {!aiEnabledBySiteAdmin && (
+                      <p className="text-xs text-muted-foreground">
+                        AI Insights must be enabled by your site administrator before this field can be edited.
+                      </p>
+                    )}
                     {aiEnabledBySiteAdmin && !form.watch('aiEnabled') && (
                       <p className="text-xs text-muted-foreground">
                         Enable Coaching Insights above to edit this field.

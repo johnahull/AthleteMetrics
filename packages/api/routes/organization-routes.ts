@@ -499,6 +499,12 @@ export function registerOrganizationRoutes(app: Express) {
         } else if (aiPromptContext.length > 2000) {
           return res.status(400).json({ message: "AI prompt context must be 2000 characters or less" });
         } else {
+          // Block setting context when AI is not enabled by site admin (consistent with aiEnabled guard)
+          if (!org.aiEnabledBySiteAdmin) {
+            return res.status(403).json({
+              message: "AI features must be enabled by site administrator first"
+            });
+          }
           updates.aiPromptContext = aiPromptContext;
         }
       }
