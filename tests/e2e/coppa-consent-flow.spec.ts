@@ -832,14 +832,16 @@ test.describe('COPPA: Login Page COPPA Error Code Handling', () => {
 test.describe('COPPA: Registration in Parent Mode', () => {
   test.use({ storageState: { cookies: [], origins: [] } });
 
-  test('register?role=parent shows "Create Parent Account" heading and hides DOB field', async ({ page }) => {
-    await page.goto(`${BASE_URL}/register?role=parent`);
+  test('register?role=parent with email param shows "Create Parent Account" heading and hides DOB field', async ({ page }) => {
+    // Phase 1B: bare /register?role=parent (no email or consent) now shows the dead-end gate.
+    // A valid email param is required to reach the registration form in parent mode.
+    await page.goto(`${BASE_URL}/register?role=parent&email=invited-parent@example.com`);
     await page.waitForLoadState('networkidle');
 
     // The heading must switch to parent mode
     await expect(
       page.locator('text=Create Parent Account'),
-      'Register page in parent mode must show "Create Parent Account" heading'
+      'Register page in parent mode must show "Create Parent Account" heading when valid email param provided'
     ).toBeVisible();
 
     // The birthDate field must NOT be shown in parent mode (COPPA does not apply to parents)
@@ -1896,5 +1898,52 @@ test.describe('Suite 13: Under-18 Registration — Parent Email Field Visibility
       consentEmailSentText,
       '13-17 athlete must not see a "consent email sent" message — they are not COPPA-gated'
     ).toBe(0);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Test Suite 14: Parent Registration Dead-End Gate (Phase 1B)
+// ────────────────────────────────────────────────────────────────────────────────
+
+test.describe('Suite 14: Parent Registration Dead-End Gate', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('navigating to /register?role=parent with no params shows dead-end message', async ({ page }) => {
+    await page.goto(`${BASE_URL}/register?role=parent`);
+    await page.waitForLoadState('networkidle');
+
+    // Should see the dead-end message referencing invitation or consent link
+    await expect(
+      page.locator('text=/invitation|consent link/i').first(),
+      'Dead-end page must display a message referencing invitation or consent link'
+    ).toBeVisible();
+
+    // Should NOT see a registration form
+    await expect(
+      page.locator('#firstName'),
+      'Registration form firstName field must NOT be visible on the dead-end page'
+    ).not.toBeVisible();
+
+    await expect(
+      page.locator('#email'),
+      'Registration form email field must NOT be visible on the dead-end page'
+    ).not.toBeVisible();
+
+    // Should have a "Back to Login" button
+    await expect(
+      page.locator('text=/back to login/i').first(),
+      'Dead-end page must have a "Back to Login" button'
+    ).toBeVisible();
+  });
+
+  test('navigating to /register?role=parent&email=test@test.com shows registration form', async ({ page }) => {
+    await page.goto(`${BASE_URL}/register?role=parent&email=test@test.com`);
+    await page.waitForLoadState('networkidle');
+
+    // Should see the registration form (email prefilled)
+    await expect(
+      page.locator('#firstName'),
+      'Registration form must be visible when a valid email param is provided in parent mode'
+    ).toBeVisible();
   });
 });

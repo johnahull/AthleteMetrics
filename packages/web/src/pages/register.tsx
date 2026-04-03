@@ -15,7 +15,8 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Shield
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { validatePassword, getPasswordRequirementsText } from '@shared/password-requirements';
@@ -37,6 +38,9 @@ export default function Register() {
   const isParentMode = searchParams.get('role') === 'parent';
   const prefilledEmail = searchParams.get('email') || '';
   const prefilledConsentId = searchParams.get('consent') || '';
+
+  // Dead-end gate: parent mode without any valid context (no email invite, no consent link)
+  const parentModeBlocked = isParentMode && !prefilledEmail && !prefilledConsentId;
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -273,14 +277,47 @@ export default function Register() {
     }
   };
 
+  // Dead-end: parent navigated directly without a valid invitation or consent link
+  if (parentModeBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <CardHeader className="text-center">
+            <p className="text-sm font-semibold tracking-wide text-primary uppercase mb-2">AthleteMetrics</p>
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Shield className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Parent Registration Requires an Invitation</CardTitle>
+            <CardDescription>
+              To create a parent account, you need a valid invitation or consent link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>There are three ways to get started:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Your child (under 13) registers and you receive a consent email</li>
+                <li>Your child (13–17) registers with your email and you receive a notification</li>
+                <li>A coach or organization admin sends you an invitation</li>
+              </ul>
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => setLocation('/login')}>
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // COPPA consent sent state — minor awaiting parental approval
   if (consentEmailSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-              <Mail className="h-8 w-8 text-blue-600" />
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-primary" />
             </div>
             <CardTitle className="text-2xl">Consent Email Sent</CardTitle>
             <CardDescription>
@@ -289,12 +326,12 @@ export default function Register() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Alert>
-              <AlertDescription className="text-sm text-gray-700">
+              <AlertDescription className="text-sm text-foreground">
                 Because you're under 13, federal law (COPPA) requires a parent or guardian to approve your account
                 before you can log in. Please ask them to check their email.
               </AlertDescription>
             </Alert>
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Once a parent or guardian clicks the approval link in the email, your account will be activated.
             </p>
           </CardContent>
@@ -306,11 +343,11 @@ export default function Register() {
   // Success state - show verification message
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <Mail className="h-8 w-8 text-green-600" />
+            <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
             <CardTitle className="text-2xl">Check your email</CardTitle>
             <CardDescription>
@@ -318,10 +355,10 @@ export default function Register() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600 text-center">
+            <p className="text-sm text-muted-foreground text-center">
               Click the link in the email to verify your account and start using AthleteMetrics.
             </p>
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Didn't receive the email? Check your spam folder or{' '}
               <button
                 onClick={async () => {
