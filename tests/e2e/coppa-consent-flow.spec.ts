@@ -1559,3 +1559,342 @@ test.describe('COPPA: Parent Child Detail Page', () => {
     ).toBe(false);
   });
 });
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Test Suite 13: Under-18 Registration — Parent Email Field Visibility
+// ────────────────────────────────────────────────────────────────────────────────
+
+test.describe('Suite 13: Under-18 Registration — Parent Email Field Visibility', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test('13-17 athlete sees optional parentEmail field', async ({ page }) => {
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+
+    // Enter a date-of-birth that makes the user 15 years old (teen minor, not under 13)
+    const teenDob = dobForAge(15);
+    await page.fill('#birthDate', teenDob);
+    await page.waitForTimeout(300);
+
+    // The parent email field must appear for 13-17 athletes
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email field must be visible for 13-17 athletes'
+    ).toBeVisible();
+
+    // The field must NOT be required — no asterisk label element and no required attribute
+    const isRequired = await page.locator('#parentEmail').getAttribute('required');
+    expect(
+      isRequired,
+      'Parent email field must NOT be required (no required attribute) for 13-17 athletes'
+    ).toBeNull();
+
+    // No red asterisk (*) should appear in the label for a teen minor
+    const asteriskCount = await page
+      .locator('label[for="parentEmail"] span.text-red-500, label[for="parentEmail"] .text-red-500')
+      .count();
+    expect(
+      asteriskCount,
+      'Required asterisk must NOT appear in the parentEmail label for 13-17 athletes'
+    ).toBe(0);
+
+    // The "optionally provide" informational text must be visible (not the COPPA alert)
+    await expect(
+      page.locator('text=/optionally provide/i'),
+      'Informational text about optionally providing a parent email must appear for 13-17 athletes'
+    ).toBeVisible();
+
+    // The COPPA amber alert about "Federal law" must NOT be visible for 13-17 athletes
+    const coppaAlertCount = await page.locator('text=/federal law.*coppa|coppa.*parental consent/i').count();
+    expect(
+      coppaAlertCount,
+      'COPPA federal-law warning must NOT appear for 13-17 athletes (only for under-13)'
+    ).toBe(0);
+  });
+
+  test('under-13 athlete sees required parentEmail field with COPPA warning', async ({ page }) => {
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+
+    // Enter a date-of-birth that makes the user 10 years old (clearly under 13)
+    const under13Dob = dobForAge(10);
+    await page.fill('#birthDate', under13Dob);
+    await page.waitForTimeout(300);
+
+    // The parent email field must appear for under-13 athletes
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email field must be visible for under-13 athletes'
+    ).toBeVisible();
+
+    // The field must be required — has the required attribute
+    const isRequired = await page.locator('#parentEmail').getAttribute('required');
+    expect(
+      isRequired,
+      'Parent email field must be required (required attribute present) for under-13 athletes'
+    ).not.toBeNull();
+
+    // The red asterisk (*) must appear in the label for an under-13 athlete
+    const asteriskCount = await page
+      .locator('label[for="parentEmail"] span.text-red-500, label[for="parentEmail"] .text-red-500')
+      .count();
+    expect(
+      asteriskCount,
+      'Required asterisk must appear in the parentEmail label for under-13 athletes'
+    ).toBeGreaterThan(0);
+
+    // The COPPA amber alert about "Federal law" must be visible
+    await expect(
+      page.locator('text=/federal law.*coppa|coppa.*parental consent/i').first(),
+      'COPPA federal-law warning must be visible for under-13 athletes'
+    ).toBeVisible();
+
+    // The "optionally provide" text must NOT appear for under-13 (it is mandatory, not optional)
+    const optionalTextCount = await page.locator('text=/optionally provide/i').count();
+    expect(
+      optionalTextCount,
+      '"Optionally provide" text must NOT appear for under-13 athletes — the field is mandatory'
+    ).toBe(0);
+  });
+
+  test('18+ athlete sees no parentEmail field', async ({ page }) => {
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+
+    // Enter a date-of-birth that makes the user 20 years old (adult, no minor flag)
+    const adultDob = dobForAge(20);
+    await page.fill('#birthDate', adultDob);
+    await page.waitForTimeout(300);
+
+    // The parent email field must NOT be visible for adults
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email field must NOT be visible for athletes 18 and older'
+    ).not.toBeVisible();
+
+    // No COPPA alert of any kind should appear
+    const coppaAlertCount = await page.locator('text=/federal law.*coppa|coppa.*parental consent/i').count();
+    expect(
+      coppaAlertCount,
+      'No COPPA warning must appear for athletes 18 and older'
+    ).toBe(0);
+
+    // No "optionally provide" text should appear either
+    const optionalTextCount = await page.locator('text=/optionally provide/i').count();
+    expect(
+      optionalTextCount,
+      'No parent-email informational text must appear for athletes 18 and older'
+    ).toBe(0);
+  });
+
+  test('13-17 registration without parentEmail succeeds normally', async ({ page }) => {
+    // Intercept the register API call so we can test the form submission path
+    // without requiring a real database or unique credentials per run.
+    await page.route('**/api/auth/register', async route => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'Registration successful. Please check your email to verify your account.',
+          // No requiresParentalConsent — 13-17 athletes can log in immediately
+        }),
+      });
+    });
+
+    // Also mock /api/auth/me so the app does not immediately redirect after login
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user: {
+            id: 'mock-teen-id',
+            username: 'teenathlete',
+            role: 'athlete',
+          },
+        }),
+      });
+    });
+
+    // Also stub the email/username availability checks to avoid debounce timeouts
+    await page.route('**/api/auth/check-email**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ available: true }),
+      });
+    });
+    await page.route('**/api/auth/check-username**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ available: true }),
+      });
+    });
+
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+
+    // Fill in the registration form with a 15-year-old's birth date
+    await page.fill('#firstName', 'Teen');
+    await page.fill('#lastName', 'Athlete');
+    await page.fill('#birthDate', dobForAge(15));
+    await page.waitForTimeout(300);
+
+    // Confirm the parentEmail field is visible but intentionally leave it blank
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email field must be visible for a 15-year-old to confirm the field exists before skipping it'
+    ).toBeVisible();
+
+    await page.fill('#email', `teen${RUN_ID}@example.com`);
+    await page.waitForTimeout(500); // allow debounce check
+    await page.fill('#username', `teen${RUN_ID}`);
+    await page.waitForTimeout(500); // allow debounce check
+    await page.fill('#password', 'TeenAthlete@2026!');
+    await page.fill('#confirmPassword', 'TeenAthlete@2026!');
+    await page.locator('[data-testid="checkbox-terms-accepted"]').click();
+
+    // Wait for the submit button to become enabled
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+        return btn && !btn.disabled;
+      },
+      { timeout: 10_000 }
+    );
+
+    await page.click('button[type="submit"]');
+
+    // The email verification success screen must appear (positive assertion)
+    await expect(
+      page.locator('text=/check your email|verify your email/i'),
+      '13-17 athlete must see the email verification screen after successful registration'
+    ).toBeVisible({ timeout: 5_000 });
+
+    // A 13-17 athlete must NOT see the "Consent Email Sent" screen — they log in immediately
+    const consentSentHeading = await page.locator('text=Consent Email Sent').isVisible().catch(() => false);
+    expect(
+      consentSentHeading,
+      '13-17 athlete registering without parentEmail must NOT see the "Consent Email Sent" screen'
+    ).toBe(false);
+
+    // No "awaiting parental consent" copy should appear
+    const awaitingConsentText = await page.locator('text=/awaiting.*consent|consent.*pending/i').count();
+    expect(
+      awaitingConsentText,
+      '13-17 athlete must not be shown an "awaiting parental consent" message'
+    ).toBe(0);
+  });
+
+  test('13-17 registration with parentEmail succeeds and shows no consent gate', async ({ page }) => {
+    // Intercept the register API call to return a successful response without
+    // requiresParentalConsent — 13-17 athletes can log in immediately even with
+    // a parentEmail provided (it is purely informational, not a COPPA gate).
+    await page.route('**/api/auth/register', async route => {
+      await route.fulfill({
+        status: 201,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          message: 'Registration successful. Please check your email to verify your account.',
+          // No requiresParentalConsent field — 13-17 athletes are not COPPA-blocked
+        }),
+      });
+    });
+
+    // Mock /api/auth/me for the post-registration auth context
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user: {
+            id: 'mock-teen-with-parent-id',
+            username: 'teenathleteP',
+            role: 'athlete',
+          },
+        }),
+      });
+    });
+
+    // Stub availability checks
+    await page.route('**/api/auth/check-email**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ available: true }),
+      });
+    });
+    await page.route('**/api/auth/check-username**', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ available: true }),
+      });
+    });
+
+    await page.goto(`${BASE_URL}/register`);
+    await page.waitForLoadState('networkidle');
+
+    // Fill in the registration form with a 15-year-old's birth date
+    await page.fill('#firstName', 'Teen');
+    await page.fill('#lastName', 'WithParent');
+    await page.fill('#birthDate', dobForAge(15));
+    await page.waitForTimeout(300);
+
+    // Fill in the optional parentEmail field
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email field must be visible for the 15-year-old before filling it'
+    ).toBeVisible();
+    await page.fill('#parentEmail', `guardianP${RUN_ID}@example.com`);
+
+    await page.fill('#email', `teenP${RUN_ID}@example.com`);
+    await page.waitForTimeout(500);
+    await page.fill('#username', `teenP${RUN_ID}`);
+    await page.waitForTimeout(500);
+    await page.fill('#password', 'TeenAthlete@2026!');
+    await page.fill('#confirmPassword', 'TeenAthlete@2026!');
+    await page.locator('[data-testid="checkbox-terms-accepted"]').click();
+
+    // Wait for the submit button to become enabled
+    await page.waitForFunction(
+      () => {
+        const btn = document.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+        return btn && !btn.disabled;
+      },
+      { timeout: 10_000 }
+    );
+
+    await page.click('button[type="submit"]');
+
+    // The email verification success screen must appear (positive assertion)
+    await expect(
+      page.locator('text=/check your email|verify your email/i'),
+      '13-17 athlete with parentEmail must see the email verification screen, not a consent gate'
+    ).toBeVisible({ timeout: 5_000 });
+
+    // Must NOT show the "Consent Email Sent" screen — 13-17 athletes are not COPPA-blocked
+    const consentSentHeading = await page.locator('text=Consent Email Sent').isVisible().catch(() => false);
+    expect(
+      consentSentHeading,
+      '13-17 athlete registering with parentEmail must NOT see the "Consent Email Sent" screen'
+    ).toBe(false);
+
+    // No "awaiting parental consent" copy should be present
+    const awaitingConsentText = await page.locator('text=/awaiting.*consent|consent.*pending/i').count();
+    expect(
+      awaitingConsentText,
+      '13-17 athlete must not be shown an "awaiting parental consent" message even when parentEmail was provided'
+    ).toBe(0);
+
+    // No "consent email sent" messaging either
+    const consentEmailSentText = await page.locator('text=/consent email sent/i').count();
+    expect(
+      consentEmailSentText,
+      '13-17 athlete must not see a "consent email sent" message — they are not COPPA-gated'
+    ).toBe(0);
+  });
+});
