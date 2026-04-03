@@ -417,7 +417,25 @@ export function registerRegistrationRoutes(app: Express) {
         return res.status(409).json({ success: false, message: "An account with this email already exists", field: "email" });
       }
 
-      // If consentId provided, validate it belongs to this parent email
+      // Invitation-only gate: parent registration requires either a valid consentId
+      // or an existing parentAthleteLinks row for this email (created during teen minor
+      // registration or coach invitation). Prevents orphaned parent accounts.
+      if (!consentId) {
+        const existingLinks = await db.select({ id: parentAthleteLinks.id })
+          .from(parentAthleteLinks)
+          .where(eq(parentAthleteLinks.parentEmail, email.toLowerCase()))
+          .limit(1);
+
+        if (existingLinks.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Parent registration requires a valid invitation or consent link. Please use the link from your email.",
+            code: "NO_PARENT_CONTEXT",
+          });
+        }
+      }
+
+      // If consentId provided, validate it belongs to this parent email and is still pending
       if (consentId) {
         const [consent] = await db.select({
           id: parentalConsents.id,
@@ -499,16 +517,9 @@ export function registerRegistrationRoutes(app: Express) {
       }
 
       // Link parent account to existing parentAthleteLinks rows (upgrade email → FK)
-      let linkedCount = 0;
-      if (consentId) {
-        linkedCount = await coppaService.linkParentAccount(userId, email);
-        console.log(`[ParentRegistration] Linked ${linkedCount} athlete(s) to parent ${username} via consentId`);
-      } else {
-        // Link by email even without consentId (parent may have received multiple consent emails)
-        linkedCount = await coppaService.linkParentAccount(userId, email);
-        if (linkedCount > 0) {
-          console.log(`[ParentRegistration] Linked ${linkedCount} athlete(s) to parent ${username} by email`);
-        }
+      const linkedCount = await coppaService.linkParentAccount(userId, email);
+      if (linkedCount > 0) {
+        console.log(`[ParentRegistration] Linked ${linkedCount} athlete(s) to parent ${username}${consentId ? ' via consentId' : ' by email'}`);
       }
 
       // Send email verification

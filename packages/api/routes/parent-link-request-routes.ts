@@ -29,6 +29,7 @@ import { users } from "@shared/schema/tables/core";
 import { storage } from "../storage";
 import { emailService } from "../services/email-service";
 import { ROLE_HIERARCHY } from "../permissions/types";
+import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 
 /** Minimum role level for coach access. */
 const COACH_LEVEL = ROLE_HIERARCHY['coach'];
@@ -73,6 +74,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
     windowMs: 15 * 60 * 1000, // 15 minutes
     limit: 10,
     keyGenerator: (req) => req.session?.user?.id ?? req.ip ?? 'unknown',
+    skip: (req) => shouldSkipRateLimiting(req, 'general'),
     message: { success: false, message: "Too many link requests. Please try again later." },
   });
 
@@ -466,6 +468,9 @@ export function registerParentLinkRequestRoutes(app: Express) {
 
       return res.json({ success: true });
     } catch (error) {
+      if (error instanceof Error && error.message === 'REQUEST_ALREADY_PROCESSED') {
+        return res.status(400).json({ message: "Request is no longer pending" });
+      }
       console.error('[ParentLinkRequest] approve error:', error);
       return res.status(500).json({ message: "Failed to approve link request" });
     }
@@ -516,17 +521,26 @@ export function registerParentLinkRequestRoutes(app: Express) {
         }
       }
 
-      // Update request status
+      // Atomic deny with re-check to prevent double-deny race
       const now = new Date();
-      await db
-        .update(parentLinkRequests)
-        .set({
-          status: 'denied',
-          processedBy: sessionUser.id,
-          processedAt: now,
-          denialReason: reason ?? null,
-        })
-        .where(eq(parentLinkRequests.id, id));
+      await db.transaction(async (tx) => {
+        const [locked] = await tx
+          .select({ status: parentLinkRequests.status })
+          .from(parentLinkRequests)
+          .where(eq(parentLinkRequests.id, id));
+        if (!locked || locked.status !== 'pending') {
+          throw new Error('REQUEST_ALREADY_PROCESSED');
+        }
+        await tx
+          .update(parentLinkRequests)
+          .set({
+            status: 'denied',
+            processedBy: sessionUser.id,
+            processedAt: now,
+            denialReason: reason ?? null,
+          })
+          .where(eq(parentLinkRequests.id, id));
+      });
 
       // Fire-and-forget: notify parent
       const parentRecord = await storage.getUser(linkReq.parentUserId);
@@ -552,6 +566,9 @@ export function registerParentLinkRequestRoutes(app: Express) {
 
       return res.json({ success: true });
     } catch (error) {
+      if (error instanceof Error && error.message === 'REQUEST_ALREADY_PROCESSED') {
+        return res.status(400).json({ message: "Request is no longer pending" });
+      }
       console.error('[ParentLinkRequest] deny error:', error);
       return res.status(500).json({ message: "Failed to deny link request" });
     }

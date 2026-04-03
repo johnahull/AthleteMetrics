@@ -20,17 +20,16 @@ import { useAuth } from '@/lib/auth';
 export default function ParentLinkChild() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const [childIdentifier, setChildIdentifier] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState('');
 
   // Role guard — only parents can access this page
   if (!user) {
     setLocation('/login');
     return null;
   }
-
-  const [childIdentifier, setChildIdentifier] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
-  const [error, setError] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

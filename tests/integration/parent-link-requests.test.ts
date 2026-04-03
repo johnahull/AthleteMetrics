@@ -180,11 +180,12 @@ beforeAll(async () => {
     nonParentUser.id,
   );
 
-  // Put minor athlete and coach in testOrg; otherCoach in otherOrg
+  // Put minor athlete, coach, and parent in testOrg; otherCoach in otherOrg
   const m1 = await addUserToOrg(minorAthlete.id, testOrg.id, 'athlete');
   const m2 = await addUserToOrg(coachUser.id, testOrg.id, 'coach');
   const m3 = await addUserToOrg(otherCoach.id, otherOrg.id, 'coach');
-  createdMembershipIds.push(m1.id, m2.id, m3.id);
+  const m4 = await addUserToOrg(parentUser.id, testOrg.id, 'parent');
+  createdMembershipIds.push(m1.id, m2.id, m3.id, m4.id);
 });
 
 afterAll(async () => {
@@ -345,6 +346,32 @@ describe('POST /api/parent/link-requests', () => {
 });
 
 // ============================================================================
+// POST /api/parent/link-requests — non-parent role
+// ============================================================================
+
+describe('POST /api/parent/link-requests — role guard', () => {
+  it('returns 403 when a non-parent user (coach role) submits a link request', async () => {
+    const cookie = await loginAs(app, coachUser);
+    const res = await request(app)
+      .post('/api/parent/link-requests')
+      .set('Cookie', cookie)
+      .send({ childIdentifier: minorAthlete.username });
+
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 when a non-parent user (athlete role) submits a link request', async () => {
+    const cookie = await loginAs(app, nonParentUser);
+    const res = await request(app)
+      .post('/api/parent/link-requests')
+      .set('Cookie', cookie)
+      .send({ childIdentifier: minorAthlete.username });
+
+    expect(res.status).toBe(403);
+  });
+});
+
+// ============================================================================
 // GET /api/parent/link-requests
 // ============================================================================
 
@@ -379,6 +406,62 @@ describe('GET /api/parent/link-requests', () => {
   it('returns 401 for unauthenticated request', async () => {
     const res = await request(app).get('/api/parent/link-requests');
     expect(res.status).toBe(401);
+  });
+
+  it('only returns own requests — not those from a different parent', async () => {
+    const parentB = await createUser('parent_b_isolation', 'parent');
+    createdUserIds.push(parentB.id);
+
+    // Give parentB a parent org membership so they can create requests
+    const memberB = await addUserToOrg(parentB.id, testOrg.id, 'parent');
+    createdMembershipIds.push(memberB.id);
+
+    const [reqA] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).returning();
+
+    const [reqB] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentB.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).returning();
+
+    try {
+      // Parent A should only see their own request
+      const cookieA = await loginAs(app, parentUser);
+      const resA = await request(app)
+        .get('/api/parent/link-requests')
+        .set('Cookie', cookieA);
+
+      expect(resA.status).toBe(200);
+      const idsA = resA.body.map((r: any) => r.id);
+      expect(idsA).toContain(reqA.id);
+      expect(idsA).not.toContain(reqB.id);
+
+      // Parent B should only see their own request
+      const cookieB = await loginAs(app, parentB);
+      const resB = await request(app)
+        .get('/api/parent/link-requests')
+        .set('Cookie', cookieB);
+
+      expect(resB.status).toBe(200);
+      const idsB = resB.body.map((r: any) => r.id);
+      expect(idsB).toContain(reqB.id);
+      expect(idsB).not.toContain(reqA.id);
+    } finally {
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, reqA.id))
+        .catch(() => {});
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, reqB.id))
+        .catch(() => {});
+    }
   });
 });
 
@@ -516,6 +599,45 @@ describe('GET /api/coach/parent-link-requests', () => {
       .set('Cookie', cookie);
     expect(res.status).toBe(403);
   });
+
+  it('excludes expired requests from the list', async () => {
+    // Insert an expired (past expiresAt) pending request
+    const [expiredReq] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() - 1000), // 1 second in the past
+    }).returning();
+
+    // Insert a non-expired pending request
+    const [activeReq] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).returning();
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+      const res = await request(app)
+        .get('/api/coach/parent-link-requests')
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(200);
+      const ids = res.body.map((r: any) => r.id);
+      expect(ids).toContain(activeReq.id);
+      expect(ids).not.toContain(expiredReq.id);
+    } finally {
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, expiredReq.id))
+        .catch(() => {});
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, activeReq.id))
+        .catch(() => {});
+    }
+  });
 });
 
 // ============================================================================
@@ -604,6 +726,73 @@ describe('POST /api/coach/parent-link-requests/:id/approve', () => {
       .post('/api/coach/parent-link-requests/some-id/approve');
     expect(res.status).toBe(401);
   });
+
+  it('returns 400 for an expired request', async () => {
+    const [expiredReq] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() - 1000), // 1 second in the past
+    }).returning();
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+      const res = await request(app)
+        .post(`/api/coach/parent-link-requests/${expiredReq.id}/approve`)
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/expired/i);
+
+      // Status must remain unchanged
+      const [check] = await db.select({ status: parentLinkRequests.status })
+        .from(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, expiredReq.id));
+      expect(check?.status).toBe('pending');
+    } finally {
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, expiredReq.id))
+        .catch(() => {});
+    }
+  });
+
+  it('second approve returns 400 when request already processed (race condition guard)', async () => {
+    const [req1] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).returning();
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+
+      // First approve should succeed
+      const first = await request(app)
+        .post(`/api/coach/parent-link-requests/${req1.id}/approve`)
+        .set('Cookie', cookie);
+      expect(first.status).toBe(200);
+
+      // Second approve should fail — request is no longer pending
+      const second = await request(app)
+        .post(`/api/coach/parent-link-requests/${req1.id}/approve`)
+        .set('Cookie', cookie);
+      expect(second.status).toBe(400);
+      expect(second.body.message).toMatch(/no longer pending/i);
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(and(
+          eq(parentAthleteLinks.parentUserId, parentUser.id),
+          eq(parentAthleteLinks.athleteUserId, minorAthlete.id),
+        ))
+        .catch(() => {});
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, req1.id))
+        .catch(() => {});
+    }
+  });
 });
 
 // ============================================================================
@@ -681,5 +870,70 @@ describe('POST /api/coach/parent-link-requests/:id/deny', () => {
       .post('/api/coach/parent-link-requests/some-id/deny')
       .send({ reason: 'test' });
     expect(res.status).toBe(401);
+  });
+
+  it('returns 400 for an expired request', async () => {
+    const [expiredReq] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() - 1000), // 1 second in the past
+    }).returning();
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+      const res = await request(app)
+        .post(`/api/coach/parent-link-requests/${expiredReq.id}/deny`)
+        .set('Cookie', cookie)
+        .send({ reason: 'Expired test' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.message).toMatch(/expired/i);
+
+      // Status must remain unchanged
+      const [check] = await db.select({ status: parentLinkRequests.status })
+        .from(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, expiredReq.id));
+      expect(check?.status).toBe('pending');
+    } finally {
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, expiredReq.id))
+        .catch(() => {});
+    }
+  });
+
+  it('truncates denial reason to 500 characters', async () => {
+    const [req1] = await db.insert(parentLinkRequests).values({
+      parentUserId: parentUser.id,
+      athleteUserId: minorAthlete.id,
+      organizationId: testOrg.id,
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    }).returning();
+
+    // Build a 1000-character reason string
+    const longReason = 'A'.repeat(1000);
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+      const res = await request(app)
+        .post(`/api/coach/parent-link-requests/${req1.id}/deny`)
+        .set('Cookie', cookie)
+        .send({ reason: longReason });
+
+      expect(res.status).toBe(200);
+
+      // Verify stored denialReason is capped at 500 characters
+      const [updated] = await db.select({ denialReason: parentLinkRequests.denialReason })
+        .from(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, req1.id));
+      expect(updated?.denialReason).not.toBeNull();
+      expect(updated!.denialReason!.length).toBe(500);
+    } finally {
+      await db.delete(parentLinkRequests)
+        .where(eq(parentLinkRequests.id, req1.id))
+        .catch(() => {});
+    }
   });
 });
