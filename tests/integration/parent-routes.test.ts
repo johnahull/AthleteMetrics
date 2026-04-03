@@ -510,3 +510,138 @@ describe('requireParentAccess — email-only links (parentUserId IS NULL) are de
     }
   });
 });
+
+// ============================================================================
+// Phase 6: POST /api/parent/children/:athleteId/unlink
+// ============================================================================
+
+describe('POST /api/parent/children/:athleteId/unlink', () => {
+  /**
+   * Helper: create an isolated parent, child, and active link for each test
+   * so tests don't share mutable state.
+   */
+  async function setupUnlinkFixture() {
+    const unlinkParent = await createUser('unlink_parent', 'parent');
+    const unlinkChild = await createUser('unlink_child', 'athlete');
+    createdIds.push(unlinkParent.id, unlinkChild.id);
+
+    const [link] = await db.insert(parentAthleteLinks).values({
+      parentEmail: unlinkParent.emails[0],
+      parentUserId: unlinkParent.id,
+      athleteUserId: unlinkChild.id,
+      isActive: true,
+    }).returning();
+
+    return { unlinkParent, unlinkChild, link };
+  }
+
+  it('returns 200 and deactivates the parent-athlete link', async () => {
+    const { unlinkParent, unlinkChild, link } = await setupUnlinkFixture();
+
+    try {
+      const cookie = await loginAs(app, unlinkParent);
+      const res = await request(app)
+        .post(`/api/parent/children/${unlinkChild.id}/unlink`)
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(200);
+      expect(res.body.success).toBe(true);
+
+      // Verify the link is now inactive in the database
+      const [updatedLink] = await db
+        .select({ isActive: parentAthleteLinks.isActive })
+        .from(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id));
+
+      expect(updatedLink?.isActive).toBe(false);
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id))
+        .catch(() => {});
+    }
+  });
+
+  it('child account remains active after unlink', async () => {
+    const { unlinkParent, unlinkChild, link } = await setupUnlinkFixture();
+
+    try {
+      const cookie = await loginAs(app, unlinkParent);
+      await request(app)
+        .post(`/api/parent/children/${unlinkChild.id}/unlink`)
+        .set('Cookie', cookie);
+
+      // Verify the child user record is unchanged
+      const [childRecord] = await db
+        .select({
+          isActive: users.isActive,
+          coppaStatus: users.coppaStatus,
+          deletedAt: users.deletedAt,
+        })
+        .from(users)
+        .where(eq(users.id, unlinkChild.id));
+
+      expect(childRecord?.isActive).not.toBe(false);
+      expect(childRecord?.deletedAt).toBeNull();
+      // coppaStatus should remain whatever it was set to — not 'revoked'
+      expect(childRecord?.coppaStatus).not.toBe('revoked');
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id))
+        .catch(() => {});
+    }
+  });
+
+  it('returns 403 for non-parent user (coach role)', async () => {
+    const { unlinkChild, link } = await setupUnlinkFixture();
+    const coachUser = await createUser('unlink_coach', 'coach');
+    createdIds.push(coachUser.id);
+
+    try {
+      const cookie = await loginAs(app, coachUser);
+      const res = await request(app)
+        .post(`/api/parent/children/${unlinkChild.id}/unlink`)
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(403);
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id))
+        .catch(() => {});
+    }
+  });
+
+  it('returns 401 for unauthenticated request', async () => {
+    const { unlinkChild, link } = await setupUnlinkFixture();
+
+    try {
+      const res = await request(app)
+        .post(`/api/parent/children/${unlinkChild.id}/unlink`);
+
+      expect(res.status).toBe(401);
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id))
+        .catch(() => {});
+    }
+  });
+
+  it('returns 403 when parent is not linked to child', async () => {
+    const { unlinkChild, link } = await setupUnlinkFixture();
+    // A different parent that has no link to unlinkChild
+    const otherParent = await createUser('unlink_other_parent', 'parent');
+    createdIds.push(otherParent.id);
+
+    try {
+      const cookie = await loginAs(app, otherParent);
+      const res = await request(app)
+        .post(`/api/parent/children/${unlinkChild.id}/unlink`)
+        .set('Cookie', cookie);
+
+      expect(res.status).toBe(403);
+    } finally {
+      await db.delete(parentAthleteLinks)
+        .where(eq(parentAthleteLinks.id, link.id))
+        .catch(() => {});
+    }
+  });
+});

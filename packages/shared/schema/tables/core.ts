@@ -141,6 +141,7 @@ export const users = pgTable("users", {
    * - 'consent_revoked': parent revoked consent; login is blocked
    */
   coppaStatus: text("coppa_status", { enum: coppaStatusEnum }).default('not_applicable').notNull(),
+  /** True when the user is under-18 at the time of account creation or last age-check. */
   isMinor: boolean("is_minor").default(false).notNull(),
   parentEmail: text("parent_email"),
   /**

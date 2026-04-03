@@ -17,6 +17,9 @@ import {
   CONSENT_TOKEN_EXPIRY_DAYS,
   COPPA_AUDIT_RETENTION_YEARS,
   COPPA_ACTIONS,
+  MINOR_AGE_THRESHOLD,
+  isMinorAge,
+  isTeenMinor,
 } from '../coppa-utils';
 
 // ============================================================================
@@ -401,5 +404,145 @@ describe('COPPA constants', () => {
 
   it('COPPA_AUDIT_RETENTION_YEARS is 5', () => {
     expect(COPPA_AUDIT_RETENTION_YEARS).toBe(5);
+  });
+});
+
+// ============================================================================
+// MINOR_AGE_THRESHOLD constant
+// ============================================================================
+
+describe('MINOR_AGE_THRESHOLD', () => {
+  it('equals 18', () => {
+    expect(MINOR_AGE_THRESHOLD).toBe(18);
+  });
+});
+
+// ============================================================================
+// isMinorAge() — returns true for age strictly < 18
+// ============================================================================
+
+describe('isMinorAge()', () => {
+  it('returns true for a 12-year-old', () => {
+    const birthDate = birthdayRelativeToToday(12, 0);
+    expect(isMinorAge(birthDate)).toBe(true);
+  });
+
+  it('returns true for a 13-year-old (COPPA boundary)', () => {
+    const birthDate = birthdayRelativeToToday(13, 0);
+    expect(isMinorAge(birthDate)).toBe(true);
+  });
+
+  it('returns true for a 17-year-old', () => {
+    const birthDate = birthdayRelativeToToday(17, 0);
+    expect(isMinorAge(birthDate)).toBe(true);
+  });
+
+  it('returns false for an 18-year-old', () => {
+    const birthDate = birthdayRelativeToToday(18, 0);
+    expect(isMinorAge(birthDate)).toBe(false);
+  });
+
+  it('returns false for a 25-year-old', () => {
+    const birthDate = birthdayRelativeToToday(25, 0);
+    expect(isMinorAge(birthDate)).toBe(false);
+  });
+
+  it('returns true for an infant (age 0)', () => {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    expect(isMinorAge(`${y}-${m}-${d}`)).toBe(true);
+  });
+
+  it('returns false when someone turns 18 today (boundary: not a minor)', () => {
+    const birthDate = birthdayRelativeToToday(MINOR_AGE_THRESHOLD, 0);
+    expect(isMinorAge(birthDate)).toBe(false);
+  });
+
+  it('returns true when the 18th birthday is tomorrow (still 17)', () => {
+    const birthDate = birthdayRelativeToToday(MINOR_AGE_THRESHOLD, 1);
+    expect(isMinorAge(birthDate)).toBe(true);
+  });
+
+  it('throws for a future date', () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const y = tomorrow.getFullYear();
+    const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const d = String(tomorrow.getDate()).padStart(2, '0');
+    expect(() => isMinorAge(`${y}-${m}-${d}`)).toThrow();
+  });
+
+  it('throws for null', () => {
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => isMinorAge(null)).toThrow();
+  });
+
+  it('throws for undefined', () => {
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => isMinorAge(undefined)).toThrow();
+  });
+});
+
+// ============================================================================
+// isTeenMinor() — returns true for 13 <= age < 18 (between COPPA and adult)
+// ============================================================================
+
+describe('isTeenMinor()', () => {
+  it('returns false for a 12-year-old (under COPPA threshold)', () => {
+    const birthDate = birthdayRelativeToToday(12, 0);
+    expect(isTeenMinor(birthDate)).toBe(false);
+  });
+
+  it('returns true for exactly 13', () => {
+    const birthDate = birthdayRelativeToToday(13, 0);
+    expect(isTeenMinor(birthDate)).toBe(true);
+  });
+
+  it('returns true for a 15-year-old', () => {
+    const birthDate = birthdayRelativeToToday(15, 0);
+    expect(isTeenMinor(birthDate)).toBe(true);
+  });
+
+  it('returns true for a 17-year-old', () => {
+    const birthDate = birthdayRelativeToToday(17, 0);
+    expect(isTeenMinor(birthDate)).toBe(true);
+  });
+
+  it('returns false for an 18-year-old', () => {
+    const birthDate = birthdayRelativeToToday(18, 0);
+    expect(isTeenMinor(birthDate)).toBe(false);
+  });
+
+  it('returns false for a 25-year-old', () => {
+    const birthDate = birthdayRelativeToToday(25, 0);
+    expect(isTeenMinor(birthDate)).toBe(false);
+  });
+
+  it('returns false when 18th birthday is today (no longer a minor)', () => {
+    const birthDate = birthdayRelativeToToday(MINOR_AGE_THRESHOLD, 0);
+    expect(isTeenMinor(birthDate)).toBe(false);
+  });
+
+  it('returns true when 18th birthday is tomorrow (still 17, a teen minor)', () => {
+    const birthDate = birthdayRelativeToToday(MINOR_AGE_THRESHOLD, 1);
+    expect(isTeenMinor(birthDate)).toBe(true);
+  });
+
+  it('returns false when 13th birthday is tomorrow (still 12, below teen range)', () => {
+    const birthDate = birthdayRelativeToToday(COPPA_AGE_THRESHOLD, 1);
+    expect(isTeenMinor(birthDate)).toBe(false);
+  });
+
+  it('throws for null', () => {
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => isTeenMinor(null)).toThrow();
+  });
+
+  it('throws for undefined', () => {
+    // @ts-expect-error — intentionally testing JS runtime path
+    expect(() => isTeenMinor(undefined)).toThrow();
   });
 });

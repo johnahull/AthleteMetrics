@@ -24,6 +24,7 @@ import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
 import { users } from '@shared/schema/tables/core';
+import { parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { eq, like } from 'drizzle-orm';
 
 // Mock vite module before importing registerRoutes
@@ -93,6 +94,22 @@ function minorPayload(overrides: Record<string, unknown> = {}): Record<string, u
   };
 }
 
+/** Base payload for a teen minor (13-17) registration */
+function teenPayload(ageYears: number, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const ts = Date.now();
+  return {
+    firstName: 'Teen',
+    lastName: 'Athlete',
+    email: `teen-reg-${ts}@testcoppa.local`,
+    username: `teenreg${ts}`,
+    password: 'ValidPass1!!',
+    legalAcceptedAt: validLegalAcceptedAt(),
+    birthDate: exactlyAge(ageYears),
+    parentEmail: `parent-teen-${ts}@testcoppa.local`,
+    ...overrides,
+  };
+}
+
 // ============================================================================
 // Setup / Teardown
 // ============================================================================
@@ -129,6 +146,7 @@ afterAll(async () => {
     await db.delete(users).where(like(users.username, 'minorreg%'));
     await db.delete(users).where(like(users.username, 'adultreg%'));
     await db.delete(users).where(like(users.username, 'exactly13%'));
+    await db.delete(users).where(like(users.username, 'teenreg%'));
   } catch {
     // best-effort
   }
@@ -339,5 +357,198 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
       .post('/api/auth/register')
       .send(secondPayload);
     expect(second.status).toBe(409);
+  });
+});
+
+// ============================================================================
+// 13-17 Teen Minor Registration
+// ============================================================================
+
+describe('13-17 minor registration (teen minor path)', () => {
+  /**
+   * A 15-year-old who provides a parentEmail should get a session (can log in
+   * immediately). isMinor must be true. coppaStatus stays 'not_applicable' —
+   * the VPC consent flow is NOT triggered for teen minors.
+   */
+  it('15-year-old with parentEmail → 201, session cookie present, isMinor=true', async () => {
+    const payload = teenPayload(15);
+    createdUsernames.push(payload.username as string);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    // Teen minor should NOT be redirected to consent flow
+    expect(res.body.requiresParentalConsent).toBeFalsy();
+
+    // A session MUST be set — teen minor can log in immediately
+    const setCookieHeader = res.headers['set-cookie'];
+    const hasSessionCookie = Array.isArray(setCookieHeader)
+      ? setCookieHeader.some((c: string) => c.startsWith('connect.sid'))
+      : typeof setCookieHeader === 'string' && setCookieHeader.startsWith('connect.sid');
+    expect(hasSessionCookie).toBe(true);
+
+    // Verify DB: isMinor=true, coppaStatus=not_applicable
+    const [dbUser] = await db
+      .select({ isMinor: users.isMinor, coppaStatus: users.coppaStatus })
+      .from(users)
+      .where(eq(users.username, payload.username as string))
+      .limit(1);
+
+    expect(dbUser).toBeDefined();
+    expect(dbUser.isMinor).toBe(true);
+    expect(dbUser.coppaStatus).toBe('not_applicable');
+  });
+
+  /**
+   * The same 15-year-old registration should also create a parentAthleteLinks
+   * row linking the provided parentEmail to the new athlete account.
+   * consentId must be null because no VPC consent is involved.
+   */
+  it('15-year-old with parentEmail → parentAthleteLinks row created', async () => {
+    const payload = teenPayload(15);
+    createdUsernames.push(payload.username as string);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send(payload);
+
+    expect(res.status).toBe(201);
+
+    // Fetch the newly created user
+    const [dbUser] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.username, payload.username as string))
+      .limit(1);
+
+    expect(dbUser).toBeDefined();
+
+    // A parentAthleteLinks row must exist for this athlete
+    const links = await db
+      .select()
+      .from(parentAthleteLinks)
+      .where(eq(parentAthleteLinks.athleteUserId, dbUser.id));
+
+    expect(links).toHaveLength(1);
+    expect(links[0].parentEmail).toBe(payload.parentEmail as string);
+    expect(links[0].athleteUserId).toBe(dbUser.id);
+    // No VPC consent involved — consentId must be null
+    expect(links[0].consentId).toBeNull();
+  });
+
+  /**
+   * A 15-year-old who omits parentEmail should register normally.
+   * isMinor is still true (they are a minor), but no parentAthleteLinks row
+   * is created and no notification email is sent.
+   */
+  it('15-year-old without parentEmail → 201, normal registration, no parent linking', async () => {
+    const payload = teenPayload(15, { parentEmail: undefined });
+    createdUsernames.push(payload.username as string);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.requiresParentalConsent).toBeFalsy();
+
+    // Session must be present
+    const setCookieHeader = res.headers['set-cookie'];
+    const hasSessionCookie = Array.isArray(setCookieHeader)
+      ? setCookieHeader.some((c: string) => c.startsWith('connect.sid'))
+      : typeof setCookieHeader === 'string' && setCookieHeader.startsWith('connect.sid');
+    expect(hasSessionCookie).toBe(true);
+
+    // DB: isMinor=true even without parentEmail
+    const [dbUser] = await db
+      .select({ id: users.id, isMinor: users.isMinor })
+      .from(users)
+      .where(eq(users.username, payload.username as string))
+      .limit(1);
+
+    expect(dbUser).toBeDefined();
+    expect(dbUser.isMinor).toBe(true);
+
+    // No parentAthleteLinks row should exist
+    const links = await db
+      .select()
+      .from(parentAthleteLinks)
+      .where(eq(parentAthleteLinks.athleteUserId, dbUser.id));
+
+    expect(links).toHaveLength(0);
+  });
+
+  /**
+   * A 19-year-old (adult) who provides a parentEmail should be treated as a
+   * normal adult registration. parentEmail is ignored for 18+ users.
+   * isMinor must be false and no parentAthleteLinks row is created.
+   */
+  it('19-year-old with parentEmail → 201, parentEmail ignored, isMinor=false', async () => {
+    const payload = teenPayload(19); // 19 years old — adult
+    createdUsernames.push(payload.username as string);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.requiresParentalConsent).toBeFalsy();
+
+    // DB: isMinor=false for adults
+    const [dbUser] = await db
+      .select({ id: users.id, isMinor: users.isMinor })
+      .from(users)
+      .where(eq(users.username, payload.username as string))
+      .limit(1);
+
+    expect(dbUser).toBeDefined();
+    expect(dbUser.isMinor).toBe(false);
+
+    // No parentAthleteLinks row should exist for adults
+    const links = await db
+      .select()
+      .from(parentAthleteLinks)
+      .where(eq(parentAthleteLinks.athleteUserId, dbUser.id));
+
+    expect(links).toHaveLength(0);
+  });
+
+  /**
+   * Regression: under-13 COPPA flow must remain completely unchanged.
+   * A 10-year-old gets: no session cookie, coppaStatus=pending_consent, isMinor=true.
+   */
+  it('under-13 COPPA flow unchanged — login blocked, coppaStatus=pending_consent', async () => {
+    const payload = minorPayload(); // uses ageWithOffset(13, 1) = 12 years old
+    createdUsernames.push(payload.username as string);
+
+    const res = await request(app)
+      .post('/api/auth/register')
+      .send(payload);
+
+    expect(res.status).toBe(201);
+    expect(res.body.requiresParentalConsent).toBe(true);
+
+    // NO session cookie — under-13 cannot log in
+    const setCookieHeader = res.headers['set-cookie'];
+    const hasSessionCookie = Array.isArray(setCookieHeader)
+      ? setCookieHeader.some((c: string) => c.startsWith('connect.sid'))
+      : typeof setCookieHeader === 'string' && setCookieHeader.startsWith('connect.sid');
+    expect(hasSessionCookie).toBe(false);
+
+    // DB: isMinor=true, coppaStatus=pending_consent
+    const [dbUser] = await db
+      .select({ isMinor: users.isMinor, coppaStatus: users.coppaStatus })
+      .from(users)
+      .where(eq(users.username, payload.username as string))
+      .limit(1);
+
+    expect(dbUser).toBeDefined();
+    expect(dbUser.isMinor).toBe(true);
+    expect(dbUser.coppaStatus).toBe('pending_consent');
   });
 });

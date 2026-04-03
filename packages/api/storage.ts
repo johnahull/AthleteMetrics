@@ -563,7 +563,11 @@ export class DatabaseStorage implements IStorage {
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
       'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
-      'lastAuthMethod', 'accountLinkedAt'
+      'lastAuthMethod', 'accountLinkedAt',
+      // Legal acceptance (role is stored on userOrganizations, not the users table)
+      'legalAcceptedAt', 'legalAcceptedVersion',
+      // COPPA / minor fields
+      'isMinor', 'coppaStatus', 'parentEmail', 'parentConsentId',
     ];
 
     // Filter to only include valid database columns and non-undefined values
@@ -666,7 +670,8 @@ export class DatabaseStorage implements IStorage {
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
       'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
       'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding',
-      'legalAcceptedAt', 'legalAcceptedVersion'
+      'legalAcceptedAt', 'legalAcceptedVersion',
+      'isMinor', 'coppaStatus', 'parentEmail', 'parentConsentId', 'coppaConsentConfirmedAt',
     ];
 
     const updateData: any = {};

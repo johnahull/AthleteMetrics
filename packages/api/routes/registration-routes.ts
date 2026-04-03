@@ -17,9 +17,9 @@ import {
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
 import { coppaService } from "../services/coppa-service";
-import { isUnder13 } from "@shared/coppa-utils";
+import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
 import { db } from "../db";
-import { parentalConsents } from "@shared/schema/tables/coppa";
+import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { eq } from "drizzle-orm";
 
 // Rate limiting for registration endpoints (stricter than normal auth)
@@ -179,11 +179,15 @@ export function registerRegistrationRoutes(app: Express) {
 
       const { firstName, lastName, email, username, password, legalAcceptedAt, birthDate, parentEmail } = validationResult.data;
 
-      // Determine COPPA status before creating the user
-      let isMinorRegistration = false;
+      // Determine age classification before creating the user
+      let under13 = false;
+      let minor = false;
+      let teenMinor = false;
       if (birthDate) {
         try {
-          isMinorRegistration = isUnder13(birthDate);
+          under13 = isUnder13(birthDate);
+          minor = isMinorAge(birthDate);
+          teenMinor = isTeenMinor(birthDate);
         } catch {
           return res.status(400).json({
             success: false,
@@ -232,10 +236,10 @@ export function registerRegistrationRoutes(app: Express) {
         legalAcceptedAt: legalAcceptedAtDate,
         legalAcceptedVersion,
         birthDate: birthDate ?? undefined,
-        // COPPA: set initial status — will be updated by initiateConsent if under-13
-        coppaStatus: isMinorRegistration ? 'pending_consent' : 'not_applicable',
-        isMinor: isMinorRegistration,
-        parentEmail: isMinorRegistration ? (parentEmail ?? undefined) : undefined,
+        // COPPA: set initial status — pending_consent only for under-13; teen minors use not_applicable
+        coppaStatus: under13 ? 'pending_consent' : 'not_applicable',
+        isMinor: minor,
+        parentEmail: minor ? (parentEmail ?? undefined) : undefined,
         // No organization membership - user is independent
       });
 
@@ -290,7 +294,7 @@ export function registerRegistrationRoutes(app: Express) {
 
       // COPPA branch: under-13 athletes cannot receive a session.
       // Initiate VPC flow and return early — NO session cookie set.
-      if (isMinorRegistration && parentEmail) {
+      if (under13 && parentEmail) {
         const coppaResult = await coppaService.initiateConsent({
           athleteUserId: userId,
           parentEmail,
@@ -306,6 +310,49 @@ export function registerRegistrationRoutes(app: Express) {
           message: "Your account has been created. A consent email has been sent to your parent or guardian. You'll be able to log in once they approve your account.",
         });
       }
+
+      // Teen minor branch (13-17): normal registration with session, but also
+      // create a parentAthleteLinks row and send a notification email if a
+      // parentEmail was provided. Does NOT trigger COPPA VPC flow.
+      if (teenMinor && parentEmail) {
+        await db.insert(parentAthleteLinks).values({
+          parentEmail,
+          athleteUserId: userId,
+          isActive: true,
+        });
+
+        // Fire-and-forget — do not block registration on email delivery
+        emailService.sendParentNotification({
+          parentEmail,
+          athleteFirstName: firstName,
+        }).catch((err: unknown) => {
+          console.error('[MINOR] Failed to send parent notification email:', err);
+        });
+      }
+
+      // Establish a session for the newly registered user.
+      // Unlike the under-13 COPPA path (which returns early above without a session),
+      // all other users — including teen minors (13-17) — can log in immediately.
+      req.session.user = {
+        id: userId,
+        username,
+        email,
+        firstName,
+        lastName,
+        role: 'athlete',
+        isSiteAdmin: false,
+        athleteId: userId,
+      };
+
+      // Explicitly save the session so the Set-Cookie header is written
+      // before the response body is sent. Without this, express-session's
+      // lazy save may race with res.json() in test environments.
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
 
       // Send verification email (outside transaction - email failure shouldn't rollback registration)
       const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;

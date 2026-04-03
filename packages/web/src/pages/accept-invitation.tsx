@@ -11,7 +11,7 @@ import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lu
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
-import { isUnder13 } from '@shared/coppa-utils';
+import { isUnder13, isMinorAge } from '@shared/coppa-utils';
 
 interface InvitationData {
   email: string;
@@ -61,19 +61,24 @@ export default function AcceptInvitation() {
   const [consentEmailSent, setConsentEmailSent] = useState(false);
   const [consentParentEmail, setConsentParentEmail] = useState('');
 
-  const isMinor = (() => {
+  const under13 = (() => {
     if (!formData.birthDate) return false;
     try { return isUnder13(formData.birthDate); } catch { return false; }
   })();
+  const minor = (() => {
+    if (!formData.birthDate) return false;
+    try { return isMinorAge(formData.birthDate); } catch { return false; }
+  })();
+  const teenMinor = minor && !under13;
 
-  // D1: Clear parentEmail when isMinor transitions from true → false
-  const prevIsMinorRef = useRef(isMinor);
+  // D1: Clear parentEmail when minor transitions from true → false
+  const prevIsMinorRef = useRef(minor);
   useEffect(() => {
-    if (prevIsMinorRef.current === true && !isMinor && formData.parentEmail) {
+    if (prevIsMinorRef.current === true && !minor && formData.parentEmail) {
       setFormData(prev => ({ ...prev, parentEmail: '' }));
     }
-    prevIsMinorRef.current = isMinor;
-  }, [isMinor]);
+    prevIsMinorRef.current = minor;
+  }, [minor]);
 
   // Extract token from URL on mount
   useEffect(() => {
@@ -150,8 +155,8 @@ export default function AcceptInvitation() {
       return;
     }
 
-    // Validate parent email for minors (defense-in-depth alongside HTML required)
-    if (isMinor && !formData.parentEmail?.trim()) {
+    // Validate parent email for under-13 (defense-in-depth alongside HTML required)
+    if (under13 && !formData.parentEmail?.trim()) {
       setError('Parent or guardian email is required for users under 13');
       return;
     }
@@ -179,7 +184,7 @@ export default function AcceptInvitation() {
           password: formData.password,
           legalAcceptedAt: new Date().toISOString(),
           birthDate: formData.birthDate || undefined,
-          parentEmail: isMinor ? formData.parentEmail.trim().toLowerCase() : undefined,
+          parentEmail: minor && formData.parentEmail ? formData.parentEmail.trim().toLowerCase() : undefined,
         }),
       });
 
@@ -423,25 +428,32 @@ export default function AcceptInvitation() {
               />
             </div>
 
-            {/* Parent/Guardian Email — shown for under-13 athletes */}
-            {isMinor && (
+            {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
+            {minor && (
               <div>
                 <Label htmlFor="parentEmail">
-                  Parent or Guardian Email <span className="text-red-500">*</span>
+                  Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
                 </Label>
-                <Alert className="mb-2 border-amber-200 bg-amber-50">
-                  <AlertCircle className="h-4 w-4 text-amber-600" />
-                  <AlertDescription className="text-amber-800 text-sm">
-                    Federal law (COPPA) requires parental consent for users under 13. A parent or guardian must approve before you can log in.
-                  </AlertDescription>
-                </Alert>
+                {under13 && (
+                  <Alert className="mb-2 border-amber-200 bg-amber-50">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800 text-sm">
+                      Federal law (COPPA) requires parental consent for users under 13. A parent or guardian must approve before you can log in.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {teenMinor && (
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Optionally provide a parent/guardian email so they can monitor your athletic progress.
+                  </p>
+                )}
                 <Input
                   id="parentEmail"
                   type="email"
                   value={formData.parentEmail}
                   onChange={handleInputChange('parentEmail')}
                   placeholder="parent@example.com"
-                  required={isMinor}
+                  required={under13}
                 />
               </div>
             )}

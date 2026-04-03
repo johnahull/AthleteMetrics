@@ -2198,6 +2198,122 @@ export class EmailService {
       return false;
     }
   }
+
+  /**
+   * Notify a parent/guardian that their 13-17 year-old child has registered on AthleteMetrics.
+   *
+   * This is a NOTIFICATION email only — no consent token, no approve/deny flow.
+   * It invites the parent to create a free parent account so they can monitor their
+   * child's athletic progress and manage their data.
+   *
+   * Used for athletes aged 13-17 (COPPA does not apply, but we offer optional oversight).
+   */
+  async sendParentNotification(data: {
+    parentEmail: string;
+    athleteFirstName: string;
+    athleteAge?: number;
+  }): Promise<boolean> {
+    if (!isValidEmail(data.parentEmail)) {
+      console.warn('[Email] Invalid parent email for parent notification — skipping send');
+      return false;
+    }
+
+    const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
+    const athleteFirstName = escapeHtml(data.athleteFirstName);
+    const registrationLink = `${baseUrl}/register?role=parent&email=${encodeURIComponent(data.parentEmail)}`;
+
+    try {
+      const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Your child has registered on AthleteMetrics</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="background:#4f46e5;padding:32px 40px;">
+              <h1 style="margin:0;color:#fff;font-size:24px;">AthleteMetrics</h1>
+              <p style="margin:8px 0 0;color:#c7d2fe;font-size:14px;">Athlete Performance Tracking</p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:40px;">
+              <h2 style="margin:0 0 16px;color:#1a202c;font-size:20px;">Your child has registered on AthleteMetrics</h2>
+
+              <p style="margin:0 0 16px;color:#4a5568;font-size:16px;">Dear Parent or Guardian,</p>
+
+              <p style="margin:0 0 16px;color:#4a5568;font-size:16px;line-height:1.6;">
+                <strong>${athleteFirstName}</strong> has created an account on AthleteMetrics, an athletic performance
+                tracking platform used by coaches, teams, and athletes.
+              </p>
+
+              <p style="margin:0 0 16px;color:#4a5568;font-size:16px;line-height:1.6;">
+                As a parent or guardian, you can create a free parent account to monitor their athletic progress,
+                view measurements, and manage their data.
+              </p>
+
+              <!-- CTA Button -->
+              <table cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                <tr>
+                  <td style="background:#4f46e5;border-radius:6px;padding:14px 28px;">
+                    <a href="${registrationLink}" style="color:#fff;text-decoration:none;font-size:16px;font-weight:600;">
+                      Create Parent Account
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:0 0 8px;color:#718096;font-size:14px;line-height:1.6;">
+                No action is required. If you do not wish to create a parent account, you can safely ignore this email.
+              </p>
+              <p style="margin:0;color:#718096;font-size:14px;line-height:1.6;">
+                Questions? Contact us at <a href="mailto:privacy@athletemetrics.app" style="color:#4f46e5;">privacy@athletemetrics.app</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#f7fafc;padding:24px 40px;border-top:1px solid #e2e8f0;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">
+                AthleteMetrics — Athlete Performance Tracking
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+      const text =
+        `Your child ${athleteFirstName} has registered on AthleteMetrics\n\n` +
+        `${athleteFirstName} has created an account on AthleteMetrics, an athletic performance tracking platform.\n\n` +
+        `As a parent or guardian, you can create a free parent account to monitor their athletic progress, ` +
+        `view measurements, and manage their data.\n\n` +
+        `Create your parent account: ${registrationLink}\n\n` +
+        `No action is required. If you do not wish to create a parent account, you can safely ignore this email.\n\n` +
+        `Questions? Contact us at privacy@athletemetrics.app`;
+
+      await this.sendEmail({
+        to: data.parentEmail,
+        subject: `Your child ${athleteFirstName} has registered on AthleteMetrics`,
+        html,
+        text,
+      });
+
+      return true;
+    } catch (error) {
+      console.error('[Email] sendParentNotification failed:', error);
+      return false;
+    }
+  }
 }
 
 // Export singleton instance

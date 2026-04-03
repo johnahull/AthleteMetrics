@@ -216,3 +216,45 @@ export const COPPA_ACTIONS = {
 } as const;
 
 export type CoppaAction = typeof COPPA_ACTIONS[keyof typeof COPPA_ACTIONS];
+
+// ============================================================================
+// Under-18 (Minor) Utilities
+// ============================================================================
+
+/**
+ * The age threshold below which a person is considered a minor for
+ * parental-consent purposes beyond COPPA. All athletes under 18 require
+ * parental involvement.
+ */
+export const MINOR_AGE_THRESHOLD = 18;
+
+/**
+ * Returns true if the person is strictly under 18 years old as of today.
+ *
+ * This extends COPPA's under-13 gate to cover all athletes who are legally
+ * minors in most jurisdictions (< 18). The boundary condition is exclusive:
+ * a person who turns 18 today is NOT a minor (age === 18 → false).
+ *
+ * @param birthDate - Date of birth as a string (YYYY-MM-DD) or Date object
+ * @returns true if under 18, false if 18 or older
+ * @throws Error if birthDate is null, undefined, or in the future
+ */
+export function isMinorAge(birthDate: Date | string): boolean {
+  return calculateAge(birthDate) < MINOR_AGE_THRESHOLD;
+}
+
+/**
+ * Returns true if the person is a "teen minor": age is at least 13 (past the
+ * COPPA threshold) but strictly under 18.
+ *
+ * Teen minors are not subject to COPPA's strict data-collection rules but
+ * still require parental consent under the broader under-18 minor policy.
+ *
+ * @param birthDate - Date of birth as a string (YYYY-MM-DD) or Date object
+ * @returns true if 13 <= age < 18, false otherwise
+ * @throws Error if birthDate is null, undefined, or in the future
+ */
+export function isTeenMinor(birthDate: Date | string): boolean {
+  const age = calculateAge(birthDate);
+  return age >= COPPA_AGE_THRESHOLD && age < MINOR_AGE_THRESHOLD;
+}

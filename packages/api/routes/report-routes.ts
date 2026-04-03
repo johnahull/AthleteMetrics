@@ -1247,7 +1247,7 @@ export function registerReportRoutes(app: Express) {
         if (!sessionUser) {
           return res.status(403).json({
             code: 'minor_data_restricted',
-            message: 'This report contains data for athletes under 13 and cannot be shared via public link.',
+            message: 'This report contains data for minor athletes and cannot be shared via public link.',
           });
         }
 
@@ -1263,7 +1263,7 @@ export function registerReportRoutes(app: Express) {
           if (!reportRow) {
             return res.status(403).json({
               code: 'minor_data_restricted',
-              message: 'This report contains data for athletes under 13. Access is restricted.',
+              message: 'This report contains data for minor athletes. Access is restricted.',
             });
           }
 
@@ -1287,7 +1287,7 @@ export function registerReportRoutes(app: Express) {
             if (!parentLink) {
               return res.status(403).json({
                 code: 'minor_data_restricted',
-                message: 'This report contains data for athletes under 13. Access is restricted to organization members.',
+                message: 'This report contains data for minor athletes. Access is restricted to organization members.',
               });
             }
           }

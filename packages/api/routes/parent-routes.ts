@@ -25,7 +25,8 @@ import { requireAuth } from "../middleware";
 import { requireParentAccess } from "../permissions/parent-middleware";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { storage } from "../storage";
-import { reports, reportShares } from "@shared/schema";
+import { reports, reportShares, auditLogs } from "@shared/schema";
+import type { AuthenticatedRequest } from "../middleware";
 
 export function registerParentRoutes(app: Express) {
   /**
@@ -190,6 +191,55 @@ export function registerParentRoutes(app: Express) {
       } catch (error) {
         console.error("[parent-routes] GET /children/:athleteId/reports error:", error);
         return res.status(500).json({ message: "Failed to fetch reports" });
+      }
+    }
+  );
+
+  /**
+   * Unlink parent from a child athlete (13-17 path).
+   *
+   * This is distinct from COPPA "revoke consent" (which deactivates the child's
+   * account). Unlinking only deactivates the parentAthleteLinks row — the child
+   * user account is left completely intact.
+   *
+   * Requires an active parent link (enforced by requireParentAccess middleware).
+   */
+  app.post(
+    "/api/parent/children/:athleteId/unlink",
+    requireAuth,
+    requireParentAccess('athleteId'),
+    async (req: AuthenticatedRequest, res) => {
+      try {
+        const { athleteId } = req.params;
+        const parentUserId = req.session!.user!.id;
+
+        // Soft-delete the link (deactivate only — child account is unaffected)
+        const updated = await db.update(parentAthleteLinks)
+          .set({ isActive: false })
+          .where(and(
+            eq(parentAthleteLinks.parentUserId, parentUserId),
+            eq(parentAthleteLinks.athleteUserId, athleteId),
+            eq(parentAthleteLinks.isActive, true),
+          ))
+          .returning({ id: parentAthleteLinks.id });
+
+        if (updated.length === 0) {
+          return res.status(409).json({ message: 'Link is already inactive or does not exist.' });
+        }
+
+        // Audit log — only written when the UPDATE actually changed a row
+        await db.insert(auditLogs).values({
+          userId: parentUserId,
+          action: 'parent_unlinked_child',
+          resourceType: 'parent_athlete_link',
+          resourceId: athleteId,
+          details: JSON.stringify({ athleteId, parentUserId }),
+        });
+
+        return res.json({ success: true, message: 'Successfully unlinked from child account.' });
+      } catch (error) {
+        console.error('[parent-routes] POST /children/:athleteId/unlink error:', error);
+        return res.status(500).json({ message: 'Failed to unlink from child account.' });
       }
     }
   );
