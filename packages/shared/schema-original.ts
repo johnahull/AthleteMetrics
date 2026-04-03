@@ -1521,6 +1521,7 @@ export const updateProfileSchema = z.object({
   emails: z.array(z.string().email("Invalid email format")).optional(),
   firstName: z.string().min(1, "First name is required").optional(),
   lastName: z.string().min(1, "Last name is required").optional(),
+  parentEmail: z.string().email("Invalid email format").optional().nullable(),
 });
 
 export const changePasswordSchema = z.object({
@@ -2593,7 +2594,8 @@ export const insertAthleteSchema = z.object({
   weight: z.coerce.number().optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   teamIds: z.array(z.string()).optional(),
-  organizationId: z.string().optional()
+  organizationId: z.string().optional(),
+  parentEmail: z.string().email("Invalid email format").optional().nullable(),
 });
 
 // Organization Type

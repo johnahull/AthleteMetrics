@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays } from "lucide-react";
+import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus, Mail, Phone, Edit2, Trash2, Clock, CalendarDays, Shield } from "lucide-react";
 import { calculateFly10Speed } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
@@ -437,7 +437,7 @@ export default function AthleteProfile() {
       )}
 
       {/* Contact Information */}
-      {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0)) && (
+      {((athlete?.emails && athlete.emails.length > 0) || (athlete?.phoneNumbers && athlete.phoneNumbers.length > 0) || athlete?.parentEmail) && (
         <Card className="bg-white mb-8">
           <CardHeader>
             <CardTitle>Contact Information</CardTitle>
@@ -454,7 +454,7 @@ export default function AthleteProfile() {
                   <div className="space-y-2">
                     {athlete.emails.map((email: any, index: number) => (
                       <div key={index} className="flex items-center space-x-2">
-                        <a 
+                        <a
                           href={`mailto:${email}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
                           data-testid={`link-email-${index}`}
@@ -477,7 +477,7 @@ export default function AthleteProfile() {
                   <div className="space-y-2">
                     {athlete.phoneNumbers.map((phone: any, index: number) => (
                       <div key={index} className="flex items-center space-x-2">
-                        <a 
+                        <a
                           href={`tel:${phone}`}
                           className="text-blue-600 hover:text-blue-800 hover:underline"
                           data-testid={`link-phone-${index}`}
@@ -490,6 +490,15 @@ export default function AthleteProfile() {
                 </div>
               )}
             </div>
+
+            {/* Parent/Guardian Email */}
+            {athlete.parentEmail && (
+              <div className="mt-4 flex items-center gap-2">
+                <Shield className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">Parent/Guardian:</span>
+                <span className="text-sm">{athlete.parentEmail}</span>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}

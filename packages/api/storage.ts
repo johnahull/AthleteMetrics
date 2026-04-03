@@ -3092,13 +3092,16 @@ export class DatabaseStorage implements IStorage {
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
-      'showPeerComparisons', 'hasCompletedOnboarding'
+      'showPeerComparisons', 'hasCompletedOnboarding',
+      'parentEmail',
     ];
 
     // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
     const updateData: any = {};
     Object.keys(athlete).forEach(key => {
       const value = (athlete as any)[key];
+      // Include the field if it is a valid column AND either has a real value or is
+      // explicitly null (to support clearing nullable fields like parentEmail).
       if (value !== undefined && validUserColumns.includes(key)) {
         updateData[key] = value;
       }
@@ -3122,7 +3125,19 @@ export class DatabaseStorage implements IStorage {
       updateData.birthYear = new Date(athlete.birthDate).getFullYear();
     }
 
-    const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    // Only issue the UPDATE if there is at least one column to write; otherwise
+    // just fetch the current record so we can still return it (and still process
+    // teamIds below if needed).
+    let updated: User | undefined;
+    if (Object.keys(updateData).length > 0) {
+      [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    } else {
+      updated = await this.getUser(id);
+    }
+
+    if (!updated) {
+      throw new Error(`Athlete ${id} not found`);
+    }
 
     // Update teams if specified
     if (athlete.teamIds !== undefined) {

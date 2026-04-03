@@ -32,6 +32,7 @@ import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { MeasurementService } from "../services/measurement-service";
 import { dateStringSchema } from "@shared/date-utils";
 import { z } from "zod";
+import { handleParentEmailUpdate } from "../services/parent-link-helper";
 // Session types are loaded globally
 
 // Rate limiting for athlete endpoints
@@ -375,10 +376,32 @@ export function registerAthleteRoutes(app: Express) {
       const validatedData = updateSchema.parse(req.body);
 
       const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
+
+      // Handle parentEmail: persist to user record and create parentAthleteLinks
+      // row for minor athletes if needed. This is done after the main update so
+      // the athlete record (with birthDate) is always fresh.
+      if (validatedData.parentEmail !== undefined) {
+        // Fetch the latest athlete state to get birthDate (may have just been
+        // updated above, or was already present from a previous request).
+        const freshAthlete = await storage.getUser(athleteId);
+        if (freshAthlete) {
+          // Determine the organization the athlete belongs to (for the link row).
+          const athleteOrgs = await storage.getUserOrganizations(athleteId);
+          const orgId = athleteOrgs[0]?.organizationId ?? null;
+
+          await handleParentEmailUpdate(
+            athleteId,
+            validatedData.parentEmail,
+            freshAthlete,
+            orgId,
+          );
+        }
+      }
+
       res.json(updatedAthlete);
     } catch (error) {
       console.error("Update athlete error:", error);
-      if (error instanceof Error && error.name === 'ZodError') {
+      if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.message });
       }
       const message = error instanceof Error ? error.message : "Failed to update athlete";
