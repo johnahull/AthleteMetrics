@@ -468,3 +468,164 @@ describe('POST /api/auth/register/parent', () => {
     });
   });
 });
+
+// ============================================================================
+// GAP 3 — linkParentAccount no-consentId path
+// ============================================================================
+
+/**
+ * When a parent registers WITHOUT a consentId, the registration route calls
+ * coppaService.linkParentAccount(parentUserId, parentEmail) which finds all
+ * parentAthleteLinks rows with matching parentEmail AND parentUserId IS NULL,
+ * and sets parentUserId on them.
+ *
+ * These tests verify the HTTP-level behaviour for that code path.
+ */
+describe('POST /api/auth/register/parent — linkParentAccount without consentId (GAP 3)', () => {
+  /**
+   * Pre-existing email-only links (created during consent initiation) should
+   * be claimed by the parent account as soon as they register — even without
+   * supplying a consentId.
+   */
+  it('links parent to all prior email-matched pending parentAthleteLinks entries', async () => {
+    const id = uniqueId();
+    const parentEmail = `${TEST_PREFIX}nocon_par_${id}@example.com`;
+    const username = `${TEST_PREFIX}nocon${id}`;
+
+    // Create two athletes whose consent flows have already seeded email-only
+    // links for this parent's email address.
+    const { athlete: athlete1 } = await createTestAthleteUser(`${TEST_PREFIX}nocon1_`);
+    const { athlete: athlete2 } = await createTestAthleteUser(`${TEST_PREFIX}nocon2_`);
+    createdAthleteIds.push(athlete1.id, athlete2.id);
+
+    // Insert email-only links (parentUserId IS NULL — simulating consent initiation)
+    const [link1] = await db.insert(parentAthleteLinks).values({
+      parentEmail,
+      athleteUserId: athlete1.id,
+      parentUserId: null,
+    }).returning();
+
+    const [link2] = await db.insert(parentAthleteLinks).values({
+      parentEmail,
+      athleteUserId: athlete2.id,
+      parentUserId: null,
+    }).returning();
+
+    // Register the parent WITHOUT a consentId
+    const res = await request(app)
+      .post('/api/auth/register/parent')
+      .send({
+        firstName: 'Jane',
+        lastName: 'NoConsent',
+        email: parentEmail,
+        username,
+        password: VALID_PASSWORD,
+        legalAcceptedAt: new Date().toISOString(),
+        // No consentId
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+
+    // Track created parent user for cleanup
+    const [createdParent] = await db.select().from(users).where(like(users.username, username));
+    if (createdParent) createdUserIds.push(createdParent.id);
+
+    // Both email-only links should now have parentUserId set
+    const [updatedLink1] = await db.select({ parentUserId: parentAthleteLinks.parentUserId })
+      .from(parentAthleteLinks)
+      .where(eq(parentAthleteLinks.id, link1.id));
+
+    const [updatedLink2] = await db.select({ parentUserId: parentAthleteLinks.parentUserId })
+      .from(parentAthleteLinks)
+      .where(eq(parentAthleteLinks.id, link2.id));
+
+    expect(updatedLink1.parentUserId).toBeTruthy();
+    expect(updatedLink2.parentUserId).toBeTruthy();
+  });
+
+  /**
+   * If no pending email-only links exist for this parent's email, registration
+   * should still succeed — the linkParentAccount call returns 0 rows updated
+   * but must not throw an error.
+   */
+  it('succeeds (201) when email has no pending email-only links — no error, no links created', async () => {
+    const id = uniqueId();
+    const parentEmail = `${TEST_PREFIX}nolinks_par_${id}@example.com`;
+    const username = `${TEST_PREFIX}nolinks${id}`;
+
+    const res = await request(app)
+      .post('/api/auth/register/parent')
+      .send({
+        firstName: 'Jane',
+        lastName: 'NoLinks',
+        email: parentEmail,
+        username,
+        password: VALID_PASSWORD,
+        legalAcceptedAt: new Date().toISOString(),
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    // linkedAthletes should be 0 (or absent / falsy) — no links to claim
+    expect(res.body.linkedAthletes ?? 0).toBe(0);
+
+    // Track created user for cleanup
+    const [createdParent] = await db.select().from(users).where(like(users.username, username));
+    if (createdParent) createdUserIds.push(createdParent.id);
+  });
+});
+
+// ============================================================================
+// GAP 3b — getConsentStatus for user with no consent records
+// ============================================================================
+
+describe('GET /api/coppa/status/:athleteUserId — user with no consent records (GAP 3b)', () => {
+  /**
+   * getConsentStatus returns the user record plus the most recent
+   * parentalConsents row. When no consent row exists, activeConsent should
+   * be null — the endpoint must still return 200 (not 404 or 500).
+   *
+   * We use the site-admin credentials (from env) to be allowed to query any
+   * athlete, consistent with how coppa-routes.test.ts exercises this endpoint.
+   */
+  it('returns 200 with activeConsent: null when the athlete has no consent records', async () => {
+    // Create a fresh minor with no associated consent records
+    const id = uniqueId();
+    const [minorNoConsent] = await db.insert(users).values({
+      username: `${TEST_PREFIX}noconstat_${id}`,
+      firstName: 'No',
+      lastName: 'Consent',
+      fullName: 'No Consent',
+      emails: [`${TEST_PREFIX}noconstat_${id}@example.com`],
+      password: await bcrypt.hash(VALID_PASSWORD, BCRYPT_SALT_ROUNDS),
+      isEmailVerified: true,
+      isSiteAdmin: false,
+      coppaStatus: 'pending_consent',
+      isMinor: true,
+      parentEmail: `${TEST_PREFIX}noconstat_parent_${id}@example.com`,
+    }).returning();
+    createdAthleteIds.push(minorNoConsent.id);
+
+    // Login as the env site-admin (same pattern as coppa-routes.test.ts)
+    const adminLoginRes = await request(app)
+      .post('/api/auth/login')
+      .send({
+        username: process.env.ADMIN_USER || 'admin',
+        password: process.env.ADMIN_PASSWORD || 'TestPassword123!',
+      });
+    expect(adminLoginRes.status).toBe(200);
+    const adminCookie = adminLoginRes.headers['set-cookie'][0];
+
+    const res = await request(app)
+      .get(`/api/coppa/status/${minorNoConsent.id}`)
+      .set('Cookie', adminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.userId).toBe(minorNoConsent.id);
+    expect(res.body.coppaStatus).toBe('pending_consent');
+    expect(res.body.isMinor).toBe(true);
+    // No consent record → activeConsent must be null (not undefined, not an object)
+    expect(res.body.activeConsent).toBeNull();
+  });
+});

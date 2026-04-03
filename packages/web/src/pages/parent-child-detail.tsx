@@ -5,6 +5,7 @@
  * - Profile (basic info)
  * - Measurements (table)
  * - Reports (list)
+ * - Data Rights (COPPA)
  *
  * Route: /parent/children/:athleteId
  */
@@ -138,6 +139,16 @@ export default function ParentChildDetail() {
     },
   });
 
+  const unlinkMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest('POST', `/api/parent/children/${athleteId}/unlink`);
+      return res.json();
+    },
+    onSuccess: () => {
+      setLocation('/parent-dashboard');
+    },
+  });
+
   const {
     data: profile,
     isLoading: profileLoading,
@@ -160,6 +171,9 @@ export default function ParentChildDetail() {
   const childName = profile
     ? `${profile.firstName} ${profile.lastName}`
     : 'Loading...';
+
+  // Under-13 children have COPPA consent records; 13-17 children do not
+  const isCoppaChild = profile?.coppaStatus && ['consented', 'pending_consent', 'consent_revoked'].includes(profile.coppaStatus);
 
   if (profileError) {
     return (
@@ -193,8 +207,8 @@ export default function ParentChildDetail() {
 
       {/* Page header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-          <User className="h-5 w-5 text-blue-600" />
+        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+          <User className="h-5 w-5 text-primary" />
         </div>
         <div>
           {profileLoading ? (
@@ -204,9 +218,9 @@ export default function ParentChildDetail() {
             </>
           ) : (
             <>
-              <h1 className="text-2xl font-bold text-gray-900">{childName}</h1>
+              <h1 className="text-2xl font-bold text-foreground">{childName}</h1>
               {(profile?.sport || (profile?.sports && profile.sports.length > 0)) && (
-                <p className="text-sm text-gray-500 flex items-center gap-1">
+                <p className="text-sm text-muted-foreground flex items-center gap-1">
                   <Trophy className="h-3 w-3" />
                   {profile.sports ? profile.sports.join(', ') : profile.sport}
                 </p>
@@ -218,7 +232,7 @@ export default function ParentChildDetail() {
 
       {/* Tabs */}
       <Tabs defaultValue="profile">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="profile" className="flex items-center gap-1">
             <User className="h-4 w-4" />
             Profile
@@ -230,6 +244,10 @@ export default function ParentChildDetail() {
           <TabsTrigger value="reports" className="flex items-center gap-1">
             <FileText className="h-4 w-4" />
             Reports
+          </TabsTrigger>
+          <TabsTrigger value="data-rights" className="flex items-center gap-1">
+            <ShieldOff className="h-4 w-4" />
+            Data Rights
           </TabsTrigger>
         </TabsList>
 
@@ -246,23 +264,23 @@ export default function ParentChildDetail() {
               ) : profile ? (
                 <dl className="space-y-3 text-sm">
                   <div className="flex gap-4">
-                    <dt className="w-28 font-medium text-gray-500 shrink-0">Full Name</dt>
-                    <dd className="text-gray-900">
+                    <dt className="w-28 font-medium text-muted-foreground shrink-0">Full Name</dt>
+                    <dd className="text-foreground">
                       {profile.firstName} {profile.lastName}
                     </dd>
                   </div>
                   {(profile.sport || (profile.sports && profile.sports.length > 0)) && (
                     <div className="flex gap-4">
-                      <dt className="w-28 font-medium text-gray-500 shrink-0">Sport</dt>
-                      <dd className="text-gray-900">
+                      <dt className="w-28 font-medium text-muted-foreground shrink-0">Sport</dt>
+                      <dd className="text-foreground">
                         {profile.sports ? profile.sports.join(', ') : profile.sport}
                       </dd>
                     </div>
                   )}
                   {profile.birthDate && (
                     <div className="flex gap-4">
-                      <dt className="w-28 font-medium text-gray-500 shrink-0">Date of Birth</dt>
-                      <dd className="text-gray-900">
+                      <dt className="w-28 font-medium text-muted-foreground shrink-0">Date of Birth</dt>
+                      <dd className="text-foreground">
                         {new Date(profile.birthDate).toLocaleDateString(undefined, {
                           year: 'numeric',
                           month: 'long',
@@ -273,7 +291,7 @@ export default function ParentChildDetail() {
                   )}
                 </dl>
               ) : (
-                <p className="text-sm text-gray-500">No profile information available.</p>
+                <p className="text-sm text-muted-foreground">No profile information available.</p>
               )}
             </CardContent>
           </Card>
@@ -298,8 +316,8 @@ export default function ParentChildDetail() {
                 </div>
               ) : !measurements || measurements.length === 0 ? (
                 <div className="text-center py-8">
-                  <Activity className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">No measurements recorded yet.</p>
+                  <Activity className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No measurements recorded yet.</p>
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -319,10 +337,10 @@ export default function ParentChildDetail() {
                           <TableCell className="text-right">
                             {m.value}
                             {m.unit && (
-                              <span className="text-gray-400 ml-1 text-xs">{m.unit}</span>
+                              <span className="text-muted-foreground/70 ml-1 text-xs">{m.unit}</span>
                             )}
                           </TableCell>
-                          <TableCell className="text-sm text-gray-600">
+                          <TableCell className="text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Calendar className="h-3 w-3" />
                               {new Date(m.measuredAt).toLocaleDateString(undefined, {
@@ -334,9 +352,9 @@ export default function ParentChildDetail() {
                           </TableCell>
                           <TableCell>
                             {m.verifiedAt ? (
-                              <span className="text-xs text-green-600 font-medium">Verified</span>
+                              <span className="text-xs text-green-600 dark:text-green-400 font-medium">Verified</span>
                             ) : (
-                              <span className="text-xs text-gray-400">Unverified</span>
+                              <span className="text-xs text-muted-foreground/70">Unverified</span>
                             )}
                           </TableCell>
                         </TableRow>
@@ -368,24 +386,24 @@ export default function ParentChildDetail() {
                 </div>
               ) : !reports || reports.length === 0 ? (
                 <div className="text-center py-8">
-                  <FileText className="h-10 w-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm text-gray-500">No reports available yet.</p>
+                  <FileText className="h-10 w-10 text-muted-foreground/50 mx-auto mb-3" />
+                  <p className="text-sm text-muted-foreground">No reports available yet.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
                   {reports.map((report) => (
                     <div
                       key={report.id}
-                      className="flex items-center justify-between p-3 rounded-lg border border-gray-100 hover:border-gray-200 hover:bg-gray-50 transition-colors"
+                      className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-border hover:bg-muted/50 transition-colors"
                     >
                       <div className="flex items-start gap-3">
-                        <FileText className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+                        <FileText className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{report.name}</p>
+                          <p className="text-sm font-medium text-foreground">{report.name}</p>
                           {report.description && (
-                            <p className="text-xs text-gray-500 mt-0.5">{report.description}</p>
+                            <p className="text-xs text-muted-foreground mt-0.5">{report.description}</p>
                           )}
-                          <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                          <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-0.5">
                             <Calendar className="h-3 w-3" />
                             {new Date(report.createdAt).toLocaleDateString(undefined, {
                               year: 'numeric',
@@ -409,118 +427,158 @@ export default function ParentChildDetail() {
             </CardContent>
           </Card>
         </TabsContent>
-      </Tabs>
 
-      {/* COPPA Data Rights */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Your Parental Rights</CardTitle>
-          <CardDescription>
-            Under COPPA, you have the right to review, export, and request deletion of your child's data, or revoke consent at any time.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {/* Export */}
-          {exportSuccess ? (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Export request submitted. You will receive an email with a download link when your child's data is ready.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              disabled={exportMutation.isPending}
-              onClick={() => exportMutation.mutate()}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              {exportMutation.isPending ? 'Requesting...' : "Download My Child's Data"}
-            </Button>
-          )}
-          {exportMutation.isError && (
-            <p className="text-sm text-red-600">Failed to request export. Please try again.</p>
-          )}
-
-          {/* Deletion */}
-          {deletionSuccess ? (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                Deletion request submitted and is pending administrator review. You will be notified when it is processed.
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
+        {/* Data Rights Tab */}
+        <TabsContent value="data-rights">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Your Parental Rights</CardTitle>
+              <CardDescription>
+                {isCoppaChild
+                  ? 'Under COPPA, you have the right to review, export, and request deletion of your child\'s data, or revoke consent at any time.'
+                  : 'As a parent or guardian, you can review, export, and request deletion of your child\'s data, or unlink your account at any time.'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Export */}
+              {exportSuccess ? (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    Export request submitted. You will receive an email with a download link when your child's data is ready.
+                  </AlertDescription>
+                </Alert>
+              ) : (
                 <Button
                   variant="outline"
-                  className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-                  disabled={deletionMutation.isPending}
+                  className="w-full justify-start"
+                  disabled={exportMutation.isPending}
+                  onClick={() => exportMutation.mutate()}
                 >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  {deletionMutation.isPending ? 'Requesting...' : 'Request Data Deletion'}
+                  <Download className="mr-2 h-4 w-4" />
+                  {exportMutation.isPending ? 'Requesting...' : "Download My Child's Data"}
                 </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Request Data Deletion</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This will submit a request to delete all of {childName}'s data from the platform. This action requires administrator approval and cannot be undone once processed.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-red-600 hover:bg-red-700"
-                    onClick={() => deletionMutation.mutate()}
-                  >
-                    Submit Deletion Request
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          {deletionMutation.isError && (
-            <p className="text-sm text-red-600">Failed to request deletion. Please try again.</p>
-          )}
+              )}
+              {exportMutation.isError && (
+                <p className="text-sm text-destructive">Failed to request export. Please try again.</p>
+              )}
 
-          {/* Revoke Consent */}
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button
-                variant="outline"
-                className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50"
-                disabled={revokeMutation.isPending}
-              >
-                <ShieldOff className="mr-2 h-4 w-4" />
-                {revokeMutation.isPending ? 'Revoking...' : 'Revoke Consent'}
-              </Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Revoke Parental Consent</AlertDialogTitle>
-                <AlertDialogDescription>
-                  Revoking consent will immediately restrict {childName}'s account. They will no longer be able to log in until consent is re-granted. You will be logged out after revoking.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  className="bg-red-600 hover:bg-red-700"
-                  onClick={() => revokeMutation.mutate()}
-                >
-                  Revoke Consent
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          {revokeMutation.isError && (
-            <p className="text-sm text-red-600">Failed to revoke consent. Please try again.</p>
-          )}
-        </CardContent>
-      </Card>
+              {/* Deletion */}
+              {deletionSuccess ? (
+                <Alert>
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertDescription>
+                    Deletion request submitted and is pending administrator review. You will be notified when it is processed.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full justify-start text-destructive hover:text-destructive/80 hover:bg-destructive/5"
+                      disabled={deletionMutation.isPending}
+                    >
+                      <Trash2 className="mr-2 h-4 w-4" />
+                      {deletionMutation.isPending ? 'Requesting...' : 'Request Data Deletion'}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Request Data Deletion</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will submit a request to delete all of {childName}'s data from the platform. This action requires administrator approval and cannot be undone once processed.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive hover:bg-destructive/90"
+                        onClick={() => deletionMutation.mutate()}
+                      >
+                        Submit Deletion Request
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              {deletionMutation.isError && (
+                <p className="text-sm text-destructive">Failed to request deletion. Please try again.</p>
+              )}
+
+              {/* Revoke Consent (COPPA under-13) or Unlink (13-17) */}
+              {isCoppaChild ? (
+                <>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-destructive hover:text-destructive/80 hover:bg-destructive/5"
+                        disabled={revokeMutation.isPending}
+                      >
+                        <ShieldOff className="mr-2 h-4 w-4" />
+                        {revokeMutation.isPending ? 'Revoking...' : 'Revoke Consent'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Revoke Parental Consent</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Revoking consent will immediately restrict {childName}'s account. They will no longer be able to log in until consent is re-granted. You will be logged out after revoking.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive hover:bg-destructive/90"
+                          onClick={() => revokeMutation.mutate()}
+                        >
+                          Revoke Consent
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {revokeMutation.isError && (
+                    <p className="text-sm text-destructive">Failed to revoke consent. Please try again.</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-muted-foreground hover:text-foreground"
+                        disabled={unlinkMutation.isPending}
+                      >
+                        <ShieldOff className="mr-2 h-4 w-4" />
+                        {unlinkMutation.isPending ? 'Unlinking...' : 'Unlink My Account'}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Unlink from {childName}</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Unlinking will remove your ability to monitor {childName}'s account and data. Their account will remain active and unaffected.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => unlinkMutation.mutate()}>
+                          Unlink
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {unlinkMutation.isError && (
+                    <p className="text-sm text-destructive">Failed to unlink. Please try again.</p>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -37,7 +37,7 @@ import { users, organizations } from '@shared/schema/tables/core';
 import { userOrganizations } from '@shared/schema/tables/membership';
 import { parentalConsents, coppaAuditLog, parentAthleteLinks } from '@shared/schema/tables/coppa';
 import { reports, reportSnapshots } from '@shared/schema/tables/reports';
-import { eq, like, and, lt, inArray } from 'drizzle-orm';
+import { eq, like, and, lt, inArray, sql } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { COPPA_ACTIONS } from '@shared/coppa-utils';
 
@@ -1039,19 +1039,8 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
 // A4 — Org settings COPPA server-side validation
 // ============================================================================
 
-describe('A4: COPPA org settings server-side validation', () => {
-  it('updating org with coppaEnabled=true but no coppaContactEmail → 400', async () => {
-    // Use a real org from the DB if available, otherwise skip
-    const res = await request(app)
-      .patch('/api/organizations/nonexistent-org-id')
-      .set('Cookie', siteAdminCookie)
-      .send({ coppaEnabled: true, coppaContactEmail: '' });
-
-    // Either 400 (validation) or 404 (org not found) — both are acceptable for this test
-    // We primarily verify the 400 path is reachable (not 500)
-    expect([400, 404]).toContain(res.status);
-  });
-});
+// A4 — Superseded by GAP 6 tests below (which use a real org ID and
+// properly exercise the COPPA contact-email validation branch).
 
 // ============================================================================
 // B2 — Token cleanup job
@@ -1496,5 +1485,101 @@ describe('C5: POST /api/admin/coppa/re-initiate/:athleteId', () => {
       .send({ parentEmail: 'parent@example.com' });
 
     expect(res.status).toBe(403);
+  });
+});
+
+// ============================================================================
+// GAP 6 — Org COPPA settings happy path
+// ============================================================================
+
+describe('GAP 6: PATCH /api/organizations/:id — COPPA settings happy path', () => {
+  /**
+   * Tests the PATCH /api/organizations/:id endpoint for COPPA-specific fields.
+   *
+   * The existing A4 test (line ~1043) only exercises the VALIDATION failure path
+   * using a non-existent org ID. These tests exercise the happy path:
+   *  - coppaEnabled=true + valid coppaContactEmail → 200, DB updated
+   *  - Verify org record in DB reflects the new values
+   *  - coppaEnabled=true without coppaContactEmail → 400 (documents the guard,
+   *    distinct from A4 which uses an invalid UUID)
+   */
+  let gapOrgId: string;
+
+  beforeAll(async () => {
+    // Use a raw SQL insert to avoid Drizzle referencing schema columns that may
+    // not yet exist in the test DB (e.g. ai_prompt_context added in a later migration).
+    const result = await db.execute(
+      sql`INSERT INTO organizations (name, is_active, coppa_enabled) VALUES (${'coppa-gap6-org-' + Date.now()}, true, false) RETURNING id`
+    );
+    gapOrgId = (result as any)[0]?.id as string;
+    if (!gapOrgId) throw new Error('Failed to create test org for GAP 6');
+  });
+
+  afterAll(async () => {
+    if (gapOrgId) {
+      await db.delete(organizations).where(eq(organizations.id, gapOrgId)).catch(() => {});
+    }
+  });
+
+  it('PATCH with coppaEnabled=true and valid coppaContactEmail → 200 and DB updated', async () => {
+    const contactEmail = `coppa-dpo-gap6-${Date.now()}@example.com`;
+
+    const res = await request(app)
+      .patch(`/api/organizations/${gapOrgId}`)
+      .set('Cookie', siteAdminCookie)
+      .send({ coppaEnabled: true, coppaContactEmail: contactEmail });
+
+    expect(res.status).toBe(200);
+
+    // Verify the response body reflects the update
+    expect(res.body.coppaEnabled).toBe(true);
+    expect(res.body.coppaContactEmail).toBe(contactEmail);
+
+    // Verify the DB record was actually persisted
+    const [updatedOrg] = await db.select({
+      coppaEnabled: organizations.coppaEnabled,
+      coppaContactEmail: organizations.coppaContactEmail,
+    })
+      .from(organizations)
+      .where(eq(organizations.id, gapOrgId))
+      .limit(1);
+
+    expect(updatedOrg.coppaEnabled).toBe(true);
+    expect(updatedOrg.coppaContactEmail).toBe(contactEmail);
+  });
+
+  it('PATCH with coppaEnabled=true but no coppaContactEmail → 400 with code coppa_contact_email_required', async () => {
+    const res = await request(app)
+      .patch(`/api/organizations/${gapOrgId}`)
+      .set('Cookie', siteAdminCookie)
+      .send({ coppaEnabled: true, coppaContactEmail: '' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe('coppa_contact_email_required');
+  });
+
+  it('PATCH to disable COPPA (coppaEnabled=false) → 200', async () => {
+    // First ensure COPPA is enabled
+    await request(app)
+      .patch(`/api/organizations/${gapOrgId}`)
+      .set('Cookie', siteAdminCookie)
+      .send({ coppaEnabled: true, coppaContactEmail: 'dpo@example.com' });
+
+    // Now disable it
+    const res = await request(app)
+      .patch(`/api/organizations/${gapOrgId}`)
+      .set('Cookie', siteAdminCookie)
+      .send({ coppaEnabled: false });
+
+    expect(res.status).toBe(200);
+    expect(res.body.coppaEnabled).toBe(false);
+
+    // Verify DB
+    const [updatedOrg] = await db.select({ coppaEnabled: organizations.coppaEnabled })
+      .from(organizations)
+      .where(eq(organizations.id, gapOrgId))
+      .limit(1);
+
+    expect(updatedOrg.coppaEnabled).toBe(false);
   });
 });

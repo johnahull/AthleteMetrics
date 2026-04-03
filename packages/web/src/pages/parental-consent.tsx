@@ -57,11 +57,12 @@ export default function ParentalConsentWaiting() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+      <Card className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-            <Clock className="h-8 w-8 text-blue-600" />
+          <p className="text-sm font-semibold tracking-wide text-primary uppercase mb-2">AthleteMetrics</p>
+          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+            <Clock className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-2xl">Awaiting Parental Approval</CardTitle>
           <CardDescription>
@@ -69,27 +70,27 @@ export default function ParentalConsentWaiting() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert className="border-blue-200 bg-blue-50">
-            <Shield className="h-4 w-4 text-blue-600" />
-            <AlertDescription className="text-blue-800 text-sm">
+          <Alert className="border-primary/20 bg-primary/5">
+            <Shield className="h-4 w-4 text-primary" />
+            <AlertDescription className="text-primary text-sm">
               Because you're under 13, federal law (COPPA) requires a parent or guardian to approve
               your account before you can log in. We've sent them a consent email.
             </AlertDescription>
           </Alert>
 
-          <div className="space-y-3 text-sm text-gray-600">
+          <div className="space-y-3 text-sm text-muted-foreground">
             <div className="flex items-start gap-2">
-              <Mail className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+              <Mail className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
               <p>Your parent or guardian should check their email for a message from AthleteMetrics.</p>
             </div>
             <div className="flex items-start gap-2">
-              <Clock className="h-4 w-4 text-gray-400 mt-0.5 shrink-0" />
+              <Clock className="h-4 w-4 text-muted-foreground/70 mt-0.5 shrink-0" />
               <p>The consent link expires in {CONSENT_TOKEN_EXPIRY_DAYS} days. If it expires, you'll need to request a new one.</p>
             </div>
           </div>
 
           <div className="border-t pt-4 space-y-2">
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Didn't receive the email? Ask your parent to check their spam folder, or resend below.
             </p>
             <Button

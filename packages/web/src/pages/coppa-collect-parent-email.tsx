@@ -78,11 +78,12 @@ export default function CoppaCollectParentEmail() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+      <Card className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-            <Shield className="h-8 w-8 text-blue-600" />
+          <p className="text-sm font-semibold tracking-wide text-primary uppercase mb-2">AthleteMetrics</p>
+          <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+            <Shield className="h-8 w-8 text-primary" />
           </div>
           <CardTitle className="text-2xl">Parent Email Required</CardTitle>
           <CardDescription>
@@ -91,9 +92,9 @@ export default function CoppaCollectParentEmail() {
         </CardHeader>
 
         <CardContent className="space-y-4">
-          <Alert className="border-amber-200 bg-amber-50">
-            <AlertCircle className="h-4 w-4 text-amber-600" />
-            <AlertDescription className="text-amber-800 text-sm">
+          <Alert className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <AlertDescription className="text-amber-800 dark:text-amber-200 text-sm">
               Federal law (COPPA) requires parental consent for users under 13.
               We will send your parent or guardian an approval email.
               You will be able to log in once they approve.
@@ -106,7 +107,7 @@ export default function CoppaCollectParentEmail() {
                 Parent or Guardian Email <span className="text-red-500">*</span>
               </Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground/70" />
                 <Input
                   id="parentEmail"
                   type="email"

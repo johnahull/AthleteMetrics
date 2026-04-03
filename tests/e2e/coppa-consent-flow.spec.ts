@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { clearAuthState } from './helpers/auth';
 
 /**
@@ -866,5 +866,696 @@ test.describe('COPPA: Registration in Parent Mode', () => {
       emailValue,
       'Email field must be pre-filled from the email query parameter in parent mode'
     ).toBe(testEmail);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Test Suite 10: needs_parent_email Login Redirect (GAP 8)
+// ────────────────────────────────────────────────────────────────────────────────
+
+test.describe('COPPA: needs_parent_email Login Redirects to Collect Parent Email Page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /**
+   * GAP 8 — Real-credential path.
+   *
+   * If E2E_COPPA_NEEDS_EMAIL_USERNAME / E2E_COPPA_NEEDS_EMAIL_PASSWORD are set in
+   * the environment, this test exercises the full live login → redirect flow.
+   * When the env vars are absent the test is skipped with an informative message so
+   * the CI run does not fail on environments that have not seeded that account.
+   */
+  test('login with needs_parent_email user redirects to /coppa/collect-parent-email with username param', async ({ page }) => {
+    const needsEmailUsername = process.env.E2E_COPPA_NEEDS_EMAIL_USERNAME;
+    const needsEmailPassword = process.env.E2E_COPPA_NEEDS_EMAIL_PASSWORD;
+
+    if (!needsEmailUsername || !needsEmailPassword) {
+      test.skip(true, [
+        'E2E_COPPA_NEEDS_EMAIL_USERNAME and E2E_COPPA_NEEDS_EMAIL_PASSWORD are not configured.',
+        'To enable this test, seed a user account whose coppaStatus is "needs_parent_email" and',
+        'export those credentials as the env vars above before running the E2E suite.',
+      ].join(' '));
+      return;
+    }
+
+    await page.goto(`${BASE_URL}/login`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('[data-testid="input-username"]', { timeout: 15_000 });
+
+    await page.fill('[data-testid="input-username"]', needsEmailUsername);
+    await page.fill('[data-testid="input-password"]', needsEmailPassword);
+    await page.click('[data-testid="button-login"]');
+
+    // The enhanced login form detects the coppa_needs_parent_email error code and
+    // navigates to /coppa/collect-parent-email?username=<username>.
+    await page.waitForURL(/\/coppa\/collect-parent-email/, { timeout: 8_000 });
+
+    expect(
+      page.url(),
+      'Login with needs_parent_email account must redirect to /coppa/collect-parent-email'
+    ).toContain('/coppa/collect-parent-email');
+
+    expect(
+      page.url(),
+      'Redirect URL must include the username as a query parameter'
+    ).toContain(`username=${encodeURIComponent(needsEmailUsername)}`);
+
+    // No session cookie must have been set — the user is not yet authenticated
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find(c => c.name === 'connect.sid' || c.name === 'session');
+    expect(
+      sessionCookie,
+      'No session cookie must be set when redirected from a needs_parent_email login attempt'
+    ).toBeUndefined();
+  });
+
+  /**
+   * Mock-API path — always runs regardless of env var configuration.
+   *
+   * Intercepts /api/auth/login to return the coppa_needs_parent_email response, then
+   * verifies the enhanced-login-form redirects correctly and the destination page
+   * renders the email input form.
+   *
+   * This test mirrors the pattern used in Suite 8 and covers the same behaviour as
+   * the real-credential test but without requiring a seeded account.
+   */
+  test('login page redirects to collect-parent-email page when API returns coppa_needs_parent_email (mock API)', async ({ page }) => {
+    const testUsername = 'needsparentemail_mock';
+
+    await page.route('**/api/auth/login', async route => {
+      await route.fulfill({
+        status: 403,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          code: 'coppa_needs_parent_email',
+          message: 'Parent email required.',
+        }),
+      });
+    });
+
+    await page.goto(`${BASE_URL}/login`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('[data-testid="input-username"]', { timeout: 15_000 });
+
+    await page.fill('[data-testid="input-username"]', testUsername);
+    await page.fill('[data-testid="input-password"]', 'SomePassword@123');
+    await page.click('[data-testid="button-login"]');
+
+    // Expect redirect to collect-parent-email route
+    await page.waitForURL(/\/coppa\/collect-parent-email/, { timeout: 8_000 });
+
+    expect(
+      page.url(),
+      'Login must redirect to /coppa/collect-parent-email for coppa_needs_parent_email response'
+    ).toContain('/coppa/collect-parent-email');
+
+    expect(
+      page.url(),
+      'Redirect must include the typed username as the ?username= query param'
+    ).toContain(`username=${encodeURIComponent(testUsername)}`);
+  });
+
+  /**
+   * Verifies that the /coppa/collect-parent-email page reached via the redirect
+   * renders the email input form correctly — including when the username query param
+   * is present (as it would be after the login redirect).
+   */
+  test('collect-parent-email page reached via redirect renders email input form', async ({ page }) => {
+    const username = 'redirecteduser';
+    await page.goto(`${BASE_URL}/coppa/collect-parent-email?username=${encodeURIComponent(username)}`);
+    await page.waitForLoadState('networkidle');
+
+    // Page heading
+    await expect(
+      page.locator('text=Parent Email Required'),
+      'collect-parent-email page must render "Parent Email Required" heading'
+    ).toBeVisible();
+
+    // Email input
+    await expect(
+      page.locator('#parentEmail'),
+      'Parent email input field must be visible on the collect-parent-email page'
+    ).toBeVisible();
+
+    // Submit button
+    await expect(
+      page.locator('button:has-text("Send Consent Email")'),
+      '"Send Consent Email" submit button must be visible'
+    ).toBeVisible();
+
+    // The page must not show a session-protected error when reached via redirect
+    const bodyText = (await page.textContent('body')) || '';
+    expect(
+      /something went wrong|uncaught error|unhandled exception/i.test(bodyText),
+      'collect-parent-email page must not show an unhandled error when reached via username redirect'
+    ).toBe(false);
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Test Suite 11: Consent Confirmation Happy Path — Grant & Deny (GAP 11)
+// ────────────────────────────────────────────────────────────────────────────────
+
+test.describe('COPPA: Consent Confirmation Grant and Deny Happy Paths', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /**
+   * Helper: sets up a page.route() intercept that returns a synthetic valid-token
+   * response from the consent verify endpoint, then navigates to the consent page.
+   * The mock response mirrors the ConsentData shape expected by consent-confirmation.tsx.
+   */
+  async function navigateToConsentPageWithValidToken(page: Page) {
+    await page.route('**/api/coppa/consent/verify/**', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            athleteName: 'Test Athlete',
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            consentId: 'mock-consent-id',
+            parentEmail: 'parent@example.com',
+          }),
+        });
+      } else {
+        // Pass POST requests through to the next route handler (action buttons)
+        await route.fallback();
+      }
+    });
+
+    await page.goto(`${BASE_URL}/consent/mock-valid-token`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+  }
+
+  test('valid consent token shows parent info, grant and deny buttons', async ({ page }) => {
+    await navigateToConsentPageWithValidToken(page);
+
+    // Main consent form heading
+    await expect(
+      page.locator('text=Parental Consent Request'),
+      'Consent confirmation page must show "Parental Consent Request" heading for a valid token'
+    ).toBeVisible();
+
+    // Athlete name from the mock payload
+    await expect(
+      page.locator('text=Test Athlete'),
+      'Consent page must display the athlete name from the token payload'
+    ).toBeVisible();
+
+    // COPPA-required data disclosure sections
+    await expect(
+      page.locator('text=What AthleteMetrics Collects'),
+      'Consent page must disclose what data is collected'
+    ).toBeVisible();
+
+    await expect(
+      page.locator('text=How This Data Is Used'),
+      'Consent page must disclose how data is used'
+    ).toBeVisible();
+
+    await expect(
+      page.locator('text=Your Rights as a Parent'),
+      'Consent page must disclose parent/guardian rights'
+    ).toBeVisible();
+
+    // Action buttons
+    await expect(
+      page.locator('button:has-text("Grant Permission")'),
+      '"Grant Permission" button must be visible on the consent form'
+    ).toBeVisible();
+
+    await expect(
+      page.locator('button:has-text("Deny")'),
+      '"Deny" button must be visible on the consent form'
+    ).toBeVisible();
+  });
+
+  test('clicking "Grant Permission" shows success confirmation screen', async ({ page }) => {
+    // Intercept GET to return valid token data, and POST to return success
+    await page.route('**/api/coppa/consent/verify/**', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            athleteName: 'Grant Test Athlete',
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            consentId: 'mock-grant-consent-id',
+            parentEmail: 'parent@example.com',
+          }),
+        });
+      } else if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    await page.goto(`${BASE_URL}/consent/mock-grant-token`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    await page.click('button:has-text("Grant Permission")');
+
+    // After a successful grant, the page transitions to the "Permission Granted" state
+    await page.waitForTimeout(2_000);
+
+    await expect(
+      page.locator('text=Permission Granted'),
+      'Clicking "Grant Permission" must show a "Permission Granted" success screen'
+    ).toBeVisible();
+
+    // The success screen should mention the athlete's name
+    await expect(
+      page.locator('text=Grant Test Athlete'),
+      'Success screen must reference the athlete name after granting consent'
+    ).toBeVisible();
+
+    // A CTA to create a parent account should be present (per consent-confirmation.tsx)
+    const hasParentCta =
+      (await page.locator('text=Create Parent Account').count()) > 0 ||
+      (await page.locator('text=/monitor.*measurements|track.*progress/i').count()) > 0;
+
+    expect(
+      hasParentCta,
+      'Permission Granted screen must offer a CTA to create a parent account'
+    ).toBe(true);
+  });
+
+  test('clicking "Deny" shows denial confirmation screen', async ({ page }) => {
+    // Intercept GET to return valid token data, and POST to return success
+    await page.route('**/api/coppa/consent/verify/**', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            athleteName: 'Deny Test Athlete',
+            expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            consentId: 'mock-deny-consent-id',
+            parentEmail: 'parent@example.com',
+          }),
+        });
+      } else if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    await page.goto(`${BASE_URL}/consent/mock-deny-token`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    await page.click('button:has-text("Deny")');
+
+    await page.waitForTimeout(2_000);
+
+    await expect(
+      page.locator('text=Permission Denied'),
+      'Clicking "Deny" must show a "Permission Denied" confirmation screen'
+    ).toBeVisible();
+
+    // The denial screen should mention the athlete's name and explain the consequence
+    await expect(
+      page.locator('text=Deny Test Athlete'),
+      'Denial screen must reference the athlete name'
+    ).toBeVisible();
+
+    // Explanation that the account stays inactive
+    const hasDenialExplanation =
+      (await page.locator('text=/remain inactive|contact support/i').count()) > 0;
+
+    expect(
+      hasDenialExplanation,
+      'Denial screen must explain that the account remains inactive and offer a contact path'
+    ).toBe(true);
+  });
+
+  /**
+   * Expired token — HTTP 410 from the API.
+   *
+   * The page component maps status 410 → tokenStatus 'expired' → "Link Expired" card.
+   * This is a distinct visual state from "Invalid Link" (which maps to tokenStatus
+   * 'invalid' from a non-200/410/400 response).
+   */
+  test('expired consent token shows "Link Expired" state distinct from "Invalid Link"', async ({ page }) => {
+    await page.route('**/api/coppa/consent/verify/**', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 410,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Token expired.' }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    await page.goto(`${BASE_URL}/consent/mock-expired-token`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3_000);
+
+    // "Link Expired" is the title shown for tokenStatus === 'expired'
+    await expect(
+      page.locator('text=Link Expired'),
+      'Expired token (HTTP 410) must show the "Link Expired" heading'
+    ).toBeVisible();
+
+    // The "Link Expired" state must NOT show the generic "Invalid Link" title
+    await expect(
+      page.locator('text=Invalid Link'),
+      '"Link Expired" state must NOT display the "Invalid Link" heading (distinct states)'
+    ).not.toBeVisible();
+
+    // Guidance to request a new consent email should be present
+    const hasGuidance =
+      (await page.locator('text=/new consent email|request a new/i').count()) > 0 ||
+      (await page.locator('text=/ask your child.*log in/i').count()) > 0;
+
+    expect(
+      hasGuidance,
+      'Expired token state must include guidance for the parent to request a new consent email'
+    ).toBe(true);
+  });
+
+  /**
+   * Already-used token — HTTP 400 from the API.
+   *
+   * Maps to tokenStatus 'used' → "Already Responded" card.
+   */
+  test('already-used consent token shows "Already Responded" state', async ({ page }) => {
+    await page.route('**/api/coppa/consent/verify/**', async route => {
+      if (route.request().method() === 'GET') {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/json',
+          body: JSON.stringify({ message: 'Token already used.' }),
+        });
+      } else {
+        await route.fallback();
+      }
+    });
+
+    await page.goto(`${BASE_URL}/consent/mock-used-token`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(3_000);
+
+    await expect(
+      page.locator('text=Already Responded'),
+      'Already-used token (HTTP 400) must show the "Already Responded" heading'
+    ).toBeVisible();
+
+    // Must not show the expired or invalid states
+    await expect(page.locator('text=Link Expired')).not.toBeVisible();
+    await expect(page.locator('text=Invalid Link')).not.toBeVisible();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────
+// Test Suite 12: Parent Child Detail Page (GAP 12)
+// ────────────────────────────────────────────────────────────────────────────────
+
+test.describe('COPPA: Parent Child Detail Page', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  /**
+   * Helper: log in as the parent test user.
+   * Returns true if login succeeded, false if credentials are not configured.
+   */
+  async function loginAsParent(page: Page): Promise<boolean> {
+    const parentUsername = process.env.E2E_PARENT_USERNAME;
+    const parentPassword = process.env.E2E_PARENT_PASSWORD;
+
+    if (!parentUsername || !parentPassword) {
+      return false;
+    }
+
+    await page.goto(`${BASE_URL}/login`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForSelector('#username, input[name="username"]', { timeout: 15_000 });
+    await page.fill('#username, input[name="username"]', parentUsername);
+    await page.fill('#password, input[name="password"]', parentPassword);
+    await page.click('button[type="submit"]');
+    await page.waitForURL(url => !url.pathname.includes('/login'), { timeout: 10_000 });
+    return true;
+  }
+
+  /**
+   * Helper: mock all three child-detail API endpoints so tests can exercise the
+   * page UI without a real parent account or a real linked child in the database.
+   */
+  async function mockChildDetailAPIs(
+    page: Page,
+    athleteId: string
+  ) {
+    await page.route(`**/api/parent/children/${athleteId}/profile`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: athleteId,
+          firstName: 'Mock',
+          lastName: 'Child',
+          username: 'mockchild',
+          sports: ['Track & Field'],
+          birthDate: '2012-06-15',
+          isMinor: true,
+          coppaStatus: 'consent_granted',
+        }),
+      });
+    });
+
+    await page.route(`**/api/parent/children/${athleteId}/measurements`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'meas-001',
+            metricType: 'VERTICAL_JUMP',
+            value: 24.5,
+            unit: 'in',
+            measuredAt: '2025-03-15T10:00:00Z',
+            verifiedAt: '2025-03-15T10:05:00Z',
+          },
+          {
+            id: 'meas-002',
+            metricType: 'DASH_40YD',
+            value: 5.1,
+            unit: 's',
+            measuredAt: '2025-03-15T10:00:00Z',
+            verifiedAt: null,
+          },
+        ]),
+      });
+    });
+
+    await page.route(`**/api/parent/children/${athleteId}/reports`, async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify([
+          {
+            id: 'report-001',
+            name: 'Spring 2025 Performance Report',
+            description: 'End of season summary',
+            createdAt: '2025-04-01T00:00:00Z',
+          },
+        ]),
+      });
+    });
+
+    // Mock /api/auth/me to simulate an authenticated parent
+    // NOTE: auth.tsx reads data.user from the response, so the user must be nested
+    await page.route('**/api/auth/me', async route => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user: {
+            id: 'parent-user-id',
+            username: 'mockparent',
+            firstName: 'Mock',
+            lastName: 'Parent',
+            role: 'parent',
+          },
+        }),
+      });
+    });
+  }
+
+  test('unauthenticated navigation to child detail page redirects to login or shows auth prompt', async ({ page }) => {
+    // Without any authentication, the child-detail page should gate access
+    await page.goto(`${BASE_URL}/parent/children/some-athlete-id`);
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(2_000);
+
+    const currentUrl = page.url();
+    const bodyText = (await page.textContent('body')) || '';
+
+    const isProtected =
+      currentUrl.includes('/login') ||
+      /sign in|log in|login/i.test(bodyText);
+
+    expect(
+      isProtected,
+      'Unauthenticated access to /parent/children/:athleteId must redirect to login or show a login prompt'
+    ).toBe(true);
+  });
+
+  test('child detail page loads with profile tab showing athlete name (mock API)', async ({ page }) => {
+    const mockAthleteId = 'mock-athlete-123';
+    await mockChildDetailAPIs(page, mockAthleteId);
+
+    await page.goto(`${BASE_URL}/parent/children/${mockAthleteId}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    // The page header should display the child's name from the profile API response
+    await expect(
+      page.locator('text=Mock Child'),
+      'Child detail page must display the child\'s full name in the page header'
+    ).toBeVisible();
+
+    // Profile tab must be the default active tab
+    await expect(
+      page.locator('text=Profile Information'),
+      'Profile tab must be active by default and show "Profile Information" heading'
+    ).toBeVisible();
+
+    // Read-only indicator must be present in the profile tab description
+    await expect(
+      page.locator('text=/read.only view/i'),
+      'Profile tab must include a read-only description to make it clear the parent cannot edit'
+    ).toBeVisible();
+  });
+
+  test('measurements tab shows performance data in read-only table (mock API)', async ({ page }) => {
+    const mockAthleteId = 'mock-athlete-measurements';
+    await mockChildDetailAPIs(page, mockAthleteId);
+
+    await page.goto(`${BASE_URL}/parent/children/${mockAthleteId}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    // Click the Measurements tab
+    await page.click('[data-state="inactive"]:has-text("Measurements"), [role="tab"]:has-text("Measurements")');
+    await page.waitForTimeout(1_000);
+
+    // Measurement data from the mock payload should appear
+    await expect(
+      page.locator('text=VERTICAL_JUMP'),
+      'Measurements tab must display metric type names from the API response'
+    ).toBeVisible();
+
+    await expect(
+      page.locator('text=DASH_40YD'),
+      'Measurements tab must display all measurements from the API response'
+    ).toBeVisible();
+
+    // No edit-measurement or add-measurement buttons should be present in the
+    // parent read-only view
+    const editButtonCount = await page.locator('button:has-text("Edit"), button:has-text("Add Measurement")').count();
+    expect(
+      editButtonCount,
+      'Parent child detail page must not expose Edit or Add Measurement buttons — view is read-only'
+    ).toBe(0);
+  });
+
+  test('reports tab shows shared reports list (mock API)', async ({ page }) => {
+    const mockAthleteId = 'mock-athlete-reports';
+    await mockChildDetailAPIs(page, mockAthleteId);
+
+    await page.goto(`${BASE_URL}/parent/children/${mockAthleteId}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    // Click the Reports tab
+    await page.click('[data-state="inactive"]:has-text("Reports"), [role="tab"]:has-text("Reports")');
+    await page.waitForTimeout(1_000);
+
+    // The mocked report should appear in the list
+    await expect(
+      page.locator('text=Spring 2025 Performance Report'),
+      'Reports tab must display reports returned by the API'
+    ).toBeVisible();
+  });
+
+  test('"Back to My Children" button navigates to /parent-dashboard', async ({ page }) => {
+    const mockAthleteId = 'mock-athlete-back-nav';
+    await mockChildDetailAPIs(page, mockAthleteId);
+
+    await page.goto(`${BASE_URL}/parent/children/${mockAthleteId}`);
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(2_000);
+
+    // Click the back navigation button
+    await page.click('button:has-text("Back to My Children")');
+    await page.waitForTimeout(1_500);
+
+    expect(
+      page.url(),
+      '"Back to My Children" button must navigate to /parent-dashboard'
+    ).toContain('/parent-dashboard');
+  });
+
+  /**
+   * Real-credential path — requires E2E_PARENT_USERNAME + E2E_PARENT_PASSWORD
+   * plus at least one linked child in the test environment.
+   */
+  test('authenticated parent can navigate from parent dashboard to child detail page', async ({ page }) => {
+    const parentUsername = process.env.E2E_PARENT_USERNAME;
+    const parentPassword = process.env.E2E_PARENT_PASSWORD;
+
+    if (!parentUsername || !parentPassword) {
+      test.skip(true, [
+        'E2E_PARENT_USERNAME and E2E_PARENT_PASSWORD are not configured.',
+        'To enable this test, export those env vars pointing to a test parent account',
+        'that has at least one linked child in the test environment.',
+      ].join(' '));
+      return;
+    }
+
+    const loggedIn = await loginAsParent(page);
+    if (!loggedIn) return; // Guard — should not be reached given the skip above
+
+    // Navigate to the parent dashboard first
+    await page.goto(`${BASE_URL}/parent-dashboard`);
+    await page.waitForLoadState('networkidle');
+
+    // Look for the "View Progress" button which links to the child detail page
+    const viewProgressButton = page.locator('button:has-text("View Progress"), a:has-text("View Progress")').first();
+    const hasLinkedChild = await viewProgressButton.isVisible().catch(() => false);
+
+    if (!hasLinkedChild) {
+      console.log('Note: The parent test account has no linked children in this environment. Skipping child detail navigation assertion.');
+      return;
+    }
+
+    await viewProgressButton.click();
+    await page.waitForLoadState('networkidle');
+    await page.waitForTimeout(1_500);
+
+    // The URL must change to the child detail pattern
+    expect(
+      page.url(),
+      'Clicking "View Progress" on the parent dashboard must navigate to /parent/children/:athleteId'
+    ).toMatch(/\/parent\/children\/[a-zA-Z0-9-]+/);
+
+    // The page must load without an unhandled error
+    const bodyText = (await page.textContent('body')) || '';
+    expect(
+      /something went wrong|uncaught error|unhandled exception/i.test(bodyText),
+      'Child detail page must not show an unhandled error when navigated to from the parent dashboard'
+    ).toBe(false);
   });
 });

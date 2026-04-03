@@ -52,7 +52,7 @@ export default function ParentDashboard() {
   if (isLoading) {
     return (
       <div className="p-6 max-w-4xl mx-auto space-y-4">
-        <h1 className="text-2xl font-bold text-gray-900">My Children</h1>
+        <h1 className="text-2xl font-bold text-foreground">My Children</h1>
         {[1, 2].map((i) => (
           <Card key={i}>
             <CardHeader>
@@ -85,12 +85,12 @@ export default function ParentDashboard() {
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-          <Users className="h-5 w-5 text-blue-600" />
+        <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
+          <Users className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">My Children</h1>
-          <p className="text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">My Children</h1>
+          <p className="text-sm text-muted-foreground">
             Track your children's athletic progress
           </p>
         </div>
@@ -100,9 +100,9 @@ export default function ParentDashboard() {
       {!children || children.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <UserCheck className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500 font-medium">No linked children yet</p>
-            <p className="text-sm text-gray-400 mt-1">
+            <UserCheck className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+            <p className="text-muted-foreground font-medium">No linked children yet</p>
+            <p className="text-sm text-muted-foreground/70 mt-1">
               Your children will appear here once they have registered and linked your account.
             </p>
           </CardContent>
@@ -114,19 +114,31 @@ export default function ParentDashboard() {
             return (
               <Card
                 key={link.athleteId}
-                className="hover:shadow-md transition-shadow cursor-pointer"
+                className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => setLocation(`/parent/children/${link.athleteId}`)}
               >
+                {/* Accent bar */}
+                <div className="h-1 bg-gradient-to-r from-primary/60 to-primary/20" />
+
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">
-                    {athlete.firstName} {athlete.lastName}
-                  </CardTitle>
-                  <CardDescription className="text-xs text-gray-500">
-                    @{athlete.username}
-                  </CardDescription>
+                  <div className="flex items-center gap-3">
+                    {/* Initials avatar */}
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm shrink-0">
+                      {athlete.firstName[0]}{athlete.lastName[0]}
+                    </div>
+                    <div className="min-w-0">
+                      <CardTitle className="text-lg leading-tight">
+                        {athlete.firstName} {athlete.lastName}
+                      </CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground">
+                        @{athlete.username}
+                      </CardDescription>
+                    </div>
+                  </div>
                 </CardHeader>
+
                 <CardContent className="space-y-3">
-                  <p className="text-xs text-gray-500 flex items-center gap-1">
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
                     <Calendar className="h-3 w-3" />
                     Linked:{' '}
                     {new Date(link.linkedAt).toLocaleDateString(undefined, {
