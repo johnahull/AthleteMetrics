@@ -102,6 +102,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
   ],
   parent: [
     { name: "My Children", href: "/parent-dashboard", icon: Users, tourId: "parent-dashboard" },
+    { name: "Link a Child", href: "/parent/link-child", icon: UserPlus, tourId: "parent-link-child" },
   ],
 });
 

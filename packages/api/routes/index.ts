@@ -49,6 +49,7 @@ import { registerCoppaRoutes } from "./coppa-routes";
 import { registerCoppaDeletionRoutes } from "./coppa-deletion-routes";
 import { registerCoppaExportRoutes } from "./coppa-export-routes";
 import { registerParentRoutes } from "./parent-routes";
+import { registerParentLinkRequestRoutes } from "./parent-link-request-routes";
 
 /**
  * Register all application routes
@@ -193,6 +194,9 @@ export function registerAllRoutes(app: Express) {
 
   // Parent account routes (linked children, read-only access)
   registerParentRoutes(app);
+
+  // Parent link request routes (Link-a-Child workflow Phase 3)
+  registerParentLinkRequestRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

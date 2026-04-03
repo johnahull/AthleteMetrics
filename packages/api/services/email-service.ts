@@ -2314,6 +2314,171 @@ export class EmailService {
       return false;
     }
   }
+
+  // ============================================================================
+  // Phase 3 Link-a-Child Emails
+  // ============================================================================
+
+  /**
+   * Notify coaches/org-admins that a parent has submitted a link request.
+   *
+   * Sent fire-and-forget after POST /api/parent/link-requests creates the record.
+   */
+  async sendParentLinkRequestToCoach(data: {
+    to: string;
+    coachName: string;
+    parentName: string;
+    childName: string;
+  }): Promise<boolean> {
+    if (!isValidEmail(data.to)) {
+      console.error('[ParentLink Email] Invalid coach email');
+      return false;
+    }
+
+    const coachName = escapeHtml(data.coachName);
+    const parentName = escapeHtml(data.parentName);
+    const childName = escapeHtml(data.childName);
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Parent Link Request</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,#4f46e5,#4338ca);">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Parent Link Request</h1>
+              <p style="margin:8px 0 0;color:#c7d2fe;font-size:14px;">AthleteMetrics — Action Required</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Hi ${coachName},</p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                <strong>${parentName}</strong> has requested to link to <strong>${childName}</strong>'s account.
+                Please review this request in your dashboard and approve or deny it.
+              </p>
+              <p style="margin:0;color:#718096;font-size:14px;">
+                Log in to AthleteMetrics to review pending parent link requests.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;border-radius:0 0 8px 8px;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">AthleteMetrics — Athlete Performance Tracking</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+    const text =
+      `Hi ${data.coachName},\n\n` +
+      `${data.parentName} has requested to link to ${data.childName}'s account. ` +
+      `Please review in your dashboard.\n\n` +
+      `Log in to AthleteMetrics to approve or deny the request.`;
+
+    return this.sendEmail({
+      to: data.to,
+      subject: `Parent Link Request for ${data.childName}`,
+      html,
+      text,
+    });
+  }
+
+  /**
+   * Notify a parent of the outcome (approved or denied) of their link request.
+   *
+   * Sent fire-and-forget after a coach approves or denies the request.
+   */
+  async sendParentLinkRequestResult(data: {
+    to: string;
+    childName: string;
+    approved: boolean;
+    denialReason?: string;
+  }): Promise<boolean> {
+    if (!isValidEmail(data.to)) {
+      console.error('[ParentLink Email] Invalid parent email for result notification');
+      return false;
+    }
+
+    const childName = escapeHtml(data.childName);
+    const outcomeWord = data.approved ? 'approved' : 'denied';
+    const denialReason = data.denialReason ? escapeHtml(data.denialReason) : null;
+
+    const outcomeSection = data.approved
+      ? `<p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+           Your request has been <strong style="color:#16a34a;">approved</strong>.
+           You can now view <strong>${childName}</strong>'s data in your parent dashboard.
+         </p>`
+      : `<p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+           Your request has been <strong style="color:#dc2626;">denied</strong>.
+           ${denialReason
+             ? `The reason provided was: <em>${denialReason}</em>`
+             : 'Please contact your organization for more information.'}
+         </p>`;
+
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Link Request ${data.approved ? 'Approved' : 'Denied'}</title></head>
+<body style="margin:0;padding:0;background:#f7fafc;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f7fafc;padding:40px 20px;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+          <tr>
+            <td style="padding:32px 40px;background:linear-gradient(135deg,${data.approved ? '#16a34a,#15803d' : '#dc2626,#b91c1c'});">
+              <h1 style="margin:0;color:#fff;font-size:22px;">Link Request ${data.approved ? 'Approved' : 'Denied'}</h1>
+              <p style="margin:8px 0 0;color:${data.approved ? '#bbf7d0' : '#fecaca'};font-size:14px;">AthleteMetrics — Parent Dashboard</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px;">
+              <p style="margin:0 0 16px;color:#1a202c;font-size:16px;">Hello,</p>
+              <p style="margin:0 0 16px;color:#4a5568;font-size:15px;line-height:1.6;">
+                Your request to link to <strong>${childName}</strong>'s account has been reviewed.
+              </p>
+              ${outcomeSection}
+              <p style="margin:16px 0 0;color:#718096;font-size:14px;">
+                If you have questions, please contact your organization administrator.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 40px;background:#f7fafc;border-radius:0 0 8px 8px;text-align:center;">
+              <p style="margin:0;color:#a0aec0;font-size:12px;">AthleteMetrics — Athlete Performance Tracking</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`.trim();
+
+    const approvedText = data.approved
+      ? `Your request has been approved. You can now view ${data.childName}'s data in your parent dashboard.`
+      : `Your request has been denied. ${data.denialReason ? `Reason: ${data.denialReason}` : 'Please contact your organization for more information.'}`;
+
+    const text =
+      `Link request ${outcomeWord} for ${data.childName}\n\n` +
+      `Your request to link to ${data.childName}'s account has been reviewed.\n\n` +
+      approvedText;
+
+    return this.sendEmail({
+      to: data.to,
+      subject: `Link request ${outcomeWord} for ${data.childName}`,
+      html,
+      text,
+    });
+  }
 }
 
 // Export singleton instance

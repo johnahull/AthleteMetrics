@@ -152,3 +152,43 @@ export const dataExportRequests = pgTable("data_export_requests", {
   athleteIdx: index("data_export_requests_athlete_idx").on(table.athleteUserId),
   statusIdx: index("data_export_requests_status_idx").on(table.status),
 }));
+
+/**
+ * Parent link requests (Phase 3 — Link a Child workflow).
+ *
+ * A parent initiates a request to be linked to a child athlete.
+ * Coaches or site admins approve or deny the request.
+ * Once approved, a parentAthleteLinks record is created.
+ */
+export const parentLinkRequests = pgTable("parent_link_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+
+  // The parent user requesting to link
+  parentUserId: varchar("parent_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+  // The athlete the parent wants to be linked to
+  athleteUserId: varchar("athlete_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+
+  // Organization context (null if the athlete is independent)
+  organizationId: varchar("organization_id").references(() => organizations.id, { onDelete: 'set null' }),
+
+  // Workflow status
+  status: text("status", { enum: ['pending', 'approved', 'denied', 'cancelled'] as const }).default('pending').notNull(),
+
+  // Admin who processed the request (null until processed)
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: 'set null' }),
+  processedAt: timestamp("processed_at"),
+
+  // Reason stored when request is denied
+  denialReason: text("denial_reason"),
+
+  // Timestamps
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+
+  // Requests expire if not acted upon (e.g. 30 days)
+  expiresAt: timestamp("expires_at").notNull(),
+}, (table) => ({
+  parentIdx: index("parent_link_requests_parent_idx").on(table.parentUserId),
+  athleteIdx: index("parent_link_requests_athlete_idx").on(table.athleteUserId),
+  statusIdx: index("parent_link_requests_status_idx").on(table.status),
+}));

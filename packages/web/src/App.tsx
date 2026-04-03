@@ -65,6 +65,7 @@ const ConsentConfirmation = React.lazy(() => import("./pages/consent-confirmatio
 const CoppaCollectParentEmail = React.lazy(() => import("./pages/coppa-collect-parent-email"));
 const ParentDashboard = React.lazy(() => import("./pages/parent-dashboard"));
 const ParentChildDetail = React.lazy(() => import("./pages/parent-child-detail"));
+const ParentLinkChild = React.lazy(() => import("./pages/parent-link-child"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -193,6 +194,11 @@ function Router() {
         <RouteWrapper loadingText="Loading Athlete...">
           <ParentChildDetail />
         </RouteWrapper>
+      </Route>
+      <Route path="/parent/link-child">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentLinkChild />
+        </Suspense>
       </Route>
       <Route path="/parent-dashboard">
         <RouteWrapper loadingText="Loading Dashboard...">

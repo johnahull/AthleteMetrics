@@ -23,6 +23,7 @@ import { LeaderboardWidget } from "@/components/dashboard/LeaderboardWidget";
 import { MostImprovedCard } from "@/components/dashboard/MostImprovedCard";
 import { AtRiskAthletesAlert } from "@/components/dashboard/AtRiskAthletesAlert";
 import { DashboardTrendsChart } from "@/components/dashboard/DashboardTrendsChart";
+import { ParentLinkRequestsWidget } from "@/components/dashboard/ParentLinkRequestsWidget";
 import type { TimeframePreset } from "@shared/dashboard-timeframe";
 
 // Type definitions for dashboard data
@@ -458,6 +459,9 @@ export default function Dashboard() {
           teamId={filterParams.teamId}
         />
       )}
+
+      {/* Parent Link Requests - Only visible when there are pending requests */}
+      <ParentLinkRequestsWidget />
 
       {/* Performance Metrics Cards - Best from Last 30 Days - Only show for org/team view */}
       {effectiveOrganizationId && scope.view !== 'athlete' && (
