@@ -161,6 +161,10 @@ BEGIN
     'event_results_unpublished',
     'event_results_visibility_changed',
 
+    -- Training module actions
+    'site_training_module_toggled',
+    'org_training_enabled',
+
     -- Parent/COPPA actions (Phase 6)
     'parent_unlinked_child'  -- NEW: parent self-service unlink from child account
   ));
