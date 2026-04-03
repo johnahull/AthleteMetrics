@@ -295,7 +295,10 @@ export function registerAthleteRoutes(app: Express) {
         height: athlete.height,
         weight: athlete.weight,
         gender: athlete.gender,
-        emails: athlete.emails
+        emails: athlete.emails,
+        parentEmail: athlete.parentEmail,
+        isMinor: athlete.isMinor,
+        coppaStatus: athlete.coppaStatus,
       };
 
       res.json(transformedAthlete);
