@@ -386,19 +386,22 @@ export class CoppaService extends BaseService {
         return { success: false, error: 'Consent token already used or expired.' };
       }
 
-      await db.update(users)
-        .set({ coppaStatus: 'consent_revoked' })
-        .where(eq(users.id, updatedConsent.athleteUserId));
+      // Atomically revoke user access and deactivate parent links.
+      // Without a transaction, a failure after updating coppaStatus but before
+      // deactivating links would leave an inconsistent state where the parent
+      // could still access child data via active links.
+      await db.transaction(async (tx) => {
+        await tx.update(users)
+          .set({ coppaStatus: 'consent_revoked' })
+          .where(eq(users.id, updatedConsent.athleteUserId));
 
-      // Deactivate all parent links for this athlete so no parent can access data
-      // after consent is denied. Without this, a parent who denied consent could
-      // still register a parent account and view the child's data.
-      await db.update(parentAthleteLinks)
-        .set({ isActive: false })
-        .where(and(
-          eq(parentAthleteLinks.athleteUserId, updatedConsent.athleteUserId),
-          eq(parentAthleteLinks.isActive, true),
-        ));
+        await tx.update(parentAthleteLinks)
+          .set({ isActive: false })
+          .where(and(
+            eq(parentAthleteLinks.athleteUserId, updatedConsent.athleteUserId),
+            eq(parentAthleteLinks.isActive, true),
+          ));
+      });
 
       await this.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_DENIED,
@@ -466,18 +469,19 @@ export class CoppaService extends BaseService {
           return { success: false, error: 'No active consent found to revoke' };
         }
 
-        await db.update(users)
-          .set({ coppaStatus: 'consent_revoked' })
-          .where(eq(users.id, athleteUserId));
+        // Atomically revoke user access and deactivate parent links.
+        await db.transaction(async (tx) => {
+          await tx.update(users)
+            .set({ coppaStatus: 'consent_revoked' })
+            .where(eq(users.id, athleteUserId));
 
-        // Deactivate all parent links for this athlete so no parent can access
-        // data after admin revocation. Mirrors the same step in denyConsent().
-        await db.update(parentAthleteLinks)
-          .set({ isActive: false })
-          .where(and(
-            eq(parentAthleteLinks.athleteUserId, athleteUserId),
-            eq(parentAthleteLinks.isActive, true),
-          ));
+          await tx.update(parentAthleteLinks)
+            .set({ isActive: false })
+            .where(and(
+              eq(parentAthleteLinks.athleteUserId, athleteUserId),
+              eq(parentAthleteLinks.isActive, true),
+            ));
+        });
 
         await this.writeCoppaAudit({
           action: COPPA_ACTIONS.CONSENT_REVOKED,
