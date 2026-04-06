@@ -10,6 +10,7 @@ import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { storage } from "../storage";
+import { generateParentEmailToken } from "../services/coppa-email-token-store";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -63,10 +64,17 @@ export function registerAuthRoutes(app: Express) {
           console.error('[COPPA] Failed to write login block audit log:', err);
         });
 
+        // For needs_parent_email, generate an opaque token so the frontend can
+        // redirect without putting the username in the URL (prevents minor enumeration).
+        const parentEmailToken = user.coppaStatus === 'needs_parent_email'
+          ? generateParentEmailToken(user.id)
+          : undefined;
+
         return res.status(403).json({
           code: codeMap[user.coppaStatus],
           coppaStatus: user.coppaStatus,
           message: "Account access requires parental consent.",
+          ...(parentEmailToken && { parentEmailToken }),
         });
       }
 

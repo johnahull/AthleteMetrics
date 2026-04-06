@@ -223,8 +223,14 @@ export function EnhancedLoginForm() {
             message: 'Your account is awaiting parental consent. Please ask a parent or guardian to check their email and approve your account.'
           });
         } else if (result.code === 'coppa_needs_parent_email') {
-          // D4: Redirect to collect-parent-email page with username in query param
-          setLocation(`/coppa/collect-parent-email?username=${encodeURIComponent(formData.username)}`);
+          // D4: Redirect to collect-parent-email page with opaque token (not username)
+          // to prevent minor status enumeration via URL inspection
+          const token = result.parentEmailToken;
+          if (token) {
+            setLocation(`/coppa/collect-parent-email?token=${encodeURIComponent(token)}`);
+          } else {
+            setError({ type: 'general', message: 'Unable to proceed. Please try logging in again.' });
+          }
         } else if (result.code === 'coppa_consent_revoked') {
           setError({
             type: 'general',

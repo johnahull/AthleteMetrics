@@ -40,6 +40,7 @@ import { reports, reportSnapshots } from '@shared/schema/tables/reports';
 import { eq, like, and, lt, inArray, sql } from 'drizzle-orm';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 import { COPPA_ACTIONS } from '@shared/coppa-utils';
+import { generateParentEmailToken } from '../../packages/api/services/coppa-email-token-store';
 
 // ============================================================================
 // Mocks — must be declared before registerRoutes import
@@ -1175,48 +1176,51 @@ describe('C4: POST /api/coppa/consent/update-parent-email', () => {
     } catch { /* best-effort */ }
   });
 
-  it('valid username with needs_parent_email status + valid parentEmail → 200', async () => {
+  it('valid token with needs_parent_email status + valid parentEmail → 200', async () => {
+    const token = generateParentEmailToken(needsParentEmailUserId);
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: needsParentEmailUsername, parentEmail: 'parent@example.com' });
+      .send({ token, parentEmail: 'parent@example.com' });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.message).toBeTruthy();
   });
 
-  it('non-existent username → 200 (enumeration prevention)', async () => {
+  it('invalid token → 200 (enumeration prevention)', async () => {
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: 'definitely-does-not-exist-xyz123', parentEmail: 'parent@example.com' });
+      .send({ token: 'definitely-not-a-valid-token-xyz123', parentEmail: 'parent@example.com' });
 
-    // Must return 200 to prevent username enumeration
+    // Must return 200 to prevent enumeration
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
-  it('missing username → 400', async () => {
+  it('missing token → 400', async () => {
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
       .send({ parentEmail: 'parent@example.com' });
 
     expect(res.status).toBe(400);
-    expect(res.body.message).toMatch(/username/i);
+    expect(res.body.message).toMatch(/token/i);
   });
 
   it('missing parentEmail → 400', async () => {
+    const token = generateParentEmailToken(needsParentEmailUserId);
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: needsParentEmailUsername });
+      .send({ token });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/parentEmail/i);
   });
 
   it('invalid parentEmail format → 400', async () => {
+    const token = generateParentEmailToken(needsParentEmailUserId);
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: needsParentEmailUsername, parentEmail: 'not-a-valid-email' });
+      .send({ token, parentEmail: 'not-a-valid-email' });
 
     expect(res.status).toBe(400);
     expect(res.body.message).toMatch(/valid email/i);
@@ -1229,23 +1233,25 @@ describe('C4: POST /api/coppa/consent/update-parent-email', () => {
       .set({ coppaStatus: 'needs_parent_email' })
       .where(eq(users.id, needsParentEmailUserId));
 
+    const token = generateParentEmailToken(needsParentEmailUserId);
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: needsParentEmailUsername, parentEmail: needsParentEmailUserEmail });
+      .send({ token, parentEmail: needsParentEmailUserEmail });
 
-    // Returns 200 with generic message to prevent enumeration — same as non-existent user
+    // Returns 200 with generic message to prevent enumeration — same as invalid token
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });
 
-  it('username with non-needs_parent_email status (not_applicable) → 200 (enumeration prevention)', async () => {
-    // orgAdminUsername has coppaStatus: 'not_applicable'
+  it('token for user with non-needs_parent_email status (not_applicable) → 200 (enumeration prevention)', async () => {
+    // orgAdminId has coppaStatus: 'not_applicable'
     // The endpoint returns 200 with generic message regardless of user status to prevent enumeration
+    const token = generateParentEmailToken(orgAdminId);
     const res = await request(app)
       .post('/api/coppa/consent/update-parent-email')
-      .send({ username: orgAdminUsername, parentEmail: 'parent@example.com' });
+      .send({ token, parentEmail: 'parent@example.com' });
 
-    // Returns 200 with same generic response as non-existent user — prevents status enumeration
+    // Returns 200 with same generic response as invalid token — prevents status enumeration
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
   });

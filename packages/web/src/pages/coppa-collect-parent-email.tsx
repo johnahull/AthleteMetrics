@@ -6,9 +6,9 @@
  * so a consent request can be sent.
  *
  * Works without authentication — designed for the post-login-block flow.
- * Pass ?username= in the query string so the backend can identify the user.
+ * Uses an opaque single-use token (not username) to prevent minor enumeration.
  *
- * Route: /coppa/collect-parent-email
+ * Route: /coppa/collect-parent-email?token=xxx
  */
 import { useState } from 'react';
 import { useLocation } from 'wouter';
@@ -24,9 +24,9 @@ export default function CoppaCollectParentEmail() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
-  // Read username from query params (passed after login block)
+  // Read opaque token from query params (generated at login-block time)
   const searchParams = new URLSearchParams(window.location.search);
-  const usernameFromUrl = searchParams.get('username') || '';
+  const tokenFromUrl = searchParams.get('token') || '';
 
   const [parentEmail, setParentEmail] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -36,8 +36,8 @@ export default function CoppaCollectParentEmail() {
     e.preventDefault();
     setError('');
 
-    if (!usernameFromUrl) {
-      setError('Invalid link. Please go back to login and try again.');
+    if (!tokenFromUrl) {
+      setError('Invalid or expired link. Please go back to login and try again.');
       return;
     }
 
@@ -53,7 +53,7 @@ export default function CoppaCollectParentEmail() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username: usernameFromUrl,
+          token: tokenFromUrl,
           parentEmail: parentEmail.trim().toLowerCase(),
         }),
       });

@@ -13,6 +13,7 @@ import { coppaService } from "../services/coppa-service";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { storage } from "../storage";
 import { db } from "../db";
+import { consumeParentEmailToken } from "../services/coppa-email-token-store";
 import { users } from "@shared/schema/tables/core";
 import { eq, and, inArray } from "drizzle-orm";
 import { isUnder13, wasUnder13At, COPPA_ACTIONS } from "@shared/coppa-utils";
@@ -508,14 +509,18 @@ export function registerCoppaRoutes(app: Express) {
    * Allows providing a parent email without being logged in.
    * Rate limited to prevent enumeration/abuse.
    *
-   * Body: { username: string, parentEmail: string }
+   * Uses an opaque single-use token (generated at login-block time) instead of
+   * a username to prevent minor status enumeration via URL/request inspection.
+   *
+   * Body: { token: string, parentEmail: string }
    */
   app.post("/api/coppa/consent/update-parent-email", consentMutateLimiter, async (req, res) => {
     try {
-      const { username, parentEmail } = req.body;
+      const { token, parentEmail } = req.body;
+      const ANTI_ENUM = { success: true, message: "If the account exists, a consent email has been sent." };
 
-      if (!username || typeof username !== 'string') {
-        return res.status(400).json({ message: "username is required" });
+      if (!token || typeof token !== 'string') {
+        return res.status(400).json({ message: "token is required" });
       }
       if (!parentEmail || typeof parentEmail !== 'string') {
         return res.status(400).json({ message: "parentEmail is required" });
@@ -527,11 +532,16 @@ export function registerCoppaRoutes(app: Express) {
         return res.status(400).json({ message: "parentEmail must be a valid email address" });
       }
 
-      // Look up user by username
-      const user = await storage.getUserByUsername(username.toLowerCase());
+      // Consume the single-use token to get the userId
+      const userId = consumeParentEmailToken(token);
+      if (!userId) {
+        // Invalid/expired/already-used token — return anti-enumeration response
+        return res.json(ANTI_ENUM);
+      }
+
+      const user = await storage.getUser(userId);
       if (!user) {
-        // Return success to prevent username enumeration
-        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
+        return res.json(ANTI_ENUM);
       }
 
       // Handle both needs_parent_email (no email on file yet) and pending_consent
