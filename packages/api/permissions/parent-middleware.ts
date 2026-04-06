@@ -17,7 +17,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../db';
 import { parentAthleteLinks } from '@shared/schema/tables/coppa';
-import { isSiteAdmin } from './helpers';
+import { isSiteAdmin } from '@shared/auth-utils';
 
 /**
  * Require an active parent-to-athlete link for the authenticated user.
@@ -49,6 +49,23 @@ export function requireParentAccess(athleteIdParam = 'athleteId') {
     // Site admins have full access
     if (isSiteAdmin(user)) {
       return next();
+    }
+
+    // Only parent-role users may access parent routes (defense-in-depth:
+    // requireParentAccess is for parents only — if a future bug somehow sets
+    // parentUserId on a non-parent link, this check prevents access).
+    if (user.role !== 'parent') {
+      return res.status(403).json({ message: 'Access denied: parent role required' });
+    }
+
+    // Require email verification before granting data access.
+    // linkParentAccount() runs at registration time (before verification),
+    // so an unverified parent account could otherwise access the child's data.
+    if (!user.emailVerified) {
+      return res.status(403).json({
+        message: 'Email verification required. Please verify your email before accessing child data.',
+        code: 'email_verification_required',
+      });
     }
 
     const athleteId = req.params[athleteIdParam];

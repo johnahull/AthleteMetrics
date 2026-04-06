@@ -46,7 +46,7 @@ import { userOrganizations } from '@shared/schema/tables/membership';
 import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations, eventInvitations } from '@shared/schema/tables/events';
-import { reportShares } from '@shared/schema/tables/reports';
+import { reportShares, reports } from '@shared/schema/tables/reports';
 import { userGlobalAthleteLinks } from '@shared/schema/tables/global-athletes';
 import { pushSubscriptions, notificationPreferences, notificationHistory } from '@shared/schema/tables/notifications';
 import { userAchievements, goals } from '@shared/schema/tables/gamification';
@@ -322,12 +322,30 @@ export class CoppaDeletionService extends BaseService {
           deletedCategories.push(`event_invitations (${deletedInvitations.length})`);
         }
 
-        // STEP 4: Delete report shares
+        // STEP 4: Delete report shares and collect affected report IDs.
+        // We capture reportIds before deleting so we can null AI coaching
+        // insights on those reports in step 4b.
         const deletedShares = await tx.delete(reportShares)
           .where(eq(reportShares.athleteId, athleteUserId))
-          .returning({ id: reportShares.id });
+          .returning({ id: reportShares.id, reportId: reportShares.reportId });
         if (deletedShares.length > 0) {
           deletedCategories.push(`report_shares (${deletedShares.length})`);
+        }
+
+        // STEP 4b: Null AI coaching insights on affected reports.
+        // AI coaching insights may contain analysis derived from this athlete's
+        // measurements. We null the insights (not the report) to preserve the
+        // report structure while removing the PII-derived analysis.
+        const affectedReportIds = [...new Set(deletedShares.map(s => s.reportId))];
+        if (affectedReportIds.length > 0) {
+          await tx.update(reports)
+            .set({
+              coachingInsights: null,
+              coachingInsightsGeneratedAt: null,
+              coachingInsightsModel: null,
+            })
+            .where(inArray(reports.id, affectedReportIds));
+          deletedCategories.push(`ai_coaching_insights_cleared (${affectedReportIds.length} reports)`);
         }
 
         // STEP 5: Unlink from global athlete profiles

@@ -534,7 +534,11 @@ export function registerCoppaRoutes(app: Express) {
         return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
 
-      if (user.coppaStatus !== 'needs_parent_email') {
+      // Handle both needs_parent_email (no email on file yet) and pending_consent
+      // (email on file, parent hasn't responded). Both statuses need the ability
+      // to provide/resend to a parent email without being logged in, since
+      // pending_consent and needs_parent_email users are blocked from login.
+      if (!['needs_parent_email', 'pending_consent'].includes(user.coppaStatus)) {
         // Return same response as user-not-found to prevent enumeration
         return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
