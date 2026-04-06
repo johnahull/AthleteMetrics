@@ -144,8 +144,13 @@ export function FullscreenChartDialog({
 
   // Convert selected benchmark IDs to BenchmarkLine objects
   const effectiveBenchmarks = useMemo<BenchmarkLine[]>(() => {
-    if (!availableBenchmarks || localSelectedBenchmarkIds.length === 0) {
+    // If benchmarks haven't loaded yet, fall back to parent's initial selection
+    if (!availableBenchmarks) {
       return initialBenchmarks || [];
+    }
+    // If user explicitly deselected all benchmarks, respect that (return empty, not fallback)
+    if (localSelectedBenchmarkIds.length === 0) {
+      return [];
     }
 
     return availableBenchmarks
