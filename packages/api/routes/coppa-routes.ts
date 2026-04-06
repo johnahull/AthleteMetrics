@@ -322,10 +322,17 @@ export function registerCoppaRoutes(app: Express) {
 
       const minors = pageUsers.filter(u => {
         if (!u.birthDate) return false;
+        if (!u.createdAt) {
+          // Cannot determine age at registration — skip and log for manual review
+          console.warn(`[COPPA] Skipping user ${u.id} in retroactive scan: createdAt is null`);
+          errors.push(`${u.id}: skipped — createdAt is null, cannot determine age at registration`);
+          return false;
+        }
         try {
           // Was the user under 13 when they registered?
-          const registeredAt = u.createdAt ? new Date(u.createdAt) : new Date();
-          return wasUnder13At(u.birthDate, registeredAt);
+          // Use age-at-collection (createdAt), not current age —
+          // COPPA obligations attach at the time of data collection.
+          return wasUnder13At(u.birthDate, new Date(u.createdAt));
         } catch (e) {
           const msg = e instanceof Error ? e.message : 'Unknown error';
           console.error(`[COPPA] Failed to check age for user ${u.id}:`, msg);
@@ -334,63 +341,77 @@ export function registerCoppaRoutes(app: Express) {
         }
       });
 
-      for (const minor of minors) {
-        // Only process if they have a parentEmail on file
-        if (!minor.parentEmail) {
-          // Flag as needs_parent_email instead
-          await db.update(users)
-            .set({ coppaStatus: 'needs_parent_email', isMinor: true })
-            .where(eq(users.id, minor.id));
-          skipped++;
-          continue;
-        }
-
-        try {
-          const result = await coppaService.initiateConsent({
-            athleteUserId: minor.id,
-            parentEmail: minor.parentEmail,
-            ip: req.ip,
-            userAgent: req.get('User-Agent'),
-          });
-
-          if (result.success) {
-            initiated++;
-            // Small delay between email sends to avoid rate-limit bursts
-            await new Promise(resolve => setTimeout(resolve, RETROACTIVE_EMAIL_DELAY_MS));
-          } else {
-            errors.push(`${minor.id}: ${result.error}`);
-          }
-        } catch (e) {
-          errors.push(`${minor.id}: ${e instanceof Error ? e.message : 'Unknown error'}`);
-        }
-      }
-
-      // Write audit log for the scan itself
-      await coppaService.writeCoppaAudit({
-        action: COPPA_ACTIONS.RETROACTIVE_SCAN,
-        actorUserId: req.session.user?.id,
-        ip: req.ip,
-        details: {
-          scanned: minors.length,
-          initiated,
-          skipped,
-          errorCount: errors.length,
-          offset,
-          limit,
-        },
-      });
+      // Respond immediately — email-sending loop runs asynchronously to avoid
+      // blocking the HTTP thread for up to 200 × 100ms = 20 seconds.
+      const actorUserId = req.session.user?.id;
+      const scanIp = req.ip;
 
       res.json({
         success: true,
         scanned: minors.length,
-        initiated,
-        skipped,
-        errors: errors.slice(0, 10), // Return first 10 errors max
+        processing: true,
+        message: `Found ${minors.length} minor(s) to process. Emails are being sent asynchronously.`,
+        errors: errors.slice(0, 10),
         pagination: {
           offset,
           limit,
           nextOffset: pageUsers.length === limit ? offset + limit : null,
         },
+      });
+
+      // Fire-and-forget: process emails after response is sent
+      setImmediate(async () => {
+        for (const minor of minors) {
+          // Only process if they have a parentEmail on file
+          if (!minor.parentEmail) {
+            // Flag as needs_parent_email instead
+            try {
+              await db.update(users)
+                .set({ coppaStatus: 'needs_parent_email', isMinor: true })
+                .where(eq(users.id, minor.id));
+              skipped++;
+            } catch (e) {
+              console.error(`[COPPA] Failed to update user ${minor.id} to needs_parent_email:`, e);
+            }
+            continue;
+          }
+
+          try {
+            const result = await coppaService.initiateConsent({
+              athleteUserId: minor.id,
+              parentEmail: minor.parentEmail,
+              ip: scanIp,
+              userAgent: undefined,
+            });
+
+            if (result.success) {
+              initiated++;
+              // Small delay between email sends to avoid rate-limit bursts
+              await new Promise(resolve => setTimeout(resolve, RETROACTIVE_EMAIL_DELAY_MS));
+            } else {
+              errors.push(`${minor.id}: ${result.error}`);
+            }
+          } catch (e) {
+            errors.push(`${minor.id}: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          }
+        }
+
+        // Write audit log after processing completes
+        coppaService.writeCoppaAudit({
+          action: COPPA_ACTIONS.RETROACTIVE_SCAN,
+          actorUserId,
+          ip: scanIp,
+          details: {
+            scanned: minors.length,
+            initiated,
+            skipped,
+            errorCount: errors.length,
+            offset,
+            limit,
+          },
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write retroactive scan audit log:', err);
+        });
       });
     } catch (error) {
       console.error("[COPPA] POST /admin/coppa/retroactive error:", error);
@@ -517,6 +538,15 @@ export function registerCoppaRoutes(app: Express) {
       // Prevent parent email being same as athlete email
       if (parentEmail.toLowerCase() === (user.emails?.[0] || '').toLowerCase()) {
         // Return same response as user-not-found to prevent enumeration
+        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
+      }
+
+      // If parentEmail is already set on the account, only allow resending to the
+      // same address — not redirecting to an attacker-controlled address.
+      // An attacker who knows an athlete's username could otherwise send a consent
+      // link to themselves and grant/deny consent on behalf of the real parent.
+      if (user.parentEmail && user.parentEmail.toLowerCase() !== parentEmail.toLowerCase()) {
+        // Different email from what's on file — silently succeed (anti-enum, don't update)
         return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
 

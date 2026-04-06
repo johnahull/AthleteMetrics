@@ -13,7 +13,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, index, unique } from "drizzle-orm/pg-core";
 import { users, organizations } from "./core";
 import { coppaStatusEnum, consentStatusEnum } from "../enums";
 
@@ -80,6 +80,9 @@ export const parentAthleteLinks = pgTable("parent_athlete_links", {
   athleteIdx: index("parent_athlete_links_athlete_idx").on(table.athleteUserId),
   parentEmailIdx: index("parent_athlete_links_parent_email_idx").on(table.parentEmail),
   parentUserIdx: index("parent_athlete_links_parent_user_idx").on(table.parentUserId),
+  // Prevents duplicate rows on consent resend — enables onConflictDoUpdate in initiateConsent
+  parentEmailAthleteUnique: unique("parent_athlete_links_parent_email_athlete_user_id_unique")
+    .on(table.parentEmail, table.athleteUserId),
 }));
 
 /**

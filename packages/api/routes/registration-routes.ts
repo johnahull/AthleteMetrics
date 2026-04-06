@@ -76,10 +76,9 @@ const registrationSchema = z.object({
       (val) => validateLegalAcceptanceTimestamp(val),
       INVALID_TIMESTAMP_MESSAGE
     ),
-  // COPPA fields — birthDate is required; parentEmail required if under 13
+  // COPPA fields — birthDate is required for all registrations to enforce age checks
   birthDate: z.string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format")
-    .optional(),
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "birthDate must be in YYYY-MM-DD format"),
   parentEmail: z.string()
     .email("Parent email must be a valid email address")
     .max(255)
@@ -87,25 +86,30 @@ const registrationSchema = z.object({
     .trim()
     .optional(),
 }).superRefine((data, ctx) => {
-  // If under-13, parentEmail is required and must differ from athlete email
-  if (data.birthDate) {
-    let under13 = false;
-    try { under13 = isUnder13(data.birthDate); } catch { /* invalid date handled below */ }
-    if (under13) {
-      if (!data.parentEmail) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['parentEmail'],
-          message: "Parent or guardian email is required for athletes under 13.",
-        });
-      } else if (data.parentEmail === data.email) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: ['parentEmail'],
-          message: "Parent email must be different from the athlete's email.",
-        });
-      }
-    }
+  let under13 = false;
+  let teenMinor = false;
+  try {
+    under13 = isUnder13(data.birthDate);
+    teenMinor = isTeenMinor(data.birthDate);
+  } catch { /* invalid date format handled by regex above */ }
+
+  // parentEmail must differ from athlete email whenever it is provided
+  // (applies to both under-13 and 13-17 paths)
+  if (data.parentEmail && data.parentEmail === data.email) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['parentEmail'],
+      message: "Parent email must be different from the athlete's email.",
+    });
+  }
+
+  // Under-13: parentEmail is required
+  if (under13 && !data.parentEmail) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['parentEmail'],
+      message: "Parent or guardian email is required for athletes under 13.",
+    });
   }
 });
 
@@ -180,21 +184,29 @@ export function registerRegistrationRoutes(app: Express) {
       const { firstName, lastName, email, username, password, legalAcceptedAt, birthDate, parentEmail } = validationResult.data;
 
       // Determine age classification before creating the user
+      // birthDate is guaranteed by the Zod schema (required field)
       let under13 = false;
       let minor = false;
       let teenMinor = false;
-      if (birthDate) {
-        try {
-          under13 = isUnder13(birthDate);
-          minor = isMinorAge(birthDate);
-          teenMinor = isTeenMinor(birthDate);
-        } catch {
-          return res.status(400).json({
-            success: false,
-            message: "Invalid birthDate provided.",
-            errors: [{ field: 'birthDate', message: 'Invalid date format or future date.' }],
-          });
-        }
+      try {
+        under13 = isUnder13(birthDate);
+        minor = isMinorAge(birthDate);
+        teenMinor = isTeenMinor(birthDate);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid birthDate provided.",
+          errors: [{ field: 'birthDate', message: 'Invalid date format or future date.' }],
+        });
+      }
+
+      // Server-side COPPA guard (defense-in-depth beyond Zod validation)
+      if (under13 && !parentEmail) {
+        return res.status(400).json({
+          success: false,
+          message: "Parent email required for athletes under 13.",
+          errors: [{ field: 'parentEmail', message: 'Parent or guardian email is required for athletes under 13.' }],
+        });
       }
 
       // Check if username is already taken

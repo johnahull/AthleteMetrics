@@ -90,24 +90,18 @@ export function registerParentLinkRequestRoutes(app: Express) {
       }
 
       // Only parent accounts (or site admins) can submit link requests.
-      // Parent users are identified by having parentAthleteLinks rows (linked parents)
-      // or a 'parent' role in userOrganizations (org-assigned parent role).
-      if (!isSiteAdmin(sessionUser)) {
-        const [existingLinks, parentMemberships] = await Promise.all([
-          db.select({ id: parentAthleteLinks.id })
-            .from(parentAthleteLinks)
-            .where(eq(parentAthleteLinks.parentUserId, sessionUser.id))
-            .limit(1),
-          db.select({ id: userOrganizations.id })
-            .from(userOrganizations)
-            .where(and(
-              eq(userOrganizations.userId, sessionUser.id),
-              eq(userOrganizations.role, 'parent'),
-            ))
-            .limit(1),
-        ]);
-        const isParent = existingLinks.length > 0 || parentMemberships.length > 0;
-        if (!isParent) {
+      // Check the user's role first — standalone parents (registered via /register?role=parent)
+      // have role='parent' on the users record and may have no org memberships or links yet.
+      if (!isSiteAdmin(sessionUser) && sessionUser.role !== 'parent') {
+        // Fallback: check for org-assigned parent role (legacy path)
+        const [parentMemberships] = await db.select({ id: userOrganizations.id })
+          .from(userOrganizations)
+          .where(and(
+            eq(userOrganizations.userId, sessionUser.id),
+            eq(userOrganizations.role, 'parent'),
+          ))
+          .limit(1);
+        if (!parentMemberships) {
           return res.status(403).json({ message: "Only parent accounts can submit link requests" });
         }
       }
@@ -131,32 +125,6 @@ export function registerParentLinkRequestRoutes(app: Express) {
         return res.status(200).json({ success: true, message: ANTI_ENUM_MESSAGE });
       }
 
-      // Check for existing active parentAthleteLinks → skip silently
-      const existingLinks = await db
-        .select({ id: parentAthleteLinks.id })
-        .from(parentAthleteLinks)
-        .where(and(
-          eq(parentAthleteLinks.parentUserId, parentUserId),
-          eq(parentAthleteLinks.athleteUserId, child.id),
-          eq(parentAthleteLinks.isActive, true),
-        ));
-      if (existingLinks.length > 0) {
-        return res.status(200).json({ success: true, message: ANTI_ENUM_MESSAGE });
-      }
-
-      // Check for existing pending parentLinkRequests → skip silently
-      const existingRequests = await db
-        .select({ id: parentLinkRequests.id })
-        .from(parentLinkRequests)
-        .where(and(
-          eq(parentLinkRequests.parentUserId, parentUserId),
-          eq(parentLinkRequests.athleteUserId, child.id),
-          eq(parentLinkRequests.status, 'pending'),
-        ));
-      if (existingRequests.length > 0) {
-        return res.status(200).json({ success: true, message: ANTI_ENUM_MESSAGE });
-      }
-
       // Find child's org (take first membership, if any)
       const [childMembership] = await db
         .select({ organizationId: userOrganizations.organizationId })
@@ -165,15 +133,48 @@ export function registerParentLinkRequestRoutes(app: Express) {
         .limit(1);
       const organizationId = childMembership?.organizationId ?? null;
 
-      // Insert the link request
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      await db.insert(parentLinkRequests).values({
-        parentUserId,
-        athleteUserId: child.id,
-        organizationId,
-        status: 'pending',
-        expiresAt,
+      // Wrap duplicate-check + insert in a transaction to prevent concurrent
+      // duplicate requests from the same parent for the same child
+      let skippedDuplicate = false;
+      await db.transaction(async (tx) => {
+        // Check for existing active link → skip silently
+        const [existingLink] = await tx
+          .select({ id: parentAthleteLinks.id })
+          .from(parentAthleteLinks)
+          .where(and(
+            eq(parentAthleteLinks.parentUserId, parentUserId),
+            eq(parentAthleteLinks.athleteUserId, child!.id),
+            eq(parentAthleteLinks.isActive, true),
+          ))
+          .limit(1);
+        if (existingLink) { skippedDuplicate = true; return; }
+
+        // Check for existing pending request → skip silently
+        const [existingRequest] = await tx
+          .select({ id: parentLinkRequests.id })
+          .from(parentLinkRequests)
+          .where(and(
+            eq(parentLinkRequests.parentUserId, parentUserId),
+            eq(parentLinkRequests.athleteUserId, child!.id),
+            eq(parentLinkRequests.status, 'pending'),
+          ))
+          .limit(1);
+        if (existingRequest) { skippedDuplicate = true; return; }
+
+        // Insert the link request
+        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+        await tx.insert(parentLinkRequests).values({
+          parentUserId,
+          athleteUserId: child!.id,
+          organizationId,
+          status: 'pending',
+          expiresAt,
+        });
       });
+
+      if (skippedDuplicate) {
+        return res.status(200).json({ success: true, message: ANTI_ENUM_MESSAGE });
+      }
 
       // Fire-and-forget: notify coaches in the org
       if (organizationId) {
@@ -227,7 +228,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   // GET /api/parent/link-requests
   // Returns all link requests submitted by the authenticated parent.
   // ==========================================================================
-  app.get("/api/parent/link-requests", requireAuth, async (req, res) => {
+  app.get("/api/parent/link-requests", requireAuth, linkRequestLimiter, async (req, res) => {
     try {
       const parentUserId = req.session.user?.id;
       if (!parentUserId) {
@@ -264,7 +265,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   // DELETE /api/parent/link-requests/:id
   // Parent cancels their own pending request.
   // ==========================================================================
-  app.delete("/api/parent/link-requests/:id", requireAuth, async (req, res) => {
+  app.delete("/api/parent/link-requests/:id", requireAuth, linkRequestLimiter, async (req, res) => {
     try {
       const parentUserId = req.session.user?.id;
       if (!parentUserId) {

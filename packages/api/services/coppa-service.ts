@@ -111,10 +111,17 @@ export class CoppaService extends BaseService {
   /**
    * Initiate the VPC flow for an under-13 athlete:
    * 1. Generate token + hash
-   * 2. Store consent record (hash only)
-   * 3. Update user coppaStatus → 'pending_consent'
-   * 4. Send parental consent email (with raw token in link)
-   * 5. Write audit log
+   * 2. Expire any existing pending consents (deduplication)
+   * 3. Store consent record (hash only) — within transaction
+   * 4. Update user coppaStatus → 'pending_consent' — within transaction
+   * 5. Upsert parent-athlete link — within transaction
+   * 6. Write audit log
+   * 7. Send parental consent email (with raw token in link)
+   *
+   * All DB writes (steps 2-5) are wrapped in a single transaction. Without this,
+   * a crash after writing the consent record but before updating the user would
+   * leave the athlete with coppaStatus='not_applicable' while a consent record
+   * exists — they could log in without parental consent (COPPA violation).
    */
   async initiateConsent(params: InitiateConsentParams): Promise<InitiateConsentResult> {
     const { athleteUserId, parentEmail, organizationId, ip, userAgent } = params;
@@ -123,43 +130,60 @@ export class CoppaService extends BaseService {
       const rawToken = this.generateRawToken();
       const tokenHash = this.hashToken(rawToken);
       const expiresAt = getConsentTokenExpiry();
-      const retainUntil = getAuditRetentionDate();
 
-      // Create consent record (hash only — never raw token)
-      const [consent] = await db.insert(parentalConsents).values({
-        athleteUserId,
-        organizationId: organizationId ?? null,
-        parentEmail,
-        tokenHash,
-        status: 'pending',
-        expiresAt,
-        initiatedIp: ip ?? null,
-        initiatedUserAgent: userAgent ?? null,
-      }).returning({ id: parentalConsents.id });
+      let consentId: string;
 
-      // Update user COPPA status and link to consent record
-      await db.update(users)
-        .set({
-          coppaStatus: 'pending_consent',
-          isMinor: true,
+      // Wrap all DB writes in a transaction — atomic initiation prevents partial state
+      await db.transaction(async (tx) => {
+        // Expire any existing pending consents (deduplication — prevents multiple active tokens)
+        await tx.update(parentalConsents)
+          .set({ status: 'expired' as ConsentStatus })
+          .where(and(
+            eq(parentalConsents.athleteUserId, athleteUserId),
+            eq(parentalConsents.status, 'pending'),
+          ));
+
+        // Create new consent record (hash only — never raw token)
+        const [consent] = await tx.insert(parentalConsents).values({
+          athleteUserId,
+          organizationId: organizationId ?? null,
           parentEmail,
-          parentConsentId: consent.id,
-        })
-        .where(eq(users.id, athleteUserId));
+          tokenHash,
+          status: 'pending',
+          expiresAt,
+          initiatedIp: ip ?? null,
+          initiatedUserAgent: userAgent ?? null,
+        }).returning({ id: parentalConsents.id });
 
-      // Create parent-athlete link record
-      await db.insert(parentAthleteLinks).values({
-        parentEmail,
-        athleteUserId,
-        organizationId: organizationId ?? null,
-        consentId: consent.id,
-      }).onConflictDoNothing();
+        consentId = consent.id;
 
-      // Write audit log before sending email (email could fail — audit is priority)
+        // Update user COPPA status and link to consent record
+        await tx.update(users)
+          .set({
+            coppaStatus: 'pending_consent',
+            isMinor: true,
+            parentEmail,
+            parentConsentId: consent.id,
+          })
+          .where(eq(users.id, athleteUserId));
+
+        // Upsert parent-athlete link (unique on parentEmail+athleteUserId)
+        await tx.insert(parentAthleteLinks).values({
+          parentEmail,
+          athleteUserId,
+          organizationId: organizationId ?? null,
+          consentId: consent.id,
+        }).onConflictDoUpdate({
+          target: [parentAthleteLinks.parentEmail, parentAthleteLinks.athleteUserId],
+          set: { consentId: consent.id, organizationId: organizationId ?? null, isActive: true },
+        });
+      });
+
+      // Write audit log before sending email (audit is priority — email could fail)
       await this.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_INITIATED,
         athleteUserId,
-        consentId: consent.id,
+        consentId: consentId!,
         actorUserId: athleteUserId,
         ip,
         userAgent,
@@ -171,7 +195,7 @@ export class CoppaService extends BaseService {
       const emailSent = await this.emailService.sendParentalConsentRequest(parentEmail, {
         athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
         consentToken: rawToken,
-        consentId: consent.id,
+        consentId: consentId!,
         expiresAt,
       });
 
@@ -179,7 +203,7 @@ export class CoppaService extends BaseService {
         console.error(`[COPPA] Consent email failed to send for athlete ${athleteUserId} to ${parentEmail}`);
       }
 
-      return { success: true, consentId: consent.id, emailSent };
+      return { success: true, consentId: consentId!, emailSent };
     } catch (error) {
       console.error('[COPPA] initiateConsent failed:', error);
       return {
