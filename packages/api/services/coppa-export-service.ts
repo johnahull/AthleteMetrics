@@ -27,7 +27,7 @@ import { users } from '@shared/schema/tables/core';
 import { measurements } from '@shared/schema/tables/measurements';
 import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations } from '@shared/schema/tables/events';
-import { reportSnapshots, reports } from '@shared/schema/tables/reports';
+import { reportSnapshots, reports, reportShares } from '@shared/schema/tables/reports';
 import { COPPA_ACTIONS, getAuditRetentionDate } from '@shared/coppa-utils';
 
 // ============================================================================
@@ -348,14 +348,7 @@ export class CoppaExportService extends BaseService {
       .from(eventRegistrations)
       .where(eq(eventRegistrations.userId, athleteUserId));
 
-    // Collect report snapshots where the athlete's data may appear.
-    // Report snapshots don't have a direct athleteUserId FK — athletes are
-    // referenced inside snapshotData.dataSnapshot.athletes[] (JSONB).
-    // We use a pragmatic approach: query snapshots from the athlete's org(s)
-    // that are flagged as containing minor data.
-    const userOrgs = await this.storage.getUserOrganizations(athleteUserId);
-    const orgIds = userOrgs.map(o => o.organizationId);
-
+    // Collect report snapshots for reports explicitly shared with this athlete.
     let athleteReportSnapshots: Array<{
       id: string;
       reportId: string;
@@ -365,7 +358,15 @@ export class CoppaExportService extends BaseService {
       publicAccessRestricted: boolean;
     }> = [];
 
-    if (orgIds.length > 0) {
+    // Only include snapshots for reports explicitly shared with this athlete.
+    // The previous approach used the athlete's org membership as a proxy, which
+    // returned snapshots for ALL minors in the org — disclosing other children's
+    // report metadata to an unauthorized parent (a COPPA violation).
+    const sharedReportIds = await db.select({ reportId: reportShares.reportId })
+      .from(reportShares)
+      .where(eq(reportShares.athleteId, athleteUserId));
+
+    if (sharedReportIds.length > 0) {
       athleteReportSnapshots = await db.select({
         id: reportSnapshots.id,
         reportId: reportSnapshots.reportId,
@@ -375,11 +376,7 @@ export class CoppaExportService extends BaseService {
         publicAccessRestricted: reportSnapshots.publicAccessRestricted,
       })
         .from(reportSnapshots)
-        .innerJoin(reports, eq(reportSnapshots.reportId, reports.id))
-        .where(and(
-          eq(reportSnapshots.containsMinorData, true),
-          inArray(reports.organizationId, orgIds),
-        ));
+        .where(inArray(reportSnapshots.reportId, sharedReportIds.map(r => r.reportId)));
     }
 
     return {
