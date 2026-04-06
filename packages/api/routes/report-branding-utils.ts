@@ -4,10 +4,13 @@
 
 /**
  * Parse hex color string to RGB tuple.
- * Returns a default blue if the input is not a valid 6-digit hex color.
+ * Returns a default blue [41, 128, 185] if the input is not a valid 6-digit hex color.
+ * Note: this fallback is silent — callers receive a valid tuple with no indication
+ * that the input was invalid. Fine for PDF rendering where a sensible default is
+ * preferable to an error, but do not rely on this function for input validation.
  */
 export function hexToRgb(hex: string): [number, number, number] {
-  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return [41, 128, 185]; // Fallback to default blue
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return [41, 128, 185]; // Silent fallback to default blue
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
@@ -21,8 +24,10 @@ export function hexToRgb(hex: string): [number, number, number] {
  * Known limitation: DNS rebinding is not mitigated here. A domain could resolve
  * to a public IP during this hostname check and then resolve to a private IP at
  * actual fetch time. The blast radius is limited because only org admins can set
- * brandLogoUrl, but deployments in highly sensitive environments should consider
- * an egress proxy or allowlist-based approach for complete protection.
+ * brandLogoUrl. Partial mitigations in fetchLogoBase64 (5s timeout, 2 MB cap,
+ * redirect: 'error') reduce the window and limit exfiltration size, but do not
+ * fully prevent a rebinding attack. Deployments in highly sensitive environments
+ * should consider an egress proxy or allowlist-based approach.
  */
 export function isSafeLogoUrl(url: string): boolean {
   try {
@@ -72,8 +77,10 @@ export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | nu
     });
     if (!response.ok) return null;
     const contentType = response.headers.get('content-type') || '';
-    const isJpeg = contentType.includes('jpeg') || contentType.includes('jpg');
-    const isPng = contentType.includes('png');
+    // Use startsWith for precise MIME type matching — .includes() would accept
+    // spoofed types like "text/html; x-hint=jpeg" as valid image content.
+    const isJpeg = contentType.startsWith('image/jpeg') || contentType.startsWith('image/jpg');
+    const isPng = contentType.startsWith('image/png');
     if (!isJpeg && !isPng) return null; // Reject SVG, WebP, etc.
     // Fast reject if Content-Length header indicates oversized image (before buffering)
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);

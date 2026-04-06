@@ -205,6 +205,16 @@ describe('fetchLogoBase64', () => {
     expect(await fetchLogoBase64('https://example.com/logo.svg')).toBeNull();
   });
 
+  it('returns null for spoofed content-type text/html; x-hint=jpeg', async () => {
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'text/html; x-hint=jpeg' }));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns null for spoofed content-type application/octet-stream; hint=png', async () => {
+    vi.stubGlobal('fetch', () => makeFetchResponse({ contentType: 'application/octet-stream; hint=png' }));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
   it('returns null when image exceeds 2 MB', async () => {
     const bigBuffer = new ArrayBuffer(3 * 1024 * 1024);
     vi.stubGlobal('fetch', () => makeFetchResponse({ body: bigBuffer }));
