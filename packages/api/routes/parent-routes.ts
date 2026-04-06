@@ -219,6 +219,7 @@ export function registerParentRoutes(app: Express) {
   app.post(
     "/api/parent/children/:athleteId/unlink",
     requireAuth,
+    parentReadLimiter,
     requireParentAccess('athleteId'),
     async (req: AuthenticatedRequest, res) => {
       try {

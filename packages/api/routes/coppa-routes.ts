@@ -67,17 +67,19 @@ export function registerCoppaRoutes(app: Express) {
         return res.status(400).json({ message: "COPPA consent initiation not applicable for this account." });
       }
 
-      const { parentEmail } = req.body;
-      if (!parentEmail || typeof parentEmail !== 'string') {
+      const { parentEmail: rawParentEmail } = req.body;
+      if (!rawParentEmail || typeof rawParentEmail !== 'string') {
         return res.status(400).json({ message: "parentEmail is required" });
       }
+
+      const parentEmail = rawParentEmail.toLowerCase().trim();
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(parentEmail)) {
         return res.status(400).json({ message: "parentEmail must be a valid email address" });
       }
 
-      if (parentEmail.toLowerCase() === (user.emails?.[0] || '').toLowerCase()) {
+      if (parentEmail === (user.emails?.[0] || '').toLowerCase()) {
         return res.status(400).json({
           code: 'parent_email_must_differ',
           message: "Parent email must be different from the athlete's email address.",
@@ -433,11 +435,13 @@ export function registerCoppaRoutes(app: Express) {
       }
 
       const { athleteId } = req.params;
-      const { parentEmail } = req.body;
+      const { parentEmail: rawParentEmail } = req.body;
 
-      if (!parentEmail || typeof parentEmail !== 'string') {
+      if (!rawParentEmail || typeof rawParentEmail !== 'string') {
         return res.status(400).json({ message: "parentEmail is required" });
       }
+
+      const parentEmail = rawParentEmail.toLowerCase().trim();
 
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(parentEmail)) {
@@ -471,7 +475,7 @@ export function registerCoppaRoutes(app: Express) {
 
       const result = await coppaService.initiateConsent({
         athleteUserId: athleteId,
-        parentEmail: parentEmail.toLowerCase(),
+        parentEmail,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
       });
@@ -486,7 +490,7 @@ export function registerCoppaRoutes(app: Express) {
         actorUserId: actorUser.id,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
-        details: { parentEmail: parentEmail.toLowerCase(), source: 'admin_re_initiate' },
+        details: { parentEmail, source: 'admin_re_initiate' },
       }).catch((err) => {
         console.error('[COPPA] Failed to write admin re-initiate audit log:', err);
       });

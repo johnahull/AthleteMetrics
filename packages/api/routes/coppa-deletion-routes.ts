@@ -21,11 +21,14 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { z } from "zod";
+import { eq, and } from "drizzle-orm";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { coppaDeletionService } from "../services/coppa-deletion-service";
 import { coppaService } from "../services/coppa-service";
 import { storage } from "../storage";
+import { db } from "../db";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 
 // ============================================================================
 // Rate limiters
@@ -113,15 +116,30 @@ export function registerCoppaDeletionRoutes(app: Express) {
           actorUserId = actor.id;
 
           if (!actor.isSiteAdmin) {
-            // org_admin: must share an org with the athlete
-            const actorOrgs = await storage.getUserOrganizations(actor.id);
-            const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
-            const authorized = actorOrgs.some(ao =>
-              ao.role === 'org_admin' &&
-              athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
-            );
-            if (!authorized) {
-              return res.status(403).json({ message: "Insufficient permissions" });
+            if ((actor as any).role === 'parent') {
+              // Authenticated parent: must have an active link to the target athlete
+              const parentLink = await db.select({ id: parentAthleteLinks.id })
+                .from(parentAthleteLinks)
+                .where(and(
+                  eq(parentAthleteLinks.parentUserId, actor.id),
+                  eq(parentAthleteLinks.athleteUserId, athleteUserId),
+                  eq(parentAthleteLinks.isActive, true),
+                ))
+                .limit(1);
+              if (parentLink.length === 0) {
+                return res.status(403).json({ message: "Insufficient permissions" });
+              }
+            } else {
+              // org_admin: must share an org with the athlete
+              const actorOrgs = await storage.getUserOrganizations(actor.id);
+              const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
+              const authorized = actorOrgs.some(ao =>
+                ao.role === 'org_admin' &&
+                athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
+              );
+              if (!authorized) {
+                return res.status(403).json({ message: "Insufficient permissions" });
+              }
             }
           }
         } else if (consentToken) {
