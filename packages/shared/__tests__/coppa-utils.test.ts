@@ -95,8 +95,11 @@ describe('calculateAge()', () => {
   it('throws for a future date', () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const futureDateStr = tomorrow.toISOString().split('T')[0];
-    expect(() => calculateAge(futureDateStr)).toThrow();
+    // Use local date parts to avoid UTC vs local timezone mismatch
+    const y = tomorrow.getFullYear();
+    const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const d = String(tomorrow.getDate()).padStart(2, '0');
+    expect(() => calculateAge(`${y}-${m}-${d}`)).toThrow();
   });
 
   it('throws for null input', () => {
@@ -183,7 +186,10 @@ describe('isUnder13() — LEGAL EXPOSURE', () => {
   it('throws for a future date', () => {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
-    expect(() => isUnder13(tomorrow.toISOString().split('T')[0])).toThrow();
+    const y = tomorrow.getFullYear();
+    const m = String(tomorrow.getMonth() + 1).padStart(2, '0');
+    const d = String(tomorrow.getDate()).padStart(2, '0');
+    expect(() => isUnder13(`${y}-${m}-${d}`)).toThrow();
   });
 
   it('throws for null', () => {

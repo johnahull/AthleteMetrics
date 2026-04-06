@@ -137,22 +137,14 @@ export class AuthService extends BaseService {
         };
       }
 
-      // If the user record already carries the parent role, trust it — no extra DB query needed.
-      // A parent who has all links deactivated should still be treated as a parent at login;
-      // they simply won't have any children to view.
-      if (user.role === 'parent') {
-        return {
-          role: "parent",
-          primaryOrganizationId: undefined,
-        };
-      }
-
       // Get user's organization memberships
       const organizations = await this.getUserOrganizations(user.id);
 
       if (organizations.length === 0) {
-        // Fallback: infer parent role from active parentAthleteLinks for users whose
-        // role column may not yet be set (e.g. legacy records created before parent role column existed).
+        // Infer parent role from active parentAthleteLinks.
+        // The users table has no 'role' column — parent identity is determined
+        // by having active parent-athlete links. A parent whose links are all
+        // deactivated (consent denied/revoked) correctly falls through to 'athlete'.
         const parentLinks = await db
           .select({ id: parentAthleteLinks.id })
           .from(parentAthleteLinks)

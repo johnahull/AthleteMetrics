@@ -292,40 +292,55 @@ export class CoppaService extends BaseService {
     const { consentId, aiConsentGranted, ip, userAgent } = params;
 
     try {
-      // Atomic update — only proceeds if status is still 'pending'
-      const [updatedConsent] = await db.update(parentalConsents)
-        .set({
-          status: 'confirmed' as ConsentStatus,
-          aiConsentGranted,
-          confirmedAt: new Date(),
-          confirmedIp: ip ?? null,
-          confirmedUserAgent: userAgent ?? null,
-        })
-        .where(and(
-          eq(parentalConsents.id, consentId),
-          eq(parentalConsents.status, 'pending'),
-        ))
-        .returning();
+      // Atomically confirm consent AND update the user's coppaStatus.
+      // Without a transaction, a crash between these two writes would leave
+      // the consent as 'confirmed' but the user stuck in 'pending_consent',
+      // permanently blocking their login with no recovery path.
+      let updatedConsent: typeof parentalConsents.$inferSelect | undefined;
 
-      if (!updatedConsent) {
-        // Either already confirmed, revoked, or expired — log replay attempt
-        await this.writeCoppaAudit({
-          action: COPPA_ACTIONS.TOKEN_REPLAY_ATTEMPT,
-          consentId,
-          ip,
-          userAgent,
-          details: { attemptedAction: 'confirm' },
+      try {
+        const result = await db.transaction(async (tx) => {
+          const [consent] = await tx.update(parentalConsents)
+            .set({
+              status: 'confirmed' as ConsentStatus,
+              aiConsentGranted,
+              confirmedAt: new Date(),
+              confirmedIp: ip ?? null,
+              confirmedUserAgent: userAgent ?? null,
+            })
+            .where(and(
+              eq(parentalConsents.id, consentId),
+              eq(parentalConsents.status, 'pending'),
+            ))
+            .returning();
+
+          if (!consent) {
+            throw new Error('CONSENT_REPLAY');
+          }
+
+          await tx.update(users)
+            .set({
+              coppaStatus: 'consented',
+              coppaConsentConfirmedAt: new Date(),
+            })
+            .where(eq(users.id, consent.athleteUserId));
+
+          return consent;
         });
-        return { success: false, error: 'Consent token already used or expired.' };
+        updatedConsent = result;
+      } catch (txError) {
+        if (txError instanceof Error && txError.message === 'CONSENT_REPLAY') {
+          await this.writeCoppaAudit({
+            action: COPPA_ACTIONS.TOKEN_REPLAY_ATTEMPT,
+            consentId,
+            ip,
+            userAgent,
+            details: { attemptedAction: 'confirm' },
+          });
+          return { success: false, error: 'Consent token already used or expired.' };
+        }
+        throw txError;
       }
-
-      // Update user to 'consented' with AI consent status
-      await db.update(users)
-        .set({
-          coppaStatus: 'consented',
-          coppaConsentConfirmedAt: new Date(),
-        })
-        .where(eq(users.id, updatedConsent.athleteUserId));
 
       await this.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_CONFIRMED,
@@ -456,21 +471,22 @@ export class CoppaService extends BaseService {
           details: { revokeAiOnly: true },
         });
       } else {
-        // Full consent revocation
-        const updated = await db.update(parentalConsents)
-          .set({ status: 'revoked' as ConsentStatus, revokedAt: new Date() })
-          .where(and(
-            eq(parentalConsents.athleteUserId, athleteUserId),
-            eq(parentalConsents.status, 'confirmed'),
-          ))
-          .returning({ id: parentalConsents.id });
-
-        if (updated.length === 0) {
-          return { success: false, error: 'No active consent found to revoke' };
-        }
-
-        // Atomically revoke user access and deactivate parent links.
+        // Full consent revocation — atomically revoke consent, user access,
+        // and parent links in a single transaction. Without this, a window
+        // exists where consent is revoked but the user still has active access.
+        let revokedCount = 0;
         await db.transaction(async (tx) => {
+          const updated = await tx.update(parentalConsents)
+            .set({ status: 'revoked' as ConsentStatus, revokedAt: new Date() })
+            .where(and(
+              eq(parentalConsents.athleteUserId, athleteUserId),
+              eq(parentalConsents.status, 'confirmed'),
+            ))
+            .returning({ id: parentalConsents.id });
+
+          revokedCount = updated.length;
+          if (revokedCount === 0) return; // no-op; checked after transaction
+
           await tx.update(users)
             .set({ coppaStatus: 'consent_revoked' })
             .where(eq(users.id, athleteUserId));
@@ -482,6 +498,10 @@ export class CoppaService extends BaseService {
               eq(parentAthleteLinks.isActive, true),
             ));
         });
+
+        if (revokedCount === 0) {
+          return { success: false, error: 'No active consent found to revoke' };
+        }
 
         await this.writeCoppaAudit({
           action: COPPA_ACTIONS.CONSENT_REVOKED,

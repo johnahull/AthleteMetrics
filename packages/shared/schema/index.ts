@@ -21,7 +21,8 @@ export * from "./constants";
 export type {
   // COPPA
   ParentalConsent, InsertParentalConsent, ParentAthleteLink, CoppaAuditLog,
-  DataDeletionRequest, DataExportRequest, CoppaStatus, ConsentStatus,
+  DataDeletionRequest, DataExportRequest, ParentLinkRequest, InsertParentLinkRequest,
+  CoppaStatus, ConsentStatus,
   // Core
   Organization, Team, User, AthleteProfile, UserTeam,
   // Metrics

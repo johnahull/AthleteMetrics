@@ -404,6 +404,10 @@ export class CoppaDeletionService extends BaseService {
             deletedAt: new Date(),
             coppaStatus: 'consent_revoked',
             // Clear PII fields while retaining the record
+            firstName: '[Deleted]',
+            lastName: '[Deleted]',
+            fullName: '[Deleted]',
+            username: `deleted_${athleteUserId.slice(0, 8)}_${Date.now()}`,
             password: null,
             emails: [],
             phoneNumbers: null,
