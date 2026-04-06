@@ -145,6 +145,9 @@ jobs:
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "$PAYLOAD")
           echo "Source update: $RESULT"
+          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::warning::serviceInstanceUpdate returned errors: $RESULT"
+          fi
 
           # Step 2: Create a deployment trigger for the PR branch
           # If the trigger already exists (reused environment), this returns null
@@ -158,6 +161,9 @@ jobs:
             -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
             -d "$PAYLOAD")
           echo "Trigger create: $RESULT"
+          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::warning::deploymentTriggerCreate returned errors: $RESULT"
+          fi
 
           # If the trigger was created, use it. Otherwise assume it already exists
           # (reused environment) and let Railway's auto-deploy webhook handle it.
@@ -282,8 +288,10 @@ jobs:
 
   cleanup-preview:
     name: Cleanup PR Preview
+    needs: [deploy-preview]
     runs-on: ubuntu-latest
     if: >
+      always() &&
       github.event.action == 'closed' &&
       github.event.pull_request.head.repo.full_name == github.repository
 
