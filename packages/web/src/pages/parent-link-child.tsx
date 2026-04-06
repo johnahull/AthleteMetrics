@@ -25,14 +25,16 @@ export default function ParentLinkChild() {
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
 
-  // Role guard — redirect unauthenticated users
+  // Role guard — only parents can access this page
   useEffect(() => {
     if (!user) {
       setLocation('/login');
+    } else if (user.role !== 'parent') {
+      setLocation('/dashboard');
     }
   }, [user, setLocation]);
 
-  if (!user) return null;
+  if (!user || user.role !== 'parent') return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

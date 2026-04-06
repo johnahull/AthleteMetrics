@@ -9,6 +9,7 @@ import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import { storage } from "../storage";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -190,7 +191,18 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const targetUserId = req.params.userId;
-      
+
+      // Block impersonation of minors without parental consent — accessing
+      // a child's data before the parent has consented is a COPPA violation
+      // regardless of admin privilege level.
+      const targetCheck = await storage.getUser(targetUserId);
+      if (targetCheck && ['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(targetCheck.coppaStatus ?? '')) {
+        return res.status(403).json({
+          message: "Cannot impersonate this account: parental consent has not been granted.",
+          code: "coppa_impersonation_blocked",
+        });
+      }
+
       const targetUser = await authService.startImpersonation(req.session.user.id, targetUserId);
 
       // Determine target user's actual role and organization context

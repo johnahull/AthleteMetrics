@@ -136,13 +136,20 @@ export function registerCoppaRoutes(app: Express) {
       const consent = result.consent!;
       const athlete = await storage.getUser(consent.athleteUserId);
 
-      // Return minimal PII — just what the consent page needs to render
+      // Return minimal PII — mask the parent email to prevent full address
+      // exposure to anyone who obtains the token (e.g. from server logs).
+      const maskedEmail = (() => {
+        const [local, domain] = consent.parentEmail.split('@');
+        if (!domain) return '***';
+        return `${local[0]}${'*'.repeat(Math.min(local.length - 1, 5))}@${domain}`;
+      })();
+
       res.json({
         valid: true,
         consentId: consent.id,
         athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
         expiresAt: consent.expiresAt.toISOString(),
-        parentEmail: consent.parentEmail,
+        parentEmail: maskedEmail,
       });
     } catch (error) {
       console.error("[COPPA] GET /consent/verify/:token error:", error);

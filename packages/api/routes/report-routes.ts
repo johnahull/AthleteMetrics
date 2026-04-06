@@ -1476,12 +1476,13 @@ export function registerReportRoutes(app: Express) {
           const canAccess = await coppaService.canAccessAI(athleteId);
           if (!canAccess) {
             const athlete = await storage.getUser(athleteId);
-            if (athlete?.isMinor) {
+            // Block if minor, or if athlete can't be found (fail closed)
+            if (!athlete || athlete.isMinor) {
               return res.status(403).json({
                 code: 'ai_consent_required',
                 message: "AI coaching insights require parental consent for AI features for this athlete.",
                 featureDisabled: true,
-                reason: 'minor_without_ai_consent',
+                reason: !athlete ? 'athlete_not_found' : 'minor_without_ai_consent',
               });
             }
           }

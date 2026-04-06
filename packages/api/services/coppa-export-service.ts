@@ -256,11 +256,10 @@ export class CoppaExportService extends BaseService {
         return { success: false, error: 'Export is not ready for download.', statusCode: 400 };
       }
 
-      // Build the export bundle
-      const bundle = await this.buildExportBundle(exportRequest.athleteUserId);
-
-      // Atomically mark as delivered — prevent race conditions
-      const [updated] = await db.update(dataExportRequests)
+      // Atomically claim the token BEFORE building the bundle.
+      // This prevents a race where two concurrent requests both build
+      // the full PII bundle before one of them discovers it lost the race.
+      const [claimed] = await db.update(dataExportRequests)
         .set({
           status: 'delivered',
           deliveredAt: new Date(),
@@ -271,10 +270,12 @@ export class CoppaExportService extends BaseService {
         ))
         .returning({ id: dataExportRequests.id });
 
-      if (!updated) {
-        // Race condition: another request already delivered this token
+      if (!claimed) {
         return { success: false, error: 'This download link has already been used.', statusCode: 410 };
       }
+
+      // Build the export bundle only after successful claim
+      const bundle = await this.buildExportBundle(exportRequest.athleteUserId);
 
       // Write audit log after successful delivery
       await this.writeCoppaAudit({

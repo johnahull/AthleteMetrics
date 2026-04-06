@@ -9,7 +9,7 @@
  *
  * Route: /parent/children/:athleteId
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useLocation } from 'wouter';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import {
@@ -109,6 +109,14 @@ export default function ParentChildDetail() {
   const { athleteId } = useParams<{ athleteId: string }>();
   const [, setLocation] = useLocation();
   const { user, logout } = useAuth();
+
+  // Role guard — only parents can access this page
+  useEffect(() => {
+    if (user && user.role !== 'parent') {
+      setLocation('/dashboard');
+    }
+  }, [user, setLocation]);
+
   const [exportSuccess, setExportSuccess] = useState(false);
   const [deletionSuccess, setDeletionSuccess] = useState(false);
 

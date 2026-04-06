@@ -6,6 +6,7 @@
  *
  * Route: /parent-dashboard
  */
+import { useEffect } from 'react';
 import { useLocation } from 'wouter';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -72,13 +73,20 @@ export default function ParentDashboard() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Role guard — only parents can access this page
+  useEffect(() => {
+    if (user && user.role !== 'parent') {
+      setLocation('/dashboard');
+    }
+  }, [user, setLocation]);
+
   const {
     data: children,
     isLoading,
     error,
   } = useQuery<LinkedChildLink[]>({
     queryKey: ['/api/parent/children'],
-    enabled: !!user,
+    enabled: !!user && user.role === 'parent',
   });
 
   const {

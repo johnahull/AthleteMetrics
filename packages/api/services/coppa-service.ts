@@ -261,6 +261,11 @@ export class CoppaService extends BaseService {
         return { confirmed: false, reason: 'expired' };
       }
 
+      // Check actual expiry even if status wasn't transitioned by the cleanup job
+      if (consent.expiresAt && new Date() > consent.expiresAt) {
+        return { confirmed: false, reason: 'expired' };
+      }
+
       if (consent.status === 'pending') {
         // Token exists but consent was never completed
         return { confirmed: false, reason: 'pending' };
@@ -377,46 +382,58 @@ export class CoppaService extends BaseService {
    */
   async denyConsent(consentId: string, ip?: string, userAgent?: string): Promise<ConfirmConsentResult> {
     try {
-      const [updatedConsent] = await db.update(parentalConsents)
-        .set({
-          status: 'revoked' as ConsentStatus,
-          revokedAt: new Date(),
-          confirmedIp: ip ?? null,
-          confirmedUserAgent: userAgent ?? null,
-        })
-        .where(and(
-          eq(parentalConsents.id, consentId),
-          eq(parentalConsents.status, 'pending'),
-        ))
-        .returning();
+      // Atomically deny consent, revoke user access, and deactivate parent links.
+      // All three updates must be in a single transaction — if the process crashes
+      // after updating the consent but before updating the user, the athlete is
+      // permanently login-blocked with no recovery path.
+      let updatedConsent: typeof parentalConsents.$inferSelect | undefined;
 
-      if (!updatedConsent) {
-        await this.writeCoppaAudit({
-          action: COPPA_ACTIONS.TOKEN_REPLAY_ATTEMPT,
-          consentId,
-          ip,
-          userAgent,
-          details: { attemptedAction: 'deny' },
+      try {
+        const result = await db.transaction(async (tx) => {
+          const [consent] = await tx.update(parentalConsents)
+            .set({
+              status: 'revoked' as ConsentStatus,
+              revokedAt: new Date(),
+              confirmedIp: ip ?? null,
+              confirmedUserAgent: userAgent ?? null,
+            })
+            .where(and(
+              eq(parentalConsents.id, consentId),
+              eq(parentalConsents.status, 'pending'),
+            ))
+            .returning();
+
+          if (!consent) {
+            throw new Error('CONSENT_REPLAY');
+          }
+
+          await tx.update(users)
+            .set({ coppaStatus: 'consent_revoked' })
+            .where(eq(users.id, consent.athleteUserId));
+
+          await tx.update(parentAthleteLinks)
+            .set({ isActive: false })
+            .where(and(
+              eq(parentAthleteLinks.athleteUserId, consent.athleteUserId),
+              eq(parentAthleteLinks.isActive, true),
+            ));
+
+          return consent;
         });
-        return { success: false, error: 'Consent token already used or expired.' };
+        updatedConsent = result;
+      } catch (txError) {
+        if (txError instanceof Error && txError.message === 'CONSENT_REPLAY') {
+          await this.writeCoppaAudit({
+            action: COPPA_ACTIONS.TOKEN_REPLAY_ATTEMPT,
+            consentId,
+            ip,
+            userAgent,
+            details: { attemptedAction: 'deny' },
+          });
+          return { success: false, error: 'Consent token already used or expired.' };
+        }
+        throw txError;
       }
-
-      // Atomically revoke user access and deactivate parent links.
-      // Without a transaction, a failure after updating coppaStatus but before
-      // deactivating links would leave an inconsistent state where the parent
-      // could still access child data via active links.
-      await db.transaction(async (tx) => {
-        await tx.update(users)
-          .set({ coppaStatus: 'consent_revoked' })
-          .where(eq(users.id, updatedConsent.athleteUserId));
-
-        await tx.update(parentAthleteLinks)
-          .set({ isActive: false })
-          .where(and(
-            eq(parentAthleteLinks.athleteUserId, updatedConsent.athleteUserId),
-            eq(parentAthleteLinks.isActive, true),
-          ));
-      });
 
       await this.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_DENIED,
