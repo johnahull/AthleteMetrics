@@ -659,6 +659,8 @@ test.describe('Scenario 8: Parent Account Registration', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 test.describe('Scenario 9: Parent Dashboard', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
+
   test('parent dashboard shows linked children and Link a Child button', async ({ page }) => {
     if (!COPPA_USERS.parent.username) {
       test.skip(true, 'Parent test user not configured');
@@ -670,13 +672,6 @@ test.describe('Scenario 9: Parent Dashboard', () => {
     await page.waitForLoadState('networkidle');
     await dismissOnboarding(page);
     await page.waitForTimeout(2000);
-
-    // Check if we were redirected away (deployed code may not have parent role detection)
-    if (!page.url().includes('/parent-dashboard')) {
-      console.log(`[Scenario 9] Redirected away from /parent-dashboard to ${page.url()} — deployed code may not recognize parent role yet`);
-      test.skip(true, 'Parent role not recognized by deployed code — parent dashboard redirect occurred');
-      return;
-    }
 
     // Verify "My Children" heading
     await expect(
@@ -695,6 +690,7 @@ test.describe('Scenario 9: Parent Dashboard', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 test.describe('Scenario 10 & 11: Parent Child Detail', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
   test('parent can view child profile and data rights tab', async ({ page }) => {
     if (!COPPA_USERS.parent.username) {
       test.skip(true, 'Parent test user not configured');
@@ -739,6 +735,7 @@ test.describe('Scenario 10 & 11: Parent Child Detail', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 test.describe('Scenario 14: Role Guards on Parent Routes', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
   test('non-parent user is redirected away from parent routes', async ({ page }) => {
     if (!COPPA_USERS.athlete.username) {
       test.skip(true, 'Athlete test user not configured');
@@ -769,6 +766,7 @@ test.describe('Scenario 14: Role Guards on Parent Routes', () => {
 // ════════════════════════════════════════════════════════════════════════════
 
 test.describe('Scenario 16: Impersonation COPPA Block', () => {
+  test.use({ storageState: { cookies: [], origins: [] } });
   test('site admin cannot impersonate COPPA-blocked minor', async ({ page }) => {
     if (!COPPA_USERS.siteAdmin.username) {
       test.skip(true, 'Site admin test user not configured');
