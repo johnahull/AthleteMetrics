@@ -76,7 +76,6 @@ interface TeamReportConfig {
     customEnd?: string;
   };
   metrics: string[];
-  audience?: 'coach' | 'athlete' | 'parent';
   filters?: {
     teamIds?: string[];
     gender?: string;

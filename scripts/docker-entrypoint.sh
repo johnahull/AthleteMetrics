@@ -20,19 +20,19 @@ elif [ "$NODE_ENV" = "production" ] || [ "$NODE_ENV" = "staging" ]; then
 else
   # Other environments (testing, development): non-fatal to ease local dev
   echo "[startup] running drizzle migrations..."
-  if node scripts/run-migrations.js; then
+  node scripts/run-migrations.js; drizzle_exit=$?
+  if [ $drizzle_exit -eq 0 ]; then
     echo "[startup] drizzle migrations complete"
   else
-    # non-zero exit from 'node scripts/run-migrations.js' means migration failed
-    echo "[startup] WARN: drizzle migrations failed (exit $?) - continuing anyway"
+    echo "[startup] WARN: drizzle migrations failed (exit $drizzle_exit) - continuing anyway"
   fi
 
   echo "[startup] running manual migrations..."
-  if node scripts/apply-manual-migrations.js; then
+  node scripts/apply-manual-migrations.js; manual_exit=$?
+  if [ $manual_exit -eq 0 ]; then
     echo "[startup] manual migrations complete"
   else
-    # non-zero exit from 'node scripts/apply-manual-migrations.js' means migration failed
-    echo "[startup] WARN: manual migrations failed (exit $?) - continuing anyway"
+    echo "[startup] WARN: manual migrations failed (exit $manual_exit) - continuing anyway"
   fi
 fi
 

@@ -31,7 +31,7 @@ export function isSafeLogoUrl(url: string): boolean {
     const hostname = parsed.hostname;
     // Block loopback, unspecified, and common internal hostnames
     if (hostname === 'localhost' || hostname === '0.0.0.0') return false;
-    if (hostname === '127.0.0.1') return false;
+    if (/^127\./.test(hostname)) return false; // Block entire 127.0.0.0/8 loopback range, not just 127.0.0.1
     // Block all IPv6 addresses (bracketed) — covers ::1, ::ffff:*, fc00::/7, fe80::, etc.
     if (hostname.startsWith('[')) return false;
     // Block RFC-1918 private ranges

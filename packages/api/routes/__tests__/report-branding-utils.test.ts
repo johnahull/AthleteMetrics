@@ -59,6 +59,14 @@ describe('isSafeLogoUrl', () => {
     expect(isSafeLogoUrl('https://127.0.0.1/logo.png')).toBe(false);
   });
 
+  it('blocks 127.0.0.2 (loopback range, not just .1)', () => {
+    expect(isSafeLogoUrl('https://127.0.0.2/logo.png')).toBe(false);
+  });
+
+  it('blocks 127.255.255.254 (end of loopback range)', () => {
+    expect(isSafeLogoUrl('https://127.255.255.254/logo.png')).toBe(false);
+  });
+
   it('blocks IPv6 loopback ::1', () => {
     expect(isSafeLogoUrl('https://[::1]/logo.png')).toBe(false);
   });
