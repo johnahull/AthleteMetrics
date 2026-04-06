@@ -27,6 +27,7 @@ import { requireParentAccess } from "../permissions/parent-middleware";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { storage } from "../storage";
 import { reports, reportShares, auditLogs } from "@shared/schema";
+import { isSiteAdmin } from "@shared/auth-utils";
 import type { AuthenticatedRequest } from "../middleware";
 
 const parentReadLimiter = rateLimit({
@@ -44,9 +45,28 @@ export function registerParentRoutes(app: Express) {
    */
   app.get("/api/parent/children", requireAuth, parentReadLimiter, async (req, res) => {
     try {
-      const userId = req.session.user?.id;
+      const user = req.session.user;
+      const userId = user?.id;
       if (!userId) {
         return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Role guard: only parent accounts (and site admins) should call this endpoint.
+      // Non-parents always receive an empty array (no data leak), but an explicit
+      // role check prevents unnecessary DB queries and is consistent with the
+      // defense-in-depth posture of all sibling routes.
+      if (user.role !== 'parent' && !isSiteAdmin(user)) {
+        return res.status(403).json({ message: 'Access denied: parent role required' });
+      }
+
+      // Email verification guard: linkParentAccount() runs at registration time
+      // (before verification), so an unverified parent could otherwise enumerate
+      // their linked children before confirming email ownership.
+      if (!user.emailVerified && !isSiteAdmin(user)) {
+        return res.status(403).json({
+          message: 'Email verification required. Please verify your email before accessing child data.',
+          code: 'email_verification_required',
+        });
       }
 
       // Find all active links for this parent user

@@ -358,10 +358,15 @@ export class CoppaService extends BaseService {
             throw new Error('CONSENT_REPLAY');
           }
 
+          // Mark email as verified when consent is confirmed — the parent's
+          // email-link verification of the VPC token is equivalent to email
+          // ownership proof for the athlete's account. Under-13 athletes can't
+          // log in to trigger resend-verification, so we set it here.
           await tx.update(users)
             .set({
               coppaStatus: 'consented',
               coppaConsentConfirmedAt: new Date(),
+              isEmailVerified: true,
             })
             .where(eq(users.id, consent.athleteUserId));
 
