@@ -93,6 +93,11 @@ export interface IndividualReportConfig {
   };
 }
 
+export interface OrgBranding {
+  tagline?: string | null;
+  orgName?: string | null;
+}
+
 export interface TeamReportData {
   reportType: 'team';
   reportConfig: TeamReportConfig;
@@ -103,6 +108,7 @@ export interface TeamReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  orgBranding?: OrgBranding;
 }
 
 export interface IndividualAthleteData {
@@ -123,6 +129,7 @@ export interface IndividualReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  orgBranding?: OrgBranding;
 }
 
 export type PdfFormat = 'visual' | 'simplified';

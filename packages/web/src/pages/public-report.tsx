@@ -61,7 +61,7 @@ export default function PublicReport() {
           <div>
             <h1 className="text-2xl font-bold">AthleteMetrics — Performance Report</h1>
             <p className="text-sm text-muted-foreground">
-              Generated on {format(new Date(generatedAt), "PPP")} · Athletic development for the Data-Driven Path to D1
+              Generated on {format(new Date(generatedAt), "PPP")} · {snapshotData.orgBranding?.tagline ?? "Athletic Performance Report"}
             </p>
           </div>
           <Badge variant="outline">AthleteMetrics</Badge>
