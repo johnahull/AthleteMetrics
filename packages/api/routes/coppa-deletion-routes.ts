@@ -134,7 +134,10 @@ export function registerCoppaDeletionRoutes(app: Express) {
           const confirmedResult = await coppaService.verifyConfirmedToken(consentToken);
 
           if (!confirmedResult.confirmed) {
-            return res.status(401).json({ message: "Invalid or expired consent token" });
+            const reason = confirmedResult.reason === 'revoked'
+              ? "Consent was denied by the parent. Please contact the organization to restart the process."
+              : "Invalid or expired consent token";
+            return res.status(401).json({ message: reason });
           }
 
           if (confirmedResult.consent.athleteUserId !== athleteUserId) {

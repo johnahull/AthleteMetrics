@@ -1485,6 +1485,17 @@ export function registerReportRoutes(app: Express) {
               });
             }
           }
+        } else {
+          // Cannot resolve athleteId from individual report config — fail closed to
+          // maintain the COPPA invariant. A missing athleteId could mean the report
+          // covers a minor whose consent status cannot be verified.
+          console.warn(`[COPPA] Individual report ${report.id} has no athleteId in config — blocking AI access (fail closed)`);
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: "AI coaching insights are unavailable: unable to verify consent status for this report.",
+            featureDisabled: true,
+            reason: 'individual_report_missing_athlete',
+          });
         }
       } else if (report.reportType === 'team') {
         // For team/org reports, check ALL minor athletes in the organization.

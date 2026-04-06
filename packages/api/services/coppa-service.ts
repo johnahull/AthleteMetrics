@@ -61,7 +61,7 @@ export interface VerifyTokenResult {
 /** Typed result for verifyConfirmedToken — avoids coupling to error message strings */
 export type VerifyConfirmedTokenResult =
   | { confirmed: true; consent: ParentalConsent }
-  | { confirmed: false; reason: 'not_found' | 'expired' | 'pending' | 'error' };
+  | { confirmed: false; reason: 'not_found' | 'expired' | 'revoked' | 'pending' | 'error' };
 
 export interface ConfirmConsentParams {
   consentId: string;
@@ -267,7 +267,8 @@ export class CoppaService extends BaseService {
       }
 
       if (consent.status === 'revoked') {
-        return { confirmed: false, reason: 'expired' };
+        // Revoked (active parent denial) is legally distinct from expired (timeout)
+        return { confirmed: false, reason: 'revoked' };
       }
 
       // status is 'confirmed' — the parent has granted consent
@@ -388,6 +389,16 @@ export class CoppaService extends BaseService {
       await db.update(users)
         .set({ coppaStatus: 'consent_revoked' })
         .where(eq(users.id, updatedConsent.athleteUserId));
+
+      // Deactivate all parent links for this athlete so no parent can access data
+      // after consent is denied. Without this, a parent who denied consent could
+      // still register a parent account and view the child's data.
+      await db.update(parentAthleteLinks)
+        .set({ isActive: false })
+        .where(and(
+          eq(parentAthleteLinks.athleteUserId, updatedConsent.athleteUserId),
+          eq(parentAthleteLinks.isActive, true),
+        ));
 
       await this.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_DENIED,

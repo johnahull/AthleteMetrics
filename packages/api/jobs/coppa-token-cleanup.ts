@@ -29,60 +29,71 @@ let scheduledTask: ScheduledTask | null = null;
  *
  * Exported so tests can invoke it directly without the cron scheduler.
  */
+const CLEANUP_BATCH_SIZE = 500;
+
 export async function cleanupExpiredTokens(): Promise<{ processed: number; errors: number }> {
   let processed = 0;
   let errors = 0;
 
   try {
-    // Find expired pending consents in batches to avoid holding large transactions
-    const expiredConsents = await db.select({
-      id: parentalConsents.id,
-      athleteUserId: parentalConsents.athleteUserId,
-      expiresAt: parentalConsents.expiresAt,
-    })
-    .from(parentalConsents)
-    .where(
-      and(
-        eq(parentalConsents.status, 'pending'),
-        lt(parentalConsents.expiresAt, sql`now()`),
-      )
-    );
-
-    for (const consent of expiredConsents) {
-      try {
-        // Atomic update: only transitions if still 'pending'
-        const [updated] = await db.update(parentalConsents)
-          .set({ status: 'expired' as ConsentStatus })
-          .where(
-            and(
-              eq(parentalConsents.id, consent.id),
-              eq(parentalConsents.status, 'pending'),
-            )
+    // Process expired pending consents in batches to avoid loading the entire table
+    // into memory. Each batch queries from the top of the remaining pending set —
+    // no offset needed because processed records transition to 'expired' and are
+    // excluded by the WHERE clause on the next iteration.
+    let batchHadRecords = true;
+    while (batchHadRecords) {
+      const expiredConsents = await db.select({
+        id: parentalConsents.id,
+        athleteUserId: parentalConsents.athleteUserId,
+        expiresAt: parentalConsents.expiresAt,
+      })
+        .from(parentalConsents)
+        .where(
+          and(
+            eq(parentalConsents.status, 'pending'),
+            lt(parentalConsents.expiresAt, sql`now()`),
           )
-          .returning({ id: parentalConsents.id, athleteUserId: parentalConsents.athleteUserId });
+        )
+        .limit(CLEANUP_BATCH_SIZE);
 
-        if (!updated) {
-          // Race condition — another process already handled this record
-          continue;
+      batchHadRecords = expiredConsents.length === CLEANUP_BATCH_SIZE;
+
+      for (const consent of expiredConsents) {
+        try {
+          // Atomic update: only transitions if still 'pending'
+          const [updated] = await db.update(parentalConsents)
+            .set({ status: 'expired' as ConsentStatus })
+            .where(
+              and(
+                eq(parentalConsents.id, consent.id),
+                eq(parentalConsents.status, 'pending'),
+              )
+            )
+            .returning({ id: parentalConsents.id, athleteUserId: parentalConsents.athleteUserId });
+
+          if (!updated) {
+            // Race condition — another process already handled this record
+            continue;
+          }
+
+          // If the athlete's coppaStatus is still 'pending_consent', it reflects
+          // the now-expired consent — leave as-is (athlete can re-initiate the flow).
+          // We intentionally do NOT change coppaStatus here: the athlete account
+          // remains in pending_consent state so they can request a new consent email.
+
+          // Write audit log entry
+          await coppaService.writeCoppaAudit({
+            action: COPPA_ACTIONS.TOKEN_EXPIRED,
+            athleteUserId: updated.athleteUserId,
+            consentId: updated.id,
+            details: { expiredAt: consent.expiresAt?.toISOString() ?? null },
+          });
+
+          processed++;
+        } catch (err) {
+          errors++;
+          console.error(`[COPPA cleanup] Failed to expire consent ${consent.id}:`, err);
         }
-
-        // If the athlete's coppaStatus is still 'pending_consent', it reflects
-        // the now-expired consent — leave as-is (athlete can re-initiate the flow).
-        // We intentionally do NOT change coppaStatus here: the athlete account
-        // remains in pending_consent state so they can request a new consent email.
-
-        // Write audit log entry
-        await coppaService.writeCoppaAudit({
-          action: COPPA_ACTIONS.TOKEN_EXPIRED,
-          athleteUserId: updated.athleteUserId,
-          consentId: updated.id,
-          details: { expiredAt: consent.expiresAt?.toISOString() ?? null },
-        });
-
-        processed++;
-      } catch (err) {
-        errors++;
-        console.error(`[COPPA cleanup] Failed to expire consent ${consent.id}:`, err);
       }
     }
 

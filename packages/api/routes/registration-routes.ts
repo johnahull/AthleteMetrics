@@ -465,6 +465,17 @@ export function registerRegistrationRoutes(app: Express) {
             errors: [{ field: 'email', message: 'The email you entered does not match the consent record.' }],
           });
         }
+
+        // Validate consent is still valid — reject revoked or expired consents.
+        // A parent who denied consent (revoked) or whose token expired must not be
+        // able to register and gain access to the child's data via an old consentId.
+        if (!['pending', 'confirmed'].includes(consent.status)) {
+          return res.status(400).json({
+            success: false,
+            message: "This consent link is no longer valid.",
+            errors: [{ field: 'consentId', message: 'Consent was denied or has expired. Please contact the athlete\'s organization to re-initiate consent.' }],
+          });
+        }
       }
 
       const legalAcceptedVersion = getLegalAcceptanceTimestamp();
