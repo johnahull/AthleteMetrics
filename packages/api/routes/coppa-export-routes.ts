@@ -106,7 +106,7 @@ export function registerCoppaExportRoutes(app: Express) {
             if (parentLink.length === 0) {
               return res.status(403).json({ message: 'Insufficient permissions' });
             }
-          } else {
+          } else if (actor.role === 'org_admin') {
             // org_admin must share an organization with the athlete
             const actorOrgs = await storage.getUserOrganizations(actor.id);
             const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
@@ -117,6 +117,8 @@ export function registerCoppaExportRoutes(app: Express) {
             if (!isAuthorized) {
               return res.status(403).json({ message: 'Insufficient permissions' });
             }
+          } else {
+            return res.status(403).json({ message: 'Insufficient permissions' });
           }
         }
 

@@ -179,28 +179,37 @@ export class CoppaService extends BaseService {
         });
       });
 
-      // Write audit log before sending email (audit is priority — email could fail)
-      await this.writeCoppaAudit({
-        action: COPPA_ACTIONS.CONSENT_INITIATED,
-        athleteUserId,
-        consentId: consentId!,
-        actorUserId: athleteUserId,
-        ip,
-        userAgent,
-        details: { parentEmail, organizationId: organizationId ?? null },
-      });
+      // Post-transaction steps: audit log and email.
+      // These must NOT cause the operation to report failure if the transaction succeeded.
+      let emailSent = false;
+      try {
+        await this.writeCoppaAudit({
+          action: COPPA_ACTIONS.CONSENT_INITIATED,
+          athleteUserId,
+          consentId: consentId!,
+          actorUserId: athleteUserId,
+          ip,
+          userAgent,
+          details: { parentEmail, organizationId: organizationId ?? null },
+        });
+      } catch (auditErr) {
+        console.error(`[COPPA] Audit log write failed for initiateConsent (athlete ${athleteUserId}):`, auditErr);
+      }
 
-      // Send parental consent email — pass raw token (used in link, not stored)
-      const athlete = await this.storage.getUser(athleteUserId);
-      const emailSent = await this.emailService.sendParentalConsentRequest(parentEmail, {
-        athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
-        consentToken: rawToken,
-        consentId: consentId!,
-        expiresAt,
-      });
+      try {
+        const athlete = await this.storage.getUser(athleteUserId);
+        emailSent = await this.emailService.sendParentalConsentRequest(parentEmail, {
+          athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'an athlete',
+          consentToken: rawToken,
+          consentId: consentId!,
+          expiresAt,
+        });
 
-      if (!emailSent) {
-        console.error(`[COPPA] Consent email failed to send for athlete ${athleteUserId} to ${parentEmail}`);
+        if (!emailSent) {
+          console.error(`[COPPA] Consent email failed to send for athlete ${athleteUserId} to ${parentEmail}`);
+        }
+      } catch (emailErr) {
+        console.error(`[COPPA] Email send threw for athlete ${athleteUserId}:`, emailErr);
       }
 
       return { success: true, consentId: consentId!, emailSent };
@@ -281,18 +290,15 @@ export class CoppaService extends BaseService {
         return { confirmed: false, reason: 'not_found' };
       }
 
+      // Confirmed consents are valid regardless of token expiry —
+      // COPPA Section 312.6 requires parents can exercise data rights at any time.
+      // Token expiry only applies to unconsumed (pending) consent flows.
+      if (consent.status === 'confirmed') {
+        return { confirmed: true, consent: consent as ParentalConsent };
+      }
+
       if (consent.status === 'expired') {
         return { confirmed: false, reason: 'expired' };
-      }
-
-      // Check actual expiry even if status wasn't transitioned by the cleanup job
-      if (consent.expiresAt && new Date() > consent.expiresAt) {
-        return { confirmed: false, reason: 'expired' };
-      }
-
-      if (consent.status === 'pending') {
-        // Token exists but consent was never completed
-        return { confirmed: false, reason: 'pending' };
       }
 
       if (consent.status === 'revoked') {
@@ -300,8 +306,13 @@ export class CoppaService extends BaseService {
         return { confirmed: false, reason: 'revoked' };
       }
 
-      // status is 'confirmed' — the parent has granted consent
-      return { confirmed: true, consent: consent as ParentalConsent };
+      // For pending consents, check actual expiry even if cleanup job hasn't run
+      if (consent.expiresAt && new Date() > consent.expiresAt) {
+        return { confirmed: false, reason: 'expired' };
+      }
+
+      // Token exists but consent was never completed
+      return { confirmed: false, reason: 'pending' };
     } catch (error) {
       console.error('[COPPA] verifyConfirmedToken failed:', error);
       return { confirmed: false, reason: 'error' };
@@ -371,23 +382,31 @@ export class CoppaService extends BaseService {
         throw txError;
       }
 
-      await this.writeCoppaAudit({
-        action: COPPA_ACTIONS.CONSENT_CONFIRMED,
-        athleteUserId: updatedConsent.athleteUserId,
-        consentId,
-        actorEmail: updatedConsent.parentEmail,
-        ip,
-        userAgent,
-        details: { aiConsentGranted },
-      });
+      // Post-transaction steps — must not cause the operation to report failure
+      try {
+        await this.writeCoppaAudit({
+          action: COPPA_ACTIONS.CONSENT_CONFIRMED,
+          athleteUserId: updatedConsent.athleteUserId,
+          consentId,
+          actorEmail: updatedConsent.parentEmail,
+          ip,
+          userAgent,
+          details: { aiConsentGranted },
+        });
+      } catch (auditErr) {
+        console.error(`[COPPA] Audit log write failed for confirmConsent (${consentId}):`, auditErr);
+      }
 
-      // Send confirmation to athlete
-      const athlete = await this.storage.getUser(updatedConsent.athleteUserId);
-      if (athlete) {
-        await this.emailService.sendConsentConfirmedNotification(
-          athlete.emails?.[0] ?? '',
-          { athleteName: `${athlete.firstName} ${athlete.lastName}` },
-        );
+      try {
+        const athlete = await this.storage.getUser(updatedConsent.athleteUserId);
+        if (athlete) {
+          await this.emailService.sendConsentConfirmedNotification(
+            athlete.emails?.[0] ?? '',
+            { athleteName: `${athlete.firstName} ${athlete.lastName}` },
+          );
+        }
+      } catch (emailErr) {
+        console.error(`[COPPA] Confirmation email failed for consent ${consentId}:`, emailErr);
       }
 
       return { success: true };
@@ -459,15 +478,20 @@ export class CoppaService extends BaseService {
         throw txError;
       }
 
-      await this.writeCoppaAudit({
-        action: COPPA_ACTIONS.CONSENT_DENIED,
-        athleteUserId: updatedConsent.athleteUserId,
-        consentId,
-        actorEmail: updatedConsent.parentEmail,
-        ip,
-        userAgent,
-        details: {},
-      });
+      // Post-transaction audit — must not cause the operation to report failure
+      try {
+        await this.writeCoppaAudit({
+          action: COPPA_ACTIONS.CONSENT_DENIED,
+          athleteUserId: updatedConsent.athleteUserId,
+          consentId,
+          actorEmail: updatedConsent.parentEmail,
+          ip,
+          userAgent,
+          details: {},
+        });
+      } catch (auditErr) {
+        console.error(`[COPPA] Audit log write failed for denyConsent (${consentId}):`, auditErr);
+      }
 
       return { success: true };
     } catch (error) {

@@ -314,12 +314,16 @@ export function registerRegistrationRoutes(app: Express) {
           userAgent: req.get('User-Agent'),
         });
 
-        console.log(`[Registration] Minor registered: ${username}, VPC initiated: ${coppaResult.success}`);
+        console.log(`[Registration] Minor registered: ${username}, VPC initiated: ${coppaResult.success}, emailSent: ${coppaResult.emailSent}`);
+
+        const consentMessage = coppaResult.emailSent === false
+          ? "Your account has been created. We were unable to send the consent email to your parent. Please ask them to visit the consent page directly, or try again later."
+          : "Your account has been created. A consent email has been sent to your parent or guardian. You'll be able to log in once they approve your account.";
 
         return res.status(201).json({
           success: true,
           requiresParentalConsent: true,
-          message: "Your account has been created. A consent email has been sent to your parent or guardian. You'll be able to log in once they approve your account.",
+          message: consentMessage,
         });
       }
 

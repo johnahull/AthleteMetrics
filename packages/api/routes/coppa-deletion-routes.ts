@@ -99,49 +99,13 @@ export function registerCoppaDeletionRoutes(app: Express) {
 
         const { athleteUserId, requestedByEmail, consentToken, notes } = bodyResult.data;
 
-        // COPPA deletion requests can only target minor athletes
-        const targetAthlete = await storage.getUser(athleteUserId);
-        if (!targetAthlete) {
-          return res.status(404).json({ message: "Athlete not found" });
-        }
-        if (!targetAthlete.isMinor) {
-          return res.status(400).json({ message: "COPPA data deletion requests can only be submitted for minor athletes" });
-        }
-
+        // Authenticate BEFORE looking up the athlete to prevent unauthenticated
+        // callers from probing athlete IDs and discovering minor status.
         const actor = req.session?.user ?? null;
         let actorUserId: string | undefined;
 
         if (actor) {
-          // Authenticated path
           actorUserId = actor.id;
-
-          if (!actor.isSiteAdmin) {
-            if (actor.role === 'parent') {
-              // Authenticated parent: must have an active link to the target athlete
-              const parentLink = await db.select({ id: parentAthleteLinks.id })
-                .from(parentAthleteLinks)
-                .where(and(
-                  eq(parentAthleteLinks.parentUserId, actor.id),
-                  eq(parentAthleteLinks.athleteUserId, athleteUserId),
-                  eq(parentAthleteLinks.isActive, true),
-                ))
-                .limit(1);
-              if (parentLink.length === 0) {
-                return res.status(403).json({ message: "Insufficient permissions" });
-              }
-            } else {
-              // org_admin: must share an org with the athlete
-              const actorOrgs = await storage.getUserOrganizations(actor.id);
-              const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
-              const authorized = actorOrgs.some(ao =>
-                ao.role === 'org_admin' &&
-                athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
-              );
-              if (!authorized) {
-                return res.status(403).json({ message: "Insufficient permissions" });
-              }
-            }
-          }
         } else if (consentToken) {
           // Public token-gated path: verify the consent token proves parent identity.
           // Uses verifyConfirmedToken() which returns a typed result — no error string parsing.
@@ -164,6 +128,46 @@ export function registerCoppaDeletionRoutes(app: Express) {
         } else {
           // Neither authenticated nor token-gated
           return res.status(401).json({ message: "Authentication or consent token required" });
+        }
+
+        // Now that caller is authenticated, look up the athlete
+        const targetAthlete = await storage.getUser(athleteUserId);
+        if (!targetAthlete) {
+          return res.status(404).json({ message: "Athlete not found" });
+        }
+        if (!targetAthlete.isMinor) {
+          return res.status(400).json({ message: "COPPA data deletion requests can only be submitted for minor athletes" });
+        }
+
+        // Authorization checks for authenticated users
+        if (actor && !actor.isSiteAdmin) {
+          if (actor.role === 'parent') {
+            // Authenticated parent: must have an active link to the target athlete
+            const parentLink = await db.select({ id: parentAthleteLinks.id })
+              .from(parentAthleteLinks)
+              .where(and(
+                eq(parentAthleteLinks.parentUserId, actor.id),
+                eq(parentAthleteLinks.athleteUserId, athleteUserId),
+                eq(parentAthleteLinks.isActive, true),
+              ))
+              .limit(1);
+            if (parentLink.length === 0) {
+              return res.status(403).json({ message: "Insufficient permissions" });
+            }
+          } else if (actor.role === 'org_admin') {
+            // org_admin: must share an org with the athlete
+            const actorOrgs = await storage.getUserOrganizations(actor.id);
+            const athleteOrgs = await storage.getUserOrganizations(athleteUserId);
+            const authorized = actorOrgs.some(ao =>
+              ao.role === 'org_admin' &&
+              athleteOrgs.some(eo => eo.organizationId === ao.organizationId)
+            );
+            if (!authorized) {
+              return res.status(403).json({ message: "Insufficient permissions" });
+            }
+          } else {
+            return res.status(403).json({ message: "Insufficient permissions" });
+          }
         }
 
         const result = await coppaDeletionService.initiateDeletionRequest({

@@ -312,7 +312,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   // Coach views pending (non-expired) requests for their org(s).
   // Site admins also see requests with NULL organizationId.
   // ==========================================================================
-  app.get("/api/coach/parent-link-requests", requireAuth, async (req, res) => {
+  app.get("/api/coach/parent-link-requests", requireAuth, linkRequestLimiter, async (req, res) => {
     try {
       const sessionUser = req.session.user;
       if (!sessionUser) {
@@ -390,7 +390,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   // ==========================================================================
   // POST /api/coach/parent-link-requests/:id/approve
   // ==========================================================================
-  app.post("/api/coach/parent-link-requests/:id/approve", requireAuth, async (req, res) => {
+  app.post("/api/coach/parent-link-requests/:id/approve", requireAuth, linkRequestLimiter, async (req, res) => {
     try {
       const sessionUser = req.session.user;
       if (!sessionUser) {
@@ -499,7 +499,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
   // ==========================================================================
   // POST /api/coach/parent-link-requests/:id/deny
   // ==========================================================================
-  app.post("/api/coach/parent-link-requests/:id/deny", requireAuth, async (req, res) => {
+  app.post("/api/coach/parent-link-requests/:id/deny", requireAuth, linkRequestLimiter, async (req, res) => {
     try {
       const sessionUser = req.session.user;
       if (!sessionUser) {

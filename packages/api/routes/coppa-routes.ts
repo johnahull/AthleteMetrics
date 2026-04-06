@@ -566,16 +566,19 @@ export function registerCoppaRoutes(app: Express) {
       });
 
       if (!result.success) {
-        return res.status(500).json({ message: result.error || "Failed to initiate consent" });
+        // Log the failure server-side but return the same anti-enumeration response
+        // to avoid leaking that this username exists and passed all checks
+        console.error(`[COPPA] initiateConsent failed for user ${user.id}:`, result.error);
+        return res.json({ success: true, message: "If the account exists, a consent email has been sent." });
       }
 
-      // Audit log
+      // Audit log — use normalized parentEmail, not raw input
       coppaService.writeCoppaAudit({
         action: COPPA_ACTIONS.CONSENT_INITIATED,
         athleteUserId: user.id,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
-        details: { parentEmail, source: 'update_parent_email_endpoint' },
+        details: { parentEmail: parentEmail.toLowerCase(), source: 'update_parent_email_endpoint' },
       }).catch((err) => {
         console.error('[COPPA] Failed to write update-parent-email audit log:', err);
       });
