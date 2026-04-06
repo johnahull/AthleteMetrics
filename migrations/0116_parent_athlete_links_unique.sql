@@ -12,7 +12,15 @@ WHERE id NOT IN (
   ORDER BY parent_email, athlete_user_id, created_at DESC NULLS LAST
 );
 
--- Step 2: Add the unique constraint
-ALTER TABLE parent_athlete_links
-  ADD CONSTRAINT parent_athlete_links_parent_email_athlete_user_id_unique
-  UNIQUE (parent_email, athlete_user_id);
+-- Step 2: Add the unique constraint (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'parent_athlete_links_parent_email_athlete_user_id_unique'
+  ) THEN
+    ALTER TABLE parent_athlete_links
+      ADD CONSTRAINT parent_athlete_links_parent_email_athlete_user_id_unique
+      UNIQUE (parent_email, athlete_user_id);
+  END IF;
+END $$;
