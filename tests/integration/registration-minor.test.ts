@@ -224,9 +224,9 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
     expect(hasParentEmailError).toBe(true);
   });
 
-  it('under-13 registration without birthDate → birthDate is optional but without it no COPPA flow', async () => {
-    // birthDate is optional in the schema. Without it, no under-13 check fires,
-    // so the user gets registered normally (no requiresParentalConsent).
+  it('registration without birthDate → 400 (birthDate is required for COPPA age checks)', async () => {
+    // birthDate is required in the schema to enforce COPPA age checks.
+    // Registration without it should be rejected with a validation error.
     const ts = Date.now();
     const payload = {
       firstName: 'NoBirth',
@@ -237,15 +237,14 @@ describe('POST /api/auth/register — minor (COPPA) registration', () => {
       legalAcceptedAt: validLegalAcceptedAt(),
       // no birthDate
     };
-    createdUsernames.push(payload.username);
 
     const res = await request(app)
       .post('/api/auth/register')
       .send(payload);
 
-    // Without birthDate the registration should succeed without COPPA flow
-    expect(res.status).toBe(201);
-    expect(res.body.requiresParentalConsent).toBeFalsy();
+    // Without birthDate the registration should be rejected
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
   });
 
   /**

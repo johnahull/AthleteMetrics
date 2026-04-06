@@ -685,8 +685,9 @@ describe('POST /api/admin/coppa/retroactive', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(typeof res.body.scanned).toBe('number');
-    expect(typeof res.body.initiated).toBe('number');
-    expect(typeof res.body.skipped).toBe('number');
+    // initiated/skipped are processed asynchronously via setImmediate after
+    // the response is sent; the immediate response includes processing=true
+    expect(res.body.processing).toBe(true);
     expect(Array.isArray(res.body.errors)).toBe(true);
   });
 

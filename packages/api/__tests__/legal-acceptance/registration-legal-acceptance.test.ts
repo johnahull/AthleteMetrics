@@ -94,6 +94,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       expect(response.status).toBe(201);
@@ -135,6 +136,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       // Verify audit log was created for legal acceptance
@@ -175,6 +177,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       const expectedVersion = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
