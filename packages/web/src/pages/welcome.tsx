@@ -46,7 +46,7 @@ export default function Welcome() {
               AthleteMetrics
             </h1>
             <p className="text-gray-600 text-sm">
-              Your data. Your D1 path.
+              Your data. Your path to performance.
             </p>
           </div>
 
@@ -89,7 +89,7 @@ export default function Welcome() {
           <div className="pt-4 space-y-3" role="list" aria-label="Key features">
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <Users className="h-4 w-4 text-primary" aria-hidden="true" />
-              <span>See where you stand vs. D1 standards</span>
+              <span>See where you stand vs. performance benchmarks</span>
             </div>
             <div className="flex items-center justify-center gap-2 text-sm text-gray-600" role="listitem">
               <BarChart3 className="h-4 w-4 text-primary" aria-hidden="true" />

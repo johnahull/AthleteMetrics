@@ -111,10 +111,10 @@ export function AthleteSidebar({
           </div>
           <div>
             <h2 className="font-semibold text-gray-900 text-sm">
-              {isOwnProfile ? 'Big Time Athletes' : 'Athlete View'}
+              {isOwnProfile ? 'My Athletics' : 'Athlete View'}
             </h2>
             <p className="text-xs text-gray-500">
-              {isOwnProfile ? 'Your D1 path' : 'View athlete data'}
+              {isOwnProfile ? 'Your performance data' : 'View athlete data'}
             </p>
           </div>
         </div>
@@ -196,7 +196,7 @@ export function AthleteSidebar({
       <div className="p-4 border-t border-gray-200">
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <TrendingUp className="h-3.5 w-3.5" />
-          <span>Data-Driven Path to D1</span>
+          <span>Data-Driven Performance</span>
         </div>
       </div>
     </aside>

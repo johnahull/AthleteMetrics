@@ -20,7 +20,7 @@ export function BenchmarkBadge({ isMet, progress }: BenchmarkBadgeProps) {
               </Badge>
             </TooltipTrigger>
             <TooltipContent>
-              <p>You&apos;re performing above the D1 benchmark — elite-level territory.</p>
+              <p>You&apos;re performing above the benchmark — elite-level territory.</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -36,7 +36,7 @@ export function BenchmarkBadge({ isMet, progress }: BenchmarkBadgeProps) {
             </Badge>
           </TooltipTrigger>
           <TooltipContent>
-            <p>You&apos;ve reached the D1 standard for this metric. Keep building.</p>
+            <p>You&apos;ve reached the benchmark standard for this metric. Keep building.</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -53,7 +53,7 @@ export function BenchmarkBadge({ isMet, progress }: BenchmarkBadgeProps) {
           </Badge>
         </TooltipTrigger>
         <TooltipContent>
-          <p>Below D1 standard — this is a target for your next training block.</p>
+          <p>Below the benchmark standard — this is a target for your next training block.</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

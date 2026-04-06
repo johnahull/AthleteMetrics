@@ -499,13 +499,16 @@ export function registerOrganizationRoutes(app: Express) {
         } else if (aiPromptContext.length > 2000) {
           return res.status(400).json({ message: "AI prompt context must be 2000 characters or less" });
         } else {
-          // Block setting context when AI is disabled at either level (matches frontend UX)
+          // Block setting context when AI is disabled at either level (matches frontend UX).
+          // Use updates.aiEnabled ?? org.aiEnabled so a single request that enables AI
+          // and sets context simultaneously is accepted (avoids requiring two API calls).
           if (!org.aiEnabledBySiteAdmin) {
             return res.status(403).json({
               message: "AI features must be enabled by site administrator first"
             });
           }
-          if (!org.aiEnabled) {
+          const effectiveAiEnabled = (updates as { aiEnabled?: boolean }).aiEnabled ?? org.aiEnabled;
+          if (!effectiveAiEnabled) {
             return res.status(403).json({
               message: "AI features must be enabled for this organization first"
             });

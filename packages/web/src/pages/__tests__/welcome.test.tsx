@@ -37,14 +37,14 @@ describe('Welcome Page', () => {
 
       // Check branding
       expect(screen.getByText('AthleteMetrics')).toBeInTheDocument();
-      expect(screen.getByText('Your data. Your D1 path.')).toBeInTheDocument();
+      expect(screen.getByText('Your data. Your path to performance.')).toBeInTheDocument();
 
       // Check buttons
       expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /accept invitation/i })).toBeInTheDocument();
 
       // Check feature highlights
-      expect(screen.getByText('See where you stand vs. D1 standards')).toBeInTheDocument();
+      expect(screen.getByText('See where you stand vs. performance benchmarks')).toBeInTheDocument();
       expect(screen.getByText('Track speed, power, and agility over time')).toBeInTheDocument();
       expect(screen.getByText('AI-powered insights after every assessment')).toBeInTheDocument();
 
@@ -153,7 +153,7 @@ describe('Welcome Page', () => {
       render(<Welcome />);
 
       // All feature pills should have descriptive text
-      expect(screen.getByText('See where you stand vs. D1 standards')).toBeInTheDocument();
+      expect(screen.getByText('See where you stand vs. performance benchmarks')).toBeInTheDocument();
       expect(screen.getByText('Track speed, power, and agility over time')).toBeInTheDocument();
       expect(screen.getByText('AI-powered insights after every assessment')).toBeInTheDocument();
     });
