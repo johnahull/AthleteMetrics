@@ -507,7 +507,7 @@ export function registerOrganizationRoutes(app: Express) {
               message: "AI features must be enabled by site administrator first"
             });
           }
-          const effectiveAiEnabled = (updates as { aiEnabled?: boolean }).aiEnabled ?? org.aiEnabled;
+          const effectiveAiEnabled = updates.aiEnabled ?? org.aiEnabled;
           if (!effectiveAiEnabled) {
             return res.status(403).json({
               message: "AI features must be enabled for this organization first"

@@ -119,7 +119,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     if (reportType === "team") {
       setValue("audience", "coach");
     } else if (!dirtyFields.audience) {
-      setValue("audience", "parent");
+      setValue("audience", "coach");
     }
   }, [reportType, setValue, dirtyFields.audience]);
   const timeframeType = watch("timeframeType");
