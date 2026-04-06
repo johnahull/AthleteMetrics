@@ -4279,7 +4279,7 @@ async function buildReportDataForAI(report: Report, userId: string, reportServic
     // Extract and validate audience from report config
     // athlete/parent audiences only apply to individual reports — team reports always use coach
     const VALID_AUDIENCES = ['coach', 'athlete', 'parent'] as const;
-    const rawAudience = reportConfig?.audience;
+    const rawAudience = (reportConfig as any)?.audience;
     const audience = report.reportType === 'team'
       ? 'coach' as const
       : VALID_AUDIENCES.includes(rawAudience as typeof VALID_AUDIENCES[number])
