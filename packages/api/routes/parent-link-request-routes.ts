@@ -90,21 +90,23 @@ export function registerParentLinkRequestRoutes(app: Express) {
       }
 
       // Only parent accounts (or site admins) can submit link requests.
-      // Parent users don't have a dedicated 'role' column — they are identified
-      // by having parentAthleteLinks rows or being standalone accounts with no
-      // org memberships (newly registered parents who haven't linked yet).
+      // Parent users are identified by having parentAthleteLinks rows (linked parents)
+      // or a 'parent' role in userOrganizations (org-assigned parent role).
       if (!isSiteAdmin(sessionUser)) {
-        const [existingLinks, orgMemberships] = await Promise.all([
+        const [existingLinks, parentMemberships] = await Promise.all([
           db.select({ id: parentAthleteLinks.id })
             .from(parentAthleteLinks)
             .where(eq(parentAthleteLinks.parentUserId, sessionUser.id))
             .limit(1),
           db.select({ id: userOrganizations.id })
             .from(userOrganizations)
-            .where(eq(userOrganizations.userId, sessionUser.id))
+            .where(and(
+              eq(userOrganizations.userId, sessionUser.id),
+              eq(userOrganizations.role, 'parent'),
+            ))
             .limit(1),
         ]);
-        const isParent = existingLinks.length > 0 || orgMemberships.length === 0;
+        const isParent = existingLinks.length > 0 || parentMemberships.length > 0;
         if (!isParent) {
           return res.status(403).json({ message: "Only parent accounts can submit link requests" });
         }
