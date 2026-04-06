@@ -470,6 +470,15 @@ export class CoppaService extends BaseService {
           .set({ coppaStatus: 'consent_revoked' })
           .where(eq(users.id, athleteUserId));
 
+        // Deactivate all parent links for this athlete so no parent can access
+        // data after admin revocation. Mirrors the same step in denyConsent().
+        await db.update(parentAthleteLinks)
+          .set({ isActive: false })
+          .where(and(
+            eq(parentAthleteLinks.athleteUserId, athleteUserId),
+            eq(parentAthleteLinks.isActive, true),
+          ));
+
         await this.writeCoppaAudit({
           action: COPPA_ACTIONS.CONSENT_REVOKED,
           athleteUserId,

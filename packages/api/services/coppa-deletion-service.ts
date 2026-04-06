@@ -233,9 +233,22 @@ export class CoppaDeletionService extends BaseService {
       // are impossible. If any step fails, the whole thing rolls back.
       await db.transaction(async (tx) => {
         // STEP 0: Mark as 'processing' BEFORE cascade deletes anything.
-        await tx.update(dataDeletionRequests)
+        // Use WHERE status='pending' as an optimistic lock — if two concurrent
+        // callers both pass the pre-transaction status check, only the first
+        // one to reach this UPDATE wins. The second gets zero rows back and
+        // aborts the transaction, preventing a double-deletion.
+        const [claimedRequest] = await tx.update(dataDeletionRequests)
           .set({ status: 'processing' })
-          .where(eq(dataDeletionRequests.id, requestId));
+          .where(and(
+            eq(dataDeletionRequests.id, requestId),
+            eq(dataDeletionRequests.status, 'pending'),
+          ))
+          .returning({ id: dataDeletionRequests.id });
+
+        if (!claimedRequest) {
+          // Another concurrent request already claimed this deletion — abort.
+          throw new Error('CONCURRENT_DELETION: request was already claimed by another process');
+        }
 
         // STEP 1: Delete measurements
         const deletedMeasurements = await tx.delete(measurements)
@@ -436,6 +449,13 @@ export class CoppaDeletionService extends BaseService {
       return { success: true, deletedCategories };
     } catch (error) {
       // Transaction rolled back — request stays in prior state
+      if (error instanceof Error && error.message.startsWith('CONCURRENT_DELETION')) {
+        return {
+          success: false,
+          error: 'Deletion request is already being processed by another request.',
+          statusCode: 409,
+        };
+      }
       console.error('[COPPA Deletion] processDeletion failed:', error);
       return {
         success: false,

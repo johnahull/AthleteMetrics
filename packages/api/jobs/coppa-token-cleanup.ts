@@ -58,6 +58,9 @@ export async function cleanupExpiredTokens(): Promise<{ processed: number; error
 
       batchHadRecords = expiredConsents.length === CLEANUP_BATCH_SIZE;
 
+      const batchProcessed = processed;
+      const batchErrors = errors;
+
       for (const consent of expiredConsents) {
         try {
           // Atomic update: only transitions if still 'pending'
@@ -94,6 +97,14 @@ export async function cleanupExpiredTokens(): Promise<{ processed: number; error
           errors++;
           console.error(`[COPPA cleanup] Failed to expire consent ${consent.id}:`, err);
         }
+      }
+
+      // Zero-progress guard: if every record in this batch failed the per-record
+      // UPDATE (e.g. persistent DB error), the records stay 'pending' and will be
+      // re-selected on the next iteration, creating an infinite loop when the count
+      // equals exactly CLEANUP_BATCH_SIZE. Break to avoid spinning.
+      if (processed === batchProcessed && errors === batchErrors) {
+        break;
       }
     }
 
