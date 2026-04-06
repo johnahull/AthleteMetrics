@@ -687,7 +687,7 @@ export default function Register() {
             <Button
               type="submit"
               className="w-full"
-              disabled={submitting || !usernameAvailable || !emailAvailable || !formData.termsAccepted}
+              disabled={submitting || !usernameAvailable || (!isParentMode && !emailAvailable) || !formData.termsAccepted}
             >
               {submitting ? (
                 <>

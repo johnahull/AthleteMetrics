@@ -95,6 +95,16 @@ export function registerCoppaDeletionRoutes(app: Express) {
         }
 
         const { athleteUserId, requestedByEmail, consentToken, notes } = bodyResult.data;
+
+        // COPPA deletion requests can only target minor athletes
+        const targetAthlete = await storage.getUser(athleteUserId);
+        if (!targetAthlete) {
+          return res.status(404).json({ message: "Athlete not found" });
+        }
+        if (!targetAthlete.isMinor) {
+          return res.status(400).json({ message: "COPPA data deletion requests can only be submitted for minor athletes" });
+        }
+
         const actor = req.session?.user ?? null;
         let actorUserId: string | undefined;
 

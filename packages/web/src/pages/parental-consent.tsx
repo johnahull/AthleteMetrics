@@ -22,7 +22,7 @@ export default function ParentalConsentWaiting() {
   // D2: Redirect away if user's COPPA status is not pending_consent
   useEffect(() => {
     if (user && user.coppaStatus !== 'pending_consent') {
-      setLocation('/login');
+      setLocation('/dashboard');
     }
   }, [user, setLocation]);
 

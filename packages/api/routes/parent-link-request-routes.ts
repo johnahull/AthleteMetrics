@@ -89,14 +89,22 @@ export function registerParentLinkRequestRoutes(app: Express) {
         return res.status(401).json({ message: "Authentication required" });
       }
 
-      // Only parent accounts (or site admins) can submit link requests
+      // Only parent accounts (or site admins) can submit link requests.
+      // Parent users don't have a dedicated 'role' column — they are identified
+      // by having parentAthleteLinks rows or being standalone accounts with no
+      // org memberships (newly registered parents who haven't linked yet).
       if (!isSiteAdmin(sessionUser)) {
-        // Check user has parent role in at least one org, or is a standalone parent
-        const memberships = await db
-          .select({ role: userOrganizations.role })
-          .from(userOrganizations)
-          .where(eq(userOrganizations.userId, sessionUser.id));
-        const isParent = memberships.some(m => m.role === 'parent');
+        const [existingLinks, orgMemberships] = await Promise.all([
+          db.select({ id: parentAthleteLinks.id })
+            .from(parentAthleteLinks)
+            .where(eq(parentAthleteLinks.parentUserId, sessionUser.id))
+            .limit(1),
+          db.select({ id: userOrganizations.id })
+            .from(userOrganizations)
+            .where(eq(userOrganizations.userId, sessionUser.id))
+            .limit(1),
+        ]);
+        const isParent = existingLinks.length > 0 || orgMemberships.length === 0;
         if (!isParent) {
           return res.status(403).json({ message: "Only parent accounts can submit link requests" });
         }
@@ -277,6 +285,10 @@ export function registerParentLinkRequestRoutes(app: Express) {
         return res.status(403).json({ message: "You do not have permission to cancel this request" });
       }
 
+      if (existing.status !== 'pending') {
+        return res.status(400).json({ message: "Only pending requests can be cancelled" });
+      }
+
       // Update status to cancelled
       await db
         .update(parentLinkRequests)
@@ -406,7 +418,10 @@ export function registerParentLinkRequestRoutes(app: Express) {
       }
 
       // Verify coach is in the request's org (or is site admin)
-      if (!isAdmin && linkReq.organizationId) {
+      if (!isAdmin) {
+        if (!linkReq.organizationId) {
+          return res.status(403).json({ message: "Only site admins can process requests for athletes without an organization" });
+        }
         const coachOrgIds = await getCoachOrgIds(sessionUser.id);
         if (!coachOrgIds.includes(linkReq.organizationId)) {
           return res.status(403).json({ message: "You do not have access to this organization" });
@@ -514,7 +529,10 @@ export function registerParentLinkRequestRoutes(app: Express) {
       }
 
       // Verify coach is in the request's org (or is site admin)
-      if (!isAdmin && linkReq.organizationId) {
+      if (!isAdmin) {
+        if (!linkReq.organizationId) {
+          return res.status(403).json({ message: "Only site admins can process requests for athletes without an organization" });
+        }
         const coachOrgIds = await getCoachOrgIds(sessionUser.id);
         if (!coachOrgIds.includes(linkReq.organizationId)) {
           return res.status(403).json({ message: "You do not have access to this organization" });

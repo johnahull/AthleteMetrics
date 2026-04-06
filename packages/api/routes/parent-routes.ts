@@ -20,6 +20,7 @@
 
 import type { Express } from "express";
 import { eq, and, isNull } from "drizzle-orm";
+import rateLimit from "express-rate-limit";
 import { db } from "../db";
 import { requireAuth } from "../middleware";
 import { requireParentAccess } from "../permissions/parent-middleware";
@@ -28,12 +29,20 @@ import { storage } from "../storage";
 import { reports, reportShares, auditLogs } from "@shared/schema";
 import type { AuthenticatedRequest } from "../middleware";
 
+const parentReadLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  message: { message: 'Too many requests, please try again later.' },
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 export function registerParentRoutes(app: Express) {
   /**
    * List all athletes linked to the authenticated parent.
    * Returns basic profile info for each linked athlete.
    */
-  app.get("/api/parent/children", requireAuth, async (req, res) => {
+  app.get("/api/parent/children", requireAuth, parentReadLimiter, async (req, res) => {
     try {
       const userId = req.session.user?.id;
       if (!userId) {
@@ -96,6 +105,7 @@ export function registerParentRoutes(app: Express) {
   app.get(
     "/api/parent/children/:athleteId/profile",
     requireAuth,
+    parentReadLimiter,
     requireParentAccess('athleteId'),
     async (req, res) => {
       try {
@@ -137,6 +147,7 @@ export function registerParentRoutes(app: Express) {
   app.get(
     "/api/parent/children/:athleteId/measurements",
     requireAuth,
+    parentReadLimiter,
     requireParentAccess('athleteId'),
     async (req, res) => {
       try {
@@ -162,6 +173,7 @@ export function registerParentRoutes(app: Express) {
   app.get(
     "/api/parent/children/:athleteId/reports",
     requireAuth,
+    parentReadLimiter,
     requireParentAccess('athleteId'),
     async (req, res) => {
       try {

@@ -333,26 +333,29 @@ export function registerRegistrationRoutes(app: Express) {
       // Establish a session for the newly registered user.
       // Unlike the under-13 COPPA path (which returns early above without a session),
       // all other users — including teen minors (13-17) — can log in immediately.
-      req.session.user = {
-        id: userId,
-        username,
-        email,
-        firstName,
-        lastName,
-        role: 'athlete',
-        isSiteAdmin: false,
-        athleteId: userId,
-      };
+      // Guard against missing session middleware (e.g. in unit test environments).
+      if (req.session) {
+        req.session.user = {
+          id: userId,
+          username,
+          email,
+          firstName,
+          lastName,
+          role: 'athlete',
+          isSiteAdmin: false,
+          athleteId: userId,
+        };
 
-      // Explicitly save the session so the Set-Cookie header is written
-      // before the response body is sent. Without this, express-session's
-      // lazy save may race with res.json() in test environments.
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) reject(err);
-          else resolve();
+        // Explicitly save the session so the Set-Cookie header is written
+        // before the response body is sent. Without this, express-session's
+        // lazy save may race with res.json() in test environments.
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
         });
-      });
+      }
 
       // Send verification email (outside transaction - email failure shouldn't rollback registration)
       const verificationLink = `${process.env.APP_URL}/verify-email?token=${verificationToken}`;

@@ -25,6 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_security_events_severity_created ON security_even
 -- Drop the old constraint and add a new one with ON DELETE CASCADE
 DO $$
 BEGIN
+  -- Drop existing constraint if it exists (may be non-cascade version)
   IF EXISTS (
     SELECT 1 FROM information_schema.table_constraints
     WHERE constraint_name = 'email_verification_tokens_user_id_users_id_fk'
@@ -34,7 +35,14 @@ BEGIN
       DROP CONSTRAINT email_verification_tokens_user_id_users_id_fk;
   END IF;
 
-  ALTER TABLE email_verification_tokens
-    ADD CONSTRAINT email_verification_tokens_user_id_users_id_fk
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  -- Re-add with CASCADE (idempotent: only if not already present after drop)
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints
+    WHERE constraint_name = 'email_verification_tokens_user_id_users_id_fk'
+      AND table_name = 'email_verification_tokens'
+  ) THEN
+    ALTER TABLE email_verification_tokens
+      ADD CONSTRAINT email_verification_tokens_user_id_users_id_fk
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+  END IF;
 END $$;

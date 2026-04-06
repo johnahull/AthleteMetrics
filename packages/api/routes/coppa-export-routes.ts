@@ -30,7 +30,7 @@ const exportRequestLimiter = rateLimit({
 // Rate limiter for download endpoint (permissive — token itself is the gate)
 const exportDownloadLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 30,
+  limit: 5,
   message: { message: 'Too many download requests, please try again later.' },
   standardHeaders: 'draft-7',
   legacyHeaders: false,
@@ -175,7 +175,7 @@ export function registerCoppaExportRoutes(app: Express) {
     try {
       const { downloadToken } = req.params;
 
-      if (!downloadToken || typeof downloadToken !== 'string' || downloadToken.length > 128) {
+      if (!downloadToken || typeof downloadToken !== 'string' || downloadToken.length !== 64 || !/^[0-9a-f]+$/i.test(downloadToken)) {
         return res.status(400).json({ message: 'Invalid token format' });
       }
 

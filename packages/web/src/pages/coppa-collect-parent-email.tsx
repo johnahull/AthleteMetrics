@@ -36,6 +36,11 @@ export default function CoppaCollectParentEmail() {
     e.preventDefault();
     setError('');
 
+    if (!usernameFromUrl) {
+      setError('Invalid link. Please go back to login and try again.');
+      return;
+    }
+
     if (!parentEmail.trim()) {
       setError("Parent or guardian's email is required.");
       return;

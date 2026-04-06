@@ -16,7 +16,9 @@ CREATE TABLE IF NOT EXISTS parent_link_requests (
   organization_id VARCHAR REFERENCES organizations(id) ON DELETE SET NULL,
 
   -- Workflow status: pending | approved | denied | cancelled
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'pending'
+    CONSTRAINT parent_link_requests_status_check
+    CHECK (status IN ('pending', 'approved', 'denied', 'cancelled')),
 
   -- Admin who processed the request (null until processed)
   processed_by VARCHAR REFERENCES users(id) ON DELETE SET NULL,

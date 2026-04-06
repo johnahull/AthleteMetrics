@@ -72,6 +72,11 @@ export function registerCoppaRoutes(app: Express) {
         return res.status(400).json({ message: "parentEmail is required" });
       }
 
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(parentEmail)) {
+        return res.status(400).json({ message: "parentEmail must be a valid email address" });
+      }
+
       if (parentEmail.toLowerCase() === (user.emails?.[0] || '').toLowerCase()) {
         return res.status(400).json({
           code: 'parent_email_must_differ',
@@ -404,6 +409,11 @@ export function registerCoppaRoutes(app: Express) {
 
       if (!parentEmail || typeof parentEmail !== 'string') {
         return res.status(400).json({ message: "parentEmail is required" });
+      }
+
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(parentEmail)) {
+        return res.status(400).json({ message: "parentEmail must be a valid email address" });
       }
 
       // Load the athlete user to check their COPPA status

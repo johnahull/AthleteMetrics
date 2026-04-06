@@ -84,6 +84,7 @@ export const notificationTypeEnum = [
   'new_measurement',      // New performance data logged for athlete
   'team_announcement',    // Coach broadcasts to team
   'report_shared',        // Coach shares performance report with athlete
+  'parent_link_request',  // Parent submits a link-a-child request for coach approval
 ] as const;
 
 /**

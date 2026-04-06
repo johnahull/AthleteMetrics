@@ -7,6 +7,11 @@
  * Cascade delete order (respects FK constraints and data integrity):
  * 1.  Measurements for athlete
  * 2.  Wellness responses
+ * 2b. Push subscriptions (endpoint URL, user agent — PII)
+ * 2c. Notification preferences
+ * 2d. Notification history (may contain PII in message body)
+ * 2e. User achievements
+ * 2f. Goals
  * 3.  Event registrations / invitations
  * 4.  Report shares (removes athlete from shared reports)
  * 5.  AI coaching insights (nulled on report snapshots — not hard-deleted)
@@ -43,6 +48,8 @@ import { wellnessResponses } from '@shared/schema/tables/wellness';
 import { eventRegistrations, eventInvitations } from '@shared/schema/tables/events';
 import { reportShares } from '@shared/schema/tables/reports';
 import { userGlobalAthleteLinks } from '@shared/schema/tables/global-athletes';
+import { pushSubscriptions, notificationPreferences, notificationHistory } from '@shared/schema/tables/notifications';
+import { userAchievements, goals } from '@shared/schema/tables/gamification';
 import {
   COPPA_ACTIONS,
   getAuditRetentionDate,
@@ -244,6 +251,46 @@ export class CoppaDeletionService extends BaseService {
           .returning({ id: wellnessResponses.id });
         if (deletedWellness.length > 0) {
           deletedCategories.push(`wellness_responses (${deletedWellness.length})`);
+        }
+
+        // STEP 2b: Delete push subscriptions (contains endpoint URL, user agent — PII)
+        const deletedPushSubs = await tx.delete(pushSubscriptions)
+          .where(eq(pushSubscriptions.userId, athleteUserId))
+          .returning({ id: pushSubscriptions.id });
+        if (deletedPushSubs.length > 0) {
+          deletedCategories.push(`push_subscriptions (${deletedPushSubs.length})`);
+        }
+
+        // STEP 2c: Delete notification preferences
+        const deletedNotifPrefs = await tx.delete(notificationPreferences)
+          .where(eq(notificationPreferences.userId, athleteUserId))
+          .returning({ id: notificationPreferences.id });
+        if (deletedNotifPrefs.length > 0) {
+          deletedCategories.push(`notification_preferences (${deletedNotifPrefs.length})`);
+        }
+
+        // STEP 2d: Delete notification history (may contain PII in message body)
+        const deletedNotifHistory = await tx.delete(notificationHistory)
+          .where(eq(notificationHistory.userId, athleteUserId))
+          .returning({ id: notificationHistory.id });
+        if (deletedNotifHistory.length > 0) {
+          deletedCategories.push(`notification_history (${deletedNotifHistory.length})`);
+        }
+
+        // STEP 2e: Delete user achievements
+        const deletedAchievements = await tx.delete(userAchievements)
+          .where(eq(userAchievements.userId, athleteUserId))
+          .returning({ id: userAchievements.id });
+        if (deletedAchievements.length > 0) {
+          deletedCategories.push(`user_achievements (${deletedAchievements.length})`);
+        }
+
+        // STEP 2f: Delete goals
+        const deletedGoals = await tx.delete(goals)
+          .where(eq(goals.userId, athleteUserId))
+          .returning({ id: goals.id });
+        if (deletedGoals.length > 0) {
+          deletedCategories.push(`goals (${deletedGoals.length})`);
         }
 
         // STEP 3: Delete event registrations

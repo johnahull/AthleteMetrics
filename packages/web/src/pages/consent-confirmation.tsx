@@ -81,11 +81,11 @@ export default function ConsentConfirmation() {
         const body = await res.json().catch(() => ({}));
         setSubmitError(body.message || 'Something went wrong. Please try again.');
         setSubmitStatus('idle');
-        submittingRef.current = false;
       }
     } catch {
       setSubmitError('Network error. Please check your connection and try again.');
       setSubmitStatus('idle');
+    } finally {
       submittingRef.current = false;
     }
   };
@@ -276,13 +276,14 @@ export default function ConsentConfirmation() {
           {/* AI consent opt-in */}
           <div className="border rounded-lg p-4 bg-muted/50 space-y-3">
             <h3 className="font-semibold text-sm text-foreground">Optional: AI Coaching Insights</h3>
-            <p className="text-sm text-muted-foreground">
+            <p id="ai-consent-description" className="text-sm text-muted-foreground">
               AthleteMetrics can generate personalized coaching insights using AI based on your child's performance data.
               This is optional — you may grant or withhold this separately.
             </p>
             <div className="flex items-center gap-2">
               <Checkbox
                 id="aiConsent"
+                aria-describedby="ai-consent-description"
                 checked={aiConsentGranted}
                 onCheckedChange={(checked) => setAiConsentGranted(checked === true)}
               />

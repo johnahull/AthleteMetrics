@@ -245,6 +245,8 @@ export type ParentAthleteLink = typeof tables.parentAthleteLinks.$inferSelect;
 export type CoppaAuditLog = typeof tables.coppaAuditLog.$inferSelect;
 export type DataDeletionRequest = typeof tables.dataDeletionRequests.$inferSelect;
 export type DataExportRequest = typeof tables.dataExportRequests.$inferSelect;
+export type ParentLinkRequest = typeof tables.parentLinkRequests.$inferSelect;
+export type InsertParentLinkRequest = typeof tables.parentLinkRequests.$inferInsert;
 
 // COPPA enum types
 export type CoppaStatus = (typeof enums.coppaStatusEnum)[number];

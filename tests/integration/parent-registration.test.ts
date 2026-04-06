@@ -108,6 +108,18 @@ async function createTestConsent(athleteId: string, parentEmail: string) {
   return { consent, rawToken };
 }
 
+/**
+ * Create a parentAthleteLinks row so the invitation-only gate allows registration.
+ * Used by tests that register a parent without a consentId.
+ */
+async function createParentLink(parentEmail: string, athleteId: string) {
+  await db.insert(parentAthleteLinks).values({
+    parentEmail: parentEmail.toLowerCase(),
+    athleteUserId: athleteId,
+    isActive: true,
+  }).onConflictDoNothing();
+}
+
 // ============================================================================
 // Setup
 // ============================================================================
@@ -231,6 +243,11 @@ describe('POST /api/auth/register/parent', () => {
       const username1 = `prt_de1_${id}`;
       const username2 = `prt_de2_${id}`;
 
+      // Create athlete + link so the invitation gate passes
+      const { athlete } = await createTestAthleteUser(`prt_dup_a_${id}_`);
+      createdAthleteIds.push(athlete.id);
+      await createParentLink(email, athlete.id);
+
       // First registration with the email
       const res1 = await request(app)
         .post('/api/auth/register/parent')
@@ -327,6 +344,11 @@ describe('POST /api/auth/register/parent', () => {
       const email = `${TEST_PREFIX}parent_${id}@example.com`;
       const username = `${TEST_PREFIX}par${id}`;
 
+      // Create athlete + parentAthleteLinks row so the invitation gate passes
+      const { athlete } = await createTestAthleteUser(`${TEST_PREFIX}link_${id}_`);
+      createdAthleteIds.push(athlete.id);
+      await createParentLink(email, athlete.id);
+
       const res = await request(app)
         .post('/api/auth/register/parent')
         .send({
@@ -354,7 +376,14 @@ describe('POST /api/auth/register/parent', () => {
     it('rejects duplicate username', async () => {
       const id = uniqueId();
       const email = `${TEST_PREFIX}parent_${id}@example.com`;
+      const email2 = `${TEST_PREFIX}other_${id}@example.com`;
       const username = `${TEST_PREFIX}dup${id}`;
+
+      // Create athlete + links so the invitation gate passes for both emails
+      const { athlete } = await createTestAthleteUser(`${TEST_PREFIX}dup_a_${id}_`);
+      createdAthleteIds.push(athlete.id);
+      await createParentLink(email, athlete.id);
+      await createParentLink(email2, athlete.id);
 
       // First registration
       const res1 = await request(app)
@@ -377,7 +406,7 @@ describe('POST /api/auth/register/parent', () => {
         .send({
           firstName: 'John',
           lastName: 'Doe',
-          email: `${TEST_PREFIX}other_${id}@example.com`,
+          email: email2,
           username, // same username!
           password: VALID_PASSWORD,
           legalAcceptedAt: new Date().toISOString(),
@@ -545,11 +574,11 @@ describe('POST /api/auth/register/parent — linkParentAccount without consentId
   });
 
   /**
-   * If no pending email-only links exist for this parent's email, registration
-   * should still succeed — the linkParentAccount call returns 0 rows updated
-   * but must not throw an error.
+   * If no pending email-only links exist for this parent's email and no consentId
+   * is provided, the invitation-only gate should reject with 400 to prevent
+   * orphaned parent accounts.
    */
-  it('succeeds (201) when email has no pending email-only links — no error, no links created', async () => {
+  it('rejects (400) when email has no pending links and no consentId', async () => {
     const id = uniqueId();
     const parentEmail = `${TEST_PREFIX}nolinks_par_${id}@example.com`;
     const username = `${TEST_PREFIX}nolinks${id}`;
@@ -565,14 +594,8 @@ describe('POST /api/auth/register/parent — linkParentAccount without consentId
         legalAcceptedAt: new Date().toISOString(),
       });
 
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    // linkedAthletes should be 0 (or absent / falsy) — no links to claim
-    expect(res.body.linkedAthletes ?? 0).toBe(0);
-
-    // Track created user for cleanup
-    const [createdParent] = await db.select().from(users).where(like(users.username, username));
-    if (createdParent) createdUserIds.push(createdParent.id);
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
   });
 });
 

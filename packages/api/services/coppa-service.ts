@@ -266,8 +266,11 @@ export class CoppaService extends BaseService {
         return { confirmed: false, reason: 'pending' };
       }
 
-      // status is 'confirmed' (or 'revoked' — both mean the parent acted, so we
-      // can treat them as authenticated for data-rights requests)
+      if (consent.status === 'revoked') {
+        return { confirmed: false, reason: 'expired' };
+      }
+
+      // status is 'confirmed' — the parent has granted consent
       return { confirmed: true, consent: consent as ParentalConsent };
     } catch (error) {
       console.error('[COPPA] verifyConfirmedToken failed:', error);
