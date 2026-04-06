@@ -408,7 +408,9 @@ export class CoppaDeletionService extends BaseService {
             lastName: '[Deleted]',
             fullName: '[Deleted]',
             username: `deleted_${athleteUserId.slice(0, 8)}_${Date.now()}`,
-            password: null,
+            // Set to a non-authenticable sentinel (not null) to satisfy
+            // the users_must_have_auth_method CHECK constraint while preventing login.
+            password: '$2b$10$DELETED_COPPA_ACCOUNT_NO_LOGIN_POSSIBLE',
             emails: [],
             phoneNumbers: null,
             birthDate: null,
