@@ -147,14 +147,13 @@ describe('GET /api/parent/children', () => {
     expect(res.status).toBe(401);
   });
 
-  it('returns empty array when no links exist for other user', async () => {
+  it('returns 403 for non-parent user (role guard)', async () => {
     const cookie = await loginAs(app, otherUser);
     const res = await request(app)
       .get('/api/parent/children')
       .set('Cookie', cookie);
-    expect(res.status).toBe(200);
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBe(0);
+    // Non-parent users are rejected by the role guard (defense-in-depth)
+    expect(res.status).toBe(403);
   });
 
   it('returns linked athletes for authenticated parent', async () => {
