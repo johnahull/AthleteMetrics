@@ -513,6 +513,10 @@ export function registerOrganizationRoutes(app: Express) {
               message: "AI features must be enabled for this organization first"
             });
           }
+          // Store the raw value; sanitizeForPrompt() is applied at prompt-build time
+          // in ai-insights-service.ts. Org admins are trusted users — storing raw lets
+          // them see exactly what they entered. The 2000-char limit above is the primary
+          // write-time guard; sanitization on read prevents injection into AI prompts.
           updates.aiPromptContext = aiPromptContext;
         }
       }

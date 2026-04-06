@@ -136,6 +136,12 @@ export class GlobalAthleteService extends BaseService {
       // address. PostgreSQL allows multiple NULLs in a UNIQUE column, so
       // leaving primaryEmail null creates a valid isolated identity.
       // The verifiedEmails array still records the email for audit purposes.
+      //
+      // Lookup safety: findByVerifiedEmail() always searches BOTH primaryEmail
+      // (for performance) AND the verifiedEmails array as a fallback, so athletes
+      // with primaryEmail = null are still discoverable by email through the array
+      // check. All callers that need to locate a global athlete by email must use
+      // findByVerifiedEmail() — never query primaryEmail in isolation.
       const [newGlobalAthlete] = await db.insert(globalAthletes).values({
         verifiedEmails: [email],
         canonicalFirstName: user.firstName,

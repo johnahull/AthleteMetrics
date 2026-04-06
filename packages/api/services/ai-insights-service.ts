@@ -604,7 +604,9 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
     if (reportData.athleteName) {
-      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
+      // Use a short max-length — a first name is never 500 chars; prevents unexpectedly
+      // long sanitized strings from becoming the firstName if the name has no spaces.
+      const firstName = sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0];
       if (firstName) {
         prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
       }
@@ -619,7 +621,9 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
     prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
     if (reportData.athleteName) {
-      const firstName = sanitizeForPrompt(reportData.athleteName).split(' ')[0];
+      // Use a short max-length — a first name is never 500 chars; prevents unexpectedly
+      // long sanitized strings from becoming the firstName if the name has no spaces.
+      const firstName = sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0];
       if (firstName) {
         prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
       }
