@@ -83,7 +83,8 @@ export function registerAuthRoutes(app: Express) {
         role: roleContext.role,
         isSiteAdmin: user.isSiteAdmin === true,
         primaryOrganizationId: roleContext.primaryOrganizationId,
-        athleteId: roleContext.role === 'athlete' ? user.id : undefined
+        athleteId: roleContext.role === 'athlete' ? user.id : undefined,
+        emailVerified: user.isEmailVerified === true,
       };
 
       // Get user organizations for context
@@ -223,7 +224,8 @@ export function registerAuthRoutes(app: Express) {
         role: targetRoleContext.role,
         isSiteAdmin: targetUser.isSiteAdmin === true,
         primaryOrganizationId: targetRoleContext.primaryOrganizationId,
-        athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined
+        athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined,
+        emailVerified: targetUser.isEmailVerified === true,
       };
 
       req.session.isImpersonating = true;

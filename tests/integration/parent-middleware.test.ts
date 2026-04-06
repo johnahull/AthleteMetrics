@@ -198,7 +198,7 @@ describe('requireParentAccess — missing athleteId parameter', () => {
 
     // Inject a fake authenticated parent session
     testApp.use((req: any, _res: any, next: any) => {
-      req.session = { user: { id: siteAdminUser.id, isSiteAdmin: false } };
+      req.session = { user: { id: siteAdminUser.id, isSiteAdmin: false, role: 'parent', emailVerified: true } };
       next();
     });
 
