@@ -515,26 +515,35 @@ export class CoppaService extends BaseService {
   ): Promise<ConfirmConsentResult> {
     try {
       if (revokeAiOnly) {
-        // Find the active consent record and update only AI consent
-        const updated = await db.update(parentalConsents)
-          .set({ aiConsentGranted: false })
-          .where(and(
-            eq(parentalConsents.athleteUserId, athleteUserId),
-            eq(parentalConsents.status, 'confirmed'),
-          ))
-          .returning({ id: parentalConsents.id });
+        // Wrap AI consent revocation + audit in a transaction so the compliance
+        // record is guaranteed to exist if the consent change succeeds.
+        let revokedAi = false;
+        await db.transaction(async (tx) => {
+          const updated = await tx.update(parentalConsents)
+            .set({ aiConsentGranted: false })
+            .where(and(
+              eq(parentalConsents.athleteUserId, athleteUserId),
+              eq(parentalConsents.status, 'confirmed'),
+            ))
+            .returning({ id: parentalConsents.id });
 
-        if (updated.length === 0) {
+          if (updated.length === 0) {
+            return; // no-op, handled below
+          }
+          revokedAi = true;
+
+          await this.writeCoppaAudit({
+            action: COPPA_ACTIONS.AI_CONSENT_DENIED,
+            athleteUserId,
+            actorUserId: actorId,
+            ip,
+            details: { revokeAiOnly: true },
+          });
+        });
+
+        if (!revokedAi) {
           return { success: false, error: 'No active consent found to revoke' };
         }
-
-        await this.writeCoppaAudit({
-          action: COPPA_ACTIONS.AI_CONSENT_DENIED,
-          athleteUserId,
-          actorUserId: actorId,
-          ip,
-          details: { revokeAiOnly: true },
-        });
       } else {
         // Full consent revocation — atomically revoke consent, user access,
         // and parent links in a single transaction. Without this, a window

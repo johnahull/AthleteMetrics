@@ -26,6 +26,8 @@ export const parentalConsents = pgTable("parental_consents", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
 
   // Athlete whose account requires consent
+  // Note: cascade is acceptable here because the system uses soft-delete (PII clearing),
+  // not hard delete. Consent records survive soft-deletion.
   athleteUserId: varchar("athlete_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
 
   // Organization context (null for independent athletes)
@@ -123,7 +125,8 @@ export const coppaAuditLog = pgTable("coppa_audit_log", {
  */
 export const dataDeletionRequests = pgTable("data_deletion_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  athleteUserId: varchar("athlete_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Nullable so deletion request records survive the athlete deletion they triggered
+  athleteUserId: varchar("athlete_user_id").references(() => users.id, { onDelete: 'set null' }),
   requestedByEmail: text("requested_by_email").notNull(),
   consentId: varchar("consent_id"), // References parentalConsents.id
   status: text("status", { enum: ['pending', 'processing', 'completed', 'rejected'] }).default('pending').notNull(),
@@ -142,7 +145,8 @@ export const dataDeletionRequests = pgTable("data_deletion_requests", {
  */
 export const dataExportRequests = pgTable("data_export_requests", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  athleteUserId: varchar("athlete_user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // Nullable so export request records survive athlete deletion
+  athleteUserId: varchar("athlete_user_id").references(() => users.id, { onDelete: 'set null' }),
   requestedByEmail: text("requested_by_email").notNull(),
   consentId: varchar("consent_id"), // References parentalConsents.id
   status: text("status", { enum: ['pending', 'processing', 'ready', 'delivered', 'expired'] }).default('pending').notNull(),

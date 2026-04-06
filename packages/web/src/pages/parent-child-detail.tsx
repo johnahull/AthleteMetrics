@@ -112,7 +112,9 @@ export default function ParentChildDetail() {
 
   // Role guard — only parents can access this page
   useEffect(() => {
-    if (user && user.role !== 'parent') {
+    if (!user) {
+      setLocation('/login');
+    } else if (user.role !== 'parent') {
       setLocation('/dashboard');
     }
   }, [user, setLocation]);

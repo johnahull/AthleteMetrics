@@ -1756,14 +1756,12 @@ export class EmailService {
         `This link expires on ${data.expiresAt.toLocaleDateString()}.\n\n` +
         `If you did not expect this, you can safely ignore it.`;
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: parentEmail,
         subject: `Action Required: Parental Consent for ${athleteName}'s AthleteMetrics Account`,
         html,
         text,
       });
-
-      return true;
     } catch (error) {
       console.error('[COPPA Email] sendParentalConsentRequest failed:', error);
       return false;
@@ -1814,14 +1812,12 @@ export class EmailService {
 </body>
 </html>`.trim();
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: athleteEmail,
         subject: 'Your AthleteMetrics Account is Now Active',
         html,
         text: `Hi ${data.athleteName},\n\nYour AthleteMetrics account has been approved by a parent or guardian. You can now log in!`,
       });
-
-      return true;
     } catch (error) {
       console.error('[COPPA Email] sendConsentConfirmedNotification failed:', error);
       return false;
@@ -1925,14 +1921,12 @@ export class EmailService {
         `This is a one-time download link. It expires on ${expiryStr}.\n\n` +
         `Questions? Contact privacy@athletemetrics.app`;
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: parentEmail,
         subject: `Data Export Ready — ${data.athleteName}`,
         html,
         text,
       });
-
-      return true;
     } catch (error) {
       console.error('[COPPA Email] sendExportReadyNotification failed:', error);
       return false;
@@ -2100,14 +2094,12 @@ export class EmailService {
 </body>
 </html>`.trim();
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: toEmail,
         subject: `Data Deletion Request Received for ${data.athleteName}`,
         html,
         text: `Data Deletion Request Received\n\nWe received your request to delete data for ${data.athleteName}.\nRequest ID: ${data.requestId}\n\nYou will receive a confirmation once the deletion is processed.\nContact: privacy@athletemetrics.app`,
       });
-
-      return true;
     } catch (error) {
       console.error('[COPPA Email] sendDeletionRequestConfirmation failed:', error);
       return false;
@@ -2185,14 +2177,12 @@ export class EmailService {
 </body>
 </html>`.trim();
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: toEmail,
         subject: 'Data Deletion Complete — AthleteMetrics',
         html,
         text: `Data Deletion Complete\n\nRequest ID: ${data.requestId}\n\nDeleted categories:\n${data.deletedCategories.map(c => `- ${c}`).join('\n')}\n\nA minimal audit record is retained for 5 years per COPPA requirements.\nContact: privacy@athletemetrics.app`,
       });
-
-      return true;
     } catch (error) {
       console.error('[COPPA Email] sendDeletionCompletedNotification failed:', error);
       return false;
@@ -2301,14 +2291,12 @@ export class EmailService {
         `No action is required. If you do not wish to create a parent account, you can safely ignore this email.\n\n` +
         `Questions? Contact us at privacy@athletemetrics.app`;
 
-      await this.sendEmail({
+      return await this.sendEmail({
         to: data.parentEmail,
         subject: `Your child ${athleteFirstName} has registered on AthleteMetrics`,
         html,
         text,
       });
-
-      return true;
     } catch (error) {
       console.error('[Email] sendParentNotification failed:', error);
       return false;

@@ -73,6 +73,7 @@ export interface InitiateDeletionParams {
 export interface InitiateDeletionResult {
   success: boolean;
   requestId?: string;
+  emailSent?: boolean;
   error?: string;
   statusCode?: number;
 }
@@ -86,7 +87,7 @@ export interface ProcessDeletionResult {
 
 export interface DeletionRequest {
   id: string;
-  athleteUserId: string;
+  athleteUserId: string | null;
   requestedByEmail: string;
   consentId: string | null;
   status: string;
@@ -164,12 +165,17 @@ export class CoppaDeletionService extends BaseService {
 
       // Send confirmation email to requester
       const athleteName = `${athlete.firstName} ${athlete.lastName}`;
-      await this.emailService.sendDeletionRequestConfirmation(requestedByEmail, {
-        athleteName,
-        requestId: request.id,
-      });
+      let emailSent = false;
+      try {
+        emailSent = await this.emailService.sendDeletionRequestConfirmation(requestedByEmail, {
+          athleteName,
+          requestId: request.id,
+        });
+      } catch (emailErr) {
+        console.error(`[COPPA Deletion] Confirmation email failed for request ${request.id}:`, emailErr);
+      }
 
-      return { success: true, requestId: request.id };
+      return { success: true, requestId: request.id, emailSent };
     } catch (error) {
       console.error('[COPPA Deletion] initiateDeletionRequest failed:', error);
       return {
@@ -226,6 +232,9 @@ export class CoppaDeletionService extends BaseService {
     }
 
     const athleteUserId = request.athleteUserId;
+    if (!athleteUserId) {
+      return { success: false, error: 'Deletion request has no associated athlete (already deleted)', statusCode: 400 };
+    }
     const deletedCategories: string[] = [];
 
     try {

@@ -280,7 +280,7 @@ export class CoppaExportService extends BaseService {
       let bundle: Awaited<ReturnType<typeof this.buildExportBundle>> | undefined;
       let buildError: Error | undefined;
       try {
-        bundle = await this.buildExportBundle(exportRequest.athleteUserId);
+        bundle = await this.buildExportBundle(exportRequest.athleteUserId!);
       } catch (err) {
         buildError = err as Error;
         console.error('[COPPA Export] buildExportBundle failed after token claimed:', err);

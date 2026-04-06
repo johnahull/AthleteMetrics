@@ -216,7 +216,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
           } catch (err) {
             console.error('[ParentLinkRequest] Failed to notify coaches:', err);
           }
-        })();
+        })().catch((err) => console.error('[ParentLinkRequest] Coach notification IIFE error:', err));
       }
 
       return res.status(200).json({ success: true, message: ANTI_ENUM_MESSAGE });
@@ -483,7 +483,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
           } catch (err) {
             console.error('[ParentLinkRequest] Failed to notify parent (approve):', err);
           }
-        })();
+        })().catch((err) => console.error('[ParentLinkRequest] Approve notification IIFE error:', err));
       }
 
       return res.json({ success: true });
@@ -584,7 +584,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
           } catch (err) {
             console.error('[ParentLinkRequest] Failed to notify parent (deny):', err);
           }
-        })();
+        })().catch((err) => console.error('[ParentLinkRequest] Deny notification IIFE error:', err));
       }
 
       return res.json({ success: true });
