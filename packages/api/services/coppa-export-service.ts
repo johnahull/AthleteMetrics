@@ -274,19 +274,37 @@ export class CoppaExportService extends BaseService {
         return { success: false, error: 'This download link has already been used.', statusCode: 410 };
       }
 
-      // Build the export bundle only after successful claim
-      const bundle = await this.buildExportBundle(exportRequest.athleteUserId);
+      // Build the export bundle only after successful claim.
+      // Write the audit log regardless of whether bundle build succeeds — the token
+      // was consumed above, so we must record the attempt even on partial failure.
+      let bundle: Awaited<ReturnType<typeof this.buildExportBundle>> | undefined;
+      let buildError: Error | undefined;
+      try {
+        bundle = await this.buildExportBundle(exportRequest.athleteUserId);
+      } catch (err) {
+        buildError = err as Error;
+        console.error('[COPPA Export] buildExportBundle failed after token claimed:', err);
+      } finally {
+        // Always write audit log — token is permanently consumed, COPPA requires the record
+        await this.writeCoppaAudit({
+          action: COPPA_ACTIONS.DATA_EXPORT_DELIVERED,
+          athleteUserId: exportRequest.athleteUserId,
+          consentId: exportRequest.consentId ?? null,
+          actorEmail: exportRequest.requestedByEmail,
+          details: {
+            exportRequestId: exportRequest.id,
+            ...(buildError ? { error: buildError.message, buildFailed: true } : {}),
+          },
+        }).catch((auditErr: unknown) => {
+          console.error('[COPPA Export] Failed to write audit log after delivery:', auditErr);
+        });
+      }
 
-      // Write audit log after successful delivery
-      await this.writeCoppaAudit({
-        action: COPPA_ACTIONS.DATA_EXPORT_DELIVERED,
-        athleteUserId: exportRequest.athleteUserId,
-        consentId: exportRequest.consentId ?? null,
-        actorEmail: exportRequest.requestedByEmail,
-        details: { exportRequestId: exportRequest.id },
-      });
+      if (buildError) {
+        return { success: false, error: 'Failed to build export bundle.', statusCode: 500 };
+      }
 
-      return { success: true, bundle };
+      return { success: true, bundle: bundle! };
     } catch (error) {
       console.error('[COPPA Export] downloadExport failed:', error);
       return {

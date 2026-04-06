@@ -116,7 +116,7 @@ export function registerCoppaDeletionRoutes(app: Express) {
           actorUserId = actor.id;
 
           if (!actor.isSiteAdmin) {
-            if ((actor as any).role === 'parent') {
+            if (actor.role === 'parent') {
               // Authenticated parent: must have an active link to the target athlete
               const parentLink = await db.select({ id: parentAthleteLinks.id })
                 .from(parentAthleteLinks)

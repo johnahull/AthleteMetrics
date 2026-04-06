@@ -149,7 +149,8 @@ export function registerParentLinkRequestRoutes(app: Express) {
           .limit(1);
         if (existingLink) { skippedDuplicate = true; return; }
 
-        // Check for existing pending request → skip silently
+        // Check for existing pending request that has not yet expired → skip silently.
+        // Expired pending requests (expiresAt <= now) are ignored so the parent can resubmit.
         const [existingRequest] = await tx
           .select({ id: parentLinkRequests.id })
           .from(parentLinkRequests)
@@ -157,6 +158,7 @@ export function registerParentLinkRequestRoutes(app: Express) {
             eq(parentLinkRequests.parentUserId, parentUserId),
             eq(parentLinkRequests.athleteUserId, child!.id),
             eq(parentLinkRequests.status, 'pending'),
+            gt(parentLinkRequests.expiresAt, new Date()),
           ))
           .limit(1);
         if (existingRequest) { skippedDuplicate = true; return; }

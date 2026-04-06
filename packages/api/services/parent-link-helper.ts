@@ -34,7 +34,19 @@ export async function handleParentEmailUpdate(
   // 1. Persist the new value (null clears it)
   await storage.updateUser(athleteUserId, { parentEmail: parentEmail ?? null });
 
-  // 2. If a real email + minor athlete → create link (de-duplicated)
+  // 2. If parentEmail is cleared, deactivate all active parent links.
+  // This revokes the parent's read access via requireParentAccess middleware.
+  if (parentEmail === null) {
+    await db.update(parentAthleteLinks)
+      .set({ isActive: false })
+      .where(and(
+        eq(parentAthleteLinks.athleteUserId, athleteUserId),
+        eq(parentAthleteLinks.isActive, true),
+      ));
+    return;
+  }
+
+  // 3. If a real email + minor athlete → create link (de-duplicated)
   if (parentEmail && athleteInfo.birthDate) {
     let minor = false;
     try {
