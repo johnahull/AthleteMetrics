@@ -5,6 +5,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { PASSWORD_REQUIREMENTS, PASSWORD_REGEX } from "./password-requirements";
 import { validateUsername } from "./username-validation";
+import { isSafePublicUrl } from "./url-safety";
 
 // AI Coaching Insights constants
 export const MAX_INSIGHTS_LENGTH = 10000;
@@ -1417,7 +1418,7 @@ export const updateOrganizationSchema = z.object({
   // and is not part of the site-admin updateOrganizationSchema
   // z.preprocess normalizes empty strings to null so clearing a field in the form
   // doesn't trigger a "must be valid URL/hex" error and stores null in the DB consistently.
-  brandLogoUrl: z.preprocess(val => val === '' ? null : val, z.string().url("Must be a valid URL").max(2000).refine(u => u.startsWith('https://'), "Logo URL must use HTTPS").nullable()).optional(),
+  brandLogoUrl: z.preprocess(val => val === '' ? null : val, z.string().url("Must be a valid URL").max(2000).refine(u => u.startsWith('https://'), "Logo URL must use HTTPS").refine(u => isSafePublicUrl(u), "Logo URL must point to a public host").nullable()).optional(),
   brandPrimaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandSecondaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandTagline: z.preprocess(val => val === '' ? null : val, z.string().max(200, "Tagline must be 200 characters or less").nullable()).optional(),

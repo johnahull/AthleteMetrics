@@ -18,42 +18,17 @@ export function hexToRgb(hex: string): [number, number, number] {
 }
 
 /**
- * Validate that a URL is safe to fetch server-side (prevents SSRF).
- * Only HTTPS URLs pointing to public internet hosts are allowed.
+ * Re-export the shared URL safety check. The canonical implementation lives in
+ * @shared/url-safety so both Zod schemas and API routes use the same logic.
  *
- * Known limitation: DNS rebinding is not mitigated here. A domain could resolve
- * to a public IP during this hostname check and then resolve to a private IP at
- * actual fetch time. The blast radius is limited because only org admins can set
- * brandLogoUrl. Partial mitigations in fetchLogoBase64 (5s timeout, 2 MB cap,
- * redirect: 'error') reduce the window and limit exfiltration size, but do not
- * fully prevent a rebinding attack. Deployments in highly sensitive environments
- * should consider an egress proxy or allowlist-based approach.
+ * Known limitation: DNS rebinding is not mitigated. Partial mitigations in
+ * fetchLogoBase64 (5s timeout, 2 MB cap, redirect: 'error') reduce the window.
+ * See @shared/url-safety.ts for full documentation.
  */
-export function isSafeLogoUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname;
-    // Block loopback, unspecified, and common internal hostnames
-    if (hostname === 'localhost') return false;
-    if (/^0\./.test(hostname)) return false; // Block 0.0.0.0/8 — Linux routes 0.x.x.x to local interfaces
-    if (/^127\./.test(hostname)) return false; // Block entire 127.0.0.0/8 loopback range
-    // Block all IPv6 addresses (bracketed) — covers ::1, ::ffff:*, fc00::/7, fe80::, etc.
-    if (hostname.startsWith('[')) return false;
-    // Block RFC-1918 private ranges
-    if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
-    if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
-    // Block APIPA / cloud metadata link-local range
-    if (/^169\.254\./.test(hostname)) return false;
-    // Block CGNAT shared address space (100.64.0.0/10) — used by some cloud providers for internal routing
-    if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return false;
-    // Block internal TLDs
-    if (hostname.endsWith('.internal') || hostname.endsWith('.local')) return false;
-    return true;
-  } catch {
-    return false;
-  }
-}
+import { isSafePublicUrl } from '@shared/url-safety';
+export { isSafePublicUrl as isSafeLogoUrl };
+// Also export the original name for direct use within this file
+const isSafeLogoUrl = isSafePublicUrl;
 
 export interface LogoFetchResult {
   base64: string;
