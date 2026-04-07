@@ -10,6 +10,11 @@
  * Check if a URL is safe to use server-side (prevents SSRF).
  * Only HTTPS URLs pointing to public internet hosts are allowed.
  *
+ * Non-standard IPv4 representations (decimal, octal, hex — e.g. 2130706433,
+ * 0x7f000001, 0177.0.0.1 for 127.0.0.1) are safe here because Node's WHATWG URL
+ * parser normalizes them to dotted-decimal before we inspect `hostname`.
+ * Tests in report-branding-utils.test.ts verify this.
+ *
  * Known limitation: DNS rebinding is not mitigated here. A domain could resolve
  * to a public IP during validation and then resolve to a private IP at fetch time.
  */
@@ -27,7 +32,9 @@ export function isSafePublicUrl(url: string): boolean {
     // Block RFC-1918 private ranges
     if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) return false;
     if (/^172\.(1[6-9]|2\d|3[01])\./.test(hostname)) return false;
-    // Block APIPA / cloud metadata link-local range
+    // Block APIPA / cloud metadata link-local range (169.254.0.0/16).
+    // This covers AWS metadata (169.254.169.254) via IP; .internal TLD check below
+    // provides additional coverage for metadata.aws.internal.
     if (/^169\.254\./.test(hostname)) return false;
     // Block CGNAT shared address space (100.64.0.0/10)
     if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(hostname)) return false;

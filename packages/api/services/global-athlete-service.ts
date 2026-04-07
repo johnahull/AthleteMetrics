@@ -534,9 +534,14 @@ export class GlobalAthleteService extends BaseService {
         .replace(/%/g, '\\%')    // Escape percent signs
         .replace(/_/g, '\\_');   // Escape underscores
 
+      // Search both primaryEmail AND verifiedEmails array. Athletes created
+      // with cross-org linking disabled have primaryEmail = null, so searching
+      // only primaryEmail would miss them. The unnest fallback ensures all
+      // athletes are discoverable by email regardless of primaryEmail state.
       conditions.push(
         or(
           ilike(globalAthletes.primaryEmail, `%${escapedSearch}%`),
+          sql`EXISTS (SELECT 1 FROM unnest(${globalAthletes.verifiedEmails}) e WHERE e ILIKE ${'%' + escapedSearch + '%'})`,
           ilike(globalAthletes.canonicalFullName, `%${escapedSearch}%`)
         ) as ReturnType<typeof eq>
       );

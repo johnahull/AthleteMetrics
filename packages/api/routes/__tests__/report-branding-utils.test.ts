@@ -148,6 +148,31 @@ describe('isSafeLogoUrl', () => {
     expect(isSafeLogoUrl('https://100.63.255.255/logo.png')).toBe(true);
   });
 
+  // --- Non-standard IPv4 representations (SSRF bypass vectors) ---
+  it('blocks decimal IP for loopback (2130706433 = 127.0.0.1)', () => {
+    expect(isSafeLogoUrl('https://2130706433/logo.png')).toBe(false);
+  });
+
+  it('blocks hex IP for loopback (0x7f000001 = 127.0.0.1)', () => {
+    expect(isSafeLogoUrl('https://0x7f000001/logo.png')).toBe(false);
+  });
+
+  it('blocks octal IP for loopback (0177.0.0.1 = 127.0.0.1)', () => {
+    expect(isSafeLogoUrl('https://0177.0.0.1/logo.png')).toBe(false);
+  });
+
+  it('blocks decimal IP for metadata (2852039166 = 169.254.169.254)', () => {
+    expect(isSafeLogoUrl('https://2852039166/logo.png')).toBe(false);
+  });
+
+  it('blocks hex IP for private range (0x0a000001 = 10.0.0.1)', () => {
+    expect(isSafeLogoUrl('https://0x0a000001/logo.png')).toBe(false);
+  });
+
+  it('blocks pure-numeric hostname (no dots)', () => {
+    expect(isSafeLogoUrl('https://12345/logo.png')).toBe(false);
+  });
+
   // --- Internal TLDs ---
   it('blocks .internal hostnames', () => {
     expect(isSafeLogoUrl('https://service.internal/logo.png')).toBe(false);

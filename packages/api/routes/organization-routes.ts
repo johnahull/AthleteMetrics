@@ -492,7 +492,11 @@ export function registerOrganizationRoutes(app: Express) {
         }
       }
 
-      // Validate and handle aiPromptContext
+      // Validate and handle aiPromptContext.
+      // Note: aiPromptContext is preserved in the DB even when AI is later disabled.
+      // This is intentional — it avoids data loss and lets the context resume when
+      // AI is re-enabled. The guard below only prevents *setting* context while
+      // AI is off; it does not clear existing context on disable.
       if (aiPromptContext !== undefined) {
         if (aiPromptContext === null || aiPromptContext === '') {
           updates.aiPromptContext = null;
