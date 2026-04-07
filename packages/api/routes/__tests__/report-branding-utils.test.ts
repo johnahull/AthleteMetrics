@@ -75,6 +75,11 @@ describe('isSafeLogoUrl', () => {
     expect(isSafeLogoUrl('https://0.0.0.0/logo.png')).toBe(false);
   });
 
+  it('blocks 0.0.0.0/8 subnet (e.g. 0.1.2.3)', () => {
+    expect(isSafeLogoUrl('https://0.1.2.3/logo.png')).toBe(false);
+    expect(isSafeLogoUrl('https://0.255.255.255/logo.png')).toBe(false);
+  });
+
   // --- IPv4-mapped IPv6 ---
   it('blocks ::ffff:127.0.0.1 (IPv4-mapped loopback)', () => {
     expect(isSafeLogoUrl('https://[::ffff:127.0.0.1]/logo.png')).toBe(false);
