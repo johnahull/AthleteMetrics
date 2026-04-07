@@ -75,6 +75,10 @@ describe('isSafeLogoUrl', () => {
     expect(isSafeLogoUrl('https://0.0.0.0/logo.png')).toBe(false);
   });
 
+  it('blocks bare hostname 0 (Node normalizes to 0.0.0.0)', () => {
+    expect(isSafeLogoUrl('https://0/logo.png')).toBe(false);
+  });
+
   it('blocks 0.0.0.0/8 subnet (e.g. 0.1.2.3)', () => {
     expect(isSafeLogoUrl('https://0.1.2.3/logo.png')).toBe(false);
     expect(isSafeLogoUrl('https://0.255.255.255/logo.png')).toBe(false);
@@ -197,13 +201,28 @@ describe('fetchLogoBase64', () => {
     vi.restoreAllMocks();
   });
 
+  /** Helper: build a mock readable stream reader from an ArrayBuffer */
+  function makeReader(body: ArrayBuffer) {
+    let delivered = false;
+    return {
+      read: () => {
+        if (delivered) return Promise.resolve({ done: true as const, value: undefined });
+        delivered = true;
+        return Promise.resolve({ done: false as const, value: new Uint8Array(body) });
+      },
+      cancel: vi.fn(() => Promise.resolve()),
+    };
+  }
+
   function makeFetchResponse(opts: {
     ok?: boolean;
     contentType?: string;
     contentLength?: number;
     body?: ArrayBuffer;
+    /** Set true to omit response.body (simulates no readable stream) */
+    noBody?: boolean;
   }) {
-    const { ok = true, contentType = 'image/png', contentLength, body = new ArrayBuffer(100) } = opts;
+    const { ok = true, contentType = 'image/png', contentLength, body = new ArrayBuffer(100), noBody = false } = opts;
     return Promise.resolve({
       ok,
       headers: {
@@ -213,7 +232,7 @@ describe('fetchLogoBase64', () => {
           return null;
         },
       },
-      arrayBuffer: () => Promise.resolve(body),
+      body: noBody ? null : { getReader: () => makeReader(body) },
     } as unknown as Response);
   }
 
@@ -245,14 +264,44 @@ describe('fetchLogoBase64', () => {
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
   });
 
-  it('returns null when image exceeds 2 MB', async () => {
+  it('returns null when streamed body exceeds 2 MB (single large chunk)', async () => {
     const bigBuffer = new ArrayBuffer(3 * 1024 * 1024);
     vi.stubGlobal('fetch', () => makeFetchResponse({ body: bigBuffer }));
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
   });
 
-  it('returns null when Content-Length header exceeds 2 MB (before buffering)', async () => {
-    const arrayBufferSpy = vi.fn(() => Promise.resolve(new ArrayBuffer(100)));
+  it('returns null when streamed body exceeds 2 MB across multiple chunks', async () => {
+    // Simulate chunked transfer: three 1 MB chunks = 3 MB total
+    const chunkSize = 1024 * 1024;
+    const chunks = [new Uint8Array(chunkSize), new Uint8Array(chunkSize), new Uint8Array(chunkSize)];
+    let idx = 0;
+    const cancelSpy = vi.fn(() => Promise.resolve());
+    const multiChunkReader = {
+      read: () => {
+        if (idx >= chunks.length) return Promise.resolve({ done: true as const, value: undefined });
+        return Promise.resolve({ done: false as const, value: chunks[idx++] });
+      },
+      cancel: cancelSpy,
+    };
+    vi.stubGlobal('fetch', () =>
+      Promise.resolve({
+        ok: true,
+        headers: { get: (h: string) => (h === 'content-type' ? 'image/png' : null) },
+        body: { getReader: () => multiChunkReader },
+      } as unknown as Response),
+    );
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+    // Reader should have been cancelled once the cap was exceeded
+    expect(cancelSpy).toHaveBeenCalled();
+  });
+
+  it('returns null when response.body is null (no readable stream)', async () => {
+    vi.stubGlobal('fetch', () => makeFetchResponse({ noBody: true }));
+    expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
+  });
+
+  it('returns null when Content-Length header exceeds 2 MB (before streaming)', async () => {
+    const getReaderSpy = vi.fn(() => makeReader(new ArrayBuffer(100)));
     const fetchSpy = vi.fn(() =>
       Promise.resolve({
         ok: true,
@@ -263,18 +312,19 @@ describe('fetchLogoBase64', () => {
             return null;
           },
         },
-        arrayBuffer: arrayBufferSpy,
+        body: { getReader: getReaderSpy },
       } as unknown as Response),
     );
     vi.stubGlobal('fetch', fetchSpy);
     expect(await fetchLogoBase64('https://example.com/logo.png')).toBeNull();
     expect(fetchSpy).toHaveBeenCalledOnce();
-    // Fast-reject must skip buffering entirely — arrayBuffer should never be called
-    expect(arrayBufferSpy).not.toHaveBeenCalled();
+    // Fast-reject must skip streaming entirely — getReader should never be called
+    expect(getReaderSpy).not.toHaveBeenCalled();
   });
 
-  it('does not reject when Content-Length header is absent (relies on post-download cap)', async () => {
+  it('does not reject when Content-Length header is absent (relies on streaming cap)', async () => {
     // No contentLength in opts → header returns null → contentLength parses to 0 → pre-check skipped
+    // Body is streamed and checked per-chunk instead
     vi.stubGlobal('fetch', () => makeFetchResponse({ body: new ArrayBuffer(100) }));
     const result = await fetchLogoBase64('https://example.com/logo.png');
     expect(result).not.toBeNull();

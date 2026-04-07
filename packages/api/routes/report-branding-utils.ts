@@ -66,17 +66,41 @@ export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | nu
       return null;
     }
     // Fast reject if Content-Length header indicates oversized image (before buffering)
+    const MAX_BYTES = 2 * 1024 * 1024; // 2 MB
     const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
-    if (contentLength > 2 * 1024 * 1024) {
+    if (contentLength > MAX_BYTES) {
       console.debug(`[fetchLogoBase64] Content-Length ${contentLength} exceeds 2 MB from ${url}`);
       return null;
     }
-    const arrayBuffer = await response.arrayBuffer();
-    if (arrayBuffer.byteLength > 2 * 1024 * 1024) {
-      console.debug(`[fetchLogoBase64] Downloaded ${arrayBuffer.byteLength} bytes exceeds 2 MB from ${url}`);
+    // Stream-read with a cumulative byte cap. Without this, chunked responses
+    // (no Content-Length) would buffer the entire body via arrayBuffer(),
+    // allowing an adversarial server to push hundreds of MB within the 5s timeout.
+    const reader = response.body?.getReader();
+    if (!reader) {
+      console.debug(`[fetchLogoBase64] No readable body from ${url}`);
       return null;
     }
-    const base64 = Buffer.from(arrayBuffer).toString('base64');
+    const chunks: Uint8Array[] = [];
+    let totalBytes = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > MAX_BYTES) {
+        reader.cancel();
+        console.debug(`[fetchLogoBase64] Streamed ${totalBytes} bytes exceeds 2 MB from ${url}`);
+        return null;
+      }
+      chunks.push(value);
+    }
+    // Concatenate chunks into a single buffer
+    const arrayBuffer = new Uint8Array(totalBytes);
+    let offset = 0;
+    for (const chunk of chunks) {
+      arrayBuffer.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    const base64 = Buffer.from(arrayBuffer.buffer, arrayBuffer.byteOffset, arrayBuffer.byteLength).toString('base64');
     return {
       base64,
       ext: isJpeg ? 'JPEG' : 'PNG',
