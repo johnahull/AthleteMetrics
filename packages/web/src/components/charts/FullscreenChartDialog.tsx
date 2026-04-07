@@ -125,12 +125,14 @@ export function FullscreenChartDialog({
     () => initialBenchmarks?.map(b => b.id) || []
   );
 
-  // Sync local state when initial benchmarks change (e.g., when dialog opens with new data)
+  // Re-sync local state only when the dialog opens (not on every render).
+  // initialBenchmarks is an array prop that may get a new reference each render;
+  // depending on it directly would clobber the user's in-dialog selections.
   useEffect(() => {
-    if (initialBenchmarks) {
+    if (open && initialBenchmarks) {
       setLocalSelectedBenchmarkIds(initialBenchmarks.map(b => b.id));
     }
-  }, [initialBenchmarks]);
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch available benchmarks for the metric
   const { data: availableBenchmarks } = useBenchmarksForMetric(
@@ -167,7 +169,11 @@ export function FullscreenChartDialog({
         metricCode: metricCode || '',
         filters: b.filters
       }));
-  }, [availableBenchmarks, localSelectedBenchmarkIds, initialBenchmarks, metricCode]);
+    // initialBenchmarks intentionally excluded — it's only a fallback while
+    // availableBenchmarks loads, and including it would recompute on every
+    // render if the parent doesn't memoize the benchmarks prop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableBenchmarks, localSelectedBenchmarkIds, metricCode]);
 
   // Determine which data to pass based on chart type
   const chartData = React.useMemo(

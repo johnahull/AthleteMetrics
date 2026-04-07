@@ -333,7 +333,7 @@ jobs:
           # from root node_modules only, so flatten nested deps into root.
           # Only api and shared — web deps are frontend-only and not needed at runtime.
           # Workspace versions intentionally overwrite root — they're what the package tested against.
-          # Note: glob * skips dotfile entries — no dotfile dirs currently exist in workspace node_modules.
+          # Note: glob * skips .bin/ and other dotfile dirs — workspace binaries are not needed at runtime since the server is a bundled dist/index.js.
           cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true
           cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
 
