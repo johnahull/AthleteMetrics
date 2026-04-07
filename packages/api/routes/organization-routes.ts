@@ -10,6 +10,7 @@ import { profileMergeService } from "../services/profile-merge-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { storage } from "../storage";
 import type { OrganizationType } from "@shared/schema";
+import { isSafeLogoUrl } from "./report-branding-utils";
 // Session types are loaded globally
 
 const organizationService = new OrganizationService();
@@ -391,11 +392,20 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(403).json({ message: "Access denied. Org admin role required." });
       }
 
-      // Only allow updating aiEnabled, wellnessEnabled, and eventsEnabled fields
-      const { aiEnabled, wellnessEnabled, eventsEnabled } = req.body;
+      // Only allow updating specific org-admin fields
+      const { aiEnabled, wellnessEnabled, eventsEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext } = req.body;
 
       // Build updates object with only the fields that were provided
-      const updates: { aiEnabled?: boolean; wellnessEnabled?: boolean; eventsEnabled?: boolean } = {};
+      const updates: {
+        aiEnabled?: boolean;
+        wellnessEnabled?: boolean;
+        eventsEnabled?: boolean;
+        brandLogoUrl?: string | null;
+        brandPrimaryColor?: string | null;
+        brandSecondaryColor?: string | null;
+        brandTagline?: string | null;
+        aiPromptContext?: string | null;
+      } = {};
 
       // Validate and handle aiEnabled
       if (aiEnabled !== undefined) {
@@ -439,9 +449,87 @@ export function registerOrganizationRoutes(app: Express) {
         updates.eventsEnabled = eventsEnabled;
       }
 
+      // Validate and handle branding fields.
+      // Note: branding is intentionally available to all orgs regardless of plan/tier.
+      // If branding becomes a premium feature, add a feature gate here similar to aiEnabled.
+      if (brandLogoUrl !== undefined) {
+        if (brandLogoUrl === null || brandLogoUrl === '') {
+          updates.brandLogoUrl = null;
+        } else if (typeof brandLogoUrl !== 'string' || brandLogoUrl.length > 2000 || !isSafeLogoUrl(brandLogoUrl)) {
+          return res.status(400).json({ message: "Logo URL must be a public HTTPS URL (max 2000 characters)" });
+        } else {
+          updates.brandLogoUrl = brandLogoUrl;
+        }
+      }
+
+      if (brandPrimaryColor !== undefined) {
+        if (brandPrimaryColor === null || brandPrimaryColor === '') {
+          updates.brandPrimaryColor = null;
+        } else if (typeof brandPrimaryColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(brandPrimaryColor)) {
+          return res.status(400).json({ message: "Primary color must be a valid hex color (e.g. #1a365d)" });
+        } else {
+          updates.brandPrimaryColor = brandPrimaryColor;
+        }
+      }
+
+      if (brandSecondaryColor !== undefined) {
+        if (brandSecondaryColor === null || brandSecondaryColor === '') {
+          updates.brandSecondaryColor = null;
+        } else if (typeof brandSecondaryColor !== 'string' || !/^#[0-9a-fA-F]{6}$/.test(brandSecondaryColor)) {
+          return res.status(400).json({ message: "Secondary color must be a valid hex color (e.g. #2d8659)" });
+        } else {
+          updates.brandSecondaryColor = brandSecondaryColor;
+        }
+      }
+
+      if (brandTagline !== undefined) {
+        if (brandTagline === null || brandTagline === '') {
+          updates.brandTagline = null;
+        } else if (typeof brandTagline !== 'string' || brandTagline.length > 200) {
+          return res.status(400).json({ message: "Tagline must be 200 characters or less" });
+        } else {
+          updates.brandTagline = brandTagline;
+        }
+      }
+
+      // Validate and handle aiPromptContext.
+      // Note: aiPromptContext is preserved in the DB even when AI is later disabled.
+      // This is intentional — it avoids data loss and lets the context resume when
+      // AI is re-enabled. The guard below only prevents *setting* context while
+      // AI is off; it does not clear existing context on disable.
+      if (aiPromptContext !== undefined) {
+        if (aiPromptContext === null || aiPromptContext === '') {
+          updates.aiPromptContext = null;
+        } else if (typeof aiPromptContext !== 'string') {
+          return res.status(400).json({ message: "AI prompt context must be a string" });
+        } else if (aiPromptContext.length > 2000) {
+          return res.status(400).json({ message: "AI prompt context must be 2000 characters or less" });
+        } else {
+          // Block setting context when AI is disabled at either level (matches frontend UX).
+          // Use updates.aiEnabled ?? org.aiEnabled so a single request that enables AI
+          // and sets context simultaneously is accepted (avoids requiring two API calls).
+          if (!org.aiEnabledBySiteAdmin) {
+            return res.status(403).json({
+              message: "AI features must be enabled by site administrator first"
+            });
+          }
+          const effectiveAiEnabled = updates.aiEnabled ?? org.aiEnabled;
+          if (!effectiveAiEnabled) {
+            return res.status(403).json({
+              message: "AI features must be enabled for this organization first"
+            });
+          }
+          // Store the raw value; sanitizeForPrompt() is applied at prompt-build time
+          // in ai-insights-service.ts. Org admins are trusted users — storing raw lets
+          // them see exactly what they entered. The 2000-char limit above is the primary
+          // write-time guard; sanitization on read prevents injection into AI prompts.
+          updates.aiPromptContext = aiPromptContext;
+        }
+      }
+
       // Require at least one field to update
       if (Object.keys(updates).length === 0) {
-        return res.status(400).json({ message: "At least one field (aiEnabled, wellnessEnabled, or eventsEnabled) is required" });
+        return res.status(400).json({ message: "At least one setting field is required" });
       }
 
       // Capture request context for audit logging

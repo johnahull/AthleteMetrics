@@ -245,6 +245,14 @@ export class MetricService extends BaseService {
           validatedData.dependentMetrics = formulaValidation.referencedMetrics;
         }
 
+        // Set default calculationConfig if not provided (required by DB constraint)
+        if (!validatedData.calculationConfig) {
+          validatedData.calculationConfig = {
+            dateMatchStrategy: 'same_date',
+            missingSourceBehavior: 'skip',
+          };
+        }
+
         // Check for circular dependencies
         // Create a hypothetical metric list with the updated metric
         const existingMetric = await this.storage.getSiteMetric(code);

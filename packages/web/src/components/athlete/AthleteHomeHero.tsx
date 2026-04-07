@@ -63,6 +63,9 @@ export function AthleteHomeHero({
           <p data-testid="streak-tracker" className="text-lg sm:text-xl text-blue-50">
             {measurementCount} {measurementText} this month 🔥
           </p>
+          <p className="text-sm text-blue-100 mt-1">
+            Every rep tracked. Every metric moves you toward your goal.
+          </p>
         </div>
         <div className="bg-white/10 backdrop-blur-sm rounded-lg px-4 sm:px-6 py-3 sm:py-4">
           <p data-testid="last-activity" className="text-sm text-blue-50">

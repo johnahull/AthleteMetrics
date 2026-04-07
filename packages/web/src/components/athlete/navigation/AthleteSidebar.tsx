@@ -114,7 +114,7 @@ export function AthleteSidebar({
               {isOwnProfile ? 'My Athletics' : 'Athlete View'}
             </h2>
             <p className="text-xs text-gray-500">
-              {isOwnProfile ? 'Track your progress' : 'View athlete data'}
+              {isOwnProfile ? 'Your performance data' : 'View athlete data'}
             </p>
           </div>
         </div>
@@ -196,7 +196,7 @@ export function AthleteSidebar({
       <div className="p-4 border-t border-gray-200">
         <div className="flex items-center gap-2 text-xs text-gray-500">
           <TrendingUp className="h-3.5 w-3.5" />
-          <span>Track progress daily</span>
+          <span>Data-Driven Performance</span>
         </div>
       </div>
     </aside>

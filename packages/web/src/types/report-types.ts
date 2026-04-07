@@ -60,6 +60,7 @@ export interface TeamReportConfig {
   metrics: string[];
   filters?: ReportFilters;
   includeCompositeIndex?: boolean;
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs
@@ -80,6 +81,7 @@ export interface IndividualReportConfig {
   athleteIds?: string[];
   timeframe: TimeframeConfig;
   metrics: string[];
+  audience?: 'coach' | 'athlete' | 'parent';
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs
@@ -89,6 +91,11 @@ export interface IndividualReportConfig {
       label: string;
     }>;
   };
+}
+
+export interface OrgBranding {
+  tagline?: string | null;
+  orgName?: string | null;
 }
 
 export interface TeamReportData {
@@ -101,6 +108,7 @@ export interface TeamReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  orgBranding?: OrgBranding;
 }
 
 export interface IndividualAthleteData {
@@ -121,6 +129,7 @@ export interface IndividualReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  orgBranding?: OrgBranding;
 }
 
 export type PdfFormat = 'visual' | 'simplified';

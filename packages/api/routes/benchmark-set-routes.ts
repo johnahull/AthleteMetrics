@@ -765,7 +765,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
             SET display_order = CASE id
               ${sql.join(
                 validatedData.items.map(item =>
-                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}`
+                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}::integer`
                 ),
                 sql` `
               )}
@@ -1331,7 +1331,7 @@ export function registerBenchmarkSetRoutes(app: Express) {
             SET display_order = CASE id
               ${sql.join(
                 validatedData.items.map(item =>
-                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}`
+                  sql`WHEN ${item.id}::varchar THEN ${item.displayOrder}::integer`
                 ),
                 sql` `
               )}

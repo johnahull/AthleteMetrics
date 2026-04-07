@@ -230,7 +230,7 @@ describe('CustomOrgMetricService', () => {
       // Create first metric with a label
       await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Duplicate Test', metricType: 'tracking' },
+        { label: 'Duplicate Test', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -238,7 +238,7 @@ describe('CustomOrgMetricService', () => {
       await expect(
         customMetricService.createCustomOrgMetric(
           testOrgId,
-          { label: 'Duplicate Test', metricType: 'tracking' },
+          { label: 'Duplicate Test', metricType: 'tracking', unit: 'count' },
           orgAdminUserId
         )
       ).rejects.toThrow(/already exists/i);
@@ -247,13 +247,13 @@ describe('CustomOrgMetricService', () => {
     it('should allow same label in different orgs', async () => {
       await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Common Metric', metricType: 'tracking' },
+        { label: 'Common Metric', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
       const metric2 = await customMetricService.createCustomOrgMetric(
         testOrgId2,
-        { label: 'Common Metric', metricType: 'tracking' },
+        { label: 'Common Metric', metricType: 'tracking', unit: 'count' },
         otherOrgUserId
       );
 
@@ -271,12 +271,12 @@ describe('CustomOrgMetricService', () => {
       // Create some test metrics
       await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Metric A', metricType: 'lower_is_better', category: 'speed' },
+        { label: 'Metric A', metricType: 'lower_is_better', category: 'speed', unit: 's' },
         orgAdminUserId
       );
       await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Metric B', metricType: 'higher_is_better', category: 'power' },
+        { label: 'Metric B', metricType: 'higher_is_better', category: 'power', unit: 'lbs' },
         orgAdminUserId
       );
     });
@@ -342,7 +342,7 @@ describe('CustomOrgMetricService', () => {
     it('should return specific metric by code', async () => {
       const created = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Specific Metric', metricType: 'tracking' },
+        { label: 'Specific Metric', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -451,7 +451,7 @@ describe('CustomOrgMetricService', () => {
     beforeEach(async () => {
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Archive Me', metricType: 'tracking' },
+        { label: 'Archive Me', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
       testMetricCode = metric.code;
@@ -501,7 +501,7 @@ describe('CustomOrgMetricService', () => {
     it('should restore an archived metric', async () => {
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Restore Me', metricType: 'tracking' },
+        { label: 'Restore Me', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 
@@ -607,7 +607,7 @@ describe('CustomOrgMetricService', () => {
       // Create a metric in org2
       const otherOrgMetric = await customMetricService.createCustomOrgMetric(
         testOrgId2,
-        { label: 'Other Org Metric', metricType: 'tracking' },
+        { label: 'Other Org Metric', metricType: 'tracking', unit: 'count' },
         otherOrgUserId
       );
 
@@ -639,7 +639,7 @@ describe('CustomOrgMetricService', () => {
     it('should return count of measurements using the metric', async () => {
       const metric = await customMetricService.createCustomOrgMetric(
         testOrgId,
-        { label: 'Count Test', metricType: 'tracking' },
+        { label: 'Count Test', metricType: 'tracking', unit: 'count' },
         orgAdminUserId
       );
 

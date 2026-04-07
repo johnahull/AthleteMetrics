@@ -13,21 +13,23 @@
  */
 
 import { useState } from "react";
+import { isSafePublicUrl } from "@shared/url-safety";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SiteSettings } from "@shared/schema";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   ArrowLeft, Save, Settings, AlertCircle, UserCog, Mail, Heart,
   UserPlus, Clock, Link as LinkIcon, Trash2, Users, Copy,
-  Globe, CheckCircle, Pencil, X, Dices, Bell
+  Globe, CheckCircle, Pencil, X, Dices, Bell, Palette
 } from "lucide-react";
 import { OrgNotificationSettingsCard } from "@/components/notifications/org-notification-settings-card";
 import { Link } from "wouter";
@@ -36,6 +38,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrgAdminSettings } from "@/lib/organization-api";
+import type { OrgAdminSettings as ApiOrgAdminSettings } from "@/lib/organization-api";
 import { useConfirmation } from "@/components/ui/confirmation-dialog";
 import { InvitationModal } from "@/components/invitation-modal";
 import { apiRequest } from "@/lib/queryClient";
@@ -88,8 +91,22 @@ type OrganizationProfile = {
 // Schema for org admin settable fields
 const orgAdminSettingsSchema = z.object({
   aiEnabled: z.boolean().default(false),
+  aiPromptContext: z.string().max(2000, "AI prompt context must be 2000 characters or less").optional().default(''),
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
+  brandLogoUrl: z.string().optional().default('').refine(
+    v => v === '' || (v.length <= 2000 && isSafePublicUrl(v)),
+    "Must be a public HTTPS URL (max 2000 characters)"
+  ),
+  brandPrimaryColor: z.string().optional().default('').refine(
+    v => v === '' || /^#[0-9a-fA-F]{6}$/.test(v),
+    "Must be a valid hex color (e.g. #1a365d)"
+  ),
+  brandSecondaryColor: z.string().optional().default('').refine(
+    v => v === '' || /^#[0-9a-fA-F]{6}$/.test(v),
+    "Must be a valid hex color (e.g. #2d8659)"
+  ),
+  brandTagline: z.string().max(200, "Tagline must be 200 characters or less").optional().default(''),
 });
 
 type OrgAdminSettings = z.infer<typeof orgAdminSettingsSchema>;
@@ -404,19 +421,55 @@ export default function OrgAdminSettings() {
     resolver: zodResolver(orgAdminSettingsSchema),
     values: organization ? {
       aiEnabled: organization.aiEnabledBySiteAdmin ? (organization.aiEnabled || false) : false,
+      aiPromptContext: organization.aiPromptContext || '',
       wellnessEnabled: siteSettings?.wellnessModuleEnabled ? (organization.wellnessEnabled ?? true) : false,
       eventsEnabled: organization.eventsEnabled ?? false,
+      brandLogoUrl: organization.brandLogoUrl || '',
+      brandPrimaryColor: organization.brandPrimaryColor || '',
+      brandSecondaryColor: organization.brandSecondaryColor || '',
+      brandTagline: organization.brandTagline || '',
     } : undefined,
   });
 
   // Handle form submission
   const onSubmit = async (data: OrgAdminSettings) => {
     try {
-      await updateMutation.mutateAsync({
-        aiEnabled: data.aiEnabled,
-        wellnessEnabled: data.wellnessEnabled,
-        eventsEnabled: data.eventsEnabled,
-      });
+      const changes: ApiOrgAdminSettings = {};
+
+      if (data.aiEnabled !== (organization?.aiEnabled || false)) {
+        changes.aiEnabled = data.aiEnabled;
+      }
+      if (data.wellnessEnabled !== (organization?.wellnessEnabled ?? true)) {
+        changes.wellnessEnabled = data.wellnessEnabled;
+      }
+      if (data.eventsEnabled !== (organization?.eventsEnabled ?? false)) {
+        changes.eventsEnabled = data.eventsEnabled;
+      }
+      if ((data.brandLogoUrl || null) !== (organization?.brandLogoUrl || null)) {
+        changes.brandLogoUrl = data.brandLogoUrl || null;
+      }
+      if ((data.brandPrimaryColor || null) !== (organization?.brandPrimaryColor || null)) {
+        changes.brandPrimaryColor = data.brandPrimaryColor || null;
+      }
+      if ((data.brandSecondaryColor || null) !== (organization?.brandSecondaryColor || null)) {
+        changes.brandSecondaryColor = data.brandSecondaryColor || null;
+      }
+      if ((data.brandTagline || null) !== (organization?.brandTagline || null)) {
+        changes.brandTagline = data.brandTagline || null;
+      }
+      if ((data.aiPromptContext || null) !== (organization?.aiPromptContext || null)) {
+        changes.aiPromptContext = data.aiPromptContext || null;
+      }
+
+      if (Object.keys(changes).length === 0) {
+        toast({
+          title: "No changes",
+          description: "No settings were modified.",
+        });
+        return;
+      }
+
+      await updateMutation.mutateAsync(changes);
 
       toast({
         title: "Settings updated",
@@ -496,6 +549,7 @@ export default function OrgAdminSettings() {
 
   const aiEnabledBySiteAdmin = organization.aiEnabledBySiteAdmin || false;
   const wellnessModuleEnabled = siteSettings?.wellnessModuleEnabled ?? true;
+  const isAiEnabled = form.watch('aiEnabled');
 
   return (
     <div className="container mx-auto p-6 max-w-4xl">
@@ -556,6 +610,46 @@ export default function OrgAdminSettings() {
                         disabled={!aiEnabledBySiteAdmin}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="aiPromptContext"
+                render={({ field }) => (
+                  <FormItem className="rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">AI Prompt Context</FormLabel>
+                      <FormDescription>
+                        Customize how AI generates coaching insights for your reports. Describe your training philosophy, methodology, or any context the AI should consider.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="e.g., Our organization focuses on speed development and injury prevention for youth athletes..."
+                        maxLength={2000}
+                        rows={4}
+                        disabled={!aiEnabledBySiteAdmin || !isAiEnabled}
+                      />
+                    </FormControl>
+                    {!aiEnabledBySiteAdmin && (
+                      <p className="text-xs text-muted-foreground">
+                        AI Insights must be enabled by your site administrator before this field can be edited.
+                      </p>
+                    )}
+                    {aiEnabledBySiteAdmin && !isAiEnabled && (
+                      <p className="text-xs text-muted-foreground">
+                        Enable Coaching Insights above to edit this field.
+                      </p>
+                    )}
+                    <div className="flex justify-end">
+                      <span className="text-xs text-muted-foreground">
+                        {(field.value || '').length} / 2000
+                      </span>
+                    </div>
+                    <FormMessage />
                   </FormItem>
                 )}
               />
@@ -623,6 +717,125 @@ export default function OrgAdminSettings() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* Branding */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Palette className="h-5 w-5" />
+                Branding
+              </CardTitle>
+              <CardDescription>
+                Customize the appearance of your organization's reports
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <FormField
+                control={form.control}
+                name="brandLogoUrl"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Logo URL</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="https://example.com/logo.png"
+                        value={field.value || ''}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      URL to your organization logo (PNG or JPEG, recommended 300x200px)
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="brandPrimaryColor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Primary Color</FormLabel>
+                      <div className="flex gap-2">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="#1a365d"
+                            value={field.value || ''}
+                            maxLength={7}
+                          />
+                        </FormControl>
+                        {field.value && /^#[0-9a-fA-F]{6}$/.test(field.value) && (
+                          <div
+                            className="h-10 w-10 rounded border shrink-0"
+                            style={{ backgroundColor: field.value }}
+                          />
+                        )}
+                      </div>
+                      <FormDescription>
+                        Hex color for table headers and titles (e.g. #1a365d)
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="brandSecondaryColor"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Secondary Color</FormLabel>
+                      <div className="flex gap-2">
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder="#2d8659"
+                            value={field.value || ''}
+                            maxLength={7}
+                          />
+                        </FormControl>
+                        {field.value && /^#[0-9a-fA-F]{6}$/.test(field.value) && (
+                          <div
+                            className="h-10 w-10 rounded border shrink-0"
+                            style={{ backgroundColor: field.value }}
+                          />
+                        )}
+                      </div>
+                      <FormDescription>
+                        Hex color for secondary elements and accents
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <FormField
+                control={form.control}
+                name="brandTagline"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Tagline</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="Data-Driven Athletic Development"
+                        value={field.value || ''}
+                        maxLength={200}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {(field.value?.length || 0)}/200 characters — displayed on report cover pages
+                    </FormDescription>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

@@ -26,6 +26,24 @@ COPY . .
 ENV NODE_ENV=production
 RUN npm run build
 
+# Prune devDependencies from existing node_modules (keeps workspace deps intact)
+# Note: npm prune --omit=dev removes devDeps without reinstalling, preserving
+# workspace dependency resolution that npm ci --omit=dev can break
+RUN npm prune --omit=dev
+
+# Flatten nested workspace node_modules into root node_modules
+# npm workspace hoisting puts some packages in packages/*/node_modules/ when there
+# are version conflicts. Since dist/index.js runs from /app/dist/, it can only find
+# packages in /app/node_modules/ (not packages/api/node_modules/). Copy them to root.
+# Only api and shared — web deps are frontend-only and not needed at runtime.
+# Note: workspace versions intentionally overwrite root-hoisted versions. This is safe
+# because the workspace version is what the package's own code was tested against.
+# Note: glob * skips dotfile entries like .bin/ and .cache/. Workspace
+# binaries (.bin/) are not needed at runtime since the server runs from
+# the bundled dist/index.js.
+RUN cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true && \
+    cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
+
 # Stage 2: Production stage
 FROM node:20-alpine
 
@@ -35,21 +53,26 @@ WORKDIR /app
 # Install runtime dependencies for tesseract OCR
 RUN apk add --no-cache tesseract-ocr tesseract-ocr-data-eng
 
-# Copy package files including workspace package.json files
+# Copy production node_modules from builder (includes workspace deps + compiled native modules)
+# Note: We copy from builder instead of running npm ci in production stage because
+# npm ci --omit=dev in a clean workspace context fails to install workspace dependencies
+# (e.g., express-rate-limit from packages/api/package.json)
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy package files (needed for Node.js module resolution and "type": "module")
 COPY package*.json ./
 COPY packages/api/package.json ./packages/api/
 COPY packages/web/package.json ./packages/web/
 COPY packages/shared/package.json ./packages/shared/
-
-# Install production dependencies only
-# Note: Migration scripts need drizzle-orm and other deps
-RUN npm ci --omit=dev
 
 # Copy built application from builder stage
 # Note: @shared code is now bundled into dist/index.js via esbuild alias
 COPY --from=builder /app/dist ./dist
 
 # Copy migrations and scripts (needed for db:migrate at startup)
+# drizzle/migrations: Drizzle ORM migrations (0000-0013) with snapshots
+# migrations: Manual SQL migrations (0014+) without drizzle snapshots
+COPY --from=builder /app/drizzle/migrations ./drizzle/migrations
 COPY --from=builder /app/migrations ./migrations
 COPY --from=builder /app/scripts ./scripts
 
@@ -70,10 +93,10 @@ EXPOSE 5000
 ENV NODE_ENV=production
 ENV PORT=5000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=40s --retries=3 \
-    CMD node -e "require('http').get('http://localhost:5000/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); })"
+# Railway handles healthchecks via railway.json — no Docker HEALTHCHECK here.
+# Docker HEALTHCHECK can conflict with Railway's healthcheck system.
+# For local Docker usage, add: HEALTHCHECK CMD wget -qO- http://localhost:5000/api/health/liveness || exit 1
 
-# Start the application
-# Run migrations before starting server (matches Railway nixpacks behavior)
-CMD ["sh", "-c", "npm run db:migrate && npm run start"]
+# Start the application via entrypoint script
+# Migrations are non-fatal (PR environments share testing DB where migrations are already applied)
+CMD ["sh", "scripts/docker-entrypoint.sh"]

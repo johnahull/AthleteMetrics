@@ -59,12 +59,12 @@ export default function PublicReport() {
         {/* Watermark */}
         <div className="flex justify-between items-center border-b pb-4">
           <div>
-            <h1 className="text-2xl font-bold">Shared Report</h1>
+            <h1 className="text-2xl font-bold">AthleteMetrics — Performance Report</h1>
             <p className="text-sm text-muted-foreground">
-              Generated on {format(new Date(generatedAt), "PPP")}
+              Generated on {format(new Date(generatedAt), "PPP")} · {snapshotData.orgBranding?.tagline ?? "Athletic Performance Report"}
             </p>
           </div>
-          <Badge variant="secondary">Read-Only</Badge>
+          <Badge variant="outline">AthleteMetrics</Badge>
         </div>
 
         {/* Coach Report View */}

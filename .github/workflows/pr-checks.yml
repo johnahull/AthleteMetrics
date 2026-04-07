@@ -184,7 +184,7 @@ jobs:
           echo "   - Frontend: dist/public/"
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: build-artifacts
           path: dist/
@@ -326,6 +326,17 @@ jobs:
           name: build-artifacts
           path: dist/
 
+      - name: Flatten workspace node_modules
+        run: |
+          # npm workspace hoisting puts some packages in packages/*/node_modules/
+          # when version conflicts exist. dist/index.js (esbuild external) resolves
+          # from root node_modules only, so flatten nested deps into root.
+          # Only api and shared — web deps are frontend-only and not needed at runtime.
+          # Workspace versions intentionally overwrite root — they're what the package tested against.
+          # Note: glob * skips .bin/ and other dotfile dirs — workspace binaries are not needed at runtime since the server is a bundled dist/index.js.
+          cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || echo '::warning::Failed to flatten packages/api/node_modules — verify no runtime deps are missing'
+          cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || echo '::warning::Failed to flatten packages/shared/node_modules — verify no runtime deps are missing'
+
       - name: Start server in background
         run: |
           nohup npm run start > server.log 2>&1 &
@@ -380,7 +391,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           path: playwright-report/
@@ -405,7 +416,7 @@ jobs:
 
       - name: Upload server logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: server-logs
           path: server.log

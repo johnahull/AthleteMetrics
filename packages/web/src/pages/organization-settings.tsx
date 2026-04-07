@@ -101,7 +101,6 @@ export default function OrganizationSettings() {
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
       }
-
       // If no changes, don't make API call
       if (Object.keys(changedFields).length === 0) {
         toast({

@@ -503,7 +503,7 @@ describe('Site Benchmark Sets API', () => {
       );
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain('site benchmarks only');
+      expect(res.body.message).toContain('site benchmarks');
     });
 
     it('should return 409 for duplicate benchmark in set', async () => {

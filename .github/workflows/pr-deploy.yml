@@ -2,46 +2,49 @@ name: Deploy PR Preview
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, synchronize, reopened, closed]
     branches:
       - develop
       - main
 
-# Explicit permissions following principle of least privilege
 permissions:
   contents: read
   pull-requests: write
 
-# Cancel redundant runs for the same PR
 concurrency:
   group: pr-deploy-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event.action != 'closed' }}
+
+env:
+  RAILWAY_API_URL: https://backboard.railway.app/graphql/v2
+  PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
+  TESTING_ENV_ID: ${{ vars.RAILWAY_TESTING_ENV_ID }}
+  SERVICE_ID: ${{ vars.RAILWAY_TESTING_SERVICE_ID }}
 
 jobs:
   deploy-preview:
     name: Deploy PR Preview
     runs-on: ubuntu-latest
-    # DISABLED: Railway PR preview environments are temporarily disabled
-    # To re-enable, remove the `false &&` condition below
-    if: false && github.event.pull_request.head.repo.full_name == github.repository
+    # Preview deployments are informational — don't block PR mergeability
+    continue-on-error: true
+    if: >
+      github.event.action != 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
-
-      - name: Setup project
-        uses: ./.github/actions/setup
-
-      - name: Run TypeScript type check
-        run: npm run check
-
-      - name: Build application
-        run: npm run build
+      - name: Validate required secrets and variables
         env:
-          NODE_ENV: production
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          MISSING=""
+          [ -z "$PROJECT_ID" ]      && MISSING="$MISSING RAILWAY_PROJECT_ID(secret)"
+          [ -z "$RAILWAY_API_TOKEN" ] && MISSING="$MISSING RAILWAY_API_TOKEN(secret)"
+          [ -z "$SERVICE_ID" ]       && MISSING="$MISSING RAILWAY_TESTING_SERVICE_ID(var)"
+          [ -z "$TESTING_ENV_ID" ]   && MISSING="$MISSING RAILWAY_TESTING_ENV_ID(var)"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing required repo secrets/variables:$MISSING — configure these before PR previews will work"
+            exit 1
+          fi
 
       - name: Find existing preview comment
         id: find-comment
@@ -49,7 +52,7 @@ jobs:
         with:
           issue-number: ${{ github.event.pull_request.number }}
           comment-author: 'github-actions[bot]'
-          body-includes: '🚂 Railway Preview Environment'
+          body-includes: 'Railway Preview'
 
       - name: Post deployment starting comment
         uses: peter-evans/create-or-update-comment@v4
@@ -58,195 +61,348 @@ jobs:
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: |
-            ## 🚂 Railway Preview Environment
+            ## Railway Preview
 
-            | Resource | Status |
-            |----------|--------|
-            | **Deployment** | ⏳ In Progress... |
-            | **Preview URL** | `https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app` |
+            Deploying `${{ github.head_ref }}` @ `${{ github.event.pull_request.head.sha }}`...
 
-            ### ⏳ Deployment Status
+      - name: Check for migration files in PR diff
+        id: migration-check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 300
+            });
+            const migrationFiles = files
+              .map(f => f.filename)
+              .filter(f => f.includes('migrations/') || f.includes('schema.ts'));
+            if (migrationFiles.length > 0) {
+              core.setOutput('has_migrations', 'true');
+              core.setOutput('migration_files', migrationFiles.join(', '));
+              core.warning(`PR contains migration files: ${migrationFiles.join(', ')} — shared testing DB will be affected`);
+            } else {
+              core.setOutput('has_migrations', 'false');
+            }
 
-            🔄 **Building and deploying...** This typically takes **3-5 minutes**.
-
-            - ✅ Code checked out
-            - ✅ Dependencies installed
-            - ✅ Type check passed
-            - ✅ Build completed
-            - ⏳ Railway deployment in progress...
-
-            ---
-            <sub>🤖 This comment will be updated when deployment completes.</sub>
-
-      - name: Deploy to PR Environment
-        id: deploy
+      - name: Create or reuse preview environment
+        id: env
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
-          PR_ENV_NAME="pr-${{ github.event.pull_request.number }}"
-          echo "🚀 Deploying to Railway service with environment: ${PR_ENV_NAME}"
-          echo "env_name=${PR_ENV_NAME}" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
-          # Deploy using service ID (matches staging pattern) with PR environment
-          # Note: This requires Railway's native PR deployments to be enabled in the dashboard
-          # which auto-creates environments. Without it, environments must pre-exist.
-          set +e
-          DEPLOY_OUTPUT=$(railway up --service "$RAILWAY_STAGING_SERVICE_ID" --environment "${PR_ENV_NAME}" --detach 2>&1)
-          DEPLOY_EXIT_CODE=$?
-          set -e
+          # Check if environment already exists
+          RESPONSE=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}")
+          echo "Environment list response: $RESPONSE"
 
-          echo "$DEPLOY_OUTPUT"
+          ENV_ID=$(echo "$RESPONSE" | jq -r --arg name "$ENV_NAME" \
+            '.data.project.environments.edges[] | select(.node.name==$name) | .node.id')
 
-          if [[ "$DEPLOY_EXIT_CODE" -eq 0 ]]; then
-            echo "✅ Deployment initiated successfully"
-            echo "deploy_status=success" >> "$GITHUB_OUTPUT"
-          elif echo "$DEPLOY_OUTPUT" | grep -q "Environment.*not found"; then
-            echo ""
-            echo "⚠️  PR environment '${PR_ENV_NAME}' does not exist."
-            echo ""
-            echo "📋 To enable PR preview environments, configure Railway's native PR deployments:"
-            echo "   1. Go to Railway Dashboard → Project Settings → Environments"
-            echo "   2. Enable 'PR Environments'"
-            echo "   3. Railway will auto-create environments for each PR"
-            echo ""
-            echo "   See: https://docs.railway.app/guides/environments#pr-environments"
-            echo ""
-            echo "deploy_status=not_configured" >> "$GITHUB_OUTPUT"
-            # Don't fail the workflow - this is a configuration issue, not a code issue
-            exit 0
+          if [ -n "$ENV_ID" ]; then
+            echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
           else
-            echo "❌ Deployment failed with exit code $DEPLOY_EXIT_CODE"
-            echo "deploy_status=failed" >> "$GITHUB_OUTPUT"
+            # Create by duplicating testing env (ephemeral = auto-cleanup eligible)
+            RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"mutation { environmentCreate(input: { name: \\\"$ENV_NAME\\\", projectId: \\\"$PROJECT_ID\\\", ephemeral: true, sourceEnvironmentId: \\\"$TESTING_ENV_ID\\\" }) { id name } }\"}")
+
+            ENV_ID=$(echo "$RESULT" | jq -r '.data.environmentCreate.id // empty')
+            if [ -z "$ENV_ID" ]; then
+              echo "::error::Failed to create environment: $RESULT"
+              exit 1
+            fi
+            echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+          fi
+
+          # Validate ENV_ID is a UUID before interpolating into subsequent queries
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
             exit 1
           fi
+
+          echo "env_id=$ENV_ID" >> "$GITHUB_OUTPUT"
+          echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Configure preview database
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_STAGING_SERVICE_ID: ${{ secrets.RAILWAY_STAGING_SERVICE_ID }}
-
-      - name: Wait for deployment to be ready
-        if: steps.deploy.outputs.deploy_status == 'success'
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          TESTING_DB_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
         run: |
-          PR_URL="https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app"
-          HEALTH_URL="${PR_URL}/api/health/liveness"
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
 
-          echo "⏳ Waiting for deployment to be ready..."
-          echo "Health check URL: ${HEALTH_URL}"
+          # PR environments don't have their own database service.
+          # Override DATABASE_URL to use the testing DB's public endpoint.
+          # LIMITATION: All open PR previews share this database. PRs that include
+          # schema migrations will affect every other open preview. Ensure migrations
+          # are backwards-compatible, or coordinate destructive migrations manually.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg dburl "$TESTING_DB_URL" \
+            '{query: "mutation { variableUpsert(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\", name: \"DATABASE_URL\", value: \"\($dburl)\" }) }"}')
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
 
-          # Wait up to 5 minutes for the deployment to become healthy
-          MAX_WAIT=300
-          INTERVAL=15
-          ELAPSED=0
+          if echo "$RESULT" | jq -e '.data.variableUpsert' > /dev/null 2>&1; then
+            echo "DATABASE_URL configured for preview environment"
+          else
+            echo "::warning::Failed to set DATABASE_URL: $RESULT"
+          fi
 
-          while [[ "$ELAPSED" -lt "$MAX_WAIT" ]]; do
-            echo "Checking health... (${ELAPSED}s elapsed)"
+          # Set IS_PR_ENVIRONMENT so docker-entrypoint.sh skips migrations.
+          # Without this, PR containers attempt migrations on every cold start
+          # against the shared testing DB, risking concurrent migration conflicts.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            '{query: "mutation { variableUpsert(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\", name: \"IS_PR_ENVIRONMENT\", value: \"true\" }) }"}')
+          curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD" > /dev/null 2>&1 || echo "::warning::Failed to set IS_PR_ENVIRONMENT"
 
-            # Use curl with timeout and follow redirects
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "${HEALTH_URL}" 2>/dev/null || echo "000")
+      - name: Connect source repo and create deployment trigger
+        id: trigger
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+          BRANCH: ${{ github.head_ref }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
 
-            if [[ "$HTTP_STATUS" == "200" ]]; then
-              echo "✅ Deployment is healthy! (HTTP $HTTP_STATUS)"
-              exit 0
+          # The testing service has no GitHub repo connected (deployed via railway up).
+          # Connect the source repo and create a deployment trigger for the PR branch.
+
+          # Step 1: Connect the service instance to the GitHub repo
+          PAYLOAD=$(jq -n \
+            --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" --arg repo "$REPO" \
+            '{query: "mutation { serviceInstanceUpdate(environmentId: \"\($eid)\", input: { source: { repo: \"\($repo)\" } }, serviceId: \"\($sid)\") }"}')
+          RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
+          echo "Source update: $RESULT"
+          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::warning::serviceInstanceUpdate returned errors: $RESULT"
+          fi
+
+          # Step 2: Create a deployment trigger for the PR branch
+          # If the trigger already exists (reused environment), this returns null
+          # and Railway's auto-deploy webhook handles subsequent pushes.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            --arg branch "$BRANCH" --arg repo "$REPO" \
+            '{query: "mutation { deploymentTriggerCreate(input: { branch: \"\($branch)\", projectId: \"\($pid)\", environmentId: \"\($eid)\", provider: \"github\", repository: \"\($repo)\", serviceId: \"\($sid)\" }) { id } }"}')
+          RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD")
+          echo "Trigger create: $RESULT"
+          if echo "$RESULT" | jq -e '.errors' > /dev/null 2>&1; then
+            echo "::warning::deploymentTriggerCreate returned errors: $RESULT"
+          fi
+
+          # If the trigger was created, use it. Otherwise assume it already exists
+          # (reused environment) and let Railway's auto-deploy webhook handle it.
+          # We warn on errors rather than hard-failing because the trigger already
+          # existing is the most common error, and auto-deploy covers it regardless
+          # of the exact error message Railway returns.
+          TRIGGER_ID=$(echo "$RESULT" | jq -r '.data.deploymentTriggerCreate.id // empty')
+
+          if [ -n "$TRIGGER_ID" ]; then
+            echo "Deployment trigger created (id: $TRIGGER_ID) for branch $BRANCH"
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          else
+            if echo "$RESULT" | jq -e '(.errors // []) | length > 0' > /dev/null 2>&1; then
+              echo "::warning::deploymentTriggerCreate returned error (likely duplicate): $RESULT"
             fi
+            echo "Trigger already exists — Railway auto-deploys on push"
+            echo "is_new=false" >> "$GITHUB_OUTPUT"
+          fi
 
-            echo "  Status: HTTP $HTTP_STATUS (waiting for 200)"
-            sleep "$INTERVAL"
-            ELAPSED=$((ELAPSED + INTERVAL))
+      - name: Trigger deployment
+        id: deploy
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+
+          # Only call environmentTriggersDeploy for newly created triggers.
+          # For existing triggers, Railway's auto-deploy webhook already fired
+          # when GitHub pushed — calling this again would create a duplicate build.
+          # Note: deploymentTriggerCreate does NOT auto-fire an initial build;
+          # it only registers the webhook. The explicit deploy below is needed.
+          if [ "${{ steps.trigger.outputs.is_new }}" = "true" ]; then
+            echo "New trigger — firing explicit deploy..."
+            PAYLOAD=$(jq -n \
+              --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+              '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
+            RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$PAYLOAD")
+
+            echo "Deploy API response: $RESULT"
+            SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
+            if [ "$SUCCESS" != "true" ]; then
+              echo "::error::Failed to trigger deployment: $RESULT"
+              exit 1
+            fi
+          else
+            echo "Existing trigger — skipping explicit deploy (auto-deploy handles it)"
+          fi
+
+          # Verify deployment was actually created (allow up to 60s)
+          DEPLOY_STATUS="NONE"
+          for i in 1 2 3 4 5 6; do
+            sleep 10
+            CHECK=$(curl -s -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$(jq -n --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+                '{query: "{ deployments(first: 1, input: { environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) { edges { node { id status } } } }"}')")
+            DEPLOY_STATUS=$(echo "$CHECK" | jq -r '.data.deployments.edges[0].node.status // "NONE"')
+            echo "Deployment status (attempt $i): $DEPLOY_STATUS"
+            if [ "$DEPLOY_STATUS" != "NONE" ]; then
+              break
+            fi
           done
 
-          echo "⚠️ Deployment health check timed out after ${MAX_WAIT}s"
-          echo "  The deployment may still be starting - check Railway dashboard"
-          # Don't fail the workflow, just warn
-          exit 0
+          if [ "$DEPLOY_STATUS" = "NONE" ]; then
+            echo "::error::No deployment created after trigger"
+            exit 1
+          fi
 
-      - name: Update comment with success
-        if: steps.deploy.outputs.deploy_status == 'success'
+      - name: Get preview domain
+        id: domain
+        if: steps.deploy.outcome == 'success'
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_ID="${{ steps.env.outputs.env_id }}"
+
+          # Query service domain (retry since Railway provisions domains asynchronously)
+          DOMAIN=""
+          for ATTEMPT in 1 2 3 4 5; do
+            DOMAIN=$(curl -sf -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { services { edges { node { id name serviceInstances { edges { node { domains { serviceDomains { domain } } environmentId } } } } } } } }\"}" \
+              | jq -r ".data.project.services.edges[] | select(.node.id==\"$SERVICE_ID\") | .node.serviceInstances.edges[] | select(.node.environmentId==\"$ENV_ID\") | .node.domains.serviceDomains[0].domain // empty")
+
+            if [ -n "$DOMAIN" ]; then
+              echo "url=https://$DOMAIN" >> "$GITHUB_OUTPUT"
+              echo "Preview URL: https://$DOMAIN"
+              break
+            fi
+            echo "Domain not yet provisioned (attempt $ATTEMPT/5), waiting 10s..."
+            if [ "$ATTEMPT" -lt 5 ]; then
+              sleep 10
+            fi
+          done
+
+          if [ -z "$DOMAIN" ]; then
+            echo "Domain not available yet — check Railway dashboard"
+          fi
+
+      - name: Update comment with result
+        if: always()
         uses: peter-evans/create-or-update-comment@v4
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: |
-            ## 🚂 Railway Preview Environment
+            ## Railway Preview
 
-            | Resource | Link |
-            |----------|------|
-            | **Preview URL** | https://pr-${{ github.event.pull_request.number }}-athletemetrics.up.railway.app |
-            | **Railway Dashboard** | [View Environment](https://railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}) |
+            | | |
+            |---|---|
+            | **Status** | ${{ steps.deploy.outcome == 'success' && 'Deployed' || 'Failed' }} |
+            | **Preview** | ${{ steps.domain.outputs.url || 'See Railway dashboard' }} |
+            | **Branch** | `${{ github.head_ref }}` |
+            | **Commit** | `${{ github.event.pull_request.head.sha }}` |
+            | **Logs** | [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+            ${{ steps.migration-check.outputs.has_migrations == 'true' && format('
+            > **⚠️ Migration Warning**: This PR contains migration files ({0}). The preview shares a database with all other open PR previews and the testing environment. These migrations will run against the shared DB and may affect other previews.', steps.migration-check.outputs.migration_files) || '' }}
 
-            ### ✅ Deployment Complete!
+  cleanup-preview:
+    name: Cleanup PR Preview
+    needs: [deploy-preview]
+    runs-on: ubuntu-latest
+    if: >
+      always() &&
+      github.event.action == 'closed' &&
+      github.event.pull_request.head.repo.full_name == github.repository
 
-            The preview environment is now available. It may take **1-2 minutes** for the first request to warm up.
+    steps:
+      - name: Delete preview environment
+        continue-on-error: true
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          set -o pipefail
+          ENV_NAME="pr-${{ github.event.pull_request.number }}"
 
-            **Environment Details:**
-            - Branch: `${{ github.head_ref }}`
-            - Commit: `${{ github.event.pull_request.head.sha }}`
-            - Database: Testing environment (isolated from staging/production)
+          # Find environment ID
+          ENV_ID=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"{ project(id: \\\"$PROJECT_ID\\\") { environments { edges { node { id name } } } } }\"}" \
+            | jq -r --arg name "$ENV_NAME" \
+              '.data.project.environments.edges[] | select(.node.name==$name) | .node.id')
 
-            <details>
-            <summary>🔧 Troubleshooting</summary>
+          if [ -z "$ENV_ID" ]; then
+            echo "Environment '$ENV_NAME' not found, nothing to clean up"
+            exit 0
+          fi
 
-            If the preview is not loading:
-            1. Wait 1-2 minutes for cold start warmup
-            2. Check the [Railway dashboard](https://railway.app/project/${{ secrets.RAILWAY_PROJECT_ID }}) for deployment logs
-            3. Verify the deployment completed successfully in the logs above
+          # Validate ENV_ID before interpolating into delete mutation
+          UUID_RE='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+          if ! [[ "$ENV_ID" =~ $UUID_RE ]]; then
+            echo "::error::ENV_ID is not a valid UUID: '$ENV_ID'"
+            exit 1
+          fi
 
-            **Note:** Preview environments use the **testing database** to keep staging data pristine.
-            </details>
+          # Delete environment
+          RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "{\"query\": \"mutation { environmentDelete(id: \\\"$ENV_ID\\\") }\"}")
 
-            ---
-            <sub>🤖 Updated at ${{ github.event.pull_request.updated_at }} | Commit ${{ github.event.pull_request.head.sha }}</sub>
+          if echo "$RESULT" | jq -e '.data.environmentDelete == true' > /dev/null 2>&1; then
+            echo "Environment '$ENV_NAME' deleted"
+          else
+            echo "::warning::Failed to delete environment: $RESULT"
+          fi
 
-      - name: Update comment - PR environments not configured
-        if: steps.deploy.outputs.deploy_status == 'not_configured'
+      - name: Find preview comment
+        id: find-comment
+        uses: peter-evans/find-comment@v3
+        with:
+          issue-number: ${{ github.event.pull_request.number }}
+          comment-author: 'github-actions[bot]'
+          body-includes: 'Railway Preview'
+
+      - name: Update comment — cleaned up
+        if: steps.find-comment.outputs.comment-id != ''
         uses: peter-evans/create-or-update-comment@v4
         with:
           comment-id: ${{ steps.find-comment.outputs.comment-id }}
           issue-number: ${{ github.event.pull_request.number }}
           edit-mode: replace
           body: |
-            ## 🚂 Railway Preview Environment
+            ## Railway Preview
 
-            ### ⚠️ PR Environments Not Configured
-
-            Railway PR environments need to be enabled in the Railway dashboard.
-
-            **To enable PR preview environments:**
-            1. Go to [Railway Dashboard](https://railway.app) → Your Project → Settings
-            2. Navigate to **Environments** section
-            3. Enable **PR Environments**
-            4. Railway will automatically create environments for each PR
-
-            📚 [Railway PR Environments Documentation](https://docs.railway.app/guides/environments#pr-environments)
-
-            ---
-            <sub>🤖 Once enabled, PR previews will be automatically deployed.</sub>
-
-      - name: Update comment with failure
-        if: failure() || steps.deploy.outputs.deploy_status == 'failed'
-        uses: peter-evans/create-or-update-comment@v4
-        with:
-          comment-id: ${{ steps.find-comment.outputs.comment-id }}
-          issue-number: ${{ github.event.pull_request.number }}
-          edit-mode: replace
-          body: |
-            ## 🚂 Railway Preview Environment
-
-            ### ❌ Deployment Failed
-
-            The preview environment deployment encountered an error.
-
-            **Debug Information:**
-            - Branch: `${{ github.head_ref }}`
-            - Commit: `${{ github.event.pull_request.head.sha }}`
-            - Workflow Run: [View Logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
-
-            <details>
-            <summary>🔧 Common Issues</summary>
-
-            1. **Build errors**: Check TypeScript compilation and build output
-            2. **Railway token issues**: Verify `RAILWAY_TOKEN` secret is valid
-            3. **Environment creation failed**: Railway project may have environment limits
-
-            Please check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
-            </details>
-
-            ---
-            <sub>🤖 Deployment attempted at ${{ github.event.pull_request.updated_at }}</sub>
+            Preview environment cleaned up (PR closed/merged).

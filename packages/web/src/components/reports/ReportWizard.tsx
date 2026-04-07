@@ -32,7 +32,8 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
-import { ChevronLeft, ChevronRight, Layers, List } from "lucide-react";
+import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
@@ -52,6 +53,7 @@ const reportConfigSchema = z.object({
   teamIds: z.array(z.string()).optional(),
   gender: z.string().optional(),
   positions: z.array(z.string()).optional(),
+  audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
@@ -87,11 +89,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     watch,
     setValue,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<ReportFormData>({
     resolver: zodResolver(reportConfigSchema),
     defaultValues: {
       reportType: "team",
+      audience: "coach",
       athleteIds: [],
       timeframeType: "preset",
       timeframePreset: "all_time",
@@ -110,10 +113,15 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const reportType = watch("reportType");
   const reportName = watch("name");
 
-  // Debug logging
+  // Default audience based on report type — reset to coach for team reports
+  // since athlete/parent audiences only make sense for individual reports
   useEffect(() => {
-    console.log('[ReportWizard] State changed - step:', step, 'reportType:', reportType);
-  }, [step, reportType]);
+    if (reportType === "team") {
+      setValue("audience", "coach");
+    } else if (!dirtyFields.audience) {
+      setValue("audience", "coach");
+    }
+  }, [reportType, setValue, dirtyFields.audience]);
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
@@ -164,11 +172,9 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
-    console.log('[ReportWizard] handleNext - current step:', step, 'reportType:', reportType);
 
     // Validate report name on step 3 before progressing
     if (step === 3 && (!reportName || reportName.trim() === "")) {
-      console.log('[ReportWizard] Cannot proceed from step 3 - report name is required');
       return;
     }
 
@@ -179,7 +185,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       } else {
         setStep(step + 1);
       }
-      console.log('[ReportWizard] Moving to step:', step + 1);
     }
   };
 
@@ -195,31 +200,21 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   };
 
   const onSubmit = async (data: ReportFormData) => {
-    console.log('[ReportWizard] onSubmit called - step:', step, 'reportType:', reportType);
-    console.log('[ReportWizard] Form data:', JSON.stringify(data, null, 2));
-    console.log('[ReportWizard] athleteIds:', data.athleteIds);
-    console.log('[ReportWizard] athleteIds length:', data.athleteIds?.length);
-
     // Prevent submission if not on final step
     if (step !== totalSteps) {
-      console.error('[ReportWizard] Form submitted prematurely on step', step, '- blocking submission');
       return;
     }
 
     if (!organizationContext) {
-      console.log('[ReportWizard] No organizationContext - aborting');
       return;
     }
 
     // Extra validation for individual reports
     if (data.reportType === "individual") {
       if (!data.athleteIds || data.athleteIds.length === 0) {
-        console.error('[ReportWizard] Individual report submitted with no athletes!');
-        console.error('[ReportWizard] This should have been caught by Zod validation');
         // The Zod schema should have prevented this, but double-check
         return;
       }
-      console.log('[ReportWizard] Individual report has', data.athleteIds.length, 'athletes');
     }
 
     const config: any = {
@@ -231,6 +226,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       },
       metrics: data.metrics,
       athleteIds: data.athleteIds,
+      audience: data.audience,
     };
 
     // Handle benchmarks - either from set or individual selection
@@ -372,10 +368,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 organizationId={organizationContext!}
                 selectedAthleteIds={watch("athleteIds") || []}
                 onSelectionChange={(ids) => {
-                  console.log('[ReportWizard] Athlete selection changed:', ids);
-                  console.log('[ReportWizard] Setting athleteIds to:', ids);
                   setValue("athleteIds", ids);
-                  console.log('[ReportWizard] Current form value:', watch("athleteIds"));
                 }}
               />
 
@@ -768,9 +761,56 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
             </div>
           )}
 
-          {/* Step 8: Composite Index (Team Reports Only) */}
+          {/* Step 8: Audience + Composite Index (Team Reports) / Audience + Review (Individual) */}
+          {step === 8 && (
+            <div className="space-y-4 mb-4">
+              <Label className="flex items-center gap-2">
+                <Users className="h-4 w-4" />
+                Who will read this report?
+              </Label>
+              <RadioGroup
+                value={watch("audience")}
+                onValueChange={(value) => setValue("audience", value as "coach" | "athlete" | "parent", { shouldDirty: true })}
+              >
+                <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                  <RadioGroupItem value="coach" id="audience-coach" />
+                  <Label htmlFor="audience-coach" className="cursor-pointer flex-1">
+                    <div className="font-semibold">Coach</div>
+                    <div className="text-sm text-muted-foreground">
+                      Direct, objective coaching language with actionable training recommendations
+                    </div>
+                  </Label>
+                </div>
+                {/* Athlete and Parent audiences only apply to individual reports */}
+                {reportType === "individual" && (
+                  <>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                      <RadioGroupItem value="athlete" id="audience-athlete" />
+                      <Label htmlFor="audience-athlete" className="cursor-pointer flex-1">
+                        <div className="font-semibold">Athlete</div>
+                        <div className="text-sm text-muted-foreground">
+                          Motivating "you" language — honest, specific, and to the point
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 border rounded-lg p-3 cursor-pointer hover:bg-accent">
+                      <RadioGroupItem value="parent" id="audience-parent" />
+                      <Label htmlFor="audience-parent" className="cursor-pointer flex-1">
+                        <div className="font-semibold">Parent</div>
+                        <div className="text-sm text-muted-foreground">
+                          Clear non-technical language explaining what the numbers mean for their child
+                        </div>
+                      </Label>
+                    </div>
+                  </>
+                )}
+              </RadioGroup>
+            </div>
+          )}
+
           {step === 8 && reportType === "team" && (
             <div className="space-y-4">
+              <Separator />
               <Label>Composite Index (Optional)</Label>
               <p className="text-sm text-muted-foreground mb-4">
                 Create a weighted composite score across multiple metrics to rank athletes
@@ -834,6 +874,14 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 </p>
                 <p className="text-sm">
                   <strong>Metrics:</strong> {selectedMetrics.length} selected
+                </p>
+                <p className="text-sm">
+                  <strong>Audience:</strong>{" "}
+                  {watch("audience") === "coach"
+                    ? "Coach"
+                    : watch("audience") === "athlete"
+                    ? "Athlete"
+                    : "Parent"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   Click "Create Report" to finish

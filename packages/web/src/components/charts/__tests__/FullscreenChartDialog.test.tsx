@@ -93,6 +93,16 @@ vi.mock('../ViolinChart', () => ({
   ViolinChart: mockChartComponent('Violin')
 }));
 
+// Mock benchmarks API (useBenchmarksForMetric is a React Query hook used by FullscreenChartDialog)
+vi.mock('@/lib/benchmarks-api', () => ({
+  useBenchmarksForMetric: () => ({ data: [], isLoading: false }),
+}));
+
+// Mock BenchmarkLineSelector component
+vi.mock('../../analytics/BenchmarkLineSelector', () => ({
+  BenchmarkLineSelector: () => null,
+}));
+
 // Mock ErrorBoundary
 vi.mock('../../ErrorBoundary', () => ({
   ErrorBoundary: ({ children }: { children: React.ReactNode }) => <div>{children}</div>

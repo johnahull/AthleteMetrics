@@ -17,6 +17,7 @@ import {
   organizationBenchmarks,
   siteMetrics,
   events,
+  organizations,
   type Report,
   type ReportSnapshot,
   type ReportBenchmark,
@@ -113,6 +114,11 @@ interface EventContext {
   participantCount: number;
 }
 
+interface OrgBranding {
+  tagline?: string | null;
+  orgName?: string | null;
+}
+
 interface TeamReportData {
   reportType: 'team';
   reportConfig: ReportConfig;
@@ -124,6 +130,7 @@ interface TeamReportData {
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
   eventContext?: EventContext; // Present when eventId filter is used
+  orgBranding?: OrgBranding;
 }
 
 interface IndividualReportData {
@@ -134,6 +141,7 @@ interface IndividualReportData {
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
   eventContext?: EventContext; // Present when eventId filter is used
+  orgBranding?: OrgBranding;
 }
 
 export class ReportService extends BaseService {
@@ -833,6 +841,22 @@ export class ReportService extends BaseService {
         athleteId
       );
     }
+
+    // Embed org branding so the public report page can display org-specific tagline
+    const org = await db
+      .select({ name: organizations.name, brandTagline: organizations.brandTagline })
+      .from(organizations)
+      .where(eq(organizations.id, report.organizationId))
+      .limit(1)
+      .then((rows) => rows[0]);
+
+    snapshotData = {
+      ...snapshotData,
+      orgBranding: {
+        orgName: org?.name ?? null,
+        tagline: org?.brandTagline ?? null,
+      },
+    };
 
     // Generate secure token
     const publicToken = nanoid(21);

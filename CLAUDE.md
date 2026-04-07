@@ -23,11 +23,45 @@ When ENABLED:
 - Multiple agents are coordinated in parallel when needed
 - Enhanced domain-specific expertise is applied automatically
 
+### Primary Entry Point: Lead Developer Agent
+
+#### Lead Developer Agent (`lead-developer-agent`) 🎯
+**Auto-invoke:** ALL development requests — features, bug fixes, refactors, architectural decisions, code review, sprint planning
+**Role:** Project-intelligent first responder. Brings architectural judgment, enforces conventions, translates intent into phased plans, and coordinates specialist agents. Routes to other agents with enriched context.
+
+**Invoke first for:**
+- Any feature request or new functionality
+- Bug fixes requiring more than a single-file change
+- Architectural or design questions
+- Sprint and milestone planning
+- Code review and PR assessment
+- Any request where the right approach isn't immediately obvious
+
+**The lead developer agent then coordinates:**
+- Specialist agents for domain-specific implementation
+- `athletemetrics-orchestrator` for multi-domain tasks
+- GSD skills for roadmap/milestone planning
+- `pr-lifecycle-agent` for detailed code review
+
+---
+
 ### Available Specialized Agents
 
 #### PR Lifecycle Agent (`pr-lifecycle-agent`) 🔄
 **Auto-invoke:** PR review, automated fixes, multi-iteration review→fix cycles, merge assessment
 **Keywords:** `pull request`, `PR review`, `code review`, `merge`, `@claude fix`, `@claude merge`
+
+#### QA Lead Agent (`qa-lead-agent`) 🧪
+**Auto-invoke:** Test coverage assessment, quality gates, bug triage, regression planning, test strategy ownership
+**Keywords:** `test coverage`, `quality gate`, `regression`, `bug triage`, `ready to ship`, `qa`, `test strategy`, `untested`
+
+#### Release Manager Agent (`release-manager-agent`) 🚢
+**Auto-invoke:** develop→main releases, changelog generation, semantic versioning, GitHub releases, hotfix workflows, release readiness
+**Keywords:** `release`, `changelog`, `version`, `hotfix`, `ship`, `tag`, `github release`, `release notes`, `ready to release`
+
+#### Documentation Agent (`documentation-agent`) 📝
+**Auto-invoke:** API docs, ADRs, JSDoc/TSDoc, README updates, CLAUDE.md maintenance, onboarding documentation
+**Keywords:** `document`, `docs`, `readme`, `adr`, `jsdoc`, `tsdoc`, `api docs`, `architecture decision`, `onboarding`
 
 #### Test-Driven Feature Agent (`test-driven-feature-agent`) 🤖
 **Auto-invoke:** Test-first/TDD feature implementation, unit/integration tests, test coverage, mocking, autonomous workflows
@@ -130,6 +164,9 @@ When ENABLED:
 | CI/CD, GitHub Actions, releases, Railway deployments, repo settings | `devops-infrastructure-agent` |
 | Org types, white-labeling, tenant isolation | `multi-tenant-profiles-agent` |
 | Custom metrics, sport-specific tests, metric builder | `custom-metric-config-agent` |
+| Test strategy, coverage gaps, quality gates, bug triage | `qa-lead-agent` |
+| Releases, changelogs, versioning, hotfixes, GitHub releases | `release-manager-agent` |
+| API docs, ADRs, JSDoc, README, CLAUDE.md maintenance | `documentation-agent` |
 
 ## Git Workflow
 
@@ -230,53 +267,95 @@ npm run db:generate  # Generate migration from schema changes
 npm run db:migrate   # Apply drizzle migrations
 ```
 
-## E2E Test Maintenance Policy
+## Test-Driven Development (TDD) — Universal Policy
 
-**CRITICAL**: All user-facing features MUST have E2E test coverage before merging to main.
+**CRITICAL**: TDD is the **default development process** for ALL code changes in AthleteMetrics — new features, bug fixes, refactors, and API changes alike. No production code is written before a failing test exists.
 
-### When to Add/Update E2E Tests
+### The Red-Green-Refactor Cycle
 
-✅ **Always Required:**
+Every change follows this cycle without exception:
+
+```
+1. RED    → Write a failing test that describes the desired behavior
+2. GREEN  → Write the minimum code to make the test pass
+3. REFACTOR → Clean up code while keeping tests green
+```
+
+### Test Layers
+
+AthleteMetrics uses three test layers. Choose the **lowest layer** that adequately tests the behavior:
+
+| Layer | Location | When to Use | Agent |
+|-------|----------|-------------|-------|
+| **Unit** | `packages/*/src/**/*.test.ts` | Pure functions, utilities, business logic | `test-driven-feature-agent` |
+| **Integration** | `tests/integration/` | API routes, DB queries, service interactions | `test-driven-feature-agent` |
+| **E2E** | `tests/e2e/` | User-facing workflows, full UI flows | `ui-testing-agent` |
+
+### When Each Test Type Is Required
+
+✅ **Unit tests ALWAYS required for:**
+- New utility functions or helpers
+- Business logic (calculations, transformations, validations)
+- Zod schema changes
+- Shared type guards or formatters
+
+✅ **Integration tests ALWAYS required for:**
+- New API routes or middleware
+- Database query logic
+- Authentication and permission logic
+- Service layer functions
+
+✅ **E2E tests ALWAYS required for:**
 - New user-facing pages or routes
 - New forms or data entry workflows
 - New CRUD operations (Create, Read, Update, Delete)
-- Authentication or authorization changes
+- Authentication or authorization user flows
 - Critical user workflows (signup, login, data import, etc.)
 - Changes to existing user workflows
 
 ⚠️ **Usually Required:**
-- UI component changes affecting user interaction
-- API endpoint changes that impact frontend behavior
-- Navigation or routing modifications
-- Form validation rule changes
+- UI component changes affecting user interaction (E2E or component test)
+- API endpoint changes that impact frontend behavior (integration + E2E)
+- Navigation or routing modifications (E2E)
+- Form validation rule changes (unit + E2E)
 
 ❌ **Not Required:**
-- Pure CSS/styling changes (no UX impact)
-- Internal refactoring with identical UX
-- Backend-only changes (use integration tests instead)
+- Pure CSS/styling changes with no UX impact
+- Internal refactoring with identical behavior (tests must still pass)
 - Documentation updates
 
-### Test-First Development Workflow
+### TDD Workflow for Every Task
 
-**Use `test-driven-feature-agent` for new features:**
+**Use `test-driven-feature-agent` for all development work:**
 
-1. **Write E2E test first** (`tests/e2e/`)
-   - Describe expected user behavior from end-user perspective
-   - Test will fail initially (red phase)
-   - Use existing test patterns as templates
+1. **Write failing test(s) first**
+   - Unit test for the logic being added/changed
+   - Integration test if an API route or DB query is involved
+   - E2E test if user interaction is affected
+   - Tests should fail because the behavior doesn't exist yet (not due to syntax errors)
 
-2. **Implement feature** (`packages/web/`, `packages/api/`)
-   - Build minimum code to make test pass
-   - Follow existing architectural patterns
+2. **Implement minimum code to pass**
+   - Write only what the test demands — no speculative code
+   - Follow existing architectural patterns in this codebase
 
-3. **Verify tests pass** (green phase)
-   - Run: `npm run test:staging`
+3. **Verify tests pass (green phase)**
+   - Run relevant test suite(s) — see commands below
    - Fix any issues
-   - Ensure test is stable and not flaky
+   - Ensure tests are stable and not flaky
 
-4. **Refactor if needed** (refactor phase)
-   - Improve code quality
-   - Tests continue to pass
+4. **Refactor**
+   - Improve code quality, naming, structure
+   - All tests must remain green
+
+### TDD for Bug Fixes
+
+Bug fixes MUST start with a **regression test** that reproduces the bug:
+
+```
+1. Write a test that FAILS because of the bug (proves the bug exists)
+2. Fix the bug (minimum change)
+3. Test now passes — bug is provably fixed and won't regress
+```
 
 ### How to Invoke Test Agents
 
@@ -284,36 +363,47 @@ npm run db:migrate   # Apply drizzle migrations
 - "implement feature with tests"
 - "add e2e test for..."
 - "test-first implementation"
+- "fix bug in..."
+- "add unit test for..."
+- "write integration test for..."
 
 **Manual invocation:**
 ```bash
-# For TDD feature development
-@claude use test-driven-feature-agent to implement [feature] with E2E tests
+# For TDD feature/fix development (all layers)
+@claude use test-driven-feature-agent to implement [feature/fix] with tests
 
-# For UI testing specifically
+# For E2E testing specifically
 @claude use ui-testing-agent to create E2E tests for [workflow]
 ```
 
-### E2E Test Location
+### Test File Locations
 
-- **CRUD tests**: `tests/e2e/[entity]-crud.spec.ts`
-- **Workflow tests**: `tests/e2e/[workflow-name].spec.ts`
-- **Auth tests**: `tests/e2e/auth-flows.spec.ts`
-- **Permission tests**: `tests/e2e/permissions.spec.ts`
+- **Unit tests**: Co-located with source — `packages/*/src/**/*.test.ts`
+- **Integration tests**: `tests/integration/[domain].test.ts`
+- **E2E CRUD tests**: `tests/e2e/[entity]-crud.spec.ts`
+- **E2E Workflow tests**: `tests/e2e/[workflow-name].spec.ts`
+- **E2E Auth tests**: `tests/e2e/auth-flows.spec.ts`
+- **E2E Permission tests**: `tests/e2e/permissions.spec.ts`
 
-### Running E2E Tests
+### Running Tests
 
 ```bash
-# Run all E2E tests against staging
+# Unit + integration tests
+npm run test
+
+# Run tests in watch mode (during TDD)
+npm run test:watch
+
+# E2E tests against staging
 npm run test:staging
 
-# Run all E2E tests against testing environment
+# E2E tests against testing environment
 npm run test:testing
 
-# Run specific test file
+# Specific E2E test file
 npx playwright test tests/e2e/athlete-crud.spec.ts --config=playwright.staging.config.ts
 
-# Run with UI (debugging)
+# E2E with UI (debugging)
 npx playwright test --ui --config=playwright.staging.config.ts
 ```
 
@@ -542,6 +632,7 @@ The application runs as a **single-process Node.js server** without clustering:
 - **Why Single Process Works**: Node.js's event loop efficiently handles concurrent connections without multi-process clustering. Most I/O operations (database queries, API calls) are non-blocking, allowing thousands of concurrent connections on a single process.
 
 ### Development Notes
+- **TDD is mandatory**: Write failing tests before writing production code — always. See the TDD policy section above.
 - All database operations use Drizzle ORM - no raw SQL
 - Forms use React Hook Form with Zod schemas from `shared/schema.ts`
 - UI components are from shadcn/ui - check existing patterns before creating new ones
@@ -597,3 +688,35 @@ The application runs as a **single-process Node.js server** without clustering:
   - **Safety Margin**: 90s provides 6x safety margin for cold starts
   - **Platform Alignment**: Railway's default timeout is 100s, so 90s aligns with platform limits
   - **Documentation**: See `railway.json` for current configuration
+
+## UI Screenshot Verification (REQUIRED)
+
+When any code change affects the UI (new components, layout changes, styling updates, page modifications, etc.), you **MUST** capture screenshots of the affected pages/components before finishing.
+
+### How
+1. Use Playwright to launch the app and screenshot the affected views:
+   ```ts
+   import { chromium } from 'playwright';
+   const browser = await chromium.launch();
+   const page = await browser.newPage();
+   await page.goto('http://localhost:5173/affected-route');
+   await page.screenshot({ path: 'screenshots/<descriptive-name>.png', fullPage: true });
+   await browser.close();
+   ```
+2. Or use the existing Playwright test infrastructure with `page.screenshot()`.
+3. Save screenshots to `screenshots/` in the project root (create the dir if needed).
+4. Name them descriptively: `screenshots/dashboard-new-chart.png`, `screenshots/athlete-profile-mobile.png`, etc.
+5. Include both desktop (1280×720) and mobile (375×667) viewports if the change is layout-related.
+
+### When
+- Any new UI component or page
+- Any change to existing component layout, styling, or behavior
+- Any responsive/mobile changes
+- Theme or color changes
+
+### What to capture
+- The full page showing the change
+- Before/after if modifying existing UI (screenshot the current state first)
+- Multiple viewports if layout-related
+
+This is a manual convention — there is no CI automation enforcing it. Include screenshots in the PR description or as committed files so the project owner can review visual changes before merge.

@@ -130,10 +130,20 @@ export class GlobalAthleteService extends BaseService {
       }
     } else {
       // Global athlete exists but has disabled cross-org linking
-      // Create a new separate global athlete for this user
+      // Create a new separate global athlete for this user.
+      // We do NOT set primaryEmail here because the unique constraint on
+      // primaryEmail prevents two global athletes from sharing the same email
+      // address. PostgreSQL allows multiple NULLs in a UNIQUE column, so
+      // leaving primaryEmail null creates a valid isolated identity.
+      // The verifiedEmails array still records the email for audit purposes.
+      //
+      // Lookup safety: findByVerifiedEmail() always searches BOTH primaryEmail
+      // (for performance) AND the verifiedEmails array as a fallback, so athletes
+      // with primaryEmail = null are still discoverable by email through the array
+      // check. All callers that need to locate a global athlete by email must use
+      // findByVerifiedEmail() — never query primaryEmail in isolation.
       const [newGlobalAthlete] = await db.insert(globalAthletes).values({
         verifiedEmails: [email],
-        primaryEmail: email,
         canonicalFirstName: user.firstName,
         canonicalLastName: user.lastName,
         canonicalFullName: user.fullName,
@@ -524,9 +534,14 @@ export class GlobalAthleteService extends BaseService {
         .replace(/%/g, '\\%')    // Escape percent signs
         .replace(/_/g, '\\_');   // Escape underscores
 
+      // Search both primaryEmail AND verifiedEmails array. Athletes created
+      // with cross-org linking disabled have primaryEmail = null, so searching
+      // only primaryEmail would miss them. The unnest fallback ensures all
+      // athletes are discoverable by email regardless of primaryEmail state.
       conditions.push(
         or(
           ilike(globalAthletes.primaryEmail, `%${escapedSearch}%`),
+          sql`EXISTS (SELECT 1 FROM unnest(${globalAthletes.verifiedEmails}) e WHERE e ILIKE ${'%' + escapedSearch + '%'})`,
           ilike(globalAthletes.canonicalFullName, `%${escapedSearch}%`)
         ) as ReturnType<typeof eq>
       );

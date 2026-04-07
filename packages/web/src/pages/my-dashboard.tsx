@@ -175,6 +175,14 @@ export default function MyDashboardPage() {
         lastMeasurementDate={dashboardData.lastMeasurementDate}
       />
 
+      {/* Book Session CTA */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <p className="text-sm font-medium text-blue-900">Ready for your next session?</p>
+        <p className="text-xs text-blue-700">
+          Contact {organization?.name ?? 'your coach'} to book your next training session.
+        </p>
+      </div>
+
       {/* Pending Tasks Banner - shows wellness questionnaires to complete */}
       {isWellnessEnabled && <PendingTasksBanner />}
 
