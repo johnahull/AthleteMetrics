@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, Link } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { Mail, Building, UserCheck, AlertCircle, Loader2, Eye, EyeOff } from 'lu
 import { validatePassword, PASSWORD_REQUIREMENTS, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { useContextualLabels } from '@/hooks/useContextualLabels';
+import { isUnder13, isMinorAge } from '@shared/coppa-utils';
 
 interface InvitationData {
   email: string;
@@ -50,11 +51,34 @@ export default function AcceptInvitation() {
     username: '',
     password: '',
     confirmPassword: '',
-    termsAccepted: false
+    termsAccepted: false,
+    birthDate: '',
+    parentEmail: '',
   });
   
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [consentEmailSent, setConsentEmailSent] = useState(false);
+  const [consentParentEmail, setConsentParentEmail] = useState('');
+
+  const under13 = (() => {
+    if (!formData.birthDate) return false;
+    try { return isUnder13(formData.birthDate); } catch { return false; }
+  })();
+  const minor = (() => {
+    if (!formData.birthDate) return false;
+    try { return isMinorAge(formData.birthDate); } catch { return false; }
+  })();
+  const teenMinor = minor && !under13;
+
+  // D1: Clear parentEmail when minor transitions from true → false
+  const prevIsMinorRef = useRef(minor);
+  useEffect(() => {
+    if (prevIsMinorRef.current === true && !minor && formData.parentEmail) {
+      setFormData(prev => ({ ...prev, parentEmail: '' }));
+    }
+    prevIsMinorRef.current = minor;
+  }, [minor]);
 
   // Extract token from URL on mount
   useEffect(() => {
@@ -82,8 +106,8 @@ export default function AcceptInvitation() {
       }
       
       const data = await response.json();
-      console.log('[INVITATION FETCH] Received invitation data:', data);
-      console.log('[INVITATION FETCH] playerId:', data.playerId);
+
+
       setInvitation(data);
 
       // Pre-populate form with existing athlete data if available
@@ -131,6 +155,12 @@ export default function AcceptInvitation() {
       return;
     }
 
+    // Validate parent email for under-13 (defense-in-depth alongside HTML required)
+    if (under13 && !formData.parentEmail?.trim()) {
+      setError('Parent or guardian email is required for users under 13');
+      return;
+    }
+
     // Validate password against shared requirements
     const passwordValidation = validatePassword(formData.password);
     if (!passwordValidation.valid) {
@@ -153,13 +183,22 @@ export default function AcceptInvitation() {
           username: formData.username,
           password: formData.password,
           legalAcceptedAt: new Date().toISOString(),
+          birthDate: formData.birthDate || undefined,
+          parentEmail: minor && formData.parentEmail ? formData.parentEmail.trim().toLowerCase() : undefined,
         }),
       });
 
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || 'Failed to accept invitation');
+      }
+
+      // COPPA: under-13 athletes await parental consent — no redirect to dashboard
+      if (data.requiresParentalConsent) {
+        setConsentParentEmail(formData.parentEmail);
+        setConsentEmailSent(true);
+        return;
       }
 
       toast({
@@ -195,13 +234,13 @@ export default function AcceptInvitation() {
     try {
       // If this is an existing athlete (playerId present), exclude their user ID from the check
       const excludeParam = invitation?.playerId ? `&excludeUserId=${encodeURIComponent(invitation.playerId)}` : '';
-      console.log('[USERNAME CHECK] invitation.playerId:', invitation?.playerId);
-      console.log('[USERNAME CHECK] Checking URL:', `/api/users/check-username?username=${encodeURIComponent(username)}${excludeParam}`);
+
+
 
       const response = await fetch(`/api/users/check-username?username=${encodeURIComponent(username)}${excludeParam}`);
       const data = await response.json();
 
-      console.log('[USERNAME CHECK] Response:', data);
+
 
       if (!data.available) {
         setUsernameError('Username already taken. Please choose a different username.');
@@ -241,6 +280,34 @@ export default function AcceptInvitation() {
           <Loader2 className="h-6 w-6 animate-spin" />
           <span>Loading invitation...</span>
         </div>
+      </div>
+    );
+  }
+
+  // COPPA: show consent-sent holding state for under-13 athletes
+  if (consentEmailSent) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-6 w-6 text-blue-600" />
+            </div>
+            <CardTitle className="text-2xl">Consent Email Sent</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-center">
+            <p className="text-sm text-gray-600">
+              Because you're under 13, federal law (COPPA) requires parental consent before you can access AthleteMetrics.
+              A consent request has been sent to <strong>{consentParentEmail}</strong>.
+            </p>
+            <p className="text-sm text-gray-500">
+              Ask your parent or guardian to check their email and click the approval link. Once approved, you'll be able to log in.
+            </p>
+            <Button variant="outline" className="w-full" onClick={() => setLocation('/login')}>
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -348,6 +415,49 @@ export default function AcceptInvitation() {
               </div>
             </div>
             
+            {/* Date of Birth — COPPA age gate */}
+            <div>
+              <Label htmlFor="birthDate">Date of Birth</Label>
+              <Input
+                id="birthDate"
+                type="date"
+                value={formData.birthDate}
+                onChange={handleInputChange('birthDate')}
+                max={new Date().toISOString().split('T')[0]}
+                required
+              />
+            </div>
+
+            {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
+            {minor && (
+              <div>
+                <Label htmlFor="parentEmail">
+                  Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
+                </Label>
+                {under13 && (
+                  <Alert className="mb-2 border-amber-200 bg-amber-50">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800 text-sm">
+                      Federal law (COPPA) requires parental consent for users under 13. A parent or guardian must approve before you can log in.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {teenMinor && (
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Optionally provide a parent/guardian email so they can monitor your athletic progress.
+                  </p>
+                )}
+                <Input
+                  id="parentEmail"
+                  type="email"
+                  value={formData.parentEmail}
+                  onChange={handleInputChange('parentEmail')}
+                  placeholder="parent@example.com"
+                  required={under13}
+                />
+              </div>
+            )}
+
             <div>
               <Label htmlFor="username">Username</Label>
               <div className="relative">

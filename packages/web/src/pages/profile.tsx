@@ -5,13 +5,13 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { apiRequest } from "@/lib/queryClient";
 import { updateProfileSchema, changePasswordSchema, type UpdateProfile, type ChangePassword } from "@shared/schema";
-import { User, Lock, Save, Eye, EyeOff, Mail, CheckCircle2, AlertCircle } from "lucide-react";
+import { User, Lock, Save, Eye, EyeOff, Mail, CheckCircle2, AlertCircle, Shield } from "lucide-react";
 
 export default function Profile() {
   const { user } = useAuth();
@@ -27,6 +27,7 @@ export default function Profile() {
     defaultValues: {
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
+      parentEmail: (user as any)?.parentEmail ?? null,
     },
   });
 
@@ -54,6 +55,7 @@ export default function Profile() {
       profileForm.reset({
         firstName: updatedUser.firstName,
         lastName: updatedUser.lastName,
+        parentEmail: updatedUser.parentEmail ?? null,
       });
     },
     onError: () => {
@@ -191,7 +193,7 @@ export default function Profile() {
                     <FormItem>
                       <FormLabel>Last Name</FormLabel>
                       <FormControl>
-                        <Input 
+                        <Input
                           {...field}
                           disabled={updateProfileMutation.isPending}
                           data-testid="input-profile-lastName"
@@ -201,6 +203,34 @@ export default function Profile() {
                     </FormItem>
                   )}
                 />
+
+                {/* Only show for minor athletes */}
+                {(user as any)?.isMinor && (
+                  <FormField
+                    control={profileForm.control}
+                    name="parentEmail"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Parent/Guardian Email</FormLabel>
+                        <FormDescription>
+                          Add your parent or guardian's email so they can monitor your athletic progress.
+                        </FormDescription>
+                        <FormControl>
+                          <Input
+                            type="email"
+                            placeholder="parent@example.com"
+                            {...field}
+                            value={field.value ?? ''}
+                            onChange={(e) => field.onChange(e.target.value || null)}
+                            disabled={updateProfileMutation.isPending}
+                            data-testid="input-profile-parentEmail"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <div>
                   <FormLabel>Username</FormLabel>

@@ -865,6 +865,40 @@ export class ReportService extends BaseService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expirationDays);
 
+    // COPPA: detect minor athlete data at snapshot creation time.
+    // IMPORTANT: use isMinor field (set at registration based on birthDate) —
+    // NOT current age — because we need age-at-collection, not current age.
+    // This flag is immutable after snapshot creation.
+    let containsMinorData = false;
+    try {
+      const data = snapshotData as any;
+      const athleteIds: string[] = [];
+
+      // Collect athlete IDs from team or individual report
+      if (report.reportType === 'individual') {
+        const config = report.config as any;
+        if (config?.athleteId) athleteIds.push(config.athleteId);
+      } else if (data?.athletes) {
+        for (const a of data.athletes) {
+          if (a?.userId || a?.id) athleteIds.push(a.userId || a.id);
+        }
+      }
+
+      if (athleteIds.length > 0) {
+        const minorCheck = await db
+          .select({ isMinor: users.isMinor })
+          .from(users)
+          .where(inArray(users.id, athleteIds));
+        containsMinorData = minorCheck.some(u => u.isMinor === true);
+      }
+    } catch (err) {
+      // Fail-closed: if we can't determine whether the snapshot contains minor
+      // data, conservatively restrict public access. Better to over-restrict
+      // than to expose COPPA-protected data publicly.
+      console.error('[COPPA] Failed to check minor data in snapshot:', err);
+      containsMinorData = true;
+    }
+
     // Create snapshot
     const [snapshot] = await db
       .insert(reportSnapshots)
@@ -876,6 +910,8 @@ export class ReportService extends BaseService {
         expiresAt,
         isActive: true,
         viewCount: 0,
+        containsMinorData,
+        publicAccessRestricted: containsMinorData,
       })
       .returning();
 

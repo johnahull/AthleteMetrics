@@ -5,6 +5,7 @@ export const ROLE_HIERARCHY = {
   org_admin: 80,
   coach: 60,
   athlete: 40,
+  parent: 35,
   guest: 20
 } as const;
 
@@ -14,7 +15,7 @@ export const PERMISSIONS: Record<string, Role[]> = {
   // Organization management
   CREATE_ORGANIZATION: ['site_admin'],
   MANAGE_ORGANIZATION: ['site_admin', 'org_admin'],
-  VIEW_ORGANIZATION: ['site_admin', 'org_admin', 'coach', 'athlete'],
+  VIEW_ORGANIZATION: ['site_admin', 'org_admin', 'coach', 'athlete', 'parent'],
   DELETE_ORGANIZATION: ['site_admin'],
   
   // User management
@@ -27,7 +28,7 @@ export const PERMISSIONS: Record<string, Role[]> = {
   // Team management
   CREATE_TEAM: ['site_admin', 'org_admin', 'coach'],
   MANAGE_TEAM: ['site_admin', 'org_admin', 'coach'],
-  VIEW_TEAM: ['site_admin', 'org_admin', 'coach', 'athlete'],
+  VIEW_TEAM: ['site_admin', 'org_admin', 'coach', 'athlete', 'parent'],
   DELETE_TEAM: ['site_admin', 'org_admin'],
   
   // Measurement management
@@ -45,16 +46,19 @@ export const PERMISSIONS: Record<string, Role[]> = {
   VIEW_ADVANCED_ANALYTICS: ['site_admin', 'org_admin'],
   EXPORT_DATA: ['site_admin', 'org_admin', 'coach'],
   BULK_EXPORT: ['site_admin', 'org_admin'],
-  
+
   // System administration
   MANAGE_SYSTEM: ['site_admin'],
   VIEW_LOGS: ['site_admin'],
   CONFIGURE_SETTINGS: ['site_admin', 'org_admin'],
+
+  // Parent/Guardian access
+  VIEW_LINKED_ATHLETES: ['parent'],
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
 
-export const roleSchema = z.enum(['site_admin', 'org_admin', 'coach', 'athlete', 'guest']);
+export const roleSchema = z.enum(['site_admin', 'org_admin', 'coach', 'athlete', 'parent', 'guest']);
 
 export function hasPermission(userRole: Role, permission: Permission): boolean {
   return PERMISSIONS[permission].includes(userRole);
@@ -81,6 +85,7 @@ export function getRoleDisplayName(role: Role): string {
     org_admin: 'Organization Admin',
     coach: 'Coach',
     athlete: 'Athlete',
+    parent: 'Parent/Guardian',
     guest: 'Guest'
   };
   return displayNames[role] || role;
@@ -92,6 +97,7 @@ export function getRoleDescription(role: Role): string {
     org_admin: 'Manages organization, teams, and users',
     coach: 'Manages teams and athlete measurements',
     athlete: 'Views own data and measurements',
+    parent: 'View-only access to linked children\'s data',
     guest: 'Limited read-only access'
   };
   return descriptions[role] || '';

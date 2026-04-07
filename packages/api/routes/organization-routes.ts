@@ -328,6 +328,14 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid organization ID format" });
       }
 
+      // COPPA validation: coppaEnabled=true requires a contact email
+      if (req.body.coppaEnabled === true && !req.body.coppaContactEmail) {
+        return res.status(400).json({
+          code: 'coppa_contact_email_required',
+          message: 'A COPPA contact email is required when enabling the minor athlete consent flow.',
+        });
+      }
+
       // Capture request context for audit logging
       const context = {
         ipAddress: req.ip,

@@ -5,6 +5,7 @@ import { shutdownSecurityStore } from "./middleware/organization-type-security";
 import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware";
 import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-digest-job";
 import { startWellnessScheduledJob, stopWellnessScheduledJob } from "./jobs/wellness-scheduled-job";
+import { startCoppaTokenCleanupJob, stopCoppaTokenCleanupJob } from "./jobs/coppa-token-cleanup";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
@@ -308,6 +309,13 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
     } catch (error) {
       console.error('Failed to start wellness jobs:', error);
     }
+
+    // Start COPPA consent token expiry cleanup job
+    try {
+      startCoppaTokenCleanupJob();
+    } catch (error) {
+      console.error('Failed to start COPPA token cleanup job:', error);
+    }
   });
 
   // Assign the graceful shutdown implementation - properly close database connections on process termination
@@ -321,6 +329,7 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
         // Stop scheduled jobs
         stopWellnessDigestJob();
         stopWellnessScheduledJob();
+        stopCoppaTokenCleanupJob();
         log('Scheduled jobs stopped');
 
         // Shutdown organization type singletons to prevent memory leaks

@@ -7,6 +7,9 @@ import { z } from "zod";
 import { BaseService } from "./base-service";
 import type { User } from "@shared/schema";
 import { INVITATION_PENDING_PASSWORD } from "@shared/schema";
+import { db } from "../db";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { eq, and } from "drizzle-orm";
 
 export interface LoginCredentials {
   username: string;
@@ -136,8 +139,28 @@ export class AuthService extends BaseService {
 
       // Get user's organization memberships
       const organizations = await this.getUserOrganizations(user.id);
-      
+
       if (organizations.length === 0) {
+        // Infer parent role from active parentAthleteLinks.
+        // The users table has no 'role' column — parent identity is determined
+        // by having active parent-athlete links. A parent whose links are all
+        // deactivated (consent denied/revoked) correctly falls through to 'athlete'.
+        const parentLinks = await db
+          .select({ id: parentAthleteLinks.id })
+          .from(parentAthleteLinks)
+          .where(and(
+            eq(parentAthleteLinks.parentUserId, user.id),
+            eq(parentAthleteLinks.isActive, true),
+          ))
+          .limit(1);
+
+        if (parentLinks.length > 0) {
+          return {
+            role: "parent",
+            primaryOrganizationId: undefined,
+          };
+        }
+
         return {
           role: "athlete", // Default for users with no organization memberships
           primaryOrganizationId: undefined

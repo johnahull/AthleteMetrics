@@ -29,6 +29,9 @@ import { ZodError, z } from "zod";
 import { db } from "../db";
 import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
+import { coppaService } from "../services/coppa-service";
+import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -1224,6 +1227,72 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Snapshot not found" });
       }
 
+      // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
+      // from an org with COPPA enabled), public link access is never permitted.
+      // Only authenticated users who belong to the report's org (or are a site_admin,
+      // or are a parent of an athlete in that org) may access the data.
+      if (snapshot.publicAccessRestricted) {
+        // Write audit log regardless of whether user is authenticated
+        coppaService.writeCoppaAudit({
+          action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+          details: { token: req.params.token, authenticated: !!req.session?.user },
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
+        });
+
+        const sessionUser = req.session?.user;
+        if (!sessionUser) {
+          return res.status(403).json({
+            code: 'minor_data_restricted',
+            message: 'This report contains data for minor athletes and cannot be shared via public link.',
+          });
+        }
+
+        // Site admins may always access restricted snapshots.
+        if (!sessionUser.isSiteAdmin) {
+          // Resolve the report's owning organization so we can check membership.
+          const [reportRow] = await db
+            .select({ organizationId: reports.organizationId })
+            .from(reports)
+            .where(eq(reports.id, snapshot.reportId))
+            .limit(1);
+
+          if (!reportRow) {
+            return res.status(403).json({
+              code: 'minor_data_restricted',
+              message: 'This report contains data for minor athletes. Access is restricted.',
+            });
+          }
+
+          const orgId = reportRow.organizationId;
+          const userOrgs = await storage.getUserOrganizations(sessionUser.id);
+          const isMember = userOrgs.some((o) => o.organizationId === orgId);
+
+          if (!isMember) {
+            // Check if the authenticated user is a parent of an athlete in this org.
+            const [parentLink] = await db
+              .select({ id: parentAthleteLinks.id })
+              .from(parentAthleteLinks)
+              .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
+              .where(and(
+                eq(parentAthleteLinks.parentUserId, sessionUser.id),
+                eq(parentAthleteLinks.isActive, true),
+                eq(userOrganizations.organizationId, orgId),
+              ))
+              .limit(1);
+
+            if (!parentLink) {
+              return res.status(403).json({
+                code: 'minor_data_restricted',
+                message: 'This report contains data for minor athletes. Access is restricted to organization members.',
+              });
+            }
+          }
+        }
+      }
+
       res.json(snapshot);
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
@@ -1394,6 +1463,57 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({
           message: "Access denied to this report"
         });
+      }
+
+      // COPPA: check AI consent for any minor athletes in this report.
+      // canAccessAI fails closed: null/undefined/false → blocked.
+      if (report.reportType === 'individual') {
+        // For individual reports, check the specific athlete.
+        const config = report.config as any;
+        const athleteId = config?.filters?.athleteId || config?.athleteId;
+        if (athleteId) {
+          const canAccess = await coppaService.canAccessAI(athleteId);
+          if (!canAccess) {
+            const athlete = await storage.getUser(athleteId);
+            // Block if minor, or if athlete can't be found (fail closed)
+            if (!athlete || athlete.isMinor) {
+              return res.status(403).json({
+                code: 'ai_consent_required',
+                message: "AI coaching insights require parental consent for AI features for this athlete.",
+                featureDisabled: true,
+                reason: !athlete ? 'athlete_not_found' : 'minor_without_ai_consent',
+              });
+            }
+          }
+        } else {
+          // Cannot resolve athleteId from individual report config — fail closed to
+          // maintain the COPPA invariant. A missing athleteId could mean the report
+          // covers a minor whose consent status cannot be verified.
+          console.warn(`[COPPA] Individual report ${report.id} has no athleteId in config — blocking AI access (fail closed)`);
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: "AI coaching insights are unavailable: unable to verify consent status for this report.",
+            featureDisabled: true,
+            reason: 'individual_report_missing_athlete',
+          });
+        }
+      } else if (report.reportType === 'team') {
+        // For team/org reports, check ALL minor athletes in the organization.
+        // If any minor lacks AI consent, block the report generation.
+        // Uses batch query (2 queries) instead of per-user queries (2*N).
+        const orgUsers = await storage.getOrganizationUsers(report.organizationId);
+        const minorIds = orgUsers
+          .filter(ou => ou.user?.isMinor)
+          .map(ou => ou.user!.id);
+        const minorsWithoutConsent = await coppaService.getMinorsWithoutAIConsent(minorIds);
+        if (minorsWithoutConsent.length > 0) {
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: `AI coaching insights blocked: ${minorsWithoutConsent.length} minor athlete(s) in this report lack parental consent for AI features.`,
+            featureDisabled: true,
+            reason: 'minor_without_ai_consent',
+          });
+        }
       }
 
       // Get organization to check AI flags

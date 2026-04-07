@@ -63,6 +63,7 @@ export type MembershipRequest = typeof tables.membershipRequests.$inferSelect;
 
 export type AuditLog = typeof tables.auditLogs.$inferSelect;
 export type EmailVerificationToken = typeof tables.emailVerificationTokens.$inferSelect;
+export type SecurityEvent = typeof tables.securityEvents.$inferSelect;
 
 // ============================================================================
 // Settings Tables
@@ -233,6 +234,23 @@ export type BenchmarkSetWithItems = BenchmarkSet & {
     };
   })[];
 };
+
+// ============================================================================
+// COPPA Tables
+// ============================================================================
+
+export type ParentalConsent = typeof tables.parentalConsents.$inferSelect;
+export type InsertParentalConsent = typeof tables.parentalConsents.$inferInsert;
+export type ParentAthleteLink = typeof tables.parentAthleteLinks.$inferSelect;
+export type CoppaAuditLog = typeof tables.coppaAuditLog.$inferSelect;
+export type DataDeletionRequest = typeof tables.dataDeletionRequests.$inferSelect;
+export type DataExportRequest = typeof tables.dataExportRequests.$inferSelect;
+export type ParentLinkRequest = typeof tables.parentLinkRequests.$inferSelect;
+export type InsertParentLinkRequest = typeof tables.parentLinkRequests.$inferInsert;
+
+// COPPA enum types
+export type CoppaStatus = (typeof enums.coppaStatusEnum)[number];
+export type ConsentStatus = (typeof enums.consentStatusEnum)[number];
 
 // ============================================================================
 // Onboarding Types

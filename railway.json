@@ -32,9 +32,6 @@
       }
     },
     "pr": {
-      "deploy": {
-        "startCommand": "sh scripts/docker-entrypoint.sh"
-      },
       "variables": {
         "NODE_ENV": "testing",
         "NODE_OPTIONS": "--max-old-space-size=2048",

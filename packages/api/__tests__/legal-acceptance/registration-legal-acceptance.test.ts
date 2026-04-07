@@ -14,12 +14,19 @@ import { storage } from '../../storage';
 import { registerRegistrationRoutes } from '../../routes/registration-routes';
 import { AUDIT_ACTION_LEGAL_ACCEPTED } from '@shared/legal-acceptance';
 
-// Mock email service to avoid resend dependency
-vi.mock('../../services/email-service', () => ({
-  emailService: {
+// Mock email service to avoid resend dependency.
+// Must export both the EmailService class (used by CoppaService) and the emailService singleton.
+vi.mock('../../services/email-service', () => {
+  const mockMethods = {
     sendEmailVerification: vi.fn().mockResolvedValue(true),
-  },
-}));
+    sendParentalConsentRequest: vi.fn().mockResolvedValue(true),
+    sendConsentConfirmedNotification: vi.fn().mockResolvedValue(true),
+  };
+  return {
+    EmailService: vi.fn().mockImplementation(() => mockMethods),
+    emailService: mockMethods,
+  };
+});
 
 describe('Registration Flow - Legal Acceptance', () => {
   let app: express.Express;
@@ -87,6 +94,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       expect(response.status).toBe(201);
@@ -128,6 +136,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       // Verify audit log was created for legal acceptance
@@ -168,6 +177,7 @@ describe('Registration Flow - Legal Acceptance', () => {
           username: 'johndoe',
           password: 'SecurePassword123!',
           legalAcceptedAt,
+          birthDate: '2000-01-01', // Adult birthDate — required by COPPA schema
         });
 
       const expectedVersion = new Date().toISOString().split('T')[0]; // YYYY-MM-DD

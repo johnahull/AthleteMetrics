@@ -99,7 +99,11 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users, tourId: "peer-comparison" },
     { name: "My Goals", href: "/my-goals", icon: Target, tourId: "my-goals" },
     { name: "Join Organization", href: "/join", icon: UserPlus, tourId: "join-organization" }
-  ]
+  ],
+  parent: [
+    { name: "My Children", href: "/parent-dashboard", icon: Users, tourId: "parent-dashboard" },
+    { name: "Link a Child", href: "/parent/link-child", icon: UserPlus, tourId: "parent-link-child" },
+  ],
 });
 
 const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number, reportBadge?: number) => {
@@ -122,8 +126,9 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     return config;
   }
 
-  // Get base navigation for role
-  const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
+  // Get base navigation for role; unknown roles fall back to coach nav
+  const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS]
+    || NAVIGATION_CONFIGS.coach;
   let navigation = Array.isArray(baseConfig)
     ? [...baseConfig]
     : typeof baseConfig === 'function'

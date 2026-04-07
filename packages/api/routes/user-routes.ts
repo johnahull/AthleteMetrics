@@ -9,6 +9,8 @@ import { UserService } from "../services/user-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { sanitizeSearchTerm, validateSearchTerm } from "@shared/input-sanitization";
 import { storage } from "../storage";
+import { handleParentEmailUpdate } from "../services/parent-link-helper";
+import { updateProfileSchema } from "@shared/schema";
 // Session types are loaded globally
 
 const userService = new UserService();
@@ -216,7 +218,21 @@ export function registerUserRoutes(app: Express) {
     try {
       const userId = req.session.user!.id;
       const updatedUser = await userService.updateProfile(userId, req.body);
-      
+
+      // Handle parentEmail: create parentAthleteLinks row for minor athletes
+      // Parse with updateProfileSchema to get typed access to parentEmail field.
+      const parsed = updateProfileSchema.safeParse(req.body);
+      if (parsed.success && parsed.data.parentEmail !== undefined) {
+        const athleteOrgs = await storage.getUserOrganizations(userId);
+        const orgId = athleteOrgs[0]?.organizationId ?? null;
+        await handleParentEmailUpdate(
+          userId,
+          parsed.data.parentEmail,
+          updatedUser,
+          orgId,
+        );
+      }
+
       // Update session with new user data
       req.session.user = {
         ...req.session.user!,

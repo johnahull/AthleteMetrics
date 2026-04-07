@@ -16,6 +16,7 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { updateProfileSchema, changePasswordSchema, userOrganizations } from "@shared/schema";
 import type { OnboardingStatusResponse } from "@shared/schema/types";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
+import { handleParentEmailUpdate } from "../services/parent-link-helper";
 
 // Rate limiting for username check endpoint to prevent enumeration attacks
 const usernameCheckLimiter = rateLimit({
@@ -303,6 +304,18 @@ export function registerProfileRoutes(app: Express) {
 
       const profileData = updateProfileSchema.parse(req.body);
       const updatedUser = await storage.updateUser(currentUser.id, profileData);
+
+      // Handle parentEmail: create parentAthleteLinks row for minor athletes
+      if (profileData.parentEmail !== undefined) {
+        const athleteOrgs = await storage.getUserOrganizations(currentUser.id);
+        const orgId = athleteOrgs[0]?.organizationId ?? null;
+        await handleParentEmailUpdate(
+          currentUser.id,
+          profileData.parentEmail,
+          updatedUser,
+          orgId,
+        );
+      }
 
       // Update session with new data
       if (req.session.user) {

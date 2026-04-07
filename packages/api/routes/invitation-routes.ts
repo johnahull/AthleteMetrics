@@ -21,6 +21,8 @@ import {
   MISSING_ACCEPTANCE_MESSAGE,
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
+import { db } from "../db";
+import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -144,12 +146,12 @@ async function checkInvitationPermissions(
     return { allowed: true };
   }
 
-  // Coaches can only invite athletes
+  // Coaches can invite athletes and parents
   if (inviterRoles.includes("coach")) {
-    if (targetRole === "athlete") {
+    if (targetRole === "athlete" || targetRole === "parent") {
       return { allowed: true };
     }
-    return { allowed: false, reason: "Coaches can only invite athletes" };
+    return { allowed: false, reason: "Coaches can only invite athletes and parents" };
   }
 
   return { allowed: false, reason: "Insufficient permissions to invite users" };
@@ -291,6 +293,11 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(400).json({ message: "Organization is required" });
       }
 
+      // Parent invitations require an athleteId to establish the link
+      if (role === 'parent' && !athleteId) {
+        return res.status(400).json({ message: "athleteId is required when inviting a parent" });
+      }
+
       // Validate organizationId is a valid string format
       if (typeof organizationId !== 'string' || organizationId.trim().length === 0) {
         return res.status(400).json({ message: "Organization ID must be a valid string" });
@@ -300,6 +307,20 @@ export function registerInvitationRoutes(app: Express) {
       const org = await storage.getOrganization(organizationId);
       if (!org) {
         return res.status(400).json({ message: "Invalid organization ID" });
+      }
+
+      // For parent invitations, validate the athlete exists and belongs to the org
+      if (role === 'parent' && athleteId) {
+        const athlete = await storage.getAthlete(athleteId);
+        if (!athlete) {
+          return res.status(404).json({ message: "Athlete not found" });
+        }
+        // Verify athlete is in this organization
+        const userOrgs = await storage.getUserOrganizations(athleteId);
+        const inOrg = userOrgs.some(o => o.organizationId === organizationId);
+        if (!inOrg) {
+          return res.status(400).json({ message: "Athlete does not belong to this organization" });
+        }
       }
 
       // Check permissions using unified function
@@ -331,14 +352,32 @@ export function registerInvitationRoutes(app: Express) {
         teamIds: teamIds || [],
         role,
         invitedBy: invitedById,
+        // For parent invitations, store athleteId in playerId field to preserve the link
+        playerId: (role === 'parent' && athleteId) ? athleteId : undefined,
         expiresAt: new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000)
       });
 
       // Generate invite link
       const inviteLink = generateInvitationLink(req, invitation.token);
 
-      // Send invitation email using shared helper
-      const emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
+      // For parent invitations, send the dedicated parent email template
+      let emailSent: boolean;
+      if (role === 'parent' && athleteId) {
+        const athlete = await storage.getAthlete(athleteId);
+        emailSent = await emailService.sendParentInvitation(email, {
+          parentName: firstName ? `${firstName} ${lastName || ''}`.trim() : undefined,
+          athleteName: athlete ? `${athlete.firstName} ${athlete.lastName}` : 'your athlete',
+          organizationName: org.name,
+          invitationLink: inviteLink,
+          expiryDays,
+        });
+        // Update invitation email sent status
+        if (emailSent) {
+          await storage.updateInvitation(invitation.id, { emailSent: true, emailSentAt: new Date() });
+        }
+      } else {
+        emailSent = await sendInvitationEmailWithTracking(invitation, invitedById, req);
+      }
 
       // Audit log
       await storage.createAuditLog({
@@ -350,6 +389,7 @@ export function registerInvitationRoutes(app: Express) {
           email: invitation.email,
           role: invitation.role,
           organizationId: invitation.organizationId,
+          athleteId: role === 'parent' ? athleteId : undefined,
           emailSent
         }),
         ipAddress: req.ip,
@@ -868,7 +908,7 @@ export function registerInvitationRoutes(app: Express) {
           firstName,
           lastName,
           legalAcceptedAt,
-          legalAcceptedVersion: getLegalAcceptanceTimestamp() // Format: "2024-12-13"
+          legalAcceptedVersion: getLegalAcceptanceTimestamp(), // Format: "2024-12-13"
         },
         {
           ipAddress: req.ip,
@@ -881,12 +921,33 @@ export function registerInvitationRoutes(app: Express) {
       // Note: Audit logs (legal acceptance + invitation accepted) are created inside
       // the acceptInvitation transaction for atomicity. No need to create them here.
 
+      // For parent invitations: create parentAthleteLinks row linking parent to athlete
+      if (invitation.role === 'parent' && invitation.playerId) {
+        try {
+          await db.insert(parentAthleteLinks).values({
+            parentEmail: invitation.email,
+            parentUserId: result.user.id,
+            athleteUserId: invitation.playerId,
+            organizationId: invitation.organizationId,
+          }).onConflictDoNothing();
+
+          console.log(`[InvitationAcceptance] Parent link created: ${result.user.id} -> athlete ${invitation.playerId}`);
+        } catch (linkError) {
+          console.error('[InvitationAcceptance] Failed to create parent athlete link:', linkError);
+          // Non-fatal: user account and org membership already created
+        }
+      }
+
       // Send welcome email
       const organization = await storage.getOrganization(result.invitation.organizationId);
+      const roleDisplayName = invitation.role === 'org_admin' ? 'Organization Admin'
+        : invitation.role === 'coach' ? 'Coach'
+        : invitation.role === 'parent' ? 'Parent/Guardian'
+        : 'Athlete';
       await emailService.sendWelcome(result.user.emails[0], {
         userName: `${result.user.firstName} ${result.user.lastName}`,
         organizationName: organization?.name || 'the organization',
-        role: invitation.role === 'org_admin' ? 'Organization Admin' : invitation.role === 'coach' ? 'Coach' : 'Athlete'
+        role: roleDisplayName
       });
 
       // Use the role from the invitation
@@ -922,6 +983,8 @@ export function registerInvitationRoutes(app: Express) {
           let redirectUrl = "/";
           if (userRole === "athlete") {
             redirectUrl = `/athletes/${result.user.id}`;
+          } else if (userRole === "parent") {
+            redirectUrl = "/parent/children";
           }
 
           res.json({

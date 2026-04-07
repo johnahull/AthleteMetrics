@@ -60,6 +60,12 @@ const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
 const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
 const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
+const ParentalConsentWaiting = React.lazy(() => import("./pages/parental-consent"));
+const ConsentConfirmation = React.lazy(() => import("./pages/consent-confirmation"));
+const CoppaCollectParentEmail = React.lazy(() => import("./pages/coppa-collect-parent-email"));
+const ParentDashboard = React.lazy(() => import("./pages/parent-dashboard"));
+const ParentChildDetail = React.lazy(() => import("./pages/parent-child-detail"));
+const ParentLinkChild = React.lazy(() => import("./pages/parent-link-child"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -168,6 +174,36 @@ function Router() {
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <TermsOfService />
         </Suspense>
+      </Route>
+      <Route path="/parental-consent">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentalConsentWaiting />
+        </Suspense>
+      </Route>
+      <Route path="/consent/:token">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ConsentConfirmation />
+        </Suspense>
+      </Route>
+      <Route path="/coppa/collect-parent-email">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <CoppaCollectParentEmail />
+        </Suspense>
+      </Route>
+      <Route path="/parent/children/:athleteId">
+        <RouteWrapper loadingText="Loading Athlete...">
+          <ParentChildDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/parent/link-child">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentLinkChild />
+        </Suspense>
+      </Route>
+      <Route path="/parent-dashboard">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <ParentDashboard />
+        </RouteWrapper>
       </Route>
       <Route path="/join/:code">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
