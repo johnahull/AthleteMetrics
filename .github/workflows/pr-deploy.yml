@@ -123,6 +123,17 @@ jobs:
             echo "::warning::Failed to set DATABASE_URL: $RESULT"
           fi
 
+          # Set IS_PR_ENVIRONMENT so docker-entrypoint.sh skips migrations.
+          # Without this, PR containers attempt migrations on every cold start
+          # against the shared testing DB, risking concurrent migration conflicts.
+          PAYLOAD=$(jq -n \
+            --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+            '{query: "mutation { variableUpsert(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\", name: \"IS_PR_ENVIRONMENT\", value: \"true\" }) }"}')
+          curl -sf -X POST "$RAILWAY_API_URL" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+            -d "$PAYLOAD" > /dev/null 2>&1 || echo "::warning::Failed to set IS_PR_ENVIRONMENT"
+
       - name: Connect source repo and create deployment trigger
         id: trigger
         env:
