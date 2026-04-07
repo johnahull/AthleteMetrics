@@ -13,6 +13,7 @@
  */
 
 import { useState } from "react";
+import { isSafePublicUrl } from "@shared/url-safety";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { SiteSettings } from "@shared/schema";
@@ -94,8 +95,8 @@ const orgAdminSettingsSchema = z.object({
   wellnessEnabled: z.boolean().default(true),
   eventsEnabled: z.boolean().default(false),
   brandLogoUrl: z.string().optional().default('').refine(
-    v => v === '' || (v.startsWith('https://') && v.length <= 2000),
-    "Must be a valid HTTPS URL (max 2000 characters)"
+    v => v === '' || (v.length <= 2000 && isSafePublicUrl(v)),
+    "Must be a public HTTPS URL (max 2000 characters)"
   ),
   brandPrimaryColor: z.string().optional().default('').refine(
     v => v === '' || /^#[0-9a-fA-F]{6}$/.test(v),

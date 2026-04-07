@@ -27,8 +27,6 @@ export function hexToRgb(hex: string): [number, number, number] {
  */
 import { isSafePublicUrl } from '@shared/url-safety';
 export { isSafePublicUrl as isSafeLogoUrl };
-// Also export the original name for direct use within this file
-const isSafeLogoUrl = isSafePublicUrl;
 
 export interface LogoFetchResult {
   base64: string;
@@ -41,11 +39,11 @@ export interface LogoFetchResult {
  * Returns null if the URL is unsafe, the fetch fails, the content-type is not
  * an allowed image type, or the image exceeds the 2 MB size cap.
  *
- * Security: validates the URL with isSafeLogoUrl, disables redirect following
+ * Security: validates the URL with isSafePublicUrl, disables redirect following
  * to prevent SSRF via open redirects, and enforces a 5-second timeout.
  */
 export async function fetchLogoBase64(url: string): Promise<LogoFetchResult | null> {
-  if (!isSafeLogoUrl(url)) return null;
+  if (!isSafePublicUrl(url)) return null;
   try {
     const response = await fetch(url, {
       signal: AbortSignal.timeout(5000),
