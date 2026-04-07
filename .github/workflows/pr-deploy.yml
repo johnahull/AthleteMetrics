@@ -32,6 +32,20 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
+      - name: Validate required secrets and variables
+        env:
+          RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
+        run: |
+          MISSING=""
+          [ -z "$PROJECT_ID" ]      && MISSING="$MISSING RAILWAY_PROJECT_ID(secret)"
+          [ -z "$RAILWAY_API_TOKEN" ] && MISSING="$MISSING RAILWAY_API_TOKEN(secret)"
+          [ -z "$SERVICE_ID" ]       && MISSING="$MISSING RAILWAY_TESTING_SERVICE_ID(var)"
+          [ -z "$TESTING_ENV_ID" ]   && MISSING="$MISSING RAILWAY_TESTING_ENV_ID(var)"
+          if [ -n "$MISSING" ]; then
+            echo "::error::Missing required repo secrets/variables:$MISSING — configure these before PR previews will work"
+            exit 1
+          fi
+
       - name: Find existing preview comment
         id: find-comment
         uses: peter-evans/find-comment@v3
@@ -50,6 +64,28 @@ jobs:
             ## Railway Preview
 
             Deploying `${{ github.head_ref }}` @ `${{ github.event.pull_request.head.sha }}`...
+
+      - name: Check for migration files in PR diff
+        id: migration-check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data: files } = await github.rest.pulls.listFiles({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 300
+            });
+            const migrationFiles = files
+              .map(f => f.filename)
+              .filter(f => f.includes('migrations/') || f.includes('schema.ts'));
+            if (migrationFiles.length > 0) {
+              core.setOutput('has_migrations', 'true');
+              core.setOutput('migration_files', migrationFiles.join(', '));
+              core.warning(`PR contains migration files: ${migrationFiles.join(', ')} — shared testing DB will be affected`);
+            } else {
+              core.setOutput('has_migrations', 'false');
+            }
 
       - name: Create or reuse preview environment
         id: env
@@ -205,6 +241,8 @@ jobs:
           # Only call environmentTriggersDeploy for newly created triggers.
           # For existing triggers, Railway's auto-deploy webhook already fired
           # when GitHub pushed — calling this again would create a duplicate build.
+          # Note: deploymentTriggerCreate does NOT auto-fire an initial build;
+          # it only registers the webhook. The explicit deploy below is needed.
           if [ "${{ steps.trigger.outputs.is_new }}" = "true" ]; then
             echo "New trigger — firing explicit deploy..."
             PAYLOAD=$(jq -n \
@@ -296,6 +334,8 @@ jobs:
             | **Branch** | `${{ github.head_ref }}` |
             | **Commit** | `${{ github.event.pull_request.head.sha }}` |
             | **Logs** | [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) |
+            ${{ steps.migration-check.outputs.has_migrations == 'true' && format('
+            > **⚠️ Migration Warning**: This PR contains migration files ({0}). The preview shares a database with all other open PR previews and the testing environment. These migrations will run against the shared DB and may affect other previews.', steps.migration-check.outputs.migration_files) || '' }}
 
   cleanup-preview:
     name: Cleanup PR Preview

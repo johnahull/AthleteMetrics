@@ -719,4 +719,4 @@ When any code change affects the UI (new components, layout changes, styling upd
 - Before/after if modifying existing UI (screenshot the current state first)
 - Multiple viewports if layout-related
 
-Screenshots will be reviewed by the project owner before merge. Do not skip this step.
+This is a manual convention — there is no CI automation enforcing it. Include screenshots in the PR description or as committed files so the project owner can review visual changes before merge.

@@ -334,8 +334,8 @@ jobs:
           # Only api and shared — web deps are frontend-only and not needed at runtime.
           # Workspace versions intentionally overwrite root — they're what the package tested against.
           # Note: glob * skips .bin/ and other dotfile dirs — workspace binaries are not needed at runtime since the server is a bundled dist/index.js.
-          cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || true
-          cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || true
+          cp -r packages/api/node_modules/* node_modules/ 2>/dev/null || echo '::warning::Failed to flatten packages/api/node_modules — verify no runtime deps are missing'
+          cp -r packages/shared/node_modules/* node_modules/ 2>/dev/null || echo '::warning::Failed to flatten packages/shared/node_modules — verify no runtime deps are missing'
 
       - name: Start server in background
         run: |
