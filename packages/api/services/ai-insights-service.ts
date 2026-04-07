@@ -595,6 +595,11 @@ export function buildPrompt(reportData: ReportData): string {
 
   prompt += `## Instructions\n`;
 
+  // Extract first name once for use across audience branches
+  const firstName = reportData.athleteName
+    ? sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0] || null
+    : null;
+
   if (audience === 'parent') {
     prompt += `You are writing for PARENTS of youth athletes, NOT coaches or trainers.\n\n`;
     prompt += `Write in clear, non-technical language that a parent with no sports science background can understand. Focus on:\n\n`;
@@ -603,13 +608,8 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `3. **What to Work On** — frame as growth opportunities, not deficiencies\n\n`;
     prompt += `TONE: Encouraging, professional, data-backed. Like a doctor explaining test results — clear, honest, but not alarming.\n\n`;
     prompt += `AVOID: Jargon (percentile ranks are OK, but explain what they mean), negative framing, comparisons that might discourage.\n\n`;
-    if (reportData.athleteName) {
-      // Use a short max-length — a first name is never 500 chars; prevents unexpectedly
-      // long sanitized strings from becoming the firstName if the name has no spaces.
-      const firstName = sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0];
-      if (firstName) {
-        prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
-      }
+    if (firstName) {
+      prompt += `Use the athlete's first name (${firstName}) throughout.\n\n`;
     }
     prompt += `Keep it to 200-300 words.\n`;
   } else if (audience === 'athlete') {
@@ -620,13 +620,8 @@ export function buildPrompt(reportData: ReportData): string {
     prompt += `3. **What to Work On**: Frame as challenges to attack, not weaknesses. Athletes want to know what to chase\n\n`;
     prompt += `TONE: Direct, confident, and energizing — like a coach who believes in you giving you your game plan. Speak to them as a competitor. Acknowledge effort where the data shows improvement. Be honest but never deflating.\n\n`;
     prompt += `AVOID: Clinical or passive language, hedging ("you might want to consider..."), generic praise ("great job!"), talking down to them. Athletes respect realness — show them the data backs up what you're saying.\n\n`;
-    if (reportData.athleteName) {
-      // Use a short max-length — a first name is never 500 chars; prevents unexpectedly
-      // long sanitized strings from becoming the firstName if the name has no spaces.
-      const firstName = sanitizeForPrompt(reportData.athleteName, 100).split(' ')[0];
-      if (firstName) {
-        prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
-      }
+    if (firstName) {
+      prompt += `Use the athlete's first name (${firstName}) to keep it personal.\n\n`;
     }
     // Note: athlete audience intentionally omits a "Next Steps" section — "What to Work On"
     // already implies action (it tells the athlete what to chase). Adding a separate next-steps

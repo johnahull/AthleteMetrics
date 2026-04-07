@@ -7,22 +7,6 @@
 -- 4. Add tier order uniqueness constraints
 -- IDEMPOTENT: Safe to run multiple times
 
--- Fix mutual exclusivity violations before adding the constraint:
--- Non-range benchmarks should only have benchmark_value set, not min_value/max_value.
--- Clear min_value/max_value for non-range benchmarks that had them set (data created
--- before this constraint existed).
-UPDATE site_benchmarks
-  SET min_value = NULL, max_value = NULL
-  WHERE comparison_operator != 'range'
-    AND benchmark_value IS NOT NULL
-    AND (min_value IS NOT NULL OR max_value IS NOT NULL);
-
-UPDATE custom_benchmarks
-  SET min_value = NULL, max_value = NULL
-  WHERE comparison_operator != 'range'
-    AND benchmark_value IS NOT NULL
-    AND (min_value IS NOT NULL OR max_value IS NOT NULL);
-
 DO $$
 BEGIN
   -- 1. ADD MUTUAL EXCLUSIVITY CONSTRAINTS

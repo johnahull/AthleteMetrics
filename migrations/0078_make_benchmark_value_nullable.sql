@@ -29,21 +29,6 @@ BEGIN
   END IF;
 END $$;
 
--- Fix data integrity before adding constraint:
--- Non-range benchmarks with null benchmark_value but with min_value/max_value
--- were likely created during range-benchmark development. Use whichever is set.
-UPDATE site_benchmarks
-  SET benchmark_value = COALESCE(min_value, max_value)
-  WHERE comparison_operator != 'range'
-    AND benchmark_value IS NULL
-    AND (min_value IS NOT NULL OR max_value IS NOT NULL);
-
-UPDATE custom_benchmarks
-  SET benchmark_value = COALESCE(min_value, max_value)
-  WHERE comparison_operator != 'range'
-    AND benchmark_value IS NULL
-    AND (min_value IS NOT NULL OR max_value IS NOT NULL);
-
 -- Add a check constraint to ensure data integrity:
 -- Either benchmark_value is set (for non-range) OR min_value/max_value are set (for range)
 DO $$

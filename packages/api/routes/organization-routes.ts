@@ -449,7 +449,9 @@ export function registerOrganizationRoutes(app: Express) {
         updates.eventsEnabled = eventsEnabled;
       }
 
-      // Validate and handle branding fields
+      // Validate and handle branding fields.
+      // Note: branding is intentionally available to all orgs regardless of plan/tier.
+      // If branding becomes a premium feature, add a feature gate here similar to aiEnabled.
       if (brandLogoUrl !== undefined) {
         if (brandLogoUrl === null || brandLogoUrl === '') {
           updates.brandLogoUrl = null;
