@@ -8,7 +8,7 @@ import { fileURLToPath } from 'url';
  * Device Import E2E Tests
  *
  * Tests the Dashr timing gate data sync feature end-to-end:
- * - Standalone import flow (/import/device)
+ * - Device Import tab on Data Entry page (/data-entry?tab=device)
  * - Event-linked import flow (from event results tab)
  * - Multi-session CSV handling
  * - Athlete matching and overrides
@@ -25,33 +25,33 @@ const __dirname = path.dirname(__filename);
 
 const DASHR_CSV = path.join(__dirname, 'fixtures/csv-files/dashr-sample.csv');
 
-test.describe('Device Import — Standalone Flow', () => {
+test.describe('Device Import — Data Entry Tab Flow', () => {
 
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
   });
 
-  test('should show Device Import in sidebar for coaches', async ({ page }) => {
-    // Navigate to dashboard to see sidebar
-    await navigateTo(page, '/dashboard');
+  test('should show Device Import tab on Data Entry page', async ({ page }) => {
+    await navigateTo(page, '/data-entry?tab=device');
 
-    // Look for Device Import nav link (uses data-testid from NavigationMenu component)
-    const navLink = page.locator('[data-testid="nav-device-import"]');
-    await expect(navLink.first()).toBeVisible({ timeout: 10000 });
-  });
-
-  test('should navigate to standalone import page', async ({ page }) => {
-    await navigateTo(page, '/import/device');
-
-    // Should show the import page heading
+    // Should show the Device Import tab and content
+    await expect(page.locator('[data-testid="device-import-tab"]')).toBeVisible({ timeout: 10000 });
     await expect(page.locator('text=Import Device Data')).toBeVisible({ timeout: 10000 });
 
     // Should show the upload button
     await expect(page.locator('text=Upload Device File')).toBeVisible();
   });
 
+  test('should redirect legacy /import/device URL to data entry tab', async ({ page }) => {
+    await navigateTo(page, '/data-entry?tab=device');
+
+    // Should redirect to data entry with device tab
+    await page.waitForURL('**/data-entry?tab=device', { timeout: 10000 });
+    await expect(page.locator('text=Import Device Data')).toBeVisible({ timeout: 10000 });
+  });
+
   test('should open import dialog and show upload step', async ({ page }) => {
-    await navigateTo(page, '/import/device');
+    await navigateTo(page, '/data-entry?tab=device');
 
     // Click the upload button to open dialog
     await page.click('text=Upload Device File');
@@ -66,7 +66,7 @@ test.describe('Device Import — Standalone Flow', () => {
   });
 
   test('should upload Dashr CSV and show session selection or review', async ({ page }) => {
-    await navigateTo(page, '/import/device');
+    await navigateTo(page, '/data-entry?tab=device');
 
     // Open dialog
     await page.click('text=Upload Device File');
@@ -90,7 +90,7 @@ test.describe('Device Import — Standalone Flow', () => {
   });
 
   test('should handle multi-session CSV with date picker', async ({ page }) => {
-    await navigateTo(page, '/import/device');
+    await navigateTo(page, '/data-entry?tab=device');
 
     // Open dialog and upload
     await page.click('text=Upload Device File');
@@ -127,7 +127,7 @@ test.describe('Device Import — Review and Commit', () => {
   });
 
   test('should show athlete match results in review step', async ({ page }) => {
-    await navigateTo(page, '/import/device');
+    await navigateTo(page, '/data-entry?tab=device');
 
     // Open dialog and upload
     await page.click('text=Upload Device File');
@@ -168,35 +168,21 @@ test.describe('Device Import — Review and Commit', () => {
 
 test.describe('Device Import — Permission Checks', () => {
 
-  test('should not show Device Import for athletes', async ({ page }) => {
+  test('should not show Device Import tab content for athletes without org', async ({ page }) => {
     await loginAsAthlete(page);
 
-    // Navigate to dashboard
-    await navigateTo(page, '/my-dashboard');
+    // Try to navigate to data entry with device tab
+    await navigateTo(page, '/data-entry?tab=device');
     await page.waitForLoadState('networkidle');
 
-    // Device Import should NOT appear in athlete sidebar
-    const navLink = page.locator('nav a:has-text("Device Import"), [role="navigation"] a:has-text("Device Import")');
-    await expect(navLink).toHaveCount(0);
-  });
-
-  test('should block direct navigation to /import/device for athletes', async ({ page }) => {
-    await loginAsAthlete(page);
-
-    // Try to navigate directly
-    await navigateTo(page, '/import/device');
-    await page.waitForLoadState('networkidle');
-
-    // Page should either show "No Organization" or redirect away
-    // Athletes without org context won't have an organizationId
+    // Athletes without org context should see "No Organization" message
     const noOrg = page.locator('text=/no organization|not authorized|access denied/i');
     const importPage = page.locator('text=Import Device Data');
 
-    // Either the athlete gets a "no org" message or sees the page but has no org
     const hasNoOrgMessage = await noOrg.isVisible({ timeout: 5000 }).catch(() => false);
     const hasImportPage = await importPage.isVisible({ timeout: 2000 }).catch(() => false);
 
-    // At least one should be true — if they see the page, they'll have the no-org message
+    // Either the athlete gets a "no org" message or sees the page but has no org
     expect(hasNoOrgMessage || hasImportPage).toBeTruthy();
   });
 });
@@ -247,7 +233,7 @@ test.describe('Device Import — Error Handling', () => {
   });
 
   test('should show error for invalid file type', async ({ page }) => {
-    await navigateTo(page, '/import/device');
+    await navigateTo(page, '/data-entry?tab=device');
 
     // Open dialog
     await page.click('text=Upload Device File');

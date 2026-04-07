@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -131,8 +131,6 @@ const EventInvite = React.lazy(() => import("./pages/event-invite"));
 const EventDataEntry = React.lazy(() => import("./pages/event-data-entry"));
 const EventResults = React.lazy(() => import("./pages/event-results"));
 
-// Lazy load device import page
-const DeviceImport = React.lazy(() => import("./pages/device-import"));
 
 function Router() {
   return (
@@ -501,11 +499,9 @@ function Router() {
           <Reports />
         </RouteWrapper>
       </Route>
-      {/* Device import - standalone (no event context) */}
+      {/* Legacy device import URL - redirect to data entry tab */}
       <Route path="/import/device">
-        <RouteWrapper loadingText="Loading Device Import...">
-          <DeviceImport />
-        </RouteWrapper>
+        <Redirect to="/data-entry?tab=device" />
       </Route>
       {/* Event routes - specific routes must come before generic */}
       <Route path="/events/join/:code">
