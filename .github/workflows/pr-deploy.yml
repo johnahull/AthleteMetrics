@@ -108,6 +108,7 @@ jobs:
 
           if [ -n "$ENV_ID" ]; then
             echo "Environment '$ENV_NAME' exists (id: $ENV_ID), reusing"
+            echo "is_new_env=false" >> "$GITHUB_OUTPUT"
           else
             # Create by duplicating testing env (ephemeral = auto-cleanup eligible)
             RESULT=$(curl -sf -X POST "$RAILWAY_API_URL" \
@@ -121,6 +122,7 @@ jobs:
               exit 1
             fi
             echo "Environment '$ENV_NAME' created (id: $ENV_ID)"
+            echo "is_new_env=true" >> "$GITHUB_OUTPUT"
             # Give Railway time to initialize the service instance
             sleep 5
           fi
@@ -135,6 +137,7 @@ jobs:
           echo "env_name=$ENV_NAME" >> "$GITHUB_OUTPUT"
 
       - name: Configure preview database
+        if: steps.env.outputs.is_new_env == 'true'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           TESTING_DB_URL: ${{ secrets.TESTING_DATABASE_PUBLIC_URL }}
@@ -173,6 +176,7 @@ jobs:
             -d "$PAYLOAD" > /dev/null 2>&1 || echo "::warning::Failed to set IS_PR_ENVIRONMENT"
 
       - name: Connect source repo and create deployment trigger
+        if: steps.env.outputs.is_new_env == 'true'
         id: trigger
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
@@ -232,21 +236,26 @@ jobs:
             echo "is_new=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Trigger deployment
+      - name: Trigger deployment (new environments only)
         id: deploy
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
         run: |
           set -o pipefail
           ENV_ID="${{ steps.env.outputs.env_id }}"
+          IS_NEW_ENV="${{ steps.env.outputs.is_new_env }}"
 
-          # Only call environmentTriggersDeploy for newly created triggers.
-          # For existing triggers, Railway's auto-deploy webhook already fired
-          # when GitHub pushed — calling this again would create a duplicate build.
-          # Note: deploymentTriggerCreate does NOT auto-fire an initial build;
-          # it only registers the webhook. The explicit deploy below is needed.
-          if [ "${{ steps.trigger.outputs.is_new }}" = "true" ]; then
-            echo "New trigger — firing explicit deploy..."
+          # For existing environments, Railway's auto-deploy webhook already fired
+          # when GitHub received the push — no action needed here. Running
+          # serviceInstanceUpdate or environmentTriggersDeploy would create
+          # duplicate builds (the root cause of 3x builds per push).
+          if [ "$IS_NEW_ENV" != "true" ]; then
+            echo "Existing environment — auto-deploy webhook handles deployment"
+          else
+            # New environment: the trigger was just created and hasn't fired yet.
+            # deploymentTriggerCreate registers the webhook but does NOT auto-fire
+            # an initial build, so we must explicitly trigger one.
+            echo "New environment — firing explicit deploy..."
             PAYLOAD=$(jq -n \
               --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
               '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
@@ -261,11 +270,9 @@ jobs:
               echo "::error::Failed to trigger deployment: $RESULT"
               exit 1
             fi
-          else
-            echo "Existing trigger — skipping explicit deploy (auto-deploy handles it)"
           fi
 
-          # Verify deployment was actually created (allow up to 60s)
+          # Verify deployment was created (allow up to 60s)
           DEPLOY_STATUS="NONE"
           for i in 1 2 3 4 5 6; do
             sleep 10
@@ -285,14 +292,6 @@ jobs:
             echo "::error::No deployment created after trigger"
             exit 1
           fi
-
-          # Verify deployment was actually created (not just acknowledged)
-          sleep 5
-          CHECK=$(curl -sf -X POST "$RAILWAY_API_URL" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-            -d "{\"query\": \"{ deployments(first: 1, input: { environmentId: \\\"$ENV_ID\\\", serviceId: \\\"$SERVICE_ID\\\" }) { edges { node { id status } } } }\"}")
-          echo "Deployment check: $CHECK"
 
       - name: Get preview domain
         id: domain
