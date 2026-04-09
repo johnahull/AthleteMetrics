@@ -17,7 +17,7 @@ set -e
 #   Fix requires drizzle-orm >=0.45.2 which is a breaking major version upgrade.
 #   AthleteMetrics uses parameterized queries via Drizzle's query builder (no raw
 #   SQL identifiers from user input), so the attack vector does not apply.
-#   Tracked for upgrade separately from feature work.
+#   Tracked for upgrade: https://github.com/johnahull/AthleteMetrics/issues/354
 
 echo "🔍 Running npm security audit..."
 

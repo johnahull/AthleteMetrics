@@ -3886,7 +3886,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             margin: { left: 14 },
             didParseCell: (data: any) => {
               if (data.section !== 'body') return;
-              // Color the "Benchmarks Met" column (index 4) with tier color
+              // Color the "Benchmarks Met" column (index 4 — matches head: [Rank, Athlete, Value, Percentile, Benchmarks Met])
               if (data.column.index === 4 && data.row.index < rowTierColors.length) {
                 const colorName = rowTierColors[data.row.index];
                 if (colorName) {
@@ -4100,7 +4100,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           styles: { fontSize: 9 },
           didParseCell: (data: any) => {
             if (data.section !== 'body') return;
-            // Color the "Meets Target" column (index 4)
+            // Color the "Meets Target" column (index 4 — matches head: [Metric, Benchmark, Target, Actual, Meets Target])
             if (data.column.index === 4) {
               const val = data.cell.raw;
               if (val === 'Yes') {
@@ -4422,6 +4422,9 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
 /**
  * Calculate tier distribution across athletes for team reports.
  * Returns how many athletes fall into each tier for each tier group.
+ *
+ * NOTE: Identical logic exists in packages/web/src/components/reports/report-utils.ts
+ * for frontend rendering. Changes here must be mirrored there.
  */
 function calculateTierDistributions(athleteRankings: any[]): Array<{
   metricCode: string;

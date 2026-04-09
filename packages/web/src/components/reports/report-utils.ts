@@ -372,6 +372,9 @@ export interface TierDistribution {
 
 /**
  * Calculate tier distribution across athletes for team reports.
+ *
+ * NOTE: Identical logic exists in packages/api/routes/report-routes.ts
+ * for PDF generation. Changes here must be mirrored there.
  * Returns how many athletes fall into each tier for each tier group.
  */
 export function calculateTierDistributions(athleteRankings: AthleteRanking[]): TierDistribution[] {
