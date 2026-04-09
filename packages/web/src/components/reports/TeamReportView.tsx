@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
@@ -135,6 +135,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     });
   }
   const benchmarkColumns = Array.from(allBenchmarkNames);
+
+  // Memoize tier distribution calculation to avoid recomputing on every render
+  const tierDistributions = useMemo(
+    () => calculateTierDistributions(athleteRankings || []),
+    [athleteRankings]
+  );
 
   // Extract composite index weights for description
   const compositeConfig = report.config as { compositeIndex?: { weights?: Record<string, number> } };
@@ -394,11 +400,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       })()}
 
       {/* Tier Distribution Summary */}
-      {(() => {
-        const tierDistributions = calculateTierDistributions(athleteRankings || []);
-        if (tierDistributions.length === 0) return null;
-
-        return (
+      {tierDistributions.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Tier Distribution</CardTitle>
@@ -436,8 +438,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
               </Table>
             </CardContent>
           </Card>
-        );
-      })()}
+      )}
 
       {/* Athlete Rankings - Only show if composite index is enabled */}
       {Array.isArray(athleteRankings) && athleteRankings.length > 0 && athleteRankings.some((a: any) => a.compositeIndex !== undefined) && (

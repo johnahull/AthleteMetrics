@@ -1613,7 +1613,7 @@ export class ReportService extends BaseService {
     }
 
     // Find the next better tier (lower tierOrder = better)
-    const matchedOrder = matchedTier.tierOrder || Number.MAX_SAFE_INTEGER;
+    const matchedOrder = matchedTier.tierOrder ?? Number.MAX_SAFE_INTEGER;
     const isBestTier = matchedOrder === 1;
     let nextTierName: string | null = null;
     let distanceToNextTier: number | null = null;
