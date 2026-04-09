@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { ReportService } from '../report-service';
 import { db } from '../../db';
-import { organizations, users, reports, measurements, siteMetrics, organizationMetrics } from '@shared/schema';
+import { organizations, users, reports, measurements, siteMetrics, organizationMetrics, siteBenchmarks, organizationBenchmarks } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('ReportService', () => {
@@ -671,6 +671,24 @@ describe('ReportService', () => {
       comparisonOperator: 'range',
     });
 
+    // Ensure required metrics exist in DB (tests depend on their metricType)
+    beforeAll(async () => {
+      const existingMetrics = await db.select().from(siteMetrics);
+      const codes = existingMetrics.map(m => m.code);
+      if (!codes.includes('FLY10_TIME')) {
+        await db.insert(siteMetrics).values({
+          code: 'FLY10_TIME', label: '10-Yard Fly Time', metricType: 'lower_is_better',
+          defaultUnit: 's', category: 'speed',
+        });
+      }
+      if (!codes.includes('VERTICAL_JUMP')) {
+        await db.insert(siteMetrics).values({
+          code: 'VERTICAL_JUMP', label: 'Vertical Jump', metricType: 'higher_is_better',
+          defaultUnit: 'in', category: 'power',
+        });
+      }
+    });
+
     // FLY10_TIME is lower_is_better in the DB
     const lowerIsBetterTiers = [
       makeTier(1, 'Elite',   'gold',   '1.00', '1.20'),
@@ -778,6 +796,82 @@ describe('ReportService', () => {
       const result = await (reportService as any).evaluateTierBenchmark(27, 'VERTICAL_JUMP', singleValueTiers);
       expect(result.tierName).toBe('Good');
       expect(result.tierOrder).toBe(2);
+    });
+  });
+
+  describe('getBenchmarkComparisons — demographic filter removal', () => {
+    // Regression test: explicitly selected benchmarks must appear on reports
+    // regardless of athlete demographic filters (gender, age, position).
+    // This was an intentional product decision — user selection overrides filters.
+
+    it('should include a male-only benchmark on a female athlete report when explicitly selected', async () => {
+      const uniqueSuffix = `demog-${Date.now()}`;
+
+      // Create a female athlete
+      const [femaleAthlete] = await db.insert(users).values({
+        username: `female-athlete-${uniqueSuffix}`,
+        emails: [`female-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        fullName: 'Jane Doe',
+        gender: 'Female',
+        birthYear: 2008,
+      }).returning();
+
+      // Create a site benchmark filtered to Males only
+      const [maleBenchmark] = await db.insert(siteBenchmarks).values({
+        metricCode: 'FLY10_TIME',
+        name: `Males Only Sprint ${uniqueSuffix}`,
+        benchmarkValue: '1.30',
+        comparisonOperator: 'lte',
+        gender: 'Male',
+        isActive: true,
+      }).returning();
+
+      // Enable it for the org
+      await db.insert(organizationBenchmarks).values({
+        organizationId: testOrgId,
+        benchmarkId: maleBenchmark.id,
+        benchmarkType: 'site',
+        isEnabled: true,
+      });
+
+      // Create report with this benchmark selected
+      const [report] = await db.insert(reports).values({
+        name: `Demog Test Report ${uniqueSuffix}`,
+        organizationId: testOrgId,
+        reportType: 'individual',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME'],
+          benchmarks: { site: [maleBenchmark.id] },
+        },
+        createdBy: testUserId,
+      }).returning();
+
+      const comparisons = await (reportService as any).getBenchmarkComparisons(
+        femaleAthlete.id,
+        testOrgId,
+        report.id,
+        { FLY10_TIME: 1.25 },
+        report.config
+      );
+
+      // The male-only benchmark MUST appear because it was explicitly selected
+      expect(comparisons.FLY10_TIME).toBeDefined();
+      expect(comparisons.FLY10_TIME.length).toBeGreaterThanOrEqual(1);
+      const found = comparisons.FLY10_TIME.find(
+        (c: any) => c.benchmarkName === `Males Only Sprint ${uniqueSuffix}`
+      );
+      expect(found).toBeDefined();
+      expect(found.meetsOrExceeds).toBe(true); // 1.25 <= 1.30
+
+      // Cleanup
+      await db.delete(reports).where(eq(reports.id, report.id));
+      await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, maleBenchmark.id));
+      await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, maleBenchmark.id));
+      await db.delete(users).where(eq(users.id, femaleAthlete.id));
     });
   });
 });
