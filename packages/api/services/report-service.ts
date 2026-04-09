@@ -1388,6 +1388,26 @@ export class ReportService extends BaseService {
 
     // Populate benchmark comparisons if benchmarks are provided
     if (benchmarksByMetric) {
+      // Pre-group tier benchmarks by tierGroupId for evaluateTierBenchmark
+      const tierGroupsByMetric = new Map<string, Map<string, any[]>>();
+      for (const [metric, benchmarks] of Object.entries(benchmarksByMetric)) {
+        const tierGroups = new Map<string, any[]>();
+        for (const b of benchmarks) {
+          if (b.tierGroupId) {
+            const group = tierGroups.get(b.tierGroupId) || [];
+            group.push(b);
+            tierGroups.set(b.tierGroupId, group);
+          }
+        }
+        // Sort each group by tierOrder
+        for (const [, tiers] of tierGroups) {
+          tiers.sort((a, b) => (a.tierOrder || 0) - (b.tierOrder || 0));
+        }
+        if (tierGroups.size > 0) {
+          tierGroupsByMetric.set(metric, tierGroups);
+        }
+      }
+
       for (const athlete of athletes) {
         for (const metric of metrics) {
           const value = athlete.measurements[metric];
@@ -1397,40 +1417,42 @@ export class ReportService extends BaseService {
           if (!benchmarks || benchmarks.length === 0) continue;
 
           const metricInfo = await this.getMetricInfo(metric);
+          const comparisons: any[] = [];
+          const processedGroups = new Set<string>();
 
-          athlete.benchmarkComparisons[metric] = benchmarks.map(benchmark => {
-            // Handle range benchmarks (tier groups)
-            if (benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null) {
-              // For range benchmarks, check if value is within the range
-              const meetsOrExceeds = value >= benchmark.minValue && value <= benchmark.maxValue;
-              return {
-                benchmarkName: benchmark.name,
-                benchmarkValue: benchmark.value,
-                minValue: benchmark.minValue,
-                maxValue: benchmark.maxValue,
-                meetsOrExceeds,
-                tierName: benchmark.tierName,
-                tierColor: benchmark.tierColor,
-              };
+          for (const benchmark of benchmarks) {
+            // Tier group benchmark — use evaluateTierBenchmark for proper tier assignment
+            if (benchmark.tierGroupId) {
+              if (processedGroups.has(benchmark.tierGroupId)) continue;
+              processedGroups.add(benchmark.tierGroupId);
+
+              const tierGroup = tierGroupsByMetric.get(metric)?.get(benchmark.tierGroupId);
+              if (tierGroup) {
+                const tierComparison = await this.evaluateTierBenchmark(value, metric, tierGroup);
+                if (tierComparison) {
+                  comparisons.push(tierComparison);
+                }
+              }
+              continue;
             }
 
-            // Handle single-value benchmarks (skip if value is null)
-            if (benchmark.value == null) {
-              return {
-                benchmarkName: benchmark.name,
-                benchmarkValue: null,
-                meetsOrExceeds: false,
-              };
-            }
+            // Single-value benchmark
+            if (benchmark.value == null) continue;
 
-            return {
+            comparisons.push({
               benchmarkName: benchmark.name,
               benchmarkValue: benchmark.value,
               meetsOrExceeds: metricInfo.lowerIsBetter
                 ? value <= benchmark.value
-                : value >= benchmark.value
-            };
-          });
+                : value >= benchmark.value,
+              percentageDiff: benchmark.value !== 0
+                ? ((value - benchmark.value) / benchmark.value) * 100
+                : 0,
+              comparisonOperator: benchmark.comparisonOperator || 'gte',
+            });
+          }
+
+          athlete.benchmarkComparisons[metric] = comparisons;
         }
       }
     }

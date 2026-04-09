@@ -361,6 +361,20 @@ export function calculateDeviationStats(
 }
 
 // ============================================================================
+// Tier Utilities
+// ============================================================================
+
+/**
+ * Derives a tier group display name from an individual tier benchmark name.
+ * Strips the last " - Segment" suffix (e.g., "40yd Dash - Elite" → "40yd Dash").
+ *
+ * NOTE: Identical logic exists in packages/api/utils/report-utils.ts.
+ */
+export function deriveTierGroupName(tierBenchmarkName: string): string {
+  return tierBenchmarkName.replace(/ - [^-]+$/, '');
+}
+
+// ============================================================================
 // Tier Distribution
 // ============================================================================
 

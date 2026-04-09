@@ -36,6 +36,7 @@ import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
+import { deriveTierGroupName } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 const reportConfigSchema = z.object({
@@ -638,7 +639,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                                 <>
                                   {/* Tier groups as single selectable items */}
                                   {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
-                                    const groupName = tiers[0]?.name?.replace(/ - [^-]+$/, '') || groupId;
+                                    const groupName = tiers[0]?.name ? deriveTierGroupName(tiers[0].name) : groupId;
                                     const tierIds = tiers.map(t => t.benchmarkId);
                                     const selectedIds = watch("siteBenchmarks") || [];
                                     const allSelected = tierIds.every(id => selectedIds.includes(id));
@@ -710,7 +711,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                               return (
                                 <>
                                   {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
-                                    const groupName = tiers[0]?.name?.replace(/ - [^-]+$/, '') || groupId;
+                                    const groupName = tiers[0]?.name ? deriveTierGroupName(tiers[0].name) : groupId;
                                     const tierIds = tiers.map(t => t.benchmarkId);
                                     const selectedIds = watch("customBenchmarks") || [];
                                     const allSelected = tierIds.every(id => selectedIds.includes(id));
