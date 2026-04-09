@@ -2628,6 +2628,7 @@ export type AIModel = typeof AI_MODELS[number];
 export const updateSiteSettingsSchema = z.object({
   aiModel: z.enum(AI_MODELS).optional(),
   wellnessModuleEnabled: z.boolean().optional(),
+  sprintFvEnabled: z.boolean().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

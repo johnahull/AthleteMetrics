@@ -25,7 +25,8 @@ import {
   Link,
   UserPlus,
   Calendar,
-  Ruler
+  Ruler,
+  Zap
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -59,6 +60,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
       { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+      { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
       { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
       { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
 
@@ -73,6 +75,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
@@ -87,6 +90,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
@@ -247,6 +251,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     navigation = navigation.filter(item =>
       item.name !== "Events" && item.name !== "My Events"
     );
+  }
+
+  // Filter out Sprint F-V link if disabled at site or org level
+  // Site admins bypass org-level check (org data not fetched for site admins)
+  const isSprintFvEnabled = (siteSettings?.sprintFvEnabled ?? false)
+    && (isSiteAdmin || (organization?.sprintFvEnabled ?? false));
+  if (!isSprintFvEnabled) {
+    navigation = navigation.filter(item => item.name !== "Sprint F-V");
   }
 
   return (

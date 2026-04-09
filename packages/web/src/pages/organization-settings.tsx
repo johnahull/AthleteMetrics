@@ -63,6 +63,7 @@ export default function OrganizationSettings() {
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
+      sprintFvEnabled: organization.sprintFvEnabled ?? false,
       customMetricsEnabled: organization.customMetricsEnabled || false,
       coppaEnabled: organization.coppaEnabled || false,
       coppaContactEmail: organization.coppaContactEmail || undefined,
@@ -106,6 +107,9 @@ export default function OrganizationSettings() {
       }
       if (data.wellnessEnabled !== organization?.wellnessEnabled) {
         changedFields.wellnessEnabled = data.wellnessEnabled;
+      }
+      if (data.sprintFvEnabled !== organization?.sprintFvEnabled) {
+        changedFields.sprintFvEnabled = data.sprintFvEnabled;
       }
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
@@ -388,6 +392,27 @@ export default function OrganizationSettings() {
                       <FormLabel className="text-base">Wellness Module</FormLabel>
                       <FormDescription>
                         Enable wellness questionnaires and health tracking for this organization
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="sprintFvEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Sprint F-V Profiling</FormLabel>
+                      <FormDescription>
+                        Enable JB Morin force-velocity sprint profiling for this organization
                       </FormDescription>
                     </div>
                     <FormControl>

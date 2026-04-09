@@ -57,6 +57,7 @@ router.get("/public", async (req, res) => {
     // Only return public information
     return res.json({
       wellnessModuleEnabled: settings?.wellnessModuleEnabled ?? true,
+      sprintFvEnabled: settings?.sprintFvEnabled ?? false,
     });
   } catch (error) {
     console.error("Error fetching public site settings:", error);
@@ -134,10 +135,16 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
       updateData.wellnessModuleEnabled = validated.wellnessModuleEnabled;
     }
 
+    // Add sprint F-V flag if provided
+    if (validated.sprintFvEnabled !== undefined) {
+      updateData.sprintFvEnabled = validated.sprintFvEnabled;
+    }
+
     // Get previous settings for audit log
     const previousSettings = await storage.getSiteSettings();
     const previousModel = previousSettings?.aiModel || 'gpt-5-nano';
     const previousWellness = previousSettings?.wellnessModuleEnabled ?? true;
+    const previousSprintFv = previousSettings?.sprintFvEnabled ?? false;
 
     // Update or create settings
     const updatedSettings = await storage.updateSiteSettings(updateData);
@@ -170,6 +177,22 @@ router.patch("/", requireSiteAdmin, async (req: AuthenticatedRequest, res: Respo
         details: JSON.stringify({
           previousEnabled: previousWellness,
           newEnabled: validated.wellnessModuleEnabled,
+        }),
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      });
+    }
+
+    // Audit log for Sprint F-V toggle
+    if (user?.id && validated.sprintFvEnabled !== undefined && previousSprintFv !== validated.sprintFvEnabled) {
+      await storage.createAuditLog({
+        userId: user.id,
+        action: 'site_sprint_fv_module_toggled',
+        resourceType: 'site_settings',
+        resourceId: 'global',
+        details: JSON.stringify({
+          previousEnabled: previousSprintFv,
+          newEnabled: validated.sprintFvEnabled,
         }),
         ipAddress: req.ip || null,
         userAgent: req.get('user-agent') || null,

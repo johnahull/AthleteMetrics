@@ -12,6 +12,7 @@ export const siteSettings = pgTable("site_settings", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   aiModel: text("ai_model").notNull().default("gpt-5-nano"),
   wellnessModuleEnabled: boolean("wellness_module_enabled").notNull().default(true),
+  sprintFvEnabled: boolean("sprint_fv_enabled").notNull().default(false),
   // Push notification global settings
   pushNotificationsEnabled: boolean("push_notifications_enabled").notNull().default(true),
   pushDefaultOrgSettings: jsonb("push_default_org_settings"),

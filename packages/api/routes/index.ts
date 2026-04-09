@@ -51,6 +51,7 @@ import { registerCoppaExportRoutes } from "./coppa-export-routes";
 import { registerParentRoutes } from "./parent-routes";
 import { registerParentLinkRequestRoutes } from "./parent-link-request-routes";
 import { registerDeviceImportRoutes } from "./device-import-routes";
+import { registerSprintFvRoutes } from "./sprint-fv-routes";
 
 /**
  * Register all application routes
@@ -201,6 +202,9 @@ export function registerAllRoutes(app: Express) {
 
   // Parent link request routes (Link-a-Child workflow Phase 3)
   registerParentLinkRequestRoutes(app);
+
+  // Sprint Force-Velocity profile routes (Morin F-V profiling)
+  registerSprintFvRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
