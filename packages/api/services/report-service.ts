@@ -103,6 +103,8 @@ interface BenchmarkComparison {
   benchmarkName: string;
   benchmarkValue: number;
   athleteValue: number;
+  /** For single-value benchmarks: true if athlete meets the threshold.
+   *  For tier benchmarks: true if athlete is in the top half of tiers (heuristic). */
   meetsOrExceeds: boolean;
   percentageDiff: number;
   comparisonOperator: string;
@@ -660,7 +662,9 @@ export class ReportService extends BaseService {
   }
 
   /**
-   * Get benchmark comparisons for an athlete
+   * Get benchmark comparisons for an athlete.
+   * Called once per individual report (not per athlete in team reports —
+   * team reports use calculateAthleteRankings with pre-fetched benchmarksByMetric).
    */
   async getBenchmarkComparisons(
     athleteId: string,
@@ -1532,15 +1536,15 @@ export class ReportService extends BaseService {
     // Find which tier the athlete falls into
     let matchedTier: any = null;
     for (const tier of allTiers) {
-      const minVal = tier.minValue ? parseFloat(tier.minValue) : null;
-      const maxVal = tier.maxValue ? parseFloat(tier.maxValue) : null;
+      const minVal = tier.minValue != null ? parseFloat(tier.minValue) : null;
+      const maxVal = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
 
       if (minVal !== null && maxVal !== null) {
         if (athleteValue >= minVal && athleteValue <= maxVal) {
           matchedTier = tier;
           break;
         }
-      } else if (tier.benchmarkValue) {
+      } else if (tier.benchmarkValue != null) {
         // Single-value tier with comparison operator
         const bv = parseFloat(tier.benchmarkValue);
         if (tier.comparisonOperator === 'lte' && athleteValue <= bv) {
@@ -1559,8 +1563,8 @@ export class ReportService extends BaseService {
     if (!matchedTier) {
       const bestTier = allTiers[0]; // tierOrder 1 = best
       const worstTier = allTiers[allTiers.length - 1];
-      const bestMin = bestTier.minValue ? parseFloat(bestTier.minValue) : null;
-      const bestMax = bestTier.maxValue ? parseFloat(bestTier.maxValue) : null;
+      const bestMin = bestTier.minValue != null ? parseFloat(bestTier.minValue) : null;
+      const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
 
       if (lowerIsBetter) {
         // For time metrics: value below best tier's min means they're faster than Elite
@@ -1592,15 +1596,15 @@ export class ReportService extends BaseService {
         // Calculate distance to the boundary of the next tier
         if (lowerIsBetter) {
           // For time-based metrics, athlete needs to decrease to reach next tier's maxValue
-          const boundary = nextTier.maxValue ? parseFloat(nextTier.maxValue) :
-                          nextTier.benchmarkValue ? parseFloat(nextTier.benchmarkValue) : null;
+          const boundary = nextTier.maxValue != null ? parseFloat(nextTier.maxValue) :
+                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
           if (boundary !== null) {
             distanceToNextTier = Math.abs(athleteValue - boundary);
           }
         } else {
           // For higher-is-better metrics, athlete needs to increase to reach next tier's minValue
-          const boundary = nextTier.minValue ? parseFloat(nextTier.minValue) :
-                          nextTier.benchmarkValue ? parseFloat(nextTier.benchmarkValue) : null;
+          const boundary = nextTier.minValue != null ? parseFloat(nextTier.minValue) :
+                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
           if (boundary !== null) {
             distanceToNextTier = Math.abs(boundary - athleteValue);
           }
@@ -1614,9 +1618,9 @@ export class ReportService extends BaseService {
       : matchedTier.name;
 
     // Use midpoint of range as benchmarkValue for compatibility
-    const minVal = matchedTier.minValue ? parseFloat(matchedTier.minValue) : null;
-    const maxVal = matchedTier.maxValue ? parseFloat(matchedTier.maxValue) : null;
-    const displayValue = matchedTier.benchmarkValue
+    const minVal = matchedTier.minValue != null ? parseFloat(matchedTier.minValue) : null;
+    const maxVal = matchedTier.maxValue != null ? parseFloat(matchedTier.maxValue) : null;
+    const displayValue = matchedTier.benchmarkValue != null
       ? parseFloat(matchedTier.benchmarkValue)
       : (minVal !== null && maxVal !== null ? (minVal + maxVal) / 2 : 0);
 
@@ -1638,8 +1642,8 @@ export class ReportService extends BaseService {
         tierName: t.tierName || t.name,
         tierColor: t.tierColor || 'gray',
         tierOrder: t.tierOrder || 0,
-        minValue: t.minValue ? parseFloat(t.minValue) : null,
-        maxValue: t.maxValue ? parseFloat(t.maxValue) : null,
+        minValue: t.minValue != null ? parseFloat(t.minValue) : null,
+        maxValue: t.maxValue != null ? parseFloat(t.maxValue) : null,
       })),
     };
   }
