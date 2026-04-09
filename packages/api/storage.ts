@@ -2869,7 +2869,8 @@ export class DatabaseStorage implements IStorage {
         inArray(userTeams.userId, athleteIds),
         eq(userTeams.isActive, true),
         or(isNull(userTeams.leftAt), gte(userTeams.leftAt, new Date())),
-        eq(teams.isArchived, false)
+        eq(teams.isArchived, false),
+        filters?.organizationId ? eq(teams.organizationId, filters.organizationId) : undefined
       ));
 
     // Build a map of user ID to teams array
