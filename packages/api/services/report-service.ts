@@ -751,14 +751,14 @@ export class ReportService extends BaseService {
     }
 
     // Collect all benchmarks from all sources for unified processing.
-    // Note: userDefinedBenchmarks (from reportBenchmarks table) don't have tier fields
-    // (tierGroupId, tierName, etc.) — they only support single-value benchmarks.
-    // Accessing .tierGroupId on them yields undefined, which correctly falls through
-    // to the single-value benchmark path below.
+    // Tag each with _source so tier group map keys are namespaced by table,
+    // preventing theoretical cross-table tierGroupId collisions.
+    // userDefinedBenchmarks (from reportBenchmarks table) don't have tier fields —
+    // accessing .tierGroupId yields undefined, falling through to single-value path.
     const allBenchmarks: any[] = [
-      ...userDefinedBenchmarks,
-      ...siteBenchmarksList.map(({ benchmark }) => benchmark),
-      ...customBenchmarksList.map(({ benchmark }) => benchmark),
+      ...userDefinedBenchmarks.map(b => ({ ...b, _source: 'report' })),
+      ...siteBenchmarksList.map(({ benchmark }) => ({ ...benchmark, _source: 'site' })),
+      ...customBenchmarksList.map(({ benchmark }) => ({ ...benchmark, _source: 'custom' })),
     ];
 
     // Collect tier group IDs and fetch all sibling tiers for distance-to-next calculation
@@ -768,7 +768,7 @@ export class ReportService extends BaseService {
         .map(b => b.tierGroupId as string)
     )];
 
-    // Build a map of tierGroupId -> all tiers in that group (sorted by tierOrder)
+    // Build a map of source:tierGroupId -> all tiers in that group (sorted by tierOrder)
     const tierGroupMap = new Map<string, typeof allBenchmarks>();
     if (tierGroupIds.length > 0) {
       // Fetch all tiers from both tables in parallel
@@ -785,21 +785,23 @@ export class ReportService extends BaseService {
 
       for (const tier of siteTierRows) {
         if (!tier.tierGroupId) continue;
-        const group = tierGroupMap.get(tier.tierGroupId) || [];
+        const key = `site:${tier.tierGroupId}`;
+        const group = tierGroupMap.get(key) || [];
         group.push(tier);
-        tierGroupMap.set(tier.tierGroupId, group);
+        tierGroupMap.set(key, group);
       }
 
       for (const tier of customTierRows) {
         if (!tier.tierGroupId) continue;
-        const group = tierGroupMap.get(tier.tierGroupId) || [];
+        const key = `custom:${tier.tierGroupId}`;
+        const group = tierGroupMap.get(key) || [];
         group.push(tier);
-        tierGroupMap.set(tier.tierGroupId, group);
+        tierGroupMap.set(key, group);
       }
 
       // Sort each group by tierOrder
-      for (const [groupId, tiers] of tierGroupMap) {
-        tierGroupMap.set(groupId, tiers.sort((a, b) => (a.tierOrder || 0) - (b.tierOrder || 0)));
+      for (const [, tiers] of tierGroupMap) {
+        tiers.sort((a, b) => (a.tierOrder || 0) - (b.tierOrder || 0));
       }
     }
 
@@ -821,14 +823,15 @@ export class ReportService extends BaseService {
         // benchmark on a female athlete's report if they selected it — this is
         // a deliberate design choice: user selection overrides demographic filters.
 
-        // Tier/range benchmark
-        if (benchmark.tierGroupId && tierGroupMap.has(benchmark.tierGroupId)) {
+        // Tier/range benchmark — use source-namespaced key to avoid cross-table collisions
+        const tierMapKey = benchmark.tierGroupId ? `${benchmark._source}:${benchmark.tierGroupId}` : null;
+        if (tierMapKey && tierGroupMap.has(tierMapKey)) {
           // Only process each tier group once per metric
-          const groupKey = `${metricCode}:${benchmark.tierGroupId}`;
+          const groupKey = `${metricCode}:${tierMapKey}`;
           if (processedTierGroups.has(groupKey)) continue;
           processedTierGroups.add(groupKey);
 
-          const allTiers = tierGroupMap.get(benchmark.tierGroupId)!;
+          const allTiers = tierGroupMap.get(tierMapKey)!;
           const tierComparison = await this.evaluateTierBenchmark(
             athleteValue,
             metricCode,
@@ -1593,26 +1596,45 @@ export class ReportService extends BaseService {
       }
     }
 
-    // If no tier matched, athlete is outside all defined ranges.
-    // Determine if they exceeded the best tier or fell below the worst.
+    // If no tier matched, athlete is outside all defined ranges or in a gap
+    // between non-contiguous ranges. Find the nearest tier by boundary distance.
     if (!matchedTier) {
       const bestTier = allTiers[0]; // tierOrder 1 = best
       const worstTier = allTiers[allTiers.length - 1];
       const bestMin = bestTier.minValue != null ? parseFloat(bestTier.minValue) : null;
       const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
 
+      // Check if athlete exceeds the best tier
+      let beatsBest = false;
       if (lowerIsBetter) {
-        // For time metrics: value below best tier's min (or within best tier's max if open-ended)
-        const beatsBest = bestMin !== null ? athleteValue < bestMin
-                        : bestMax !== null ? athleteValue <= bestMax
-                        : false;
-        matchedTier = beatsBest ? bestTier : worstTier;
+        beatsBest = bestMin !== null ? athleteValue < bestMin
+                  : bestMax !== null ? athleteValue <= bestMax
+                  : false;
       } else {
-        // For higher-is-better: value above best tier's max (or within best tier's min if open-ended)
-        const beatsBest = bestMax !== null ? athleteValue > bestMax
-                        : bestMin !== null ? athleteValue >= bestMin
-                        : false;
-        matchedTier = beatsBest ? bestTier : worstTier;
+        beatsBest = bestMax !== null ? athleteValue > bestMax
+                  : bestMin !== null ? athleteValue >= bestMin
+                  : false;
+      }
+
+      if (beatsBest) {
+        matchedTier = bestTier;
+      } else {
+        // Find nearest tier by minimum distance to any boundary
+        let minDistance = Infinity;
+        for (const tier of allTiers) {
+          const tMin = tier.minValue != null ? parseFloat(tier.minValue) : null;
+          const tMax = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
+          if (tMin !== null) {
+            const d = Math.abs(athleteValue - tMin);
+            if (d < minDistance) { minDistance = d; matchedTier = tier; }
+          }
+          if (tMax !== null) {
+            const d = Math.abs(athleteValue - tMax);
+            if (d < minDistance) { minDistance = d; matchedTier = tier; }
+          }
+        }
+        // Final fallback if no boundaries found at all
+        if (!matchedTier) matchedTier = worstTier;
       }
     }
 
