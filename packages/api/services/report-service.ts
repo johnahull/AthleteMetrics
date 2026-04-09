@@ -687,10 +687,6 @@ export class ReportService extends BaseService {
       return comparisons;
     }
 
-    const athleteAge = athlete.birthYear
-      ? new Date().getFullYear() - athlete.birthYear
-      : undefined;
-
     // Get report-specific user-defined benchmarks
     const userDefinedBenchmarks = await db
       .select()
@@ -1610,7 +1606,7 @@ export class ReportService extends BaseService {
     }
 
     // Find the next better tier (lower tierOrder = better)
-    const matchedOrder = matchedTier.tierOrder || allTiers.length;
+    const matchedOrder = matchedTier.tierOrder || Number.MAX_SAFE_INTEGER;
     const isBestTier = matchedOrder === 1;
     let nextTierName: string | null = null;
     let distanceToNextTier: number | null = null;

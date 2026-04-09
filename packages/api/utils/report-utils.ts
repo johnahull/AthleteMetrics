@@ -7,14 +7,8 @@ import { db } from '../db';
 import { eq } from 'drizzle-orm';
 import { siteMetrics } from '@shared/schema';
 
-/**
- * Derives a tier group display name from an individual tier benchmark name.
- * Tier benchmarks are named like "40yd Dash - Elite", "40yd Dash - Good", etc.
- * This strips the tier-specific suffix to get the group name.
- */
-export function deriveTierGroupName(tierBenchmarkName: string): string {
-  return tierBenchmarkName.replace(/ - [^-]+$/, '');
-}
+// Re-export from shared package — single source of truth
+export { deriveTierGroupName } from '@shared/benchmark-utils';
 
 // Cache for metric types to avoid repeated DB queries
 const metricTypeCache = new Map<string, string>();
