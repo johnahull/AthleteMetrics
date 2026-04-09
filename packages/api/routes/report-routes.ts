@@ -4139,8 +4139,9 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       if (!ath?.benchmarkComparisons) continue;
       for (const [metric, comparisons] of Object.entries(ath.benchmarkComparisons) as [string, any[]][]) {
         for (const comp of comparisons) {
-          if (comp.tierGroupName && comp.allTiers && !tierLegendGroups.has(comp.tierGroupName)) {
-            tierLegendGroups.set(comp.tierGroupName, {
+          const legendKey = `${metric}:${comp.tierGroupName}`;
+          if (comp.tierGroupName && comp.allTiers && !tierLegendGroups.has(legendKey)) {
+            tierLegendGroups.set(legendKey, {
               groupName: comp.tierGroupName,
               metricLabel: reportData.metricLabels?.[metric] || metric,
               tiers: [...comp.allTiers].sort((a: any, b: any) => a.tierOrder - b.tierOrder),

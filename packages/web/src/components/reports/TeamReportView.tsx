@@ -107,6 +107,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     downloadPdf({ format });
   };
 
+  // Memoize tier distribution calculation (must be before early returns for hook ordering)
+  const tierDistributions = useMemo(
+    () => calculateTierDistributions(reportData?.athleteRankings || []),
+    [reportData?.athleteRankings]
+  );
+
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Generating report..." />;
   }
@@ -135,12 +141,6 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     });
   }
   const benchmarkColumns = Array.from(allBenchmarkNames);
-
-  // Memoize tier distribution calculation to avoid recomputing on every render
-  const tierDistributions = useMemo(
-    () => calculateTierDistributions(athleteRankings || []),
-    [athleteRankings]
-  );
 
   // Extract composite index weights for description
   const compositeConfig = report.config as { compositeIndex?: { weights?: Record<string, number> } };

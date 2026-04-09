@@ -1586,6 +1586,10 @@ export class ReportService extends BaseService {
           matchedTier = tier;
           break;
         }
+        if (tier.comparisonOperator === 'eq' && Math.abs(athleteValue - bv) < 0.01) {
+          matchedTier = tier;
+          break;
+        }
       }
     }
 
