@@ -1645,7 +1645,11 @@ export class ReportService extends BaseService {
     let distanceToNextTier: number | null = null;
 
     if (!isBestTier) {
-      const nextTier = allTiers.find((t: any) => (t.tierOrder || 0) === matchedOrder - 1);
+      // Find the next better tier (largest tierOrder strictly less than matchedOrder).
+      // Handles non-sequential tier orders (e.g., 1, 5, 10) — allTiers is sorted ascending.
+      const nextTier = allTiers
+        .filter((t: any) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
+        .at(-1);
       if (nextTier) {
         nextTierName = nextTier.tierName || null;
         // Calculate distance to the boundary of the next tier

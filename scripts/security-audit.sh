@@ -15,8 +15,10 @@ set -e
 #   Dev-only CLI tool, not shipped in production. Does not affect app security.
 # - GHSA-gpj5-g38j-94v9 (drizzle-orm SQL injection via improperly escaped identifiers)
 #   Fix requires drizzle-orm >=0.45.2 which is a breaking major version upgrade.
-#   AthleteMetrics uses parameterized queries via Drizzle's query builder (no raw
-#   SQL identifiers from user input), so the attack vector does not apply.
+#   The CVE is about improperly escaped SQL *identifiers* (column/table names),
+#   not parameterized values. Verified: all sql`` template literals in the codebase
+#   use Drizzle column references, sql.param(), or string literals — no user input
+#   flows into SQL identifiers. The attack vector does not apply.
 #   Tracked for upgrade: https://github.com/johnahull/AthleteMetrics/issues/354
 
 echo "🔍 Running npm security audit..."
