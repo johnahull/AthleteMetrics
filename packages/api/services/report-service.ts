@@ -1589,19 +1589,17 @@ export class ReportService extends BaseService {
       const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
 
       if (lowerIsBetter) {
-        // For time metrics: value below best tier's min means they're faster than Elite
-        if (bestMin !== null && athleteValue < bestMin) {
-          matchedTier = bestTier;
-        } else {
-          matchedTier = worstTier;
-        }
+        // For time metrics: value below best tier's min (or within best tier's max if open-ended)
+        const beatsBest = bestMin !== null ? athleteValue < bestMin
+                        : bestMax !== null ? athleteValue <= bestMax
+                        : false;
+        matchedTier = beatsBest ? bestTier : worstTier;
       } else {
-        // For higher-is-better: value above best tier's max means they exceeded Elite
-        if (bestMax !== null && athleteValue > bestMax) {
-          matchedTier = bestTier;
-        } else {
-          matchedTier = worstTier;
-        }
+        // For higher-is-better: value above best tier's max (or within best tier's min if open-ended)
+        const beatsBest = bestMax !== null ? athleteValue > bestMax
+                        : bestMin !== null ? athleteValue >= bestMin
+                        : false;
+        matchedTier = beatsBest ? bestTier : worstTier;
       }
     }
 

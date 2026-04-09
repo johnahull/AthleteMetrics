@@ -4143,7 +4143,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             tierLegendGroups.set(comp.tierGroupName, {
               groupName: comp.tierGroupName,
               metricLabel: reportData.metricLabels?.[metric] || metric,
-              tiers: comp.allTiers.sort((a: any, b: any) => a.tierOrder - b.tierOrder),
+              tiers: [...comp.allTiers].sort((a: any, b: any) => a.tierOrder - b.tierOrder),
             });
           }
         }
