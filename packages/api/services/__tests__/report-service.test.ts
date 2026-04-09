@@ -749,5 +749,35 @@ describe('ReportService', () => {
       const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', []);
       expect(result).toBeNull();
     });
+
+    it('matches single-value tier with lte operator (lower-is-better)', async () => {
+      const singleValueTiers = [
+        { tierGroupId: 'sv-group', tierOrder: 1, tierName: 'Elite', tierColor: 'gold',
+          name: 'Sprint - Elite', minValue: null, maxValue: null,
+          benchmarkValue: '1.20', comparisonOperator: 'lte' },
+        { tierGroupId: 'sv-group', tierOrder: 2, tierName: 'Good', tierColor: 'silver',
+          name: 'Sprint - Good', minValue: null, maxValue: null,
+          benchmarkValue: '1.40', comparisonOperator: 'lte' },
+      ];
+      // 1.15 <= 1.20 → matches Elite (first, best tier)
+      const result = await (reportService as any).evaluateTierBenchmark(1.15, 'FLY10_TIME', singleValueTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('matches single-value tier with gte operator (higher-is-better)', async () => {
+      const singleValueTiers = [
+        { tierGroupId: 'sv-group', tierOrder: 1, tierName: 'Elite', tierColor: 'gold',
+          name: 'Jump - Elite', minValue: null, maxValue: null,
+          benchmarkValue: '30', comparisonOperator: 'gte' },
+        { tierGroupId: 'sv-group', tierOrder: 2, tierName: 'Good', tierColor: 'silver',
+          name: 'Jump - Good', minValue: null, maxValue: null,
+          benchmarkValue: '25', comparisonOperator: 'gte' },
+      ];
+      // 27 >= 25 but not >= 30 → matches Good (tier 2)
+      const result = await (reportService as any).evaluateTierBenchmark(27, 'VERTICAL_JUMP', singleValueTiers);
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+    });
   });
 });

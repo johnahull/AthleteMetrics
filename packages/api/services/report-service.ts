@@ -1386,6 +1386,12 @@ export class ReportService extends BaseService {
     if (benchmarksByMetric) {
       // Pre-group tier benchmarks by tierGroupId for evaluateTierBenchmark
       const tierGroupsByMetric = new Map<string, Map<string, any[]>>();
+      // INVARIANT: benchmarksByMetric must contain ALL tiers for each tier group.
+      // The ReportWizard enforces this by selecting all tier IDs atomically.
+      // If a future caller provides partial tier groups, evaluateTierBenchmark
+      // will produce incorrect results (missing tiers in the evaluation).
+      // The individual report path (getBenchmarkComparisons) separately fetches
+      // complete groups from the DB, so it's not affected.
       for (const [metric, benchmarks] of Object.entries(benchmarksByMetric)) {
         const tierGroups = new Map<string, any[]>();
         for (const b of benchmarks) {
@@ -1404,6 +1410,9 @@ export class ReportService extends BaseService {
         }
       }
 
+      // Pre-warm metric info cache to avoid sequential DB hits in the nested loop
+      await Promise.all(metrics.map(m => this.getMetricInfo(m)));
+
       for (const athlete of athletes) {
         for (const metric of metrics) {
           const value = athlete.measurements[metric];
@@ -1412,7 +1421,7 @@ export class ReportService extends BaseService {
           const benchmarks = benchmarksByMetric[metric];
           if (!benchmarks || benchmarks.length === 0) continue;
 
-          const metricInfo = await this.getMetricInfo(metric);
+          const metricInfo = await this.getMetricInfo(metric); // cached from pre-warm
           const comparisons: any[] = [];
           const processedGroups = new Set<string>();
 

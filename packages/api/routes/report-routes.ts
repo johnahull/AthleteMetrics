@@ -3505,6 +3505,28 @@ function addFooterToAllPages(doc: jsPDF, orgName?: string, startPage = 1): void 
 /**
  * Generate PDF document from report data
  */
+// Tier color name → RGB for PDF cell backgrounds (matched to Tailwind classes in TierBadge.tsx)
+const TIER_COLOR_RGB: Record<string, [number, number, number]> = {
+  gold:    [245, 158, 11],
+  emerald: [16, 185, 129],
+  silver:  [148, 163, 184],
+  blue:    [59, 130, 246],
+  bronze:  [234, 88, 12],
+  amber:   [217, 119, 6],
+  slate:   [100, 116, 139],
+  gray:    [107, 114, 128],
+};
+
+/** Create a light tint (blend with white at 25% opacity) for cell backgrounds */
+function tierTint(colorName: string): [number, number, number] {
+  const rgb = TIER_COLOR_RGB[colorName?.toLowerCase()] || TIER_COLOR_RGB.gray;
+  return [
+    Math.round(rgb[0] * 0.25 + 255 * 0.75),
+    Math.round(rgb[1] * 0.25 + 255 * 0.75),
+    Math.round(rgb[2] * 0.25 + 255 * 0.75),
+  ] as [number, number, number];
+}
+
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
@@ -3515,28 +3537,6 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     secondary: (org?.brandSecondaryColor ? hexToRgb(org.brandSecondaryColor) : isVisual ? [52, 152, 219] : [100, 100, 100]) as [number, number, number],
     accent: (isVisual ? [46, 204, 113] : [120, 120, 120]) as [number, number, number],
     text: [40, 40, 40] as [number, number, number],
-  };
-
-  // Tier color name → RGB for cell backgrounds (matched to Tailwind classes in TierBadge.tsx)
-  const tierColorRgb: Record<string, [number, number, number]> = {
-    gold:    [245, 158, 11],
-    emerald: [16, 185, 129],
-    silver:  [148, 163, 184],
-    blue:    [59, 130, 246],
-    bronze:  [234, 88, 12],
-    amber:   [217, 119, 6],
-    slate:   [100, 116, 139],
-    gray:    [107, 114, 128],
-  };
-
-  // Create a light tint (blend with white at 25% opacity) for cell backgrounds
-  const tierTint = (colorName: string): [number, number, number] => {
-    const rgb = tierColorRgb[colorName?.toLowerCase()] || tierColorRgb.gray;
-    return [
-      Math.round(rgb[0] * 0.25 + 255 * 0.75),
-      Math.round(rgb[1] * 0.25 + 255 * 0.75),
-      Math.round(rgb[2] * 0.25 + 255 * 0.75),
-    ] as [number, number, number];
   };
 
   const reportName = report.name || 'Performance Report';
