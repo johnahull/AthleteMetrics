@@ -114,6 +114,14 @@ interface BenchmarkComparison {
   distanceToNextTier?: number | null;
   nextTierName?: string | null;
   isBestTier?: boolean;
+  // All tiers in this group (for rendering legends/references)
+  allTiers?: Array<{
+    tierName: string;
+    tierColor: string;
+    tierOrder: number;
+    minValue: number | null;
+    maxValue: number | null;
+  }>;
 }
 
 interface EventContext {
@@ -1605,6 +1613,13 @@ export class ReportService extends BaseService {
       distanceToNextTier,
       nextTierName,
       isBestTier,
+      allTiers: allTiers.map((t: any) => ({
+        tierName: t.tierName || t.name,
+        tierColor: t.tierColor || 'gray',
+        tierOrder: t.tierOrder || 0,
+        minValue: t.minValue ? parseFloat(t.minValue) : null,
+        maxValue: t.maxValue ? parseFloat(t.maxValue) : null,
+      })),
     };
   }
 

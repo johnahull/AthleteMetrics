@@ -4121,6 +4121,90 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     }
   }
 
+  // Tier Legend — show all tiers for each tier group referenced in this report
+  if (reportData.reportType === 'individual' || reportData.reportType === 'team') {
+    // Collect unique tier groups from benchmark comparisons
+    const tierLegendGroups = new Map<string, {
+      groupName: string;
+      metricLabel: string;
+      tiers: Array<{ tierName: string; tierColor: string; tierOrder: number; minValue: number | null; maxValue: number | null }>;
+    }>();
+
+    const athletes = reportData.reportType === 'individual'
+      ? [reportData.athlete]
+      : (reportData.athleteRankings || []);
+
+    for (const ath of athletes) {
+      if (!ath?.benchmarkComparisons) continue;
+      for (const [metric, comparisons] of Object.entries(ath.benchmarkComparisons) as [string, any[]][]) {
+        for (const comp of comparisons) {
+          if (comp.tierGroupName && comp.allTiers && !tierLegendGroups.has(comp.tierGroupName)) {
+            tierLegendGroups.set(comp.tierGroupName, {
+              groupName: comp.tierGroupName,
+              metricLabel: reportData.metricLabels?.[metric] || metric,
+              tiers: comp.allTiers.sort((a: any, b: any) => a.tierOrder - b.tierOrder),
+            });
+          }
+        }
+      }
+    }
+
+    if (tierLegendGroups.size > 0) {
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Benchmark Tier Reference", 14, yPos);
+      yPos += 8;
+
+      for (const group of tierLegendGroups.values()) {
+        if (yPos > 250) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(10);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(`${group.groupName}`, 14, yPos);
+        yPos += 6;
+
+        const legendRows = group.tiers.map(t => {
+          const range = (t.minValue != null && t.maxValue != null)
+            ? `${t.minValue.toFixed(2)} - ${t.maxValue.toFixed(2)}`
+            : '-';
+          return [`#${t.tierOrder}`, t.tierName, range];
+        });
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Rank", "Tier", "Range"]],
+          body: legendRows,
+          theme: "grid",
+          headStyles: { fillColor: colors.secondary, fontSize: 8 },
+          styles: { fontSize: 8 },
+          margin: { left: 14, right: 100 },
+          tableWidth: 100,
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            if (data.row.index < group.tiers.length) {
+              const colorName = group.tiers[data.row.index].tierColor;
+              if (data.column.index === 1) {
+                data.cell.styles.fillColor = tierTint(colorName);
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      yPos += 5;
+    }
+  }
+
   // Add Coaching Insights section (if available)
   if (report.coachingInsights) {
     // Check if we need a new page

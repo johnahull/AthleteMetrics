@@ -39,6 +39,13 @@ export interface BenchmarkComparison {
   distanceToNextTier?: number | null;
   nextTierName?: string | null;
   isBestTier?: boolean;
+  allTiers?: Array<{
+    tierName: string;
+    tierColor: string;
+    tierOrder: number;
+    minValue: number | null;
+    maxValue: number | null;
+  }>;
 }
 
 export interface AthleteRanking {
