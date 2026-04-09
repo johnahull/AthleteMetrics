@@ -2480,6 +2480,11 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   minValue: number | null;
   maxValue: number | null;
+  // Tier group fields
+  tierGroupId: string | null;
+  tierName: string | null;
+  tierOrder: number | null;
+  tierColor: string | null;
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;

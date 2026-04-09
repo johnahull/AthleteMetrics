@@ -621,29 +621,71 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         <div>
                           <h4 className="font-medium mb-2">Site Benchmarks</h4>
                           <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {siteBenchmarks.map((benchmark: any) => (
-                              <div key={benchmark.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`site-${benchmark.id}`}
-                                  checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
-                                  onCheckedChange={(checked) => {
-                                    const current = watch("siteBenchmarks") || [];
-                                    setValue(
-                                      "siteBenchmarks",
-                                      checked
-                                        ? [...current, benchmark.benchmarkId]
-                                        : current.filter((id) => id !== benchmark.benchmarkId)
+                            {(() => {
+                              // Group tier benchmarks by tierGroupId; keep individual benchmarks separate
+                              const tierGroups = new Map<string, any[]>();
+                              const individualBenchmarks: any[] = [];
+                              for (const benchmark of siteBenchmarks) {
+                                if (benchmark.tierGroupId) {
+                                  const group = tierGroups.get(benchmark.tierGroupId) || [];
+                                  group.push(benchmark);
+                                  tierGroups.set(benchmark.tierGroupId, group);
+                                } else {
+                                  individualBenchmarks.push(benchmark);
+                                }
+                              }
+                              return (
+                                <>
+                                  {/* Tier groups as single selectable items */}
+                                  {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
+                                    const groupName = tiers[0]?.name?.replace(/ - [^-]+$/, '') || groupId;
+                                    const tierIds = tiers.map(t => t.benchmarkId);
+                                    const selectedIds = watch("siteBenchmarks") || [];
+                                    const allSelected = tierIds.every(id => selectedIds.includes(id));
+                                    return (
+                                      <div key={groupId} className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={`site-group-${groupId}`}
+                                          checked={allSelected}
+                                          onCheckedChange={(checked) => {
+                                            const current = watch("siteBenchmarks") || [];
+                                            if (checked) {
+                                              setValue("siteBenchmarks", [...new Set([...current, ...tierIds])]);
+                                            } else {
+                                              setValue("siteBenchmarks", current.filter((id: string) => !tierIds.includes(id)));
+                                            }
+                                          }}
+                                        />
+                                        <Label htmlFor={`site-group-${groupId}`} className="cursor-pointer">
+                                          {groupName} <span className="text-muted-foreground text-xs">({tiers.length} tiers)</span>
+                                        </Label>
+                                      </div>
                                     );
-                                  }}
-                                />
-                                <Label
-                                  htmlFor={`site-${benchmark.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  {benchmark.name}
-                                </Label>
-                              </div>
-                            ))}
+                                  })}
+                                  {/* Individual (non-tier) benchmarks */}
+                                  {individualBenchmarks.map((benchmark: any) => (
+                                    <div key={benchmark.id} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`site-${benchmark.id}`}
+                                        checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
+                                        onCheckedChange={(checked) => {
+                                          const current = watch("siteBenchmarks") || [];
+                                          setValue(
+                                            "siteBenchmarks",
+                                            checked
+                                              ? [...current, benchmark.benchmarkId]
+                                              : current.filter((id: string) => id !== benchmark.benchmarkId)
+                                          );
+                                        }}
+                                      />
+                                      <Label htmlFor={`site-${benchmark.id}`} className="cursor-pointer">
+                                        {benchmark.name}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       )}
@@ -652,29 +694,68 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         <div>
                           <h4 className="font-medium mb-2">Custom Benchmarks</h4>
                           <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {customBenchmarks.map((benchmark: any) => (
-                              <div key={benchmark.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`custom-${benchmark.id}`}
-                                  checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
-                                  onCheckedChange={(checked) => {
-                                    const current = watch("customBenchmarks") || [];
-                                    setValue(
-                                      "customBenchmarks",
-                                      checked
-                                        ? [...current, benchmark.benchmarkId]
-                                        : current.filter((id) => id !== benchmark.benchmarkId)
+                            {(() => {
+                              const tierGroups = new Map<string, any[]>();
+                              const individualBenchmarks: any[] = [];
+                              for (const benchmark of customBenchmarks) {
+                                if (benchmark.tierGroupId) {
+                                  const group = tierGroups.get(benchmark.tierGroupId) || [];
+                                  group.push(benchmark);
+                                  tierGroups.set(benchmark.tierGroupId, group);
+                                } else {
+                                  individualBenchmarks.push(benchmark);
+                                }
+                              }
+                              return (
+                                <>
+                                  {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
+                                    const groupName = tiers[0]?.name?.replace(/ - [^-]+$/, '') || groupId;
+                                    const tierIds = tiers.map(t => t.benchmarkId);
+                                    const selectedIds = watch("customBenchmarks") || [];
+                                    const allSelected = tierIds.every(id => selectedIds.includes(id));
+                                    return (
+                                      <div key={groupId} className="flex items-center space-x-2">
+                                        <Checkbox
+                                          id={`custom-group-${groupId}`}
+                                          checked={allSelected}
+                                          onCheckedChange={(checked) => {
+                                            const current = watch("customBenchmarks") || [];
+                                            if (checked) {
+                                              setValue("customBenchmarks", [...new Set([...current, ...tierIds])]);
+                                            } else {
+                                              setValue("customBenchmarks", current.filter((id: string) => !tierIds.includes(id)));
+                                            }
+                                          }}
+                                        />
+                                        <Label htmlFor={`custom-group-${groupId}`} className="cursor-pointer">
+                                          {groupName} <span className="text-muted-foreground text-xs">({tiers.length} tiers)</span>
+                                        </Label>
+                                      </div>
                                     );
-                                  }}
-                                />
-                                <Label
-                                  htmlFor={`custom-${benchmark.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  {benchmark.name}
-                                </Label>
-                              </div>
-                            ))}
+                                  })}
+                                  {individualBenchmarks.map((benchmark: any) => (
+                                    <div key={benchmark.id} className="flex items-center space-x-2">
+                                      <Checkbox
+                                        id={`custom-${benchmark.id}`}
+                                        checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
+                                        onCheckedChange={(checked) => {
+                                          const current = watch("customBenchmarks") || [];
+                                          setValue(
+                                            "customBenchmarks",
+                                            checked
+                                              ? [...current, benchmark.benchmarkId]
+                                              : current.filter((id: string) => id !== benchmark.benchmarkId)
+                                          );
+                                        }}
+                                      />
+                                      <Label htmlFor={`custom-${benchmark.id}`} className="cursor-pointer">
+                                        {benchmark.name}
+                                      </Label>
+                                    </div>
+                                  ))}
+                                </>
+                              );
+                            })()}
                           </div>
                         </div>
                       )}

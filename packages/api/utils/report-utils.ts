@@ -7,6 +7,15 @@ import { db } from '../db';
 import { eq } from 'drizzle-orm';
 import { siteMetrics } from '@shared/schema';
 
+/**
+ * Derives a tier group display name from an individual tier benchmark name.
+ * Tier benchmarks are named like "40yd Dash - Elite", "40yd Dash - Good", etc.
+ * This strips the tier-specific suffix to get the group name.
+ */
+export function deriveTierGroupName(tierBenchmarkName: string): string {
+  return tierBenchmarkName.replace(/ - [^-]+$/, '');
+}
+
 // Cache for metric types to avoid repeated DB queries
 const metricTypeCache = new Map<string, string>();
 
@@ -63,6 +72,21 @@ export async function getBenchmarkLabel(athlete: any, metricCode: string): Promi
   const comparisons = athlete.benchmarkComparisons?.[metricCode];
   if (!comparisons || comparisons.length === 0) return null;
 
+  // Check for tier benchmark comparisons first
+  const tierComparison = comparisons.find((c: any) => c.tierName);
+  if (tierComparison) {
+    if (tierComparison.isBestTier) {
+      return `${tierComparison.tierName} ★`;
+    }
+    if (tierComparison.distanceToNextTier !== null && tierComparison.nextTierName) {
+      const dist = tierComparison.distanceToNextTier;
+      const formatted = dist < 1 ? dist.toFixed(2) : dist.toFixed(1);
+      return `${tierComparison.tierName} (↑${formatted} to ${tierComparison.nextTierName})`;
+    }
+    return tierComparison.tierName;
+  }
+
+  // Fall back to single-value benchmark logic
   const lowerIsBetter = await isLowerBetter(metricCode);
   const sortedComparisons = [...comparisons].sort((a: any, b: any) => {
     return lowerIsBetter ? a.benchmarkValue - b.benchmarkValue : b.benchmarkValue - a.benchmarkValue;

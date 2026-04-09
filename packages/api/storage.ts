@@ -5133,6 +5133,10 @@ export class DatabaseStorage implements IStorage {
         position: siteBenchmarks.position,
         level: siteBenchmarks.level,
         isActive: siteBenchmarks.isActive,
+        tierGroupId: siteBenchmarks.tierGroupId,
+        tierName: siteBenchmarks.tierName,
+        tierOrder: siteBenchmarks.tierOrder,
+        tierColor: siteBenchmarks.tierColor,
       })
       .from(organizationBenchmarks)
       .innerJoin(siteBenchmarks, eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id))
@@ -5169,6 +5173,10 @@ export class DatabaseStorage implements IStorage {
         position: customBenchmarks.position,
         level: customBenchmarks.level,
         isActive: customBenchmarks.isActive,
+        tierGroupId: customBenchmarks.tierGroupId,
+        tierName: customBenchmarks.tierName,
+        tierOrder: customBenchmarks.tierOrder,
+        tierColor: customBenchmarks.tierColor,
       })
       .from(organizationBenchmarks)
       .innerJoin(customBenchmarks, eq(organizationBenchmarks.benchmarkId, customBenchmarks.id))

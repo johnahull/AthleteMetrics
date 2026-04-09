@@ -3738,6 +3738,44 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
         yPos = (doc as any).lastAutoTable.finalY + 15;
       }
+
+      // 3b. Tier Distribution Summary
+      const tierDistributions = calculateTierDistributions(reportData.athleteRankings);
+      if (tierDistributions.length > 0) {
+        if (yPos > 230) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        doc.text("Tier Distribution", 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 8;
+
+        for (const dist of tierDistributions) {
+          if (yPos > 250) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          const tierNames = dist.tiers.map(t => t.tierName);
+          const tierCounts = dist.tiers.map(t => t.count.toString());
+
+          autoTable(doc, {
+            startY: yPos,
+            head: [["Metric", "Tier Group", ...tierNames]],
+            body: [[dist.metricCode, dist.tierGroupName, ...tierCounts]],
+            theme: isVisual ? "striped" : "grid",
+            headStyles: { fillColor: colors.secondary },
+            styles: { fontSize: 9 },
+          });
+
+          yPos = (doc as any).lastAutoTable.finalY + 8;
+        }
+
+        yPos += 7;
+      }
     }
 
     // Check if we need a new page
@@ -4157,6 +4195,59 @@ function calculateBenchmarkAchievements(athleteRankings: any[], teamStatistics?:
     });
 
   return achievements;
+}
+
+/**
+ * Calculate tier distribution across athletes for team reports.
+ * Returns how many athletes fall into each tier for each tier group.
+ */
+function calculateTierDistributions(athleteRankings: any[]): Array<{
+  metricCode: string;
+  tierGroupName: string;
+  tiers: Array<{ tierName: string; tierColor: string; tierOrder: number; count: number }>;
+}> {
+  if (!athleteRankings || athleteRankings.length === 0) return [];
+
+  // Map: "metricCode:tierGroupName" -> { tiers: Map<tierName, { color, order, count }> }
+  const groupMap = new Map<string, {
+    metricCode: string;
+    tierGroupName: string;
+    tiers: Map<string, { tierColor: string; tierOrder: number; count: number }>;
+  }>();
+
+  for (const athlete of athleteRankings) {
+    if (!athlete.benchmarkComparisons) continue;
+    for (const [metric, comparisons] of Object.entries(athlete.benchmarkComparisons) as [string, any[]][]) {
+      for (const comp of comparisons) {
+        if (!comp.tierName || !comp.tierGroupName) continue;
+        const key = `${metric}:${comp.tierGroupName}`;
+        if (!groupMap.has(key)) {
+          groupMap.set(key, {
+            metricCode: metric,
+            tierGroupName: comp.tierGroupName,
+            tiers: new Map(),
+          });
+        }
+        const group = groupMap.get(key)!;
+        if (!group.tiers.has(comp.tierName)) {
+          group.tiers.set(comp.tierName, {
+            tierColor: comp.tierColor || 'gray',
+            tierOrder: comp.tierOrder || 99,
+            count: 0,
+          });
+        }
+        group.tiers.get(comp.tierName)!.count++;
+      }
+    }
+  }
+
+  return Array.from(groupMap.values()).map(({ metricCode, tierGroupName, tiers }) => ({
+    metricCode,
+    tierGroupName,
+    tiers: Array.from(tiers.entries())
+      .map(([tierName, data]) => ({ tierName, ...data }))
+      .sort((a, b) => a.tierOrder - b.tierOrder),
+  }));
 }
 
 /**

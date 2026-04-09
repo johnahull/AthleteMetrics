@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
@@ -216,19 +217,36 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       </TableCell>
                       <TableCell>
                         {benchmarks.length > 0 ? (
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             {benchmarks.map((b: any, idx: number) => (
-                              <div key={idx} className="text-sm">
-                                <span className="font-medium">{b.benchmarkName}:</span>{" "}
-                                {isFly10Metric(metricCode)
-                                  ? formatFly10Dual(b.benchmarkValue)
-                                  : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
-                                <Badge
-                                  variant={b.meetsOrExceeds ? "default" : "secondary"}
-                                  className="ml-2"
-                                >
-                                  {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
-                                </Badge>
+                              <div key={idx}>
+                                {b.tierName ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{b.tierGroupName || b.benchmarkName}:</span>
+                                    <TierBadge
+                                      tierName={b.tierName}
+                                      tierColor={b.tierColor || 'gray'}
+                                      tierOrder={b.tierOrder}
+                                      nextTierName={b.nextTierName}
+                                      distanceToNextTier={b.distanceToNextTier}
+                                      unit={unit}
+                                      showProgress={true}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="text-sm">
+                                    <span className="font-medium">{b.benchmarkName}:</span>{" "}
+                                    {isFly10Metric(metricCode)
+                                      ? formatFly10Dual(b.benchmarkValue)
+                                      : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
+                                    <Badge
+                                      variant={b.meetsOrExceeds ? "default" : "secondary"}
+                                      className="ml-2"
+                                    >
+                                      {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
+                                    </Badge>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
