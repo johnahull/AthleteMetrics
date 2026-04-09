@@ -3944,25 +3944,64 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     // Benchmark comparisons
     if (athlete.benchmarkComparisons) {
-      const allBenchmarks: any[] = [];
+      const singleValueRows: any[] = [];
+      const tierRows: any[] = [];
 
       Object.entries(athlete.benchmarkComparisons).forEach(
         ([metric, comparisons]: [string, any]) => {
           const label = reportData.metricLabels?.[metric] || metric;
           const unit = reportData.metricUnits?.[metric] || '';
           comparisons.forEach((comp: any) => {
-            allBenchmarks.push([
-              label,
-              comp.benchmarkName,
-              `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-              `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-              comp.meetsOrExceeds ? "Yes" : "No",
-            ]);
+            if (comp.tierName) {
+              // Tier benchmark: show tier name + distance to next
+              let tierLabel = comp.tierName;
+              if (comp.isBestTier) {
+                tierLabel += ' ★';
+              } else if (comp.distanceToNextTier != null && comp.nextTierName) {
+                const dist = comp.distanceToNextTier < 1
+                  ? comp.distanceToNextTier.toFixed(2)
+                  : comp.distanceToNextTier.toFixed(1);
+                tierLabel += ` (↑${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
+              }
+              tierRows.push([
+                label,
+                comp.tierGroupName || comp.benchmarkName,
+                tierLabel,
+                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+              ]);
+            } else {
+              // Single-value benchmark: existing format
+              singleValueRows.push([
+                label,
+                comp.benchmarkName,
+                `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                comp.meetsOrExceeds ? "Yes" : "No",
+              ]);
+            }
           });
         }
       );
 
-      if (allBenchmarks.length > 0) {
+      // Render tier benchmarks table
+      if (tierRows.length > 0) {
+        doc.setFontSize(14);
+        doc.text("Benchmark Tiers", 14, yPos);
+        yPos += 10;
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Metric", "Tier Group", "Tier", "Actual"]],
+          body: tierRows,
+          theme: isVisual ? "striped" : "grid",
+          headStyles: { fillColor: colors.primary },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // Render single-value benchmarks table
+      if (singleValueRows.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Comparisons", 14, yPos);
         yPos += 10;
@@ -3972,12 +4011,11 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           head: [
             ["Metric", "Benchmark", "Target", "Actual", "Meets Target"],
           ],
-          body: allBenchmarks,
+          body: singleValueRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
         });
 
-        // Update yPos to after the table
         yPos = (doc as any).lastAutoTable.finalY + 10;
       }
     }
