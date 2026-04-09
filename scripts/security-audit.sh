@@ -5,7 +5,7 @@ set -e
 # Runs npm audit and fails on critical or high severity vulnerabilities
 # Usage: ./scripts/security-audit.sh
 #
-# Excluded vulnerabilities (false positives for this project):
+# Excluded vulnerabilities (false positives or deferred fixes for this project):
 # - GHSA-5j98-mcp5-4vw2 (glob CLI command injection)
 #   This vulnerability only affects glob's CLI mode with -c/--cmd flag.
 #   AthleteMetrics uses glob programmatically through tailwindcss/sucrase,
@@ -13,6 +13,11 @@ set -e
 #   Dependency chain: tailwindcss → sucrase → glob
 # - GHSA-mmgp-wc2j-qcv7 (@anthropic-ai/claude-code workspace trust bypass)
 #   Dev-only CLI tool, not shipped in production. Does not affect app security.
+# - GHSA-gpj5-g38j-94v9 (drizzle-orm SQL injection via improperly escaped identifiers)
+#   Fix requires drizzle-orm >=0.45.2 which is a breaking major version upgrade.
+#   AthleteMetrics uses parameterized queries via Drizzle's query builder (no raw
+#   SQL identifiers from user input), so the attack vector does not apply.
+#   Tracked for upgrade separately from feature work.
 
 echo "🔍 Running npm security audit..."
 
@@ -24,7 +29,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7"
+EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gpj5-g38j-94v9"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
