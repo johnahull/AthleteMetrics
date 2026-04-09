@@ -1640,7 +1640,8 @@ export class ReportService extends BaseService {
 
     // Find the next better tier (lower tierOrder = better)
     const matchedOrder = matchedTier.tierOrder ?? Number.MAX_SAFE_INTEGER;
-    const isBestTier = matchedOrder === 1;
+    const bestTierOrder = allTiers[0]?.tierOrder ?? 1;
+    const isBestTier = matchedOrder === bestTierOrder;
     let nextTierName: string | null = null;
     let distanceToNextTier: number | null = null;
 
@@ -1687,7 +1688,7 @@ export class ReportService extends BaseService {
       benchmarkName: tierGroupName,
       benchmarkValue: displayValue,
       athleteValue,
-      meetsOrExceeds: isBestTier || matchedOrder <= Math.ceil(allTiers.length / 2),
+      meetsOrExceeds: isBestTier,
       percentageDiff: 0,
       comparisonOperator: 'range',
       tierName: matchedTier.tierName || matchedTier.name,

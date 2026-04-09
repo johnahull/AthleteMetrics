@@ -768,6 +768,16 @@ describe('ReportService', () => {
       expect(result).toBeNull();
     });
 
+    it('assigns nearest tier when value falls in a gap between non-contiguous ranges', async () => {
+      const gappedTiers = [
+        makeTier(1, 'Elite',   'gold',   '1.00', '1.20'),
+        makeTier(2, 'Good',    'silver', '1.40', '1.60'), // gap: 1.21-1.39
+      ];
+      // 1.25 is in the gap, closer to Elite's max (1.20) than Good's min (1.40)
+      const result = await (reportService as any).evaluateTierBenchmark(1.25, 'FLY10_TIME', gappedTiers);
+      expect(result.tierName).toBe('Elite');
+    });
+
     it('matches single-value tier with lte operator (lower-is-better)', async () => {
       const singleValueTiers = [
         { tierGroupId: 'sv-group', tierOrder: 1, tierName: 'Elite', tierColor: 'gold',
