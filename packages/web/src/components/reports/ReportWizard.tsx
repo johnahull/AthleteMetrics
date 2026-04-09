@@ -642,11 +642,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                                     const tierIds = tiers.map(t => t.benchmarkId);
                                     const selectedIds = watch("siteBenchmarks") || [];
                                     const allSelected = tierIds.every(id => selectedIds.includes(id));
+                                    const someSelected = !allSelected && tierIds.some(id => selectedIds.includes(id));
                                     return (
                                       <div key={groupId} className="flex items-center space-x-2">
                                         <Checkbox
                                           id={`site-group-${groupId}`}
-                                          checked={allSelected}
+                                          checked={someSelected ? 'indeterminate' : allSelected}
                                           onCheckedChange={(checked) => {
                                             const current = watch("siteBenchmarks") || [];
                                             if (checked) {
@@ -713,11 +714,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                                     const tierIds = tiers.map(t => t.benchmarkId);
                                     const selectedIds = watch("customBenchmarks") || [];
                                     const allSelected = tierIds.every(id => selectedIds.includes(id));
+                                    const someSelected = !allSelected && tierIds.some(id => selectedIds.includes(id));
                                     return (
                                       <div key={groupId} className="flex items-center space-x-2">
                                         <Checkbox
                                           id={`custom-group-${groupId}`}
-                                          checked={allSelected}
+                                          checked={someSelected ? 'indeterminate' : allSelected}
                                           onCheckedChange={(checked) => {
                                             const current = watch("customBenchmarks") || [];
                                             if (checked) {

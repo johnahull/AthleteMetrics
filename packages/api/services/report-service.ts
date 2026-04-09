@@ -1533,7 +1533,11 @@ export class ReportService extends BaseService {
     const metricInfo = await this.getMetricInfo(metricCode);
     const lowerIsBetter = metricInfo.lowerIsBetter;
 
-    // Find which tier the athlete falls into
+    // Find which tier the athlete falls into.
+    // Tiers are sorted by tierOrder (1 = best). For adjacent tiers with shared
+    // boundaries (e.g., Tier 1: 1.00–1.20, Tier 2: 1.20–1.40), the inclusive
+    // range check (>= min && <= max) matches both — first match wins, assigning
+    // the better tier. This is intentional: boundary values favor the better tier.
     let matchedTier: any = null;
     for (const tier of allTiers) {
       const minVal = tier.minValue != null ? parseFloat(tier.minValue) : null;

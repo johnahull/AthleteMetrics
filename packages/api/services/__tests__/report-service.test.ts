@@ -654,4 +654,100 @@ describe('ReportService', () => {
       expect(fly10Stats.median).toBeCloseTo(1.45, 2);
     });
   });
+
+  describe('evaluateTierBenchmark', () => {
+    // Test the private method via (reportService as any) — same pattern as calculateDateRange tests above.
+    // These are integration tests because evaluateTierBenchmark calls getMetricInfo (DB lookup, cached).
+
+    const makeTier = (order: number, name: string, color: string, min: string | null, max: string | null) => ({
+      tierGroupId: 'test-group',
+      tierOrder: order,
+      tierName: name,
+      tierColor: color,
+      name: `Test - ${name}`,
+      minValue: min,
+      maxValue: max,
+      benchmarkValue: null,
+      comparisonOperator: 'range',
+    });
+
+    // FLY10_TIME is lower_is_better in the DB
+    const lowerIsBetterTiers = [
+      makeTier(1, 'Elite',   'gold',   '1.00', '1.20'),
+      makeTier(2, 'Good',    'silver', '1.21', '1.40'),
+      makeTier(3, 'Average', 'bronze', '1.41', '1.60'),
+    ];
+
+    // VERTICAL_JUMP is higher_is_better in the DB
+    const higherIsBetterTiers = [
+      makeTier(1, 'Elite',   'gold',   '30.00', '40.00'),
+      makeTier(2, 'Good',    'silver', '25.00', '29.99'),
+      makeTier(3, 'Average', 'bronze', '20.00', '24.99'),
+    ];
+
+    it('matches athlete to correct tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result).toBeDefined();
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+      expect(result.isBestTier).toBe(false);
+    });
+
+    it('matches athlete to best tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.10, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+      expect(result.distanceToNextTier).toBeNull();
+    });
+
+    it('assigns best tier when athlete exceeds best range (lower-is-better, value below min)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(0.90, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('assigns worst tier when athlete is below all ranges (lower-is-better, value above max)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(2.00, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Average');
+      expect(result.tierOrder).toBe(3);
+    });
+
+    it('calculates distance to next tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.nextTierName).toBe('Elite');
+      // Distance = |1.30 - 1.20| = 0.10 (need to get to Elite's maxValue)
+      expect(result.distanceToNextTier).toBeCloseTo(0.10, 2);
+    });
+
+    it('matches athlete to correct tier (higher-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(27.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('assigns best tier when athlete exceeds best range (higher-is-better, value above max)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(45.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('calculates distance to next tier (higher-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(27.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.nextTierName).toBe('Elite');
+      // Distance = |30.00 - 27.0| = 3.0 (need to reach Elite's minValue)
+      expect(result.distanceToNextTier).toBeCloseTo(3.0, 1);
+    });
+
+    it('includes allTiers in the result for legend rendering', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.allTiers).toHaveLength(3);
+      expect(result.allTiers[0].tierName).toBe('Elite');
+      expect(result.allTiers[2].tierName).toBe('Average');
+    });
+
+    it('returns null for empty tiers array', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', []);
+      expect(result).toBeNull();
+    });
+  });
 });
