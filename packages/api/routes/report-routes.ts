@@ -3516,6 +3516,28 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     text: [40, 40, 40] as [number, number, number],
   };
 
+  // Tier color name → RGB for cell backgrounds (matched to Tailwind classes in TierBadge.tsx)
+  const tierColorRgb: Record<string, [number, number, number]> = {
+    gold:    [245, 158, 11],
+    emerald: [16, 185, 129],
+    silver:  [148, 163, 184],
+    blue:    [59, 130, 246],
+    bronze:  [234, 88, 12],
+    amber:   [217, 119, 6],
+    slate:   [100, 116, 139],
+    gray:    [107, 114, 128],
+  };
+
+  // Create a light tint (blend with white at 25% opacity) for cell backgrounds
+  const tierTint = (colorName: string): [number, number, number] => {
+    const rgb = tierColorRgb[colorName?.toLowerCase()] || tierColorRgb.gray;
+    return [
+      Math.round(rgb[0] * 0.25 + 255 * 0.75),
+      Math.round(rgb[1] * 0.25 + 255 * 0.75),
+      Math.round(rgb[2] * 0.25 + 255 * 0.75),
+    ] as [number, number, number];
+  };
+
   const reportName = report.name || 'Performance Report';
   const pageWidth = doc.internal.pageSize.getWidth();
 
@@ -3760,15 +3782,35 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           }
 
           const tierNames = dist.tiers.map(t => t.tierName);
+          const tierColors = dist.tiers.map(t => t.tierColor);
           const tierCounts = dist.tiers.map(t => t.count.toString());
+          const metricLabel = reportData.teamStatistics?.find((s: any) => s.metric === dist.metricCode)?.metric || dist.metricCode;
 
           autoTable(doc, {
             startY: yPos,
             head: [["Metric", "Tier Group", ...tierNames]],
-            body: [[dist.metricCode, dist.tierGroupName, ...tierCounts]],
+            body: [[metricLabel, dist.tierGroupName, ...tierCounts]],
             theme: isVisual ? "striped" : "grid",
             headStyles: { fillColor: colors.secondary },
             styles: { fontSize: 9 },
+            didParseCell: (data: any) => {
+              // Color tier name header cells with their tier color tint
+              if (data.section === 'head' && data.column.index >= 2) {
+                const tierIdx = data.column.index - 2;
+                if (tierIdx < tierColors.length) {
+                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                  data.cell.styles.textColor = [40, 40, 40];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+              // Color tier count body cells with matching tint
+              if (data.section === 'body' && data.column.index >= 2) {
+                const tierIdx = data.column.index - 2;
+                if (tierIdx < tierColors.length) {
+                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                }
+              }
+            },
           });
 
           yPos = (doc as any).lastAutoTable.finalY + 8;
@@ -3813,10 +3855,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
+          // Collect tier color for each row's benchmark column
+          const rowTierColors: (string | null)[] = [];
           const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
             const value = athlete.measurements[stat.metric];
             const percentile = athlete.percentiles?.[stat.metric];
             const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
+
+            // Check if this athlete has a tier benchmark for coloring
+            const comps = athlete.benchmarkComparisons?.[stat.metric];
+            const tierComp = comps?.find((c: any) => c.tierName);
+            rowTierColors.push(tierComp?.tierColor || null);
 
             return [
               (idx + 1).toString(),
@@ -3835,6 +3884,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             headStyles: { fillColor: colors.accent, fontSize: 9 },
             styles: { fontSize: 8 },
             margin: { left: 14 },
+            didParseCell: (data: any) => {
+              if (data.section !== 'body') return;
+              // Color the "Benchmarks Met" column (index 4) with tier color
+              if (data.column.index === 4 && data.row.index < rowTierColors.length) {
+                const colorName = rowTierColors[data.row.index];
+                if (colorName) {
+                  data.cell.styles.fillColor = tierTint(colorName);
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+            },
           });
 
           yPos = (doc as any).lastAutoTable.finalY + 5;
@@ -3945,7 +4005,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     // Benchmark comparisons
     if (athlete.benchmarkComparisons) {
       const singleValueRows: any[] = [];
-      const tierRows: any[] = [];
+      // Tier data: keep metadata alongside cells for color styling
+      const tierData: Array<{
+        cells: string[];
+        tierColor: string;
+        tierOrder: number;
+      }> = [];
 
       Object.entries(athlete.benchmarkComparisons).forEach(
         ([metric, comparisons]: [string, any]) => {
@@ -3954,7 +4019,6 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           comparisons.forEach((comp: any) => {
             if (comp.tierName) {
               // Tier benchmark: show tier name + distance to next
-              // Note: use ASCII-safe characters for jsPDF (no ↑ or ★)
               let tierLabel = comp.tierName;
               if (comp.isBestTier) {
                 tierLabel += ' [Best]';
@@ -3964,12 +4028,18 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
                   : comp.distanceToNextTier.toFixed(1);
                 tierLabel += ` (${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
               }
-              tierRows.push([
-                label,
-                comp.tierGroupName || comp.benchmarkName,
-                tierLabel,
-                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-              ]);
+              // Prefix with rank indicator
+              const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
+              tierData.push({
+                cells: [
+                  label,
+                  comp.tierGroupName || comp.benchmarkName,
+                  `${rankPrefix}${tierLabel}`,
+                  `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                ],
+                tierColor: comp.tierColor || 'gray',
+                tierOrder: comp.tierOrder || 99,
+              });
             } else {
               // Single-value benchmark: existing format
               singleValueRows.push([
@@ -3984,8 +4054,8 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         }
       );
 
-      // Render tier benchmarks table
-      if (tierRows.length > 0) {
+      // Render tier benchmarks table with color-coded tier cells
+      if (tierData.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Tiers", 14, yPos);
         yPos += 10;
@@ -3993,15 +4063,27 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         autoTable(doc, {
           startY: yPos,
           head: [["Metric", "Tier Group", "Tier", "Actual"]],
-          body: tierRows,
+          body: tierData.map(d => d.cells),
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
+          styles: { fontSize: 9 },
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            const rowIdx = data.row.index;
+            const colIdx = data.column.index;
+            // Color the "Tier" column (index 2) with the tier's color tint
+            if (colIdx === 2 && rowIdx < tierData.length) {
+              const colorName = tierData[rowIdx].tierColor;
+              data.cell.styles.fillColor = tierTint(colorName);
+              data.cell.styles.fontStyle = 'bold';
+            }
+          },
         });
 
         yPos = (doc as any).lastAutoTable.finalY + 10;
       }
 
-      // Render single-value benchmarks table
+      // Render single-value benchmarks table with green/red Meets Target
       if (singleValueRows.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Comparisons", 14, yPos);
@@ -4015,6 +4097,23 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           body: singleValueRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
+          styles: { fontSize: 9 },
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            // Color the "Meets Target" column (index 4)
+            if (data.column.index === 4) {
+              const val = data.cell.raw;
+              if (val === 'Yes') {
+                data.cell.styles.fillColor = [34, 197, 94];  // green-500
+                data.cell.styles.textColor = [255, 255, 255];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (val === 'No') {
+                data.cell.styles.fillColor = [239, 68, 68];  // red-500
+                data.cell.styles.textColor = [255, 255, 255];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
         });
 
         yPos = (doc as any).lastAutoTable.finalY + 10;
