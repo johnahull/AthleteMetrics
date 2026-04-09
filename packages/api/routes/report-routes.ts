@@ -3954,14 +3954,15 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           comparisons.forEach((comp: any) => {
             if (comp.tierName) {
               // Tier benchmark: show tier name + distance to next
+              // Note: use ASCII-safe characters for jsPDF (no ↑ or ★)
               let tierLabel = comp.tierName;
               if (comp.isBestTier) {
-                tierLabel += ' ★';
+                tierLabel += ' [Best]';
               } else if (comp.distanceToNextTier != null && comp.nextTierName) {
                 const dist = comp.distanceToNextTier < 1
                   ? comp.distanceToNextTier.toFixed(2)
                   : comp.distanceToNextTier.toFixed(1);
-                tierLabel += ` (↑${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
+                tierLabel += ` (${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
               }
               tierRows.push([
                 label,

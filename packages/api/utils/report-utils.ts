@@ -76,12 +76,12 @@ export async function getBenchmarkLabel(athlete: any, metricCode: string): Promi
   const tierComparison = comparisons.find((c: any) => c.tierName);
   if (tierComparison) {
     if (tierComparison.isBestTier) {
-      return `${tierComparison.tierName} ★`;
+      return `${tierComparison.tierName} [Best]`;
     }
     if (tierComparison.distanceToNextTier !== null && tierComparison.nextTierName) {
       const dist = tierComparison.distanceToNextTier;
       const formatted = dist < 1 ? dist.toFixed(2) : dist.toFixed(1);
-      return `${tierComparison.tierName} (↑${formatted} to ${tierComparison.nextTierName})`;
+      return `${tierComparison.tierName} (${formatted} to ${tierComparison.nextTierName})`;
     }
     return tierComparison.tierName;
   }
