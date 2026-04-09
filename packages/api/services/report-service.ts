@@ -1763,12 +1763,16 @@ export class ReportService extends BaseService {
             tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
-        // Handle single-value benchmarks
+        // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
         else if (benchmark.benchmarkValue != null) {
           benchmarksByMetric[benchmark.metricCode].push({
             name: benchmark.name,
             value: parseFloat(String(benchmark.benchmarkValue)),
             comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
         // Skip benchmarks with neither (invalid data)
@@ -1818,12 +1822,16 @@ export class ReportService extends BaseService {
             tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
-        // Handle single-value benchmarks
+        // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
         else if (benchmark.benchmarkValue != null) {
           benchmarksByMetric[benchmark.metricCode].push({
             name: benchmark.name,
             value: parseFloat(String(benchmark.benchmarkValue)),
             comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
         // Skip benchmarks with neither (invalid data)
