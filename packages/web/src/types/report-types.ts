@@ -31,6 +31,21 @@ export interface BenchmarkComparison {
   benchmarkName: string;
   benchmarkValue: number;
   meetsOrExceeds: boolean;
+  // Tier fields (present only for tier/range benchmarks)
+  tierName?: string;
+  tierColor?: string;
+  tierOrder?: number;
+  tierGroupName?: string;
+  distanceToNextTier?: number | null;
+  nextTierName?: string | null;
+  isBestTier?: boolean;
+  allTiers?: Array<{
+    tierName: string;
+    tierColor: string;
+    tierOrder: number;
+    minValue: number | null;
+    maxValue: number | null;
+  }>;
 }
 
 export interface AthleteRanking {

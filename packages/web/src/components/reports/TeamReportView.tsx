@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
+import { TierBadgeCompact } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToMultipleAthletesDialog } from "./SendReportToMultipleAthletesDialog";
@@ -40,6 +41,7 @@ import {
   getCompositeIndexDescription,
   calculateBenchmarkAchievements,
   calculateDeviationStats,
+  calculateTierDistributions,
 } from "./report-utils";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
@@ -104,6 +106,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const handleDownloadPDF = (format: PdfFormat) => {
     downloadPdf({ format });
   };
+
+  // Memoize tier distribution calculation (must be before early returns for hook ordering)
+  const tierDistributions = useMemo(
+    () => calculateTierDistributions(reportData?.athleteRankings || []),
+    [reportData?.athleteRankings]
+  );
 
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Generating report..." />;
@@ -391,6 +399,47 @@ export function TeamReportView({ report }: TeamReportViewProps) {
         ) : null;
       })()}
 
+      {/* Tier Distribution Summary */}
+      {tierDistributions.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Tier Distribution</CardTitle>
+              <CardDescription>
+                How {labels.athletes.toLowerCase()} are distributed across benchmark tiers
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Metric</TableHead>
+                    <TableHead>Tier Group</TableHead>
+                    <TableHead>Distribution</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {tierDistributions.map(({ metricCode, tierGroupName, tiers }) => (
+                    <TableRow key={`${metricCode}:${tierGroupName}`}>
+                      <TableCell className="font-medium">{metricLabels?.[metricCode] || metricCode}</TableCell>
+                      <TableCell>{tierGroupName}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-2">
+                          {tiers.map(({ tierName, tierColor, count }) => (
+                            <div key={tierName} className="flex items-center gap-1">
+                              <TierBadgeCompact tierName={tierName} tierColor={tierColor} />
+                              <span className="text-sm text-muted-foreground">{count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+      )}
+
       {/* Athlete Rankings - Only show if composite index is enabled */}
       {Array.isArray(athleteRankings) && athleteRankings.length > 0 && athleteRankings.some((a: any) => a.compositeIndex !== undefined) && (
         <Card>
@@ -487,11 +536,22 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <span>{athlete.userName}</span>
-                                {benchmarkLabel && (
-                                  <Badge variant="secondary" className="text-xs font-normal">
-                                    {benchmarkLabel}
-                                  </Badge>
-                                )}
+                                {(() => {
+                                  // Check for tier benchmark comparison first
+                                  const comps = athlete.benchmarkComparisons?.[stat.metric];
+                                  const tierComp = comps?.find((c: any) => c.tierName);
+                                  if (tierComp) {
+                                    return <TierBadgeCompact tierName={tierComp.tierName!} tierColor={tierComp.tierColor || 'gray'} />;
+                                  }
+                                  if (benchmarkLabel) {
+                                    return (
+                                      <Badge variant="secondary" className="text-xs font-normal">
+                                        {benchmarkLabel}
+                                      </Badge>
+                                    );
+                                  }
+                                  return null;
+                                })()}
                               </div>
                             </TableCell>
                             <TableCell>

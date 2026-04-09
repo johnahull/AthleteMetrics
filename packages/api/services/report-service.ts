@@ -26,6 +26,7 @@ import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
+import { deriveTierGroupName } from '../utils/report-utils';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -102,9 +103,27 @@ interface BenchmarkComparison {
   benchmarkName: string;
   benchmarkValue: number;
   athleteValue: number;
+  /** For single-value benchmarks: true if athlete meets the threshold.
+   *  For tier benchmarks: true if athlete is in the top half of tiers (heuristic). */
   meetsOrExceeds: boolean;
   percentageDiff: number;
   comparisonOperator: string;
+  // Tier fields (present only for tier/range benchmarks)
+  tierName?: string;
+  tierColor?: string;
+  tierOrder?: number;
+  tierGroupName?: string;
+  distanceToNextTier?: number | null;
+  nextTierName?: string | null;
+  isBestTier?: boolean;
+  // All tiers in this group (for rendering legends/references)
+  allTiers?: Array<{
+    tierName: string;
+    tierColor: string;
+    tierOrder: number;
+    minValue: number | null;
+    maxValue: number | null;
+  }>;
 }
 
 interface EventContext {
@@ -643,7 +662,9 @@ export class ReportService extends BaseService {
   }
 
   /**
-   * Get benchmark comparisons for an athlete
+   * Get benchmark comparisons for an athlete.
+   * Called once per individual report (not per athlete in team reports —
+   * team reports use calculateAthleteRankings with pre-fetched benchmarksByMetric).
    */
   async getBenchmarkComparisons(
     athleteId: string,
@@ -665,10 +686,6 @@ export class ReportService extends BaseService {
     if (!athlete) {
       return comparisons;
     }
-
-    const athleteAge = athlete.birthYear
-      ? new Date().getFullYear() - athlete.birthYear
-      : undefined;
 
     // Get report-specific user-defined benchmarks
     const userDefinedBenchmarks = await db
@@ -733,61 +750,108 @@ export class ReportService extends BaseService {
         );
     }
 
+    // Collect all benchmarks from all sources for unified processing.
+    // Tag each with _source so tier group map keys are namespaced by table,
+    // preventing theoretical cross-table tierGroupId collisions.
+    // userDefinedBenchmarks (from reportBenchmarks table) don't have tier fields —
+    // accessing .tierGroupId yields undefined, falling through to single-value path.
+    const allBenchmarks: any[] = [
+      ...userDefinedBenchmarks.map(b => ({ ...b, _source: 'report' })),
+      ...siteBenchmarksList.map(({ benchmark }) => ({ ...benchmark, _source: 'site' })),
+      ...customBenchmarksList.map(({ benchmark }) => ({ ...benchmark, _source: 'custom' })),
+    ];
+
+    // Collect tier group IDs and fetch all sibling tiers for distance-to-next calculation
+    const tierGroupIds = [...new Set(
+      allBenchmarks
+        .filter(b => b.tierGroupId)
+        .map(b => b.tierGroupId as string)
+    )];
+
+    // Build a map of source:tierGroupId -> all tiers in that group (sorted by tierOrder)
+    const tierGroupMap = new Map<string, typeof allBenchmarks>();
+    if (tierGroupIds.length > 0) {
+      // Fetch all tiers from both tables in parallel
+      const [siteTierRows, customTierRows] = await Promise.all([
+        db.select().from(siteBenchmarks).where(and(
+          inArray(siteBenchmarks.tierGroupId, tierGroupIds),
+          eq(siteBenchmarks.isActive, true)
+        )),
+        db.select().from(customBenchmarks).where(and(
+          inArray(customBenchmarks.tierGroupId, tierGroupIds),
+          eq(customBenchmarks.isActive, true)
+        )),
+      ]);
+
+      for (const tier of siteTierRows) {
+        if (!tier.tierGroupId) continue;
+        const key = `site:${tier.tierGroupId}`;
+        const group = tierGroupMap.get(key) || [];
+        group.push(tier);
+        tierGroupMap.set(key, group);
+      }
+
+      for (const tier of customTierRows) {
+        if (!tier.tierGroupId) continue;
+        const key = `custom:${tier.tierGroupId}`;
+        const group = tierGroupMap.get(key) || [];
+        group.push(tier);
+        tierGroupMap.set(key, group);
+      }
+
+      // Sort each group by tierOrder
+      for (const [, tiers] of tierGroupMap) {
+        tiers.sort((a, b) => (a.tierOrder || 0) - (b.tierOrder || 0));
+      }
+    }
+
+    // Track which tier groups we've already processed per metric (avoid duplicate entries)
+    const processedTierGroups = new Set<string>();
+
     // Process all benchmarks
-    for (const [metricCode, athleteValue] of Object.entries(
-      athletePerformances
-    )) {
+    for (const [metricCode, athleteValue] of Object.entries(athletePerformances)) {
       comparisons[metricCode] = [];
+      processedTierGroups.clear();
 
-      // User-defined benchmarks
-      for (const benchmark of userDefinedBenchmarks) {
-        if (benchmark.metricCode === metricCode) {
-          // Skip range benchmarks (they don't have a single benchmarkValue)
-          if (!benchmark.benchmarkValue) continue;
-          if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
-            const comparison = this.createBenchmarkComparison(
-              benchmark.name,
-              parseFloat(benchmark.benchmarkValue),
-              athleteValue,
-              benchmark.comparisonOperator
-            );
-            comparisons[metricCode].push(comparison);
-          }
-        }
-      }
+      for (const benchmark of allBenchmarks) {
+        if (benchmark.metricCode !== metricCode) continue;
+        // Note: we intentionally do NOT filter by benchmarkMatchesAthlete() here.
+        // This applies to ALL benchmarks (both tier and single-value).
+        // These benchmarks were explicitly selected by the user for this report,
+        // so they should always appear regardless of athlete attribute filters
+        // (gender, age, position). This means a coach may see a "Males 18+"
+        // benchmark on a female athlete's report if they selected it — this is
+        // a deliberate design choice: user selection overrides demographic filters.
 
-      // Site benchmarks
-      for (const { benchmark } of siteBenchmarksList) {
-        if (benchmark.metricCode === metricCode) {
-          // Skip range benchmarks (they don't have a single benchmarkValue)
-          if (!benchmark.benchmarkValue) continue;
-          if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
-            const comparison = this.createBenchmarkComparison(
-              benchmark.name,
-              parseFloat(benchmark.benchmarkValue),
-              athleteValue,
-              benchmark.comparisonOperator
-            );
-            comparisons[metricCode].push(comparison);
-          }
-        }
-      }
+        // Tier/range benchmark — use source-namespaced key to avoid cross-table collisions
+        const tierMapKey = benchmark.tierGroupId ? `${benchmark._source}:${benchmark.tierGroupId}` : null;
+        if (tierMapKey && tierGroupMap.has(tierMapKey)) {
+          // Only process each tier group once per metric
+          const groupKey = `${metricCode}:${tierMapKey}`;
+          if (processedTierGroups.has(groupKey)) continue;
+          processedTierGroups.add(groupKey);
 
-      // Custom benchmarks
-      for (const { benchmark } of customBenchmarksList) {
-        if (benchmark.metricCode === metricCode) {
-          // Skip range benchmarks (they don't have a single benchmarkValue)
-          if (!benchmark.benchmarkValue) continue;
-          if (this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) {
-            const comparison = this.createBenchmarkComparison(
-              benchmark.name,
-              parseFloat(benchmark.benchmarkValue),
-              athleteValue,
-              benchmark.comparisonOperator
-            );
-            comparisons[metricCode].push(comparison);
+          const allTiers = tierGroupMap.get(tierMapKey)!;
+          const tierComparison = await this.evaluateTierBenchmark(
+            athleteValue,
+            metricCode,
+            allTiers
+          );
+          if (tierComparison) {
+            comparisons[metricCode].push(tierComparison);
           }
+          continue;
         }
+
+        // Single-value benchmark (existing behavior)
+        if (!benchmark.benchmarkValue) continue;
+        const comparison = this.createBenchmarkComparison(
+          benchmark.name,
+          parseFloat(benchmark.benchmarkValue),
+          athleteValue,
+          benchmark.comparisonOperator
+        );
+        comparisons[metricCode].push(comparison);
       }
     }
 
@@ -1323,6 +1387,35 @@ export class ReportService extends BaseService {
 
     // Populate benchmark comparisons if benchmarks are provided
     if (benchmarksByMetric) {
+      // Pre-group tier benchmarks by tierGroupId for evaluateTierBenchmark
+      const tierGroupsByMetric = new Map<string, Map<string, any[]>>();
+      // INVARIANT: benchmarksByMetric must contain ALL tiers for each tier group.
+      // The ReportWizard enforces this by selecting all tier IDs atomically.
+      // If a future caller provides partial tier groups, evaluateTierBenchmark
+      // will produce incorrect results (missing tiers in the evaluation).
+      // The individual report path (getBenchmarkComparisons) separately fetches
+      // complete groups from the DB, so it's not affected.
+      for (const [metric, benchmarks] of Object.entries(benchmarksByMetric)) {
+        const tierGroups = new Map<string, any[]>();
+        for (const b of benchmarks) {
+          if (b.tierGroupId) {
+            const group = tierGroups.get(b.tierGroupId) || [];
+            group.push(b);
+            tierGroups.set(b.tierGroupId, group);
+          }
+        }
+        // Sort each group by tierOrder
+        for (const [, tiers] of tierGroups) {
+          tiers.sort((a, b) => (a.tierOrder || 0) - (b.tierOrder || 0));
+        }
+        if (tierGroups.size > 0) {
+          tierGroupsByMetric.set(metric, tierGroups);
+        }
+      }
+
+      // Pre-warm metric info cache to avoid sequential DB hits in the nested loop
+      await Promise.all(metrics.map(m => this.getMetricInfo(m)));
+
       for (const athlete of athletes) {
         for (const metric of metrics) {
           const value = athlete.measurements[metric];
@@ -1331,41 +1424,43 @@ export class ReportService extends BaseService {
           const benchmarks = benchmarksByMetric[metric];
           if (!benchmarks || benchmarks.length === 0) continue;
 
-          const metricInfo = await this.getMetricInfo(metric);
+          const metricInfo = await this.getMetricInfo(metric); // cached from pre-warm
+          const comparisons: any[] = [];
+          const processedGroups = new Set<string>();
 
-          athlete.benchmarkComparisons[metric] = benchmarks.map(benchmark => {
-            // Handle range benchmarks (tier groups)
-            if (benchmark.comparisonOperator === 'range' && benchmark.minValue != null && benchmark.maxValue != null) {
-              // For range benchmarks, check if value is within the range
-              const meetsOrExceeds = value >= benchmark.minValue && value <= benchmark.maxValue;
-              return {
-                benchmarkName: benchmark.name,
-                benchmarkValue: benchmark.value,
-                minValue: benchmark.minValue,
-                maxValue: benchmark.maxValue,
-                meetsOrExceeds,
-                tierName: benchmark.tierName,
-                tierColor: benchmark.tierColor,
-              };
+          for (const benchmark of benchmarks) {
+            // Tier group benchmark — use evaluateTierBenchmark for proper tier assignment
+            if (benchmark.tierGroupId) {
+              if (processedGroups.has(benchmark.tierGroupId)) continue;
+              processedGroups.add(benchmark.tierGroupId);
+
+              const tierGroup = tierGroupsByMetric.get(metric)?.get(benchmark.tierGroupId);
+              if (tierGroup) {
+                const tierComparison = await this.evaluateTierBenchmark(value, metric, tierGroup);
+                if (tierComparison) {
+                  comparisons.push(tierComparison);
+                }
+              }
+              continue;
             }
 
-            // Handle single-value benchmarks (skip if value is null)
-            if (benchmark.value == null) {
-              return {
-                benchmarkName: benchmark.name,
-                benchmarkValue: null,
-                meetsOrExceeds: false,
-              };
-            }
+            // Single-value benchmark
+            if (benchmark.value == null) continue;
 
-            return {
+            comparisons.push({
               benchmarkName: benchmark.name,
               benchmarkValue: benchmark.value,
               meetsOrExceeds: metricInfo.lowerIsBetter
                 ? value <= benchmark.value
-                : value >= benchmark.value
-            };
-          });
+                : value >= benchmark.value,
+              percentageDiff: benchmark.value !== 0
+                ? ((value - benchmark.value) / benchmark.value) * 100
+                : 0,
+              comparisonOperator: benchmark.comparisonOperator || 'gte',
+            });
+          }
+
+          athlete.benchmarkComparisons[metric] = comparisons;
         }
       }
     }
@@ -1451,6 +1546,164 @@ export class ReportService extends BaseService {
       meetsOrExceeds: meetsTarget,
       percentageDiff,
       comparisonOperator,
+    };
+  }
+
+  /**
+   * Evaluate which tier an athlete's value falls into within a tier group,
+   * and calculate distance to the next tier up.
+   */
+  private async evaluateTierBenchmark(
+    athleteValue: number,
+    metricCode: string,
+    allTiers: any[]
+  ): Promise<BenchmarkComparison | null> {
+    if (allTiers.length === 0) return null;
+
+    const metricInfo = await this.getMetricInfo(metricCode);
+    const lowerIsBetter = metricInfo.lowerIsBetter;
+
+    // Find which tier the athlete falls into.
+    // Tiers are sorted by tierOrder (1 = best). For adjacent tiers with shared
+    // boundaries (e.g., Tier 1: 1.00–1.20, Tier 2: 1.20–1.40), the inclusive
+    // range check (>= min && <= max) matches both — first match wins, assigning
+    // the better tier. This is intentional: boundary values favor the better tier.
+    let matchedTier: any = null;
+    for (const tier of allTiers) {
+      const minVal = tier.minValue != null ? parseFloat(tier.minValue) : null;
+      const maxVal = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
+
+      if (minVal !== null && maxVal !== null) {
+        if (athleteValue >= minVal && athleteValue <= maxVal) {
+          matchedTier = tier;
+          break;
+        }
+      } else if (tier.benchmarkValue != null) {
+        // Single-value tier with comparison operator
+        const bv = parseFloat(tier.benchmarkValue);
+        if (tier.comparisonOperator === 'lte' && athleteValue <= bv) {
+          matchedTier = tier;
+          break;
+        }
+        if (tier.comparisonOperator === 'gte' && athleteValue >= bv) {
+          matchedTier = tier;
+          break;
+        }
+        if (tier.comparisonOperator === 'eq' && Math.abs(athleteValue - bv) < 0.01) {
+          matchedTier = tier;
+          break;
+        }
+      }
+    }
+
+    // If no tier matched, athlete is outside all defined ranges or in a gap
+    // between non-contiguous ranges. Find the nearest tier by boundary distance.
+    if (!matchedTier) {
+      const bestTier = allTiers[0]; // tierOrder 1 = best
+      const worstTier = allTiers[allTiers.length - 1];
+      const bestMin = bestTier.minValue != null ? parseFloat(bestTier.minValue) : null;
+      const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
+
+      // Check if athlete exceeds the best tier
+      let beatsBest = false;
+      if (lowerIsBetter) {
+        beatsBest = bestMin !== null ? athleteValue < bestMin
+                  : bestMax !== null ? athleteValue <= bestMax
+                  : false;
+      } else {
+        beatsBest = bestMax !== null ? athleteValue > bestMax
+                  : bestMin !== null ? athleteValue >= bestMin
+                  : false;
+      }
+
+      if (beatsBest) {
+        matchedTier = bestTier;
+      } else {
+        // Find nearest tier by minimum distance to any boundary
+        let minDistance = Infinity;
+        for (const tier of allTiers) {
+          const tMin = tier.minValue != null ? parseFloat(tier.minValue) : null;
+          const tMax = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
+          if (tMin !== null) {
+            const d = Math.abs(athleteValue - tMin);
+            if (d < minDistance) { minDistance = d; matchedTier = tier; }
+          }
+          if (tMax !== null) {
+            const d = Math.abs(athleteValue - tMax);
+            if (d < minDistance) { minDistance = d; matchedTier = tier; }
+          }
+        }
+        // Final fallback if no boundaries found at all
+        if (!matchedTier) matchedTier = worstTier;
+      }
+    }
+
+    // Find the next better tier (lower tierOrder = better)
+    const matchedOrder = matchedTier.tierOrder ?? Number.MAX_SAFE_INTEGER;
+    const isBestTier = matchedOrder === 1;
+    let nextTierName: string | null = null;
+    let distanceToNextTier: number | null = null;
+
+    if (!isBestTier) {
+      // Find the next better tier (largest tierOrder strictly less than matchedOrder).
+      // Handles non-sequential tier orders (e.g., 1, 5, 10) — allTiers is sorted ascending.
+      const nextTier = allTiers
+        .filter((t: any) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
+        .at(-1);
+      if (nextTier) {
+        nextTierName = nextTier.tierName || null;
+        // Calculate distance to the boundary of the next tier
+        if (lowerIsBetter) {
+          // For time-based metrics, athlete needs to decrease to reach next tier's maxValue
+          const boundary = nextTier.maxValue != null ? parseFloat(nextTier.maxValue) :
+                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
+          if (boundary !== null) {
+            distanceToNextTier = Math.abs(athleteValue - boundary);
+          }
+        } else {
+          // For higher-is-better metrics, athlete needs to increase to reach next tier's minValue
+          const boundary = nextTier.minValue != null ? parseFloat(nextTier.minValue) :
+                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
+          if (boundary !== null) {
+            distanceToNextTier = Math.abs(boundary - athleteValue);
+          }
+        }
+      }
+    }
+
+    // Use the tier group's base name (derive from first tier's name minus tier-specific suffix)
+    const tierGroupName = matchedTier.tierGroupId
+      ? deriveTierGroupName(allTiers[0]?.name || matchedTier.name)
+      : matchedTier.name;
+
+    // Use midpoint of range as benchmarkValue for compatibility
+    const minVal = matchedTier.minValue != null ? parseFloat(matchedTier.minValue) : null;
+    const maxVal = matchedTier.maxValue != null ? parseFloat(matchedTier.maxValue) : null;
+    const displayValue = matchedTier.benchmarkValue != null
+      ? parseFloat(matchedTier.benchmarkValue)
+      : (minVal !== null && maxVal !== null ? (minVal + maxVal) / 2 : 0);
+
+    return {
+      benchmarkName: tierGroupName,
+      benchmarkValue: displayValue,
+      athleteValue,
+      meetsOrExceeds: isBestTier || matchedOrder <= Math.ceil(allTiers.length / 2),
+      percentageDiff: 0,
+      comparisonOperator: 'range',
+      tierName: matchedTier.tierName || matchedTier.name,
+      tierColor: matchedTier.tierColor || 'gray',
+      tierOrder: matchedTier.tierOrder,
+      tierGroupName,
+      distanceToNextTier,
+      nextTierName,
+      isBestTier,
+      allTiers: allTiers.map((t: any) => ({
+        tierName: t.tierName || t.name,
+        tierColor: t.tierColor || 'gray',
+        tierOrder: t.tierOrder || 0,
+        minValue: t.minValue != null ? parseFloat(t.minValue) : null,
+        maxValue: t.maxValue != null ? parseFloat(t.maxValue) : null,
+      })),
     };
   }
 
@@ -1540,12 +1793,16 @@ export class ReportService extends BaseService {
             tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
-        // Handle single-value benchmarks
+        // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
         else if (benchmark.benchmarkValue != null) {
           benchmarksByMetric[benchmark.metricCode].push({
             name: benchmark.name,
             value: parseFloat(String(benchmark.benchmarkValue)),
             comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
         // Skip benchmarks with neither (invalid data)
@@ -1595,12 +1852,16 @@ export class ReportService extends BaseService {
             tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
-        // Handle single-value benchmarks
+        // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
         else if (benchmark.benchmarkValue != null) {
           benchmarksByMetric[benchmark.metricCode].push({
             name: benchmark.name,
             value: parseFloat(String(benchmark.benchmarkValue)),
             comparisonOperator: (benchmark.comparisonOperator as 'lte' | 'gte' | 'eq') ?? 'gte',
+            tierName: benchmark.tierName ?? undefined,
+            tierColor: benchmark.tierColor ?? undefined,
+            tierGroupId: benchmark.tierGroupId ?? undefined,
+            tierOrder: benchmark.tierOrder ?? undefined,
           });
         }
         // Skip benchmarks with neither (invalid data)

@@ -359,3 +359,10 @@ export function calculateDeviationStats(
     zScoreColor,
   };
 }
+
+// ============================================================================
+// Tier Utilities — re-exported from @shared/benchmark-utils (single source of truth)
+// ============================================================================
+
+export { deriveTierGroupName, calculateTierDistributions } from '@shared/benchmark-utils';
+export type { TierDistribution } from '@shared/benchmark-utils';

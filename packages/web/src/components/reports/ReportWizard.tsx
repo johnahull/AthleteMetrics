@@ -36,6 +36,7 @@ import { ChevronLeft, ChevronRight, Layers, List, Users } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
+import { deriveTierGroupName } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
 const reportConfigSchema = z.object({
@@ -169,6 +170,71 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     () => enabledBenchmarks?.filter((b) => b.benchmarkType === 'custom') || [],
     [enabledBenchmarks]
   );
+
+  // Helper to render grouped benchmark checkboxes (used for both site and custom)
+  const renderBenchmarkCheckboxes = (benchmarks: any[], fieldName: "siteBenchmarks" | "customBenchmarks", idPrefix: string) => {
+    const tierGroups = new Map<string, any[]>();
+    const individualBenchmarks: any[] = [];
+    for (const benchmark of benchmarks) {
+      if (benchmark.tierGroupId) {
+        const group = tierGroups.get(benchmark.tierGroupId) || [];
+        group.push(benchmark);
+        tierGroups.set(benchmark.tierGroupId, group);
+      } else {
+        individualBenchmarks.push(benchmark);
+      }
+    }
+    return (
+      <>
+        {Array.from(tierGroups.entries()).map(([groupId, tiers]) => {
+          const groupName = tiers[0]?.name ? deriveTierGroupName(tiers[0].name) : groupId;
+          const tierIds = tiers.map(t => t.benchmarkId);
+          const selectedIds = watch(fieldName) || [];
+          const allSelected = tierIds.every(id => selectedIds.includes(id));
+          const someSelected = !allSelected && tierIds.some(id => selectedIds.includes(id));
+          return (
+            <div key={groupId} className="flex items-center space-x-2">
+              <Checkbox
+                id={`${idPrefix}-group-${groupId}`}
+                checked={someSelected ? 'indeterminate' : allSelected}
+                onCheckedChange={(checked) => {
+                  const current = watch(fieldName) || [];
+                  if (checked) {
+                    setValue(fieldName, [...new Set([...current, ...tierIds])]);
+                  } else {
+                    setValue(fieldName, current.filter((id: string) => !tierIds.includes(id)));
+                  }
+                }}
+              />
+              <Label htmlFor={`${idPrefix}-group-${groupId}`} className="cursor-pointer">
+                {groupName} <span className="text-muted-foreground text-xs">({tiers.length} tiers)</span>
+              </Label>
+            </div>
+          );
+        })}
+        {individualBenchmarks.map((benchmark: any) => (
+          <div key={benchmark.id} className="flex items-center space-x-2">
+            <Checkbox
+              id={`${idPrefix}-${benchmark.id}`}
+              checked={watch(fieldName)?.includes(benchmark.benchmarkId)}
+              onCheckedChange={(checked) => {
+                const current = watch(fieldName) || [];
+                setValue(
+                  fieldName,
+                  checked
+                    ? [...current, benchmark.benchmarkId]
+                    : current.filter((id: string) => id !== benchmark.benchmarkId)
+                );
+              }}
+            />
+            <Label htmlFor={`${idPrefix}-${benchmark.id}`} className="cursor-pointer">
+              {benchmark.name}
+            </Label>
+          </div>
+        ))}
+      </>
+    );
+  };
 
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
@@ -621,29 +687,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         <div>
                           <h4 className="font-medium mb-2">Site Benchmarks</h4>
                           <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {siteBenchmarks.map((benchmark: any) => (
-                              <div key={benchmark.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`site-${benchmark.id}`}
-                                  checked={watch("siteBenchmarks")?.includes(benchmark.benchmarkId)}
-                                  onCheckedChange={(checked) => {
-                                    const current = watch("siteBenchmarks") || [];
-                                    setValue(
-                                      "siteBenchmarks",
-                                      checked
-                                        ? [...current, benchmark.benchmarkId]
-                                        : current.filter((id) => id !== benchmark.benchmarkId)
-                                    );
-                                  }}
-                                />
-                                <Label
-                                  htmlFor={`site-${benchmark.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  {benchmark.name}
-                                </Label>
-                              </div>
-                            ))}
+                            {renderBenchmarkCheckboxes(siteBenchmarks, "siteBenchmarks", "site")}
                           </div>
                         </div>
                       )}
@@ -652,29 +696,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                         <div>
                           <h4 className="font-medium mb-2">Custom Benchmarks</h4>
                           <div className="space-y-2 border rounded-lg p-4 max-h-48 overflow-y-auto">
-                            {customBenchmarks.map((benchmark: any) => (
-                              <div key={benchmark.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`custom-${benchmark.id}`}
-                                  checked={watch("customBenchmarks")?.includes(benchmark.benchmarkId)}
-                                  onCheckedChange={(checked) => {
-                                    const current = watch("customBenchmarks") || [];
-                                    setValue(
-                                      "customBenchmarks",
-                                      checked
-                                        ? [...current, benchmark.benchmarkId]
-                                        : current.filter((id) => id !== benchmark.benchmarkId)
-                                    );
-                                  }}
-                                />
-                                <Label
-                                  htmlFor={`custom-${benchmark.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  {benchmark.name}
-                                </Label>
-                              </div>
-                            ))}
+                            {renderBenchmarkCheckboxes(customBenchmarks, "customBenchmarks", "custom")}
                           </div>
                         </div>
                       )}

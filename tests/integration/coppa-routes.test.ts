@@ -704,7 +704,9 @@ describe('POST /api/admin/coppa/retroactive', () => {
   });
 
   it('writes a retroactive scan audit log entry', async () => {
-    const before = new Date();
+    // Subtract 1 second buffer to account for clock precision differences
+    // between Node.js Date.now() and PostgreSQL's now()
+    const before = new Date(Date.now() - 1000);
 
     await request(app)
       .post('/api/admin/coppa/retroactive')

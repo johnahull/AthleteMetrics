@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { ReportService } from '../report-service';
 import { db } from '../../db';
-import { organizations, users, reports, measurements, siteMetrics, organizationMetrics } from '@shared/schema';
+import { organizations, users, reports, measurements, siteMetrics, organizationMetrics, siteBenchmarks, organizationBenchmarks } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 
 describe('ReportService', () => {
@@ -652,6 +652,226 @@ describe('ReportService', () => {
 
       // Median should also reflect 2 values, not 11
       expect(fly10Stats.median).toBeCloseTo(1.45, 2);
+    });
+  });
+
+  describe('evaluateTierBenchmark', () => {
+    // Test the private method via (reportService as any) — same pattern as calculateDateRange tests above.
+    // These are integration tests because evaluateTierBenchmark calls getMetricInfo (DB lookup, cached).
+
+    const makeTier = (order: number, name: string, color: string, min: string | null, max: string | null) => ({
+      tierGroupId: 'test-group',
+      tierOrder: order,
+      tierName: name,
+      tierColor: color,
+      name: `Test - ${name}`,
+      minValue: min,
+      maxValue: max,
+      benchmarkValue: null,
+      comparisonOperator: 'range',
+    });
+
+    // Ensure required metrics exist in DB (tests depend on their metricType)
+    beforeAll(async () => {
+      const existingMetrics = await db.select().from(siteMetrics);
+      const codes = existingMetrics.map(m => m.code);
+      if (!codes.includes('FLY10_TIME')) {
+        await db.insert(siteMetrics).values({
+          code: 'FLY10_TIME', label: '10-Yard Fly Time', metricType: 'lower_is_better',
+          defaultUnit: 's', category: 'speed',
+        });
+      }
+      if (!codes.includes('VERTICAL_JUMP')) {
+        await db.insert(siteMetrics).values({
+          code: 'VERTICAL_JUMP', label: 'Vertical Jump', metricType: 'higher_is_better',
+          defaultUnit: 'in', category: 'power',
+        });
+      }
+    });
+
+    // FLY10_TIME is lower_is_better in the DB
+    const lowerIsBetterTiers = [
+      makeTier(1, 'Elite',   'gold',   '1.00', '1.20'),
+      makeTier(2, 'Good',    'silver', '1.21', '1.40'),
+      makeTier(3, 'Average', 'bronze', '1.41', '1.60'),
+    ];
+
+    // VERTICAL_JUMP is higher_is_better in the DB
+    const higherIsBetterTiers = [
+      makeTier(1, 'Elite',   'gold',   '30.00', '40.00'),
+      makeTier(2, 'Good',    'silver', '25.00', '29.99'),
+      makeTier(3, 'Average', 'bronze', '20.00', '24.99'),
+    ];
+
+    it('matches athlete to correct tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result).toBeDefined();
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+      expect(result.isBestTier).toBe(false);
+    });
+
+    it('matches athlete to best tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.10, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+      expect(result.distanceToNextTier).toBeNull();
+    });
+
+    it('assigns best tier when athlete exceeds best range (lower-is-better, value below min)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(0.90, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('assigns worst tier when athlete is below all ranges (lower-is-better, value above max)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(2.00, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.tierName).toBe('Average');
+      expect(result.tierOrder).toBe(3);
+    });
+
+    it('calculates distance to next tier (lower-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.nextTierName).toBe('Elite');
+      // Distance = |1.30 - 1.20| = 0.10 (need to get to Elite's maxValue)
+      expect(result.distanceToNextTier).toBeCloseTo(0.10, 2);
+    });
+
+    it('matches athlete to correct tier (higher-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(27.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+    });
+
+    it('assigns best tier when athlete exceeds best range (higher-is-better, value above max)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(45.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('calculates distance to next tier (higher-is-better)', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(27.0, 'VERTICAL_JUMP', higherIsBetterTiers);
+      expect(result.nextTierName).toBe('Elite');
+      // Distance = |30.00 - 27.0| = 3.0 (need to reach Elite's minValue)
+      expect(result.distanceToNextTier).toBeCloseTo(3.0, 1);
+    });
+
+    it('includes allTiers in the result for legend rendering', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', lowerIsBetterTiers);
+      expect(result.allTiers).toHaveLength(3);
+      expect(result.allTiers[0].tierName).toBe('Elite');
+      expect(result.allTiers[2].tierName).toBe('Average');
+    });
+
+    it('returns null for empty tiers array', async () => {
+      const result = await (reportService as any).evaluateTierBenchmark(1.30, 'FLY10_TIME', []);
+      expect(result).toBeNull();
+    });
+
+    it('matches single-value tier with lte operator (lower-is-better)', async () => {
+      const singleValueTiers = [
+        { tierGroupId: 'sv-group', tierOrder: 1, tierName: 'Elite', tierColor: 'gold',
+          name: 'Sprint - Elite', minValue: null, maxValue: null,
+          benchmarkValue: '1.20', comparisonOperator: 'lte' },
+        { tierGroupId: 'sv-group', tierOrder: 2, tierName: 'Good', tierColor: 'silver',
+          name: 'Sprint - Good', minValue: null, maxValue: null,
+          benchmarkValue: '1.40', comparisonOperator: 'lte' },
+      ];
+      // 1.15 <= 1.20 → matches Elite (first, best tier)
+      const result = await (reportService as any).evaluateTierBenchmark(1.15, 'FLY10_TIME', singleValueTiers);
+      expect(result.tierName).toBe('Elite');
+      expect(result.isBestTier).toBe(true);
+    });
+
+    it('matches single-value tier with gte operator (higher-is-better)', async () => {
+      const singleValueTiers = [
+        { tierGroupId: 'sv-group', tierOrder: 1, tierName: 'Elite', tierColor: 'gold',
+          name: 'Jump - Elite', minValue: null, maxValue: null,
+          benchmarkValue: '30', comparisonOperator: 'gte' },
+        { tierGroupId: 'sv-group', tierOrder: 2, tierName: 'Good', tierColor: 'silver',
+          name: 'Jump - Good', minValue: null, maxValue: null,
+          benchmarkValue: '25', comparisonOperator: 'gte' },
+      ];
+      // 27 >= 25 but not >= 30 → matches Good (tier 2)
+      const result = await (reportService as any).evaluateTierBenchmark(27, 'VERTICAL_JUMP', singleValueTiers);
+      expect(result.tierName).toBe('Good');
+      expect(result.tierOrder).toBe(2);
+    });
+  });
+
+  describe('getBenchmarkComparisons — demographic filter removal', () => {
+    // Regression test: explicitly selected benchmarks must appear on reports
+    // regardless of athlete demographic filters (gender, age, position).
+    // This was an intentional product decision — user selection overrides filters.
+
+    it('should include a male-only benchmark on a female athlete report when explicitly selected', async () => {
+      const uniqueSuffix = `demog-${Date.now()}`;
+
+      // Create a female athlete
+      const [femaleAthlete] = await db.insert(users).values({
+        username: `female-athlete-${uniqueSuffix}`,
+        emails: [`female-${uniqueSuffix}@example.com`],
+        password: 'hashedpassword',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        fullName: 'Jane Doe',
+        gender: 'Female',
+        birthYear: 2008,
+      }).returning();
+
+      // Create a site benchmark filtered to Males only
+      const [maleBenchmark] = await db.insert(siteBenchmarks).values({
+        metricCode: 'FLY10_TIME',
+        name: `Males Only Sprint ${uniqueSuffix}`,
+        benchmarkValue: '1.30',
+        comparisonOperator: 'lte',
+        gender: 'Male',
+        isActive: true,
+      }).returning();
+
+      // Enable it for the org
+      await db.insert(organizationBenchmarks).values({
+        organizationId: testOrgId,
+        benchmarkId: maleBenchmark.id,
+        benchmarkType: 'site',
+        isEnabled: true,
+      });
+
+      // Create report with this benchmark selected
+      const [report] = await db.insert(reports).values({
+        name: `Demog Test Report ${uniqueSuffix}`,
+        organizationId: testOrgId,
+        reportType: 'individual',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME'],
+          benchmarks: { site: [maleBenchmark.id] },
+        },
+        createdBy: testUserId,
+      }).returning();
+
+      const comparisons = await (reportService as any).getBenchmarkComparisons(
+        femaleAthlete.id,
+        testOrgId,
+        report.id,
+        { FLY10_TIME: 1.25 },
+        report.config
+      );
+
+      // The male-only benchmark MUST appear because it was explicitly selected
+      expect(comparisons.FLY10_TIME).toBeDefined();
+      expect(comparisons.FLY10_TIME.length).toBeGreaterThanOrEqual(1);
+      const found = comparisons.FLY10_TIME.find(
+        (c: any) => c.benchmarkName === `Males Only Sprint ${uniqueSuffix}`
+      );
+      expect(found).toBeDefined();
+      expect(found.meetsOrExceeds).toBe(true); // 1.25 <= 1.30
+
+      // Cleanup
+      await db.delete(reports).where(eq(reports.id, report.id));
+      await db.delete(organizationBenchmarks).where(eq(organizationBenchmarks.benchmarkId, maleBenchmark.id));
+      await db.delete(siteBenchmarks).where(eq(siteBenchmarks.id, maleBenchmark.id));
+      await db.delete(users).where(eq(users.id, femaleAthlete.id));
     });
   });
 });
