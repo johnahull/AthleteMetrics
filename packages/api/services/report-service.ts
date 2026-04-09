@@ -771,14 +771,18 @@ export class ReportService extends BaseService {
     // Build a map of tierGroupId -> all tiers in that group (sorted by tierOrder)
     const tierGroupMap = new Map<string, typeof allBenchmarks>();
     if (tierGroupIds.length > 0) {
-      // Fetch all tiers for groups from site benchmarks
-      const siteTierRows = await db
-        .select()
-        .from(siteBenchmarks)
-        .where(and(
+      // Fetch all tiers from both tables in parallel
+      const [siteTierRows, customTierRows] = await Promise.all([
+        db.select().from(siteBenchmarks).where(and(
           inArray(siteBenchmarks.tierGroupId, tierGroupIds),
           eq(siteBenchmarks.isActive, true)
-        ));
+        )),
+        db.select().from(customBenchmarks).where(and(
+          inArray(customBenchmarks.tierGroupId, tierGroupIds),
+          eq(customBenchmarks.isActive, true)
+        )),
+      ]);
+
       for (const tier of siteTierRows) {
         if (!tier.tierGroupId) continue;
         const group = tierGroupMap.get(tier.tierGroupId) || [];
@@ -786,14 +790,6 @@ export class ReportService extends BaseService {
         tierGroupMap.set(tier.tierGroupId, group);
       }
 
-      // Fetch all tiers for groups from custom benchmarks
-      const customTierRows = await db
-        .select()
-        .from(customBenchmarks)
-        .where(and(
-          inArray(customBenchmarks.tierGroupId, tierGroupIds),
-          eq(customBenchmarks.isActive, true)
-        ));
       for (const tier of customTierRows) {
         if (!tier.tierGroupId) continue;
         const group = tierGroupMap.get(tier.tierGroupId) || [];
@@ -818,8 +814,12 @@ export class ReportService extends BaseService {
       for (const benchmark of allBenchmarks) {
         if (benchmark.metricCode !== metricCode) continue;
         // Note: we intentionally do NOT filter by benchmarkMatchesAthlete() here.
+        // This applies to ALL benchmarks (both tier and single-value).
         // These benchmarks were explicitly selected by the user for this report,
-        // so they should always appear regardless of athlete attribute filters.
+        // so they should always appear regardless of athlete attribute filters
+        // (gender, age, position). This means a coach may see a "Males 18+"
+        // benchmark on a female athlete's report if they selected it — this is
+        // a deliberate design choice: user selection overrides demographic filters.
 
         // Tier/range benchmark
         if (benchmark.tierGroupId && tierGroupMap.has(benchmark.tierGroupId)) {
@@ -1554,10 +1554,29 @@ export class ReportService extends BaseService {
       }
     }
 
-    // If no tier matched, athlete is outside all defined ranges
-    // Place them in the last (worst) tier
+    // If no tier matched, athlete is outside all defined ranges.
+    // Determine if they exceeded the best tier or fell below the worst.
     if (!matchedTier) {
-      matchedTier = allTiers[allTiers.length - 1];
+      const bestTier = allTiers[0]; // tierOrder 1 = best
+      const worstTier = allTiers[allTiers.length - 1];
+      const bestMin = bestTier.minValue ? parseFloat(bestTier.minValue) : null;
+      const bestMax = bestTier.maxValue ? parseFloat(bestTier.maxValue) : null;
+
+      if (lowerIsBetter) {
+        // For time metrics: value below best tier's min means they're faster than Elite
+        if (bestMin !== null && athleteValue < bestMin) {
+          matchedTier = bestTier;
+        } else {
+          matchedTier = worstTier;
+        }
+      } else {
+        // For higher-is-better: value above best tier's max means they exceeded Elite
+        if (bestMax !== null && athleteValue > bestMax) {
+          matchedTier = bestTier;
+        } else {
+          matchedTier = worstTier;
+        }
+      }
     }
 
     // Find the next better tier (lower tierOrder = better)

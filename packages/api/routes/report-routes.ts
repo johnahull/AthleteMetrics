@@ -3784,7 +3784,7 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           const tierNames = dist.tiers.map(t => t.tierName);
           const tierColors = dist.tiers.map(t => t.tierColor);
           const tierCounts = dist.tiers.map(t => t.count.toString());
-          const metricLabel = reportData.teamStatistics?.find((s: any) => s.metric === dist.metricCode)?.metric || dist.metricCode;
+          const metricLabel = reportData.metricLabels?.[dist.metricCode] || dist.metricCode;
 
           autoTable(doc, {
             startY: yPos,
