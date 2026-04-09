@@ -817,7 +817,9 @@ export class ReportService extends BaseService {
 
       for (const benchmark of allBenchmarks) {
         if (benchmark.metricCode !== metricCode) continue;
-        if (!this.benchmarkMatchesAthlete(benchmark, athlete, athleteAge)) continue;
+        // Note: we intentionally do NOT filter by benchmarkMatchesAthlete() here.
+        // These benchmarks were explicitly selected by the user for this report,
+        // so they should always appear regardless of athlete attribute filters.
 
         // Tier/range benchmark
         if (benchmark.tierGroupId && tierGroupMap.has(benchmark.tierGroupId)) {
