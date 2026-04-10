@@ -224,6 +224,13 @@ export class DeviceImportService {
     const preview = batch.parsedPreview;
     if (!preview) throw new Error('Batch has no parsed data');
 
+    // Runtime shape check: parsedPreview is a JSONB column with only compile-time
+    // typing (.$type). Validate before opening a transaction so a malformed blob
+    // fails fast with a clear error instead of throwing mid-transaction.
+    if (!Array.isArray(preview.athletes)) {
+      throw new Error('Batch preview data is malformed (missing athletes array)');
+    }
+
     // Check event not frozen (if linked)
     if (batch.eventId) {
       const [event] = await db.select({ isFrozen: events.isFrozen })
@@ -311,6 +318,22 @@ export class DeviceImportService {
     // Measurements are inserted directly via tx (not via MeasurementService which uses its
     // own internal db.transaction and would be outside this transaction boundary).
     await db.transaction(async (tx) => {
+      // Re-check TTL and status inside the transaction to close the race window
+      // between the outer check and this point. Uses FOR UPDATE to lock the row
+      // so no concurrent commit can proceed on the same batch.
+      const [freshBatch] = await tx.execute(
+        sql`SELECT status, expires_at FROM import_batches WHERE id = ${batchId} FOR UPDATE`
+      ) as any[];
+      if (freshBatch?.status !== 'pending') {
+        throw new Error(`Batch is ${freshBatch?.status ?? 'unknown'}, not pending`);
+      }
+      if (new Date() > new Date(freshBatch.expires_at)) {
+        await tx.update(importBatches)
+          .set({ status: 'expired' })
+          .where(eq(importBatches.id, batchId));
+        throw new Error('Import session has expired. Please re-upload the file.');
+      }
+
       // Process each athlete
       for (const previewAthlete of preview.athletes) {
         const override = overrideMap.get(previewAthlete.csvName);

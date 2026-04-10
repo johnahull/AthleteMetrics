@@ -93,6 +93,8 @@ const orgQuerySchema = z.object({
   organizationId: z.string().min(1),
 });
 
+const batchIdSchema = z.string().uuid();
+
 const commitRequestSchema = z.object({
   batchId: z.string().min(1),
   organizationId: z.string().min(1),
@@ -278,7 +280,12 @@ export function registerDeviceImportRoutes(app: Express) {
           }
         }
 
-        const batch = await importService.getBatchDetail(req.params.batchId, organizationId);
+        const batchIdResult = batchIdSchema.safeParse(req.params.batchId);
+        if (!batchIdResult.success) {
+          return res.status(400).json({ message: "Invalid batch ID format" });
+        }
+
+        const batch = await importService.getBatchDetail(batchIdResult.data, organizationId);
         if (!batch) {
           return res.status(404).json({ message: "Batch not found" });
         }
@@ -318,7 +325,12 @@ export function registerDeviceImportRoutes(app: Express) {
           }
         }
 
-        await importService.rollbackBatch(req.params.batchId, user.id, organizationId);
+        const batchIdResult = batchIdSchema.safeParse(req.params.batchId);
+        if (!batchIdResult.success) {
+          return res.status(400).json({ message: "Invalid batch ID format" });
+        }
+
+        await importService.rollbackBatch(batchIdResult.data, user.id, organizationId);
 
         return res.json({ message: "Import rolled back successfully" });
       } catch (error: any) {

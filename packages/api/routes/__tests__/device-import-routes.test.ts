@@ -153,7 +153,7 @@ describe('Device Import Routes — Auth', () => {
       const res = await request(app)
         .post('/api/import/device/commit')
         .send({
-          batchId: 'batch-1',
+          batchId: '00000000-0000-4000-8000-000000000001',
           organizationId: 'org-1',
           duplicateStrategy: 'skip',
           addMissingEventMetrics: false,
@@ -170,7 +170,7 @@ describe('Device Import Routes — Auth', () => {
       const res = await request(app)
         .post('/api/import/device/commit')
         .send({
-          batchId: 'batch-1',
+          batchId: '00000000-0000-4000-8000-000000000001',
           organizationId: 'org-1',
           duplicateStrategy: 'skip',
           addMissingEventMetrics: false,
@@ -246,7 +246,7 @@ describe('Device Import Routes — Auth', () => {
       (storage.getUserRoles as any).mockResolvedValue(['athlete']);
 
       const res = await request(app)
-        .get('/api/import/device/batches/batch-1')
+        .get('/api/import/device/batches/00000000-0000-4000-8000-000000000001')
         .query({ organizationId: 'org-1' });
 
       expect(res.status).toBe(403);
@@ -257,7 +257,7 @@ describe('Device Import Routes — Auth', () => {
       (storage.getUserRoles as any).mockResolvedValue(['coach']);
 
       const res = await request(app)
-        .get('/api/import/device/batches/batch-1')
+        .get('/api/import/device/batches/00000000-0000-4000-8000-000000000001')
         .query({ organizationId: 'org-1' });
 
       expect(res.status).toBe(200);
@@ -270,7 +270,7 @@ describe('Device Import Routes — Auth', () => {
       (storage.getUserRoles as any).mockResolvedValue(['athlete']);
 
       const res = await request(app)
-        .post('/api/import/device/batches/batch-1/rollback')
+        .post('/api/import/device/batches/00000000-0000-4000-8000-000000000001/rollback')
         .send({ organizationId: 'org-1' });
 
       expect(res.status).toBe(403);
@@ -281,7 +281,7 @@ describe('Device Import Routes — Auth', () => {
       (storage.getUserRoles as any).mockResolvedValue(['coach']);
 
       const res = await request(app)
-        .post('/api/import/device/batches/batch-1/rollback')
+        .post('/api/import/device/batches/00000000-0000-4000-8000-000000000001/rollback')
         .send({ organizationId: 'org-1' });
 
       expect(res.status).toBe(200);
@@ -291,7 +291,7 @@ describe('Device Import Routes — Auth', () => {
       const app = createApp(coachUser);
 
       const res = await request(app)
-        .post('/api/import/device/batches/batch-1/rollback')
+        .post('/api/import/device/batches/00000000-0000-4000-8000-000000000001/rollback')
         .send({});
 
       expect(res.status).toBe(400);
