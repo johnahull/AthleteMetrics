@@ -37,11 +37,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { WizardStepIndicator } from '@/components/import/WizardStepIndicator';
 import {
@@ -139,38 +134,36 @@ function AthleteReviewRow({
       : athlete.matchType;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen}>
+    <>
       <TableRow className={included ? '' : 'opacity-50'}>
         {/* Expand toggle */}
         <TableCell className="w-8 p-2">
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-              {open ? (
-                <ChevronDown className="h-3 w-3" />
-              ) : (
-                <ChevronRight className="h-3 w-3" />
-              )}
-            </Button>
-          </CollapsibleTrigger>
+          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setOpen(!open)}>
+            {open ? (
+              <ChevronDown className="h-3 w-3" />
+            ) : (
+              <ChevronRight className="h-3 w-3" />
+            )}
+          </Button>
         </TableCell>
 
         {/* Athlete name */}
-        <TableCell className="font-medium w-[22%]">{athlete.csvName}</TableCell>
+        <TableCell className="font-medium truncate">{athlete.csvName}</TableCell>
 
         {/* Match status */}
-        <TableCell className="w-[10%]">
+        <TableCell>
           <MatchBadge matchType={effectiveMatchType as 'exact' | 'fuzzy' | 'partial' | 'none'} />
         </TableCell>
 
         {/* Match override dropdown */}
-        <TableCell className="w-[38%]">
+        <TableCell>
           <Select
             value={effectiveMatchId ?? '__none__'}
             onValueChange={(val) =>
               onOverride(athlete.csvName, val === '__none__' ? undefined : val)
             }
           >
-            <SelectTrigger className="h-8 text-xs w-full [&>span]:flex-1 [&>span]:min-w-0">
+            <SelectTrigger className="h-8 text-xs" style={{ display: 'flex', width: '100%' }}>
               <SelectValue placeholder="No match" />
             </SelectTrigger>
             <SelectContent>
@@ -185,7 +178,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Drills summary */}
-        <TableCell className="text-sm text-muted-foreground w-[14%]">
+        <TableCell className="text-sm text-muted-foreground">
           {athlete.drills.length} drill{athlete.drills.length !== 1 ? 's' : ''}
           {athlete.drills.some((d) => d.isOutlier) && (
             <span className="ml-1 text-yellow-600">
@@ -195,7 +188,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Include toggle */}
-        <TableCell className="text-center w-[8%]">
+        <TableCell className="text-center">
           <Checkbox
             checked={included}
             onCheckedChange={(checked) =>
@@ -207,7 +200,7 @@ function AthleteReviewRow({
       </TableRow>
 
       {/* Expanded drill details */}
-      <CollapsibleContent asChild>
+      {open && (
         <TableRow>
           <TableCell colSpan={6} className="bg-muted/30 p-3">
             <div className="space-y-1 text-xs">
@@ -232,8 +225,8 @@ function AthleteReviewRow({
             </div>
           </TableCell>
         </TableRow>
-      </CollapsibleContent>
-    </Collapsible>
+      )}
+    </>
   );
 }
 
@@ -546,15 +539,15 @@ export function DeviceImportDialog({
 
         {/* Athletes table */}
         <div className="border rounded-lg overflow-auto max-h-[380px]">
-          <Table className="table-fixed">
+          <Table style={{ tableLayout: 'fixed' }}>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8 p-2" />
-                <TableHead className="w-[22%]">Athlete</TableHead>
-                <TableHead className="w-[10%]">Match</TableHead>
-                <TableHead className="w-[38%]">Assign To</TableHead>
-                <TableHead className="w-[14%]">Drills</TableHead>
-                <TableHead className="w-[8%] text-center">Include</TableHead>
+                <TableHead style={{ width: 32 }} className="p-2" />
+                <TableHead style={{ width: '22%' }}>Athlete</TableHead>
+                <TableHead style={{ width: '10%' }}>Match</TableHead>
+                <TableHead style={{ width: '38%' }}>Assign To</TableHead>
+                <TableHead style={{ width: '14%' }}>Drills</TableHead>
+                <TableHead style={{ width: '8%' }} className="text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

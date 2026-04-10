@@ -189,10 +189,16 @@ export class DeviceImportService {
       })
       .returning({ id: importBatches.id });
 
+    // When a sessionDate filter is active, return only that session
+    // so the client advances to "review" instead of looping back to "session-select"
+    const filteredSessions = sessionDate
+      ? sessions.filter(s => s.sessionDate === sessionDate)
+      : sessions;
+
     return {
       batchId: batch.id,
       preview: { athletes: previewAthletes, summary },
-      sessions,
+      sessions: filteredSessions,
       warnings: [...parseWarnings, ...parsed.warnings],
     };
   }
