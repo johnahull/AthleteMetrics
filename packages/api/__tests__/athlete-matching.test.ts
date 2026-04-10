@@ -297,15 +297,15 @@ describe('findBestAthleteMatch', () => {
     expect(result.type).toBe('exact');
   });
 
-  it('handles single athlete in array (name-only = partial at 70)', () => {
+  it('returns exact match for identical names without team context', () => {
     const athletes = [
       makeAthlete({ id: 'a1', firstName: 'John', lastName: 'Doe' }),
     ];
-    // Without teamName, max score is 70 (30+40) which falls in "partial" range (60-74)
+    // Without teamName: maxPossibleScore = 70, normalizedPct = 70/70*100 = 100% → exact
     const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Doe' }, athletes);
-    expect(result.type).toBe('partial');
+    expect(result.type).toBe('exact');
     expect(result.candidate?.id).toBe('a1');
-    expect(result.confidence).toBe(70);
+    expect(result.confidence).toBe(100);
   });
 
   it('ignores team score when no teamName in criteria', () => {
@@ -369,9 +369,10 @@ describe('findBestAthleteMatch', () => {
         { firstName: 'Jon', lastName: 'Smith', teamName: 'BTA' },
         athletes
       );
-      // "Jon" vs "John": similarity = 75% (3-char vs 4-char, 1 edit) → below 80% threshold
-      // Score = 0 (first name) + 40 (last exact) + 30 (team exact) = 70 → partial
-      expect(result.type).toBe('partial');
+      // "Jon" vs "John": similarity = 75% → below 80% threshold → 0 pts first name
+      // Raw = 0 (first) + 40 (last exact) + 30 (team exact) = 70
+      // maxPossibleScore = 100 (teamName provided), normalizedPct = 70% → fuzzy
+      expect(result.type).toBe('fuzzy');
       expect(result.candidate?.id).toBe('a1');
       expect(result.confidence).toBe(70);
     });
@@ -493,8 +494,8 @@ describe('findBestAthleteMatch', () => {
         makeAthlete({ id: 'a2', firstName: 'John', lastName: 'Smith' }),
       ];
       const result = findBestAthleteMatch({ firstName: 'John', lastName: 'Smith' }, athletes);
-      // Both score 70 (30+40), gap is 0 < 10 → manual review if type is fuzzy
-      // At 70, type is "partial" which always requires manual review
+      // Both normalize to 100% (70/70, no team context) → exact.
+      // Gap is 0 < 10 → requiresManualReview = true via the exact-branch close-gap check.
       expect(result.requiresManualReview).toBe(true);
       expect(result.alternatives).toBeDefined();
       expect(result.alternatives!.length).toBeGreaterThanOrEqual(1);

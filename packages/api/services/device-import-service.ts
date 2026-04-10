@@ -155,6 +155,7 @@ export class DeviceImportService {
       totalAthletes: previewAthletes.length,
       exactMatches: previewAthletes.filter(a => a.matchType === 'exact').length,
       fuzzyMatches: previewAthletes.filter(a => a.matchType === 'fuzzy').length,
+      partialMatches: previewAthletes.filter(a => a.matchType === 'partial').length,
       unmatched: previewAthletes.filter(a => a.matchType === 'none').length,
       totalDrills: previewAthletes.reduce((sum, a) => sum + a.drills.length, 0),
       outlierCount: previewAthletes.reduce(

@@ -509,6 +509,11 @@ export function DeviceImportDialog({
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-800 text-xs font-medium">
             {summary.fuzzyMatches} fuzzy
           </span>
+          {summary.partialMatches > 0 && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-800 text-xs font-medium">
+              {summary.partialMatches} partial
+            </span>
+          )}
           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-800 text-xs font-medium">
             {summary.unmatched} unmatched
           </span>

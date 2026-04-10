@@ -53,6 +53,7 @@ export interface PreviewSummary {
   totalAthletes: number;
   exactMatches: number;
   fuzzyMatches: number;
+  partialMatches: number;
   unmatched: number;
   totalDrills: number;
   outlierCount: number;
