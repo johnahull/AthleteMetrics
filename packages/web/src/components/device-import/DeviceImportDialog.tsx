@@ -170,7 +170,7 @@ function AthleteReviewRow({
               onOverride(athlete.csvName, val === '__none__' ? undefined : val)
             }
           >
-            <SelectTrigger className="h-8 text-xs w-full">
+            <SelectTrigger className="h-8 text-xs w-full [&>span]:flex-1 [&>span]:min-w-0">
               <SelectValue placeholder="No match" />
             </SelectTrigger>
             <SelectContent>
