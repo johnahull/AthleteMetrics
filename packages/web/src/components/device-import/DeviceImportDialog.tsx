@@ -155,22 +155,22 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Athlete name */}
-        <TableCell className="font-medium w-[25%]">{athlete.csvName}</TableCell>
+        <TableCell className="font-medium w-[22%]">{athlete.csvName}</TableCell>
 
         {/* Match status */}
-        <TableCell className="w-[12%]">
+        <TableCell className="w-[10%]">
           <MatchBadge matchType={effectiveMatchType as 'exact' | 'fuzzy' | 'partial' | 'none'} />
         </TableCell>
 
         {/* Match override dropdown */}
-        <TableCell className="w-[30%]">
+        <TableCell className="w-[38%]">
           <Select
             value={effectiveMatchId ?? '__none__'}
             onValueChange={(val) =>
               onOverride(athlete.csvName, val === '__none__' ? undefined : val)
             }
           >
-            <SelectTrigger className="h-8 text-xs">
+            <SelectTrigger className="h-8 text-xs w-full">
               <SelectValue placeholder="No match" />
             </SelectTrigger>
             <SelectContent>
@@ -185,7 +185,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Drills summary */}
-        <TableCell className="text-sm text-muted-foreground w-[13%]">
+        <TableCell className="text-sm text-muted-foreground w-[14%]">
           {athlete.drills.length} drill{athlete.drills.length !== 1 ? 's' : ''}
           {athlete.drills.some((d) => d.isOutlier) && (
             <span className="ml-1 text-yellow-600">
@@ -195,7 +195,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Include toggle */}
-        <TableCell className="text-center w-[10%]">
+        <TableCell className="text-center w-[8%]">
           <Checkbox
             checked={included}
             onCheckedChange={(checked) =>
@@ -550,11 +550,11 @@ export function DeviceImportDialog({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8 p-2" />
-                <TableHead className="w-[25%]">Athlete</TableHead>
-                <TableHead className="w-[12%]">Match</TableHead>
-                <TableHead className="w-[30%]">Assign To</TableHead>
-                <TableHead className="w-[13%]">Drills</TableHead>
-                <TableHead className="w-[10%] text-center">Include</TableHead>
+                <TableHead className="w-[22%]">Athlete</TableHead>
+                <TableHead className="w-[10%]">Match</TableHead>
+                <TableHead className="w-[38%]">Assign To</TableHead>
+                <TableHead className="w-[14%]">Drills</TableHead>
+                <TableHead className="w-[8%] text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
