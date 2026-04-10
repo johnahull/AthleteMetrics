@@ -163,7 +163,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Match override dropdown */}
-        <TableCell className="min-w-[180px]">
+        <TableCell className="min-w-[150px]">
           <Select
             value={effectiveMatchId ?? '__none__'}
             onValueChange={(val) =>
@@ -539,11 +539,11 @@ export function DeviceImportDialog({
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
-                <TableHead>CSV Name</TableHead>
+                <TableHead>Athlete</TableHead>
                 <TableHead>Match</TableHead>
                 <TableHead>Assign To</TableHead>
                 <TableHead>Drills</TableHead>
-                <TableHead className="text-center">Include</TableHead>
+                <TableHead className="w-16 text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -769,7 +769,7 @@ export function DeviceImportDialog({
       }}
     >
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto overflow-x-hidden"
+        className="max-h-[90vh] overflow-y-auto"
         style={{ maxWidth: '900px', width: '95vw' }}
       >
         <DialogHeader>
