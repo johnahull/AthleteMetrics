@@ -46,6 +46,7 @@ export const importBatches = pgTable("import_batches", {
       totalAthletes: number;
       exactMatches: number;
       fuzzyMatches: number;
+      partialMatches: number;
       unmatched: number;
       totalDrills: number;
       outlierCount: number;

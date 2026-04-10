@@ -380,9 +380,22 @@ export class DeviceImportService {
               skipped++;
               continue;
             }
-            // Replace: delete existing import-sourced rows (inside tx for atomicity)
+            // Replace: delete parent measurement and any orphaned split measurements
+            // for this drill (same athlete/date/event). Splits have distinct metric
+            // codes (e.g. DASH_10YD, DASH_20YD) so they don't appear in `existing`
+            // but must be cleaned up to prevent duplicates on re-import.
+            const splitMetrics = drill.splits?.map(s => s.metric) ?? [];
+            const metricsToDelete = [drill.metric, ...splitMetrics];
             await tx.delete(measurements)
-              .where(inArray(measurements.id, existing.map(e => e.id)));
+              .where(and(
+                eq(measurements.userId, athleteId),
+                inArray(measurements.metric, metricsToDelete),
+                eq(measurements.date, date),
+                batch.eventId
+                  ? eq(measurements.eventId, batch.eventId)
+                  : isNull(measurements.eventId),
+                sql`${measurements.importSource} IS NOT NULL`,
+              ));
             replaced++;
           }
 
