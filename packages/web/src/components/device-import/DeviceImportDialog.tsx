@@ -154,16 +154,16 @@ function AthleteReviewRow({
           </CollapsibleTrigger>
         </TableCell>
 
-        {/* CSV name */}
-        <TableCell className="font-medium">{athlete.csvName}</TableCell>
+        {/* Athlete name */}
+        <TableCell className="font-medium w-[25%]">{athlete.csvName}</TableCell>
 
         {/* Match status */}
-        <TableCell>
+        <TableCell className="w-[12%]">
           <MatchBadge matchType={effectiveMatchType as 'exact' | 'fuzzy' | 'partial' | 'none'} />
         </TableCell>
 
         {/* Match override dropdown */}
-        <TableCell className="min-w-[150px]">
+        <TableCell className="w-[30%]">
           <Select
             value={effectiveMatchId ?? '__none__'}
             onValueChange={(val) =>
@@ -185,7 +185,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Drills summary */}
-        <TableCell className="text-sm text-muted-foreground">
+        <TableCell className="text-sm text-muted-foreground w-[13%]">
           {athlete.drills.length} drill{athlete.drills.length !== 1 ? 's' : ''}
           {athlete.drills.some((d) => d.isOutlier) && (
             <span className="ml-1 text-yellow-600">
@@ -195,7 +195,7 @@ function AthleteReviewRow({
         </TableCell>
 
         {/* Include toggle */}
-        <TableCell className="text-center">
+        <TableCell className="text-center w-[10%]">
           <Checkbox
             checked={included}
             onCheckedChange={(checked) =>
@@ -366,13 +366,24 @@ export function DeviceImportDialog({
 
         {/* File input */}
         <div
+          role="button"
+          tabIndex={0}
+          aria-label="Upload CSV file. Drop file here or press Enter to browse."
           className="border-2 border-dashed border-muted rounded-lg p-8 text-center cursor-pointer hover:border-primary/50 transition-colors"
           onClick={() => fileInputRef.current?.click()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              fileInputRef.current?.click();
+            }
+          }}
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
             const file = e.dataTransfer.files?.[0];
-            if (file) setSelectedFile(file);
+            if (file && file.name.toLowerCase().endsWith('.csv')) {
+              setSelectedFile(file);
+            }
           }}
         >
           <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
@@ -535,15 +546,15 @@ export function DeviceImportDialog({
 
         {/* Athletes table */}
         <div className="border rounded-lg overflow-auto max-h-[380px]">
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-8" />
-                <TableHead>Athlete</TableHead>
-                <TableHead>Match</TableHead>
-                <TableHead>Assign To</TableHead>
-                <TableHead>Drills</TableHead>
-                <TableHead className="w-16 text-center">Include</TableHead>
+                <TableHead className="w-8 p-2" />
+                <TableHead className="w-[25%]">Athlete</TableHead>
+                <TableHead className="w-[12%]">Match</TableHead>
+                <TableHead className="w-[30%]">Assign To</TableHead>
+                <TableHead className="w-[13%]">Drills</TableHead>
+                <TableHead className="w-[10%] text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -761,7 +772,7 @@ export function DeviceImportDialog({
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen && step !== 'success' && !commitMutation.isPending) {
+        if (!isOpen && !commitMutation.isPending) {
           onOpenChange(false);
         } else if (isOpen) {
           onOpenChange(true);

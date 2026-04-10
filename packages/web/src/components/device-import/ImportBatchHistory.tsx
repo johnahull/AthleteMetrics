@@ -133,7 +133,7 @@ export function ImportBatchHistory({ organizationId }: ImportBatchHistoryProps) 
                           variant="ghost"
                           size="sm"
                           className="ml-2 text-destructive hover:text-destructive"
-                          disabled={isRollingBack && rollingBackBatchId === batch.id}
+                          disabled={isRollingBack}
                           onClick={() => setConfirmBatch(batch)}
                         >
                           {isRollingBack && rollingBackBatchId === batch.id ? (

@@ -43,7 +43,10 @@ function isSafeError(message: string): boolean {
 function handleRouteError(res: Response, error: any, defaultStatus = 500): Response {
   const message: string = error?.message ?? 'Unknown error';
   if (isSafeError(message)) {
-    const status = message.includes('not found') ? 404 : 400;
+    const status = message.includes('not found') ? 404
+      : message.includes('Import session has expired') ? 410
+      : message.includes('Cannot import to a frozen event') ? 409
+      : 400;
     return res.status(status).json({ message });
   }
   // Unexpected error — log full details but return generic message to client
@@ -208,13 +211,6 @@ export function registerDeviceImportRoutes(app: Express) {
         return res.json(result);
       } catch (error: any) {
         console.error('Device import commit error:', error);
-        const message: string = error?.message ?? '';
-        if (message.includes('expired')) {
-          return res.status(410).json({ message });
-        }
-        if (message.includes('frozen')) {
-          return res.status(409).json({ message });
-        }
         return handleRouteError(res, error);
       }
     }

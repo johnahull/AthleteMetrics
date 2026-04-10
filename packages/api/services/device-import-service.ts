@@ -105,11 +105,12 @@ export class DeviceImportService {
 
     // Build candidate pool for matching
     let candidates: any[];
+    const parseWarnings: string[] = [];
     if (eventId) {
       // Narrow to event registrations first
       candidates = await this.getEventRegistrationCandidates(eventId, organizationId);
       if (candidates.length === 0) {
-        // Fallback to org-wide
+        parseWarnings.push('No athletes registered for this event. Matching against all organization athletes.');
         candidates = await this.getOrgCandidates(organizationId);
       }
     } else {
@@ -192,7 +193,7 @@ export class DeviceImportService {
       batchId: batch.id,
       preview: { athletes: previewAthletes, summary },
       sessions,
-      warnings: parsed.warnings,
+      warnings: [...parseWarnings, ...parsed.warnings],
     };
   }
 
@@ -295,10 +296,17 @@ export class DeviceImportService {
     const birthDateMap = new Map(userRows.map(u => [u.id, u.birthDate]));
     const unitMap = new Map(metricRows.map(m => [m.code, m.unit]));
 
-    // Helper: compute age from athlete birth date and measurement date string
+    const missingBirthDateAthletes = new Set<string>();
+
+    // Helper: compute age from athlete birth date and measurement date string.
+    // Returns 0 when birth date is unknown (schema requires non-null integer); the caller
+    // tracks which athletes were affected so a warning can be surfaced to the user.
     const computeAge = (athleteId: string, dateStr: string): number => {
       const birthDate = birthDateMap.get(athleteId);
-      if (!birthDate) return 0;
+      if (!birthDate) {
+        missingBirthDateAthletes.add(athleteId);
+        return 0;
+      }
       const measurementDate = new Date(dateStr);
       const bd = new Date(birthDate);
       let age = measurementDate.getFullYear() - bd.getFullYear();
@@ -389,7 +397,11 @@ export class DeviceImportService {
             value: String(drill.value),
             date,
             age: computeAge(athleteId, date),
-            units: unitMap.get(drill.metric) ?? drill.units ?? 'in',
+            units: (() => {
+              const u = unitMap.get(drill.metric) ?? drill.units;
+              if (!u) throw new Error(`No unit configured for metric ${drill.metric}`);
+              return u;
+            })(),
             eventId: batch.eventId ?? null,
             organizationId,
             importSource: batch.source,
@@ -421,7 +433,11 @@ export class DeviceImportService {
                 value: String(split.value),
                 date,
                 age: computeAge(athleteId, date),
-                units: unitMap.get(split.metric) ?? split.units ?? 'in',
+                units: (() => {
+                  const u = unitMap.get(split.metric) ?? split.units;
+                  if (!u) throw new Error(`No unit configured for metric ${split.metric}`);
+                  return u;
+                })(),
                 eventId: batch.eventId ?? null,
                 organizationId,
                 importSource: batch.source,
@@ -476,6 +492,9 @@ export class DeviceImportService {
       measurementsSkipped: skipped,
       measurementsReplaced: replaced,
       athletesImported: importedAthleteIds.size,
+      ...(missingBirthDateAthletes.size > 0
+        ? { warnings: [`${missingBirthDateAthletes.size} athlete(s) had no birth date on file; age was recorded as 0.`] }
+        : {}),
     };
   }
 
