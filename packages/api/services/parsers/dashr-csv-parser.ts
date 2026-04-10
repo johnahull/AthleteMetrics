@@ -175,13 +175,13 @@ function mapDrillType(row: DashrRow): string | null {
 
   switch (type) {
     case 'Dash': {
-      // Map based on final distance
+      // Map based on final distance — only known metric codes
       if (finalDist === 10) return MetricType.DASH_10YD;
       if (finalDist === 20) return MetricType.DASH_20YD;
       if (finalDist === 30) return MetricType.DASH_30YD;
       if (finalDist === 40) return MetricType.DASH_40YD;
-      // Unknown dash distance — skip
-      if (finalDist && finalDist > 0) return `DASH_${finalDist}YD`;
+      // Unknown dash distance — return null so it's skipped with a warning,
+      // rather than creating a non-standard metric code in the database.
       return null;
     }
 

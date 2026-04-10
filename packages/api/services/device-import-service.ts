@@ -350,7 +350,9 @@ export class DeviceImportService {
           // so the measurement date reflects when the data was uploaded, not when it was confirmed.
           const date = batch.sessionDate ?? batch.createdAt.toISOString().split('T')[0];
 
-          // Check for duplicates
+          // Check for duplicates — only consider device-imported measurements.
+          // Manual (hand-entered) measurements have importSource = NULL and are
+          // never overwritten by a device import to prevent silent data loss.
           const existing = await tx
             .select({ id: measurements.id })
             .from(measurements)
@@ -361,6 +363,7 @@ export class DeviceImportService {
               batch.eventId
                 ? eq(measurements.eventId, batch.eventId)
                 : isNull(measurements.eventId),
+              sql`${measurements.importSource} IS NOT NULL`,
             ));
 
           if (existing.length > 0) {
@@ -368,7 +371,7 @@ export class DeviceImportService {
               skipped++;
               continue;
             }
-            // Replace: delete existing (inside tx for atomicity), then insert replacement below
+            // Replace: delete existing import-sourced rows (inside tx for atomicity)
             await tx.delete(measurements)
               .where(inArray(measurements.id, existing.map(e => e.id)));
             replaced++;

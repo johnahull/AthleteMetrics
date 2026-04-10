@@ -43,7 +43,8 @@ function isSafeError(message: string): boolean {
 function handleRouteError(res: Response, error: any, defaultStatus = 500): Response {
   const message: string = error?.message ?? 'Unknown error';
   if (isSafeError(message)) {
-    return res.status(400).json({ message });
+    const status = message.includes('not found') ? 404 : 400;
+    return res.status(status).json({ message });
   }
   // Unexpected error — log full details but return generic message to client
   return res.status(defaultStatus).json({ message: 'An unexpected error occurred. Please try again.' });
