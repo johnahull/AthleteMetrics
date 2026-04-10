@@ -208,25 +208,36 @@ export function findBestAthleteMatch(
     };
   }
   
-  // Determine match type and confidence based on new scoring system
+  // Normalize the raw score against the maximum achievable score.
+  // Without team context (no criteria.teamName), the max is 70 (30 first + 40 last).
+  // With team context the max is 100 (+ 30 team). Applying thresholds to the normalized
+  // percentage makes "exact first + last name" classify as "exact" in both cases.
+  const maxPossibleScore = criteria.teamName ? 100 : 70;
+  const normalizedPct = Math.round((bestCandidate.matchScore / maxPossibleScore) * 100);
+  const secondNormalizedPct = secondBest
+    ? Math.round((secondBest.matchScore / maxPossibleScore) * 100)
+    : 0;
+
   let matchType: 'exact' | 'fuzzy' | 'partial' | 'none';
   let confidence: number;
   let requiresManualReview = false;
-  
-  if (bestCandidate.matchScore >= 90) {
+
+  if (normalizedPct >= 90) {
     matchType = 'exact';
-    confidence = bestCandidate.matchScore;
-  } else if (bestCandidate.matchScore >= 75) {
-    matchType = 'fuzzy';
-    confidence = bestCandidate.matchScore;
-    
-    // Require manual review if there are close alternatives
-    if (secondBest && (bestCandidate.matchScore - secondBest.matchScore) < 10) {
+    confidence = normalizedPct;
+    // Flag manual review when two candidates are tied or very close (e.g. duplicate names)
+    if (secondBest && (normalizedPct - secondNormalizedPct) < 10) {
       requiresManualReview = true;
     }
-  } else if (bestCandidate.matchScore >= 60) {
+  } else if (normalizedPct >= 70) {
+    matchType = 'fuzzy';
+    confidence = normalizedPct;
+    if (secondBest && (normalizedPct - secondNormalizedPct) < 10) {
+      requiresManualReview = true;
+    }
+  } else if (normalizedPct >= 50) {
     matchType = 'partial';
-    confidence = bestCandidate.matchScore;
+    confidence = normalizedPct;
     requiresManualReview = true;
   } else {
     matchType = 'none';
