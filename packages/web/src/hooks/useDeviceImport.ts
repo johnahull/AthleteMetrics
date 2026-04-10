@@ -6,7 +6,7 @@
  */
 
 import { useReducer, useCallback } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 
 // ─── Step Types ───────────────────────────────────────────────────────────────
@@ -225,6 +225,7 @@ interface UseDeviceImportOptions {
 export function useDeviceImport({ organizationId, eventId }: UseDeviceImportOptions) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // ── Parse Mutation ───────────────────────────────────────────────────────────
   const parseMutation = useMutation({
@@ -348,6 +349,10 @@ export function useDeviceImport({ organizationId, eventId }: UseDeviceImportOpti
     },
     onSuccess: (data) => {
       dispatch({ type: 'COMMIT_SUCCESS', payload: data });
+      // Invalidate measurement and dashboard caches so imported data appears immediately
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
     },
     onError: (error: Error) => {
       toast({
@@ -399,6 +404,9 @@ export function useDeviceImport({ organizationId, eventId }: UseDeviceImportOpti
     onSuccess: (data) => {
       toast({ title: 'Import Undone', description: data.message });
       dispatch({ type: 'RESET' });
+      queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/analytics'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
     },
     onError: (error: Error) => {
       toast({

@@ -421,7 +421,7 @@ export class DeviceImportService {
             importBatchId: batchId,
             notes: `Imported from ${batch.fileName}`,
             isCalculated: false,
-            isVerified: false,
+            isVerified: true, // Device imports committed by coach/admin are considered verified (same policy as manual coach entry)
             teamContextAuto: false,
             calculationMetadata: {
               formula: 'direct_import',
@@ -457,7 +457,7 @@ export class DeviceImportService {
                 importBatchId: batchId,
                 notes: `Split from ${drill.metric} — imported from ${batch.fileName}`,
                 isCalculated: false,
-                isVerified: false,
+                isVerified: true, // Device imports committed by coach/admin are considered verified (same policy as manual coach entry)
                 teamContextAuto: false,
               });
               created++;
