@@ -45,6 +45,36 @@ CREATE TABLE IF NOT EXISTS import_batches (
   expires_at TIMESTAMP NOT NULL
 );
 
+-- Insert new device-import metrics into site_metrics so unitMap lookups
+-- and addMissingEventMetrics work correctly for Dashr-specific drills.
+INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order, description, decimal_precision, color, icon)
+VALUES
+  ('DASH_5YD', '5-Yard Dash Split', 'speed', 's', 'lower_is_better', true, true, 20,
+   '5-yard split time from Dashr timing gates (acceleration phase).',
+   3, 'indigo', 'Timer'),
+  ('DASH_10YD', '10-Yard Dash Split', 'speed', 's', 'lower_is_better', true, true, 21,
+   '10-yard split time from Dashr timing gates.',
+   3, 'indigo', 'Timer'),
+  ('DASH_20YD', '20-Yard Dash Split', 'speed', 's', 'lower_is_better', true, true, 22,
+   '20-yard split time from Dashr timing gates.',
+   3, 'indigo', 'Timer'),
+  ('DASH_30YD', '30-Yard Dash Split', 'speed', 's', 'lower_is_better', true, true, 23,
+   '30-yard split time from Dashr timing gates.',
+   3, 'indigo', 'Timer'),
+  ('AGILITY_505_L', '5-0-5 Agility (Left)', 'agility', 's', 'lower_is_better', true, true, 24,
+   '5-0-5 agility test turning to the left.',
+   3, 'green', 'Zap'),
+  ('AGILITY_505_R', '5-0-5 Agility (Right)', 'agility', 's', 'lower_is_better', true, true, 25,
+   '5-0-5 agility test turning to the right.',
+   3, 'green', 'Zap'),
+  ('AGILITY_5105_L', '5-10-5 Agility (Left)', 'agility', 's', 'lower_is_better', true, true, 26,
+   '5-10-5 Pro Agility test starting to the left.',
+   3, 'yellow', 'Zap'),
+  ('AGILITY_5105_R', '5-10-5 Agility (Right)', 'agility', 's', 'lower_is_better', true, true, 27,
+   '5-10-5 Pro Agility test starting to the right.',
+   3, 'yellow', 'Zap')
+ON CONFLICT (code) DO NOTHING;
+
 -- Indexes for import_batches
 CREATE INDEX IF NOT EXISTS import_batches_org_idx ON import_batches (organization_id);
 CREATE INDEX IF NOT EXISTS import_batches_status_idx ON import_batches (status);

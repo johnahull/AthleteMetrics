@@ -37,6 +37,7 @@ const ImportBatchHistory = lazy(() => import('@/components/device-import').then(
 export default function DataEntry() {
   const { toast } = useToast();
   const { user } = useAuth();
+  const canDeviceImport = user?.isSiteAdmin || user?.role === 'org_admin' || user?.role === 'coach';
   const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -156,11 +157,13 @@ export default function DataEntry() {
 
         {/* Tabs for Single, Batch, and Import/Export Entry */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-6">
-          <TabsList className="grid w-full max-w-2xl grid-cols-4">
+          <TabsList className={`grid w-full max-w-2xl ${canDeviceImport ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="single">Single Entry</TabsTrigger>
             <TabsTrigger value="batch">Batch Entry</TabsTrigger>
             <TabsTrigger value="import" data-testid="import-export-tab">Import/Export</TabsTrigger>
-            <TabsTrigger value="device" data-testid="device-import-tab">Device Import</TabsTrigger>
+            {canDeviceImport && (
+              <TabsTrigger value="device" data-testid="device-import-tab">Device Import</TabsTrigger>
+            )}
           </TabsList>
 
           {/* Single Entry Tab */}
@@ -324,8 +327,8 @@ export default function DataEntry() {
             </Suspense>
           </TabsContent>
 
-          {/* Device Import Tab - Lazy Loaded */}
-          <TabsContent value="device">
+          {/* Device Import Tab - Lazy Loaded (coach/admin only) */}
+          {canDeviceImport && <TabsContent value="device">
             <Suspense fallback={
               <Card className="bg-white">
                 <CardContent className="p-12 flex items-center justify-center">
@@ -370,7 +373,7 @@ export default function DataEntry() {
                 </Card>
               )}
             </Suspense>
-          </TabsContent>
+          </TabsContent>}
         </Tabs>
 
         {/* Recent Entries */}

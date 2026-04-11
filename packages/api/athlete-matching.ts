@@ -199,12 +199,17 @@ export function findBestAthleteMatch(
   const bestCandidate = candidates[0];
   const secondBest = candidates[1];
   
-  // Handle case where best candidate has 0 score
+  // Handle case where best candidate has 0 score — still provide alternatives
+  // with non-zero scores so coaches can manually assign from the review UI
   if (!bestCandidate || bestCandidate.matchScore === 0) {
+    const nonZeroAlternatives = candidates
+      .filter(c => c.matchScore > 0)
+      .slice(0, 3);
     return {
       type: 'none',
       confidence: 0,
       requiresManualReview: false,
+      alternatives: nonZeroAlternatives.length > 0 ? nonZeroAlternatives : undefined,
     };
   }
   

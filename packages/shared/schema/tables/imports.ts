@@ -74,4 +74,5 @@ export const importBatches = pgTable("import_batches", {
   orgIdx: index("import_batches_org_idx").on(table.organizationId),
   statusIdx: index("import_batches_status_idx").on(table.status),
   createdAtIdx: index("import_batches_created_at_idx").on(table.createdAt),
+  expiresAtIdx: index("import_batches_expires_at_idx").on(table.expiresAt),
 }));
