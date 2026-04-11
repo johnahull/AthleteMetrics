@@ -336,13 +336,15 @@ export class DeviceImportService {
       // Re-check TTL and status inside the transaction to close the race window
       // between the outer check and this point. Uses FOR UPDATE to lock the row
       // so no concurrent commit can proceed on the same batch.
-      const [freshBatch] = await tx.execute(
-        sql`SELECT status, expires_at FROM import_batches WHERE id = ${batchId} FOR UPDATE`
-      ) as any[];
+      const [freshBatch] = await tx
+        .select({ status: importBatches.status, expiresAt: importBatches.expiresAt })
+        .from(importBatches)
+        .where(eq(importBatches.id, batchId))
+        .for('update');
       if (freshBatch?.status !== 'pending') {
         throw new Error(`Batch is ${freshBatch?.status ?? 'unknown'}, not pending`);
       }
-      if (new Date() > new Date(freshBatch.expires_at)) {
+      if (new Date() > new Date(freshBatch.expiresAt)) {
         await tx.update(importBatches)
           .set({ status: 'expired' })
           .where(eq(importBatches.id, batchId));

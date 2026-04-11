@@ -100,7 +100,7 @@ const orgQuerySchema = z.object({
 const batchIdSchema = z.string().uuid();
 
 const commitRequestSchema = z.object({
-  batchId: z.string().min(1),
+  batchId: z.string().uuid(),
   organizationId: z.string().min(1),
   duplicateStrategy: z.enum(['skip', 'replace']),
   addMissingEventMetrics: z.boolean().default(false),

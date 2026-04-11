@@ -23,13 +23,13 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # continue-on-error: true so review failures don't block PRs.
-      # The action uses OIDC token exchange for GitHub auth. If that fails,
-      # github_token provides a fallback for posting review comments.
+      # continue-on-error is false: silent failures previously masked broken
+      # auth for weeks. The github_token fallback handles OIDC failures, so
+      # the step should only fail on genuine issues worth investigating.
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12
-        continue-on-error: true
+        continue-on-error: false
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
