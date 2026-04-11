@@ -137,7 +137,7 @@ function AthleteReviewRow({
     <>
       <TableRow className={included ? '' : 'opacity-50'}>
         {/* Expand toggle */}
-        <TableCell className="w-8 p-2">
+        <TableCell className="p-2">
           <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => setOpen(!open)}>
             {open ? (
               <ChevronDown className="h-3 w-3" />
@@ -539,15 +539,23 @@ export function DeviceImportDialog({
 
         {/* Athletes table */}
         <div className="border rounded-lg overflow-auto max-h-[380px]">
-          <Table style={{ tableLayout: 'fixed' }}>
+          <Table style={{ tableLayout: 'fixed', width: '100%' }}>
+            <colgroup>
+              <col style={{ width: '5%' }} />
+              <col style={{ width: '20%' }} />
+              <col style={{ width: '12%' }} />
+              <col style={{ width: '35%' }} />
+              <col style={{ width: '15%' }} />
+              <col style={{ width: '13%' }} />
+            </colgroup>
             <TableHeader>
               <TableRow>
-                <TableHead style={{ width: 32 }} className="p-2" />
-                <TableHead style={{ width: '22%' }}>Athlete</TableHead>
-                <TableHead style={{ width: '10%' }}>Match</TableHead>
-                <TableHead style={{ width: '38%' }}>Assign To</TableHead>
-                <TableHead style={{ width: '14%' }}>Drills</TableHead>
-                <TableHead style={{ width: '8%' }} className="text-center">Include</TableHead>
+                <TableHead className="p-2" />
+                <TableHead>Athlete</TableHead>
+                <TableHead>Match</TableHead>
+                <TableHead>Assign To</TableHead>
+                <TableHead>Drills</TableHead>
+                <TableHead className="text-center">Include</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
