@@ -28,6 +28,7 @@ export interface DrillResult {
   splits?: Array<{ metric: string; value: number; units: string }>;
   isOutlier?: boolean;
   outlierReason?: string;
+  derivedFrom?: string;
 }
 
 export interface AlternativeMatch {
@@ -83,6 +84,7 @@ export interface CommitResponse {
   measurementsSkipped: number;
   measurementsReplaced: number;
   athletesImported: number;
+  warnings?: string[];
 }
 
 export interface BatchSummary {

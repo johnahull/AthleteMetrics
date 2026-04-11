@@ -22,6 +22,7 @@ const REQUIRED_COLUMNS = ['Date', 'First Name', 'Last Name', 'Type', 'Final Time
 
 // Outlier ranges: values outside these bounds are flagged
 const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }> = {
+  DASH_5YD: { min: 0.8, max: 2.5, label: '5yd split' },
   DASH_10YD: { min: 1.0, max: 4.0, label: '10yd dash' },
   DASH_20YD: { min: 2.0, max: 6.0, label: '20yd dash' },
   DASH_30YD: { min: 3.0, max: 8.0, label: '30yd dash' },
@@ -272,6 +273,68 @@ function checkOutlier(metric: string, value: number): string | null {
 }
 
 /**
+ * Derive FLY10_TIME from an athlete's dash drill splits.
+ *
+ * FLY10 = time at 30yd - time at 20yd (the "flying 10" segment at full speed).
+ * Only derives when the athlete has no direct FLY10_TIME measurement.
+ * When multiple candidates exist, picks the fastest (lowest) value.
+ */
+function deriveFly10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult | null {
+  // Skip if athlete already has a direct FLY10_TIME
+  if (drills.some(d => d.metric === MetricType.FLY10_TIME)) return null;
+
+  const candidates: { value: number; source: string }[] = [];
+
+  for (const drill of drills) {
+    if (!drill.splits || drill.splits.length === 0) continue;
+
+    let time20: number | undefined;
+    let time30: number | undefined;
+    let source: string | undefined;
+
+    if (drill.metric === 'DASH_30YD') {
+      // 30yd dash: FLY10 = finalTime (30yd) - split at 20yd
+      const split20 = drill.splits.find(s => s.metric === 'DASH_20YD');
+      if (split20) {
+        time20 = split20.value;
+        time30 = drill.value;
+        source = 'DASH_30YD';
+      }
+    } else if (drill.metric === 'DASH_40YD') {
+      // 40yd dash: FLY10 = split at 30yd - split at 20yd
+      const split20 = drill.splits.find(s => s.metric === 'DASH_20YD');
+      const split30 = drill.splits.find(s => s.metric === 'DASH_30YD');
+      if (split20 && split30) {
+        time20 = split20.value;
+        time30 = split30.value;
+        source = 'DASH_40YD';
+      }
+    }
+
+    if (time20 !== undefined && time30 !== undefined && source) {
+      const fly10 = parseFloat((time30 - time20).toFixed(3));
+      if (fly10 > 0) {
+        candidates.push({ value: fly10, source });
+      }
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Pick fastest (lowest) FLY10
+  const best = candidates.reduce((a, b) => (a.value <= b.value ? a : b));
+  const outlierReason = checkOutlier(MetricType.FLY10_TIME, best.value);
+
+  return {
+    metric: MetricType.FLY10_TIME,
+    value: best.value,
+    units: 's',
+    derivedFrom: `${best.source} splits`,
+    ...(outlierReason ? { isOutlier: true, outlierReason } : {}),
+  };
+}
+
+/**
  * Group rows by athlete name + drill type + date + direction,
  * then select the best (fastest) attempt per group.
  */
@@ -430,6 +493,14 @@ export class DashrCsvParser implements DeviceImportParser {
       };
 
       athleteMap.get(key)!.drills.push(drill);
+    }
+
+    // Derive FLY10_TIME from dash splits when no direct measurement exists
+    for (const [, athlete] of athleteMap) {
+      const fly10 = deriveFly10ForAthlete(athlete.drills);
+      if (fly10) {
+        athlete.drills.push(fly10);
+      }
     }
 
     const athletes = Array.from(athleteMap.values());

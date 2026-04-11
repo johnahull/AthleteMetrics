@@ -381,3 +381,88 @@ describe('parseCsvLine (RFC 4180)', () => {
     expect(fields[10]).toBe('9.21 (MPH)');
   });
 });
+
+// ============================================================================
+// FLY10_TIME Derivation from Dash Splits
+// ============================================================================
+
+describe('FLY10_TIME derivation', () => {
+  it('derives FLY10 from DASH_30YD with 20yd split', () => {
+    const buffer = loadFixture('valid-multi-session.csv');
+    const result = parser.parse(buffer, '2025-12-27');
+
+    const christian = result.athletes[0];
+    const fly10 = christian.drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly10).toBeDefined();
+    // 4.48 (30yd) - 3.19 (20yd split) = 1.29
+    expect(fly10!.value).toBe(1.29);
+    expect(fly10!.units).toBe('s');
+    expect(fly10!.derivedFrom).toContain('DASH_30YD');
+  });
+
+  it('derives FLY10 from DASH_40YD with 20yd and 30yd splits', () => {
+    // 40yd dash: final=5.20, split at 10yd=1.80, 20yd=3.10, 30yd=4.30
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.800000,10.000000,,3.100000,20.000000,,4.300000,30.000000,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly10 = result.athletes[0]?.drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly10).toBeDefined();
+    // 4.30 (30yd split) - 3.10 (20yd split) = 1.20
+    expect(fly10!.value).toBe(1.2);
+    expect(fly10!.units).toBe('s');
+    expect(fly10!.derivedFrom).toContain('DASH_40YD');
+  });
+
+  it('does NOT derive FLY10 when direct Flying measurement exists', () => {
+    // Flying drill (direct FLY10) + 30yd dash with splits on same date
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Flying,,Imperial,20.000000,,,,,,,,,,,,,,,,,,,1.150000,10.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '01/01/2025 10:05:00,John,,Doe,Dash,,Imperial,,1.100000,5.000000,,1.870000,10.000000,,3.190000,20.000000,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly10s = result.athletes[0]?.drills.filter(d => d.metric === 'FLY10_TIME');
+    // Only the direct measurement, not a derived one
+    expect(fly10s).toHaveLength(1);
+    expect(fly10s![0].derivedFrom).toBeUndefined();
+    expect(fly10s![0].value).toBe(1.15);
+  });
+
+  it('picks fastest FLY10 when multiple dash drills are candidates', () => {
+    // Two dash drills on same date: 30yd and 40yd, each producing different FLY10
+    const csv = makeCsv([
+      // 30yd dash: final=4.48, 20yd split=3.19 → FLY10=1.29
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.110000,5.000000,,1.870000,10.000000,,3.190000,20.000000,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      // 40yd dash: final=5.20, 20yd=3.10, 30yd=4.20 → FLY10=1.10
+      '01/01/2025 10:05:00,John,,Doe,Dash,,Imperial,,1.800000,10.000000,,3.100000,20.000000,,4.200000,30.000000,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly10s = result.athletes[0]?.drills.filter(d => d.metric === 'FLY10_TIME');
+    expect(fly10s).toHaveLength(1);
+    // Should pick the faster one (1.10 from 40yd)
+    expect(fly10s![0].value).toBe(1.1);
+  });
+
+  it('applies outlier detection to derived FLY10', () => {
+    // 30yd dash with very close splits → FLY10 will be < 0.8s (outlier)
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.000000,10.000000,,3.500000,20.000000,,,,,,,,,,,,,,4.000000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly10 = result.athletes[0]?.drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly10).toBeDefined();
+    // 4.00 - 3.50 = 0.50, which is < 0.8 → outlier
+    expect(fly10!.value).toBe(0.5);
+    expect(fly10!.isOutlier).toBe(true);
+  });
+
+  it('does NOT derive FLY10 when no 20yd split exists', () => {
+    // 30yd dash with only a 10yd split, no 20yd split
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.870000,10.000000,,,,,,,,,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly10 = result.athletes[0]?.drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly10).toBeUndefined();
+  });
+});

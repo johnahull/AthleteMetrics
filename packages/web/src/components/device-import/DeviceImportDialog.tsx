@@ -215,6 +215,11 @@ function AthleteReviewRow({
                       Outlier: {drill.outlierReason}
                     </Badge>
                   )}
+                  {drill.derivedFrom && (
+                    <Badge variant="outline" className="text-blue-700 border-blue-300 text-xs">
+                      Calc: {drill.derivedFrom}
+                    </Badge>
+                  )}
                   {drill.splits && drill.splits.length > 0 && (
                     <span className="text-muted-foreground">
                       ({drill.splits.map((s) => `${s.metric}: ${s.value}${s.units}`).join(', ')})
@@ -702,7 +707,7 @@ export function DeviceImportDialog({
   // ── Step: Success ─────────────────────────────────────────────────────────────
   const renderSuccess = () => {
     if (!commitResult) return null;
-    const { measurementsCreated, measurementsSkipped, measurementsReplaced, athletesImported } =
+    const { measurementsCreated, measurementsSkipped, measurementsReplaced, athletesImported, warnings: commitWarnings } =
       commitResult;
 
     return (
@@ -744,6 +749,12 @@ export function DeviceImportDialog({
             <div className="text-xs text-muted-foreground mt-0.5">Athletes</div>
           </div>
         </div>
+
+        {commitWarnings && commitWarnings.length > 0 && (
+          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800">
+            {commitWarnings.join(' ')}
+          </div>
+        )}
 
         <div className="flex justify-between">
           <Button

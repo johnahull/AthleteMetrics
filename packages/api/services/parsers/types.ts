@@ -11,6 +11,7 @@ export interface ParsedDrillResult {
   splits?: ParsedSplit[];
   isOutlier?: boolean;
   outlierReason?: string;
+  derivedFrom?: string;
 }
 
 export interface ParsedSplit {

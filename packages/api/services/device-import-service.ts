@@ -58,6 +58,7 @@ export interface CommitResult {
   measurementsSkipped: number;
   measurementsReplaced: number;
   athletesImported: number;
+  warnings?: string[];
 }
 
 export interface BatchSummary {
@@ -388,12 +389,27 @@ export class DeviceImportService {
               skipped++;
               continue;
             }
-            // Replace: delete parent measurement and any orphaned split measurements
-            // for this drill (same athlete/date/event). Splits have distinct metric
-            // codes (e.g. DASH_10YD, DASH_20YD) so they don't appear in `existing`
-            // but must be cleaned up to prevent duplicates on re-import.
-            const splitMetrics = drill.splits?.map(s => s.metric) ?? [];
-            const metricsToDelete = [drill.metric, ...splitMetrics];
+            // Replace: delete parent measurement and any associated split measurements.
+            // Query the DB for existing splits from previous imports — a re-import
+            // may have fewer split gates than the original (e.g., 4→2 gates), and
+            // only using the new import's splits would leave old ones as orphans.
+            const newSplitMetrics = drill.splits?.map(s => s.metric) ?? [];
+            const existingSplitRows = await tx.select({ metric: measurements.metric })
+              .from(measurements)
+              .where(and(
+                eq(measurements.userId, athleteId),
+                eq(measurements.date, date),
+                batch.eventId
+                  ? eq(measurements.eventId, batch.eventId)
+                  : isNull(measurements.eventId),
+                sql`${measurements.importSource} IS NOT NULL`,
+                sql`${measurements.notes} LIKE ${'Split from ' + drill.metric + ' %'}`,
+              ));
+            const metricsToDelete = [...new Set([
+              drill.metric,
+              ...newSplitMetrics,
+              ...existingSplitRows.map(r => r.metric),
+            ])];
             const deleted = await tx.delete(measurements)
               .where(and(
                 eq(measurements.userId, athleteId),
@@ -603,7 +619,12 @@ export class DeviceImportService {
   }
 
   /**
-   * Get all import batches for an organization
+   * Get all import batches for an organization.
+   *
+   * Note: Expired pending batches are filtered out of results but not deleted.
+   * Their parsedPreview JSONB blobs will accumulate over time. A periodic cleanup
+   * job should run: DELETE FROM import_batches WHERE status='pending' AND expires_at < NOW()
+   * The import_batches_expires_at_idx index supports this query efficiently.
    */
   async getBatches(organizationId: string): Promise<BatchSummary[]> {
     const batches = await db

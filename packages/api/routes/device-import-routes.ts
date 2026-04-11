@@ -108,7 +108,7 @@ const commitRequestSchema = z.object({
     csvName: z.string(),
     matchedAthleteId: z.string().optional(),
     included: z.boolean(),
-  })),
+  })).max(500),
 });
 
 export function registerDeviceImportRoutes(app: Express) {
