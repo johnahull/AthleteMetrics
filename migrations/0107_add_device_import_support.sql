@@ -19,15 +19,16 @@ CREATE TABLE IF NOT EXISTS import_batches (
   file_name VARCHAR(255) NOT NULL,
   session_date TEXT,
 
-  -- Event linkage (optional)
-  event_id VARCHAR,
+  -- Event linkage (optional — SET NULL if event is deleted so batch history survives)
+  event_id VARCHAR REFERENCES events(id) ON DELETE SET NULL,
   event_name_snapshot TEXT,
 
   -- Server-side parsed preview (cleared after commit)
   parsed_preview JSONB,
 
   -- Status tracking
-  status VARCHAR(20) NOT NULL DEFAULT 'pending',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending'
+    CHECK (status IN ('pending', 'completed', 'rolled_back', 'expired')),
   created_by VARCHAR NOT NULL,
   committed_by VARCHAR,
   committed_at TIMESTAMP,

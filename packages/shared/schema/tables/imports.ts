@@ -8,6 +8,7 @@
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, jsonb, index } from "drizzle-orm/pg-core";
 import { organizations } from "./core";
+import { events } from "./events";
 
 export const importBatches = pgTable("import_batches", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -18,8 +19,8 @@ export const importBatches = pgTable("import_batches", {
   fileName: varchar("file_name", { length: 255 }).notNull(),
   sessionDate: text("session_date"), // Selected session date from multi-session CSV
 
-  // Event linkage (optional — standalone imports have null eventId)
-  eventId: varchar("event_id"), // Historical reference (no FK — event may be deleted)
+  // Event linkage (optional — SET NULL if event is deleted so batch history survives)
+  eventId: varchar("event_id").references(() => events.id, { onDelete: 'set null' }),
   eventNameSnapshot: text("event_name_snapshot"),
 
   // Server-side parsed preview (cleared after commit)

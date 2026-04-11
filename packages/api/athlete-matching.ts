@@ -202,9 +202,11 @@ export function findBestAthleteMatch(
   // Handle case where best candidate has 0 score — still provide alternatives
   // with non-zero scores so coaches can manually assign from the review UI
   if (!bestCandidate || bestCandidate.matchScore === 0) {
+    const maxScore = criteria.teamName ? 100 : 70;
     const nonZeroAlternatives = candidates
       .filter(c => c.matchScore > 0)
-      .slice(0, 3);
+      .slice(0, 3)
+      .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxScore) * 100) }));
     return {
       type: 'none',
       confidence: 0,
@@ -250,10 +252,12 @@ export function findBestAthleteMatch(
     requiresManualReview = false;
   }
   
-  // Provide alternatives for manual review
+  // Provide alternatives for manual review, with scores normalized to the
+  // same 0-100 scale as the primary candidate's `confidence` percentage.
   const alternatives = candidates
     .filter(c => c.matchScore >= 30 && c.id !== bestCandidate.id)
-    .slice(0, 3); // Top 3 alternatives
+    .slice(0, 3) // Top 3 alternatives
+    .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxPossibleScore) * 100) }));
   
   return {
     type: matchType,

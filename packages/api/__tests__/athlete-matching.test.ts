@@ -216,14 +216,11 @@ describe('findBestAthleteMatch', () => {
       { firstName: 'Christian', lastName: 'Hull' },
       athletes
     );
-    // First name fuzzy (25) + last name exact (40) = 65... actually let's check
-    // "Cristian" vs "Christian": levenshtein = 1, similarity = 88%
-    // 88 >= 80 → 20 pts for first name partial? No, >= 90 → 25 pts fuzzy
-    // Actually stringSimilarity('cristian','christian') -> max(8,9)=9, dist=1, (9-1)/9*100 = 89 -> 25 pts (>= 80 but < 90? No >= 90 is false, >= 90 would need 90+)
-    // Hmm 89 < 90, so >= 80 → 20 pts partial. 20 + 40 = 60 → that's "partial" not "fuzzy"
-    // Let's use a closer name
-    expect(result.type).toMatch(/fuzzy|partial/);
-    expect(result.confidence).toBeGreaterThanOrEqual(60);
+    // "Cristian" vs "Christian": levenshtein=1, similarity=(9-1)/9*100=89 → ≥80 partial → 20 pts
+    // "Hull" vs "Hull": exact → 40 pts. Raw total: 60, normalized: round(60/70*100) = 86%
+    // 86 ≥ 70 → "fuzzy"
+    expect(result.type).toBe('fuzzy');
+    expect(result.confidence).toBe(86);
   });
 
   it('returns "none" with no alternatives when all scores are 0', () => {
@@ -407,11 +404,11 @@ describe('findBestAthleteMatch', () => {
       const athletes = [
         makeAthlete({ id: 'a1', firstName: 'Robert', lastName: 'Martinez' }),
       ];
-      // First name "Bob" vs "Robert" → low first name score, but last name exact (40)
+      // "Bob" vs "Robert": similarity=(6-4)/6*100=33 → <80, 0 pts.
+      // "Martinez" vs "Martinez": exact → 40 pts. Raw: 40, normalized: round(40/70*100) = 57%
+      // 57 ≥ 50 → "partial"
       const result = findBestAthleteMatch({ firstName: 'Bob', lastName: 'Martinez' }, athletes);
-      // 40 for last name exact, first name likely 0 → total 40 < 60 → "none"
-      // This is correct: partial requires 60+
-      expect(result.type).toMatch(/partial|none/);
+      expect(result.type).toBe('partial');
     });
 
     it('scores last name higher than first name (40 vs 30 max)', () => {

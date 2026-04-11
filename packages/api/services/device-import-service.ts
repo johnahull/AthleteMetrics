@@ -105,7 +105,14 @@ export class DeviceImportService {
     const parsed = parser.parse(file, sessionDate);
 
     // Build candidate pool for matching
-    let candidates: any[];
+    let candidates: Array<{
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      emails: string[] | null;
+      birthYear: number | null;
+      username: string | null;
+    }>;
     const parseWarnings: string[] = [];
     if (eventId) {
       // Narrow to event registrations first
