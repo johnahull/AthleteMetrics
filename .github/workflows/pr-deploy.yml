@@ -291,7 +291,10 @@ jobs:
           done
 
           if [ "$DEPLOY_STATUS" = "NONE" ]; then
-            echo "::error::No deployment created after trigger"
+            # This can fire for existing environments if Railway's auto-deploy
+            # webhook was slow or the push didn't trigger a build (e.g. no
+            # service-relevant files changed). Re-run the workflow to retry.
+            echo "::error::Deployment was not created within timeout (15s initial + 60s polling)"
             exit 1
           fi
 

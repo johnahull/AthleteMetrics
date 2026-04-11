@@ -595,8 +595,19 @@ export class DeviceImportService {
       recalcPairs.add(`${m.userId}|${m.metric}`);
     }
 
-    // Step 2: Bulk delete + status update in a single transaction
+    // Step 2: Bulk delete + status update in a single transaction.
+    // Re-check status with FOR UPDATE to prevent concurrent rollbacks
+    // (mirrors the commitBatch pattern for TOCTOU safety).
     await db.transaction(async (tx) => {
+      const [freshBatch] = await tx
+        .select({ status: importBatches.status })
+        .from(importBatches)
+        .where(eq(importBatches.id, batchId))
+        .for('update');
+      if (freshBatch?.status !== 'completed') {
+        throw new Error(`Batch is ${freshBatch?.status ?? 'unknown'}, not completed`);
+      }
+
       if (batchMeasurements.length > 0) {
         await tx.delete(measurements)
           .where(eq(measurements.importBatchId, batchId));
@@ -672,6 +683,11 @@ export class DeviceImportService {
       .where(and(
         eq(importBatches.id, batchId),
         eq(importBatches.organizationId, organizationId),
+        // Exclude expired pending batches (same filter as getBatches)
+        or(
+          ne(importBatches.status, 'pending'),
+          gt(importBatches.expiresAt, sql`NOW()`),
+        ),
       ));
 
     return batch ?? null;

@@ -254,10 +254,13 @@ export function findBestAthleteMatch(
   
   // Provide alternatives for manual review, with scores normalized to the
   // same 0-100 scale as the primary candidate's `confidence` percentage.
+  // Filter threshold uses normalized score (43% ≈ raw 30/70) so it's
+  // consistent with the 50% partial threshold used for top candidates.
   const alternatives = candidates
-    .filter(c => c.matchScore >= 30 && c.id !== bestCandidate.id)
-    .slice(0, 3) // Top 3 alternatives
-    .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxPossibleScore) * 100) }));
+    .filter(c => c.id !== bestCandidate.id)
+    .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxPossibleScore) * 100) }))
+    .filter(c => c.matchScore >= 43)
+    .slice(0, 3);
   
   return {
     type: matchType,
