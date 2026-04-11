@@ -433,7 +433,28 @@ export class DashrCsvParser implements DeviceImportParser {
     }
 
     const athletes = Array.from(athleteMap.values());
-    const sessions = this.getSessionDates(buffer);
+
+    // Compute sessions from allRows (already parsed) instead of re-parsing buffer
+    const sessionDateGroups = new Map<string, { athletes: Set<string>; drillCount: number }>();
+    for (const row of allRows) {
+      const date = extractDateFromTimestamp(row['Date'] || '');
+      if (!date) continue;
+      if (validateRow(row) !== null) continue;
+      if (!sessionDateGroups.has(date)) {
+        sessionDateGroups.set(date, { athletes: new Set(), drillCount: 0 });
+      }
+      const group = sessionDateGroups.get(date)!;
+      group.athletes.add(`${row['First Name']}|${row['Last Name']}`);
+      group.drillCount++;
+    }
+    const sessions = Array.from(sessionDateGroups.entries())
+      .map(([date, group]) => ({
+        sessionDate: date,
+        sessionLabel: formatDateLabel(date),
+        athleteCount: group.athletes.size,
+        drillCount: group.drillCount,
+      }))
+      .sort((a, b) => b.sessionDate.localeCompare(a.sessionDate));
 
     // Handle RSI column if present
     for (const row of bestRows) {

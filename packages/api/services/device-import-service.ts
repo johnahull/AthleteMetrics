@@ -394,7 +394,7 @@ export class DeviceImportService {
             // but must be cleaned up to prevent duplicates on re-import.
             const splitMetrics = drill.splits?.map(s => s.metric) ?? [];
             const metricsToDelete = [drill.metric, ...splitMetrics];
-            await tx.delete(measurements)
+            const deleted = await tx.delete(measurements)
               .where(and(
                 eq(measurements.userId, athleteId),
                 inArray(measurements.metric, metricsToDelete),
@@ -403,8 +403,9 @@ export class DeviceImportService {
                   ? eq(measurements.eventId, batch.eventId)
                   : isNull(measurements.eventId),
                 sql`${measurements.importSource} IS NOT NULL`,
-              ));
-            replaced++;
+              ))
+              .returning({ id: measurements.id });
+            replaced += deleted.length;
           }
 
           // Insert measurement directly via tx — stays inside this transaction.
@@ -447,6 +448,26 @@ export class DeviceImportService {
           // Also insert split measurements inside the same transaction
           if (drill.splits) {
             for (const split of drill.splits) {
+              // Check for existing split measurements to prevent duplicates
+              // (the parent drill check above only covers the parent metric)
+              if (duplicateStrategy === 'skip') {
+                const existingSplit = await tx
+                  .select({ id: measurements.id })
+                  .from(measurements)
+                  .where(and(
+                    eq(measurements.userId, athleteId),
+                    eq(measurements.metric, split.metric),
+                    eq(measurements.date, date),
+                    batch.eventId
+                      ? eq(measurements.eventId, batch.eventId)
+                      : isNull(measurements.eventId),
+                    sql`${measurements.importSource} IS NOT NULL`,
+                  ));
+                if (existingSplit.length > 0) {
+                  skipped++;
+                  continue;
+                }
+              }
               await tx.insert(measurements).values({
                 userId: athleteId,
                 submittedBy: committedBy,

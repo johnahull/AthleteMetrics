@@ -773,7 +773,7 @@ export function DeviceImportDialog({
     <Dialog
       open={open}
       onOpenChange={(isOpen) => {
-        if (!isOpen && !commitMutation.isPending) {
+        if (!isOpen && !commitMutation.isPending && !rollbackMutation.isPending) {
           onOpenChange(false);
         } else if (isOpen) {
           onOpenChange(true);

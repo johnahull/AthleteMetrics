@@ -349,10 +349,11 @@ export function useDeviceImport({ organizationId, eventId }: UseDeviceImportOpti
     },
     onSuccess: (data) => {
       dispatch({ type: 'COMMIT_SUCCESS', payload: data });
-      // Invalidate measurement and dashboard caches so imported data appears immediately
+      // Invalidate measurement, dashboard, and batch history caches
       queryClient.invalidateQueries({ queryKey: ['/api/measurements'] });
       queryClient.invalidateQueries({ queryKey: ['/api/analytics'] });
       queryClient.invalidateQueries({ queryKey: ['/api/dashboard'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/import/device/batches'] });
     },
     onError: (error: Error) => {
       toast({
