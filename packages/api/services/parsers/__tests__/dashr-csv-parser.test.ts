@@ -459,7 +459,7 @@ describe('FLY10_TIME derivation', () => {
   it('does NOT derive FLY10 when no 20yd split exists', () => {
     // 30yd dash with only a 10yd split, no 20yd split
     const csv = makeCsv([
-      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.870000,10.000000,,,,,,,,,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,1.870000,10.000000,,,,,,,,,,,,,,,,,4.480000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
     ]);
     const result = parser.parse(csv);
     const fly10 = result.athletes[0]?.drills.find(d => d.metric === 'FLY10_TIME');
