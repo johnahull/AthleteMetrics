@@ -359,6 +359,59 @@ export class DeviceImportService {
         throw new Error('Import session has expired. Please re-upload the file.');
       }
 
+      // ── Pre-fetch existing device-imported measurements (eliminates N+1 queries) ──
+      // Collect all (athleteId, date) pairs we'll process, then do ONE bulk query
+      // for all existing device-imported measurements. Build in-memory Maps for
+      // O(1) duplicate checking and orphan split detection in the loop below.
+      const affectedAthleteIds = new Set<string>();
+      const affectedDates = new Set<string>();
+      const defaultDate = batch.sessionDate ?? batch.createdAt.toISOString().split('T')[0];
+      for (const pa of preview.athletes) {
+        const ov = overrideMap.get(pa.csvName);
+        if (!(ov?.included ?? pa.included)) continue;
+        const aid = ov?.matchedAthleteId ?? pa.matchedAthleteId;
+        if (!aid) continue;
+        affectedAthleteIds.add(aid);
+        affectedDates.add(defaultDate);
+      }
+
+      // Single query: all device-imported measurements for affected athletes/dates
+      const existingRows = affectedAthleteIds.size > 0
+        ? await tx.select({
+            userId: measurements.userId,
+            metric: measurements.metric,
+            date: measurements.date,
+            notes: measurements.notes,
+          })
+          .from(measurements)
+          .where(and(
+            inArray(measurements.userId, [...affectedAthleteIds]),
+            inArray(measurements.date, [...affectedDates]),
+            batch.eventId
+              ? eq(measurements.eventId, batch.eventId)
+              : isNull(measurements.eventId),
+            sql`${measurements.importSource} IS NOT NULL`,
+          ))
+        : [];
+
+      // Lookup: "userId|metric|date" → exists (for duplicate checking)
+      const existingMetricSet = new Set(
+        existingRows.map(r => `${r.userId}|${r.metric}|${r.date}`),
+      );
+      // Lookup: "userId|date|parentMetric" → set of orphaned split metric codes
+      // Parses "Split from DASH_40YD — ..." notes to find parent→split relationships
+      const orphanSplitsMap = new Map<string, Set<string>>();
+      for (const r of existingRows) {
+        if (r.notes?.startsWith('Split from ')) {
+          const parentMatch = r.notes.match(/^Split from (\S+)/);
+          if (parentMatch) {
+            const key = `${r.userId}|${r.date}|${parentMatch[1]}`;
+            if (!orphanSplitsMap.has(key)) orphanSplitsMap.set(key, new Set());
+            orphanSplitsMap.get(key)!.add(r.metric);
+          }
+        }
+      }
+
       // Process each athlete
       for (const previewAthlete of preview.athletes) {
         const override = overrideMap.get(previewAthlete.csvName);
@@ -371,51 +424,28 @@ export class DeviceImportService {
         importedAthleteIds.add(athleteId);
 
         for (const drill of previewAthlete.drills) {
-          // Fall back to the batch creation date (upload time) rather than commit time,
-          // so the measurement date reflects when the data was uploaded, not when it was confirmed.
-          const date = batch.sessionDate ?? batch.createdAt.toISOString().split('T')[0];
+          const date = defaultDate;
 
-          // Check for duplicates — only consider device-imported measurements.
-          // Manual (hand-entered) measurements have importSource = NULL and are
-          // never overwritten by a device import to prevent silent data loss.
-          const existing = await tx
-            .select({ id: measurements.id })
-            .from(measurements)
-            .where(and(
-              eq(measurements.userId, athleteId),
-              eq(measurements.metric, drill.metric),
-              eq(measurements.date, date),
-              batch.eventId
-                ? eq(measurements.eventId, batch.eventId)
-                : isNull(measurements.eventId),
-              sql`${measurements.importSource} IS NOT NULL`,
-            ));
+          // Check for duplicates via in-memory lookup (pre-fetched above).
+          // Only device-imported measurements are considered — manual entries are never touched.
+          const existsKey = `${athleteId}|${drill.metric}|${date}`;
+          const hasDuplicate = existingMetricSet.has(existsKey);
 
-          if (existing.length > 0) {
+          if (hasDuplicate) {
             if (duplicateStrategy === 'skip') {
               skipped++;
               continue;
             }
             // Replace: delete parent measurement and any associated split measurements.
-            // Query the DB for existing splits from previous imports — a re-import
-            // may have fewer split gates than the original (e.g., 4→2 gates), and
-            // only using the new import's splits would leave old ones as orphans.
+            // Orphaned splits from previous imports (e.g., 4→2 gates on re-import)
+            // are found via the pre-fetched orphanSplitsMap (parsed from notes).
             const newSplitMetrics = drill.splits?.map(s => s.metric) ?? [];
-            const existingSplitRows = await tx.select({ metric: measurements.metric })
-              .from(measurements)
-              .where(and(
-                eq(measurements.userId, athleteId),
-                eq(measurements.date, date),
-                batch.eventId
-                  ? eq(measurements.eventId, batch.eventId)
-                  : isNull(measurements.eventId),
-                sql`${measurements.importSource} IS NOT NULL`,
-                sql`${measurements.notes} LIKE ${'Split from ' + drill.metric + ' %'}`,
-              ));
+            const orphanKey = `${athleteId}|${date}|${drill.metric}`;
+            const existingOrphans = orphanSplitsMap.get(orphanKey);
             const metricsToDelete = [...new Set([
               drill.metric,
               ...newSplitMetrics,
-              ...existingSplitRows.map(r => r.metric),
+              ...(existingOrphans ?? []),
             ])];
             const deleted = await tx.delete(measurements)
               .where(and(
@@ -471,22 +501,10 @@ export class DeviceImportService {
           // Also insert split measurements inside the same transaction
           if (drill.splits) {
             for (const split of drill.splits) {
-              // Check for existing split measurements to prevent duplicates
-              // (the parent drill check above only covers the parent metric)
+              // Check for existing split measurements via in-memory lookup
               if (duplicateStrategy === 'skip') {
-                const existingSplit = await tx
-                  .select({ id: measurements.id })
-                  .from(measurements)
-                  .where(and(
-                    eq(measurements.userId, athleteId),
-                    eq(measurements.metric, split.metric),
-                    eq(measurements.date, date),
-                    batch.eventId
-                      ? eq(measurements.eventId, batch.eventId)
-                      : isNull(measurements.eventId),
-                    sql`${measurements.importSource} IS NOT NULL`,
-                  ));
-                if (existingSplit.length > 0) {
+                const splitKey = `${athleteId}|${split.metric}|${date}`;
+                if (existingMetricSet.has(splitKey)) {
                   skipped++;
                   continue;
                 }

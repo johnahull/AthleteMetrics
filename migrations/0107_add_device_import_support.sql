@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS import_batches (
   -- Status tracking
   status VARCHAR(20) NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'completed', 'rolled_back', 'expired')),
+  -- Audit columns: intentionally no FK to users — allows batch history to
+  -- survive user deletion (user IDs are still queryable via other tables).
   created_by VARCHAR NOT NULL,
   committed_by VARCHAR,
   committed_at TIMESTAMP,

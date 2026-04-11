@@ -251,8 +251,8 @@ jobs:
           # duplicate builds (the root cause of 3x builds per push).
           if [ "$IS_NEW_ENV" != "true" ]; then
             echo "Existing environment — auto-deploy webhook handles deployment"
-            echo "Waiting 15s for Railway webhook to register the deployment..."
-            sleep 15
+            # No explicit sleep — the polling loop below (6×10s) gives Railway
+            # up to 60s to register the deployment from the webhook.
           else
             # New environment: the trigger was just created and hasn't fired yet.
             # deploymentTriggerCreate registers the webhook but does NOT auto-fire
