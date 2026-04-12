@@ -109,7 +109,7 @@ export function registerSprintFvRoutes(app: Express) {
           user.id,
           {
             eventId: parsed.eventId,
-            bodyMassKgOverride: parsed.bodyMassKgOverride,
+            bodyMassLbsOverride: parsed.bodyMassLbsOverride,
             notes: parsed.notes,
           },
         );

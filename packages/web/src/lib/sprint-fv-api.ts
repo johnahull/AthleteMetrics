@@ -128,7 +128,7 @@ async function generateProfile(data: {
   userId: string;
   date: string;
   eventId?: string;
-  bodyMassKgOverride?: number;
+  bodyMassLbsOverride?: number;
   notes?: string;
 }): Promise<SprintFvProfile> {
   const response = await fetch('/api/sprint-fv-profiles/generate', {

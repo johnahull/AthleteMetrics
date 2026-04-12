@@ -26,7 +26,7 @@ export function SprintFvSessionSelector({ userId }: Props) {
         userId,
         date: session.date,
         eventId: session.eventId || undefined,
-        bodyMassKgOverride: !session.hasWeight && weightOverride
+        bodyMassLbsOverride: !session.hasWeight && weightOverride
           ? parseFloat(weightOverride)
           : undefined,
         notes: notes || undefined,
@@ -135,14 +135,14 @@ export function SprintFvSessionSelector({ userId }: Props) {
                 <div className="mt-4 pt-4 border-t space-y-3">
                   {!session.hasWeight && (
                     <div>
-                      <Label htmlFor="weight-override">Body Mass (kg) *</Label>
+                      <Label htmlFor="weight-override">Body Weight (lbs) *</Label>
                       <Input
                         id="weight-override"
                         type="number"
-                        step="0.1"
-                        min="20"
+                        step="1"
+                        min="50"
                         max="500"
-                        placeholder="Enter body mass in kg"
+                        placeholder="Enter weight in lbs"
                         value={weightOverride}
                         onChange={(e) => setWeightOverride(e.target.value)}
                         className="mt-1 w-48"

@@ -293,18 +293,19 @@ describe('Sprint F-V Profile Integration Tests', () => {
     });
   });
 
-  describe('POST /api/sprint-fv-profiles/generate with bodyMassKgOverride', () => {
-    it('should accept manual body mass override', async () => {
+  describe('POST /api/sprint-fv-profiles/generate with bodyMassLbsOverride', () => {
+    it('should accept manual body mass override in lbs and convert to kg', async () => {
       const res = await adminAgent
         .post('/api/sprint-fv-profiles/generate')
         .send({
           userId: testAthleteId,
           date: TEST_DATE,
-          bodyMassKgOverride: 85.0,
+          bodyMassLbsOverride: 187.4, // ~85 kg
         })
         .expect(201);
 
-      expect(parseFloat(res.body.bodyMassKg)).toBeCloseTo(85.0, 1);
+      // 187.4 lbs * 0.453592 = ~85.0 kg
+      expect(parseFloat(res.body.bodyMassKg)).toBeCloseTo(85.0, 0);
 
       // Cleanup
       await adminAgent.delete(`/api/sprint-fv-profiles/${res.body.id}`);

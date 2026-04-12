@@ -51,7 +51,7 @@ export interface EligibleSession {
 
 export interface GenerateProfileOptions {
   eventId?: string;
-  bodyMassKgOverride?: number;
+  bodyMassLbsOverride?: number;
   notes?: string;
 }
 
@@ -185,8 +185,8 @@ export class SprintFvService {
     let bodyMassKg: number;
     let weightMeasurementId: string | null = null;
 
-    if (options.bodyMassKgOverride) {
-      bodyMassKg = options.bodyMassKgOverride;
+    if (options.bodyMassLbsOverride) {
+      bodyMassKg = options.bodyMassLbsOverride * 0.453592;
     } else {
       // Find most recent WEIGHT measurement for this athlete
       const [weightM] = await db
@@ -200,7 +200,7 @@ export class SprintFvService {
         .limit(1);
 
       if (!weightM) {
-        throw new SprintFvValidationError('No WEIGHT measurement found for this athlete. Provide bodyMassKgOverride.');
+        throw new SprintFvValidationError('No WEIGHT measurement found for this athlete. Provide bodyMassLbsOverride.');
       }
 
       // Weight is stored in lbs in the system, convert to kg
