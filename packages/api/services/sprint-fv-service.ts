@@ -99,7 +99,7 @@ export class SprintFvService {
       existingProfiles.map(p => p.eventId || `date:${p.date}`)
     );
 
-    // Check for weight measurements (any weight = usable, since we take most recent)
+    // Check for weight: measurement table first, then user profile fallback
     const weightMeasurements = await db
       .select({ date: measurements.date })
       .from(measurements)
@@ -109,7 +109,16 @@ export class SprintFvService {
       ))
       .orderBy(desc(measurements.date))
       .limit(1);
-    const hasAnyWeight = weightMeasurements.length > 0;
+    let hasAnyWeight = weightMeasurements.length > 0;
+
+    if (!hasAnyWeight) {
+      const [userProfile] = await db
+        .select({ weight: users.weight })
+        .from(users)
+        .where(eq(users.id, userId))
+        .limit(1);
+      hasAnyWeight = !!userProfile?.weight;
+    }
 
     // Build eligible sessions
     const sessions: EligibleSession[] = [];
@@ -199,14 +208,26 @@ export class SprintFvService {
         .orderBy(desc(measurements.date))
         .limit(1);
 
-      if (!weightM) {
-        throw new SprintFvValidationError('No WEIGHT measurement found for this athlete. Provide bodyMassLbsOverride.');
-      }
+      if (weightM) {
+        // Weight measurement found — stored in lbs, convert to kg
+        const weightValue = parseFloat(weightM.value);
+        bodyMassKg = weightM.units === 'kg' ? weightValue : weightValue * 0.453592;
+        weightMeasurementId = weightM.id;
+      } else {
+        // Fallback: check user profile weight (set via general CSV import)
+        const [userProfile] = await db
+          .select({ weight: users.weight })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
 
-      // Weight is stored in lbs in the system, convert to kg
-      const weightValue = parseFloat(weightM.value);
-      bodyMassKg = weightM.units === 'kg' ? weightValue : weightValue * 0.453592;
-      weightMeasurementId = weightM.id;
+        if (!userProfile?.weight) {
+          throw new SprintFvValidationError('No weight data found for this athlete. Enter a weight measurement or provide a manual override.');
+        }
+
+        // Profile weight is stored in lbs
+        bodyMassKg = userProfile.weight * 0.453592;
+      }
     }
 
     // 5. Compute the F-V profile
