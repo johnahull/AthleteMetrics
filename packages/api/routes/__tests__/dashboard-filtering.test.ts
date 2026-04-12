@@ -102,7 +102,10 @@ describe('Dashboard Filtering - Backend Integration', () => {
       { organizationId: orgId, metricCode: 'VERTICAL_JUMP', isEnabled: true },
     ]).onConflictDoNothing();
 
-    // Create athletes
+    // Create athletes with explicit createdAt (7 days ago) to avoid timezone
+    // sensitivity at UTC midnight. This date is always within the "current period"
+    // (last 30 days) regardless of when the test runs or the server's timezone.
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
     const [ath1, ath2, ath3] = await db
       .insert(users)
       .values([
@@ -115,6 +118,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
           role: 'athlete',
           primaryOrganizationId: orgId,
           isActive: true,
+          createdAt: sevenDaysAgo,
         },
         {
           username: 'athlete2-filtering',
@@ -125,6 +129,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
           role: 'athlete',
           primaryOrganizationId: orgId,
           isActive: true,
+          createdAt: sevenDaysAgo,
         },
         {
           username: 'athlete3-filtering',
@@ -135,6 +140,7 @@ describe('Dashboard Filtering - Backend Integration', () => {
           role: 'athlete',
           primaryOrganizationId: orgId,
           isActive: true,
+          createdAt: sevenDaysAgo,
         },
       ])
       .returning();
@@ -354,10 +360,9 @@ describe('Dashboard Filtering - Backend Integration', () => {
       expect(res.body).toHaveProperty('athletes');
       expect(res.body).toHaveProperty('measurements');
 
-      // Trends endpoint counts athletes created during the current period (last 30 days).
-      // The count depends on whether createdAt (UTC timestamp) falls before today's UTC midnight
-      // (the exclusive end bound), making it timezone-sensitive. Assert structure, not exact value.
-      expect(typeof res.body.athletes.current).toBe('number');
+      // All test athletes were created 7 days ago (within the 30-day current period),
+      // so the filtered athlete count should be exactly 1 for the single athleteId filter.
+      expect(res.body.athletes.current).toBe(1);
       expect(res.body.athletes).toHaveProperty('trend');
     });
   });

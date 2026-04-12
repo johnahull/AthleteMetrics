@@ -381,6 +381,7 @@ export class DeviceImportService {
             userId: measurements.userId,
             metric: measurements.metric,
             date: measurements.date,
+            calculationMetadata: measurements.calculationMetadata,
             notes: measurements.notes,
           })
           .from(measurements)
@@ -398,17 +399,18 @@ export class DeviceImportService {
       const existingMetricSet = new Set(
         existingRows.map(r => `${r.userId}|${r.metric}|${r.date}`),
       );
-      // Lookup: "userId|date|parentMetric" → set of orphaned split metric codes
-      // Parses "Split from DASH_40YD — ..." notes to find parent→split relationships
+      // Lookup: "userId|date|parentMetric" → set of orphaned split metric codes.
+      // Uses calculationMetadata.parentMetric (structured) for new imports,
+      // falls back to notes parsing for data imported before this field was added.
       const orphanSplitsMap = new Map<string, Set<string>>();
       for (const r of existingRows) {
-        if (r.notes?.startsWith('Split from ')) {
-          const parentMatch = r.notes.match(/^Split from (\S+)/);
-          if (parentMatch) {
-            const key = `${r.userId}|${r.date}|${parentMatch[1]}`;
-            if (!orphanSplitsMap.has(key)) orphanSplitsMap.set(key, new Set());
-            orphanSplitsMap.get(key)!.add(r.metric);
-          }
+        const meta = r.calculationMetadata as Record<string, any> | null;
+        const parentMetric = meta?.parentMetric
+          || r.notes?.match(/^Split from (\S+)/)?.[1];
+        if (parentMetric) {
+          const key = `${r.userId}|${r.date}|${parentMetric}`;
+          if (!orphanSplitsMap.has(key)) orphanSplitsMap.set(key, new Set());
+          orphanSplitsMap.get(key)!.add(r.metric);
         }
       }
 
@@ -529,6 +531,16 @@ export class DeviceImportService {
                 isCalculated: false,
                 isVerified: true, // Device imports committed by coach/admin are considered verified (same policy as manual coach entry)
                 teamContextAuto: false,
+                calculationMetadata: {
+                  formula: 'direct_import_split',
+                  parentMetric: drill.metric,
+                  sourceValues: {},
+                  calculatedAt: new Date().toISOString(),
+                  triggeredBy: {
+                    event: 'bulk_import',
+                    userId: committedBy,
+                  },
+                },
               });
               created++;
               recalcPairs.add(`${athleteId}|${split.metric}`);

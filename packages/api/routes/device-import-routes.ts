@@ -80,7 +80,7 @@ const upload = multer({
     if (hasValidMime && hasValidExtension) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only CSV files are allowed.'));
+      cb(null, false);
     }
   },
 });
@@ -126,7 +126,7 @@ export function registerDeviceImportRoutes(app: Express) {
 
         const file = req.file;
         if (!file) {
-          return res.status(400).json({ message: "No file uploaded" });
+          return res.status(400).json({ message: "No CSV file provided. Only .csv files are accepted." });
         }
 
         // Parse form data (multer puts body fields in req.body)

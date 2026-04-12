@@ -42,6 +42,7 @@ export const measurements = pgTable("measurements", {
     sourceValues: Record<string, number>;
     calculatedAt: string;
     calculationVersion?: string;  // Version of the calculator (e.g., "1.0.0")
+    parentMetric?: string;  // For splits: the parent drill metric this split belongs to (e.g., "DASH_30YD")
     triggeredBy?: {
       event: 'measurement_insert' | 'measurement_update' | 'measurement_delete' | 'manual_recalculation' | 'bulk_import';
       userId?: string;              // Who triggered the calculation (if applicable)
