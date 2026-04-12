@@ -160,7 +160,179 @@ export function classifyProfile(
 }
 
 // ============================================================================
-// Analysis 2: Optimal Profile Gap Analysis
+// Analysis 2: Acceleration Profile (from velocity-time curve)
+// ============================================================================
+
+export interface AccelerationProfile {
+  tau: number;
+  timeTo90Pct: number;
+  timeTo95Pct: number;
+  accelerationPhaseM: number;
+  tauRating: 'explosive' | 'fast' | 'average' | 'slow';
+  trainingInsights: string[];
+}
+
+/**
+ * Analyze the velocity-time curve for training-relevant insights.
+ *
+ * Tau (time constant) tells you how quickly an athlete reaches top speed.
+ * Lower tau = faster acceleration = better force application early in the sprint.
+ */
+export function analyzeAcceleration(
+  vmax: number,
+  tau: number,
+  sprintDistanceM: number,
+): AccelerationProfile {
+  // Time to reach % of Vmax: v(t) = Vmax(1 - e^(-t/τ))
+  // Solving: t = -τ * ln(1 - fraction)
+  const timeTo90Pct = -tau * Math.log(1 - 0.90);
+  const timeTo95Pct = -tau * Math.log(1 - 0.95);
+
+  // Distance covered during acceleration phase (to 95% Vmax)
+  const accelerationPhaseM = vmax * (timeTo95Pct + tau * Math.exp(-timeTo95Pct / tau) - tau);
+
+  // Rate tau against population norms (Morin et al. data, trained sprinters)
+  // tau < 0.9s = explosive, 0.9-1.1 = fast, 1.1-1.4 = average, > 1.4 = slow
+  let tauRating: AccelerationProfile['tauRating'];
+  if (tau < 0.9) tauRating = 'explosive';
+  else if (tau < 1.1) tauRating = 'fast';
+  else if (tau < 1.4) tauRating = 'average';
+  else tauRating = 'slow';
+
+  const trainingInsights: string[] = [];
+
+  if (tauRating === 'slow') {
+    trainingInsights.push(
+      'Acceleration is below average — prioritize block starts, short sled pulls (20-40% BW), and first-step explosiveness drills',
+    );
+    trainingInsights.push(
+      'Strengthen hip extensors (glutes/hamstrings) for horizontal force in the drive phase',
+    );
+  } else if (tauRating === 'average') {
+    trainingInsights.push(
+      'Acceleration is adequate — targeted work on the first 10m can yield meaningful gains',
+    );
+    trainingInsights.push(
+      'Contrast training (heavy squat → 10m sprint) can sharpen early acceleration',
+    );
+  } else if (tauRating === 'fast') {
+    trainingInsights.push(
+      'Strong acceleration — maintain with regular short sprint work and max-strength training',
+    );
+  } else {
+    trainingInsights.push(
+      'Elite-level acceleration — focus on maintaining this quality while developing top speed',
+    );
+  }
+
+  // Sprint distance context
+  const accelPct = (accelerationPhaseM / sprintDistanceM) * 100;
+  if (accelPct > 90) {
+    trainingInsights.push(
+      `The athlete is still accelerating through ${accelPct.toFixed(0)}% of the ${sprintDistanceM.toFixed(0)}m sprint — top speed is never fully reached. Longer sprint distances would better reveal max velocity capacity.`,
+    );
+  } else if (accelPct > 70) {
+    trainingInsights.push(
+      `Acceleration covers ~${accelPct.toFixed(0)}% of the sprint, leaving a short max-velocity phase. This is typical for distances under 30m.`,
+    );
+  }
+
+  return { tau, timeTo90Pct, timeTo95Pct, accelerationPhaseM, tauRating, trainingInsights };
+}
+
+// ============================================================================
+// Analysis 3: Power Profile (from P-V curve)
+// ============================================================================
+
+export interface PowerProfile {
+  pmaxRel: number;
+  velocityAtPmax: number;
+  rfPeak: number;
+  rfPeakRating: 'excellent' | 'good' | 'average' | 'poor';
+  drf: number;
+  drfRating: 'excellent' | 'good' | 'average' | 'poor';
+  trainingInsights: string[];
+}
+
+/**
+ * Analyze the power-velocity curve and force application efficiency.
+ *
+ * RF Peak: how well the athlete directs force horizontally at sprint start.
+ * DRF: how quickly force application efficiency drops as speed increases.
+ */
+export function analyzePower(
+  f0Rel: number,
+  v0: number,
+  pmaxRel: number,
+  rfPeak: number,
+  drf: number,
+): PowerProfile {
+  const velocityAtPmax = v0 / 2;
+
+  // RF Peak norms (Morin et al.): > 0.55 excellent, 0.48-0.55 good, 0.42-0.48 average, < 0.42 poor
+  let rfPeakRating: PowerProfile['rfPeakRating'];
+  if (rfPeak > 0.55) rfPeakRating = 'excellent';
+  else if (rfPeak > 0.48) rfPeakRating = 'good';
+  else if (rfPeak > 0.42) rfPeakRating = 'average';
+  else rfPeakRating = 'poor';
+
+  // DRF norms (always negative): closer to 0 is better
+  // > -0.06 excellent, -0.06 to -0.08 good, -0.08 to -0.10 average, < -0.10 poor
+  let drfRating: PowerProfile['drfRating'];
+  const absDrf = Math.abs(drf);
+  if (absDrf < 0.06) drfRating = 'excellent';
+  else if (absDrf < 0.08) drfRating = 'good';
+  else if (absDrf < 0.10) drfRating = 'average';
+  else drfRating = 'poor';
+
+  const trainingInsights: string[] = [];
+
+  // Pmax context
+  if (pmaxRel > 25) {
+    trainingInsights.push(
+      `Pmax of ${pmaxRel.toFixed(1)} W/kg is elite-level — this athlete has exceptional sprint power output`,
+    );
+  } else if (pmaxRel > 20) {
+    trainingInsights.push(
+      `Pmax of ${pmaxRel.toFixed(1)} W/kg is strong — near elite sprint power. Continue combined force and velocity training`,
+    );
+  } else if (pmaxRel > 15) {
+    trainingInsights.push(
+      `Pmax of ${pmaxRel.toFixed(1)} W/kg is average for trained athletes — improvement will come from addressing the weaker side of the F-V profile`,
+    );
+  } else {
+    trainingInsights.push(
+      `Pmax of ${pmaxRel.toFixed(1)} W/kg suggests room for significant improvement — general strength and power training should be a priority`,
+    );
+  }
+
+  // RF Peak insights
+  if (rfPeakRating === 'poor' || rfPeakRating === 'average') {
+    trainingInsights.push(
+      `RF Peak (${(rfPeak * 100).toFixed(0)}%) is ${rfPeakRating} — the athlete is losing force to vertical push-off. Focus on forward lean, hip extension angle, and sled marches to improve horizontal force direction`,
+    );
+  } else if (rfPeakRating === 'excellent') {
+    trainingInsights.push(
+      `RF Peak (${(rfPeak * 100).toFixed(0)}%) is excellent — strong horizontal force application at sprint start`,
+    );
+  }
+
+  // DRF insights
+  if (drfRating === 'poor' || drfRating === 'average') {
+    trainingInsights.push(
+      `DRF (${drf.toFixed(3)}) indicates force application drops off quickly as speed increases — work on maintaining forward trunk lean longer into the sprint and transition mechanics`,
+    );
+  } else if (drfRating === 'excellent') {
+    trainingInsights.push(
+      `DRF (${drf.toFixed(3)}) is excellent — the athlete maintains horizontal force well through the acceleration phase`,
+    );
+  }
+
+  return { pmaxRel, velocityAtPmax, rfPeak, rfPeakRating, drf, drfRating, trainingInsights };
+}
+
+// ============================================================================
+// Analysis 4: Optimal Profile Gap Analysis
 // ============================================================================
 
 /**

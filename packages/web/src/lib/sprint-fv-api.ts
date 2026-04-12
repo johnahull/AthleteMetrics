@@ -59,6 +59,23 @@ export interface SprintFvProfile {
       estimatedTimeImprovement: number;
       recommendation: string;
     };
+    accelerationProfile: {
+      tau: number;
+      timeTo90Pct: number;
+      timeTo95Pct: number;
+      accelerationPhaseM: number;
+      tauRating: 'explosive' | 'fast' | 'average' | 'slow';
+      trainingInsights: string[];
+    };
+    powerProfile: {
+      pmaxRel: number;
+      velocityAtPmax: number;
+      rfPeak: number;
+      rfPeakRating: 'excellent' | 'good' | 'average' | 'poor';
+      drf: number;
+      drfRating: 'excellent' | 'good' | 'average' | 'poor';
+      trainingInsights: string[];
+    };
     deltas?: {
       f0Delta: { absolute: number; percent: number; direction: string };
       v0Delta: { absolute: number; percent: number; direction: string };

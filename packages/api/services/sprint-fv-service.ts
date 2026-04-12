@@ -15,7 +15,7 @@ import {
 } from '@shared/schema';
 import { eq, and, gte, lte, lt, desc, inArray, sql } from 'drizzle-orm';
 import { computeFvProfile } from './sprint-fv-computation';
-import { classifyProfile, computeOptimalGap, computeDeltas } from './sprint-fv-analysis';
+import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
 
 // Hardcoded split metric codes — maps metric code to distance in the code's unit
@@ -249,7 +249,13 @@ export class SprintFvService {
       computed.f0Rel, computed.v0, computed.pmaxRel, bodyMassKg, sprintDistanceM,
     );
 
-    // 9. Delta analysis against previous profile (strictly before current date)
+    // 9. Acceleration and power analysis
+    const accelerationProfile = analyzeAcceleration(computed.vmax, computed.tau, sprintDistanceM);
+    const powerProfile = analyzePower(
+      computed.f0Rel, computed.v0, computed.pmaxRel, computed.rfPeak, computed.drf,
+    );
+
+    // 10. Delta analysis against previous profile (strictly before current date)
     const [previousProfile] = await db
       .select()
       .from(sprintFvProfiles)
@@ -282,7 +288,7 @@ export class SprintFvService {
       );
     }
 
-    const analysisJson: SprintFvAnalysisJson = { classification, optimalGap, deltas };
+    const analysisJson: SprintFvAnalysisJson = { classification, optimalGap, accelerationProfile, powerProfile, deltas };
 
     // 10. Check for existing profile on this date/event (prevent duplicates)
     const existingConditions = [

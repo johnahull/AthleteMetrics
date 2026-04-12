@@ -7,6 +7,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useSprintFvProfile } from '@/lib/sprint-fv-api';
 import { SprintFvKpiCards } from '@/components/sprint-fv/SprintFvKpiCards';
 import { SprintFvAnalysisCard } from '@/components/sprint-fv/SprintFvAnalysisCard';
+import { SprintFvAccelerationCard } from '@/components/sprint-fv/SprintFvAccelerationCard';
+import { SprintFvPowerCard } from '@/components/sprint-fv/SprintFvPowerCard';
 import { ForceVelocityChart } from '@/components/charts/ForceVelocityChart';
 import { VelocityTimeCurve } from '@/components/charts/VelocityTimeCurve';
 import { UnitSystemProvider, useUnitSystem } from '@/contexts/UnitSystemContext';
@@ -101,13 +103,15 @@ function SprintFvProfileDetailInner() {
       {/* 3. Analysis card */}
       <SprintFvAnalysisCard profile={profile} />
 
-      {/* 4. Hero chart — Force-Velocity */}
+      {/* 4. Hero chart — Force-Velocity + Power Analysis */}
       <div>
         <h2 className="text-lg font-semibold mb-3">Force-Velocity Profile</h2>
         <ForceVelocityChart profile={profile} />
       </div>
 
-      {/* 5. Secondary chart — Velocity-Time */}
+      <SprintFvPowerCard profile={profile} />
+
+      {/* 5. Secondary chart — Velocity-Time + Acceleration Analysis */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div>
           <h2 className="text-lg font-semibold mb-3">Velocity-Time Curve</h2>
@@ -149,6 +153,8 @@ function SprintFvProfileDetailInner() {
           </CardContent>
         </Card>
       </div>
+
+      <SprintFvAccelerationCard profile={profile} />
     </div>
   );
 }
