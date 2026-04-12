@@ -11,9 +11,10 @@ import {
   sprintFvProfiles,
   users,
   teams,
+  siteMetrics,
   type SprintFvProfile,
 } from '@shared/schema';
-import { eq, and, gte, lte, lt, desc, inArray, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, desc, inArray, sql, or, ilike } from 'drizzle-orm';
 import { computeFvProfile } from './sprint-fv-computation';
 import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
@@ -29,6 +30,29 @@ const SPLIT_METRICS: Record<string, number> = {
 const SPLIT_METRIC_CODES = Object.keys(SPLIT_METRICS);
 const YARDS_TO_METERS = 0.9144;
 const MIN_SPLITS_REQUIRED = 3;
+
+/**
+ * Dynamically find all weight-related metric codes from site_metrics.
+ * Falls back to 'WEIGHT' if no site metrics are configured.
+ */
+async function getWeightMetricCodes(): Promise<string[]> {
+  const weightMetrics = await db
+    .select({ code: siteMetrics.code })
+    .from(siteMetrics)
+    .where(and(
+      eq(siteMetrics.isActive, true),
+      or(
+        ilike(siteMetrics.code, '%WEIGHT%'),
+        and(
+          eq(siteMetrics.category, 'Physical'),
+          or(eq(siteMetrics.unit, 'lbs'), eq(siteMetrics.unit, 'kg')),
+        ),
+      ),
+    ));
+
+  const codes = weightMetrics.map(m => m.code);
+  return codes.length > 0 ? codes : ['WEIGHT'];
+}
 
 /** Thrown for user-facing validation errors (insufficient data, missing weight, etc.) */
 export class SprintFvValidationError extends Error {
@@ -100,12 +124,13 @@ export class SprintFvService {
     );
 
     // Check for weight: measurement table first, then user profile fallback
+    const weightCodes = await getWeightMetricCodes();
     const weightMeasurements = await db
       .select({ date: measurements.date })
       .from(measurements)
       .where(and(
         eq(measurements.userId, userId),
-        eq(measurements.metric, 'WEIGHT'),
+        inArray(measurements.metric, weightCodes),
       ))
       .orderBy(desc(measurements.date))
       .limit(1);
@@ -197,13 +222,14 @@ export class SprintFvService {
     if (options.bodyMassLbsOverride) {
       bodyMassKg = options.bodyMassLbsOverride * 0.453592;
     } else {
-      // Find most recent WEIGHT measurement for this athlete
+      // Find most recent weight measurement for this athlete (any weight metric)
+      const weightCodes = await getWeightMetricCodes();
       const [weightM] = await db
         .select()
         .from(measurements)
         .where(and(
           eq(measurements.userId, userId),
-          eq(measurements.metric, 'WEIGHT'),
+          inArray(measurements.metric, weightCodes),
         ))
         .orderBy(desc(measurements.date))
         .limit(1);
