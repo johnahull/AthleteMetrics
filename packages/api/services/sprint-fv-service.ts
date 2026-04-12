@@ -319,6 +319,36 @@ export class SprintFvService {
     return profile;
   }
 
+  /**
+   * For a given org, return each athlete's count of eligible sessions
+   * (dates with >= MIN_SPLITS_REQUIRED distinct split metrics).
+   * Used by the coach athlete-selector to show who has sprint data.
+   */
+  async getEligibleSummaryByOrg(orgId: string): Promise<
+    Array<{ userId: string; eligibleSessionCount: number; latestDate: string }>
+  > {
+    // Single query: group measurements by (user_id, date), count distinct metrics,
+    // then aggregate to per-user eligible session counts.
+    const result = await db.execute<{ user_id: string; session_count: string; latest_date: string }>(sql`
+      SELECT user_id, COUNT(*) AS session_count, MAX(date)::text AS latest_date
+      FROM (
+        SELECT user_id, date
+        FROM measurements
+        WHERE organization_id = ${orgId}
+          AND metric IN ('DASH_5YD', 'DASH_10YD', 'DASH_20YD', 'DASH_30YD')
+        GROUP BY user_id, date
+        HAVING COUNT(DISTINCT metric) >= ${MIN_SPLITS_REQUIRED}
+      ) eligible_sessions
+      GROUP BY user_id
+    `);
+
+    return (result as unknown as Array<{ user_id: string; session_count: string; latest_date: string }>).map(r => ({
+      userId: r.user_id,
+      eligibleSessionCount: parseInt(r.session_count, 10),
+      latestDate: r.latest_date,
+    }));
+  }
+
   async getById(id: string): Promise<SprintFvProfile | null> {
     const [profile] = await db
       .select()

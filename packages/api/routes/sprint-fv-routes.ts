@@ -152,6 +152,27 @@ export function registerSprintFvRoutes(app: Express) {
     }
   );
 
+  // GET /api/sprint-fv-profiles/eligible-summary/:orgId
+  // Lightweight: which athletes in this org have eligible sprint sessions?
+  app.get(
+    "/api/sprint-fv-profiles/eligible-summary/:orgId",
+    requireAuth,
+    requireRole('coach'),
+    requireOrgAccess(),
+    requireSprintFvEnabled,
+    standardLimiter,
+    async (req: Request, res: Response) => {
+      try {
+        const { orgId } = req.params;
+        const summary = await sprintFvService.getEligibleSummaryByOrg(orgId);
+        res.json({ athletes: summary });
+      } catch (error: any) {
+        console.error("Error fetching eligible summary:", error);
+        res.status(500).json({ message: "Failed to fetch eligible summary" });
+      }
+    }
+  );
+
   // GET /api/sprint-fv-profiles/organization/:orgId
   // List all profiles in an organization
   app.get(

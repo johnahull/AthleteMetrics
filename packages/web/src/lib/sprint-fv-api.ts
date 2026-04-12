@@ -84,7 +84,20 @@ async function getErrorMessage(response: Response, fallback: string): Promise<st
   }
 }
 
+export interface EligibleAthleteSummary {
+  userId: string;
+  eligibleSessionCount: number;
+  latestDate: string;
+}
+
 // ─── Fetch Functions ────────────────────────────────────────────────────────
+
+async function fetchEligibleSummary(orgId: string): Promise<EligibleAthleteSummary[]> {
+  const response = await fetch(`/api/sprint-fv-profiles/eligible-summary/${encodeURIComponent(orgId)}`);
+  if (!response.ok) throw new Error(await getErrorMessage(response, 'Failed to fetch eligible summary'));
+  const data = await response.json();
+  return data.athletes;
+}
 
 async function fetchEligibleSessions(userId: string): Promise<EligibleSession[]> {
   const response = await fetch(`/api/sprint-fv-profiles/eligible/${encodeURIComponent(userId)}`);
@@ -135,6 +148,15 @@ async function deleteProfile(id: string): Promise<void> {
 }
 
 // ─── React Query Hooks ──────────────────────────────────────────────────────
+
+export function useEligibleSummary(orgId: string | undefined | null) {
+  return useQuery({
+    queryKey: ['sprint-fv', 'eligible-summary', orgId],
+    queryFn: () => fetchEligibleSummary(orgId!),
+    enabled: !!orgId,
+    staleTime: STALE_TIME.DEFAULT,
+  });
+}
 
 export function useEligibleSessions(userId: string | undefined) {
   return useQuery({
