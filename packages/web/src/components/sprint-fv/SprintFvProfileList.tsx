@@ -5,6 +5,7 @@ import { Loader2, Trash2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useSprintFvProfiles, useDeleteSprintFvProfile, type SprintFvProfile } from '@/lib/sprint-fv-api';
 import { useLocation } from 'wouter';
+import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
   userId: string;
@@ -21,6 +22,7 @@ export function SprintFvProfileList({ userId }: Props) {
   const deleteMutation = useDeleteSprintFvProfile();
   const [, navigate] = useLocation();
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const units = useUnitSystem();
 
   const profiles = useMemo(() => {
     if (!data?.profiles) return [];
@@ -60,9 +62,9 @@ export function SprintFvProfileList({ userId }: Props) {
               Date {sortDir === 'desc' ? '↓' : '↑'}
             </TableHead>
             <TableHead>Classification</TableHead>
-            <TableHead className="text-right">F0 (N/kg)</TableHead>
-            <TableHead className="text-right">V0 (m/s)</TableHead>
-            <TableHead className="text-right">Pmax (W/kg)</TableHead>
+            <TableHead className="text-right">F0 ({units.forceRelUnit})</TableHead>
+            <TableHead className="text-right">V0 ({units.velUnit})</TableHead>
+            <TableHead className="text-right">Pmax ({units.powerRelUnit})</TableHead>
             <TableHead className="text-right">R²</TableHead>
             <TableHead />
           </TableRow>
@@ -83,7 +85,7 @@ export function SprintFvProfileList({ userId }: Props) {
                   {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
                 </TableCell>
                 <TableCell className="text-right">{p.f0Rel ? parseFloat(p.f0Rel).toFixed(2) : '—'}</TableCell>
-                <TableCell className="text-right">{p.v0 ? parseFloat(p.v0).toFixed(2) : '—'}</TableCell>
+                <TableCell className="text-right">{p.v0 ? units.vel(parseFloat(p.v0)).toFixed(2) : '—'}</TableCell>
                 <TableCell className="text-right">{p.pmaxRel ? parseFloat(p.pmaxRel).toFixed(2) : '—'}</TableCell>
                 <TableCell className="text-right">{p.fitR2 ? parseFloat(p.fitR2).toFixed(4) : '—'}</TableCell>
                 <TableCell>

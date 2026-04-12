@@ -5,22 +5,31 @@ import { Loader2 } from 'lucide-react';
 import { Line } from 'react-chartjs-2';
 import type { ChartOptions } from 'chart.js';
 import { useSprintFvProfiles, type SprintFvProfile } from '@/lib/sprint-fv-api';
+import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
   userId: string;
 }
 
-const METRIC_OPTIONS = [
-  { key: 'f0Rel', label: 'F0 (N/kg)', color: 'rgba(59, 130, 246, 1)' },
-  { key: 'v0', label: 'V0 (m/s)', color: 'rgba(16, 185, 129, 1)' },
-  { key: 'pmaxRel', label: 'Pmax (W/kg)', color: 'rgba(245, 158, 11, 1)' },
+const METRIC_KEYS = [
+  { key: 'f0Rel', color: 'rgba(59, 130, 246, 1)' },
+  { key: 'v0', color: 'rgba(16, 185, 129, 1)' },
+  { key: 'pmaxRel', color: 'rgba(245, 158, 11, 1)' },
 ] as const;
 
 export function SprintFvLongitudinal({ userId }: Props) {
   const { data, isLoading } = useSprintFvProfiles(userId);
+  const units = useUnitSystem();
   const [visibleMetrics, setVisibleMetrics] = useState<Set<string>>(
-    new Set(METRIC_OPTIONS.map(m => m.key))
+    new Set(METRIC_KEYS.map(m => m.key))
   );
+
+  const METRIC_OPTIONS = METRIC_KEYS.map(m => ({
+    ...m,
+    label: m.key === 'f0Rel' ? `F0 (${units.forceRelUnit})`
+      : m.key === 'v0' ? `V0 (${units.velUnit})`
+      : `Pmax (${units.powerRelUnit})`,
+  }));
 
   const profiles = useMemo(() => {
     if (!data?.profiles) return [];
@@ -58,7 +67,9 @@ export function SprintFvLongitudinal({ userId }: Props) {
       label: m.label,
       data: profiles.map(p => {
         const val = p[m.key as 'f0Rel' | 'v0' | 'pmaxRel'];
-        return val != null ? parseFloat(val) : null;
+        if (val == null) return null;
+        const num = parseFloat(val);
+        return m.key === 'v0' ? units.vel(num) : num;
       }),
       borderColor: m.color,
       backgroundColor: m.color.replace(', 1)', ', 0.1)'),

@@ -2,17 +2,20 @@ import { useMemo } from 'react';
 import { Scatter } from 'react-chartjs-2';
 import type { ChartOptions, ChartData } from 'chart.js';
 import type { SprintFvProfile } from '@/lib/sprint-fv-api';
+import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
   profile: SprintFvProfile;
 }
 
 export function VelocityTimeCurve({ profile }: Props) {
-  const vmax = profile.vmax ? parseFloat(profile.vmax) : 0;
+  const units = useUnitSystem();
+  const vmaxRaw = profile.vmax ? parseFloat(profile.vmax) : 0;
+  const vmax = units.vel(vmaxRaw);
   const tau = profile.tau ? parseFloat(profile.tau) : 0;
   const splitTimes = profile.splitTimesJson;
   const distanceUnit = profile.distanceUnit;
-  const hasData = vmax > 0 && tau > 0 && Object.keys(splitTimes).length > 0;
+  const hasData = vmaxRaw > 0 && tau > 0 && Object.keys(splitTimes).length > 0;
 
   const chartData = useMemo<ChartData<'scatter'>>(() => {
     if (!hasData) return { datasets: [] };
@@ -42,14 +45,14 @@ export function VelocityTimeCurve({ profile }: Props) {
       if (i === 0) {
         scatterPoints.push({
           x: entries[0].time / 2,
-          y: entries[0].distanceM / entries[0].time,
+          y: units.vel(entries[0].distanceM / entries[0].time),
         });
       } else {
         const dt = entries[i].time - entries[i - 1].time;
         const dd = entries[i].distanceM - entries[i - 1].distanceM;
         scatterPoints.push({
           x: (entries[i].time + entries[i - 1].time) / 2,
-          y: dd / dt,
+          y: units.vel(dd / dt),
         });
       }
     }
@@ -77,7 +80,7 @@ export function VelocityTimeCurve({ profile }: Props) {
         },
       ],
     };
-  }, [vmax, tau, splitTimes, distanceUnit, hasData]);
+  }, [vmax, tau, splitTimes, distanceUnit, hasData, units]);
 
   const options = useMemo<ChartOptions<'scatter'>>(() => ({
     responsive: true,
@@ -94,7 +97,7 @@ export function VelocityTimeCurve({ profile }: Props) {
             borderWidth: 1,
             borderDash: [6, 4],
             label: {
-              content: `Vmax = ${vmax.toFixed(2)} m/s`,
+              content: `Vmax = ${vmax.toFixed(2)} ${units.velUnit}`,
               display: true,
               position: 'end',
               backgroundColor: 'rgba(107, 114, 128, 0.8)',
@@ -107,9 +110,9 @@ export function VelocityTimeCurve({ profile }: Props) {
     },
     scales: {
       x: { title: { display: true, text: 'Time (s)' }, min: 0 },
-      y: { title: { display: true, text: 'Velocity (m/s)' }, min: 0, max: vmax > 0 ? vmax * 1.15 : undefined },
+      y: { title: { display: true, text: `Velocity (${units.velUnit})` }, min: 0, max: vmax > 0 ? vmax * 1.15 : undefined },
     },
-  }), [vmax]);
+  }), [vmax, units]);
 
   if (!hasData) {
     return (

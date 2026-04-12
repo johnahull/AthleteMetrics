@@ -1,6 +1,7 @@
 import { KPICardWithTrend, type TrendData } from '@/components/kpi-card-with-trend';
 import { Zap, Gauge, BatteryCharging, TrendingDown, Activity, ArrowDownRight } from 'lucide-react';
 import type { SprintFvProfile } from '@/lib/sprint-fv-api';
+import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
   profile: SprintFvProfile;
@@ -19,22 +20,23 @@ function deltaToTrend(delta?: { absolute: number; percent: number; direction: st
 
 export function SprintFvKpiCards({ profile }: Props) {
   const deltas = profile.analysisJson?.deltas;
+  const units = useUnitSystem();
 
   const cards = [
     {
-      title: 'F0 (N/kg)',
+      title: `F0 (${units.forceRelUnit})`,
       value: profile.f0Rel ? parseFloat(profile.f0Rel).toFixed(2) : '—',
       icon: Zap,
       trend: deltaToTrend(deltas?.f0Delta),
     },
     {
-      title: 'V0 (m/s)',
-      value: profile.v0 ? parseFloat(profile.v0).toFixed(2) : '—',
+      title: `V0 (${units.velUnit})`,
+      value: profile.v0 ? units.vel(parseFloat(profile.v0)).toFixed(2) : '—',
       icon: Gauge,
       trend: deltaToTrend(deltas?.v0Delta),
     },
     {
-      title: 'Pmax (W/kg)',
+      title: `Pmax (${units.powerRelUnit})`,
       value: profile.pmaxRel ? parseFloat(profile.pmaxRel).toFixed(2) : '—',
       icon: BatteryCharging,
       trend: deltaToTrend(deltas?.pmaxDelta),

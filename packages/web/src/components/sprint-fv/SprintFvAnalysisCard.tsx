@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dumbbell, Zap, TrendingUp, Target, AlertTriangle } from 'lucide-react';
 import type { SprintFvProfile } from '@/lib/sprint-fv-api';
+import { useUnitSystem } from '@/contexts/UnitSystemContext';
 
 interface Props {
   profile: SprintFvProfile;
@@ -17,6 +18,7 @@ const recIcons = [Dumbbell, Zap, TrendingUp, Target, AlertTriangle];
 
 export function SprintFvAnalysisCard({ profile }: Props) {
   const analysis = profile.analysisJson;
+  const units = useUnitSystem();
   if (!analysis) return null;
 
   const { classification, optimalGap } = analysis;
@@ -84,14 +86,14 @@ export function SprintFvAnalysisCard({ profile }: Props) {
                 actual={profile.f0Rel ? parseFloat(profile.f0Rel) : 0}
                 optimal={optimalGap.optimalF0}
                 gapPercent={optimalGap.f0GapPercent}
-                unit="N/kg"
+                unit={units.forceRelUnit}
               />
               <GapItem
                 label="V0"
-                actual={profile.v0 ? parseFloat(profile.v0) : 0}
-                optimal={optimalGap.optimalV0}
+                actual={profile.v0 ? units.vel(parseFloat(profile.v0)) : 0}
+                optimal={units.vel(optimalGap.optimalV0)}
                 gapPercent={optimalGap.v0GapPercent}
-                unit="m/s"
+                unit={units.velUnit}
               />
             </div>
             {optimalGap.estimatedTimeImprovement > 0.01 && (

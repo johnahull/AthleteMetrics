@@ -8,6 +8,8 @@ import { Zap, List, TrendingUp, Users, ChevronsUpDown, Check, Activity } from 'l
 import { SprintFvSessionSelector } from '@/components/sprint-fv/SprintFvSessionSelector';
 import { SprintFvProfileList } from '@/components/sprint-fv/SprintFvProfileList';
 import { SprintFvLongitudinal } from '@/components/sprint-fv/SprintFvLongitudinal';
+import { UnitSystemToggle } from '@/components/sprint-fv/UnitSystemToggle';
+import { UnitSystemProvider } from '@/contexts/UnitSystemContext';
 import { useAuth } from '@/lib/auth';
 import { useQuery } from '@tanstack/react-query';
 import { useEligibleSummary } from '@/lib/sprint-fv-api';
@@ -120,12 +122,16 @@ export default function SprintFvPage() {
   }
 
   return (
+    <UnitSystemProvider>
     <div className="container mx-auto p-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold">Sprint Force-Velocity Profile</h1>
-        <p className="text-muted-foreground mt-1">
-          Generate and analyze JB Morin sprint F-V profiles from laser gate split times
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Sprint Force-Velocity Profile</h1>
+          <p className="text-muted-foreground mt-1">
+            Generate and analyze JB Morin sprint F-V profiles from laser gate split times
+          </p>
+        </div>
+        <UnitSystemToggle />
       </div>
 
       {isCoachOrAdmin && (
@@ -254,5 +260,6 @@ export default function SprintFvPage() {
         </Tabs>
       )}
     </div>
+    </UnitSystemProvider>
   );
 }

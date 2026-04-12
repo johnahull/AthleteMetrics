@@ -9,11 +9,22 @@ import { SprintFvKpiCards } from '@/components/sprint-fv/SprintFvKpiCards';
 import { SprintFvAnalysisCard } from '@/components/sprint-fv/SprintFvAnalysisCard';
 import { ForceVelocityChart } from '@/components/charts/ForceVelocityChart';
 import { VelocityTimeCurve } from '@/components/charts/VelocityTimeCurve';
+import { UnitSystemProvider, useUnitSystem } from '@/contexts/UnitSystemContext';
+import { UnitSystemToggle } from '@/components/sprint-fv/UnitSystemToggle';
 
 export default function SprintFvProfileDetailPage() {
+  return (
+    <UnitSystemProvider>
+      <SprintFvProfileDetailInner />
+    </UnitSystemProvider>
+  );
+}
+
+function SprintFvProfileDetailInner() {
   const [, params] = useRoute('/sprint-fv/:id');
   const [, navigate] = useLocation();
   const { data: profile, isLoading, error } = useSprintFvProfile(params?.id);
+  const units = useUnitSystem();
 
   if (isLoading) {
     return (
@@ -37,11 +48,14 @@ export default function SprintFvProfileDetailPage() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
-      {/* Back button */}
-      <Button variant="ghost" size="sm" onClick={() => navigate('/sprint-fv')}>
-        <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Sprint F-V
-      </Button>
+      {/* Back button + unit toggle */}
+      <div className="flex items-center justify-between">
+        <Button variant="ghost" size="sm" onClick={() => navigate('/sprint-fv')}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Back to Sprint F-V
+        </Button>
+        <UnitSystemToggle />
+      </div>
 
       {/* 1. Header card */}
       <Card>
@@ -53,7 +67,7 @@ export default function SprintFvProfileDetailPage() {
             </div>
             <div className="flex items-center gap-2">
               <Weight className="h-4 w-4 text-muted-foreground" />
-              <span>{parseFloat(profile.bodyMassKg).toFixed(1)} kg</span>
+              <span>{units.mass(parseFloat(profile.bodyMassKg)).toFixed(1)} {units.massUnit}</span>
             </div>
             <div className="flex items-center gap-2">
               <Ruler className="h-4 w-4 text-muted-foreground" />
