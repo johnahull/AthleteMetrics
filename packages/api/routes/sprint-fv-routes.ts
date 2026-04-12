@@ -10,7 +10,7 @@ import rateLimit from "express-rate-limit";
 import { requireAuth } from "../middleware";
 import { requireRole, requireOrgAccess } from "../permissions/middleware";
 import { requireSprintFvEnabled } from "../middleware/require-sprint-fv-enabled";
-import { SprintFvService } from "../services/sprint-fv-service";
+import { SprintFvService, SprintFvValidationError } from "../services/sprint-fv-service";
 import { generateSprintFvProfileSchema, sprintFvProfileQuerySchema } from "../validation/sprint-fv-validation";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import { storage } from "../storage";
@@ -120,9 +120,8 @@ export function registerSprintFvRoutes(app: Express) {
           return res.status(400).json({ message: "Validation error", errors: error.errors });
         }
         console.error("Error generating F-V profile:", error);
-        res.status(error.message?.includes('Insufficient') || error.message?.includes('No WEIGHT')
-          ? 400 : 500
-        ).json({ message: error.message || "Failed to generate profile" });
+        const statusCode = error instanceof SprintFvValidationError ? error.statusCode : 500;
+        res.status(statusCode).json({ message: error.message || "Failed to generate profile" });
       }
     }
   );
@@ -158,6 +157,7 @@ export function registerSprintFvRoutes(app: Express) {
   app.get(
     "/api/sprint-fv-profiles/organization/:orgId",
     requireAuth,
+    requireRole('coach'),
     requireOrgAccess(),
     requireSprintFvEnabled,
     standardLimiter,

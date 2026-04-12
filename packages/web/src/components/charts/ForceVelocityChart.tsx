@@ -94,8 +94,8 @@ export function ForceVelocityChart({ profile }: Props) {
       tooltip: {
         callbacks: {
           label: (ctx) => {
-            const v = ctx.parsed.x.toFixed(2);
-            const val = ctx.parsed.y.toFixed(2);
+            const v = (ctx.parsed.x ?? 0).toFixed(2);
+            const val = (ctx.parsed.y ?? 0).toFixed(2);
             if (ctx.dataset.yAxisID === 'y1') {
               return `Power: ${val} W/kg at ${v} m/s`;
             }

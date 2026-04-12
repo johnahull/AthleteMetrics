@@ -1422,6 +1422,7 @@ export const updateOrganizationSchema = z.object({
   brandPrimaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandSecondaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandTagline: z.preprocess(val => val === '' ? null : val, z.string().max(200, "Tagline must be 200 characters or less").nullable()).optional(),
+  sprintFvEnabled: z.boolean().optional(), // Org admin can set this (only effective when site sprint F-V enabled)
   coppaEnabled: z.boolean().optional(), // Site admin only - enables COPPA minor-athlete flow
   coppaContactEmail: z.string().email("COPPA contact email must be a valid email address").max(255).optional().nullable(),
 }).refine(

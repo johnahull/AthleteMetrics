@@ -30,6 +30,15 @@ const SPLIT_METRIC_CODES = Object.keys(SPLIT_METRICS);
 const YARDS_TO_METERS = 0.9144;
 const MIN_SPLITS_REQUIRED = 3;
 
+/** Thrown for user-facing validation errors (insufficient data, missing weight, etc.) */
+export class SprintFvValidationError extends Error {
+  public readonly statusCode = 400;
+  constructor(message: string) {
+    super(message);
+    this.name = 'SprintFvValidationError';
+  }
+}
+
 export interface EligibleSession {
   date: string;
   eventId: string | null;
@@ -157,7 +166,7 @@ export class SprintFvService {
       .where(and(...conditions));
 
     if (splitMeasurements.length < MIN_SPLITS_REQUIRED) {
-      throw new Error(`Insufficient split data: found ${splitMeasurements.length} splits, need at least ${MIN_SPLITS_REQUIRED}`);
+      throw new SprintFvValidationError(`Insufficient split data: found ${splitMeasurements.length} splits, need at least ${MIN_SPLITS_REQUIRED}`);
     }
 
     // 2. Build split times map
@@ -191,7 +200,7 @@ export class SprintFvService {
         .limit(1);
 
       if (!weightM) {
-        throw new Error('No WEIGHT measurement found for this athlete. Provide bodyMassKgOverride.');
+        throw new SprintFvValidationError('No WEIGHT measurement found for this athlete. Provide bodyMassKgOverride.');
       }
 
       // Weight is stored in lbs in the system, convert to kg
@@ -231,7 +240,12 @@ export class SprintFvService {
       .limit(1);
 
     let deltas: SprintFvAnalysisJson['deltas'];
-    if (previousProfile && previousProfile.f0Rel && previousProfile.v0) {
+    if (
+      previousProfile
+      && previousProfile.f0Rel && previousProfile.v0
+      && previousProfile.pmaxRel && previousProfile.fvSlope
+      && previousProfile.rfPeak && previousProfile.drf
+    ) {
       deltas = computeDeltas(
         {
           f0Rel: computed.f0Rel, v0: computed.v0, pmaxRel: computed.pmaxRel,
@@ -240,8 +254,8 @@ export class SprintFvService {
         },
         {
           f0Rel: parseFloat(previousProfile.f0Rel), v0: parseFloat(previousProfile.v0),
-          pmaxRel: parseFloat(previousProfile.pmaxRel!), fvSlope: parseFloat(previousProfile.fvSlope!),
-          rfPeak: parseFloat(previousProfile.rfPeak!), drf: parseFloat(previousProfile.drf!),
+          pmaxRel: parseFloat(previousProfile.pmaxRel), fvSlope: parseFloat(previousProfile.fvSlope),
+          rfPeak: parseFloat(previousProfile.rfPeak), drf: parseFloat(previousProfile.drf),
           date: previousProfile.date,
         },
       );
@@ -263,41 +277,44 @@ export class SprintFvService {
       .where(and(...existingConditions))
       .limit(1);
 
-    if (existing) {
-      // Delete and regenerate (user clicked "Regenerate")
-      await db.delete(sprintFvProfiles).where(eq(sprintFvProfiles.id, existing.id));
-    }
+    // 11. Atomic delete-then-insert inside a transaction to prevent data loss on failure
+    const profile = await db.transaction(async (tx) => {
+      if (existing) {
+        await tx.delete(sprintFvProfiles).where(eq(sprintFvProfiles.id, existing.id));
+      }
 
-    // 11. Insert profile
-    const [profile] = await db
-      .insert(sprintFvProfiles)
-      .values({
-        userId,
-        submittedBy,
-        organizationId: orgId,
-        teamId,
-        teamNameSnapshot,
-        date,
-        bodyMassKg: String(bodyMassKg),
-        distanceUnit,
-        splitTimesJson: splitTimes,
-        sourceMeasurementIds: splitMeasurements.map(m => m.id),
-        weightMeasurementId,
-        eventId: options.eventId || firstM.eventId,
-        vmax: String(computed.vmax),
-        tau: String(computed.tau),
-        f0Rel: String(computed.f0Rel),
-        v0: String(computed.v0),
-        pmaxRel: String(computed.pmaxRel),
-        fvSlope: String(computed.fvSlope),
-        rfPeak: String(computed.rfPeak),
-        drf: String(computed.drf),
-        fitR2: String(computed.fitR2),
-        fitResiduals: computed.fitResiduals,
-        analysisJson,
-        notes: options.notes || null,
-      })
-      .returning();
+      const [inserted] = await tx
+        .insert(sprintFvProfiles)
+        .values({
+          userId,
+          submittedBy,
+          organizationId: orgId,
+          teamId,
+          teamNameSnapshot,
+          date,
+          bodyMassKg: String(bodyMassKg),
+          distanceUnit,
+          splitTimesJson: splitTimes,
+          sourceMeasurementIds: splitMeasurements.map(m => m.id),
+          weightMeasurementId,
+          eventId: options.eventId || firstM.eventId,
+          vmax: String(computed.vmax),
+          tau: String(computed.tau),
+          f0Rel: String(computed.f0Rel),
+          v0: String(computed.v0),
+          pmaxRel: String(computed.pmaxRel),
+          fvSlope: String(computed.fvSlope),
+          rfPeak: String(computed.rfPeak),
+          drf: String(computed.drf),
+          fitR2: String(computed.fitR2),
+          fitResiduals: computed.fitResiduals,
+          analysisJson,
+          notes: options.notes || null,
+        })
+        .returning();
+
+      return inserted;
+    });
 
     return profile;
   }

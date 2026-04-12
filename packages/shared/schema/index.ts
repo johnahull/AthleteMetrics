@@ -51,6 +51,8 @@ export type {
   Event, EventRegistration, EventInvitation, EventMetric, EventFreezeOverride,
   // Imports
   ImportBatch,
+  // Sprint F-V Profiles
+  SprintFvProfile, InsertSprintFvProfile,
   // Enum types (aliased from enums, not conflicting with constants)
   SportCode, MembershipRequestStatus, MembershipRequestDiscoveryMethod,
   AchievementCategory, AchievementRarity, GoalType, GoalStatus,
