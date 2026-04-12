@@ -41,6 +41,8 @@ const mockMeasurementsWithEvents: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2025-03-15'),
+    importSource: null,
+    importBatchId: null,
   },
   {
     id: 'meas-2',
@@ -68,6 +70,8 @@ const mockMeasurementsWithEvents: Measurement[] = [
     calculatedFromMeasurementIds: null,
     calculationMetadata: null,
     createdAt: new Date('2025-02-01'),
+    importSource: null,
+    importBatchId: null,
   },
 ];
 

@@ -433,17 +433,22 @@ test.describe('Profile Merge Feature', () => {
         await page.click('[data-testid="button-merge-profiles"]');
         await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-        // Simulate network failure by intercepting API calls
+        // Simulate network failure by returning 500 error
         await page.route('**/merge-profiles/preview', (route) => {
-          route.abort('failed');
+          route.fulfill({
+            status: 500,
+            contentType: 'application/json',
+            body: JSON.stringify({ message: 'Internal Server Error' }),
+          });
         });
 
-        // Try to proceed to preview (should show error)
+        // Try to proceed to preview (should show error via toast)
         await page.click('[data-testid="wizard-next-button"]');
 
-        // Verify error message appears
-        const errorMessage = page.locator('text=/error|failed|unable/i');
-        await expect(errorMessage).toBeVisible({ timeout: 5000 });
+        // Verify error message appears (toast shows "Preview Failed")
+        await expect(
+          page.getByText(/preview failed|error|failed|unable/i).first()
+        ).toBeVisible({ timeout: 10000 });
 
         // Wizard should still be open (not crash)
         await expect(page.locator('[role="dialog"]')).toBeVisible();
@@ -469,11 +474,14 @@ test.describe('Profile Merge Feature', () => {
         await page.click('[data-testid="button-merge-profiles"]');
         await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-        // Go to step 3
+        // Go to step 2 (preview) — clicking Next triggers the preview API call
         await page.click('[data-testid="wizard-next-button"]');
-        await page.waitForLoadState('networkidle');
+        // Wait for step 2 to load (preview API must succeed)
+        await expect(page.getByText('Step 2 of 3')).toBeVisible({ timeout: 15000 });
+
+        // Go to step 3 (confirm)
         await page.click('[data-testid="wizard-next-button"]');
-        await page.waitForLoadState('networkidle');
+        await expect(page.getByText('Step 3 of 3')).toBeVisible({ timeout: 5000 });
 
         // Verify confirm button is disabled initially
         const confirmButton = page.locator('[data-testid="confirm-merge-button"]');

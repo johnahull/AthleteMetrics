@@ -55,7 +55,7 @@ test.describe('RBAC/Permissions Tests', () => {
       // Should NOT be able to access athletes management page
       await page.goto(`${STAGING_URL}/athletes`);
       // Wait for page to load (either redirected or access denied)
-      await page.waitForSelector('text=/access.*denied|unauthorized|403/i, [data-testid^="checkbox-athlete-"]', { timeout: 5000 }).catch(() => {});
+      await page.locator('text=/access.*denied|unauthorized|403/i').or(page.locator('[data-testid^="checkbox-athlete-"]')).first().waitFor({ timeout: 5000 }).catch(() => {});
 
       // Should either redirect or show access denied
       const isRedirected = page.url().includes('/athlete') || page.url().includes('/profile');
@@ -73,7 +73,7 @@ test.describe('RBAC/Permissions Tests', () => {
       // For now, just verify they can't browse all athletes
       await page.goto(`${STAGING_URL}/athletes`);
       // Wait for page response
-      await page.waitForSelector('[data-testid^="checkbox-athlete-"], text=/access.*denied/i, .empty-state', { timeout: 5000 }).catch(() => {});
+      await page.locator('[data-testid^="checkbox-athlete-"], .empty-state').or(page.locator('text=/access.*denied/i')).first().waitFor({ timeout: 5000 }).catch(() => {});
 
       // Should not see athletes list
       const athletesList = await page.locator('[data-testid^="checkbox-athlete-"]').count();
@@ -181,7 +181,7 @@ test.describe('RBAC/Permissions Tests', () => {
       // Try to access admin-only route
       const response = await page.goto(`${STAGING_URL}/admin`);
       // Wait for page to load or redirect
-      await page.waitForSelector('main, text=/access.*denied|unauthorized|403/i', { timeout: 5000 }).catch(() => {});
+      await page.locator('main').or(page.locator('text=/access.*denied|unauthorized|403/i')).first().waitFor({ timeout: 5000 }).catch(() => {});
 
       // Should either:
       // 1. Return 403 status
@@ -356,7 +356,7 @@ test.describe('Enhanced RBAC Edge Cases', () => {
       // Try to access admin route
       const response = await page.goto(`${STAGING_URL}${route}`);
       // Wait for page to load or redirect
-      await page.waitForSelector('main, text=/access.*denied|unauthorized|403/i', { timeout: 3000 }).catch(() => {});
+      await page.locator('main').or(page.locator('text=/access.*denied|unauthorized|403/i')).first().waitFor({ timeout: 3000 }).catch(() => {});
 
       // Should be blocked (403, unauthorized, or redirected)
       const is403 = response?.status() === 403;
@@ -516,7 +516,7 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     const maliciousId = "1' OR '1'='1";
     await page.goto(`${STAGING_URL}/athletes/${encodeURIComponent(maliciousId)}`);
     // Wait for error page or content to load
-    await page.waitForSelector('text=/not found|404|error|invalid/i, main', { timeout: 5000 }).catch(() => {});
+    await page.locator('text=/not found|404|error|invalid/i').or(page.locator('main')).first().waitFor({ timeout: 5000 }).catch(() => {});
 
     // Should return 404 or error page, NOT expose all athletes
     const is404 = await page.locator('text=/not found|404/i').count() > 0;
@@ -538,7 +538,7 @@ test.describe('Security: Input Validation & Injection Prevention', () => {
     const maliciousId = "1' OR '1'='1' --";
     await page.goto(`${STAGING_URL}/teams/${encodeURIComponent(maliciousId)}`);
     // Wait for error page or content to load
-    await page.waitForSelector('text=/not found|404|error|invalid/i, main', { timeout: 5000 }).catch(() => {});
+    await page.locator('text=/not found|404|error|invalid/i').or(page.locator('main')).first().waitFor({ timeout: 5000 }).catch(() => {});
 
     // Should return 404 or error page
     const is404 = await page.locator('text=/not found|404/i').count() > 0;

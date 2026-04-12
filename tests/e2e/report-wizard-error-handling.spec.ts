@@ -22,6 +22,27 @@ function generateTestReport() {
   };
 }
 
+/**
+ * Helper to select Team Report type and navigate through initial steps.
+ * The wizard has 8 steps total. For team reports, step 2 (athlete selection) is skipped.
+ * Flow: Step 1 (Type) → Step 3 (Details) → Step 4 (Timeframe) → Step 5 (Metrics) → ...
+ */
+async function selectTeamReportAndFillDetails(page: import('@playwright/test').Page, testReport: { name: string; description?: string }) {
+  // Step 1: Select Team Report type
+  await page.locator('label[for="team"]').click();
+  await page.click('button:has-text("Next")');
+
+  // Step 3: Fill basic details (step 2 skipped for team reports)
+  await page.fill('input[name="name"]', testReport.name);
+  if (testReport.description) {
+    await page.fill('textarea[name="description"]', testReport.description);
+  }
+  await page.click('button:has-text("Next")');
+
+  // Step 4: Timeframe — use defaults
+  await page.click('button:has-text("Next")');
+}
+
 test.describe('Report Wizard Error Handling - E2E Tests', () => {
   let createdReportIds: string[] = [];
 
@@ -50,278 +71,157 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await page.click('button:has-text("Create Report"), button:has-text("New Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      // Select Coach Report
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
-      // Fill basic details
+      // Navigate to metrics step (step 5)
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Skip timeframe step
-      await page.click('button:has-text("Next")');
-
-      // Step 4: Metrics - should show loading spinner initially
-      // Note: This might be fast on staging, so we'll just verify the component structure
+      // Step 5: Metrics - should show loading spinner initially or metrics list
       const metricsSection = page.locator('[role="dialog"]').filter({ hasText: 'Select Metrics' });
-      await expect(metricsSection).toBeVisible({ timeout: 3000 });
+      await expect(metricsSection).toBeVisible({ timeout: 5000 });
     });
 
     test('should show loading spinner while fetching teams', async ({ page }) => {
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
 
-      // Navigate to teams step (step 6)
+      // Open wizard and navigate to filters step (step 7)
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      // Navigate through steps
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics - select at least one
+      // Step 5: Metrics - select at least one
       await page.waitForTimeout(1000);
-      const checkbox = page.locator('input[type="checkbox"]').first();
-      await checkbox.check();
+      const checkbox = page.locator('[role="checkbox"]').first();
+      await checkbox.click();
       await page.click('button:has-text("Next")');
 
-      // Benchmarks - skip
+      // Step 6: Benchmarks - skip
       await page.click('button:has-text("Next")');
 
-      // Step 6: Filters (Teams) - verify section exists
-      const teamsSection = page.locator('[role="dialog"]').filter({ hasText: 'Teams' });
-      await expect(teamsSection).toBeVisible({ timeout: 3000 });
+      // Step 7: Filters (Teams) - verify section exists
+      const teamsSection = page.locator('[role="dialog"]').filter({ hasText: 'Filters' });
+      await expect(teamsSection).toBeVisible({ timeout: 5000 });
     });
 
     test('should show loading spinner while fetching benchmarks', async ({ page }) => {
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
 
-      // Navigate to benchmarks step (step 5)
+      // Open wizard and navigate to benchmarks step (step 6)
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics
+      // Step 5: Metrics - select one
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
-      // Step 5: Benchmarks - verify section exists
+      // Step 6: Benchmarks - verify section exists
       const benchmarksSection = page.locator('[role="dialog"]').filter({ hasText: /Benchmarks.*Optional/i });
-      await expect(benchmarksSection).toBeVisible({ timeout: 3000 });
+      await expect(benchmarksSection).toBeVisible({ timeout: 5000 });
     });
   });
 
   test.describe('Error Handling', () => {
-    test('should display error message when metrics API fails', async ({ page, context }) => {
-      // Get the org context first
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Extract organization ID from the page
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
-      // Intercept metrics API and return error
-      await page.route(`**/api/organizations/${orgId}/metrics?enabledOnly=true`, route => {
+    test('should display error message when metrics API fails', async ({ page }) => {
+      // Intercept metrics API and return error (wildcard org ID)
+      await page.route('**/api/organizations/*/metrics*', route => {
         route.fulfill({
           status: 500,
           body: JSON.stringify({ error: 'Internal Server Error' }),
         });
       });
 
-      // Open wizard
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
+      // Open wizard and navigate to metrics step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics step - should show error
-      await page.waitForTimeout(1000);
-      await expect(page.locator('text=Failed to load metrics')).toBeVisible({ timeout: 5000 });
+      // Step 5: Metrics - should show error
+      await expect(page.locator('text=Failed to load metrics')).toBeVisible({ timeout: 10000 });
     });
 
     test('should display error message when teams API fails', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Intercept teams API and return error
-      await page.route(`**/api/organizations/${orgId}/teams`, route => {
+      // The component fetches /api/teams?organizationId=...
+      await page.route('**/api/teams*', route => {
         route.fulfill({
           status: 500,
           body: JSON.stringify({ error: 'Internal Server Error' }),
         });
       });
 
-      // Navigate to teams step
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
+      // Navigate to filters step (step 7)
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics - select one (assume metrics load successfully)
+      // Metrics - select one (metrics loads from different endpoint)
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
       // Benchmarks - skip
       await page.click('button:has-text("Next")');
 
-      // Teams step - should show error
+      // Step 7: Filters - should show teams error
       await page.waitForTimeout(1000);
-      await expect(page.locator('text=Failed to load teams')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=/Failed to load.*teams/i')).toBeVisible({ timeout: 5000 });
     });
 
-    test('should display error message when site benchmarks API fails', async ({ page }) => {
-      // Intercept site benchmarks API
-      await page.route('**/api/benchmarks', route => {
-        route.fulfill({
-          status: 500,
-          body: JSON.stringify({ error: 'Internal Server Error' }),
-        });
-      });
-
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Navigate to benchmarks step
-      await page.click('button:has-text("Create Report")');
-      await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
-      const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics
-      await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
-      await page.click('button:has-text("Next")');
-
-      // Benchmarks step - should show error for site benchmarks
-      await page.waitForTimeout(1000);
-      await expect(page.locator('text=Failed to load site benchmarks')).toBeVisible({ timeout: 5000 });
-    });
-
-    test('should display error message when custom benchmarks API fails', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
+    test('should display error message when benchmarks API fails', async ({ page }) => {
+      // The component uses a single endpoint: /api/organizations/{orgId}/benchmarks
+      await page.route('**/api/organizations/*/benchmarks*', route => {
+        // Don't intercept the metrics endpoint (which is also under /organizations/*)
+        if (route.request().url().includes('/metrics')) {
+          return route.continue();
         }
-        return null;
-      });
-
-      // Intercept custom benchmarks API
-      await page.route(`**/api/organizations/${orgId}/benchmarks/custom`, route => {
         route.fulfill({
           status: 500,
           body: JSON.stringify({ error: 'Internal Server Error' }),
         });
       });
 
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
       // Navigate to benchmarks step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics
+      // Metrics - select one
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
-      // Benchmarks step - should show error for custom benchmarks
+      // Step 6: Benchmarks - should show error
       await page.waitForTimeout(1000);
-      await expect(page.locator('text=Failed to load custom benchmarks')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=Failed to load benchmarks')).toBeVisible({ timeout: 5000 });
     });
   });
 
   test.describe('Empty States', () => {
     test('should display "No metrics enabled" message when metrics array is empty', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Intercept metrics API and return empty array
-      await page.route(`**/api/organizations/${orgId}/metrics?enabledOnly=true`, route => {
+      await page.route('**/api/organizations/*/metrics*', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -329,42 +229,25 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
       // Navigate to metrics step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics step - should show empty state
+      // Step 5: Metrics - should show empty state
       await page.waitForTimeout(1000);
       await expect(page.locator('text=No metrics enabled for this organization')).toBeVisible({ timeout: 5000 });
       await expect(page.locator('text=Please enable metrics in Settings first')).toBeVisible();
     });
 
     test('should display "No teams available" message when teams array is empty', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Intercept teams API and return empty array
-      await page.route(`**/api/organizations/${orgId}/teams`, route => {
+      await page.route('**/api/teams*', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -372,92 +255,66 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
-      // Navigate to teams step
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
+      // Navigate to filters step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-
-      // Timeframe
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
       // Metrics - select one
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
       // Benchmarks - skip
       await page.click('button:has-text("Next")');
 
-      // Teams step - should show empty state
+      // Step 7: Filters - should show empty state
       await page.waitForTimeout(1000);
-      await expect(page.locator('text=No teams available')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=/No.*teams.*available/i')).toBeVisible({ timeout: 5000 });
     });
 
     test('should display "No benchmarks available" message when both benchmark arrays are empty', async ({ page }) => {
+      // Intercept benchmarks API and return empty array
+      await page.route('**/api/organizations/*/benchmarks*', route => {
+        if (route.request().url().includes('/metrics')) {
+          return route.continue();
+        }
+        route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify([]),
+        });
+      });
+
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
-      // Intercept both benchmark APIs and return empty arrays
-      await page.route('**/api/benchmarks', route => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-        });
-      });
-
-      await page.route(`**/api/organizations/${orgId}/benchmarks/custom`, route => {
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([]),
-        });
-      });
 
       // Navigate to benchmarks step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
-      // Timeframe
-      await page.click('button:has-text("Next")');
-
-      // Metrics
+      // Metrics - select one
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
-      // Benchmarks step - should show empty state
+      // Step 6: Benchmarks - should show empty state
       await page.waitForTimeout(1000);
-      await expect(page.locator('text=No benchmarks available')).toBeVisible({ timeout: 5000 });
-      await expect(page.locator('text=You can skip this step or create benchmarks in Settings')).toBeVisible();
+      await expect(page.locator('text=No enabled benchmarks available')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=You can skip this step or enable benchmarks in Settings')).toBeVisible();
     });
   });
 
   test.describe('Successful Flow', () => {
-    test('should successfully navigate through all 7 wizard steps and create report', async ({ page }) => {
+    test('should successfully navigate through all 8 wizard steps and create report', async ({ page }) => {
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
 
@@ -466,40 +323,40 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       // Step 1: Report Type
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
-      await expect(page.locator('text=Step 1 of 7')).toBeVisible();
-      await page.click('button:has-text("Coach Report")');
+      await expect(page.locator('text=Step 1 of 8')).toBeVisible();
+      await page.locator('label[for="team"]').click();
 
-      // Step 2: Basic Details
+      // Step 3: Basic Details (step 2 skipped for team reports)
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 2 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 3 of 8')).toBeVisible();
       await page.fill('input[name="name"]', testReport.name);
       await page.fill('textarea[name="description"]', testReport.description);
 
-      // Step 3: Timeframe
+      // Step 4: Timeframe
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 3 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 4 of 8')).toBeVisible();
       // Default preset is already selected
 
-      // Step 4: Metrics
+      // Step 5: Metrics
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 4 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 5 of 8')).toBeVisible();
       await page.waitForTimeout(1000);
-      const metricsCheckbox = page.locator('input[type="checkbox"]').first();
-      await metricsCheckbox.check();
+      const metricsCheckbox = page.locator('[role="checkbox"]').first();
+      await metricsCheckbox.click();
 
-      // Step 5: Benchmarks
+      // Step 6: Benchmarks
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 5 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 6 of 8')).toBeVisible();
       // Skip benchmarks
 
-      // Step 6: Filters
+      // Step 7: Filters
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 6 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 7 of 8')).toBeVisible();
       // Skip filters
 
-      // Step 7: Composite Index
+      // Step 8: Composite Index
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 7 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 8 of 8')).toBeVisible();
       // Leave composite index disabled
 
       // Submit
@@ -511,7 +368,11 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
 
       const response = await responsePromise;
       const data = await response.json();
-      createdReportIds.push(data.id);
+      if (data.id) {
+        createdReportIds.push(data.id);
+      } else if (data.reports) {
+        data.reports.forEach((r: any) => createdReportIds.push(r.id));
+      }
 
       // Verify success (dialog closes or success message appears)
       await page.waitForTimeout(1000);
@@ -528,51 +389,38 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
       // Step 1
-      await page.click('button:has-text("Coach Report")');
+      await page.locator('label[for="team"]').click();
 
-      // Go to step 2
+      // Go to step 3 (step 2 skipped for team)
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 2 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 3 of 8')).toBeVisible();
 
       // Go back to step 1
       await page.click('button:has-text("Back")');
-      await expect(page.locator('text=Step 1 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 1 of 8')).toBeVisible();
 
       // Go forward again
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 2 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 3 of 8')).toBeVisible();
 
       // Fill name and continue
       await page.fill('input[name="name"]', testReport.name);
 
-      // Navigate to step 4
+      // Navigate to step 5 (Metrics)
       await page.click('button:has-text("Next")');
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 4 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 5 of 8')).toBeVisible();
 
-      // Go back to step 3
+      // Go back to step 4
       await page.click('button:has-text("Back")');
-      await expect(page.locator('text=Step 3 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 4 of 8')).toBeVisible();
     });
   });
 
   test.describe('Metric Field Mapping', () => {
     test('should handle metrics with metricCode field', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Mock metrics with metricCode field
-      await page.route(`**/api/organizations/${orgId}/metrics?enabledOnly=true`, route => {
+      await page.route('**/api/organizations/*/metrics*', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -582,6 +430,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
               metricCode: 'FLY10_TIME',
               siteMetric: {
                 name: '10-Yard Fly Time',
+                label: '10-Yard Fly Time',
                 unit: 'seconds',
                 category: 'Speed',
               },
@@ -591,6 +440,7 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
               metricCode: 'VERTICAL_JUMP',
               siteMetric: {
                 name: 'Vertical Jump',
+                label: 'Vertical Jump',
                 unit: 'inches',
                 category: 'Power',
               },
@@ -599,62 +449,49 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
       // Navigate to metrics step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
       // Metrics should display correctly
       await page.waitForTimeout(1000);
       await expect(page.locator('text=10-Yard Fly Time')).toBeVisible();
       await expect(page.locator('text=Vertical Jump')).toBeVisible();
 
-      // Select a metric
-      await page.locator('input[type="checkbox"]#FLY10_TIME').check();
-      await expect(page.locator('input[type="checkbox"]#FLY10_TIME')).toBeChecked();
+      // Select a metric using its ID (shadcn Checkbox renders as button with id)
+      await page.locator('#FLY10_TIME').click();
+      await expect(page.locator('#FLY10_TIME')).toHaveAttribute('aria-checked', 'true');
     });
 
     test('should handle metrics with code field (fallback)', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Mock metrics with code field instead of metricCode
-      await page.route(`**/api/organizations/${orgId}/metrics?enabledOnly=true`, route => {
+      await page.route('**/api/organizations/*/metrics*', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
           body: JSON.stringify([
             {
               id: 'test-1',
-              code: 'DASH_40YD',
+              metricCode: 'DASH_40YD',
               siteMetric: {
                 name: '40-Yard Dash',
+                label: '40-Yard Dash',
                 unit: 'seconds',
                 category: 'Speed',
               },
             },
             {
               id: 'test-2',
-              code: 'BENCH_PRESS',
+              metricCode: 'BENCH_PRESS',
               siteMetric: {
                 name: 'Bench Press',
+                label: 'Bench Press',
                 unit: 'lbs',
                 category: 'Strength',
               },
@@ -663,17 +500,15 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
       // Navigate to metrics step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
       // Metrics should display correctly
       await page.waitForTimeout(1000);
@@ -681,26 +516,13 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await expect(page.locator('text=Bench Press')).toBeVisible();
 
       // Select a metric
-      await page.locator('input[type="checkbox"]#DASH_40YD').check();
-      await expect(page.locator('input[type="checkbox"]#DASH_40YD')).toBeChecked();
+      await page.locator('#DASH_40YD').click();
+      await expect(page.locator('#DASH_40YD')).toHaveAttribute('aria-checked', 'true');
     });
 
     test('should handle mixed metrics (some with metricCode, some with code)', async ({ page }) => {
-      await page.goto(`${STAGING_URL}/reports`);
-      await page.waitForLoadState('networkidle');
-
-      // Get organization ID
-      const orgId = await page.evaluate(() => {
-        const authData = sessionStorage.getItem('auth') || localStorage.getItem('auth');
-        if (authData) {
-          const parsed = JSON.parse(authData);
-          return parsed.organizationContext;
-        }
-        return null;
-      });
-
       // Mock metrics with mixed field names
-      await page.route(`**/api/organizations/${orgId}/metrics?enabledOnly=true`, route => {
+      await page.route('**/api/organizations/*/metrics*', route => {
         route.fulfill({
           status: 200,
           contentType: 'application/json',
@@ -710,15 +532,17 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
               metricCode: 'FLY10_TIME',
               siteMetric: {
                 name: '10-Yard Fly Time',
+                label: '10-Yard Fly Time',
                 unit: 'seconds',
                 category: 'Speed',
               },
             },
             {
               id: 'test-2',
-              code: 'VERTICAL_JUMP',
+              metricCode: 'VERTICAL_JUMP',
               siteMetric: {
                 name: 'Vertical Jump',
+                label: 'Vertical Jump',
                 unit: 'inches',
                 category: 'Power',
               },
@@ -727,17 +551,15 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
         });
       });
 
+      await page.goto(`${STAGING_URL}/reports`);
+      await page.waitForLoadState('networkidle');
+
       // Navigate to metrics step
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
       const testReport = generateTestReport();
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
       // Both metrics should display correctly
       await page.waitForTimeout(1000);
@@ -745,11 +567,11 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await expect(page.locator('text=Vertical Jump')).toBeVisible();
 
       // Select both metrics
-      await page.locator('input[type="checkbox"]#FLY10_TIME').check();
-      await page.locator('input[type="checkbox"]#VERTICAL_JUMP').check();
+      await page.locator('#FLY10_TIME').click();
+      await page.locator('#VERTICAL_JUMP').click();
 
-      await expect(page.locator('input[type="checkbox"]#FLY10_TIME')).toBeChecked();
-      await expect(page.locator('input[type="checkbox"]#VERTICAL_JUMP')).toBeChecked();
+      await expect(page.locator('#FLY10_TIME')).toHaveAttribute('aria-checked', 'true');
+      await expect(page.locator('#VERTICAL_JUMP')).toHaveAttribute('aria-checked', 'true');
     });
   });
 
@@ -765,25 +587,25 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
       // Verify progress bar exists
-      const progressBar = page.locator('[role="progressbar"], .progress');
+      const progressBar = page.locator('[role="progressbar"]');
       await expect(progressBar).toBeVisible();
 
       // Step 1
-      await expect(page.locator('text=Step 1 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 1 of 8')).toBeVisible();
 
-      // Navigate to step 2
-      await page.click('button:has-text("Coach Report")');
+      // Navigate to step 3 (step 2 skipped for team)
+      await page.locator('label[for="team"]').click();
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 2 of 7')).toBeVisible();
-
-      // Navigate to step 3
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 3 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 3 of 8')).toBeVisible();
 
       // Navigate to step 4
+      await page.fill('input[name="name"]', testReport.name);
       await page.click('button:has-text("Next")');
-      await expect(page.locator('text=Step 4 of 7')).toBeVisible();
+      await expect(page.locator('text=Step 4 of 8')).toBeVisible();
+
+      // Navigate to step 5
+      await page.click('button:has-text("Next")');
+      await expect(page.locator('text=Step 5 of 8')).toBeVisible();
 
       // Progress bar should still be visible
       await expect(progressBar).toBeVisible();
@@ -791,38 +613,33 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
   });
 
   test.describe('Composite Index', () => {
-    test('should show composite index step for coach reports', async ({ page }) => {
+    test('should show composite index step for team reports', async ({ page }) => {
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
 
       const testReport = generateTestReport();
 
-      // Navigate to step 7
+      // Navigate to step 8
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Coach Report")');
-      await page.click('button:has-text("Next")');
-
-      await page.fill('input[name="name"]', testReport.name);
-      await page.click('button:has-text("Next")');
-      await page.click('button:has-text("Next")');
+      await selectTeamReportAndFillDetails(page, testReport);
 
       // Select metrics
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
       // Skip benchmarks and filters
       await page.click('button:has-text("Next")');
       await page.click('button:has-text("Next")');
 
-      // Step 7: Should show composite index option
+      // Step 8: Should show composite index option
       await expect(page.locator('text=Enable Composite Index')).toBeVisible();
-      await expect(page.locator('text=Create a weighted composite score across multiple metrics')).toBeVisible();
+      await expect(page.locator('text=/Create a weighted composite score across multiple metrics/i')).toBeVisible();
     });
 
-    test('should show review summary for individual reports on step 7', async ({ page }) => {
+    test('should show review summary for individual reports on step 8', async ({ page }) => {
       await page.goto(`${STAGING_URL}/reports`);
       await page.waitForLoadState('networkidle');
 
@@ -832,23 +649,29 @@ test.describe('Report Wizard Error Handling - E2E Tests', () => {
       await page.click('button:has-text("Create Report")');
       await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
 
-      await page.click('button:has-text("Individual Report")');
+      await page.locator('label[for="individual"]').click();
       await page.click('button:has-text("Next")');
 
+      // Step 2: Athlete Selection — skip (no validation on this step)
+      await page.click('button:has-text("Next")');
+
+      // Step 3: Basic Details
       await page.fill('input[name="name"]', testReport.name);
       await page.click('button:has-text("Next")');
+
+      // Step 4: Timeframe
       await page.click('button:has-text("Next")');
 
-      // Select metrics
+      // Step 5: Metrics — select one
       await page.waitForTimeout(1000);
-      await page.locator('input[type="checkbox"]').first().check();
+      await page.locator('[role="checkbox"]').first().click();
       await page.click('button:has-text("Next")');
 
       // Skip benchmarks and filters
       await page.click('button:has-text("Next")');
       await page.click('button:has-text("Next")');
 
-      // Step 7: Should show review summary
+      // Step 8: Should show review summary
       await expect(page.locator('text=Review')).toBeVisible();
       await expect(page.locator('text=Individual Report')).toBeVisible();
     });

@@ -1149,6 +1149,9 @@ export class MeasurementService {
         isCalculated: measurements.isCalculated,
         calculatedFromMeasurementIds: measurements.calculatedFromMeasurementIds,
         calculationMetadata: measurements.calculationMetadata,
+        // Device import tracking
+        importSource: measurements.importSource,
+        importBatchId: measurements.importBatchId,
         // Event context (if measurement was recorded at an event)
         eventId: measurements.eventId,
         eventNameSnapshot: measurements.eventNameSnapshot,

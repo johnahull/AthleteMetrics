@@ -61,6 +61,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
       { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
       { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+
       { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
     ]
   },

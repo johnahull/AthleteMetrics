@@ -608,8 +608,15 @@ test.describe('Athlete Membership Submission - Error Handling', () => {
     await page.goto(`${TESTING_URL}/join`);
     await page.waitForLoadState('networkidle');
 
-    // Mock network failure for join code lookup
-    await page.route('**/api/organizations/join/**', route => route.abort());
+    // Mock network failure for join code lookup — return 500 instead of aborting
+    // to avoid inconsistent browser-level abort behavior
+    await page.route('**/api/organizations/join/**', route => {
+      route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ message: 'Internal Server Error' }),
+      });
+    });
 
     // Try to lookup a join code
     const codeInput = page.locator('input[placeholder*="code"]').first();
@@ -617,11 +624,11 @@ test.describe('Athlete Membership Submission - Error Handling', () => {
 
     const lookupButton = page.locator('button:has-text("Look Up")');
     await lookupButton.click();
-    await page.waitForTimeout(1000);
 
-    // Should show some kind of error (connection error or invalid code)
-    const errorExists = await page.locator('text=/error/i, text=/failed/i, text=/invalid/i').count() > 0;
-    expect(errorExists).toBeTruthy();
+    // Should show some kind of error — toast shows "Invalid Code" with error description
+    await expect(
+      page.getByText(/error|failed|invalid/i).first()
+    ).toBeVisible({ timeout: 10000 });
 
     // Unblock the route
     await page.unroute('**/api/organizations/join/**');

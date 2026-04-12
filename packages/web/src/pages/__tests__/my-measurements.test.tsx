@@ -163,6 +163,8 @@ describe('My Measurements Page', () => {
         eventId: null,
         eventNameSnapshot: null,
         eventDateSnapshot: null,
+        importSource: null,
+        importBatchId: null,
       },
       {
         id: 'm2',
@@ -190,6 +192,8 @@ describe('My Measurements Page', () => {
         eventId: null,
         eventNameSnapshot: null,
         eventDateSnapshot: null,
+        importSource: null,
+        importBatchId: null,
       },
       {
         id: 'm3',
@@ -216,6 +220,8 @@ describe('My Measurements Page', () => {
         eventId: null,
         eventNameSnapshot: null,
         eventDateSnapshot: null,
+        importSource: null,
+        importBatchId: null,
         createdAt: new Date('2024-01-10'),
       },
     ];

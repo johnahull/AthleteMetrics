@@ -4,6 +4,7 @@
  */
 
 import { Link } from "wouter";
+import { DeviceImportButton } from "@/components/device-import";
 import {
   useResultsVisibilityStatus,
   usePublishResults,
@@ -36,6 +37,8 @@ import { format } from "date-fns";
 
 interface EventResultsTabProps {
   eventId: string;
+  organizationId?: string;
+  eventType?: string | null;
   isFrozen?: boolean;
   eventStatus?: string;
   resultsPublishedAt?: string | Date | null;
@@ -60,6 +63,8 @@ const visibilityLabels: Record<ResultsVisibilityMode, { label: string; descripti
 
 export function EventResultsTab({
   eventId,
+  organizationId,
+  eventType,
   isFrozen = false,
   eventStatus,
   resultsPublishedAt,
@@ -315,17 +320,27 @@ export function EventResultsTab({
                 </p>
               </div>
             </div>
-            {isFrozen ? (
-              <Button variant="outline" disabled>
-                Enter Data
-              </Button>
-            ) : (
-              <Link href={`/events/${eventId}/data-entry`}>
-                <Button variant="outline">
+            <div className="flex gap-2">
+              {organizationId && (
+                <DeviceImportButton
+                  organizationId={organizationId}
+                  eventId={eventId}
+                  eventType={eventType ?? undefined}
+                  isFrozen={isFrozen}
+                />
+              )}
+              {isFrozen ? (
+                <Button variant="outline" disabled>
                   Enter Data
                 </Button>
-              </Link>
-            )}
+              ) : (
+                <Link href={`/events/${eventId}/data-entry`}>
+                  <Button variant="outline">
+                    Enter Data
+                  </Button>
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </CardContent>
