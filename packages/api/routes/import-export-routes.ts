@@ -1280,6 +1280,11 @@ export function registerImportExportRoutes(app: Express) {
       matchedCount = results.filter(r => r.action === 'matched' || r.action === 'matched_and_deactivated').length;
       skippedCount = results.filter(r => r.action === 'skipped').length;
 
+      // DEBUG: Log first few errors for diagnosis
+      if (errors.length > 0) {
+        console.error(`[CSV IMPORT] ${errors.length} errors in ${type} import. First 3:`, JSON.stringify(errors.slice(0, 3)));
+      }
+
       const response: ImportResult = {
         type,
         totalRows,
