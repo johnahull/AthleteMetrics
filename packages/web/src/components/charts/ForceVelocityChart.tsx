@@ -127,8 +127,8 @@ export function ForceVelocityChart({ profile }: Props) {
           },
           f0Label: {
             type: 'label',
-            xValue: 0.3,
-            yValue: f0 - 0.3,
+            xValue: v0 * 0.02,
+            yValue: f0 * 0.95,
             content: [`F0 = ${f0.toFixed(1)} ${units.forceRelUnit}`],
             color: 'rgba(59, 130, 246, 1)',
             font: { size: 11, weight: 'bold' },
