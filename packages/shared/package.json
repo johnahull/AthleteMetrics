@@ -31,7 +31,7 @@
     "dompurify": "^3.2.6",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",
-    "isomorphic-dompurify": "^2.30.0",
+    "isomorphic-dompurify": "^3.8.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   }
