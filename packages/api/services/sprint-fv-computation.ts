@@ -227,22 +227,22 @@ function computeFitQuality(
   vmax: number,
   tau: number,
 ): { fitR2: number; fitResiduals: FitResidual[] } {
-  const predicted = times.map(t => vmax * (t + tau * Math.exp(-t / tau) - tau));
+  const predictedDistances = times.map(t => vmax * (t + tau * Math.exp(-t / tau) - tau));
 
-  // R-squared
+  // R-squared (distance domain — see function JSDoc)
   const mean = distancesM.reduce((s, d) => s + d, 0) / distancesM.length;
   const ssTot = distancesM.reduce((s, d) => s + (d - mean) ** 2, 0);
-  const ssRes = distancesM.reduce((s, d, i) => s + (d - predicted[i]) ** 2, 0);
+  const ssRes = distancesM.reduce((s, d, i) => s + (d - predictedDistances[i]) ** 2, 0);
   const fitR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
 
   // Per-split residuals with time-domain inversion
   const fitResiduals: FitResidual[] = entries.map((e, i) => {
-    const predicted = solveTimeForDistance(distancesM[i], vmax, tau);
+    const predictedTime = solveTimeForDistance(distancesM[i], vmax, tau);
     return {
       distance: e.distance,
       observedTime: e.time,
-      predictedTime: predicted,
-      residual: e.time - predicted,
+      predictedTime,
+      residual: e.time - predictedTime,
     };
   });
 

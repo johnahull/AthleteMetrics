@@ -202,8 +202,8 @@ export class SprintFvService {
       .from(measurements)
       .where(and(...conditions));
 
-    if (splitMeasurements.length < MIN_SPLITS_REQUIRED) {
-      throw new SprintFvValidationError(`Insufficient split data: found ${splitMeasurements.length} splits, need at least ${MIN_SPLITS_REQUIRED}`);
+    if (splitMeasurements.length === 0) {
+      throw new SprintFvValidationError('No split measurements found for this athlete on this date');
     }
 
     // 1b. When querying by date (no eventId), check for mixed-event data.
