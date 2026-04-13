@@ -14,7 +14,7 @@ import {
   siteMetrics,
   type SprintFvProfile,
 } from '@shared/schema';
-import { eq, and, gte, lte, lt, desc, inArray, sql, or, ilike } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, desc, inArray, sql, or, ilike, isNull } from 'drizzle-orm';
 import { computeFvProfile } from './sprint-fv-computation';
 import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower, validateParameters } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
@@ -346,19 +346,23 @@ export class SprintFvService {
         classification, optimalGap, accelerationProfile, powerProfile, deltas,
       };
 
-      // 10b. Check for existing profile on this date/event
+      // 10b. Check for existing profile on this date/event.
+      // When eventId is provided, match on userId+date+eventId exactly.
+      // When eventId is absent, match only non-event profiles (userId+date+eventId IS NULL)
+      // to avoid silently replacing an event-scoped profile.
       const existingConditions = [
         eq(sprintFvProfiles.userId, userId),
         eq(sprintFvProfiles.date, date),
       ];
       if (options.eventId) {
         existingConditions.push(eq(sprintFvProfiles.eventId, options.eventId));
+      } else {
+        existingConditions.push(isNull(sprintFvProfiles.eventId));
       }
       const [existing] = await tx
         .select({ id: sprintFvProfiles.id })
         .from(sprintFvProfiles)
-        .where(and(...existingConditions))
-        .limit(1);
+        .where(and(...existingConditions));
 
       if (existing) {
         await tx.delete(sprintFvProfiles).where(eq(sprintFvProfiles.id, existing.id));

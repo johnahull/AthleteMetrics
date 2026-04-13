@@ -215,6 +215,10 @@ function solveTimeForDistance(distanceM: number, vmax: number, tau: number): num
 
 /**
  * Compute R-squared and per-split residuals for model fit quality.
+ *
+ * Note: R² is computed in the distance domain (predicted vs observed distances)
+ * because the LM model fits d(t). The per-split residuals are reported in the
+ * time domain (observed - predicted time) which is more intuitive for coaches.
  */
 function computeFitQuality(
   times: number[],
