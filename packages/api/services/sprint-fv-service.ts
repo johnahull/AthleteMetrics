@@ -302,6 +302,12 @@ export class SprintFvService {
     const teamId = firstM.teamId;
     const teamNameSnapshot = firstM.teamNameSnapshot;
 
+    // 6b. When eventId is specified, use the measurement's actual date to prevent
+    // mismatches between the caller-supplied date and the real event date.
+    if (options.eventId && firstM.date !== date) {
+      date = firstM.date;
+    }
+
     // 7. Compute sprint distance in meters for analysis
     const maxDistance = Math.max(...Object.keys(splitTimes).map(Number));
     const sprintDistanceM = maxDistance * YARDS_TO_METERS;
