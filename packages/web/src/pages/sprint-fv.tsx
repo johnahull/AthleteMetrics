@@ -58,7 +58,7 @@ export default function SprintFvPage() {
   const { data: athletes } = useQuery<OrgAthlete[]>({
     queryKey: ['athletes', effectiveOrgId],
     queryFn: async () => {
-      const response = await fetch(`/api/athletes?organizationId=${effectiveOrgId}`, {
+      const response = await fetch(`/api/athletes?organizationId=${encodeURIComponent(effectiveOrgId!)}`, {
         credentials: 'include',
       });
       if (!response.ok) throw new Error('Failed to fetch athletes');

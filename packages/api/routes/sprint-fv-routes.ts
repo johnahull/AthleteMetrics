@@ -37,12 +37,16 @@ const mutationLimiter = rateLimit({
 /**
  * Check if the requesting user can view profiles for a given athlete.
  * Athletes can view their own; coaches/admins can view athletes in their org.
+ *
+ * Known limitation: only checks user.primaryOrganizationId, so a coach whose
+ * primary org differs from the athlete's org will get a 403 even with legitimate
+ * secondary-org access. Matches the existing measurement/analytics access pattern.
  */
 async function canViewAthleteProfiles(user: SessionUser, athleteUserId: string): Promise<boolean> {
   if (isSiteAdmin(user)) return true;
   if (user.id === athleteUserId) return true;
 
-  // Check if user is a coach/admin in any org that the athlete belongs to
+  // Check if user is a coach/admin in their primary org and the athlete is in that org
   if (user.primaryOrganizationId) {
     const athleteRoles = await storage.getUserRoles(athleteUserId, user.primaryOrganizationId);
     if (athleteRoles.length > 0) {

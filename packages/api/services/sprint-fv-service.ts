@@ -221,6 +221,14 @@ export class SprintFvService {
       }
     }
 
+    // 2b. Validate deduplicated split count (duplicates for same distance are collapsed above)
+    const uniqueSplitCount = Object.keys(splitTimes).length;
+    if (uniqueSplitCount < MIN_SPLITS_REQUIRED) {
+      throw new SprintFvValidationError(
+        `Insufficient unique splits: found ${uniqueSplitCount} distinct distances, need at least ${MIN_SPLITS_REQUIRED}`
+      );
+    }
+
     // 3. Determine distance unit (all split metrics are in yards based on code names)
     const distanceUnit = 'yards' as const;
 

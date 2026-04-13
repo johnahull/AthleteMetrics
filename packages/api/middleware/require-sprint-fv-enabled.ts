@@ -55,6 +55,7 @@ export async function requireSprintFvEnabled(
         .select()
         .from(userOrganizations)
         .where(eq(userOrganizations.userId, req.user.id))
+        .orderBy(userOrganizations.createdAt)
         .limit(1);
 
       if (userOrgs.length > 0) {
