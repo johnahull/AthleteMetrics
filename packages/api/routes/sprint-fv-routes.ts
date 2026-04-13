@@ -256,9 +256,9 @@ export function registerSprintFvRoutes(app: Express) {
           return res.status(404).json({ message: "Profile not found" });
         }
 
-        // Only the submitter, org_admin, or site_admin can delete
+        // Only the submitter, org_admin in the profile's org, or site_admin can delete
         if (profile.submittedBy !== user.id && !isSiteAdmin(user)) {
-          if (profile.organizationId && user.primaryOrganizationId === profile.organizationId) {
+          if (profile.organizationId) {
             const roles = await storage.getUserRoles(user.id, profile.organizationId);
             if (!roles.includes('org_admin')) {
               return res.status(403).json({ message: "Not authorized to delete this profile" });

@@ -45,8 +45,11 @@ async function syncPhysicalMetricToProfile(
     let weightLbs: number;
     if (unitLower === 'kg') {
       weightLbs = value * 2.20462;
+    } else if (unitLower === 'lbs' || unitLower === 'lb') {
+      weightLbs = value;
     } else {
-      weightLbs = value; // assume lbs
+      console.warn(`[PROFILE SYNC] Unknown weight unit '${unit}' for ${metricCode} — skipping profile sync`);
+      return;
     }
     await storage.updateUser(userId, { weight: Math.round(weightLbs) });
     return;
@@ -57,8 +60,11 @@ async function syncPhysicalMetricToProfile(
     let heightIn: number;
     if (unitLower === 'cm') {
       heightIn = value / 2.54;
+    } else if (unitLower === 'in' || unitLower === 'inches') {
+      heightIn = value;
     } else {
-      heightIn = value; // assume inches
+      console.warn(`[PROFILE SYNC] Unknown height unit '${unit}' for ${metricCode} — skipping profile sync`);
+      return;
     }
     await storage.updateUser(userId, { height: Math.round(heightIn) });
   }

@@ -51,15 +51,21 @@ export async function requireSprintFvEnabled(
     organizationId = req.params.organizationId || req.params.orgId;
 
     if (!organizationId && req.user) {
-      const userOrgs = await db
-        .select()
-        .from(userOrganizations)
-        .where(eq(userOrganizations.userId, req.user.id))
-        .orderBy(userOrganizations.createdAt)
-        .limit(1);
+      // Prefer primaryOrganizationId (user's chosen "home" org), then fall back
+      // to first-joined org — matches how other org-scoped middleware resolves context.
+      if (req.user.primaryOrganizationId) {
+        organizationId = req.user.primaryOrganizationId;
+      } else {
+        const userOrgs = await db
+          .select()
+          .from(userOrganizations)
+          .where(eq(userOrganizations.userId, req.user.id))
+          .orderBy(userOrganizations.createdAt)
+          .limit(1);
 
-      if (userOrgs.length > 0) {
-        organizationId = userOrgs[0].organizationId;
+        if (userOrgs.length > 0) {
+          organizationId = userOrgs[0].organizationId;
+        }
       }
     }
 
