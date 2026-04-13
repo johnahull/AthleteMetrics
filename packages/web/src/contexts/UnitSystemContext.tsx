@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import {
   type UnitSystem,
   convertVelocity,
@@ -42,7 +42,7 @@ export function UnitSystemProvider({ children }: { children: ReactNode }) {
     try { localStorage.setItem(STORAGE_KEY, s); } catch { /* ignore */ }
   }, []);
 
-  const value: UnitSystemContextValue = {
+  const value = useMemo<UnitSystemContextValue>(() => ({
     system,
     setSystem,
     vel: (ms: number) => convertVelocity(ms, system),
@@ -52,7 +52,7 @@ export function UnitSystemProvider({ children }: { children: ReactNode }) {
     massUnit: massUnit(system),
     forceRelUnit: forceRelUnit(system),
     powerRelUnit: powerRelUnit(system),
-  };
+  }), [system, setSystem]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
