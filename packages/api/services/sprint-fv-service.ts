@@ -206,6 +206,17 @@ export class SprintFvService {
       throw new SprintFvValidationError(`Insufficient split data: found ${splitMeasurements.length} splits, need at least ${MIN_SPLITS_REQUIRED}`);
     }
 
+    // 1b. When querying by date (no eventId), check for mixed-event data.
+    // Merging splits from different events produces an inaccurate profile.
+    if (!options.eventId) {
+      const distinctEventIds = new Set(splitMeasurements.map(m => m.eventId).filter(Boolean));
+      if (distinctEventIds.size > 1) {
+        throw new SprintFvValidationError(
+          `Multiple events found on ${date}. Please select a specific event to generate a profile from.`
+        );
+      }
+    }
+
     // 2. Build split times map — pick fastest time per distance (handles duplicate trials)
     const splitTimes: Record<string, number> = {};
     const usedMeasurementIds: Record<string, string> = {};
@@ -425,6 +436,11 @@ export class SprintFvService {
   > {
     // Two-step: Drizzle ORM query for eligible (user, date) pairs, then aggregate in JS.
     // Using inArray() ensures proper parameterization (no raw SQL interpolation).
+    // Bounded to last 2 years to prevent unbounded scans on orgs with large histories.
+    const twoYearsAgo = new Date();
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    const dateLowerBound = twoYearsAgo.toISOString().slice(0, 10);
+
     const eligibleRows = await db
       .select({
         userId: measurements.userId,
@@ -434,6 +450,7 @@ export class SprintFvService {
       .where(and(
         eq(measurements.organizationId, orgId),
         inArray(measurements.metric, SPLIT_METRIC_CODES),
+        gte(measurements.date, dateLowerBound),
       ))
       .groupBy(measurements.userId, measurements.date)
       .having(sql`COUNT(DISTINCT ${measurements.metric}) >= ${MIN_SPLITS_REQUIRED}`);
