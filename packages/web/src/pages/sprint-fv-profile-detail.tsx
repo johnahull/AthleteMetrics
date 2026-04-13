@@ -85,6 +85,18 @@ function SprintFvProfileDetailInner() {
         </CardContent>
       </Card>
 
+      {/* Parameter plausibility warnings */}
+      {profile.analysisJson?.parameterWarnings && profile.analysisJson.parameterWarnings.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <p className="font-medium text-blue-800 mb-1">Parameter Warnings</p>
+          <ul className="list-disc list-inside text-sm text-blue-700">
+            {profile.analysisJson.parameterWarnings.map((warning, i) => (
+              <li key={i}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* 2. KPI cards */}
       <SprintFvKpiCards profile={profile} />
 

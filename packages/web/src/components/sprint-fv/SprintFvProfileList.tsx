@@ -84,7 +84,7 @@ export function SprintFvProfileList({ userId }: Props) {
                 <TableCell>
                   {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
                 </TableCell>
-                <TableCell className="text-right">{p.f0Rel ? parseFloat(p.f0Rel).toFixed(2) : '—'}</TableCell>
+                <TableCell className="text-right">{p.f0Rel ? units.forceRel(parseFloat(p.f0Rel)).toFixed(2) : '—'}</TableCell>
                 <TableCell className="text-right">{p.v0 ? units.vel(parseFloat(p.v0)).toFixed(2) : '—'}</TableCell>
                 <TableCell className="text-right">{p.pmaxRel ? parseFloat(p.pmaxRel).toFixed(2) : '—'}</TableCell>
                 <TableCell className="text-right">{p.fitR2 ? parseFloat(p.fitR2).toFixed(4) : '—'}</TableCell>

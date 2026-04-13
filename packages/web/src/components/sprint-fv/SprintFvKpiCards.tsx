@@ -25,7 +25,7 @@ export function SprintFvKpiCards({ profile }: Props) {
   const cards = [
     {
       title: `F0 (${units.forceRelUnit})`,
-      value: profile.f0Rel ? parseFloat(profile.f0Rel).toFixed(2) : '—',
+      value: profile.f0Rel ? units.forceRel(parseFloat(profile.f0Rel)).toFixed(2) : '—',
       icon: Zap,
       trend: deltaToTrend(deltas?.f0Delta),
     },

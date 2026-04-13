@@ -83,8 +83,8 @@ export function SprintFvAnalysisCard({ profile }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <GapItem
                 label="F0"
-                actual={profile.f0Rel ? parseFloat(profile.f0Rel) : 0}
-                optimal={optimalGap.optimalF0}
+                actual={profile.f0Rel ? units.forceRel(parseFloat(profile.f0Rel)) : 0}
+                optimal={units.forceRel(optimalGap.optimalF0)}
                 gapPercent={optimalGap.f0GapPercent}
                 unit={units.forceRelUnit}
               />
@@ -99,7 +99,7 @@ export function SprintFvAnalysisCard({ profile }: Props) {
             {optimalGap.estimatedTimeImprovement > 0.01 && (
               <div className="bg-blue-50 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  {optimalGap.recommendation}
+                  {buildRecommendation(optimalGap, units)}
                 </p>
               </div>
             )}
@@ -108,6 +108,27 @@ export function SprintFvAnalysisCard({ profile }: Props) {
       </CardContent>
     </Card>
   );
+}
+
+function buildRecommendation(
+  gap: NonNullable<SprintFvProfile['analysisJson']>['optimalGap'],
+  units: ReturnType<typeof useUnitSystem>,
+): string {
+  // Fallback for profiles generated before sprintDistanceM was added
+  if (!gap.sprintDistanceM) return gap.recommendation;
+  const distLabel = units.system === 'imperial'
+    ? `${(gap.sprintDistanceM * 1.09361).toFixed(0)}yd`
+    : `${gap.sprintDistanceM.toFixed(0)}m`;
+  const timeDelta = gap.estimatedTimeImprovement.toFixed(2);
+
+  if (gap.f0Gap > 0 && gap.v0Gap < 0) {
+    return `Increasing V0 by ${units.vel(Math.abs(gap.v0Gap)).toFixed(2)} ${units.velUnit} (while maintaining Pmax) ` +
+      `could improve ${distLabel} time by ~${timeDelta}s.`;
+  } else if (gap.f0Gap < 0 && gap.v0Gap > 0) {
+    return `Increasing F0 by ${units.forceRel(Math.abs(gap.f0Gap)).toFixed(2)} ${units.forceRelUnit} (while maintaining Pmax) ` +
+      `could improve ${distLabel} time by ~${timeDelta}s.`;
+  }
+  return `Profile is near optimal. Estimated time improvement from further balancing: ~${timeDelta}s.`;
 }
 
 function GapItem({ label, actual, optimal, gapPercent, unit }: {

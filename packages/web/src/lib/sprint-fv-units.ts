@@ -2,6 +2,7 @@ export type UnitSystem = 'metric' | 'imperial';
 
 const MS_TO_MPH = 2.23694;
 const KG_TO_LBS = 2.20462;
+const G = 9.80665; // m/s², standard gravity
 
 // ─── Value Conversions ─────────────────────────────────────────────────────
 
@@ -11,6 +12,14 @@ export function convertVelocity(ms: number, system: UnitSystem): number {
 
 export function convertMass(kg: number, system: UnitSystem): number {
   return system === 'imperial' ? kg * KG_TO_LBS : kg;
+}
+
+/**
+ * Convert relative force from N/kg to lbf/lb (×BW).
+ * N/kg ÷ g = lbf/lb, representing "times body weight" in horizontal force.
+ */
+export function convertForceRel(nPerKg: number, system: UnitSystem): number {
+  return system === 'imperial' ? nPerKg / G : nPerKg;
 }
 
 // ─── Unit Labels ───────────────────────────────────────────────────────────

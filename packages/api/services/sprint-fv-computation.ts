@@ -129,7 +129,7 @@ function fitModel(times: number[], distances: number[]): { vmax: number; tau: nu
     distanceModel,
     {
       initialValues: [initialVmax, initialTau],
-      minValues: [3.0, 0.3],   // Physical lower bounds
+      minValues: [3.0, 0.7],   // Physical lower bounds (tau < 0.7 exceeds human biomechanical limits)
       maxValues: [15.0, 4.0],  // Physical upper bounds
       maxIterations: 200,
       damping: 0.01,

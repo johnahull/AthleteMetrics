@@ -30,6 +30,7 @@ export interface OptimalGapResult {
   f0GapPercent: number;
   v0GapPercent: number;
   estimatedTimeImprovement: number;
+  sprintDistanceM: number;
   recommendation: string;
 }
 
@@ -59,6 +60,59 @@ interface ProfileValues {
   rfPeak: number;
   drf: number;
   date: string;
+}
+
+// ============================================================================
+// Parameter Plausibility Validation
+// ============================================================================
+
+/**
+ * Check computed parameters against literature ranges and return warnings
+ * for values that exceed physiological norms.
+ *
+ * Thresholds based on Morin et al. (2011, 2016), Samozino et al. (2016):
+ * - F0_rel: trained 5–9 N/kg, elite 8–12 N/kg → warn > 14
+ * - tau: trained 1.0–1.5s, elite 0.8–1.2s → warn < 0.8
+ * - V0: normal athletic range 5–12 m/s → warn < 5
+ * - Pmax_rel: trained 10–20, elite 20–30 W/kg → warn > 30
+ */
+export function validateParameters(params: {
+  f0Rel: number;
+  v0: number;
+  tau: number;
+  pmaxRel: number;
+}): string[] {
+  const warnings: string[] = [];
+
+  if (params.f0Rel > 14) {
+    warnings.push(
+      `F₀ relative (${params.f0Rel.toFixed(1)} N/kg) exceeds the elite sprinter range (8–12 N/kg). ` +
+      `This may indicate the sprint distance is too short for reliable model fitting.`
+    );
+  }
+
+  if (params.tau < 0.75) {
+    warnings.push(
+      `Time constant τ (${params.tau.toFixed(2)}s) is at the physiological lower limit. ` +
+      `The sprint distance may be too short for reliable max-velocity estimation.`
+    );
+  }
+
+  if (params.v0 < 5) {
+    warnings.push(
+      `V₀ (${params.v0.toFixed(1)} m/s) is below the normal athletic range (5+ m/s). ` +
+      `Check that split times are accurate.`
+    );
+  }
+
+  if (params.pmaxRel > 30) {
+    warnings.push(
+      `Pmax relative (${params.pmaxRel.toFixed(1)} W/kg) exceeds the elite range (20–30 W/kg). ` +
+      `This is likely inflated by extreme F₀ or V₀ values.`
+    );
+  }
+
+  return warnings;
 }
 
 // ============================================================================
@@ -269,11 +323,12 @@ export function analyzePower(
 ): PowerProfile {
   const velocityAtPmax = v0 / 2;
 
-  // RF Peak norms (Morin et al.): > 0.55 excellent, 0.48-0.55 good, 0.42-0.48 average, < 0.42 poor
+  // RF Peak norms (model-computed from F0_rel): > 0.71 excellent, 0.63-0.71 good, 0.52-0.63 average, < 0.52 poor
+  // Note: these are higher than empirical force-plate norms because RF_peak = F0/(F0²+g²)^0.5
   let rfPeakRating: PowerProfile['rfPeakRating'];
-  if (rfPeak > 0.55) rfPeakRating = 'excellent';
-  else if (rfPeak > 0.48) rfPeakRating = 'good';
-  else if (rfPeak > 0.42) rfPeakRating = 'average';
+  if (rfPeak > 0.71) rfPeakRating = 'excellent';
+  else if (rfPeak > 0.63) rfPeakRating = 'good';
+  else if (rfPeak > 0.52) rfPeakRating = 'average';
   else rfPeakRating = 'poor';
 
   // DRF norms (always negative): closer to 0 is better
@@ -372,7 +427,7 @@ export function computeOptimalGap(
   const optimalTime = estimateSprintTime(sprintDistanceM, optimalV0, optimalTau);
   const estimatedTimeImprovement = Math.max(0, actualTime - optimalTime);
 
-  // Build recommendation
+  // Build recommendation (metric units for DB storage — frontend overrides with unit-aware display)
   let recommendation: string;
   if (f0Gap > 0 && v0Gap < 0) {
     recommendation = `Increasing V0 by ${Math.abs(v0Gap).toFixed(2)} m/s (while maintaining Pmax) ` +
@@ -393,6 +448,7 @@ export function computeOptimalGap(
     f0GapPercent,
     v0GapPercent,
     estimatedTimeImprovement,
+    sprintDistanceM,
     recommendation,
   };
 }

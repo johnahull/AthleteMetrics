@@ -16,7 +16,7 @@ import {
 } from '@shared/schema';
 import { eq, and, gte, lte, lt, desc, inArray, sql, or, ilike } from 'drizzle-orm';
 import { computeFvProfile } from './sprint-fv-computation';
-import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower } from './sprint-fv-analysis';
+import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower, validateParameters } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
 
 // Hardcoded split metric codes — maps metric code to distance in the code's unit
@@ -314,7 +314,18 @@ export class SprintFvService {
       );
     }
 
-    const analysisJson: SprintFvAnalysisJson = { classification, optimalGap, accelerationProfile, powerProfile, deltas };
+    // 10b. Parameter plausibility validation
+    const parameterWarnings = validateParameters({
+      f0Rel: computed.f0Rel,
+      v0: computed.v0,
+      tau: computed.tau,
+      pmaxRel: computed.pmaxRel,
+    });
+
+    const analysisJson: SprintFvAnalysisJson = {
+      parameterWarnings: parameterWarnings.length > 0 ? parameterWarnings : undefined,
+      classification, optimalGap, accelerationProfile, powerProfile, deltas,
+    };
 
     // 10. Check for existing profile on this date/event (prevent duplicates)
     const existingConditions = [

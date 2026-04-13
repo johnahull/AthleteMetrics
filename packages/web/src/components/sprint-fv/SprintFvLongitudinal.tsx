@@ -69,7 +69,7 @@ export function SprintFvLongitudinal({ userId }: Props) {
         const val = p[m.key as 'f0Rel' | 'v0' | 'pmaxRel'];
         if (val == null) return null;
         const num = parseFloat(val);
-        return m.key === 'v0' ? units.vel(num) : num;
+        return m.key === 'v0' ? units.vel(num) : m.key === 'f0Rel' ? units.forceRel(num) : num;
       }),
       borderColor: m.color,
       backgroundColor: m.color.replace(', 1)', ', 0.1)'),
@@ -149,8 +149,8 @@ export function SprintFvLongitudinal({ userId }: Props) {
                           </Badge>
                         )}
                       </td>
-                      <td className="py-2 pr-4 text-right">{p.f0Rel ? parseFloat(p.f0Rel).toFixed(2) : '—'}</td>
-                      <td className="py-2 pr-4 text-right">{p.v0 ? parseFloat(p.v0).toFixed(2) : '—'}</td>
+                      <td className="py-2 pr-4 text-right">{p.f0Rel ? units.forceRel(parseFloat(p.f0Rel)).toFixed(2) : '—'}</td>
+                      <td className="py-2 pr-4 text-right">{p.v0 ? units.vel(parseFloat(p.v0)).toFixed(2) : '—'}</td>
                       <td className="py-2 text-right">{p.pmaxRel ? parseFloat(p.pmaxRel).toFixed(2) : '—'}</td>
                     </tr>
                   );

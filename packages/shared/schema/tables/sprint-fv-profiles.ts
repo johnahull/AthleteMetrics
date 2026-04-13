@@ -28,6 +28,7 @@ export interface FitResidual {
  * Analysis stored as JSON on the profile
  */
 export interface SprintFvAnalysisJson {
+  parameterWarnings?: string[];
   classification: {
     classification: 'force-deficit' | 'velocity-deficit' | 'well-balanced';
     imbalancePercent: number;
@@ -44,6 +45,7 @@ export interface SprintFvAnalysisJson {
     f0GapPercent: number;
     v0GapPercent: number;
     estimatedTimeImprovement: number;
+    sprintDistanceM: number;
     recommendation: string;
   };
   accelerationProfile: {

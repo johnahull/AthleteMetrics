@@ -10,7 +10,8 @@ interface Props {
 
 export function ForceVelocityChart({ profile }: Props) {
   const units = useUnitSystem();
-  const f0 = profile.f0Rel ? parseFloat(profile.f0Rel) : 0;
+  const f0Raw = profile.f0Rel ? parseFloat(profile.f0Rel) : 0;
+  const f0 = units.forceRel(f0Raw);
   const v0Raw = profile.v0 ? parseFloat(profile.v0) : 0;
   const v0 = units.vel(v0Raw);
   const pmax = profile.pmaxRel ? parseFloat(profile.pmaxRel) : 0;
@@ -37,13 +38,13 @@ export function ForceVelocityChart({ profile }: Props) {
       yAxisID: 'y',
     });
 
-    // Dataset 2: P-V parabola
+    // Dataset 2: P-V parabola (computed in metric so Y1 axis stays in W/kg)
     const pvPoints: { x: number; y: number }[] = [];
     const numPoints = 50;
     for (let i = 0; i <= numPoints; i++) {
-      const v = (i / numPoints) * v0;
-      const p = f0 * v * (1 - v / v0);
-      pvPoints.push({ x: v, y: p });
+      const vMetric = (i / numPoints) * v0Raw;
+      const p = f0Raw * vMetric * (1 - vMetric / v0Raw);
+      pvPoints.push({ x: units.vel(vMetric), y: p });
     }
     datasets.push({
       type: 'scatter' as const,
@@ -64,7 +65,7 @@ export function ForceVelocityChart({ profile }: Props) {
         type: 'scatter' as const,
         label: 'Optimal Profile',
         data: [
-          { x: 0, y: analysis.optimalF0 },
+          { x: 0, y: units.forceRel(analysis.optimalF0) },
           { x: units.vel(analysis.optimalV0), y: 0 },
         ],
         showLine: true,
@@ -154,7 +155,7 @@ export function ForceVelocityChart({ profile }: Props) {
         position: 'left',
         title: { display: true, text: `Force (${units.forceRelUnit})` },
         min: 0,
-        max: Math.max(f0, analysis?.optimalF0 || 0) * 1.15,
+        max: Math.max(f0, analysis ? units.forceRel(analysis.optimalF0) : 0) * 1.15,
       },
       y1: {
         type: 'linear',

@@ -3,6 +3,7 @@ import {
   type UnitSystem,
   convertVelocity,
   convertMass,
+  convertForceRel,
   velocityUnit,
   massUnit,
   forceRelUnit,
@@ -24,6 +25,7 @@ interface UnitSystemContextValue {
   setSystem: (s: UnitSystem) => void;
   vel: (ms: number) => number;
   mass: (kg: number) => number;
+  forceRel: (nPerKg: number) => number;
   velUnit: string;
   massUnit: string;
   forceRelUnit: string;
@@ -45,6 +47,7 @@ export function UnitSystemProvider({ children }: { children: ReactNode }) {
     setSystem,
     vel: (ms: number) => convertVelocity(ms, system),
     mass: (kg: number) => convertMass(kg, system),
+    forceRel: (nPerKg: number) => convertForceRel(nPerKg, system),
     velUnit: velocityUnit(system),
     massUnit: massUnit(system),
     forceRelUnit: forceRelUnit(system),

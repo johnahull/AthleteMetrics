@@ -41,6 +41,7 @@ export interface SprintFvProfile {
     residual: number;
   }> | null;
   analysisJson: {
+    parameterWarnings?: string[];
     classification: {
       classification: 'force-deficit' | 'velocity-deficit' | 'well-balanced';
       imbalancePercent: number;
@@ -57,6 +58,7 @@ export interface SprintFvProfile {
       f0GapPercent: number;
       v0GapPercent: number;
       estimatedTimeImprovement: number;
+      sprintDistanceM: number;
       recommendation: string;
     };
     accelerationProfile: {
