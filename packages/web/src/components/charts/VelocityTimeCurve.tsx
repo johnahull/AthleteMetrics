@@ -124,7 +124,7 @@ export function VelocityTimeCurve({ profile }: Props) {
 
   return (
     <div className="rounded-lg border bg-card shadow-sm p-6" style={{ height: 300 }}>
-      <Scatter data={chartData} options={options} />
+      <Scatter key={units.system} data={chartData} options={options} />
     </div>
   );
 }

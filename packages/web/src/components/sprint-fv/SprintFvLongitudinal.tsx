@@ -112,7 +112,7 @@ export function SprintFvLongitudinal({ userId }: Props) {
       <Card>
         <CardContent className="p-4">
           <div style={{ height: 400 }}>
-            <Line data={chartData} options={options} />
+            <Line key={units.system} data={chartData} options={options} />
           </div>
         </CardContent>
       </Card>
