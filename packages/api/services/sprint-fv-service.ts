@@ -224,6 +224,7 @@ export class SprintFvService {
       const distance = SPLIT_METRICS[m.metric];
       if (distance !== undefined) {
         const time = parseFloat(m.value);
+        if (!isFinite(time) || time <= 0) continue;
         const key = String(distance);
         if (!(key in splitTimes) || time < splitTimes[key]) {
           splitTimes[key] = time;
