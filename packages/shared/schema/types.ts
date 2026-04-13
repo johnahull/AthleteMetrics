@@ -129,6 +129,13 @@ export type EventFreezeOverride = typeof tables.eventFreezeOverrides.$inferSelec
 export type ImportBatch = typeof tables.importBatches.$inferSelect;
 
 // ============================================================================
+// Sprint F-V Profile Tables
+// ============================================================================
+
+export type SprintFvProfile = typeof tables.sprintFvProfiles.$inferSelect;
+export type InsertSprintFvProfile = typeof tables.sprintFvProfiles.$inferInsert;
+
+// ============================================================================
 // Enum Types
 // ============================================================================
 

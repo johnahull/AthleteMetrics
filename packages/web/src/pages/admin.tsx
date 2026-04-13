@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Heart, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
+import { Sparkles, Heart, Zap, AlertTriangle, FileText, Bell, Calculator, Loader2 } from "lucide-react";
 import { AdminNotificationSettingsCard } from "@/components/notifications/admin-notification-settings-card";
 
 export default function AdminPage() {
@@ -19,13 +19,14 @@ export default function AdminPage() {
   const [, setLocation] = useLocation();
 
   // Site Settings - hooks must be called unconditionally (React Rules of Hooks)
-  const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean }>({
+  const { data: siteSettings } = useQuery<{ aiModel: string; wellnessModuleEnabled: boolean; sprintFvEnabled: boolean }>({
     queryKey: ["/api/site-settings"],
     enabled: !!user?.isSiteAdmin, // Only fetch if user is site admin
   });
 
   const [selectedModel, setSelectedModel] = useState<string>("gpt-5-nano");
   const [wellnessEnabled, setWellnessEnabled] = useState<boolean>(true);
+  const [sprintFvEnabled, setSprintFvEnabled] = useState<boolean>(false);
 
   // Redirect non-site-admins to home
   useEffect(() => {
@@ -40,6 +41,9 @@ export default function AdminPage() {
     }
     if (siteSettings?.wellnessModuleEnabled !== undefined) {
       setWellnessEnabled(siteSettings.wellnessModuleEnabled);
+    }
+    if (siteSettings?.sprintFvEnabled !== undefined) {
+      setSprintFvEnabled(siteSettings.sprintFvEnabled);
     }
   }, [siteSettings]);
 
@@ -78,6 +82,30 @@ export default function AdminPage() {
     onError: (error: any) => {
       toast({
         title: "Error updating wellness module",
+        description: error.message,
+        variant: "destructive"
+      });
+    },
+  });
+
+  const updateSprintFvMutation = useMutation({
+    mutationFn: async (enabled: boolean) => {
+      const res = await apiRequest("PATCH", "/api/site-settings", { sprintFvEnabled: enabled });
+      return res.json();
+    },
+    onSuccess: (_, enabled) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/site-settings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/site-settings/public"] });
+      toast({
+        title: enabled ? "Sprint F-V profiling enabled" : "Sprint F-V profiling disabled",
+        description: enabled
+          ? "Organizations can now enable force-velocity profiling."
+          : "Sprint F-V profiling is now disabled for all organizations.",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Error updating Sprint F-V setting",
         description: error.message,
         variant: "destructive"
       });
@@ -138,6 +166,11 @@ export default function AdminPage() {
   const handleWellnessToggle = (enabled: boolean) => {
     setWellnessEnabled(enabled);
     updateWellnessMutation.mutate(enabled);
+  };
+
+  const handleSprintFvToggle = (enabled: boolean) => {
+    setSprintFvEnabled(enabled);
+    updateSprintFvMutation.mutate(enabled);
   };
 
   const selectedModelData = aiModels.find(m => m.value === selectedModel);
@@ -257,6 +290,48 @@ export default function AdminPage() {
                 <p className="font-medium">Wellness Module Disabled</p>
                 <p className="mt-1">
                   All organizations are currently unable to access wellness features.
+                  Organization-level settings are frozen until you re-enable this module.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Sprint F-V Profiling Configuration */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Zap className="h-5 w-5" />
+            Sprint F-V Profiling
+          </CardTitle>
+          <CardDescription>
+            Control global access to JB Morin force-velocity sprint profiling
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div className="space-y-0.5">
+              <div className="font-medium">Enable Sprint F-V Profiling</div>
+              <div className="text-sm text-muted-foreground">
+                When disabled, force-velocity profiling is hidden for all organizations
+              </div>
+            </div>
+            <Switch
+              checked={sprintFvEnabled}
+              onCheckedChange={handleSprintFvToggle}
+              disabled={updateSprintFvMutation.isPending}
+              data-testid="sprint-fv-module-toggle"
+            />
+          </div>
+
+          {!sprintFvEnabled && (
+            <div className="flex items-start gap-2 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium">Sprint F-V Profiling Disabled</p>
+                <p className="mt-1">
+                  All organizations are currently unable to access force-velocity profiling.
                   Organization-level settings are frozen until you re-enable this module.
                 </p>
               </div>

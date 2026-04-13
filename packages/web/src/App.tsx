@@ -67,6 +67,10 @@ const ParentDashboard = React.lazy(() => import("./pages/parent-dashboard"));
 const ParentChildDetail = React.lazy(() => import("./pages/parent-child-detail"));
 const ParentLinkChild = React.lazy(() => import("./pages/parent-link-child"));
 
+// Lazy load sprint F-V pages
+const SprintFv = React.lazy(() => import("./pages/sprint-fv"));
+const SprintFvProfileDetail = React.lazy(() => import("./pages/sprint-fv-profile-detail"));
+
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
 const CoachAnalytics = React.lazy(() => import("./pages/CoachAnalytics"));
@@ -369,6 +373,16 @@ function Router() {
       <Route path="/athlete-analytics">
         <RouteWrapper loadingText="Loading Athlete Analytics...">
           <AthleteAnalytics />
+        </RouteWrapper>
+      </Route>
+      <Route path="/sprint-fv/:id">
+        <RouteWrapper loadingText="Loading Sprint F-V Profile...">
+          <SprintFvProfileDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/sprint-fv">
+        <RouteWrapper loadingText="Loading Sprint F-V...">
+          <SprintFv />
         </RouteWrapper>
       </Route>
       <Route path="/publish">
