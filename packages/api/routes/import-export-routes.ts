@@ -37,6 +37,8 @@ async function syncPhysicalMetricToProfile(
   value: number,
   unit: string,
 ): Promise<void> {
+  if (!isFinite(value)) return;
+
   const code = metricCode.toUpperCase();
   const unitLower = (unit || '').toLowerCase();
 
