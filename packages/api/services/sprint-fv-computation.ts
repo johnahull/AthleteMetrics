@@ -137,10 +137,12 @@ function fitModel(times: number[], distances: number[]): { vmax: number; tau: nu
     }
   );
 
-  return {
-    vmax: result.parameterValues[0],
-    tau: result.parameterValues[1],
-  };
+  const [vmax, tau] = result.parameterValues;
+  if (!isFinite(vmax) || !isFinite(tau)) {
+    throw new Error('Curve fit did not converge — check split times for accuracy');
+  }
+
+  return { vmax, tau };
 }
 
 /**

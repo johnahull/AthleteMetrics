@@ -63,7 +63,7 @@ export function registerSprintFvRoutes(app: Express) {
     standardLimiter,
     async (req: Request, res: Response) => {
       try {
-        const user = req.session?.user as SessionUser;
+        const user = req.user as SessionUser;
         const { userId } = req.params;
 
         if (!await canViewAthleteProfiles(user, userId)) {
@@ -102,7 +102,7 @@ export function registerSprintFvRoutes(app: Express) {
     mutationLimiter,
     async (req: Request, res: Response) => {
       try {
-        const user = req.session?.user as SessionUser;
+        const user = req.user as SessionUser;
         const parsed = generateSprintFvProfileSchema.parse(req.body);
 
         // Verify the coach can access this athlete's data
@@ -142,7 +142,7 @@ export function registerSprintFvRoutes(app: Express) {
     standardLimiter,
     async (req: Request, res: Response) => {
       try {
-        const user = req.session?.user as SessionUser;
+        const user = req.user as SessionUser;
         const { userId } = req.params;
 
         if (!await canViewAthleteProfiles(user, userId)) {
@@ -217,7 +217,7 @@ export function registerSprintFvRoutes(app: Express) {
     standardLimiter,
     async (req: Request, res: Response) => {
       try {
-        const user = req.session?.user as SessionUser;
+        const user = req.user as SessionUser;
         const profile = await sprintFvService.getById(req.params.id);
 
         if (!profile) {
@@ -245,7 +245,7 @@ export function registerSprintFvRoutes(app: Express) {
     mutationLimiter,
     async (req: Request, res: Response) => {
       try {
-        const user = req.session?.user as SessionUser;
+        const user = req.user as SessionUser;
         const profile = await sprintFvService.getById(req.params.id);
 
         if (!profile) {

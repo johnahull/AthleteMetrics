@@ -20,11 +20,12 @@ import { ArrowLeft, Save, Settings } from "lucide-react";
 import { Link } from "wouter";
 import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
 import { updateOrganizationSchema } from "@shared/schema";
-import type { UpdateOrganization } from "@shared/schema";
+import type { UpdateOrganization, SiteSettings } from "@shared/schema";
 import { OrganizationTypeSelector } from "@/components/organization-type-selector";
 
 // Loading spinner component
@@ -46,6 +47,12 @@ export default function OrganizationSettings() {
 
   // Fetch organization data
   const { data: organization, isLoading, error } = useOrganization(organizationId);
+
+  // Fetch site settings to determine which toggles should be disabled
+  const { data: siteSettings } = useQuery<Pick<SiteSettings, 'sprintFvEnabled' | 'wellnessModuleEnabled'>>({
+    queryKey: ['/api/site-settings/public'],
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Update mutation
   const updateMutation = useUpdateOrganization(organizationId!);
@@ -412,13 +419,16 @@ export default function OrganizationSettings() {
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Sprint F-V Profiling</FormLabel>
                       <FormDescription>
-                        Enable JB Morin force-velocity sprint profiling for this organization
+                        {siteSettings?.sprintFvEnabled === false
+                          ? 'Sprint F-V profiling must be enabled by a site administrator first'
+                          : 'Enable JB Morin force-velocity sprint profiling for this organization'}
                       </FormDescription>
                     </div>
                     <FormControl>
                       <Switch
                         checked={field.value}
                         onCheckedChange={field.onChange}
+                        disabled={siteSettings?.sprintFvEnabled === false}
                       />
                     </FormControl>
                   </FormItem>

@@ -62,6 +62,9 @@ export async function requireSprintFvEnabled(
       }
     }
 
+    // If no organizationId is resolved (user has no org membership), the org-level
+    // check is skipped. This is intentional: site-level enablement alone gates access
+    // for independent athletes, matching the wellness middleware pattern.
     if (organizationId) {
       const org = await db
         .select()

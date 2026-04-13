@@ -77,7 +77,7 @@ export function ForceVelocityChart({ profile }: Props) {
         fill: false,
         yAxisID: 'y',
         segment: { borderDash: [8, 4] },
-      } as any);
+      });
     }
 
     return { datasets };
