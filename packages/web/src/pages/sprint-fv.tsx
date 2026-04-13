@@ -29,13 +29,13 @@ export default function SprintFvPage() {
   const [selectorOpen, setSelectorOpen] = useState(false);
 
   const siteSettingsEndpoint = user?.isSiteAdmin ? '/api/site-settings' : '/api/site-settings/public';
-  const { data: siteSettings } = useQuery<SiteSettings>({
+  const { data: siteSettings } = useQuery<Pick<SiteSettings, 'sprintFvEnabled' | 'wellnessModuleEnabled'>>({
     queryKey: [siteSettingsEndpoint],
     enabled: !!user,
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: organization } = useQuery<Organization>({
+  const { data: organization, isLoading: orgLoading } = useQuery<Organization>({
     queryKey: [`/api/organizations/${user?.primaryOrganizationId}`],
     enabled: !!user?.primaryOrganizationId && !user?.isSiteAdmin,
     staleTime: 5 * 60 * 1000,
@@ -105,7 +105,7 @@ export default function SprintFvPage() {
     return <div className="p-6 text-muted-foreground">Please log in to view Sprint F-V profiles.</div>;
   }
 
-  if (!isEnabled && siteSettings !== undefined) {
+  if (!isEnabled && siteSettings !== undefined && !orgLoading) {
     return (
       <div className="container mx-auto p-6">
         <Card className="border-dashed">

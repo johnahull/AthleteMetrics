@@ -100,6 +100,11 @@ export function SprintFvSessionSelector({ userId }: Props) {
                   <p className="text-sm text-muted-foreground mt-1">
                     {session.availableSplits.join(', ')}
                   </p>
+                  {session.duplicateSplits > 0 && (
+                    <p className="text-xs text-blue-600 mt-1">
+                      Multiple trials detected — fastest time per split will be used
+                    </p>
+                  )}
                 </div>
 
                 <div>

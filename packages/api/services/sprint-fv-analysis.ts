@@ -139,7 +139,7 @@ function getOptimalSlope(sprintDistanceM: number): number {
   return -0.40; // 100m+
 }
 
-const FORCE_DEFICIT_RECS = [
+const VELOCITY_TRAINING_RECS = [
   'Prioritize overspeed training (downhill sprints, assisted towing)',
   'Reduce heavy sled work volume temporarily',
   'Focus on fast-twitch recruitment with short, maximal sprints (10-20m)',
@@ -147,7 +147,7 @@ const FORCE_DEFICIT_RECS = [
   'Consider assisted sprint training to develop higher movement velocities',
 ];
 
-const VELOCITY_DEFICIT_RECS = [
+const FORCE_TRAINING_RECS = [
   'Add heavy resisted sprint training (sled pulls at 50-80% BW)',
   'Increase maximal strength work (squats, hip thrusts, deadlifts)',
   'Hill sprints at moderate grades (5-10°) for force application',
@@ -183,7 +183,7 @@ export function classifyProfile(
       classification: 'velocity-deficit',
       imbalancePercent: Math.abs(slopeDiff),
       dominantQuality: 'force',
-      trainingRecommendations: FORCE_DEFICIT_RECS,
+      trainingRecommendations: VELOCITY_TRAINING_RECS,
       explanation: `This athlete's F-V profile is force-dominant — strong acceleration but limited top-end speed. ` +
         `The F-V slope is ${Math.abs(slopeDiff).toFixed(0)}% steeper than optimal for a ${sprintDistanceM.toFixed(0)}m sprint.`,
     };
@@ -197,7 +197,7 @@ export function classifyProfile(
       classification: 'force-deficit',
       imbalancePercent: Math.abs(slopeDiff),
       dominantQuality: 'velocity',
-      trainingRecommendations: VELOCITY_DEFICIT_RECS,
+      trainingRecommendations: FORCE_TRAINING_RECS,
       explanation: `This athlete's F-V profile is velocity-dominant — good top-end speed but limited acceleration force. ` +
         `The F-V slope is ${Math.abs(slopeDiff).toFixed(0)}% shallower than optimal for a ${sprintDistanceM.toFixed(0)}m sprint.`,
     };
@@ -401,7 +401,6 @@ export function computeOptimalGap(
   f0Rel: number,
   v0: number,
   pmaxRel: number,
-  bodyMassKg: number,
   sprintDistanceM: number,
 ): OptimalGapResult {
   const optimalSlope = getOptimalSlope(sprintDistanceM);
@@ -477,7 +476,7 @@ function estimateSprintTime(distanceM: number, vmax: number, tau: number): numbe
 }
 
 // ============================================================================
-// Analysis 3: Session-over-Session Delta Analysis
+// Analysis 5: Session-over-Session Delta Analysis
 // ============================================================================
 
 const STABLE_THRESHOLD = 1;   // < 1% change = stable

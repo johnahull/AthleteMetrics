@@ -9,6 +9,7 @@ export interface EligibleSession {
   hasWeight: boolean;
   profileExists: boolean;
   measurementIds: string[];
+  duplicateSplits: number;
 }
 
 export interface SprintFvProfile {

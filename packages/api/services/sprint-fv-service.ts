@@ -71,6 +71,7 @@ export interface EligibleSession {
   hasWeight: boolean;
   profileExists: boolean;
   measurementIds: string[];
+  duplicateSplits: number;
 }
 
 export interface GenerateProfileOptions {
@@ -156,6 +157,7 @@ export class SprintFvService {
       const eventId = mList[0].eventId;
 
       const hasWeight = hasAnyWeight;
+      const duplicateSplits = mList.length - availableSplits.length;
 
       sessions.push({
         date,
@@ -165,6 +167,7 @@ export class SprintFvService {
         hasWeight,
         profileExists: existingKeys.has(key),
         measurementIds: mList.map(m => m.id),
+        duplicateSplits,
       });
     }
 
@@ -203,12 +206,18 @@ export class SprintFvService {
       throw new SprintFvValidationError(`Insufficient split data: found ${splitMeasurements.length} splits, need at least ${MIN_SPLITS_REQUIRED}`);
     }
 
-    // 2. Build split times map
+    // 2. Build split times map — pick fastest time per distance (handles duplicate trials)
     const splitTimes: Record<string, number> = {};
+    const usedMeasurementIds: Record<string, string> = {};
     for (const m of splitMeasurements) {
       const distance = SPLIT_METRICS[m.metric];
       if (distance !== undefined) {
-        splitTimes[String(distance)] = parseFloat(m.value);
+        const time = parseFloat(m.value);
+        const key = String(distance);
+        if (!(key in splitTimes) || time < splitTimes[key]) {
+          splitTimes[key] = time;
+          usedMeasurementIds[key] = m.id;
+        }
       }
     }
 
@@ -272,7 +281,7 @@ export class SprintFvService {
     // 8. Run analysis engine
     const classification = classifyProfile(computed.f0Rel, computed.v0, sprintDistanceM);
     const optimalGap = computeOptimalGap(
-      computed.f0Rel, computed.v0, computed.pmaxRel, bodyMassKg, sprintDistanceM,
+      computed.f0Rel, computed.v0, computed.pmaxRel, sprintDistanceM,
     );
 
     // 9. Acceleration and power analysis
@@ -281,40 +290,7 @@ export class SprintFvService {
       computed.f0Rel, computed.v0, computed.pmaxRel, computed.rfPeak, computed.drf,
     );
 
-    // 10. Delta analysis against previous profile (strictly before current date)
-    const [previousProfile] = await db
-      .select()
-      .from(sprintFvProfiles)
-      .where(and(
-        eq(sprintFvProfiles.userId, userId),
-        lt(sprintFvProfiles.date, date),
-      ))
-      .orderBy(desc(sprintFvProfiles.date))
-      .limit(1);
-
-    let deltas: SprintFvAnalysisJson['deltas'];
-    if (
-      previousProfile
-      && previousProfile.f0Rel && previousProfile.v0
-      && previousProfile.pmaxRel && previousProfile.fvSlope
-      && previousProfile.rfPeak && previousProfile.drf
-    ) {
-      deltas = computeDeltas(
-        {
-          f0Rel: computed.f0Rel, v0: computed.v0, pmaxRel: computed.pmaxRel,
-          fvSlope: computed.fvSlope, rfPeak: computed.rfPeak, drf: computed.drf,
-          date,
-        },
-        {
-          f0Rel: parseFloat(previousProfile.f0Rel), v0: parseFloat(previousProfile.v0),
-          pmaxRel: parseFloat(previousProfile.pmaxRel), fvSlope: parseFloat(previousProfile.fvSlope),
-          rfPeak: parseFloat(previousProfile.rfPeak), drf: parseFloat(previousProfile.drf),
-          date: previousProfile.date,
-        },
-      );
-    }
-
-    // 10b. Parameter plausibility validation
+    // 9b. Parameter plausibility validation
     const parameterWarnings = validateParameters({
       f0Rel: computed.f0Rel,
       v0: computed.v0,
@@ -322,27 +298,60 @@ export class SprintFvService {
       pmaxRel: computed.pmaxRel,
     });
 
-    const analysisJson: SprintFvAnalysisJson = {
-      parameterWarnings: parameterWarnings.length > 0 ? parameterWarnings : undefined,
-      classification, optimalGap, accelerationProfile, powerProfile, deltas,
-    };
-
-    // 10. Check for existing profile on this date/event (prevent duplicates)
-    const existingConditions = [
-      eq(sprintFvProfiles.userId, userId),
-      eq(sprintFvProfiles.date, date),
-    ];
-    if (options.eventId) {
-      existingConditions.push(eq(sprintFvProfiles.eventId, options.eventId));
-    }
-    const [existing] = await db
-      .select({ id: sprintFvProfiles.id })
-      .from(sprintFvProfiles)
-      .where(and(...existingConditions))
-      .limit(1);
-
-    // 11. Atomic delete-then-insert inside a transaction to prevent data loss on failure
+    // 10. Atomic transaction: delta computation, duplicate check, delete, insert
     const profile = await db.transaction(async (tx) => {
+      // 10a. Delta analysis against previous profile (inside tx for consistent read)
+      const [previousProfile] = await tx
+        .select()
+        .from(sprintFvProfiles)
+        .where(and(
+          eq(sprintFvProfiles.userId, userId),
+          lt(sprintFvProfiles.date, date),
+        ))
+        .orderBy(desc(sprintFvProfiles.date))
+        .limit(1);
+
+      let deltas: SprintFvAnalysisJson['deltas'];
+      if (
+        previousProfile
+        && previousProfile.f0Rel && previousProfile.v0
+        && previousProfile.pmaxRel && previousProfile.fvSlope
+        && previousProfile.rfPeak && previousProfile.drf
+      ) {
+        deltas = computeDeltas(
+          {
+            f0Rel: computed.f0Rel, v0: computed.v0, pmaxRel: computed.pmaxRel,
+            fvSlope: computed.fvSlope, rfPeak: computed.rfPeak, drf: computed.drf,
+            date,
+          },
+          {
+            f0Rel: parseFloat(previousProfile.f0Rel), v0: parseFloat(previousProfile.v0),
+            pmaxRel: parseFloat(previousProfile.pmaxRel), fvSlope: parseFloat(previousProfile.fvSlope),
+            rfPeak: parseFloat(previousProfile.rfPeak), drf: parseFloat(previousProfile.drf),
+            date: previousProfile.date,
+          },
+        );
+      }
+
+      const analysisJson: SprintFvAnalysisJson = {
+        parameterWarnings: parameterWarnings.length > 0 ? parameterWarnings : undefined,
+        classification, optimalGap, accelerationProfile, powerProfile, deltas,
+      };
+
+      // 10b. Check for existing profile on this date/event
+      const existingConditions = [
+        eq(sprintFvProfiles.userId, userId),
+        eq(sprintFvProfiles.date, date),
+      ];
+      if (options.eventId) {
+        existingConditions.push(eq(sprintFvProfiles.eventId, options.eventId));
+      }
+      const [existing] = await tx
+        .select({ id: sprintFvProfiles.id })
+        .from(sprintFvProfiles)
+        .where(and(...existingConditions))
+        .limit(1);
+
       if (existing) {
         await tx.delete(sprintFvProfiles).where(eq(sprintFvProfiles.id, existing.id));
       }
@@ -359,7 +368,7 @@ export class SprintFvService {
           bodyMassKg: String(bodyMassKg),
           distanceUnit,
           splitTimesJson: splitTimes,
-          sourceMeasurementIds: splitMeasurements.map(m => m.id),
+          sourceMeasurementIds: Object.values(usedMeasurementIds),
           weightMeasurementId,
           eventId: options.eventId || firstM.eventId,
           vmax: String(computed.vmax),
@@ -391,25 +400,37 @@ export class SprintFvService {
   async getEligibleSummaryByOrg(orgId: string): Promise<
     Array<{ userId: string; eligibleSessionCount: number; latestDate: string }>
   > {
-    // Single query: group measurements by (user_id, date), count distinct metrics,
-    // then aggregate to per-user eligible session counts.
-    const result = await db.execute<{ user_id: string; session_count: string; latest_date: string }>(sql`
-      SELECT user_id, COUNT(*) AS session_count, MAX(date)::text AS latest_date
-      FROM (
-        SELECT user_id, date
-        FROM measurements
-        WHERE organization_id = ${orgId}
-          AND metric IN ('DASH_5YD', 'DASH_10YD', 'DASH_20YD', 'DASH_30YD')
-        GROUP BY user_id, date
-        HAVING COUNT(DISTINCT metric) >= ${MIN_SPLITS_REQUIRED}
-      ) eligible_sessions
-      GROUP BY user_id
-    `);
+    // Two-step: Drizzle ORM query for eligible (user, date) pairs, then aggregate in JS.
+    // Using inArray() ensures proper parameterization (no raw SQL interpolation).
+    const eligibleRows = await db
+      .select({
+        userId: measurements.userId,
+        date: measurements.date,
+      })
+      .from(measurements)
+      .where(and(
+        eq(measurements.organizationId, orgId),
+        inArray(measurements.metric, SPLIT_METRIC_CODES),
+      ))
+      .groupBy(measurements.userId, measurements.date)
+      .having(sql`COUNT(DISTINCT ${measurements.metric}) >= ${MIN_SPLITS_REQUIRED}`);
 
-    return (result as unknown as Array<{ user_id: string; session_count: string; latest_date: string }>).map(r => ({
-      userId: r.user_id,
-      eligibleSessionCount: parseInt(r.session_count, 10),
-      latestDate: r.latest_date,
+    // Aggregate per-user: count sessions and find latest date
+    const userMap = new Map<string, { sessionCount: number; latestDate: string }>();
+    for (const row of eligibleRows) {
+      const existing = userMap.get(row.userId);
+      if (!existing) {
+        userMap.set(row.userId, { sessionCount: 1, latestDate: row.date });
+      } else {
+        existing.sessionCount++;
+        if (row.date > existing.latestDate) existing.latestDate = row.date;
+      }
+    }
+
+    return Array.from(userMap.entries()).map(([userId, info]) => ({
+      userId,
+      eligibleSessionCount: info.sessionCount,
+      latestDate: info.latestDate,
     }));
   }
 

@@ -65,7 +65,7 @@ describe('computeOptimalGap', () => {
   const sprintDistance = 27.432; // ~30yd
 
   it('should compute optimal F0 and V0 targets', () => {
-    const result = computeOptimalGap(7.0, 9.0, 15.75, 80, sprintDistance);
+    const result = computeOptimalGap(7.0, 9.0, 15.75, sprintDistance);
     expect(result.optimalF0).toBeGreaterThan(0);
     expect(result.optimalV0).toBeGreaterThan(0);
     expect(result.optimalSlope).toBeLessThan(0);
@@ -73,23 +73,23 @@ describe('computeOptimalGap', () => {
 
   it('should show positive gap when F0 exceeds optimal', () => {
     // Very high F0 for this V0 → F0 surplus
-    const result = computeOptimalGap(10.0, 8.0, 20.0, 80, sprintDistance);
+    const result = computeOptimalGap(10.0, 8.0, 20.0, sprintDistance);
     expect(result.f0Gap).toBeGreaterThan(0); // surplus
     expect(result.v0Gap).toBeLessThan(0); // deficit
   });
 
   it('should estimate time improvement > 0 for imbalanced profiles', () => {
-    const result = computeOptimalGap(10.0, 7.0, 17.5, 80, sprintDistance);
+    const result = computeOptimalGap(10.0, 7.0, 17.5, sprintDistance);
     expect(result.estimatedTimeImprovement).toBeGreaterThan(0);
   });
 
   it('should estimate near-zero time improvement for balanced profiles', () => {
-    const result = computeOptimalGap(7.5, 9.0, 16.875, 80, sprintDistance);
+    const result = computeOptimalGap(7.5, 9.0, 16.875, sprintDistance);
     expect(result.estimatedTimeImprovement).toBeLessThan(0.15);
   });
 
   it('should include a recommendation string', () => {
-    const result = computeOptimalGap(10.0, 7.0, 17.5, 80, sprintDistance);
+    const result = computeOptimalGap(10.0, 7.0, 17.5, sprintDistance);
     expect(result.recommendation).toBeTruthy();
     expect(result.recommendation.length).toBeGreaterThan(10);
   });

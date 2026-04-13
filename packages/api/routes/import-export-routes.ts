@@ -40,8 +40,8 @@ async function syncPhysicalMetricToProfile(
   const code = metricCode.toUpperCase();
   const unitLower = (unit || '').toLowerCase();
 
-  // Detect weight metrics
-  if (code.includes('WEIGHT') || (unitLower === 'lbs' || unitLower === 'kg' || unitLower === 'lb')) {
+  // Detect weight metrics — only trigger on metric codes that contain 'WEIGHT'
+  if (code.includes('WEIGHT')) {
     let weightLbs: number;
     if (unitLower === 'kg') {
       weightLbs = value * 2.20462;
@@ -52,8 +52,8 @@ async function syncPhysicalMetricToProfile(
     return;
   }
 
-  // Detect height metrics
-  if (code.includes('HEIGHT') || (unitLower === 'in' || unitLower === 'cm' || unitLower === 'inches')) {
+  // Detect height metrics — only trigger on metric codes that contain 'HEIGHT'
+  if (code.includes('HEIGHT')) {
     let heightIn: number;
     if (unitLower === 'cm') {
       heightIn = value / 2.54;
@@ -1280,9 +1280,8 @@ export function registerImportExportRoutes(app: Express) {
       matchedCount = results.filter(r => r.action === 'matched' || r.action === 'matched_and_deactivated').length;
       skippedCount = results.filter(r => r.action === 'skipped').length;
 
-      // DEBUG: Log first few errors for diagnosis
       if (errors.length > 0) {
-        console.error(`[CSV IMPORT] ${errors.length} errors in ${type} import. First 3:`, JSON.stringify(errors.slice(0, 3)));
+        console.error(`[CSV IMPORT] ${errors.length} errors in ${type} import`);
       }
 
       const response: ImportResult = {

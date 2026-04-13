@@ -70,10 +70,8 @@ export async function requireSprintFvEnabled(
         .limit(1);
 
       if (org.length === 0) {
-        return res.status(403).json({
-          message: "Sprint F-V profiling is not enabled",
-          featureDisabled: true,
-          disabledBy: 'org_admin'
+        return res.status(404).json({
+          message: "Organization not found",
         });
       }
 
@@ -89,18 +87,9 @@ export async function requireSprintFvEnabled(
     next();
   } catch (error) {
     console.error("Error checking Sprint F-V feature flags:", error);
-
-    const isConnectionError = (error as any).code === 'ECONNREFUSED' ||
-                             (error as any).code === 'ETIMEDOUT' ||
-                             (error as any).message?.includes('connection');
-
-    if (req.user?.isSiteAdmin && isConnectionError) {
-      console.error('CRITICAL: Sprint F-V check failed due to DB connection error but allowing site admin access', error);
-      return next();
-    }
-
-    res.status(500).json({
-      message: "Failed to check Sprint F-V feature access"
+    // Fail closed: if we can't verify the feature flag state, deny access
+    res.status(503).json({
+      message: "Unable to verify Sprint F-V feature access. Please try again later."
     });
   }
 }

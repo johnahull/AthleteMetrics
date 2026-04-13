@@ -70,11 +70,18 @@ export function registerSprintFvRoutes(app: Express) {
           return res.status(403).json({ message: "Not authorized to view this athlete's data" });
         }
 
+        const dateFrom = req.query.dateFrom as string | undefined;
+        const dateTo = req.query.dateTo as string | undefined;
+        const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+        if ((dateFrom && !dateRegex.test(dateFrom)) || (dateTo && !dateRegex.test(dateTo))) {
+          return res.status(400).json({ message: "Invalid date format. Use YYYY-MM-DD." });
+        }
+
         const sessions = await sprintFvService.findEligibleSessions(
           userId,
           user.primaryOrganizationId || undefined,
-          req.query.dateFrom as string | undefined,
-          req.query.dateTo as string | undefined,
+          dateFrom,
+          dateTo,
         );
 
         res.json({ sessions });
@@ -146,6 +153,9 @@ export function registerSprintFvRoutes(app: Express) {
         const result = await sprintFvService.listByAthlete(userId, query);
         res.json(result);
       } catch (error: any) {
+        if (error.name === 'ZodError') {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
         console.error("Error listing athlete profiles:", error);
         res.status(500).json({ message: "Failed to list profiles" });
       }
@@ -189,6 +199,9 @@ export function registerSprintFvRoutes(app: Express) {
         const result = await sprintFvService.listByOrganization(orgId, query);
         res.json(result);
       } catch (error: any) {
+        if (error.name === 'ZodError') {
+          return res.status(400).json({ message: "Validation error", errors: error.errors });
+        }
         console.error("Error listing org profiles:", error);
         res.status(500).json({ message: "Failed to list profiles" });
       }

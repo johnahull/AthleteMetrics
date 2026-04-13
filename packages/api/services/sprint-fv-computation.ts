@@ -230,12 +230,15 @@ function computeFitQuality(
   const fitR2 = ssTot > 0 ? 1 - ssRes / ssTot : 0;
 
   // Per-split residuals with time-domain inversion
-  const fitResiduals: FitResidual[] = entries.map((e, i) => ({
-    distance: e.distance,
-    observedTime: e.time,
-    predictedTime: solveTimeForDistance(distancesM[i], vmax, tau),
-    residual: e.time - solveTimeForDistance(distancesM[i], vmax, tau),
-  }));
+  const fitResiduals: FitResidual[] = entries.map((e, i) => {
+    const predicted = solveTimeForDistance(distancesM[i], vmax, tau);
+    return {
+      distance: e.distance,
+      observedTime: e.time,
+      predictedTime: predicted,
+      residual: e.time - predicted,
+    };
+  });
 
   return { fitR2, fitResiduals };
 }
