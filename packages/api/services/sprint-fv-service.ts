@@ -252,9 +252,18 @@ export class SprintFvService {
         .limit(1);
 
       if (weightM) {
-        // Weight measurement found — stored in lbs, convert to kg
+        // Weight measurement found — convert to kg
         const weightValue = parseFloat(weightM.value);
-        bodyMassKg = weightM.units === 'kg' ? weightValue : weightValue * 0.453592;
+        const unitLower = (weightM.units || '').toLowerCase();
+        if (unitLower === 'kg') {
+          bodyMassKg = weightValue;
+        } else if (unitLower === 'lbs' || unitLower === 'lb') {
+          bodyMassKg = weightValue * 0.453592;
+        } else {
+          throw new SprintFvValidationError(
+            `Weight measurement has unrecognized unit '${weightM.units}'. Expected 'kg' or 'lbs'.`
+          );
+        }
         weightMeasurementId = weightM.id;
       } else {
         // Fallback: check user profile weight (set via general CSV import)
@@ -347,15 +356,17 @@ export class SprintFvService {
       };
 
       // 10b. Check for existing profile on this date/event.
-      // When eventId is provided, match on userId+date+eventId exactly.
-      // When eventId is absent, match only non-event profiles (userId+date+eventId IS NULL)
-      // to avoid silently replacing an event-scoped profile.
+      // Resolve eventId once: explicit option > measurement's event > null.
+      // Use the same resolved value for both duplicate check and insert to
+      // prevent mismatches that would create duplicate profiles.
+      const resolvedEventId = options.eventId ?? firstM.eventId ?? null;
+
       const existingConditions = [
         eq(sprintFvProfiles.userId, userId),
         eq(sprintFvProfiles.date, date),
       ];
-      if (options.eventId) {
-        existingConditions.push(eq(sprintFvProfiles.eventId, options.eventId));
+      if (resolvedEventId) {
+        existingConditions.push(eq(sprintFvProfiles.eventId, resolvedEventId));
       } else {
         existingConditions.push(isNull(sprintFvProfiles.eventId));
       }
@@ -382,7 +393,7 @@ export class SprintFvService {
           splitTimesJson: splitTimes,
           sourceMeasurementIds: Object.values(usedMeasurementIds),
           weightMeasurementId,
-          eventId: options.eventId || firstM.eventId,
+          eventId: resolvedEventId,
           vmax: String(computed.vmax),
           tau: String(computed.tau),
           f0Rel: String(computed.f0Rel),
