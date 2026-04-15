@@ -6,6 +6,10 @@ on:
 
 jobs:
   claude-review:
+    # Skip release PRs (develop → main). These bundle commits that were already
+    # reviewed individually on their feature → develop PRs, so re-reviewing the
+    # combined diff adds little and blocks the release on an expiring OAuth token.
+    if: github.base_ref != 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
