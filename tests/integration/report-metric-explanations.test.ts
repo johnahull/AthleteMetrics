@@ -254,7 +254,7 @@ describe('PDF generation — glossary section', () => {
 });
 
 describe('Snapshot freezing — metricExplanations', () => {
-  it('persists metricExplanations into snapshotData.dataSnapshot', async () => {
+  it('persists metricExplanations at snapshotData top level', async () => {
     [testReport] = await db
       .insert(reports)
       .values({
@@ -331,5 +331,44 @@ describe('Snapshot freezing — metricExplanations', () => {
     expect(frozen).toBeDefined();
     expect(frozen.whatItMeasures).toBe('Original description.');
     expect(frozen.whatItMeasures).not.toMatch(/AFTER snapshot/i);
+  });
+
+  it('does not transform malicious markdown server-side (XSS defense lives client-side)', async () => {
+    const maliciousDescription = '<script>alert(1)</script>Normal text.';
+    await db.insert(customOrgMetrics).values({
+      organizationId: testOrg.id,
+      code: 'CUSTOM_XSS',
+      label: 'XSS Metric',
+      description: maliciousDescription,
+      unit: 'seconds',
+      metricType: 'lower_is_better',
+    });
+
+    [testReport] = await db
+      .insert(reports)
+      .values({
+        name: 'XSS Test',
+        organizationId: testOrg.id,
+        reportType: 'team',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['CUSTOM_XSS'],
+        },
+        createdBy: testCoach.id,
+      })
+      .returning();
+
+    const snapRes = await request(app)
+      .post(`/api/reports/${testReport.id}/snapshots`)
+      .set('Cookie', coachCookie)
+      .send({ expirationDays: 7 });
+    expect(snapRes.status).toBe(201);
+    const token = snapRes.body.publicToken;
+
+    const publicRes = await request(app).get(`/api/public/reports/${token}`);
+    expect(publicRes.status).toBe(200);
+    const frozen = publicRes.body.snapshotData?.metricExplanations?.CUSTOM_XSS;
+    expect(frozen).toBeDefined();
+    expect(frozen.whatItMeasures).toBe(maliciousDescription);
   });
 });
