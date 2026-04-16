@@ -15,18 +15,11 @@ import { loginAsDefaultUser } from './helpers/auth';
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
 async function getUserOrgId(page: Page): Promise<string | null> {
-  return await page.evaluate(() => {
-    const authData = localStorage.getItem('auth');
-    if (authData) {
-      try {
-        const parsed = JSON.parse(authData);
-        return parsed.organizationContext || null;
-      } catch {
-        return null;
-      }
-    }
-    return null;
-  });
+  const res = await page.request.get(`${STAGING_URL}/api/auth/me/organizations`);
+  if (!res.ok()) return null;
+  const orgs = await res.json();
+  if (!Array.isArray(orgs) || orgs.length === 0) return null;
+  return orgs[0].organizationId ?? null;
 }
 
 function generateReportName() {
