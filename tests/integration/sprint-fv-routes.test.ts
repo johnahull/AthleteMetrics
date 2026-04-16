@@ -79,12 +79,17 @@ describe('Sprint F-V Profile Integration Tests', () => {
     }).returning();
     testOrgId = testOrg.id;
 
-    // Enable sprint F-V at site level
+    // Enable sprint F-V at site level (insert if missing, update if exists)
     const existingSettings = await db.select().from(siteSettings).limit(1);
     if (existingSettings.length > 0) {
       await db.update(siteSettings)
         .set({ sprintFvEnabled: true })
         .where(eq(siteSettings.id, existingSettings[0].id));
+    } else {
+      await db.insert(siteSettings).values({
+        id: randomUUID(),
+        sprintFvEnabled: true,
+      });
     }
 
     // Create test team
