@@ -32,6 +32,7 @@ import { isSiteAdmin } from "../utils/auth-helpers";
 import { coppaService } from "../services/coppa-service";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -4297,6 +4298,65 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
     }
+  }
+
+  // --- Glossary of metrics (always last content section) ---
+  const glossaryExplanations: Record<string, MetricExplanation> =
+    reportData.metricExplanations ?? {};
+
+  // Collect ordered metric codes for glossary rows
+  const glossaryOrder: string[] = [];
+  const pushCode = (code: unknown) => {
+    if (typeof code === 'string' && code && !glossaryOrder.includes(code)) {
+      glossaryOrder.push(code);
+    }
+  };
+  if (reportData.reportType === 'team' && Array.isArray(reportData.teamStatistics)) {
+    for (const stat of reportData.teamStatistics) pushCode(stat?.metric);
+  } else if (reportData.reportType === 'individual' && reportData.athlete?.measurements) {
+    for (const code of Object.keys(reportData.athlete.measurements)) pushCode(code);
+  }
+  // Fallback: include any explanation keys that weren't already ordered
+  for (const code of Object.keys(glossaryExplanations)) pushCode(code);
+
+  const glossaryRows = glossaryOrder
+    .map((code) => {
+      const entry = glossaryExplanations[code];
+      if (!entry) return null;
+      return [entry.title || code, entry.whatItMeasures || '', entry.whyItMatters || '', entry.unitNote || ''];
+    })
+    .filter((row): row is string[] => row !== null);
+
+  if (glossaryRows.length > 0) {
+    doc.addPage();
+    doc.setFontSize(18);
+    doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text('Glossary of Metrics', 14, 20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Metric', 'What it measures', 'Why it matters', 'Unit & direction']],
+      body: glossaryRows,
+      theme: isVisual ? 'grid' : 'striped',
+      headStyles: {
+        fillColor: colors.primary,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+      },
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        valign: 'top',
+      },
+      columnStyles: {
+        0: { cellWidth: 32, fontStyle: 'bold' },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 60 },
+        3: { cellWidth: 30 },
+      },
+      margin: { left: 14, right: 14 },
+    });
   }
 
   // Add footer to content pages — skip page 1 when a cover page was inserted

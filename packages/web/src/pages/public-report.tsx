@@ -14,6 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { Lock } from "lucide-react";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { MetricExplanation } from "@/components/reports/MetricExplanation";
+import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
+import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -52,6 +55,18 @@ export default function PublicReport() {
 
   const { snapshotData } = snapshot;
   const { reportConfig, generatedAt, dataSnapshot } = snapshotData;
+  const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
+  const glossaryOrder: string[] = [];
+  if (Array.isArray(dataSnapshot?.performanceSnapshot)) {
+    for (const m of dataSnapshot.performanceSnapshot) {
+      if (m?.metricCode) glossaryOrder.push(m.metricCode);
+    }
+  }
+  if (Array.isArray(dataSnapshot?.performance)) {
+    for (const m of dataSnapshot.performance) {
+      if (m?.metricCode) glossaryOrder.push(m.metricCode);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -90,8 +105,11 @@ export default function PublicReport() {
                     <TableBody>
                       {dataSnapshot.performanceSnapshot.map((metric: any) => (
                         <TableRow key={metric.metricCode}>
-                          <TableCell className="font-medium">
-                            {metric.metricName}
+                          <TableCell className="font-medium align-top">
+                            <MetricExplanation
+                              label={metric.metricName}
+                              explanation={metricExplanations[metric.metricCode]}
+                            />
                           </TableCell>
                           <TableCell>
                             {metric.teamAverage?.toFixed(2) || "N/A"} {metric.unit}
@@ -220,6 +238,14 @@ export default function PublicReport() {
           </>
         )}
 
+        {/* Glossary of metrics (Team) */}
+        {reportConfig.reportType === 'team' && Object.keys(metricExplanations).length > 0 && (
+          <ReportMetricsGlossary
+            explanations={metricExplanations}
+            metricOrder={glossaryOrder}
+          />
+        )}
+
         {/* Individual Report View */}
         {reportConfig.reportType === "individual" && (
           <>
@@ -265,8 +291,11 @@ export default function PublicReport() {
                     <TableBody>
                       {dataSnapshot.performance.map((metric: any) => (
                         <TableRow key={metric.metricCode}>
-                          <TableCell className="font-medium">
-                            {metric.metricName}
+                          <TableCell className="font-medium align-top">
+                            <MetricExplanation
+                              label={metric.metricName}
+                              explanation={metricExplanations[metric.metricCode]}
+                            />
                           </TableCell>
                           <TableCell>
                             {metric.bestValue?.toFixed(2) || "N/A"} {metric.unit}
@@ -315,6 +344,14 @@ export default function PublicReport() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Glossary of metrics (Individual) */}
+            {Object.keys(metricExplanations).length > 0 && (
+              <ReportMetricsGlossary
+                explanations={metricExplanations}
+                metricOrder={glossaryOrder}
+              />
             )}
           </>
         )}

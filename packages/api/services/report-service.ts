@@ -16,6 +16,7 @@ import {
   customBenchmarks,
   organizationBenchmarks,
   siteMetrics,
+  customOrgMetrics,
   events,
   organizations,
   type Report,
@@ -27,6 +28,11 @@ import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
 import { deriveTierGroupName } from '../utils/report-utils';
+import {
+  buildMetricExplanationsMap,
+  type MetricExplanation,
+  type CustomMetricsMap,
+} from '@shared/metric-explanations';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -148,6 +154,7 @@ interface TeamReportData {
   athleteCount: number;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
 }
@@ -159,6 +166,7 @@ interface IndividualReportData {
   generatedAt: string;
   metricLabels: Record<string, string>;
   metricUnits: Record<string, string>;
+  metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
 }
@@ -203,6 +211,46 @@ export class ReportService extends BaseService {
     }
 
     return { labels, units };
+  }
+
+  /**
+   * Build athlete/parent-friendly explanations for each metric in a report.
+   * Built-in metric codes resolve against the shared static content; codes
+   * that aren't built-ins fall back to the org's custom metric description.
+   */
+  async getMetricExplanationsMap(
+    metricCodes: string[],
+    organizationId: string,
+  ): Promise<Record<string, MetricExplanation>> {
+    if (metricCodes.length === 0) return {};
+
+    const customRows = await db
+      .select({
+        code: customOrgMetrics.code,
+        label: customOrgMetrics.label,
+        description: customOrgMetrics.description,
+        unit: customOrgMetrics.unit,
+        metricType: customOrgMetrics.metricType,
+      })
+      .from(customOrgMetrics)
+      .where(
+        and(
+          eq(customOrgMetrics.organizationId, organizationId),
+          inArray(customOrgMetrics.code, metricCodes),
+        ),
+      );
+
+    const customMap: CustomMetricsMap = {};
+    for (const row of customRows) {
+      customMap[row.code] = {
+        label: row.label,
+        description: row.description,
+        unit: row.unit,
+        metricType: row.metricType,
+      };
+    }
+
+    return buildMetricExplanationsMap(metricCodes, customMap);
   }
 
   /**
@@ -276,6 +324,10 @@ export class ReportService extends BaseService {
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const metricExplanations = await this.getMetricExplanationsMap(
+      config.metrics,
+      report.organizationId,
+    );
 
     // Get event context if eventId is specified
     let eventContext: EventContext | undefined;
@@ -307,6 +359,7 @@ export class ReportService extends BaseService {
       athleteCount: athleteRankings.length,
       metricLabels,
       metricUnits,
+      metricExplanations,
       eventContext,
     };
 
@@ -461,6 +514,10 @@ export class ReportService extends BaseService {
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
+    const metricExplanations = await this.getMetricExplanationsMap(
+      config.metrics,
+      report.organizationId,
+    );
 
     // Get event context if eventId is specified
     let eventContext: EventContext | undefined;
@@ -496,6 +553,7 @@ export class ReportService extends BaseService {
       generatedAt: new Date().toISOString(),
       metricLabels,
       metricUnits,
+      metricExplanations,
       eventContext,
     };
   }

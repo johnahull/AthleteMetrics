@@ -30,6 +30,8 @@ import { FileDown, Share2, Users, Calendar, TrendingUp, Activity, ChevronDown, S
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToMultipleAthletesDialog } from "./SendReportToMultipleAthletesDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
+import { MetricExplanation } from "./MetricExplanation";
+import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
 import { getMetricDisplayName } from "@/lib/metrics";
 import {
@@ -127,7 +129,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     );
   }
 
-  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits } = reportData;
+  const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations } = reportData;
+  const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
 
   // Collect all unique benchmark names across all metrics
   const allBenchmarkNames = new Set<string>();
@@ -294,7 +297,12 @@ export function TeamReportView({ report }: TeamReportViewProps) {
 
                   return (
                     <TableRow key={stat.metric}>
-                      <TableCell className="font-medium">{metricLabels?.[stat.metric] || stat.metric}</TableCell>
+                      <TableCell className="font-medium align-top">
+                        <MetricExplanation
+                          label={metricLabels?.[stat.metric] || stat.metric}
+                          explanation={metricExplanations?.[stat.metric]}
+                        />
+                      </TableCell>
                       <TableCell>
                         {stat.average !== null && stat.average !== undefined
                           ? (isFly10Metric(stat.metric)
@@ -608,6 +616,13 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             );
           })}
         </div>
+      )}
+
+      {metricExplanations && (
+        <ReportMetricsGlossary
+          explanations={metricExplanations}
+          metricOrder={teamMetricCodes}
+        />
       )}
 
       {showShareDialog && (

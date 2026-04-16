@@ -1,3 +1,5 @@
+import type { MetricExplanation } from '@shared/metric-explanations';
+
 export interface Benchmark {
   name: string;
   value: number | null;
@@ -123,6 +125,7 @@ export interface TeamReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
 }
 
@@ -144,6 +147,7 @@ export interface IndividualReportData {
   generatedAt: string;
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
 }
 
