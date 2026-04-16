@@ -37,6 +37,10 @@ const EXPECTED_STRUCTURE = {
     { table: 'users', column: 'deleted_at', type: 'timestamp without time zone' },
     { table: 'organizations', column: 'deleted_at', type: 'timestamp without time zone' },
     { table: 'organizations', column: 'is_active', type: 'boolean' },
+    { table: 'organizations', column: 'coppa_enabled', type: 'boolean' },
+    { table: 'organizations', column: 'sprint_fv_enabled', type: 'boolean' },
+    { table: 'site_settings', column: 'sprint_fv_enabled', type: 'boolean' },
+    { table: 'users', column: 'is_minor', type: 'boolean' },
   ],
 
   // Expected index counts per table (minimum required)
@@ -60,12 +64,12 @@ const EXPECTED_STRUCTURE = {
   },
 
   // Total migrations expected across both systems:
-  // - Drizzle migrations (0000-0013): 13 migrations tracked in drizzle.__drizzle_migrations
-  // - Manual migrations (0014-0021): 8 migrations tracked in manual_migrations
-  // Total: 21 migrations
-  minDrizzleMigrationCount: 13, // Drizzle migrations with snapshots
-  minManualMigrationCount: 8,   // Manual SQL migrations without snapshots
-  minTotalMigrationCount: 21,   // Total across both systems
+  // - Drizzle migrations (0000-0006 in drizzle/migrations/): tracked in drizzle.__drizzle_migrations
+  // - Manual migrations (0014-0117 in migrations/): tracked in manual_migrations
+  // Updated 2026-04-15 for COPPA (0111-0116) and Sprint F-V (0117) release
+  minDrizzleMigrationCount: 7,    // Drizzle migrations with snapshots
+  minManualMigrationCount: 90,    // Manual SQL migrations (0014+, excluding _down files)
+  minTotalMigrationCount: 97,     // Total across both systems
 };
 
 async function verifyColumns(client) {
