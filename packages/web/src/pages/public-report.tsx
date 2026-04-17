@@ -56,17 +56,18 @@ export default function PublicReport() {
   const { snapshotData } = snapshot;
   const { reportConfig, generatedAt, dataSnapshot } = snapshotData;
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
-  const glossaryOrder: string[] = [];
+  const glossaryOrderSet = new Set<string>();
   if (Array.isArray(dataSnapshot?.performanceSnapshot)) {
     for (const m of dataSnapshot.performanceSnapshot) {
-      if (m?.metricCode) glossaryOrder.push(m.metricCode);
+      if (m?.metricCode) glossaryOrderSet.add(m.metricCode);
     }
   }
   if (Array.isArray(dataSnapshot?.performance)) {
     for (const m of dataSnapshot.performance) {
-      if (m?.metricCode) glossaryOrder.push(m.metricCode);
+      if (m?.metricCode) glossaryOrderSet.add(m.metricCode);
     }
   }
+  const glossaryOrder = Array.from(glossaryOrderSet);
 
   return (
     <div className="min-h-screen bg-background">
