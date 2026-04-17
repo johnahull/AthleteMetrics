@@ -13,11 +13,11 @@ export const GENERIC_CUSTOM_METRIC_PLACEHOLDER =
 export const BUILT_IN_METRIC_EXPLANATIONS: Record<string, MetricExplanation> = {
   FLY10_TIME: {
     title: '10-Yard Fly',
-    shortDescription: "How fast you hit and hold top speed once you're already moving.",
+    shortDescription: 'How fast you cover 10 yards at top speed — a pure max velocity measurement.',
     whatItMeasures:
-      'The 10-yard fly measures your maximum velocity acceleration capacity. It captures how quickly you can reach and maintain top speed over a short distance.',
+      'The 10-yard fly measures the time it takes to run 10 yards after you are already up to full speed. When converted from time to speed, it is essentially a maximum velocity measurement.',
     whyItMatters:
-      "This metric is crucial for sports requiring explosive speed bursts. It reflects your ability to accelerate after an initial buildup phase, simulating game situations where you're already in motion.",
+      "Max velocity separates fast athletes from the fastest. In game situations you're often already moving — this test captures how fast you actually are once acceleration is out of the picture.",
     unitNote: 'Measured in seconds; lower is better.',
     directionOfBetter: 'lower',
   },

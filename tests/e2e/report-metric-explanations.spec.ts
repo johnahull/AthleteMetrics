@@ -80,7 +80,7 @@ test.describe('Report metric explanations — E2E', () => {
     await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
     // Expanded content should include the built-in description fragment
-    await expect(page.getByText(/maximum velocity acceleration/i)).toBeVisible();
+    await expect(page.getByText(/maximum velocity measurement/i)).toBeVisible();
 
     // Glossary section at the bottom
     await expect(page.getByRole('heading', { name: /Glossary of metrics/i })).toBeVisible();
