@@ -21,6 +21,10 @@ export const siteMetrics = pgTable("site_metrics", {
   isActive: boolean("is_active").default(true).notNull(), // Can be globally disabled by site admin
   displayOrder: integer("display_order"),
   description: text("description"),
+  // Explanation fields for reports/glossaries (Issue #367 Phase 2)
+  shortDescription: text("short_description"),
+  whatItMeasures: text("what_it_measures"),
+  whyItMatters: text("why_it_matters"),
   // Organization type availability (NULL = available to all org types)
   availableOrgTypes: text("available_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Advanced properties for sport-specific configuration

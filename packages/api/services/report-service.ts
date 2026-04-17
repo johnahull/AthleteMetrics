@@ -226,9 +226,19 @@ export class ReportService extends BaseService {
   ): Promise<Record<string, MetricExplanation>> {
     if (metricCodes.length === 0) return {};
 
-    // Query site-admin overrides and custom org metrics in parallel
-    const [siteOverrideRows, customRows] = await Promise.all([
-      db.select().from(siteMetricExplanations),
+    // Query site metrics, site-admin overrides, and custom org metrics in parallel
+    const [siteMetricRows, siteOverrideRows, customRows] = await Promise.all([
+      db
+        .select({
+          code: siteMetrics.code,
+          label: siteMetrics.label,
+          shortDescription: siteMetrics.shortDescription,
+          whatItMeasures: siteMetrics.whatItMeasures,
+          whyItMatters: siteMetrics.whyItMatters,
+        })
+        .from(siteMetrics)
+        .where(inArray(siteMetrics.code, metricCodes)),
+      db.select().from(siteMetricExplanations).where(inArray(siteMetricExplanations.metricCode, metricCodes)),
       db
         .select({
           code: customOrgMetrics.code,
@@ -249,10 +259,24 @@ export class ReportService extends BaseService {
         ),
     ]);
 
-    // Build site overrides map
+    // Build site overrides map — site_metric_explanations overrides take priority,
+    // then fall back to site_metrics columns
     const siteOverrides: SiteOverridesMap = {};
-    for (const row of siteOverrideRows) {
+
+    // First, populate from site_metrics explanation columns
+    for (const row of siteMetricRows) {
       const entry: Record<string, string> = {};
+      if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
+      if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
+      if (row.whyItMatters != null) entry.whyItMatters = row.whyItMatters;
+      if (Object.keys(entry).length > 0) {
+        siteOverrides[row.code] = entry;
+      }
+    }
+
+    // Then, layer site_metric_explanations on top (higher priority)
+    for (const row of siteOverrideRows) {
+      const entry: Record<string, string> = { ...siteOverrides[row.metricCode] };
       if (row.title != null) entry.title = row.title;
       if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
       if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
