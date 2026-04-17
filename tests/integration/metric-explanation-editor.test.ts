@@ -28,6 +28,8 @@ import {
   userOrganizations,
   siteMetricExplanations,
   siteSettings,
+  reports,
+  reportSnapshots,
 } from '@shared/schema';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
 
@@ -128,6 +130,15 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Clean up reports + snapshots first (FK deps)
+  if (testOrg?.id) {
+    const orgReports = await db.select({ id: reports.id }).from(reports).where(eq(reports.organizationId, testOrg.id));
+    for (const r of orgReports) {
+      await db.delete(reportSnapshots).where(eq(reportSnapshots.reportId, r.id));
+      await db.delete(reports).where(eq(reports.id, r.id));
+    }
+  }
+
   // Clean up overrides
   await db.delete(siteMetricExplanations);
 
@@ -292,5 +303,96 @@ describe('DELETE /api/admin/metric-explanations/:code', () => {
       .set('Cookie', coachCookie);
 
     expect(res.status).toBe(403);
+  });
+});
+
+describe('Report generation with site-admin overrides', () => {
+  it('reflects site override in generated report metricExplanations', async () => {
+    // Create an override for FLY10_TIME
+    await request(app)
+      .put('/api/admin/metric-explanations/FLY10_TIME')
+      .set('Cookie', siteAdminCookie)
+      .send({ whyItMatters: 'Admin-customized reason for fly time.' });
+
+    // Create a report that includes FLY10_TIME
+    const [testReport] = await db
+      .insert(reports)
+      .values({
+        name: `Override Report ${Date.now()}`,
+        organizationId: testOrg.id,
+        reportType: 'team',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME', 'VERTICAL_JUMP'],
+        },
+        createdBy: siteAdmin.id,
+      })
+      .returning();
+
+    // Generate the report
+    const res = await request(app)
+      .post(`/api/reports/${testReport.id}/generate`)
+      .set('Cookie', siteAdminCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.metricExplanations).toBeDefined();
+
+    const fly = res.body.metricExplanations.FLY10_TIME;
+    expect(fly).toBeDefined();
+    // Overridden field should reflect the site admin's text
+    expect(fly.whyItMatters).toBe('Admin-customized reason for fly time.');
+    // Non-overridden fields should still be built-in
+    expect(fly.title).toBe('10-Yard Fly');
+    expect(fly.directionOfBetter).toBe('lower');
+
+    // VERTICAL_JUMP should be pure built-in (no override)
+    const vj = res.body.metricExplanations.VERTICAL_JUMP;
+    expect(vj).toBeDefined();
+    expect(vj.title).toBe('Vertical Jump');
+  });
+
+  it('snapshot freezes overridden text — later override deletion does not change snapshot', async () => {
+    // Create an override
+    await request(app)
+      .put('/api/admin/metric-explanations/FLY10_TIME')
+      .set('Cookie', siteAdminCookie)
+      .send({ whyItMatters: 'Frozen override text for snapshot.' });
+
+    // Create a report + snapshot
+    const [testReport] = await db
+      .insert(reports)
+      .values({
+        name: `Frozen Override Report ${Date.now()}`,
+        organizationId: testOrg.id,
+        reportType: 'team',
+        config: {
+          timeframe: { type: 'preset', preset: 'all_time' },
+          metrics: ['FLY10_TIME'],
+        },
+        createdBy: siteAdmin.id,
+      })
+      .returning();
+
+    const snapRes = await request(app)
+      .post(`/api/reports/${testReport.id}/snapshots`)
+      .set('Cookie', siteAdminCookie)
+      .send({ expirationDays: 7 });
+
+    expect(snapRes.status).toBe(201);
+    const token = snapRes.body.publicToken;
+    expect(token).toBeTruthy();
+
+    // Delete the override (reset to default)
+    await request(app)
+      .delete('/api/admin/metric-explanations/FLY10_TIME')
+      .set('Cookie', siteAdminCookie);
+
+    // The public snapshot should still have the overridden text
+    const publicRes = await request(app).get(`/api/public/reports/${token}`);
+    expect(publicRes.status).toBe(200);
+
+    const frozen = publicRes.body.snapshotData?.metricExplanations?.FLY10_TIME;
+    expect(frozen).toBeDefined();
+    expect(frozen.whyItMatters).toBe('Frozen override text for snapshot.');
   });
 });
