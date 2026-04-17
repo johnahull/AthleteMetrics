@@ -21,6 +21,8 @@ import { FileDown, Share2, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
+import { MetricExplanation } from "./MetricExplanation";
+import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
@@ -99,7 +101,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits } = reportData;
+  const { athlete, metricLabels, metricUnits, metricExplanations } = reportData;
+  const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
 
   return (
     <div className="space-y-6">
@@ -193,7 +196,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
                   return (
                     <TableRow key={metricCode}>
-                      <TableCell className="font-medium">{metricLabel}</TableCell>
+                      <TableCell className="font-medium align-top">
+                        <MetricExplanation
+                          label={metricLabel}
+                          explanation={metricExplanations?.[metricCode]}
+                        />
+                      </TableCell>
                       <TableCell>
                         {typeof value === 'number'
                           ? (isFly10Metric(metricCode)
@@ -263,6 +271,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </Card>
       )}
 
+      {metricExplanations && (
+        <ReportMetricsGlossary
+          explanations={metricExplanations}
+          metricOrder={measurementCodes}
+        />
+      )}
 
       {showShareDialog && (
         <ShareReportDialog

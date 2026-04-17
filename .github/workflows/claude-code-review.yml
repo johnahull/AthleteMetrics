@@ -27,9 +27,10 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # continue-on-error is false: silent failures previously masked broken
-      # auth for weeks. The github_token fallback handles OIDC failures, so
-      # the step should only fail on genuine issues worth investigating.
+      # Auth: uses Claude Code OAuth (included with Claude Pro/Team subscription).
+      # If reviews stop working, refresh the token:
+      #   gh secret set CLAUDE_CODE_OAUTH_TOKEN
+      # Generate a new token at: https://console.anthropic.com/settings/tokens
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12

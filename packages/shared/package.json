@@ -24,7 +24,8 @@
     "./season-utils": "./season-utils.ts",
     "./username-validation": "./username-validation.ts",
     "./utils/number-conversion": "./utils/number-conversion.ts",
-    "./utils/statistics": "./utils/statistics.ts"
+    "./utils/statistics": "./utils/statistics.ts",
+    "./metric-explanations": "./metric-explanations/index.ts"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
