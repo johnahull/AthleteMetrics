@@ -27,14 +27,14 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # continue-on-error: true so that an expired CLAUDE_CODE_OAUTH_TOKEN
-      # does not block PRs. The job still shows as failed (yellow ⚠) so it's
-      # visible, but it won't hold up the merge queue. To restore reviews,
-      # refresh the CLAUDE_CODE_OAUTH_TOKEN secret in repo Settings → Secrets.
+      # Auth: uses Claude Code OAuth (included with Claude Pro/Team subscription).
+      # If reviews stop working, refresh the token:
+      #   gh secret set CLAUDE_CODE_OAUTH_TOKEN
+      # Generate a new token at: https://console.anthropic.com/settings/tokens
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12
-        continue-on-error: true
+        continue-on-error: false
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
