@@ -114,6 +114,11 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
     .default('lower_is_better').notNull(),
   description: text("description"),
 
+  // Richer explanation fields (Phase 2, Issue #367)
+  shortDescription: text("short_description"),
+  whatItMeasures: text("what_it_measures"),
+  whyItMatters: text("why_it_matters"),
+
   // Validation rules
   validationMin: decimal("validation_min", { precision: 10, scale: 3 }),
   validationMax: decimal("validation_max", { precision: 10, scale: 3 }),
@@ -153,6 +158,23 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
   codeIdx: index("custom_org_metrics_code_idx").on(table.code),
   isDerivedIdx: index("custom_org_metrics_is_derived_idx")
     .on(table.isDerived).where(sql`${table.isDerived} = true`),
+}));
+
+// Site-level metric explanation overrides (Phase 2, Issue #367)
+// Site admins can customize the prose for built-in metrics.
+// Nullable fields enable partial overrides — null = use built-in default.
+export const siteMetricExplanations = pgTable("site_metric_explanations", {
+  id: varchar("id", { length: 36 }).primaryKey().default(sql`gen_random_uuid()`),
+  metricCode: varchar("metric_code", { length: 100 }).notNull().unique(),
+  title: text("title"),
+  shortDescription: text("short_description"),
+  whatItMeasures: text("what_it_measures"),
+  whyItMatters: text("why_it_matters"),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  codeIdx: index("idx_site_metric_explanations_code").on(table.metricCode),
 }));
 
 // Sport-specific position definitions

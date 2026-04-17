@@ -55,6 +55,9 @@ const formSchema = z.object({
   unit: z.string().max(20).optional(),
   metricType: z.enum(['lower_is_better', 'higher_is_better', 'tracking']),
   description: z.string().optional(),
+  shortDescription: z.string().optional(),
+  whatItMeasures: z.string().optional(),
+  whyItMatters: z.string().optional(),
   validationMin: z.number().optional(),
   validationMax: z.number().optional(),
   decimalPrecision: z.number().int().min(0).max(10).optional(),
@@ -124,6 +127,9 @@ export function CustomOrgMetricForm({
       unit: "",
       metricType: "higher_is_better",
       description: "",
+      shortDescription: "",
+      whatItMeasures: "",
+      whyItMatters: "",
       validationMin: undefined,
       validationMax: undefined,
       decimalPrecision: 3,
@@ -146,6 +152,9 @@ export function CustomOrgMetricForm({
         unit: metric.unit || "",
         metricType: metric.metricType,
         description: metric.description || "",
+        shortDescription: metric.shortDescription || "",
+        whatItMeasures: metric.whatItMeasures || "",
+        whyItMatters: metric.whyItMatters || "",
         validationMin: metric.validationMin ? parseFloat(metric.validationMin) : undefined,
         validationMax: metric.validationMax ? parseFloat(metric.validationMax) : undefined,
         decimalPrecision: metric.decimalPrecision ?? 3,
@@ -162,6 +171,9 @@ export function CustomOrgMetricForm({
         unit: "",
         metricType: "higher_is_better",
         description: "",
+        shortDescription: "",
+        whatItMeasures: "",
+        whyItMatters: "",
         validationMin: undefined,
         validationMax: undefined,
         decimalPrecision: 3,
@@ -231,10 +243,11 @@ export function CustomOrgMetricForm({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid grid-cols-3 w-full">
+              <TabsList className="grid grid-cols-4 w-full">
                 <TabsTrigger value="basic">Basic Info</TabsTrigger>
                 <TabsTrigger value="validation">Validation</TabsTrigger>
                 <TabsTrigger value="derived">Derived</TabsTrigger>
+                <TabsTrigger value="explanations">Explanations</TabsTrigger>
               </TabsList>
 
               <ScrollArea className="h-[400px] pr-4">
@@ -593,6 +606,69 @@ export function CustomOrgMetricForm({
                       </p>
                     </div>
                   )}
+                </TabsContent>
+
+                {/* Explanations Tab */}
+                <TabsContent value="explanations" className="space-y-4 mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    These fields appear in report glossaries. They are optional — if left empty,
+                    the general description is used instead.
+                  </p>
+
+                  <FormField
+                    control={form.control}
+                    name="shortDescription"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Short Description</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="One-sentence summary shown next to the metric label"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="whatItMeasures"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>What It Measures</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Explain what this metric actually tests or tracks"
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>Supports Markdown</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="whyItMatters"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Why It Matters</FormLabel>
+                        <FormControl>
+                          <Textarea
+                            placeholder="Explain why this metric is important for athletes"
+                            rows={3}
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>Supports Markdown</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </TabsContent>
               </ScrollArea>
             </Tabs>

@@ -18,6 +18,9 @@ export interface InsertCustomOrgMetric {
   unit?: string;
   metricType: 'lower_is_better' | 'higher_is_better' | 'tracking';
   description?: string;
+  shortDescription?: string;
+  whatItMeasures?: string;
+  whyItMatters?: string;
   validationMin?: number;
   validationMax?: number;
   decimalPrecision?: number;
@@ -278,6 +281,9 @@ export class CustomOrgMetricService extends BaseService {
           unit: data.unit,
           metricType: data.metricType,
           description: data.description,
+          shortDescription: data.shortDescription,
+          whatItMeasures: data.whatItMeasures,
+          whyItMatters: data.whyItMatters,
           validationMin: data.validationMin?.toString(),
           validationMax: data.validationMax?.toString(),
           decimalPrecision: data.decimalPrecision ?? 3,
@@ -446,6 +452,9 @@ export class CustomOrgMetricService extends BaseService {
       if (data.unit !== undefined) updateData.unit = data.unit;
       if (data.metricType !== undefined) updateData.metricType = data.metricType;
       if (data.description !== undefined) updateData.description = data.description;
+      if (data.shortDescription !== undefined) updateData.shortDescription = data.shortDescription;
+      if (data.whatItMeasures !== undefined) updateData.whatItMeasures = data.whatItMeasures;
+      if (data.whyItMatters !== undefined) updateData.whyItMatters = data.whyItMatters;
       if (data.validationMin !== undefined) updateData.validationMin = data.validationMin?.toString();
       if (data.validationMax !== undefined) updateData.validationMax = data.validationMax?.toString();
       if (data.decimalPrecision !== undefined) updateData.decimalPrecision = data.decimalPrecision;

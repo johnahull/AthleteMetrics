@@ -26,7 +26,8 @@ import {
   UserPlus,
   Calendar,
   Ruler,
-  Zap
+  Zap,
+  BookOpen
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -48,6 +49,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Measurements", href: "/admin/measurements", icon: Activity, testId: "admin-measurements-menu-item", tourId: "admin-measurements" },
       { name: "Wellness Templates", href: "/wellness-templates", icon: ClipboardCheck, testId: "wellness-templates-menu-item", tourId: "wellness-templates" },
       { name: "Metrics", href: "/metrics", icon: Settings, testId: "metrics-menu-item", tourId: "metrics" },
+      { name: "Metric Explanations", href: "/metric-explanations", icon: BookOpen, testId: "metric-explanations-menu-item", tourId: "metric-explanations" },
       { name: "Sports", href: "/sports", icon: Trophy, testId: "sports-menu-item", tourId: "sports" },
       { name: "Benchmarks", href: "/benchmarks", icon: Target, testId: "benchmarks-menu-item", tourId: "benchmarks" },
       { name: "Site Settings", href: "/admin", icon: Settings, testId: "site-settings-menu-item", tourId: "site-settings" }

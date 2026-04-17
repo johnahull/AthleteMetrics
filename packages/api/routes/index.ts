@@ -21,6 +21,7 @@ import { registerSearchRoutes } from "./search-routes";
 import siteSettingsRoutes from "./site-settings-routes";
 import { registerWellnessRoutes } from "./wellness-routes";
 import { registerAdminWellnessRoutes } from "./admin-wellness-routes";
+import { registerAdminMetricExplanationRoutes } from "./admin-metric-explanation-routes";
 import { registerWellnessScheduleRoutes } from "./wellness-schedule-routes";
 import { registerSportsRoutes } from "./sport-routes";
 import { registerGoalRoutes } from "./goal-routes";
@@ -116,6 +117,9 @@ export function registerAllRoutes(app: Express) {
 
   // Admin wellness routes (site admin only)
   registerAdminWellnessRoutes(app);
+
+  // Admin metric explanation routes (site admin only)
+  registerAdminMetricExplanationRoutes(app);
 
   // Wellness recurring schedule routes
   registerWellnessScheduleRoutes(app);
