@@ -142,18 +142,14 @@ export default function Teams() {
 
   const handleExportTeamToDashr = async (team: Team) => {
     try {
-      const params = new URLSearchParams({
-        teamId: team.id,
-        limit: '10000',
-      });
+      const params = new URLSearchParams({ teamId: team.id });
       if (effectiveOrganizationId) {
         params.append('organizationId', effectiveOrganizationId);
       }
       const response = await fetch(`/api/athletes?${params}`);
       if (!response.ok) throw new Error('Failed to fetch team roster');
-      const data = await response.json();
-      const roster: Array<{ firstName: string; lastName: string }> = (Array.isArray(data) ? data : data.athletes ?? [])
-        .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
+      const data: Array<{ firstName?: string; lastName?: string }> = await response.json();
+      const roster = data.map(a => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
 
       const stem = team.season ? `${team.name}-${team.season}` : team.name;
       const filename = sanitizeDashrFilename(stem);
