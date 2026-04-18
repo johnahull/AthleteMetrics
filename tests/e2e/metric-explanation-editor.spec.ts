@@ -110,24 +110,18 @@ test.describe('Custom Metric Form — Explanations Tab', () => {
     await submitButton.click();
 
     // Wait for API response
-    const response = await responsePromise.catch(() => null);
-    if (response && response.ok()) {
-      const body = await response.json();
-      if (body.code) createdMetricCodes.push(body.code);
+    const response = await responsePromise;
+    expect(response).toBeTruthy();
+    expect(response.ok()).toBe(true);
 
-      // Verify the explanation fields were saved
-      expect(body.shortDescription).toBe('A short description for the glossary.');
-      expect(body.whatItMeasures).toBe(
-        'This metric measures **horizontal distance** from a standing start.',
-      );
-      expect(body.whyItMatters).toBe('Important for assessing lower body power transfer.');
-    } else {
-      // If form submission didn't trigger API call, check for validation errors
-      const errorVisible = await page.locator('[role="alert"], .text-destructive').isVisible().catch(() => false);
-      if (errorVisible) {
-        console.log('Form validation error prevented submission — check required fields');
-      }
-      // Don't fail the test — the tab and fields were visible and fillable
-    }
+    const body = await response.json();
+    if (body.code) createdMetricCodes.push(body.code);
+
+    // Verify the explanation fields were saved
+    expect(body.shortDescription).toBe('A short description for the glossary.');
+    expect(body.whatItMeasures).toBe(
+      'This metric measures **horizontal distance** from a standing start.',
+    );
+    expect(body.whyItMatters).toBe('Important for assessing lower body power transfer.');
   });
 });

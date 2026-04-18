@@ -265,7 +265,7 @@ export class ReportService extends BaseService {
 
     // First, populate from site_metrics explanation columns
     for (const row of siteMetricRows) {
-      const entry: Record<string, string> = {};
+      const entry: Record<string, string | null> = {};
       if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
       if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
       if (row.whyItMatters != null) entry.whyItMatters = row.whyItMatters;
@@ -276,7 +276,7 @@ export class ReportService extends BaseService {
 
     // Then, layer site_metric_explanations on top (higher priority)
     for (const row of siteOverrideRows) {
-      const entry: Record<string, string> = { ...siteOverrides[row.metricCode] };
+      const entry: Record<string, string | null> = { ...siteOverrides[row.metricCode] };
       if (row.title != null) entry.title = row.title;
       if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
       if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
