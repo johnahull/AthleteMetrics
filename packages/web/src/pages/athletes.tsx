@@ -22,7 +22,7 @@ import { AthletesCardView } from "@/components/athletes-card-view";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useSports, usePositionsForSports } from "@/lib/sports-api";
 import { ProfileMergeWizard } from "@/components/athletes";
-import { downloadDashrCsv, sanitizeDashrFilename } from "@/utils/dashr-export";
+import { downloadDashrXlsx, sanitizeDashrFilename } from "@/utils/dashr-export";
 
 export default function Athletes() {
   const responsiveMode = useResponsiveMode();
@@ -1517,17 +1517,25 @@ export default function Athletes() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => {
+              onClick={async () => {
                 const selected = athletes
                   .filter((a: any) => selectedAthletes.has(a.id))
                   .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
                 const today = new Date().toISOString().split('T')[0];
                 const filename = sanitizeDashrFilename(`athletes-${today}`);
-                downloadDashrCsv(filename, selected);
-                toast({
-                  title: 'Dashr export ready',
-                  description: `Exported ${selected.length} athlete${selected.length !== 1 ? 's' : ''} to ${filename}`,
-                });
+                try {
+                  await downloadDashrXlsx(filename, selected);
+                  toast({
+                    title: 'Exported to Dashr',
+                    description: `${selected.length} athlete${selected.length !== 1 ? 's' : ''} → ${filename}`,
+                  });
+                } catch (err) {
+                  toast({
+                    title: 'Export failed',
+                    description: err instanceof Error ? err.message : 'Could not build Dashr workbook',
+                    variant: 'destructive',
+                  });
+                }
               }}
               className="text-white hover:bg-emerald-600 bg-emerald-700"
               data-testid="bulk-export-dashr-button"

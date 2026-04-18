@@ -19,7 +19,7 @@ import type { Team, ArchiveTeam } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KPICardSkeleton } from "@/components/ui/loading-states";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
-import { downloadDashrCsv, sanitizeDashrFilename } from "@/utils/dashr-export";
+import { downloadDashrXlsx, sanitizeDashrFilename } from "@/utils/dashr-export";
 
 export default function Teams() {
   const labels = useContextualLabels(); // Get contextual labels
@@ -153,11 +153,11 @@ export default function Teams() {
 
       const stem = team.season ? `${team.name}-${team.season}` : team.name;
       const filename = sanitizeDashrFilename(stem);
-      downloadDashrCsv(filename, roster);
+      await downloadDashrXlsx(filename, roster);
 
       toast({
-        title: 'Dashr export ready',
-        description: `Exported ${roster.length} athlete${roster.length !== 1 ? 's' : ''} to ${filename}`,
+        title: 'Exported to Dashr',
+        description: `${roster.length} athlete${roster.length !== 1 ? 's' : ''} → ${filename}`,
       });
     } catch (err) {
       toast({

@@ -1,4 +1,4 @@
-import { sanitizeCSVCell, downloadCSV } from '@/lib/csv';
+import { sanitizeCSVCell } from '@/lib/csv';
 
 export const DASHR_COLUMNS = [
   'First Name (Required)',
@@ -30,26 +30,29 @@ export interface DashrExportAthlete {
   lastName: string;
 }
 
-function escapeCell(value: string): string {
-  const sanitized = sanitizeCSVCell(value);
-  if (sanitized.includes(',') || sanitized.includes('"') || sanitized.includes('\n')) {
-    return `"${sanitized.replace(/"/g, '""')}"`;
-  }
-  return sanitized;
+function buildRow(athlete: DashrExportAthlete): string[] {
+  const cells = new Array<string>(DASHR_COLUMNS.length).fill('');
+  cells[0] = sanitizeCSVCell(athlete.firstName ?? '');
+  cells[2] = sanitizeCSVCell(athlete.lastName ?? '');
+  return cells;
 }
 
-export function buildDashrCsv(athletes: DashrExportAthlete[]): string {
-  const headerRow = DASHR_COLUMNS.join(',');
-  if (athletes.length === 0) return headerRow;
+export async function buildDashrXlsxBuffer(
+  athletes: DashrExportAthlete[],
+): Promise<ArrayBuffer> {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Athletes');
 
-  const rows = athletes.map(athlete => {
-    const cells = new Array<string>(DASHR_COLUMNS.length).fill('');
-    cells[0] = escapeCell(athlete.firstName ?? '');
-    cells[2] = escapeCell(athlete.lastName ?? '');
-    return cells.join(',');
-  });
+  worksheet.addRow([...DASHR_COLUMNS]);
+  worksheet.getRow(1).font = { bold: true };
 
-  return [headerRow, ...rows].join('\n');
+  for (const athlete of athletes) {
+    worksheet.addRow(buildRow(athlete));
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer as ArrayBuffer;
 }
 
 export function sanitizeDashrFilename(name: string): string {
@@ -58,10 +61,24 @@ export function sanitizeDashrFilename(name: string): string {
     .replace(/[^a-z0-9_-]+/g, '-')
     .replace(/^-+|-+$/g, '');
   const stem = cleaned || 'athletes';
-  return `dashr-${stem}.csv`;
+  return `dashr-${stem}.xlsx`;
 }
 
-export function downloadDashrCsv(filename: string, athletes: DashrExportAthlete[]): void {
-  const csv = buildDashrCsv(athletes);
-  downloadCSV(csv, filename);
+export async function downloadDashrXlsx(
+  filename: string,
+  athletes: DashrExportAthlete[],
+): Promise<void> {
+  const buffer = await buildDashrXlsxBuffer(athletes);
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.style.visibility = 'hidden';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

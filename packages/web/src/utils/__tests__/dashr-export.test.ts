@@ -1,9 +1,26 @@
 import { describe, it, expect } from 'vitest';
+import ExcelJS from 'exceljs';
 import {
   DASHR_COLUMNS,
-  buildDashrCsv,
+  buildDashrXlsxBuffer,
   sanitizeDashrFilename,
 } from '../dashr-export';
+
+async function parseWorkbook(buffer: ArrayBuffer) {
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(buffer);
+  const ws = wb.worksheets[0];
+  const rows: string[][] = [];
+  ws.eachRow({ includeEmpty: false }, row => {
+    const cells: string[] = [];
+    for (let i = 1; i <= DASHR_COLUMNS.length; i++) {
+      const v = row.getCell(i).value;
+      cells.push(v == null ? '' : String(v));
+    }
+    rows.push(cells);
+  });
+  return { worksheet: ws, rows };
+}
 
 describe('DASHR_COLUMNS', () => {
   it('has exactly 22 columns in Dashr template order', () => {
@@ -15,74 +32,87 @@ describe('DASHR_COLUMNS', () => {
   });
 });
 
-describe('buildDashrCsv', () => {
-  it('returns header-only output for empty athlete list', () => {
-    const csv = buildDashrCsv([]);
-    const lines = csv.split('\n');
-    expect(lines).toHaveLength(1);
-    expect(lines[0].split(',')).toHaveLength(22);
-    expect(lines[0].startsWith('First Name (Required),Middle Name,Last Name (Required)')).toBe(true);
+describe('buildDashrXlsxBuffer', () => {
+  it('emits a single worksheet named "Athletes"', async () => {
+    const buf = await buildDashrXlsxBuffer([]);
+    const { worksheet } = await parseWorkbook(buf);
+    expect(worksheet.name).toBe('Athletes');
   });
 
-  it('populates First Name (col 0) and Last Name (col 2) only; other 20 cols blank', () => {
-    const csv = buildDashrCsv([{ firstName: 'Jonathan', lastName: 'Sherman' }]);
-    const lines = csv.split('\n');
-    expect(lines).toHaveLength(2);
+  it('produces header row only for empty athlete list', async () => {
+    const buf = await buildDashrXlsxBuffer([]);
+    const { rows } = await parseWorkbook(buf);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual([...DASHR_COLUMNS]);
+  });
 
-    const cells = lines[1].split(',');
-    expect(cells).toHaveLength(22);
-    expect(cells[0]).toBe('Jonathan');
-    expect(cells[1]).toBe('');
-    expect(cells[2]).toBe('Sherman');
+  it('populates First Name (col 1) and Last Name (col 3) only; other 20 cols blank', async () => {
+    const buf = await buildDashrXlsxBuffer([
+      { firstName: 'Jonathan', lastName: 'Sherman' },
+    ]);
+    const { rows } = await parseWorkbook(buf);
+    expect(rows).toHaveLength(2);
+    expect(rows[1][0]).toBe('Jonathan');
+    expect(rows[1][1]).toBe('');
+    expect(rows[1][2]).toBe('Sherman');
     for (let i = 3; i < 22; i++) {
-      expect(cells[i]).toBe('');
+      expect(rows[1][i]).toBe('');
     }
   });
 
-  it('emits one data row per athlete', () => {
-    const csv = buildDashrCsv([
+  it('emits one data row per athlete in input order', async () => {
+    const buf = await buildDashrXlsxBuffer([
       { firstName: 'Jonathan', lastName: 'Sherman' },
       { firstName: 'Test', lastName: 'Athlete' },
       { firstName: 'Jane', lastName: 'Doe' },
     ]);
-    const lines = csv.split('\n');
-    expect(lines).toHaveLength(4);
-    expect(lines[1].split(',')[0]).toBe('Jonathan');
-    expect(lines[2].split(',')[0]).toBe('Test');
-    expect(lines[3].split(',')[0]).toBe('Jane');
+    const { rows } = await parseWorkbook(buf);
+    expect(rows).toHaveLength(4);
+    expect(rows[1][0]).toBe('Jonathan');
+    expect(rows[2][0]).toBe('Test');
+    expect(rows[3][0]).toBe('Jane');
   });
 
-  it('sanitizes formula-injection attempts in names', () => {
-    const csv = buildDashrCsv([{ firstName: '=1+1', lastName: '@cmd' }]);
-    const dataRow = csv.split('\n')[1];
-    expect(dataRow).not.toMatch(/^=1\+1/);
-    expect(dataRow).toContain("'=1+1");
-    expect(dataRow).toContain("'@cmd");
+  it('sanitizes formula-injection attempts in names', async () => {
+    const buf = await buildDashrXlsxBuffer([
+      { firstName: '=1+1', lastName: '@cmd' },
+    ]);
+    const { rows } = await parseWorkbook(buf);
+    expect(rows[1][0]).toBe("'=1+1");
+    expect(rows[1][2]).toBe("'@cmd");
   });
 
-  it('quotes names containing commas', () => {
-    const csv = buildDashrCsv([{ firstName: 'Smith, Jr.', lastName: 'Doe' }]);
-    const dataRow = csv.split('\n')[1];
-    expect(dataRow).toContain('"Smith, Jr."');
-    expect(dataRow.split(',').length).toBeGreaterThan(22);
+  it('preserves names containing commas without CSV quoting artifacts', async () => {
+    const buf = await buildDashrXlsxBuffer([
+      { firstName: 'Smith, Jr.', lastName: 'Doe' },
+    ]);
+    const { rows } = await parseWorkbook(buf);
+    expect(rows[1][0]).toBe('Smith, Jr.');
+    expect(rows[1][2]).toBe('Doe');
+  });
+
+  it('bolds the header row', async () => {
+    const buf = await buildDashrXlsxBuffer([]);
+    const { worksheet } = await parseWorkbook(buf);
+    expect(worksheet.getRow(1).font?.bold).toBe(true);
   });
 });
 
 describe('sanitizeDashrFilename', () => {
-  it('lowercases and replaces unsafe characters with hyphens', () => {
-    expect(sanitizeDashrFilename('Varsity Soccer 2025')).toBe('dashr-varsity-soccer-2025.csv');
+  it('lowercases and replaces unsafe characters with hyphens, emits .xlsx', () => {
+    expect(sanitizeDashrFilename('Varsity Soccer 2025')).toBe('dashr-varsity-soccer-2025.xlsx');
   });
 
   it('strips leading and trailing separators', () => {
-    expect(sanitizeDashrFilename('  !!team!!  ')).toBe('dashr-team.csv');
+    expect(sanitizeDashrFilename('  !!team!!  ')).toBe('dashr-team.xlsx');
   });
 
   it('falls back to a default stem when input is empty or all-unsafe', () => {
-    expect(sanitizeDashrFilename('')).toBe('dashr-athletes.csv');
-    expect(sanitizeDashrFilename('///')).toBe('dashr-athletes.csv');
+    expect(sanitizeDashrFilename('')).toBe('dashr-athletes.xlsx');
+    expect(sanitizeDashrFilename('///')).toBe('dashr-athletes.xlsx');
   });
 
   it('preserves hyphens, underscores, and digits', () => {
-    expect(sanitizeDashrFilename('U14_boys-A')).toBe('dashr-u14_boys-a.csv');
+    expect(sanitizeDashrFilename('U14_boys-A')).toBe('dashr-u14_boys-a.xlsx');
   });
 });
