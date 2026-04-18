@@ -291,12 +291,13 @@ describe('DELETE /api/admin/metric-explanations/:code', () => {
     expect(fly.hasOverride).toBe(false);
   });
 
-  it('returns 404 when no override exists', async () => {
+  it('succeeds idempotently when no override exists', async () => {
     const res = await request(app)
       .delete('/api/admin/metric-explanations/FLY10_TIME')
       .set('Cookie', siteAdminCookie);
 
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(200);
+    expect(res.body.code).toBe('FLY10_TIME');
   });
 
   it('returns 403 for non-site-admin', async () => {

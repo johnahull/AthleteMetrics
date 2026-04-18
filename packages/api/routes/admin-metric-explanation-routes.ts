@@ -179,15 +179,11 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
           return res.status(400).json({ message: 'Unknown metric code' });
         }
 
-        const deleted = await db
+        await db
           .delete(siteMetricExplanations)
-          .where(eq(siteMetricExplanations.metricCode, code))
-          .returning({ id: siteMetricExplanations.id });
+          .where(eq(siteMetricExplanations.metricCode, code));
 
-        if (deleted.length === 0) {
-          return res.status(404).json({ message: "No override found for this metric code" });
-        }
-
+        // Idempotent: success whether or not an override existed
         res.json({ message: "Reset to default", code });
       } catch (error: any) {
         console.error("Failed to delete metric explanation override:", error);
