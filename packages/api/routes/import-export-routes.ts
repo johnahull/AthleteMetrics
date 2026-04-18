@@ -27,6 +27,51 @@ import type { SiteMetric } from "@shared/schema";
 import { DerivedMetricCalculator } from "../services/derived-metric-calculator";
 import { db } from "../db";
 
+/**
+ * After a weight or height measurement is created, sync the value to the user's profile.
+ * Uses the measurement's unit to convert to the profile's storage format (lbs / inches).
+ */
+async function syncPhysicalMetricToProfile(
+  userId: string,
+  metricCode: string,
+  value: number,
+  unit: string,
+): Promise<void> {
+  if (!isFinite(value)) return;
+
+  const code = metricCode.toUpperCase();
+  const unitLower = (unit || '').toLowerCase();
+
+  // Detect weight metrics — only trigger on metric codes that contain 'WEIGHT'
+  if (code.includes('WEIGHT')) {
+    let weightLbs: number;
+    if (unitLower === 'kg') {
+      weightLbs = value * 2.20462;
+    } else if (unitLower === 'lbs' || unitLower === 'lb') {
+      weightLbs = value;
+    } else {
+      console.warn(`[PROFILE SYNC] Unknown weight unit '${unit}' for ${metricCode} — skipping profile sync`);
+      return;
+    }
+    await storage.updateUser(userId, { weight: Math.round(weightLbs) });
+    return;
+  }
+
+  // Detect height metrics — only trigger on metric codes that contain 'HEIGHT'
+  if (code.includes('HEIGHT')) {
+    let heightIn: number;
+    if (unitLower === 'cm') {
+      heightIn = value / 2.54;
+    } else if (unitLower === 'in' || unitLower === 'inches') {
+      heightIn = value;
+    } else {
+      console.warn(`[PROFILE SYNC] Unknown height unit '${unit}' for ${metricCode} — skipping profile sync`);
+      return;
+    }
+    await storage.updateUser(userId, { height: Math.round(heightIn) });
+  }
+}
+
 // MeasurementFilters interface
 interface MeasurementFilters {
   userId?: string;
@@ -342,6 +387,18 @@ export function registerImportExportRoutes(app: Express) {
             });
           } catch (derivedError) {
             console.warn(`[OCR IMPORT] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
+          }
+
+          // PROFILE SYNC: Update user profile weight/height when physical metrics are imported
+          try {
+            await syncPhysicalMetricToProfile(
+              userId,
+              measurement.metric,
+              parseFloat(measurement.value),
+              measurement.units || '',
+            );
+          } catch (syncError) {
+            console.warn(`[OCR IMPORT] Profile sync failed for measurement ${measurement.id}:`, syncError);
           }
 
           processedData.push({
@@ -1194,6 +1251,18 @@ export function registerImportExportRoutes(app: Express) {
               console.warn(`[CSV IMPORT] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
             }
 
+            // PROFILE SYNC: Update user profile weight/height when physical metrics are imported
+            try {
+              await syncPhysicalMetricToProfile(
+                matchedAthlete.id,
+                measurement.metric,
+                parseFloat(measurement.value),
+                measurement.units || '',
+              );
+            } catch (syncError) {
+              console.warn(`[CSV IMPORT] Profile sync failed for measurement ${measurement.id}:`, syncError);
+            }
+
             results.push({
               action: 'created',
               measurement: {
@@ -1218,6 +1287,10 @@ export function registerImportExportRoutes(app: Express) {
       updatedCount = results.filter(r => r.action === 'updated').length;
       matchedCount = results.filter(r => r.action === 'matched' || r.action === 'matched_and_deactivated').length;
       skippedCount = results.filter(r => r.action === 'skipped').length;
+
+      if (errors.length > 0) {
+        console.error(`[CSV IMPORT] ${errors.length} errors in ${type} import`);
+      }
 
       const response: ImportResult = {
         type,
@@ -1340,6 +1413,18 @@ export function registerImportExportRoutes(app: Express) {
               });
             } catch (derivedError) {
               console.warn(`[REVIEW QUEUE] Derived metric calculation failed for measurement ${measurement.id}:`, derivedError);
+            }
+
+            // PROFILE SYNC: Update user profile weight/height when physical metrics are imported
+            try {
+              await syncPhysicalMetricToProfile(
+                athleteId,
+                measurement.metric,
+                parseFloat(measurement.value),
+                measurement.units || '',
+              );
+            } catch (syncError) {
+              console.warn(`[REVIEW QUEUE] Profile sync failed for measurement ${measurement.id}:`, syncError);
             }
 
             res.json({

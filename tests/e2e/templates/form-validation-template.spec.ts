@@ -64,12 +64,11 @@ test.describe('[FORM] Validation Tests', () => {
     await page.click('button[type="submit"]');
 
     // Wait for validation errors to appear
-    await page.waitForSelector('.error, [role="alert"], text=/required|must/i', {
-      timeout: 5000
-    });
+    const formErrorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/required|must/i'));
+    await formErrorLocator.first().waitFor({ timeout: 5000 });
 
     // Count validation error messages
-    const errorCount = await page.locator('.error, [role="alert"], text=/required|must/i').count();
+    const errorCount = await formErrorLocator.count();
 
     // TODO: Update expected count to match number of required fields
     expect(errorCount).toBeGreaterThan(0);
@@ -89,11 +88,10 @@ test.describe('[FORM] Validation Tests', () => {
     await page.click('button[type="submit"]');
 
     // Should show specific error for the empty field
-    await page.waitForSelector('[data-testid="error-[required-field]"], text=/[field].*required/i', {
-      timeout: 5000
-    });
+    const specificErrorLocator = page.locator('[data-testid="error-[required-field]"]').or(page.locator('text=/[field].*required/i'));
+    await specificErrorLocator.first().waitFor({ timeout: 5000 });
 
-    const specificError = await page.locator('[data-testid="error-[required-field]"], text=/[field].*required/i').count();
+    const specificError = await specificErrorLocator.count();
     expect(specificError).toBeGreaterThan(0);
   });
 

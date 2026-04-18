@@ -84,6 +84,7 @@ export const notificationTypeEnum = [
   'new_measurement',      // New performance data logged for athlete
   'team_announcement',    // Coach broadcasts to team
   'report_shared',        // Coach shares performance report with athlete
+  'parent_link_request',  // Parent submits a link-a-child request for coach approval
 ] as const;
 
 /**
@@ -125,3 +126,18 @@ export const registrationStatusEnum = ['pending', 'approved', 'waitlisted', 'dec
  * Event invitation status enum
  */
 export const eventInvitationStatusEnum = ['pending', 'accepted', 'declined', 'expired', 'cancelled'] as const;
+
+/**
+ * COPPA compliance status for user accounts
+ * - not_applicable: User is 13+ years old, no COPPA requirements
+ * - pending_consent: Under-13 user awaiting parental consent (login blocked)
+ * - needs_parent_email: Under-13 user missing parent email (incomplete registration)
+ * - consented: Parental consent confirmed, account fully active
+ * - consent_revoked: Parent has revoked consent; login blocked
+ */
+export const coppaStatusEnum = ['not_applicable', 'pending_consent', 'needs_parent_email', 'consented', 'consent_revoked'] as const;
+
+/**
+ * Parental consent record status
+ */
+export const consentStatusEnum = ['pending', 'confirmed', 'revoked', 'expired'] as const;

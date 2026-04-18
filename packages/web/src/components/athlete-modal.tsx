@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +50,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
       positions: [],
       phoneNumbers: [],
       gender: undefined,
+      parentEmail: null,
     },
   });
 
@@ -119,6 +120,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
         positions: (athlete.positions || []).filter((p): p is string => typeof p === "string" && p.trim() !== ""),
         phoneNumbers: athlete.phoneNumbers || [],
         gender: athlete.gender || undefined,
+        parentEmail: athlete.parentEmail ?? null,
       });
       setSelectedTeamIds(athlete.teams?.map(t => t.id) || []);
     } else {
@@ -133,6 +135,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
         positions: [],
         phoneNumbers: [],
         gender: undefined,
+        parentEmail: null,
       });
       setSelectedTeamIds([]);
     }
@@ -237,6 +240,7 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
         positions: [],
         phoneNumbers: [],
         gender: undefined,
+        parentEmail: null,
       });
       setSelectedTeamIds([]);
     },
@@ -741,6 +745,32 @@ export default function AthleteModal({ isOpen, onClose, athlete }: AthleteModalP
                 </Button>
               </div>
             </FormItem>
+
+            {/* Parent/Guardian Email */}
+            <FormField
+              control={form.control}
+              name="parentEmail"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Parent/Guardian Email</FormLabel>
+                  <FormDescription>
+                    Optional. If provided, the parent will be notified and can create an account to monitor this athlete.
+                  </FormDescription>
+                  <FormControl>
+                    <Input
+                      type="email"
+                      placeholder="parent@example.com"
+                      {...field}
+                      value={field.value ?? ''}
+                      onChange={(e) => field.onChange(e.target.value || null)}
+                      disabled={isPending}
+                      data-testid="input-athlete-parentemail"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             {/* Team Assignment */}
             {!isEditing && (

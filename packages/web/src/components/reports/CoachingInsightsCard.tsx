@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, Edit, Save, X, RefreshCw, Loader2 } from "lucide-react";
+import { Sparkles, Edit, Save, X, RefreshCw, Loader2, ShieldAlert } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { useToast } from "@/hooks/use-toast";
@@ -16,6 +16,10 @@ interface CoachingInsightsCardProps {
   generatedAt?: string | null;
   model?: string | null;
   aiEnabled: boolean;
+  /** For minor athletes: whether parental AI consent has been granted.
+   *  Defaults to true for adult athletes (COPPA not applicable).
+   *  Use strict === true check — null/undefined must block access (fail-closed). */
+  aiConsentGranted?: boolean;
 }
 
 // Use MAX_INSIGHTS_LENGTH from shared schema for consistency with database constraint
@@ -26,6 +30,7 @@ export function CoachingInsightsCard({
   generatedAt,
   model,
   aiEnabled,
+  aiConsentGranted = true,
 }: CoachingInsightsCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState(initialInsights || "");
@@ -41,9 +46,34 @@ export function CoachingInsightsCard({
     }
   }, [initialInsights, isEditing]);
 
-  // Don't render if AI is not enabled
+  // Don't render if AI is not enabled site-wide
   if (!aiEnabled) {
     return null;
+  }
+
+  // COPPA: minor athlete without AI consent — show locked card so coaches
+  // understand why insights are unavailable (returning null would be confusing)
+  if (aiConsentGranted !== true) {
+    return (
+      <Card className="border-amber-200 bg-amber-50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 text-amber-800">
+            <ShieldAlert className="h-4 w-4" />
+            AI Coaching Insights
+            <Badge variant="outline" className="border-amber-300 text-amber-700 text-xs ml-auto">
+              Parental Consent Required
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-amber-700">
+            AI coaching insights are not available for this athlete. Parental consent for AI data
+            processing has not been granted. A parent or guardian can enable this via the consent
+            email they received during registration.
+          </p>
+        </CardContent>
+      </Card>
+    );
   }
 
   const hasInsights = !!initialInsights;

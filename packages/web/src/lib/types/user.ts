@@ -31,7 +31,9 @@ export interface EnhancedUser extends BaseUser {
   // All user's organizations
   organizations?: UserOrganization[];
   // Backwards compatibility - primary role for the current context
-  role?: 'site_admin' | 'org_admin' | 'coach' | 'athlete';
+  role?: 'site_admin' | 'org_admin' | 'coach' | 'athlete' | 'parent' | 'guest';
+  // COPPA status for under-13 athletes
+  coppaStatus?: 'not_applicable' | 'pending_consent' | 'consented' | 'consent_revoked' | 'needs_parent_email';
 }
 
 export interface ImpersonationStatus {

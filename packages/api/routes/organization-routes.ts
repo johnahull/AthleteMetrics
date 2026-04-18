@@ -328,6 +328,14 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid organization ID format" });
       }
 
+      // COPPA validation: coppaEnabled=true requires a contact email
+      if (req.body.coppaEnabled === true && !req.body.coppaContactEmail) {
+        return res.status(400).json({
+          code: 'coppa_contact_email_required',
+          message: 'A COPPA contact email is required when enabling the minor athlete consent flow.',
+        });
+      }
+
       // Capture request context for audit logging
       const context = {
         ipAddress: req.ip,
@@ -393,13 +401,14 @@ export function registerOrganizationRoutes(app: Express) {
       }
 
       // Only allow updating specific org-admin fields
-      const { aiEnabled, wellnessEnabled, eventsEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext } = req.body;
+      const { aiEnabled, wellnessEnabled, eventsEnabled, sprintFvEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext } = req.body;
 
       // Build updates object with only the fields that were provided
       const updates: {
         aiEnabled?: boolean;
         wellnessEnabled?: boolean;
         eventsEnabled?: boolean;
+        sprintFvEnabled?: boolean;
         brandLogoUrl?: string | null;
         brandPrimaryColor?: string | null;
         brandSecondaryColor?: string | null;
@@ -447,6 +456,24 @@ export function registerOrganizationRoutes(app: Express) {
         }
 
         updates.eventsEnabled = eventsEnabled;
+      }
+
+      // Validate and handle sprintFvEnabled
+      if (sprintFvEnabled !== undefined) {
+        if (typeof sprintFvEnabled !== 'boolean') {
+          return res.status(400).json({ message: "sprintFvEnabled must be boolean" });
+        }
+
+        if (sprintFvEnabled === true) {
+          const siteSettingsForFv = await storage.getSiteSettings();
+          if (!siteSettingsForFv?.sprintFvEnabled) {
+            return res.status(403).json({
+              message: "Sprint F-V profiling must be enabled by site administrator first"
+            });
+          }
+        }
+
+        updates.sprintFvEnabled = sprintFvEnabled;
       }
 
       // Validate and handle branding fields.
@@ -589,6 +616,23 @@ export function registerOrganizationRoutes(app: Express) {
             organizationName: org.name,
             previousValue: org.eventsEnabled,
             newValue: updates.eventsEnabled
+          }),
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+        });
+      }
+
+      // Create audit log for Sprint F-V flag change by org admin
+      if (updates.sprintFvEnabled !== undefined && updates.sprintFvEnabled !== org.sprintFvEnabled) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: updates.sprintFvEnabled ? 'org_sprint_fv_enabled' : 'org_sprint_fv_disabled',
+          resourceType: 'organization',
+          resourceId: organizationId,
+          details: JSON.stringify({
+            organizationName: org.name,
+            previousValue: org.sprintFvEnabled,
+            newValue: updates.sprintFvEnabled
           }),
           ipAddress: context.ipAddress || null,
           userAgent: context.userAgent || null,

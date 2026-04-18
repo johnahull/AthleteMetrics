@@ -27,9 +27,10 @@ import {
   type EventMetric, type InsertEventMetric,
   insertUserSchema,
   type OrganizationType,
-  type InsertOAuthUser
+  type InsertOAuthUser,
+  securityEvents,
+  type SecurityEvent,
 } from "@shared/schema";
-import { securityEvents, type SecurityEvent } from "@shared/enhanced-auth-schema";
 import type { WellnessTrend } from "@shared/wellness-types";
 import { db } from "./db";
 import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./repositories/wellness-repository";
@@ -562,7 +563,11 @@ export class DatabaseStorage implements IStorage {
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
       'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
-      'lastAuthMethod', 'accountLinkedAt'
+      'lastAuthMethod', 'accountLinkedAt',
+      // Legal acceptance (role is stored on userOrganizations, not the users table)
+      'legalAcceptedAt', 'legalAcceptedVersion',
+      // COPPA / minor fields
+      'isMinor', 'coppaStatus', 'parentEmail', 'parentConsentId',
     ];
 
     // Filter to only include valid database columns and non-undefined values
@@ -665,7 +670,8 @@ export class DatabaseStorage implements IStorage {
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
       'googleId', 'appleId', 'oauthProvider', 'oauthEmail', 'oauthEmailVerified',
       'lastAuthMethod', 'accountLinkedAt', 'showPeerComparisons', 'hasCompletedOnboarding',
-      'legalAcceptedAt', 'legalAcceptedVersion'
+      'legalAcceptedAt', 'legalAcceptedVersion',
+      'isMinor', 'coppaStatus', 'parentEmail', 'parentConsentId', 'coppaConsentConfirmedAt',
     ];
 
     const updateData: any = {};
@@ -1771,7 +1777,7 @@ export class DatabaseStorage implements IStorage {
             password: userInfo.password,
             firstName: userInfo.firstName,
             lastName: userInfo.lastName,
-            role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete",
+            role: invitation.role as "site_admin" | "org_admin" | "coach" | "athlete" | "parent",
             ...legalData
           };
 
@@ -1797,12 +1803,15 @@ export class DatabaseStorage implements IStorage {
 
       // Add user to organization with the invitation role
       // Note: addUserToOrganization will automatically replace any existing role for this user in this org
+      // Parent role is a user-level role, not an org-level role. Map parent → athlete for org membership.
+      // Parents access child data through parentAthleteLinks, not org roles.
+      const orgRole = invitation.role === 'parent' ? 'athlete' : invitation.role;
       console.log("[Invitation] Adding user to organization:", {
         userId: user.id,
         organizationId: invitation.organizationId,
-        role: invitation.role
+        role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, invitation.role);
+      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole);
 
       // Add user to teams if specified
       if (invitation.teamIds && invitation.teamIds.length > 0) {
@@ -2860,7 +2869,8 @@ export class DatabaseStorage implements IStorage {
         inArray(userTeams.userId, athleteIds),
         eq(userTeams.isActive, true),
         or(isNull(userTeams.leftAt), gte(userTeams.leftAt, new Date())),
-        eq(teams.isArchived, false)
+        eq(teams.isArchived, false),
+        filters?.organizationId ? eq(teams.organizationId, filters.organizationId) : undefined
       ));
 
     // Build a map of user ID to teams array
@@ -3083,13 +3093,16 @@ export class DatabaseStorage implements IStorage {
       'height', 'weight', 'gender', 'mfaEnabled', 'mfaSecret', 'backupCodes',
       'lastLoginAt', 'loginAttempts', 'lockedUntil', 'isEmailVerified',
       'requiresPasswordChange', 'passwordChangedAt', 'isSiteAdmin', 'isActive',
-      'showPeerComparisons', 'hasCompletedOnboarding'
+      'showPeerComparisons', 'hasCompletedOnboarding',
+      'parentEmail',
     ];
 
     // Filter out undefined values and non-database columns to prevent UNDEFINED_VALUE errors
     const updateData: any = {};
     Object.keys(athlete).forEach(key => {
       const value = (athlete as any)[key];
+      // Include the field if it is a valid column AND either has a real value or is
+      // explicitly null (to support clearing nullable fields like parentEmail).
       if (value !== undefined && validUserColumns.includes(key)) {
         updateData[key] = value;
       }
@@ -3113,7 +3126,19 @@ export class DatabaseStorage implements IStorage {
       updateData.birthYear = new Date(athlete.birthDate).getFullYear();
     }
 
-    const [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    // Only issue the UPDATE if there is at least one column to write; otherwise
+    // just fetch the current record so we can still return it (and still process
+    // teamIds below if needed).
+    let updated: User | undefined;
+    if (Object.keys(updateData).length > 0) {
+      [updated] = await db.update(users).set(updateData).where(eq(users.id, id)).returning();
+    } else {
+      updated = await this.getUser(id);
+    }
+
+    if (!updated) {
+      throw new Error(`Athlete ${id} not found`);
+    }
 
     // Update teams if specified
     if (athlete.teamIds !== undefined) {
@@ -5108,6 +5133,10 @@ export class DatabaseStorage implements IStorage {
         position: siteBenchmarks.position,
         level: siteBenchmarks.level,
         isActive: siteBenchmarks.isActive,
+        tierGroupId: siteBenchmarks.tierGroupId,
+        tierName: siteBenchmarks.tierName,
+        tierOrder: siteBenchmarks.tierOrder,
+        tierColor: siteBenchmarks.tierColor,
       })
       .from(organizationBenchmarks)
       .innerJoin(siteBenchmarks, eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id))
@@ -5144,6 +5173,10 @@ export class DatabaseStorage implements IStorage {
         position: customBenchmarks.position,
         level: customBenchmarks.level,
         isActive: customBenchmarks.isActive,
+        tierGroupId: customBenchmarks.tierGroupId,
+        tierName: customBenchmarks.tierName,
+        tierOrder: customBenchmarks.tierOrder,
+        tierColor: customBenchmarks.tierColor,
       })
       .from(organizationBenchmarks)
       .innerJoin(customBenchmarks, eq(organizationBenchmarks.benchmarkId, customBenchmarks.id))

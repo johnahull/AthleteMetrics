@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation } from 'wouter';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,12 +15,14 @@ import {
   Eye,
   EyeOff,
   CheckCircle2,
-  XCircle
+  XCircle,
+  Shield
 } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { validatePassword, getPasswordRequirementsText } from '@shared/password-requirements';
 import { validateUsername, getUsernameRequirementsText } from '@shared/username-validation';
 import { OAuthButtons } from '@/components/auth/oauth-buttons';
+import { isUnder13, isMinorAge } from '@shared/coppa-utils';
 
 interface PasswordRequirement {
   label: string;
@@ -31,20 +33,53 @@ export default function Register() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  // Parse query params for parent registration mode
+  const searchParams = new URLSearchParams(window.location.search);
+  const isParentMode = searchParams.get('role') === 'parent';
+  const prefilledEmail = searchParams.get('email') || '';
+  const prefilledConsentId = searchParams.get('consent') || '';
+
+  // Dead-end gate: parent mode without any valid context (no email invite, no consent link)
+  const parentModeBlocked = isParentMode && !prefilledEmail && !prefilledConsentId;
+
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
   const [success, setSuccess] = useState(false);
+  const [consentEmailSent, setConsentEmailSent] = useState(false);
+  const [consentParentEmail, setConsentParentEmail] = useState('');
 
   // Form data
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    email: '',
+    email: isParentMode ? prefilledEmail : '',
     username: '',
     password: '',
     confirmPassword: '',
+    birthDate: '',
+    parentEmail: '',
     termsAccepted: false
   });
+
+  // Age gate: compute whether the entered birthDate is under-13 or under-18 (athlete mode only)
+  const under13 = (() => {
+    if (isParentMode || !formData.birthDate) return false;
+    try { return isUnder13(formData.birthDate); } catch { return false; }
+  })();
+  const minor = (() => {
+    if (isParentMode || !formData.birthDate) return false;
+    try { return isMinorAge(formData.birthDate); } catch { return false; }
+  })();
+  const teenMinor = minor && !under13;
+
+  // D1: Clear parentEmail when minor transitions from true → false
+  const prevIsMinor = useRef(minor);
+  useEffect(() => {
+    if (prevIsMinor.current === true && !minor && formData.parentEmail) {
+      setFormData(prev => ({ ...prev, parentEmail: '' }));
+    }
+    prevIsMinor.current = minor;
+  }, [minor]);
 
   // Validation states
   const [usernameChecking, setUsernameChecking] = useState(false);
@@ -168,6 +203,12 @@ export default function Register() {
       return;
     }
 
+    // Validate parent email for under-13 (defense-in-depth alongside HTML required)
+    if (under13 && !formData.parentEmail?.trim()) {
+      setError('Parent or guardian email is required for users under 13');
+      return;
+    }
+
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
@@ -184,25 +225,42 @@ export default function Register() {
     setSubmitting(true);
 
     try {
-      const response = await fetch('/api/auth/register', {
+      const endpoint = isParentMode ? '/api/auth/register/parent' : '/api/auth/register';
+      const body: Record<string, unknown> = {
+        firstName: formData.firstName.trim(),
+        lastName: formData.lastName.trim(),
+        email: formData.email.trim().toLowerCase(),
+        username: formData.username.trim().toLowerCase(),
+        password: formData.password,
+        legalAcceptedAt: new Date().toISOString(),
+      };
+
+      if (!isParentMode) {
+        body.birthDate = formData.birthDate || undefined;
+        body.parentEmail = minor && formData.parentEmail ? formData.parentEmail.trim().toLowerCase() : undefined;
+      } else if (prefilledConsentId) {
+        body.consentId = prefilledConsentId;
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          firstName: formData.firstName.trim(),
-          lastName: formData.lastName.trim(),
-          email: formData.email.trim().toLowerCase(),
-          username: formData.username.trim().toLowerCase(),
-          password: formData.password,
-          legalAcceptedAt: new Date().toISOString(),
-        }),
+        body: JSON.stringify(body),
       });
 
       const data = await response.json();
 
       if (!response.ok) {
         throw new Error(data.message || 'Registration failed');
+      }
+
+      // COPPA: minor registration — show "consent sent" state, no redirect
+      if (data.requiresParentalConsent) {
+        setConsentEmailSent(true);
+        setConsentParentEmail(formData.parentEmail);
+        return;
       }
 
       // Success!
@@ -219,14 +277,77 @@ export default function Register() {
     }
   };
 
+  // Dead-end: parent navigated directly without a valid invitation or consent link
+  if (parentModeBlocked) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <CardHeader className="text-center">
+            <p className="text-sm font-semibold tracking-wide text-primary uppercase mb-2">AthleteMetrics</p>
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Shield className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Parent Registration Requires an Invitation</CardTitle>
+            <CardDescription>
+              To create a parent account, you need a valid invitation or consent link.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>There are three ways to get started:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>Your child (under 13) registers and you receive a consent email</li>
+                <li>Your child (13–17) registers with your email and you receive a notification</li>
+                <li>A coach or organization admin sends you an invitation</li>
+              </ul>
+            </div>
+            <Button variant="outline" className="w-full" onClick={() => setLocation('/login')}>
+              Back to Login
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // COPPA consent sent state — minor awaiting parental approval
+  if (consentEmailSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            <div className="mx-auto w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-primary" />
+            </div>
+            <CardTitle className="text-2xl">Consent Email Sent</CardTitle>
+            <CardDescription>
+              We've sent a parental consent request to <strong>{consentParentEmail}</strong>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Alert>
+              <AlertDescription className="text-sm text-foreground">
+                Because you're under 13, federal law (COPPA) requires a parent or guardian to approve your account
+                before you can log in. Please ask them to check their email.
+              </AlertDescription>
+            </Alert>
+            <p className="text-xs text-muted-foreground text-center">
+              Once a parent or guardian clicks the approval link in the email, your account will be activated.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   // Success state - show verification message
   if (success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-              <Mail className="h-8 w-8 text-green-600" />
+            <div className="mx-auto w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+              <Mail className="h-8 w-8 text-green-600 dark:text-green-400" />
             </div>
             <CardTitle className="text-2xl">Check your email</CardTitle>
             <CardDescription>
@@ -234,10 +355,10 @@ export default function Register() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-sm text-gray-600 text-center">
+            <p className="text-sm text-muted-foreground text-center">
               Click the link in the email to verify your account and start using AthleteMetrics.
             </p>
-            <p className="text-xs text-gray-500 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Didn't receive the email? Check your spam folder or{' '}
               <button
                 onClick={async () => {
@@ -286,26 +407,33 @@ export default function Register() {
             alt="AthleteMetrics logo"
             className="h-16 w-16 mx-auto mb-4"
           />
-          <CardTitle className="text-2xl">Create your account</CardTitle>
+          <CardTitle className="text-2xl">
+            {isParentMode ? 'Create Parent Account' : 'Create your account'}
+          </CardTitle>
           <CardDescription>
-            Join AthleteMetrics to track your athletic performance
+            {isParentMode
+              ? 'Create an account to monitor your child\'s athletic progress'
+              : 'Join AthleteMetrics to track your athletic performance'}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* OAuth buttons */}
-          <OAuthButtons />
-
-          {/* Divider */}
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t" />
-            </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-white px-2 text-muted-foreground">
-                Or continue with email
-              </span>
-            </div>
-          </div>
+          {/* OAuth buttons (only for athlete registration) */}
+          {!isParentMode && (
+            <>
+              <OAuthButtons />
+              {/* Divider */}
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-white px-2 text-muted-foreground">
+                    Or continue with email
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           {error && (
             <Alert variant="destructive" className="mb-4">
@@ -341,6 +469,51 @@ export default function Register() {
               </div>
             </div>
 
+            {/* Date of Birth — required for COPPA age gate (athlete mode only) */}
+            {!isParentMode && (
+              <div className="space-y-2">
+                <Label htmlFor="birthDate">Date of Birth</Label>
+                <Input
+                  id="birthDate"
+                  type="date"
+                  value={formData.birthDate}
+                  onChange={(e) => setFormData({ ...formData, birthDate: e.target.value })}
+                  max={new Date().toISOString().split('T')[0]}
+                  required
+                />
+              </div>
+            )}
+
+            {/* Parent/Guardian Email — shown for all minor athletes (under-18) */}
+            {!isParentMode && minor && (
+              <div className="space-y-2">
+                <Label htmlFor="parentEmail">
+                  Parent or Guardian Email {under13 && <span className="text-red-500">*</span>}
+                </Label>
+                {under13 && (
+                  <Alert className="border-amber-200 bg-amber-50">
+                    <AlertCircle className="h-4 w-4 text-amber-600" />
+                    <AlertDescription className="text-amber-800 text-sm">
+                      Federal law (COPPA) requires parental consent for users under 13. A consent email will be sent to your parent or guardian. You'll be able to log in once they approve.
+                    </AlertDescription>
+                  </Alert>
+                )}
+                {teenMinor && (
+                  <p className="text-sm text-muted-foreground">
+                    Optionally provide a parent/guardian email so they can monitor your athletic progress.
+                  </p>
+                )}
+                <Input
+                  id="parentEmail"
+                  type="email"
+                  value={formData.parentEmail}
+                  onChange={(e) => setFormData({ ...formData, parentEmail: e.target.value })}
+                  placeholder="parent@example.com"
+                  required={under13}
+                />
+              </div>
+            )}
+
             {/* Email field */}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
@@ -350,9 +523,10 @@ export default function Register() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => !isParentMode && setFormData({ ...formData, email: e.target.value })}
                   placeholder="you@example.com"
-                  className="pl-10"
+                  className={`pl-10 ${isParentMode && prefilledEmail ? 'bg-gray-50' : ''}`}
+                  readOnly={isParentMode && !!prefilledEmail}
                   required
                 />
                 {emailChecking && (
@@ -513,7 +687,7 @@ export default function Register() {
             <Button
               type="submit"
               className="w-full"
-              disabled={submitting || !usernameAvailable || !emailAvailable || !formData.termsAccepted}
+              disabled={submitting || !usernameAvailable || (!isParentMode && !emailAvailable) || !formData.termsAccepted}
             >
               {submitting ? (
                 <>

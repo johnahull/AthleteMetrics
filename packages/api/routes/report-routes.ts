@@ -29,10 +29,15 @@ import { ZodError, z } from "zod";
 import { db } from "../db";
 import { eq, and, desc, asc, sql, inArray, isNull, type SQL } from "drizzle-orm";
 import { isSiteAdmin } from "../utils/auth-helpers";
+import { coppaService } from "../services/coppa-service";
+import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
+import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import type { MetricExplanation } from "@shared/metric-explanations";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { calculateTierDistributions } from "@shared/benchmark-utils";
 import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
 import { getPushNotificationService, type NotificationPayload } from "../services/push-notification-service";
@@ -1224,6 +1229,72 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Snapshot not found" });
       }
 
+      // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
+      // from an org with COPPA enabled), public link access is never permitted.
+      // Only authenticated users who belong to the report's org (or are a site_admin,
+      // or are a parent of an athlete in that org) may access the data.
+      if (snapshot.publicAccessRestricted) {
+        // Write audit log regardless of whether user is authenticated
+        coppaService.writeCoppaAudit({
+          action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+          details: { token: req.params.token, authenticated: !!req.session?.user },
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
+        });
+
+        const sessionUser = req.session?.user;
+        if (!sessionUser) {
+          return res.status(403).json({
+            code: 'minor_data_restricted',
+            message: 'This report contains data for minor athletes and cannot be shared via public link.',
+          });
+        }
+
+        // Site admins may always access restricted snapshots.
+        if (!sessionUser.isSiteAdmin) {
+          // Resolve the report's owning organization so we can check membership.
+          const [reportRow] = await db
+            .select({ organizationId: reports.organizationId })
+            .from(reports)
+            .where(eq(reports.id, snapshot.reportId))
+            .limit(1);
+
+          if (!reportRow) {
+            return res.status(403).json({
+              code: 'minor_data_restricted',
+              message: 'This report contains data for minor athletes. Access is restricted.',
+            });
+          }
+
+          const orgId = reportRow.organizationId;
+          const userOrgs = await storage.getUserOrganizations(sessionUser.id);
+          const isMember = userOrgs.some((o) => o.organizationId === orgId);
+
+          if (!isMember) {
+            // Check if the authenticated user is a parent of an athlete in this org.
+            const [parentLink] = await db
+              .select({ id: parentAthleteLinks.id })
+              .from(parentAthleteLinks)
+              .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
+              .where(and(
+                eq(parentAthleteLinks.parentUserId, sessionUser.id),
+                eq(parentAthleteLinks.isActive, true),
+                eq(userOrganizations.organizationId, orgId),
+              ))
+              .limit(1);
+
+            if (!parentLink) {
+              return res.status(403).json({
+                code: 'minor_data_restricted',
+                message: 'This report contains data for minor athletes. Access is restricted to organization members.',
+              });
+            }
+          }
+        }
+      }
+
       res.json(snapshot);
     } catch (error) {
       console.error("Error fetching public snapshot:", error);
@@ -1394,6 +1465,57 @@ export function registerReportRoutes(app: Express) {
         return res.status(403).json({
           message: "Access denied to this report"
         });
+      }
+
+      // COPPA: check AI consent for any minor athletes in this report.
+      // canAccessAI fails closed: null/undefined/false → blocked.
+      if (report.reportType === 'individual') {
+        // For individual reports, check the specific athlete.
+        const config = report.config as any;
+        const athleteId = config?.filters?.athleteId || config?.athleteId;
+        if (athleteId) {
+          const canAccess = await coppaService.canAccessAI(athleteId);
+          if (!canAccess) {
+            const athlete = await storage.getUser(athleteId);
+            // Block if minor, or if athlete can't be found (fail closed)
+            if (!athlete || athlete.isMinor) {
+              return res.status(403).json({
+                code: 'ai_consent_required',
+                message: "AI coaching insights require parental consent for AI features for this athlete.",
+                featureDisabled: true,
+                reason: !athlete ? 'athlete_not_found' : 'minor_without_ai_consent',
+              });
+            }
+          }
+        } else {
+          // Cannot resolve athleteId from individual report config — fail closed to
+          // maintain the COPPA invariant. A missing athleteId could mean the report
+          // covers a minor whose consent status cannot be verified.
+          console.warn(`[COPPA] Individual report ${report.id} has no athleteId in config — blocking AI access (fail closed)`);
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: "AI coaching insights are unavailable: unable to verify consent status for this report.",
+            featureDisabled: true,
+            reason: 'individual_report_missing_athlete',
+          });
+        }
+      } else if (report.reportType === 'team') {
+        // For team/org reports, check ALL minor athletes in the organization.
+        // If any minor lacks AI consent, block the report generation.
+        // Uses batch query (2 queries) instead of per-user queries (2*N).
+        const orgUsers = await storage.getOrganizationUsers(report.organizationId);
+        const minorIds = orgUsers
+          .filter(ou => ou.user?.isMinor)
+          .map(ou => ou.user!.id);
+        const minorsWithoutConsent = await coppaService.getMinorsWithoutAIConsent(minorIds);
+        if (minorsWithoutConsent.length > 0) {
+          return res.status(403).json({
+            code: 'ai_consent_required',
+            message: `AI coaching insights blocked: ${minorsWithoutConsent.length} minor athlete(s) in this report lack parental consent for AI features.`,
+            featureDisabled: true,
+            reason: 'minor_without_ai_consent',
+          });
+        }
       }
 
       // Get organization to check AI flags
@@ -3384,6 +3506,28 @@ function addFooterToAllPages(doc: jsPDF, orgName?: string, startPage = 1): void 
 /**
  * Generate PDF document from report data
  */
+// Tier color name → RGB for PDF cell backgrounds (matched to Tailwind classes in TierBadge.tsx)
+const TIER_COLOR_RGB: Record<string, [number, number, number]> = {
+  gold:    [245, 158, 11],
+  emerald: [16, 185, 129],
+  silver:  [148, 163, 184],
+  blue:    [59, 130, 246],
+  bronze:  [234, 88, 12],
+  amber:   [217, 119, 6],
+  slate:   [100, 116, 139],
+  gray:    [107, 114, 128],
+};
+
+/** Create a light tint (blend with white at 25% opacity) for cell backgrounds */
+function tierTint(colorName: string): [number, number, number] {
+  const rgb = TIER_COLOR_RGB[colorName?.toLowerCase()] || TIER_COLOR_RGB.gray;
+  return [
+    Math.round(rgb[0] * 0.25 + 255 * 0.75),
+    Math.round(rgb[1] * 0.25 + 255 * 0.75),
+    Math.round(rgb[2] * 0.25 + 255 * 0.75),
+  ] as [number, number, number];
+}
+
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
@@ -3618,6 +3762,64 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
         yPos = (doc as any).lastAutoTable.finalY + 15;
       }
+
+      // 3b. Tier Distribution Summary
+      const tierDistributions = calculateTierDistributions(reportData.athleteRankings);
+      if (tierDistributions.length > 0) {
+        if (yPos > 230) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(14);
+        if (isVisual) doc.setTextColor(colors.secondary[0], colors.secondary[1], colors.secondary[2]);
+        doc.text("Tier Distribution", 14, yPos);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        yPos += 8;
+
+        for (const dist of tierDistributions) {
+          if (yPos > 250) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          const tierNames = dist.tiers.map(t => t.tierName);
+          const tierColors = dist.tiers.map(t => t.tierColor);
+          const tierCounts = dist.tiers.map(t => t.count.toString());
+          const metricLabel = reportData.metricLabels?.[dist.metricCode] || dist.metricCode;
+
+          autoTable(doc, {
+            startY: yPos,
+            head: [["Metric", "Tier Group", ...tierNames]],
+            body: [[metricLabel, dist.tierGroupName, ...tierCounts]],
+            theme: isVisual ? "striped" : "grid",
+            headStyles: { fillColor: colors.secondary },
+            styles: { fontSize: 9 },
+            didParseCell: (data: any) => {
+              // Color tier name header cells with their tier color tint
+              if (data.section === 'head' && data.column.index >= 2) {
+                const tierIdx = data.column.index - 2;
+                if (tierIdx < tierColors.length) {
+                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                  data.cell.styles.textColor = [40, 40, 40];
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+              // Color tier count body cells with matching tint
+              if (data.section === 'body' && data.column.index >= 2) {
+                const tierIdx = data.column.index - 2;
+                if (tierIdx < tierColors.length) {
+                  data.cell.styles.fillColor = tierTint(tierColors[tierIdx]);
+                }
+              }
+            },
+          });
+
+          yPos = (doc as any).lastAutoTable.finalY + 8;
+        }
+
+        yPos += 7;
+      }
     }
 
     // Check if we need a new page
@@ -3655,10 +3857,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
         const displayedAthletes = sortedAthletes.slice(0, PDF_LIMITS.MAX_ATHLETES_PER_METRIC);
 
         if (displayedAthletes.length > 0) {
+          // Collect tier color for each row's benchmark column
+          const rowTierColors: (string | null)[] = [];
           const metricRows = displayedAthletes.map((athlete: any, idx: number) => {
             const value = athlete.measurements[stat.metric];
             const percentile = athlete.percentiles?.[stat.metric];
             const benchmarkLabel = getBenchmarkLabel(athlete, stat.metric);
+
+            // Check if this athlete has a tier benchmark for coloring
+            const comps = athlete.benchmarkComparisons?.[stat.metric];
+            const tierComp = comps?.find((c: any) => c.tierName);
+            rowTierColors.push(tierComp?.tierColor || null);
 
             return [
               (idx + 1).toString(),
@@ -3677,6 +3886,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
             headStyles: { fillColor: colors.accent, fontSize: 9 },
             styles: { fontSize: 8 },
             margin: { left: 14 },
+            didParseCell: (data: any) => {
+              if (data.section !== 'body') return;
+              // Color the "Benchmarks Met" column (index 4 — matches head: [Rank, Athlete, Value, Percentile, Benchmarks Met])
+              if (data.column.index === 4 && data.row.index < rowTierColors.length) {
+                const colorName = rowTierColors[data.row.index];
+                if (colorName) {
+                  data.cell.styles.fillColor = tierTint(colorName);
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
+            },
           });
 
           yPos = (doc as any).lastAutoTable.finalY + 5;
@@ -3786,25 +4006,87 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
 
     // Benchmark comparisons
     if (athlete.benchmarkComparisons) {
-      const allBenchmarks: any[] = [];
+      const singleValueRows: any[] = [];
+      // Tier data: keep metadata alongside cells for color styling
+      const tierData: Array<{
+        cells: string[];
+        tierColor: string;
+        tierOrder: number;
+      }> = [];
 
       Object.entries(athlete.benchmarkComparisons).forEach(
         ([metric, comparisons]: [string, any]) => {
           const label = reportData.metricLabels?.[metric] || metric;
           const unit = reportData.metricUnits?.[metric] || '';
           comparisons.forEach((comp: any) => {
-            allBenchmarks.push([
-              label,
-              comp.benchmarkName,
-              `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-              `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
-              comp.meetsOrExceeds ? "Yes" : "No",
-            ]);
+            if (comp.tierName) {
+              // Tier benchmark: show tier name + distance to next
+              let tierLabel = comp.tierName;
+              if (comp.isBestTier) {
+                tierLabel += ' [Best]';
+              } else if (comp.distanceToNextTier != null && comp.nextTierName) {
+                const dist = comp.distanceToNextTier < 1
+                  ? comp.distanceToNextTier.toFixed(2)
+                  : comp.distanceToNextTier.toFixed(1);
+                tierLabel += ` (${dist}${unit ? ` ${unit}` : ''} to ${comp.nextTierName})`;
+              }
+              // Prefix with rank indicator
+              const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
+              tierData.push({
+                cells: [
+                  label,
+                  comp.tierGroupName || comp.benchmarkName,
+                  `${rankPrefix}${tierLabel}`,
+                  `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                ],
+                tierColor: comp.tierColor || 'gray',
+                tierOrder: comp.tierOrder || 99,
+              });
+            } else {
+              // Single-value benchmark: existing format
+              singleValueRows.push([
+                label,
+                comp.benchmarkName,
+                `${comp.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
+                comp.meetsOrExceeds ? "Yes" : "No",
+              ]);
+            }
           });
         }
       );
 
-      if (allBenchmarks.length > 0) {
+      // Render tier benchmarks table with color-coded tier cells
+      if (tierData.length > 0) {
+        doc.setFontSize(14);
+        doc.text("Benchmark Tiers", 14, yPos);
+        yPos += 10;
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Metric", "Tier Group", "Tier", "Actual"]],
+          body: tierData.map(d => d.cells),
+          theme: isVisual ? "striped" : "grid",
+          headStyles: { fillColor: colors.primary },
+          styles: { fontSize: 9 },
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            const rowIdx = data.row.index;
+            const colIdx = data.column.index;
+            // Color the "Tier" column (index 2) with the tier's color tint
+            if (colIdx === 2 && rowIdx < tierData.length) {
+              const colorName = tierData[rowIdx].tierColor;
+              data.cell.styles.fillColor = tierTint(colorName);
+              data.cell.styles.fontStyle = 'bold';
+            }
+          },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 10;
+      }
+
+      // Render single-value benchmarks table with green/red Meets Target
+      if (singleValueRows.length > 0) {
         doc.setFontSize(14);
         doc.text("Benchmark Comparisons", 14, yPos);
         yPos += 10;
@@ -3814,14 +4096,115 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
           head: [
             ["Metric", "Benchmark", "Target", "Actual", "Meets Target"],
           ],
-          body: allBenchmarks,
+          body: singleValueRows,
           theme: isVisual ? "striped" : "grid",
           headStyles: { fillColor: colors.primary },
+          styles: { fontSize: 9 },
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            // Color the "Meets Target" column (index 4 — matches head: [Metric, Benchmark, Target, Actual, Meets Target])
+            if (data.column.index === 4) {
+              const val = data.cell.raw;
+              if (val === 'Yes') {
+                data.cell.styles.fillColor = [34, 197, 94];  // green-500
+                data.cell.styles.textColor = [255, 255, 255];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (val === 'No') {
+                data.cell.styles.fillColor = [239, 68, 68];  // red-500
+                data.cell.styles.textColor = [255, 255, 255];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
         });
 
-        // Update yPos to after the table
         yPos = (doc as any).lastAutoTable.finalY + 10;
       }
+    }
+  }
+
+  // Tier Legend — show all tiers for each tier group referenced in this report
+  if (reportData.reportType === 'individual' || reportData.reportType === 'team') {
+    // Collect unique tier groups from benchmark comparisons
+    const tierLegendGroups = new Map<string, {
+      groupName: string;
+      metricLabel: string;
+      tiers: Array<{ tierName: string; tierColor: string; tierOrder: number; minValue: number | null; maxValue: number | null }>;
+    }>();
+
+    const athletes = reportData.reportType === 'individual'
+      ? [reportData.athlete]
+      : (reportData.athleteRankings || []);
+
+    for (const ath of athletes) {
+      if (!ath?.benchmarkComparisons) continue;
+      for (const [metric, comparisons] of Object.entries(ath.benchmarkComparisons) as [string, any[]][]) {
+        for (const comp of comparisons) {
+          const legendKey = `${metric}:${comp.tierGroupName}`;
+          if (comp.tierGroupName && comp.allTiers && !tierLegendGroups.has(legendKey)) {
+            tierLegendGroups.set(legendKey, {
+              groupName: comp.tierGroupName,
+              metricLabel: reportData.metricLabels?.[metric] || metric,
+              tiers: [...comp.allTiers].sort((a: any, b: any) => a.tierOrder - b.tierOrder),
+            });
+          }
+        }
+      }
+    }
+
+    if (tierLegendGroups.size > 0) {
+      if (yPos > 230) {
+        doc.addPage();
+        yPos = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.text("Benchmark Tier Reference", 14, yPos);
+      yPos += 8;
+
+      for (const group of tierLegendGroups.values()) {
+        if (yPos > 250) {
+          doc.addPage();
+          yPos = 20;
+        }
+
+        doc.setFontSize(10);
+        doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+        doc.text(`${group.groupName}`, 14, yPos);
+        yPos += 6;
+
+        const legendRows = group.tiers.map(t => {
+          const range = (t.minValue != null && t.maxValue != null)
+            ? `${t.minValue.toFixed(2)} - ${t.maxValue.toFixed(2)}`
+            : '-';
+          return [`#${t.tierOrder}`, t.tierName, range];
+        });
+
+        autoTable(doc, {
+          startY: yPos,
+          head: [["Rank", "Tier", "Range"]],
+          body: legendRows,
+          theme: "grid",
+          headStyles: { fillColor: colors.secondary, fontSize: 8 },
+          styles: { fontSize: 8 },
+          margin: { left: 14, right: 100 },
+          tableWidth: 100,
+          didParseCell: (data: any) => {
+            if (data.section !== 'body') return;
+            if (data.row.index < group.tiers.length) {
+              const colorName = group.tiers[data.row.index].tierColor;
+              if (data.column.index === 1) {
+                data.cell.styles.fillColor = tierTint(colorName);
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
+        });
+
+        yPos = (doc as any).lastAutoTable.finalY + 8;
+      }
+
+      yPos += 5;
     }
   }
 
@@ -3915,6 +4298,65 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
       yPos += 10;
     }
+  }
+
+  // --- Glossary of metrics (always last content section) ---
+  const glossaryExplanations: Record<string, MetricExplanation> =
+    reportData.metricExplanations ?? {};
+
+  // Collect ordered metric codes for glossary rows
+  const glossaryOrder: string[] = [];
+  const pushCode = (code: unknown) => {
+    if (typeof code === 'string' && code && !glossaryOrder.includes(code)) {
+      glossaryOrder.push(code);
+    }
+  };
+  if (reportData.reportType === 'team' && Array.isArray(reportData.teamStatistics)) {
+    for (const stat of reportData.teamStatistics) pushCode(stat?.metric);
+  } else if (reportData.reportType === 'individual' && reportData.athlete?.measurements) {
+    for (const code of Object.keys(reportData.athlete.measurements)) pushCode(code);
+  }
+  // Fallback: include any explanation keys that weren't already ordered
+  for (const code of Object.keys(glossaryExplanations)) pushCode(code);
+
+  const glossaryRows = glossaryOrder
+    .map((code) => {
+      const entry = glossaryExplanations[code];
+      if (!entry) return null;
+      return [entry.title || code, entry.whatItMeasures || '', entry.whyItMatters || '', entry.unitNote || ''];
+    })
+    .filter((row): row is string[] => row !== null);
+
+  if (glossaryRows.length > 0) {
+    doc.addPage();
+    doc.setFontSize(18);
+    doc.setTextColor(colors.primary[0], colors.primary[1], colors.primary[2]);
+    doc.text('Glossary of Metrics', 14, 20);
+    doc.setTextColor(colors.text[0], colors.text[1], colors.text[2]);
+
+    autoTable(doc, {
+      startY: 28,
+      head: [['Metric', 'What it measures', 'Why it matters', 'Unit & direction']],
+      body: glossaryRows,
+      theme: isVisual ? 'grid' : 'striped',
+      headStyles: {
+        fillColor: colors.primary,
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+      },
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        valign: 'top',
+      },
+      columnStyles: {
+        0: { cellWidth: 32, fontStyle: 'bold' },
+        1: { cellWidth: 60 },
+        2: { cellWidth: 60 },
+        3: { cellWidth: 30 },
+      },
+      margin: { left: 14, right: 14 },
+    });
   }
 
   // Add footer to content pages — skip page 1 when a cover page was inserted

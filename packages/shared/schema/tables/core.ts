@@ -6,7 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, integer, timestamp, date, boolean, unique, index } from "drizzle-orm/pg-core";
-import { organizationTypeEnum } from "../enums";
+import { organizationTypeEnum, coppaStatusEnum } from "../enums";
 
 export const organizations = pgTable("organizations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -31,6 +31,8 @@ export const organizations = pgTable("organizations", {
   autoApproveRequests: boolean("auto_approve_requests").default(false).notNull(),
   // Events module feature flag (added in migration 0079)
   eventsEnabled: boolean("events_enabled").default(false).notNull(),
+  // Sprint F-V profiling feature flag
+  sprintFvEnabled: boolean("sprint_fv_enabled").default(false).notNull(),
   // Custom organization metrics feature flag (added in migration 0093)
   customMetricsEnabled: boolean("custom_metrics_enabled").default(false).notNull(),
   // AI prompt context for customizing coaching insights (added in migration 0107)
@@ -40,6 +42,9 @@ export const organizations = pgTable("organizations", {
   brandPrimaryColor: varchar("brand_primary_color", { length: 7 }),
   brandSecondaryColor: varchar("brand_secondary_color", { length: 7 }),
   brandTagline: varchar("brand_tagline", { length: 200 }),
+  // COPPA compliance fields (added in migration 0024_coppa_compliance)
+  coppaEnabled: boolean("coppa_enabled").default(false).notNull(),
+  coppaContactEmail: text("coppa_contact_email"),
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
@@ -128,6 +133,26 @@ export const users = pgTable("users", {
    */
   legalAcceptedAt: timestamp("legal_accepted_at"),
   legalAcceptedVersion: text("legal_accepted_version"),
+  // COPPA compliance fields (added in migration 0024_coppa_compliance)
+  /**
+   * coppaStatus tracks the COPPA lifecycle for this user.
+   * - 'not_applicable': user is 13+, no COPPA restrictions
+   * - 'pending_consent': under-13, awaiting parental consent (login is blocked)
+   * - 'needs_parent_email': under-13, registration incomplete (missing parentEmail)
+   * - 'consented': parental consent confirmed, account fully active
+   * - 'consent_revoked': parent revoked consent; login is blocked
+   */
+  coppaStatus: text("coppa_status", { enum: coppaStatusEnum }).default('not_applicable').notNull(),
+  /** True when the user is under-18 at the time of account creation or last age-check. */
+  isMinor: boolean("is_minor").default(false).notNull(),
+  parentEmail: text("parent_email"),
+  /**
+   * References parentalConsents.id but declared as plain varchar (no Drizzle FK)
+   * to avoid a circular import between core.ts and coppa.ts.
+   * Referential integrity is enforced at the service layer.
+   */
+  parentConsentId: varchar("parent_consent_id"),
+  coppaConsentConfirmedAt: timestamp("coppa_consent_confirmed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

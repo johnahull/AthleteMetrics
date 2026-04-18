@@ -38,6 +38,8 @@ const mockMeasurements: Measurement[] = [
     eventId: null,
     eventNameSnapshot: null,
     eventDateSnapshot: null,
+    importSource: null,
+    importBatchId: null,
   },
   {
     id: '2',
@@ -65,6 +67,8 @@ const mockMeasurements: Measurement[] = [
     eventId: null,
     eventNameSnapshot: null,
     eventDateSnapshot: null,
+    importSource: null,
+    importBatchId: null,
   },
   {
     id: '3',
@@ -92,6 +96,8 @@ const mockMeasurements: Measurement[] = [
     eventId: null,
     eventNameSnapshot: null,
     eventDateSnapshot: null,
+    importSource: null,
+    importBatchId: null,
   },
 ];
 

@@ -44,7 +44,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     '/terms',
     '/wellness/submit',
     '/public/reports',
-    '/events/join'
+    '/events/join',
+    '/parental-consent',
+    '/coppa/collect-parent-email',
+    '/consent',
   ];
 
   const isPublicRoute = PUBLIC_ROUTES.some(route =>
@@ -75,6 +78,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!isLoading && !user && !isPublicRoute) {
       setLocation("/login");
+    }
+    // COPPA consent gate: block pending_consent minors from accessing any
+    // protected route. Without this, a minor who is authenticated but awaiting
+    // parental consent can navigate directly to /dashboard or other routes.
+    if (!isLoading && user && !isPublicRoute) {
+      if (user.coppaStatus === 'pending_consent' || user.coppaStatus === 'needs_parent_email') {
+        setLocation("/parental-consent");
+      } else if (user.coppaStatus === 'consent_revoked') {
+        setLocation("/login");
+      }
     }
   }, [user, isLoading, location, setLocation, isPublicRoute]);
 

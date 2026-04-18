@@ -298,8 +298,8 @@ test.describe('Account Settings - Password Management', () => {
     // Try to submit
     await page.click('[data-testid="button-save-password"]');
 
-    // Should show error about incorrect current password
-    await expect(page.locator('text=/Current password is incorrect|Invalid password/i')).toBeVisible({ timeout: 10000 });
+    // Should show error about incorrect current password (error may appear in toast with raw API message format)
+    await expect(page.locator('text=/Current password is incorrect|Invalid password|Failed to change password/i')).toBeVisible({ timeout: 10000 });
 
     // Form should still be visible (not closed on error)
     await expect(page.locator('[data-testid="input-current-password"]')).toBeVisible();

@@ -6,6 +6,10 @@ on:
 
 jobs:
   claude-review:
+    # Skip release PRs (develop → main). These bundle commits that were already
+    # reviewed individually on their feature → develop PRs, so re-reviewing the
+    # combined diff adds little and blocks the release on an expiring OAuth token.
+    if: github.base_ref != 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -17,18 +21,20 @@ jobs:
 
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Note: No continue-on-error — review failures (including timeouts) surface
-      # as red CI. This is intentional: silent failures previously masked broken
-      # auth for weeks. Transient Claude API issues are rare and worth the signal.
+      # Auth: uses Claude Code OAuth (included with Claude Pro/Team subscription).
+      # If reviews stop working, refresh the token:
+      #   gh secret set CLAUDE_CODE_OAUTH_TOKEN
+      # Generate a new token at: https://console.anthropic.com/settings/tokens
       - name: Run Automated PR Review
         id: claude-review
         timeout-minutes: 12
+        continue-on-error: false
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}

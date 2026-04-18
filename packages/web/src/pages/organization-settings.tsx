@@ -14,15 +14,18 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
 import { ArrowLeft, Save, Settings } from "lucide-react";
 import { Link } from "wouter";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/lib/auth";
 import { useOrganization, useUpdateOrganization } from "@/lib/organization-api";
 import { updateOrganizationSchema } from "@shared/schema";
-import type { UpdateOrganization } from "@shared/schema";
+import type { UpdateOrganization, SiteSettings } from "@shared/schema";
 import { OrganizationTypeSelector } from "@/components/organization-type-selector";
 
 // Loading spinner component
@@ -45,6 +48,12 @@ export default function OrganizationSettings() {
   // Fetch organization data
   const { data: organization, isLoading, error } = useOrganization(organizationId);
 
+  // Fetch site settings to determine which toggles should be disabled
+  const { data: siteSettings } = useQuery<Pick<SiteSettings, 'sprintFvEnabled' | 'wellnessModuleEnabled'>>({
+    queryKey: ['/api/site-settings/public'],
+    staleTime: 5 * 60 * 1000,
+  });
+
   // Update mutation
   const updateMutation = useUpdateOrganization(organizationId!);
 
@@ -61,9 +70,17 @@ export default function OrganizationSettings() {
       allowCustomBenchmarks: organization.allowCustomBenchmarks || false,
       aiEnabledBySiteAdmin: organization.aiEnabledBySiteAdmin || false,
       wellnessEnabled: organization.wellnessEnabled ?? true,
+      sprintFvEnabled: organization.sprintFvEnabled ?? false,
       customMetricsEnabled: organization.customMetricsEnabled || false,
+      coppaEnabled: organization.coppaEnabled || false,
+      coppaContactEmail: organization.coppaContactEmail || undefined,
     } : undefined,
   });
+
+  // Watch coppaEnabled so we can conditionally enforce coppaContactEmail
+  const coppaEnabled = useWatch({ control: form.control, name: 'coppaEnabled' });
+  const wasOriginallyEnabled = organization?.coppaEnabled ?? false;
+  const isDisablingCoppa = wasOriginallyEnabled && coppaEnabled === false;
 
   // Handle form submission
   const onSubmit = async (data: UpdateOrganization) => {
@@ -98,9 +115,19 @@ export default function OrganizationSettings() {
       if (data.wellnessEnabled !== organization?.wellnessEnabled) {
         changedFields.wellnessEnabled = data.wellnessEnabled;
       }
+      if (data.sprintFvEnabled !== organization?.sprintFvEnabled) {
+        changedFields.sprintFvEnabled = data.sprintFvEnabled;
+      }
       if (data.customMetricsEnabled !== organization?.customMetricsEnabled) {
         changedFields.customMetricsEnabled = data.customMetricsEnabled;
       }
+      if (data.coppaEnabled !== organization?.coppaEnabled) {
+        changedFields.coppaEnabled = data.coppaEnabled;
+      }
+      if ((data.coppaContactEmail || null) !== (organization?.coppaContactEmail || null)) {
+        changedFields.coppaContactEmail = data.coppaContactEmail || null;
+      }
+
       // If no changes, don't make API call
       if (Object.keys(changedFields).length === 0) {
         toast({
@@ -386,6 +413,30 @@ export default function OrganizationSettings() {
 
               <FormField
                 control={form.control}
+                name="sprintFvEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Sprint F-V Profiling</FormLabel>
+                      <FormDescription>
+                        {siteSettings?.sprintFvEnabled === false
+                          ? 'Sprint F-V profiling must be enabled by a site administrator first'
+                          : 'Enable JB Morin force-velocity sprint profiling for this organization'}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                        disabled={siteSettings?.sprintFvEnabled === false}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="customMetricsEnabled"
                 render={({ field }) => (
                   <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
@@ -436,6 +487,72 @@ export default function OrganizationSettings() {
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
+                  </FormItem>
+                )}
+              />
+            </CardContent>
+          </Card>
+
+          {/* COPPA / Minor Athletes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>COPPA / Minor Athletes</CardTitle>
+              <CardDescription>
+                Configure parental consent flow for athletes under 13. Required when your organization serves youth athletes.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isDisablingCoppa && (
+                <Alert variant="destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertDescription>
+                    Disabling COPPA will stop the parental consent flow for minor athletes. Existing consent records will be preserved, but new under-13 athletes will not be required to obtain parental consent.
+                  </AlertDescription>
+                </Alert>
+              )}
+              <FormField
+                control={form.control}
+                name="coppaEnabled"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Enable Minor Athlete Consent Flow</FormLabel>
+                      <FormDescription>
+                        When enabled, athletes under 13 must obtain parental consent before using the platform.
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value ?? false}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="coppaContactEmail"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      COPPA Contact Email
+                      {coppaEnabled && <span className="text-destructive ml-1">*</span>}
+                    </FormLabel>
+                    <FormDescription>
+                      Email address parents can contact for privacy inquiries related to minor athletes in this organization.
+                      {coppaEnabled && ' Required when the consent flow is enabled.'}
+                    </FormDescription>
+                    <FormControl>
+                      <Input
+                        type="email"
+                        placeholder="privacy@yourorg.com"
+                        {...field}
+                        value={field.value ?? ''}
+                        required={coppaEnabled === true}
+                      />
+                    </FormControl>
+                    <FormMessage />
                   </FormItem>
                 )}
               />

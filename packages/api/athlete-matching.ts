@@ -32,7 +32,7 @@ export interface MatchResult {
 /**
  * Calculate Levenshtein distance between two strings
  */
-function levenshteinDistance(str1: string, str2: string): number {
+export function levenshteinDistance(str1: string, str2: string): number {
   const matrix = Array(str2.length + 1).fill(null).map(() => Array(str1.length + 1).fill(null));
   
   for (let i = 0; i <= str1.length; i++) matrix[0][i] = i;
@@ -55,7 +55,7 @@ function levenshteinDistance(str1: string, str2: string): number {
 /**
  * Calculate string similarity as a percentage (0-100)
  */
-function stringSimilarity(str1: string, str2: string): number {
+export function stringSimilarity(str1: string, str2: string): number {
   if (!str1 || !str2) return 0;
   
   const cleanStr1 = str1.toLowerCase().trim();
@@ -72,7 +72,7 @@ function stringSimilarity(str1: string, str2: string): number {
 /**
  * Normalize names for comparison (handle common variations)
  */
-function normalizeName(name: string): string {
+export function normalizeName(name: string): string {
   if (!name || typeof name !== 'string') return '';
   
   return name
@@ -88,7 +88,7 @@ function normalizeName(name: string): string {
 /**
  * Score an athlete match based on firstName + lastName + team criteria
  */
-function calculateMatchScore(criteria: MatchingCriteria, athlete: any): AthleteMatchCandidate {
+export function calculateMatchScore(criteria: MatchingCriteria, athlete: any): AthleteMatchCandidate {
   let score = 0;
   let matchReasons: string[] = [];
   
@@ -199,35 +199,52 @@ export function findBestAthleteMatch(
   const bestCandidate = candidates[0];
   const secondBest = candidates[1];
   
-  // Handle case where all candidates have 0 score
+  // Handle case where best candidate has 0 score — still provide alternatives
+  // with non-zero scores so coaches can manually assign from the review UI
   if (!bestCandidate || bestCandidate.matchScore === 0) {
+    const maxScore = criteria.teamName ? 100 : 70;
+    const nonZeroAlternatives = candidates
+      .filter(c => c.matchScore > 0)
+      .slice(0, 3)
+      .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxScore) * 100) }));
     return {
       type: 'none',
       confidence: 0,
       requiresManualReview: false,
-      alternatives: candidates.length > 1 ? candidates.slice(0, 3) : undefined
+      alternatives: nonZeroAlternatives.length > 0 ? nonZeroAlternatives : undefined,
     };
   }
   
-  // Determine match type and confidence based on new scoring system
+  // Normalize the raw score against the maximum achievable score.
+  // Without team context (no criteria.teamName), the max is 70 (30 first + 40 last).
+  // With team context the max is 100 (+ 30 team). Applying thresholds to the normalized
+  // percentage makes "exact first + last name" classify as "exact" in both cases.
+  const maxPossibleScore = criteria.teamName ? 100 : 70;
+  const normalizedPct = Math.round((bestCandidate.matchScore / maxPossibleScore) * 100);
+  const secondNormalizedPct = secondBest
+    ? Math.round((secondBest.matchScore / maxPossibleScore) * 100)
+    : 0;
+
   let matchType: 'exact' | 'fuzzy' | 'partial' | 'none';
   let confidence: number;
   let requiresManualReview = false;
-  
-  if (bestCandidate.matchScore >= 90) {
+
+  if (normalizedPct >= 90) {
     matchType = 'exact';
-    confidence = bestCandidate.matchScore;
-  } else if (bestCandidate.matchScore >= 75) {
-    matchType = 'fuzzy';
-    confidence = bestCandidate.matchScore;
-    
-    // Require manual review if there are close alternatives
-    if (secondBest && (bestCandidate.matchScore - secondBest.matchScore) < 10) {
+    confidence = normalizedPct;
+    // Flag manual review when two candidates are tied or very close (e.g. duplicate names)
+    if (secondBest && (normalizedPct - secondNormalizedPct) < 10) {
       requiresManualReview = true;
     }
-  } else if (bestCandidate.matchScore >= 60) {
+  } else if (normalizedPct >= 70) {
+    matchType = 'fuzzy';
+    confidence = normalizedPct;
+    if (secondBest && (normalizedPct - secondNormalizedPct) < 10) {
+      requiresManualReview = true;
+    }
+  } else if (normalizedPct >= 50) {
     matchType = 'partial';
-    confidence = bestCandidate.matchScore;
+    confidence = normalizedPct;
     requiresManualReview = true;
   } else {
     matchType = 'none';
@@ -235,10 +252,15 @@ export function findBestAthleteMatch(
     requiresManualReview = false;
   }
   
-  // Provide alternatives for manual review
+  // Provide alternatives for manual review, with scores normalized to the
+  // same 0-100 scale as the primary candidate's `confidence` percentage.
+  // Filter threshold uses normalized score (43% ≈ raw 30/70) so it's
+  // consistent with the 50% partial threshold used for top candidates.
   const alternatives = candidates
-    .filter(c => c.matchScore >= 30 && c.id !== bestCandidate.id)
-    .slice(0, 3); // Top 3 alternatives
+    .filter(c => c.id !== bestCandidate.id)
+    .map(c => ({ ...c, matchScore: Math.round((c.matchScore / maxPossibleScore) * 100) }))
+    .filter(c => c.matchScore >= 43)
+    .slice(0, 3);
   
   return {
     type: matchType,

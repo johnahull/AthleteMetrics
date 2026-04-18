@@ -16,10 +16,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Send } from "lucide-react";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
+import { MetricExplanation } from "./MetricExplanation";
+import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
@@ -98,7 +101,8 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits } = reportData;
+  const { athlete, metricLabels, metricUnits, metricExplanations } = reportData;
+  const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
 
   return (
     <div className="space-y-6">
@@ -192,7 +196,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
                   return (
                     <TableRow key={metricCode}>
-                      <TableCell className="font-medium">{metricLabel}</TableCell>
+                      <TableCell className="font-medium align-top">
+                        <MetricExplanation
+                          label={metricLabel}
+                          explanation={metricExplanations?.[metricCode]}
+                        />
+                      </TableCell>
                       <TableCell>
                         {typeof value === 'number'
                           ? (isFly10Metric(metricCode)
@@ -216,19 +225,36 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                       </TableCell>
                       <TableCell>
                         {benchmarks.length > 0 ? (
-                          <div className="space-y-1">
+                          <div className="space-y-2">
                             {benchmarks.map((b: any, idx: number) => (
-                              <div key={idx} className="text-sm">
-                                <span className="font-medium">{b.benchmarkName}:</span>{" "}
-                                {isFly10Metric(metricCode)
-                                  ? formatFly10Dual(b.benchmarkValue)
-                                  : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
-                                <Badge
-                                  variant={b.meetsOrExceeds ? "default" : "secondary"}
-                                  className="ml-2"
-                                >
-                                  {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
-                                </Badge>
+                              <div key={idx}>
+                                {b.tierName ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-sm font-medium">{b.tierGroupName || b.benchmarkName}:</span>
+                                    <TierBadge
+                                      tierName={b.tierName}
+                                      tierColor={b.tierColor || 'gray'}
+                                      tierOrder={b.tierOrder}
+                                      nextTierName={b.nextTierName}
+                                      distanceToNextTier={b.distanceToNextTier}
+                                      unit={unit}
+                                      showProgress={true}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="text-sm">
+                                    <span className="font-medium">{b.benchmarkName}:</span>{" "}
+                                    {isFly10Metric(metricCode)
+                                      ? formatFly10Dual(b.benchmarkValue)
+                                      : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
+                                    <Badge
+                                      variant={b.meetsOrExceeds ? "default" : "secondary"}
+                                      className="ml-2"
+                                    >
+                                      {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
+                                    </Badge>
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -245,6 +271,12 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </Card>
       )}
 
+      {metricExplanations && (
+        <ReportMetricsGlossary
+          explanations={metricExplanations}
+          metricOrder={measurementCodes}
+        />
+      )}
 
       {showShareDialog && (
         <ShareReportDialog

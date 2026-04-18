@@ -39,6 +39,8 @@ const mockMeasurement: Measurement = {
   eventId: null,
   eventNameSnapshot: null,
   eventDateSnapshot: null,
+  importSource: null,
+  importBatchId: null,
 };
 
 describe('EditMeasurementModal', () => {

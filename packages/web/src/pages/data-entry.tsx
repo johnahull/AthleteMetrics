@@ -5,7 +5,7 @@ import { useSearch } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Plus, Save, Copy, Trash2, Wand2, Loader2 } from "lucide-react";
+import { Plus, Save, Copy, Trash2, Wand2, Loader2, Upload } from "lucide-react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,18 +22,33 @@ import { BatchEntryCard } from '@/components/batch-measurement-entry/batch-entry
 import { BatchWizard, BatchWizardConfig } from '@/components/batch-measurement-entry/batch-wizard';
 import { useMediaQuery } from '@/hooks/use-media-query';
 import { useBatchMeasurementForm } from '@/components/batch-measurement-entry/use-batch-measurement-form';
+import { useAuth } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { RESPONSIVE_BREAKPOINTS } from '@shared/constants';
+import type { UserOrganization } from '@shared/schema';
 
 // Lazy load the Import/Export panel to keep initial page load fast
 const ImportExportPanel = lazy(() => import('@/components/import/ImportExportPanel'));
 
+// Lazy load device import components
+const DeviceImportDialog = lazy(() => import('@/components/device-import').then(m => ({ default: m.DeviceImportDialog })));
+const ImportBatchHistory = lazy(() => import('@/components/device-import').then(m => ({ default: m.ImportBatchHistory })));
+
 export default function DataEntry() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canDeviceImport = user?.isSiteAdmin || user?.role === 'org_admin' || user?.role === 'coach';
   const isMobile = useMediaQuery(`(max-width: ${RESPONSIVE_BREAKPOINTS.MOBILE_BREAKPOINT - 1}px)`);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [deviceDialogOpen, setDeviceDialogOpen] = useState(false);
   const searchString = useSearch();
+
+  const { data: userOrganizations } = useQuery<UserOrganization[]>({
+    queryKey: ["/api/auth/me/organizations"],
+    enabled: !!user?.id,
+  });
+  const organizationId = userOrganizations?.[0]?.organizationId;
 
   // Derive tab from URL query parameter
   const getTabFromUrl = (search: string) => {
@@ -41,6 +56,7 @@ export default function DataEntry() {
     const tabParam = params.get('tab');
     if (tabParam === 'batch') return 'batch';
     if (tabParam === 'import') return 'import';
+    if (tabParam === 'device') return 'device';
     return 'single';
   };
 
@@ -141,10 +157,13 @@ export default function DataEntry() {
 
         {/* Tabs for Single, Batch, and Import/Export Entry */}
         <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-6">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsList className={`grid w-full max-w-2xl ${canDeviceImport ? 'grid-cols-4' : 'grid-cols-3'}`}>
             <TabsTrigger value="single">Single Entry</TabsTrigger>
             <TabsTrigger value="batch">Batch Entry</TabsTrigger>
             <TabsTrigger value="import" data-testid="import-export-tab">Import/Export</TabsTrigger>
+            {canDeviceImport && (
+              <TabsTrigger value="device" data-testid="device-import-tab">Device Import</TabsTrigger>
+            )}
           </TabsList>
 
           {/* Single Entry Tab */}
@@ -307,6 +326,54 @@ export default function DataEntry() {
               <ImportExportPanel />
             </Suspense>
           </TabsContent>
+
+          {/* Device Import Tab - Lazy Loaded (coach/admin only) */}
+          {canDeviceImport && <TabsContent value="device">
+            <Suspense fallback={
+              <Card className="bg-white">
+                <CardContent className="p-12 flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-3">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-sm text-muted-foreground">Loading Device Import...</p>
+                  </div>
+                </CardContent>
+              </Card>
+            }>
+              {organizationId ? (
+                <>
+                  <Card className="bg-white mb-6">
+                    <CardHeader>
+                      <CardTitle>Import Device Data</CardTitle>
+                      <CardDescription>
+                        Upload timing gate data (Dashr CSV) to automatically create athlete measurements.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <Button onClick={() => setDeviceDialogOpen(true)} className="w-full sm:w-auto">
+                        <Upload className="h-4 w-4 mr-2" />
+                        Upload Device File
+                      </Button>
+                      <DeviceImportDialog
+                        organizationId={organizationId}
+                        open={deviceDialogOpen}
+                        onOpenChange={setDeviceDialogOpen}
+                      />
+                    </CardContent>
+                  </Card>
+                  <ImportBatchHistory organizationId={organizationId} />
+                </>
+              ) : (
+                <Card className="bg-white">
+                  <CardHeader>
+                    <CardTitle>No Organization</CardTitle>
+                    <CardDescription>
+                      You need to be a member of an organization to import device data.
+                    </CardDescription>
+                  </CardHeader>
+                </Card>
+              )}
+            </Suspense>
+          </TabsContent>}
         </Tabs>
 
         {/* Recent Entries */}

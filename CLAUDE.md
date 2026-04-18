@@ -2,6 +2,26 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Development Principles (Design Phase)
+
+Applied **before** TDD begins. Sequence: **Ask → Agree → Test → Code**. Adapted from Andrej Karpathy's observations on LLM coding pitfalls.
+
+1. **Think Before Coding** — State assumptions explicitly. If requirements are ambiguous, surface concrete interpretations and **ask** — do not silently pick one. Hidden confusion is worse than a clarifying question.
+2. **Simplicity First** — Minimum code for the stated problem. No speculative abstractions, no unrequested features, no error handling for scenarios that cannot occur within trusted boundaries.
+3. **Surgical Changes** — Touch only what the task requires. Preserve existing style, naming, and structure even if you would write it differently. Refactoring unbroken code is out of scope unless the task explicitly calls for it. Clean up only what *your* change introduced.
+4. **Goal-Driven Execution** — Define verifiable success criteria **before** writing code or tests. "Done" means criteria are demonstrably met, not that the code compiles or the test passes.
+
+### Interaction with the TDD Policy
+
+These principles govern the **design phase**. The TDD policy (below) governs the **implementation phase**. They do not conflict — they run in sequence.
+
+| Phase | Authority | What it enforces |
+|-------|-----------|------------------|
+| Design | Karpathy principles (this section) | Surface ambiguity, agree on approach, define success criteria |
+| Red → Green → Refactor | TDD policy (below) | Encode agreed behavior as a failing test, minimum implementation, safe cleanup |
+
+**If the request is ambiguous, stop before writing the test.** A test encodes behavior — encoding the wrong behavior costs more rework than asking a clarifying question.
+
 ## Specialized Agent Integration
 
 **STATUS: ENABLED** _(Change to "DISABLED" to turn off automatic agent usage)_

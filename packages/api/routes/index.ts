@@ -45,6 +45,13 @@ import { registerPushNotificationRoutes } from "./push-notification-routes";
 import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
 import { registerOrgNotificationRoutes } from "./org-notification-routes";
 import { registerAdminNotificationRoutes } from "./admin-notification-routes";
+import { registerCoppaRoutes } from "./coppa-routes";
+import { registerCoppaDeletionRoutes } from "./coppa-deletion-routes";
+import { registerCoppaExportRoutes } from "./coppa-export-routes";
+import { registerParentRoutes } from "./parent-routes";
+import { registerParentLinkRequestRoutes } from "./parent-link-request-routes";
+import { registerDeviceImportRoutes } from "./device-import-routes";
+import { registerSprintFvRoutes } from "./sprint-fv-routes";
 
 /**
  * Register all application routes
@@ -134,6 +141,9 @@ export function registerAllRoutes(app: Express) {
   // Import/Export routes (CSV/photo import and data export)
   registerImportExportRoutes(app);
 
+  // Device import routes (Dashr, OVR timing gate imports)
+  registerDeviceImportRoutes(app);
+
   // Profile and user management routes
   registerProfileRoutes(app);
 
@@ -177,6 +187,24 @@ export function registerAllRoutes(app: Express) {
 
   // Event report routes (event-specific reports with event percentiles)
   registerEventReportRoutes(app);
+
+  // COPPA compliance routes (VPC flow, parental consent management)
+  registerCoppaRoutes(app);
+
+  // COPPA data deletion routes (parent data deletion requests)
+  registerCoppaDeletionRoutes(app);
+
+  // COPPA data export routes (parent data review/download)
+  registerCoppaExportRoutes(app);
+
+  // Parent account routes (linked children, read-only access)
+  registerParentRoutes(app);
+
+  // Parent link request routes (Link-a-Child workflow Phase 3)
+  registerParentLinkRequestRoutes(app);
+
+  // Sprint Force-Velocity profile routes (Morin F-V profiling)
+  registerSprintFvRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }

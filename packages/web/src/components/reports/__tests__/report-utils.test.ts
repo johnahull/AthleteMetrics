@@ -16,6 +16,7 @@ import {
   calculateBenchmarkAchievements,
   extractAthleteId,
   calculateDeviationStats,
+  calculateTierDistributions,
 } from '../report-utils';
 import type { TimeframeConfig, AthleteRanking } from '@/types/report-types';
 
@@ -539,6 +540,86 @@ describe('report-utils', () => {
       const stats = calculateDeviationStats(-8, -10, 2, false);
       expect(stats.deviation).toBe(2); // -8 - (-10) = 2
       expect(stats.percentDiff).toBe(20); // 2 / |-10| * 100 = 20%
+    });
+  });
+
+  // ============================================================================
+  // calculateTierDistributions
+  // ============================================================================
+  describe('calculateTierDistributions', () => {
+    it('returns empty array for empty rankings', () => {
+      expect(calculateTierDistributions([])).toEqual([]);
+    });
+
+    it('returns empty array when no tier comparisons exist', () => {
+      const rankings = [
+        {
+          userId: '1', userName: 'Athlete', measurements: { FLY10: 1.5 },
+          benchmarkComparisons: { FLY10: [{ benchmarkName: 'Target', benchmarkValue: 1.4, meetsOrExceeds: false }] },
+        },
+      ] as any;
+      expect(calculateTierDistributions(rankings)).toEqual([]);
+    });
+
+    it('counts athletes per tier within a single tier group', () => {
+      const rankings = [
+        {
+          userId: '1', userName: 'A', measurements: {},
+          benchmarkComparisons: { FLY10: [{ tierName: 'Elite', tierColor: 'gold', tierOrder: 1, tierGroupName: 'Sprint Tiers' }] },
+        },
+        {
+          userId: '2', userName: 'B', measurements: {},
+          benchmarkComparisons: { FLY10: [{ tierName: 'Good', tierColor: 'silver', tierOrder: 2, tierGroupName: 'Sprint Tiers' }] },
+        },
+        {
+          userId: '3', userName: 'C', measurements: {},
+          benchmarkComparisons: { FLY10: [{ tierName: 'Elite', tierColor: 'gold', tierOrder: 1, tierGroupName: 'Sprint Tiers' }] },
+        },
+      ] as any;
+
+      const result = calculateTierDistributions(rankings);
+      expect(result).toHaveLength(1);
+      expect(result[0].metricCode).toBe('FLY10');
+      expect(result[0].tierGroupName).toBe('Sprint Tiers');
+      expect(result[0].tiers).toHaveLength(2);
+      // Sorted by tierOrder
+      expect(result[0].tiers[0]).toEqual({ tierName: 'Elite', tierColor: 'gold', tierOrder: 1, count: 2 });
+      expect(result[0].tiers[1]).toEqual({ tierName: 'Good', tierColor: 'silver', tierOrder: 2, count: 1 });
+    });
+
+    it('handles multiple metrics with separate tier groups', () => {
+      const rankings = [
+        {
+          userId: '1', userName: 'A', measurements: {},
+          benchmarkComparisons: {
+            FLY10: [{ tierName: 'Elite', tierColor: 'gold', tierOrder: 1, tierGroupName: 'Sprint' }],
+            VERT: [{ tierName: 'Good', tierColor: 'silver', tierOrder: 2, tierGroupName: 'Jump' }],
+          },
+        },
+      ] as any;
+
+      const result = calculateTierDistributions(rankings);
+      expect(result).toHaveLength(2);
+      expect(result.map(r => r.metricCode).sort()).toEqual(['FLY10', 'VERT']);
+    });
+
+    it('skips comparisons without tierName or tierGroupName', () => {
+      const rankings = [
+        {
+          userId: '1', userName: 'A', measurements: {},
+          benchmarkComparisons: {
+            FLY10: [
+              { tierName: 'Elite', tierGroupName: 'Sprint', tierColor: 'gold', tierOrder: 1 },
+              { tierName: 'Good', tierGroupName: undefined, tierColor: 'silver', tierOrder: 2 }, // missing group
+              { benchmarkName: 'Target', benchmarkValue: 1.4, meetsOrExceeds: true }, // single-value
+            ],
+          },
+        },
+      ] as any;
+
+      const result = calculateTierDistributions(rankings);
+      expect(result).toHaveLength(1);
+      expect(result[0].tiers).toHaveLength(1); // Only the one with both tierName and tierGroupName
     });
   });
 });

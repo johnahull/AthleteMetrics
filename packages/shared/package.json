@@ -24,14 +24,15 @@
     "./season-utils": "./season-utils.ts",
     "./username-validation": "./username-validation.ts",
     "./utils/number-conversion": "./utils/number-conversion.ts",
-    "./utils/statistics": "./utils/statistics.ts"
+    "./utils/statistics": "./utils/statistics.ts",
+    "./metric-explanations": "./metric-explanations/index.ts"
   },
   "dependencies": {
-    "date-fns": "^3.6.0",
+    "date-fns": "^4.1.0",
     "dompurify": "^3.2.6",
     "drizzle-orm": "^0.39.3",
     "drizzle-zod": "^0.7.0",
-    "isomorphic-dompurify": "^2.30.0",
+    "isomorphic-dompurify": "^3.8.0",
     "zod": "^3.24.2",
     "zod-validation-error": "^3.4.0"
   }

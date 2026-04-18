@@ -5,8 +5,12 @@
 import type { Express } from "express";
 import rateLimit from "express-rate-limit";
 import { AuthService } from "../services/auth-service";
+import { coppaService } from "../services/coppa-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
+import { COPPA_ACTIONS } from "@shared/coppa-utils";
+import { storage } from "../storage";
+import { generateParentEmailToken } from "../services/coppa-email-token-store";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -37,6 +41,43 @@ export function registerAuthRoutes(app: Express) {
 
       const user = result.user!;
 
+      // COPPA check: block login for under-13 athletes without parental consent.
+      // IMPORTANT: This check runs AFTER password validation to prevent leaking
+      // whether an account exists via different error codes on wrong passwords.
+      if (['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(user.coppaStatus)) {
+        const codeMap: Record<string, string> = {
+          pending_consent: 'coppa_pending_consent',
+          needs_parent_email: 'coppa_needs_parent_email',
+          consent_revoked: 'coppa_consent_revoked',
+        };
+
+        // Write audit log for blocked login (fire-and-forget — never fails the request)
+        const auditAction = user.coppaStatus === 'consent_revoked'
+          ? COPPA_ACTIONS.LOGIN_BLOCKED_REVOKED
+          : COPPA_ACTIONS.LOGIN_BLOCKED_PENDING;
+        coppaService.writeCoppaAudit({
+          action: auditAction,
+          athleteUserId: user.id,
+          ip: req.ip,
+          userAgent: req.get('User-Agent'),
+        }).catch((err) => {
+          console.error('[COPPA] Failed to write login block audit log:', err);
+        });
+
+        // For needs_parent_email, generate an opaque token so the frontend can
+        // redirect without putting the username in the URL (prevents minor enumeration).
+        const parentEmailToken = user.coppaStatus === 'needs_parent_email'
+          ? generateParentEmailToken(user.id)
+          : undefined;
+
+        return res.status(403).json({
+          code: codeMap[user.coppaStatus],
+          coppaStatus: user.coppaStatus,
+          message: "Account access requires parental consent.",
+          ...(parentEmailToken && { parentEmailToken }),
+        });
+      }
+
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 
@@ -50,7 +91,8 @@ export function registerAuthRoutes(app: Express) {
         role: roleContext.role,
         isSiteAdmin: user.isSiteAdmin === true,
         primaryOrganizationId: roleContext.primaryOrganizationId,
-        athleteId: roleContext.role === 'athlete' ? user.id : undefined
+        athleteId: roleContext.role === 'athlete' ? user.id : undefined,
+        emailVerified: user.isEmailVerified === true,
       };
 
       // Get user organizations for context
@@ -62,6 +104,8 @@ export function registerAuthRoutes(app: Express) {
         redirectUrl = '/admin';
       } else if (roleContext.role === 'athlete') {
         redirectUrl = '/my-dashboard';
+      } else if (roleContext.role === 'parent') {
+        redirectUrl = '/parent-dashboard';
       }
       // org_admin, coach, and others default to /dashboard
 
@@ -156,7 +200,18 @@ export function registerAuthRoutes(app: Express) {
       }
 
       const targetUserId = req.params.userId;
-      
+
+      // Block impersonation of minors without parental consent — accessing
+      // a child's data before the parent has consented is a COPPA violation
+      // regardless of admin privilege level.
+      const targetCheck = await storage.getUser(targetUserId);
+      if (targetCheck && ['pending_consent', 'needs_parent_email', 'consent_revoked'].includes(targetCheck.coppaStatus ?? '')) {
+        return res.status(403).json({
+          message: "Cannot impersonate this account: parental consent has not been granted.",
+          code: "coppa_impersonation_blocked",
+        });
+      }
+
       const targetUser = await authService.startImpersonation(req.session.user.id, targetUserId);
 
       // Determine target user's actual role and organization context
@@ -177,7 +232,8 @@ export function registerAuthRoutes(app: Express) {
         role: targetRoleContext.role,
         isSiteAdmin: targetUser.isSiteAdmin === true,
         primaryOrganizationId: targetRoleContext.primaryOrganizationId,
-        athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined
+        athleteId: targetRoleContext.role === 'athlete' ? targetUser.id : undefined,
+        emailVerified: targetUser.isEmailVerified === true,
       };
 
       req.session.isImpersonating = true;

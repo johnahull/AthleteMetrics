@@ -557,7 +557,7 @@ export const sessions = pgTable("session", {
 // Email verification tokens
 export const emailVerificationTokens = pgTable("email_verification_tokens", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   email: text("email").notNull(),
   token: text("token").notNull().unique(),
   isUsed: boolean("is_used").default(false).notNull(),
@@ -1422,6 +1422,9 @@ export const updateOrganizationSchema = z.object({
   brandPrimaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandSecondaryColor: z.preprocess(val => val === '' ? null : val, z.string().regex(/^#[0-9a-fA-F]{6}$/, "Must be a valid hex color (e.g. #1a365d)").nullable()).optional(),
   brandTagline: z.preprocess(val => val === '' ? null : val, z.string().max(200, "Tagline must be 200 characters or less").nullable()).optional(),
+  sprintFvEnabled: z.boolean().optional(), // Org admin can set this (only effective when site sprint F-V enabled)
+  coppaEnabled: z.boolean().optional(), // Site admin only - enables COPPA minor-athlete flow
+  coppaContactEmail: z.string().email("COPPA contact email must be a valid email address").max(255).optional().nullable(),
 }).refine(
   (data) => {
     // If allowCustomBenchmarks is being set to true, benchmarksEnabled must also be true
@@ -1477,7 +1480,7 @@ export const insertUserSchema = createInsertSchema(users).omit({
     .regex(PASSWORD_REGEX.specialChar, "Password must contain at least one special character"),
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  role: z.enum(["site_admin", "org_admin", "coach", "athlete"]).default("athlete"),
+  role: z.enum(["site_admin", "org_admin", "coach", "athlete", "parent"]).default("athlete"),
   isSiteAdmin: z.boolean().default(false).optional(),
   birthDate: z.string().optional().refine((date) => {
     if (!date) return true;
@@ -1492,6 +1495,12 @@ export const insertUserSchema = createInsertSchema(users).omit({
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   // Onboarding tracking - defaults to false for new users
   hasCompletedOnboarding: z.boolean().optional(),
+  // COPPA compliance fields
+  coppaStatus: z.enum(['not_applicable', 'pending_consent', 'needs_parent_email', 'consented', 'consent_revoked']).optional(),
+  isMinor: z.boolean().optional(),
+  parentEmail: z.string().email().optional().nullable(),
+  parentConsentId: z.string().optional(),
+  coppaConsentConfirmedAt: z.coerce.date().optional().nullable(),
 });
 
 // Schema for creating OAuth users (password is optional for OAuth-only accounts)
@@ -1514,6 +1523,7 @@ export const updateProfileSchema = z.object({
   emails: z.array(z.string().email("Invalid email format")).optional(),
   firstName: z.string().min(1, "First name is required").optional(),
   lastName: z.string().min(1, "Last name is required").optional(),
+  parentEmail: z.string().email("Invalid email format").optional().nullable(),
 });
 
 export const changePasswordSchema = z.object({
@@ -1593,7 +1603,7 @@ export const insertInvitationSchema = createInsertSchema(invitations).omit({
   isUsed: true,
 }).extend({
   email: z.string().email("Invalid email format"),
-  role: z.enum(["athlete", "coach", "org_admin"]), // Removed site_admin from invitations
+  role: z.enum(["athlete", "coach", "org_admin", "parent"]), // Removed site_admin from invitations
   teamIds: z.array(z.string()).optional(),
 });
 
@@ -2471,6 +2481,11 @@ export type OrganizationBenchmarkWithDetails = OrganizationBenchmark & {
   comparisonOperator: 'lte' | 'gte' | 'eq' | 'range';
   minValue: number | null;
   maxValue: number | null;
+  // Tier group fields
+  tierGroupId: string | null;
+  tierName: string | null;
+  tierOrder: number | null;
+  tierColor: string | null;
   // Athlete filters
   ageMin: number | null;
   ageMax: number | null;
@@ -2586,7 +2601,8 @@ export const insertAthleteSchema = z.object({
   weight: z.coerce.number().optional(),
   gender: z.enum(["Male", "Female", "Not Specified"]).optional(),
   teamIds: z.array(z.string()).optional(),
-  organizationId: z.string().optional()
+  organizationId: z.string().optional(),
+  parentEmail: z.string().email("Invalid email format").optional().nullable(),
 });
 
 // Organization Type
@@ -2613,6 +2629,7 @@ export type AIModel = typeof AI_MODELS[number];
 export const updateSiteSettingsSchema = z.object({
   aiModel: z.enum(AI_MODELS).optional(),
   wellnessModuleEnabled: z.boolean().optional(),
+  sprintFvEnabled: z.boolean().optional(),
 });
 
 export const insertSiteSettingsSchema = createInsertSchema(siteSettings).omit({

@@ -1,5 +1,5 @@
 import React, { Suspense, useEffect } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -60,6 +60,16 @@ const ResetPassword = React.lazy(() => import("./pages/reset-password"));
 const VerifyEmail = React.lazy(() => import("./pages/verify-email"));
 const PrivacyPolicy = React.lazy(() => import("./pages/privacy-policy"));
 const TermsOfService = React.lazy(() => import("./pages/terms-of-service"));
+const ParentalConsentWaiting = React.lazy(() => import("./pages/parental-consent"));
+const ConsentConfirmation = React.lazy(() => import("./pages/consent-confirmation"));
+const CoppaCollectParentEmail = React.lazy(() => import("./pages/coppa-collect-parent-email"));
+const ParentDashboard = React.lazy(() => import("./pages/parent-dashboard"));
+const ParentChildDetail = React.lazy(() => import("./pages/parent-child-detail"));
+const ParentLinkChild = React.lazy(() => import("./pages/parent-link-child"));
+
+// Lazy load sprint F-V pages
+const SprintFv = React.lazy(() => import("./pages/sprint-fv"));
+const SprintFvProfileDetail = React.lazy(() => import("./pages/sprint-fv-profile-detail"));
 
 // Lazy load analytics pages to reduce initial bundle size
 const Analytics = React.lazy(() => import("./pages/analytics"));
@@ -125,6 +135,7 @@ const EventInvite = React.lazy(() => import("./pages/event-invite"));
 const EventDataEntry = React.lazy(() => import("./pages/event-data-entry"));
 const EventResults = React.lazy(() => import("./pages/event-results"));
 
+
 function Router() {
   return (
     <Switch>
@@ -168,6 +179,36 @@ function Router() {
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
           <TermsOfService />
         </Suspense>
+      </Route>
+      <Route path="/parental-consent">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentalConsentWaiting />
+        </Suspense>
+      </Route>
+      <Route path="/consent/:token">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ConsentConfirmation />
+        </Suspense>
+      </Route>
+      <Route path="/coppa/collect-parent-email">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <CoppaCollectParentEmail />
+        </Suspense>
+      </Route>
+      <Route path="/parent/children/:athleteId">
+        <RouteWrapper loadingText="Loading Athlete...">
+          <ParentChildDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/parent/link-child">
+        <Suspense fallback={<LoadingSpinner text="Loading..." />}>
+          <ParentLinkChild />
+        </Suspense>
+      </Route>
+      <Route path="/parent-dashboard">
+        <RouteWrapper loadingText="Loading Dashboard...">
+          <ParentDashboard />
+        </RouteWrapper>
       </Route>
       <Route path="/join/:code">
         <Suspense fallback={<LoadingSpinner text="Loading..." />}>
@@ -334,6 +375,16 @@ function Router() {
           <AthleteAnalytics />
         </RouteWrapper>
       </Route>
+      <Route path="/sprint-fv/:id">
+        <RouteWrapper loadingText="Loading Sprint F-V Profile...">
+          <SprintFvProfileDetail />
+        </RouteWrapper>
+      </Route>
+      <Route path="/sprint-fv">
+        <RouteWrapper loadingText="Loading Sprint F-V...">
+          <SprintFv />
+        </RouteWrapper>
+      </Route>
       <Route path="/publish">
         <RouteWrapper loadingText="Loading Publish...">
           <Publish />
@@ -461,6 +512,10 @@ function Router() {
         <RouteWrapper loadingText="Loading Reports...">
           <Reports />
         </RouteWrapper>
+      </Route>
+      {/* Legacy device import URL - redirect to data entry tab */}
+      <Route path="/import/device">
+        <Redirect to="/data-entry?tab=device" />
       </Route>
       {/* Event routes - specific routes must come before generic */}
       <Route path="/events/join/:code">

@@ -85,7 +85,8 @@ test.describe('Time-Series Violin Chart Feature', () => {
 
     // Verify multi-athlete content appears after tab selection
     // The tab content should show athlete selection or metric selection options
-    const tabContentVisible = await page.locator('[role="tabpanel"], .space-y-4, text=/Select.*Metric|Select.*Athlete|Apply Filters/i').first().isVisible({ timeout: 5000 }).catch(() => false);
+    const tabContentLocator = page.locator('[role="tabpanel"], .space-y-4').or(page.locator('text=/Select.*Metric|Select.*Athlete|Apply Filters/i'));
+    const tabContentVisible = await tabContentLocator.first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
 
     if (tabContentVisible) {
       console.log('Multi-Athlete tab content loaded successfully');

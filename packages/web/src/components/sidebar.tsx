@@ -25,7 +25,8 @@ import {
   Link,
   UserPlus,
   Calendar,
-  Ruler
+  Ruler,
+  Zap
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";
@@ -59,8 +60,10 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
       { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
       { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
       { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+      { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
       { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
       { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
+
       { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
     ]
   },
@@ -72,6 +75,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" },
@@ -86,6 +90,7 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Events", href: "/events", icon: Calendar, tourId: "events" },
     { name: "Wellness", href: "/wellness", icon: Heart, tourId: "wellness" },
     { name: "Coach Analytics", href: "/coach-analytics", icon: TrendingUp, tourId: "coach-analytics" },
+    { name: "Sprint F-V", href: "/sprint-fv", icon: Zap, tourId: "sprint-fv" },
     { name: "Reports", href: "/reports", icon: ClipboardList, tourId: "reports" },
     { name: "Measurements", href: "/publish", icon: FileCheck, tourId: "measurements" },
     { name: "Benchmarks", href: "/organizations/__ORG_ID__/benchmarks", icon: Target, tourId: "benchmarks" }
@@ -99,7 +104,11 @@ const getNavigationConfigs = (teamLabel: string, athletesLabel: string) => ({
     { name: "Peer Comparison", href: "/my-peer-comparison", icon: Users, tourId: "peer-comparison" },
     { name: "My Goals", href: "/my-goals", icon: Target, tourId: "my-goals" },
     { name: "Join Organization", href: "/join", icon: UserPlus, tourId: "join-organization" }
-  ]
+  ],
+  parent: [
+    { name: "My Children", href: "/parent-dashboard", icon: Users, tourId: "parent-dashboard" },
+    { name: "Link a Child", href: "/parent/link-child", icon: UserPlus, tourId: "parent-link-child" },
+  ],
 });
 
 const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationContext: boolean, user?: any, userOrganizations?: any[], organizationContext?: string, teamLabel = "Teams", athletesLabel = "Athletes", invitationBadge?: number, reportBadge?: number) => {
@@ -122,8 +131,9 @@ const getNavigation = (role: string, isSiteAdmin: boolean, isInOrganizationConte
     return config;
   }
 
-  // Get base navigation for role
-  const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS] || NAVIGATION_CONFIGS.coach;
+  // Get base navigation for role; unknown roles fall back to coach nav
+  const baseConfig = NAVIGATION_CONFIGS[role as keyof typeof NAVIGATION_CONFIGS]
+    || NAVIGATION_CONFIGS.coach;
   let navigation = Array.isArray(baseConfig)
     ? [...baseConfig]
     : typeof baseConfig === 'function'
@@ -241,6 +251,14 @@ export default function Sidebar({ onNavigate }: { onNavigate?: () => void } = {}
     navigation = navigation.filter(item =>
       item.name !== "Events" && item.name !== "My Events"
     );
+  }
+
+  // Filter out Sprint F-V link if disabled at site or org level
+  // Site admins bypass org-level check (org data not fetched for site admins)
+  const isSprintFvEnabled = (siteSettings?.sprintFvEnabled ?? false)
+    && (isSiteAdmin || (organization?.sprintFvEnabled ?? false));
+  if (!isSprintFvEnabled) {
+    navigation = navigation.filter(item => item.name !== "Sprint F-V");
   }
 
   return (

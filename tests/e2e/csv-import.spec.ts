@@ -105,7 +105,7 @@ test.describe('CSV Import Tests', () => {
     // Get initial athlete count (navigate to athletes page)
     await page.goto(`${STAGING_URL}/athletes`);
     // Wait for athletes page to load
-    await page.waitForSelector('[data-testid^="checkbox-athlete-"], .empty-state, text=/no athletes/i', { timeout: 5000 });
+    await page.locator('[data-testid^="checkbox-athlete-"], .empty-state').or(page.locator('text=/no athletes/i')).first().waitFor({ timeout: 5000 });
     const initialCount = await page.locator('[data-testid^="checkbox-athlete-"]').count();
 
     // Go back to import
@@ -147,10 +147,11 @@ test.describe('CSV Import Tests', () => {
     await fileInput.setInputFiles(INVALID_DATA_CSV);
 
     // Wait for file to be processed and errors to appear
-    await page.waitForSelector('.error, [role="alert"], text=/invalid|error|warning/i', { timeout: 10000 });
+    const csvErrorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/invalid|error|warning/i'));
+    await csvErrorLocator.first().waitFor({ timeout: 10000 });
 
     // Should show error messages or warnings
-    const errorMessages = await page.locator('.error, [role="alert"], text=/invalid|error|warning/i').count();
+    const errorMessages = await csvErrorLocator.count();
     expect(errorMessages).toBeGreaterThan(0);
 
     // Import button might be disabled or show warnings

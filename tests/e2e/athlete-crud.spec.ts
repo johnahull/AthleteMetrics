@@ -253,15 +253,16 @@ test.describe('Athlete CRUD Tests', () => {
     // Try to submit without filling required fields
     await page.click('[data-testid="submit-athlete"]');
 
-    // Wait for validation errors to appear
-    await page.waitForSelector('.error, [role="alert"], text=/required|must|invalid/i', { timeout: 5000 });
+    // Wait for validation errors to appear (use locator with .or() instead of waitForSelector which only accepts CSS)
+    const errorLocator = page.locator('.error, [role="alert"]').or(page.locator('text=/required|must|invalid/i'));
+    await errorLocator.first().waitFor({ timeout: 5000 });
 
     // Should still be on the form (modal visible)
     const modalVisible = await page.locator('[role="dialog"], .modal').count();
     expect(modalVisible).toBeGreaterThan(0);
 
     // Should show validation error messages
-    const errorMessages = await page.locator('.error, [role="alert"], text=/required|must|invalid/i').count();
+    const errorMessages = await errorLocator.count();
     expect(errorMessages).toBeGreaterThan(0);
   });
 
