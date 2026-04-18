@@ -6,9 +6,9 @@ import {
   sanitizeDashrFilename,
 } from '../dashr-export';
 
-async function parseWorkbook(buffer: ArrayBuffer) {
+async function parseWorkbook(buffer: Uint8Array | ArrayBuffer) {
   const wb = new ExcelJS.Workbook();
-  await wb.xlsx.load(buffer);
+  await wb.xlsx.load(buffer as ArrayBuffer);
   const ws = wb.worksheets[0];
   const rows: string[][] = [];
   ws.eachRow({ includeEmpty: false }, row => {
@@ -73,13 +73,23 @@ describe('buildDashrXlsxBuffer', () => {
     expect(rows[3][0]).toBe('Jane');
   });
 
-  it('sanitizes formula-injection attempts in names', async () => {
+  it('passes names with leading =/+/-/@ through unchanged (XLSX stores them as shared strings, not formulas)', async () => {
     const buf = await buildDashrXlsxBuffer([
       { firstName: '=1+1', lastName: '@cmd' },
     ]);
     const { rows } = await parseWorkbook(buf);
-    expect(rows[1][0]).toBe("'=1+1");
-    expect(rows[1][2]).toBe("'@cmd");
+    expect(rows[1][0]).toBe('=1+1');
+    expect(rows[1][2]).toBe('@cmd');
+  });
+
+  it('emits blank cells for empty first/last name strings', async () => {
+    const buf = await buildDashrXlsxBuffer([
+      { firstName: '', lastName: '' },
+    ]);
+    const { rows } = await parseWorkbook(buf);
+    expect(rows).toHaveLength(2);
+    expect(rows[1][0]).toBe('');
+    expect(rows[1][2]).toBe('');
   });
 
   it('preserves names containing commas without CSV quoting artifacts', async () => {

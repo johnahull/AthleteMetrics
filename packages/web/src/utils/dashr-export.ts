@@ -1,5 +1,3 @@
-import { sanitizeCSVCell } from '@/lib/csv';
-
 export const DASHR_COLUMNS = [
   'First Name (Required)',
   'Middle Name',
@@ -32,8 +30,8 @@ export interface DashrExportAthlete {
 
 function buildRow(athlete: DashrExportAthlete): string[] {
   const cells = new Array<string>(DASHR_COLUMNS.length).fill('');
-  cells[0] = sanitizeCSVCell(athlete.firstName ?? '');
-  cells[2] = sanitizeCSVCell(athlete.lastName ?? '');
+  cells[0] = athlete.firstName;
+  cells[2] = athlete.lastName;
   return cells;
 }
 

@@ -146,8 +146,7 @@ export default function Teams() {
       if (effectiveOrganizationId) {
         params.append('organizationId', effectiveOrganizationId);
       }
-      const response = await fetch(`/api/athletes?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch team roster');
+      const response = await apiRequest('GET', `/api/athletes?${params}`);
       const data: Array<{ firstName?: string; lastName?: string }> = await response.json();
       const roster = data.map(a => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
 
