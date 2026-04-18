@@ -107,23 +107,24 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
         const userId = (req as any).user?.id ?? null;
 
         // Build the conflict-update set from only the provided fields
+        // Normalize empty strings to null so they fall through to built-in defaults
         const conflictSet: Record<string, any> = {
           updatedBy: userId,
           updatedAt: new Date(),
         };
-        if (data.title !== undefined) conflictSet.title = data.title ?? null;
-        if (data.shortDescription !== undefined) conflictSet.shortDescription = data.shortDescription ?? null;
-        if (data.whatItMeasures !== undefined) conflictSet.whatItMeasures = data.whatItMeasures ?? null;
-        if (data.whyItMatters !== undefined) conflictSet.whyItMatters = data.whyItMatters ?? null;
+        if (data.title !== undefined) conflictSet.title = data.title?.trim() || null;
+        if (data.shortDescription !== undefined) conflictSet.shortDescription = data.shortDescription?.trim() || null;
+        if (data.whatItMeasures !== undefined) conflictSet.whatItMeasures = data.whatItMeasures?.trim() || null;
+        if (data.whyItMatters !== undefined) conflictSet.whyItMatters = data.whyItMatters?.trim() || null;
 
         const [updated] = await db
           .insert(siteMetricExplanations)
           .values({
             metricCode: code,
-            title: data.title ?? null,
-            shortDescription: data.shortDescription ?? null,
-            whatItMeasures: data.whatItMeasures ?? null,
-            whyItMatters: data.whyItMatters ?? null,
+            title: data.title?.trim() || null,
+            shortDescription: data.shortDescription?.trim() || null,
+            whatItMeasures: data.whatItMeasures?.trim() || null,
+            whyItMatters: data.whyItMatters?.trim() || null,
             updatedBy: userId,
           })
           .onConflictDoUpdate({

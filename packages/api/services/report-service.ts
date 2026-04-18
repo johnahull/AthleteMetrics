@@ -231,7 +231,6 @@ export class ReportService extends BaseService {
       db
         .select({
           code: siteMetrics.code,
-          label: siteMetrics.label,
           shortDescription: siteMetrics.shortDescription,
           whatItMeasures: siteMetrics.whatItMeasures,
           whyItMatters: siteMetrics.whyItMatters,
