@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Plus, Edit, Trash2, Users, MoreHorizontal, Archive, RotateCcw, Settings } from "lucide-react";
+import { Plus, Edit, Trash2, Users, MoreHorizontal, Archive, RotateCcw, Settings, Download } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import TeamModal from "@/components/team-modal";
@@ -19,6 +19,7 @@ import type { Team, ArchiveTeam } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
 import { KPICardSkeleton } from "@/components/ui/loading-states";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { downloadDashrCsv, sanitizeDashrFilename } from "@/utils/dashr-export";
 
 export default function Teams() {
   const labels = useContextualLabels(); // Get contextual labels
@@ -136,6 +137,38 @@ export default function Teams() {
   const handleDeleteTeam = async (teamId: string, teamName: string) => {
     if (window.confirm(`Are you sure you want to delete "${teamName}"? This action cannot be undone.`)) {
       deleteTeamMutation.mutate(teamId);
+    }
+  };
+
+  const handleExportTeamToDashr = async (team: Team) => {
+    try {
+      const params = new URLSearchParams({
+        teamId: team.id,
+        limit: '10000',
+      });
+      if (effectiveOrganizationId) {
+        params.append('organizationId', effectiveOrganizationId);
+      }
+      const response = await fetch(`/api/athletes?${params}`);
+      if (!response.ok) throw new Error('Failed to fetch team roster');
+      const data = await response.json();
+      const roster: Array<{ firstName: string; lastName: string }> = (Array.isArray(data) ? data : data.athletes ?? [])
+        .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
+
+      const stem = team.season ? `${team.name}-${team.season}` : team.name;
+      const filename = sanitizeDashrFilename(stem);
+      downloadDashrCsv(filename, roster);
+
+      toast({
+        title: 'Dashr export ready',
+        description: `Exported ${roster.length} athlete${roster.length !== 1 ? 's' : ''} to ${filename}`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not export team roster',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -278,6 +311,13 @@ export default function Teams() {
                         Archive {labels.team}
                       </DropdownMenuItem>
                     )}
+                    <DropdownMenuItem
+                      onClick={() => handleExportTeamToDashr(team)}
+                      data-testid={`menu-export-dashr-${team.id}`}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Export to Dashr
+                    </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
                       onClick={() => handleDeleteTeam(team.id, team.name)}
