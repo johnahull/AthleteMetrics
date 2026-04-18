@@ -12,7 +12,10 @@ interface ReportMetricsGlossaryProps {
 
 export function ReportMetricsGlossary({ explanations, metricOrder }: ReportMetricsGlossaryProps) {
   const headingId = useId();
-  const codes = [...new Set(metricOrder?.filter((c) => explanations[c]) ?? Object.keys(explanations))];
+  const ordered = metricOrder?.filter((c) => explanations[c]) ?? [];
+  const orderedSet = new Set(ordered);
+  const extras = Object.keys(explanations).filter((c) => !orderedSet.has(c));
+  const codes = [...new Set([...ordered, ...extras])];
 
   if (codes.length === 0) {
     return null;

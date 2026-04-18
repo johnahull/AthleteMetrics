@@ -202,6 +202,111 @@ describe('getMetricExplanation — custom metric direction and unit', () => {
   });
 });
 
+describe('getMetricExplanation — site admin overrides (Phase 2)', () => {
+  const siteOverrides = {
+    FLY10_TIME: { whyItMatters: 'Custom admin reason for FLY10.' },
+  };
+
+  it('merges a single-field site override with built-in defaults', () => {
+    const result = getMetricExplanation('FLY10_TIME', undefined, siteOverrides);
+    // whyItMatters comes from override
+    expect(result.whyItMatters).toBe('Custom admin reason for FLY10.');
+    // Other fields come from built-in
+    expect(result.title).toBe('10-Yard Fly');
+    expect(result.shortDescription).toMatch(/max velocity/i);
+    expect(result.directionOfBetter).toBe('lower');
+    expect(result.unitNote).toMatch(/lower is better/i);
+  });
+
+  it('merges multiple overridden fields per metric', () => {
+    const multiOverrides = {
+      VERTICAL_JUMP: {
+        title: 'VJ (Customized)',
+        whatItMeasures: 'Admin-customized measurement text.',
+      },
+    };
+    const result = getMetricExplanation('VERTICAL_JUMP', undefined, multiOverrides);
+    expect(result.title).toBe('VJ (Customized)');
+    expect(result.whatItMeasures).toBe('Admin-customized measurement text.');
+    // Non-overridden fields stay as built-in
+    expect(result.whyItMatters).toMatch(/explosive/i);
+    expect(result.directionOfBetter).toBe('higher');
+  });
+
+  it('ignores null fields in override — falls through to built-in', () => {
+    const nullOverrides = {
+      FLY10_TIME: {
+        title: null as unknown as string | undefined,
+        whyItMatters: 'Only this field overridden.',
+      },
+    };
+    const result = getMetricExplanation('FLY10_TIME', undefined, nullOverrides);
+    expect(result.title).toBe('10-Yard Fly'); // null → built-in
+    expect(result.whyItMatters).toBe('Only this field overridden.');
+  });
+
+  it('returns pure built-in when override has all null/undefined fields', () => {
+    const emptyOverride = { FLY10_TIME: {} };
+    const result = getMetricExplanation('FLY10_TIME', undefined, emptyOverride);
+    const builtIn = getMetricExplanation('FLY10_TIME');
+    expect(result).toEqual(builtIn);
+  });
+
+  it('site override does not affect unitNote or directionOfBetter', () => {
+    const sneakyOverride = {
+      FLY10_TIME: {
+        whyItMatters: 'Overridden.',
+        // unitNote and directionOfBetter should NOT be overridable via this mechanism
+      },
+    };
+    const result = getMetricExplanation('FLY10_TIME', undefined, sneakyOverride);
+    expect(result.unitNote).toMatch(/lower is better/i);
+    expect(result.directionOfBetter).toBe('lower');
+  });
+
+  it('applies site override to a non-built-in code (custom metric)', () => {
+    const customMap = {
+      CUSTOM_X: { label: 'Custom X', description: 'Original desc.' },
+    };
+    const overrides = {
+      CUSTOM_X: { whatItMeasures: 'Admin override for custom metric.' },
+    };
+    const result = getMetricExplanation('CUSTOM_X', customMap, overrides);
+    expect(result.whatItMeasures).toBe('Admin override for custom metric.');
+    expect(result.title).toBe('Custom X'); // from custom map
+  });
+
+  it('uses custom org metric fields (whatItMeasures, whyItMatters) from enriched custom map', () => {
+    const enrichedCustom = {
+      CUSTOM_RICH: {
+        label: 'Rich Metric',
+        description: 'Old single-field description.',
+        whatItMeasures: 'Rich what it measures.',
+        whyItMatters: 'Rich why it matters.',
+        shortDescription: 'Rich short desc.',
+      },
+    };
+    const result = getMetricExplanation('CUSTOM_RICH', enrichedCustom);
+    expect(result.whatItMeasures).toBe('Rich what it measures.');
+    expect(result.whyItMatters).toBe('Rich why it matters.');
+    expect(result.shortDescription).toBe('Rich short desc.');
+  });
+
+  it('falls back to description when whatItMeasures is null in enriched custom map', () => {
+    const partialCustom = {
+      CUSTOM_PARTIAL: {
+        label: 'Partial',
+        description: 'Fallback description.',
+        whatItMeasures: null as unknown as string | undefined,
+        whyItMatters: 'Specific why.',
+      },
+    };
+    const result = getMetricExplanation('CUSTOM_PARTIAL', partialCustom);
+    expect(result.whatItMeasures).toBe('Fallback description.');
+    expect(result.whyItMatters).toBe('Specific why.');
+  });
+});
+
 describe('buildMetricExplanationsMap', () => {
   it('dedups repeated codes so each resolves once', () => {
     const out = buildMetricExplanationsMap(['FLY10_TIME', 'FLY10_TIME', 'VERTICAL_JUMP']);

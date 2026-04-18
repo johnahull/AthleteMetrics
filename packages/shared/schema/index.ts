@@ -26,7 +26,9 @@ export type {
   // Core
   Organization, Team, User, AthleteProfile, UserTeam,
   // Metrics
-  SiteMetric, OrganizationMetric, CustomOrgMetric, InsertCustomOrgMetric, UpdateCustomOrgMetric, SiteSport, SitePosition,
+  SiteMetric, OrganizationMetric, CustomOrgMetric, InsertCustomOrgMetric, UpdateCustomOrgMetric,
+  SiteMetricExplanation, InsertSiteMetricExplanation,
+  SiteSport, SitePosition,
   // Benchmarks
   SiteBenchmark, CustomBenchmark, OrganizationBenchmark, BenchmarkSet, BenchmarkSetItem, OrganizationBenchmarkSet,
   // Measurements
