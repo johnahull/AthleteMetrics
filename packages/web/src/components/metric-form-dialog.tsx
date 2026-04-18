@@ -55,7 +55,10 @@ const metricFormSchema = z.object({
     .max(100, "Label must be 100 characters or less"),
   category: z.string().max(50, "Category must be 50 characters or less").optional(),
   unit: z.string().max(20, "Unit must be 20 characters or less").optional(),
-  description: z.string().optional(),
+  description: z.string().max(5000).optional(),
+  shortDescription: z.string().max(5000).optional(),
+  whatItMeasures: z.string().max(5000).optional(),
+  whyItMatters: z.string().max(5000).optional(),
   metricType: z.enum(metricTypeEnum).default('lower_is_better'),
   availableOrgTypes: z.array(z.enum(organizationTypeEnum)).optional(),
   sportAssociations: z.array(z.string()).optional(),
@@ -126,6 +129,9 @@ export default function MetricFormDialog({
       category: "",
       unit: "",
       description: "",
+      shortDescription: "",
+      whatItMeasures: "",
+      whyItMatters: "",
       metricType: 'lower_is_better',
       availableOrgTypes: undefined,
       sportAssociations: undefined,
@@ -159,6 +165,9 @@ export default function MetricFormDialog({
         category: metric.category || "",
         unit: metric.unit || "",
         description: metric.description || "",
+        shortDescription: metric.shortDescription || "",
+        whatItMeasures: metric.whatItMeasures || "",
+        whyItMatters: metric.whyItMatters || "",
         metricType: metric.metricType,
         availableOrgTypes: metric.availableOrgTypes || undefined,
         sportAssociations: metric.sportAssociations || undefined,
@@ -178,6 +187,9 @@ export default function MetricFormDialog({
         category: "",
         unit: "",
         description: "",
+        shortDescription: "",
+        whatItMeasures: "",
+        whyItMatters: "",
         metricType: 'lower_is_better',
         availableOrgTypes: undefined,
         sportAssociations: undefined,
@@ -205,6 +217,9 @@ export default function MetricFormDialog({
             category: data.category || undefined,
             unit: data.unit || undefined,
             description: data.description || undefined,
+            shortDescription: data.shortDescription?.trim() || null,
+            whatItMeasures: data.whatItMeasures?.trim() || null,
+            whyItMatters: data.whyItMatters?.trim() || null,
             metricType: data.metricType,
             availableOrgTypes: data.availableOrgTypes?.length ? data.availableOrgTypes : undefined,
             sportAssociations: data.sportAssociations?.length ? data.sportAssociations : undefined,
@@ -228,6 +243,9 @@ export default function MetricFormDialog({
           category: data.category || undefined,
           unit: data.unit || undefined,
           description: data.description || undefined,
+          shortDescription: data.shortDescription?.trim() || undefined,
+          whatItMeasures: data.whatItMeasures?.trim() || undefined,
+          whyItMatters: data.whyItMatters?.trim() || undefined,
           metricType: data.metricType,
           availableOrgTypes: data.availableOrgTypes || undefined,
           sportAssociations: data.sportAssociations || undefined,
@@ -414,6 +432,72 @@ export default function MetricFormDialog({
                 </FormItem>
               )}
             />
+
+            {/* Report Explanation Fields */}
+            <div className="pt-4 border-t">
+              <p className="text-sm font-medium mb-3">Report Explanations</p>
+              <p className="text-xs text-muted-foreground mb-4">
+                These fields appear in report glossaries and athlete-facing explanations. Supports Markdown.
+              </p>
+
+              <div className="space-y-4">
+                <FormField
+                  control={form.control}
+                  name="shortDescription"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Short Description</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          placeholder="One-line summary for card views"
+                          data-testid="metric-short-description-input"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="whatItMeasures"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>What It Measures</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="Describe what this metric measures and how the test works..."
+                          rows={3}
+                          data-testid="metric-what-it-measures-input"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="whyItMatters"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Why It Matters</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          {...field}
+                          placeholder="Explain why this metric is important for athletic development..."
+                          rows={3}
+                          data-testid="metric-why-it-matters-input"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
 
             {/* Available Organization Types field */}
             <FormField

@@ -26,7 +26,7 @@ import {
   UserPlus,
   Calendar,
   Ruler,
-  Zap
+  Zap,
 } from "lucide-react";
 import { NavigationMenu } from "./navigation-menu";
 import { UserProfileDisplay } from "./user-profile-display";

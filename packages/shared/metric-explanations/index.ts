@@ -13,13 +13,23 @@ export type CustomMetricEntry = {
   description: string | null;
   unit?: string | null;
   metricType?: 'lower_is_better' | 'higher_is_better' | 'tracking' | null;
+  shortDescription?: string | null;
+  whatItMeasures?: string | null;
+  whyItMatters?: string | null;
 };
 
 export type CustomMetricsMap = Record<string, CustomMetricEntry>;
 
+export type SiteOverridesMap = Record<string, Partial<Record<
+  'title' | 'shortDescription' | 'whatItMeasures' | 'whyItMatters',
+  string | null
+>>>;
+
 function mapDirection(metricType: CustomMetricEntry['metricType']): 'lower' | 'higher' | 'tracking' {
   if (metricType === 'lower_is_better') return 'lower';
+  if (metricType === 'higher_is_better') return 'higher';
   if (metricType === 'tracking') return 'tracking';
+  // null / undefined / unknown — default to higher
   return 'higher';
 }
 
@@ -39,27 +49,48 @@ function buildCustomUnitNote(
   return `Unit depends on the metric configured by your organization; ${directionText}.`;
 }
 
+const DEFAULT_CUSTOM_WHY =
+  'Your coach added this metric to track something specific to your sport or training focus. Reach out if you want more context on how it applies to your goals.';
+
 export function getMetricExplanation(
   code: string,
   customMetricsMap?: CustomMetricsMap,
+  siteOverrides?: SiteOverridesMap,
 ): MetricExplanation {
   const builtIn = BUILT_IN_METRIC_EXPLANATIONS[code];
+  const override = siteOverrides?.[code];
+
   if (builtIn) {
-    return builtIn;
+    // Per-field merge: site override (non-null) > built-in
+    if (!override) return builtIn;
+    return {
+      ...builtIn,
+      title: override.title ?? builtIn.title,
+      shortDescription: override.shortDescription ?? builtIn.shortDescription,
+      whatItMeasures: override.whatItMeasures ?? builtIn.whatItMeasures,
+      whyItMatters: override.whyItMatters ?? builtIn.whyItMatters,
+    };
   }
 
+  // Custom / unknown metric path
   const custom = customMetricsMap?.[code];
-  const title = custom?.label?.trim() ? custom.label : code;
+  const title = override?.title ?? (custom?.label?.trim() ? custom.label : code);
   const trimmedDescription = custom?.description?.trim();
   const description = trimmedDescription || GENERIC_CUSTOM_METRIC_PLACEHOLDER;
   const direction = mapDirection(custom?.metricType);
 
+  const shortDescription = override?.shortDescription
+    ?? (custom?.shortDescription?.trim() || description);
+  const whatItMeasures = override?.whatItMeasures
+    ?? (custom?.whatItMeasures?.trim() || description);
+  const whyItMatters = override?.whyItMatters
+    ?? (custom?.whyItMatters?.trim() || DEFAULT_CUSTOM_WHY);
+
   return {
     title,
-    shortDescription: description,
-    whatItMeasures: description,
-    whyItMatters:
-      'Your coach added this metric to track something specific to your sport or training focus. Reach out if you want more context on how it applies to your goals.',
+    shortDescription,
+    whatItMeasures,
+    whyItMatters,
     unitNote: buildCustomUnitNote(custom, direction),
     directionOfBetter: direction,
   };
@@ -68,13 +99,14 @@ export function getMetricExplanation(
 export function buildMetricExplanationsMap(
   codes: string[],
   customMetricsMap?: CustomMetricsMap,
+  siteOverrides?: SiteOverridesMap,
 ): Record<string, MetricExplanation> {
   const out: Record<string, MetricExplanation> = {};
   const seen = new Set<string>();
   for (const code of codes) {
     if (!code || seen.has(code)) continue;
     seen.add(code);
-    out[code] = getMetricExplanation(code, customMetricsMap);
+    out[code] = getMetricExplanation(code, customMetricsMap, siteOverrides);
   }
   return out;
 }

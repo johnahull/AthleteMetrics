@@ -28,6 +28,8 @@ export type OrganizationMetric = typeof tables.organizationMetrics.$inferSelect;
 export type CustomOrgMetric = typeof tables.customOrgMetrics.$inferSelect;
 export type InsertCustomOrgMetric = typeof tables.customOrgMetrics.$inferInsert;
 export type UpdateCustomOrgMetric = Partial<InsertCustomOrgMetric>;
+export type SiteMetricExplanation = typeof tables.siteMetricExplanations.$inferSelect;
+export type InsertSiteMetricExplanation = typeof tables.siteMetricExplanations.$inferInsert;
 export type SiteSport = typeof tables.siteSports.$inferSelect;
 export type SitePosition = typeof tables.sitePositions.$inferSelect;
 
