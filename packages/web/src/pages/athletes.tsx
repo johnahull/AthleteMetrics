@@ -629,6 +629,27 @@ export default function Athletes() {
     }
   };
 
+  const handleBulkExportDashr = async () => {
+    const selected = athletes
+      .filter(a => selectedAthletes.has(a.id))
+      .map(a => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
+    const today = new Date().toISOString().split('T')[0];
+    const filename = sanitizeDashrFilename(`athletes-${today}`);
+    try {
+      await downloadDashrXlsx(filename, selected);
+      toast({
+        title: 'Exported to Dashr',
+        description: `${selected.length} athlete${selected.length !== 1 ? 's' : ''} → ${filename}`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not build Dashr workbook',
+        variant: 'destructive',
+      });
+    }
+  };
+
   // Sort handler
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -1517,26 +1538,7 @@ export default function Athletes() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={async () => {
-                const selected = athletes
-                  .filter((a: any) => selectedAthletes.has(a.id))
-                  .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
-                const today = new Date().toISOString().split('T')[0];
-                const filename = sanitizeDashrFilename(`athletes-${today}`);
-                try {
-                  await downloadDashrXlsx(filename, selected);
-                  toast({
-                    title: 'Exported to Dashr',
-                    description: `${selected.length} athlete${selected.length !== 1 ? 's' : ''} → ${filename}`,
-                  });
-                } catch (err) {
-                  toast({
-                    title: 'Export failed',
-                    description: err instanceof Error ? err.message : 'Could not build Dashr workbook',
-                    variant: 'destructive',
-                  });
-                }
-              }}
+              onClick={handleBulkExportDashr}
               className="text-white hover:bg-emerald-600 bg-emerald-700"
               data-testid="bulk-export-dashr-button"
             >
