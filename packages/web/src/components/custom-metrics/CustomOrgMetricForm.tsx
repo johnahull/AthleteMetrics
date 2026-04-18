@@ -190,6 +190,7 @@ export function CustomOrgMetricForm({
   const onSubmit = async (data: FormData) => {
     try {
       // Transform form data to API format (numbers to strings for decimal fields)
+      // Normalize explanation fields: empty strings → null (update) / undefined (create)
       const apiData = {
         ...data,
         validationMin: data.validationMin?.toString(),
@@ -200,7 +201,12 @@ export function CustomOrgMetricForm({
         await updateMutation.mutateAsync({
           organizationId,
           code: metric.code,
-          data: apiData,
+          data: {
+            ...apiData,
+            shortDescription: data.shortDescription?.trim() || null,
+            whatItMeasures: data.whatItMeasures?.trim() || null,
+            whyItMatters: data.whyItMatters?.trim() || null,
+          },
         });
         toast({
           title: "Metric Updated",
@@ -209,7 +215,12 @@ export function CustomOrgMetricForm({
       } else {
         await createMutation.mutateAsync({
           organizationId,
-          data: apiData,
+          data: {
+            ...apiData,
+            shortDescription: data.shortDescription?.trim() || undefined,
+            whatItMeasures: data.whatItMeasures?.trim() || undefined,
+            whyItMatters: data.whyItMatters?.trim() || undefined,
+          },
         });
         toast({
           title: "Metric Created",
