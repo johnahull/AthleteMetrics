@@ -39,7 +39,7 @@ function buildRow(athlete: DashrExportAthlete): string[] {
 
 export async function buildDashrXlsxBuffer(
   athletes: DashrExportAthlete[],
-): Promise<ArrayBuffer> {
+): Promise<Uint8Array> {
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Athletes');
@@ -52,7 +52,7 @@ export async function buildDashrXlsxBuffer(
   }
 
   const buffer = await workbook.xlsx.writeBuffer();
-  return buffer as ArrayBuffer;
+  return new Uint8Array(buffer as ArrayBuffer);
 }
 
 export function sanitizeDashrFilename(name: string): string {
