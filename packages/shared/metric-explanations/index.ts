@@ -20,8 +20,10 @@ export type CustomMetricEntry = {
 
 export type CustomMetricsMap = Record<string, CustomMetricEntry>;
 
-export type SiteOverridesMap = Record<string, Partial<Pick<MetricExplanation,
-  'title' | 'shortDescription' | 'whatItMeasures' | 'whyItMatters'>>>;
+export type SiteOverridesMap = Record<string, Partial<Record<
+  'title' | 'shortDescription' | 'whatItMeasures' | 'whyItMatters',
+  string | null
+>>>;
 
 function mapDirection(metricType: CustomMetricEntry['metricType']): 'lower' | 'higher' | 'tracking' {
   if (metricType === 'lower_is_better') return 'lower';

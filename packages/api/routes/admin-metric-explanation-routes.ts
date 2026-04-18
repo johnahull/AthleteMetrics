@@ -13,17 +13,18 @@ import {
   BUILT_IN_METRIC_EXPLANATIONS,
   BUILT_IN_METRIC_CODES,
 } from "@shared/metric-explanations";
-import type { MetricExplanation } from "@shared/metric-explanations";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 const OVERRIDABLE_FIELDS = ['title', 'shortDescription', 'whatItMeasures', 'whyItMatters'] as const;
 
+const MAX_FIELD_LENGTH = 5000;
+
 const upsertSchema = z.object({
-  title: z.string().nullable().optional(),
-  shortDescription: z.string().nullable().optional(),
-  whatItMeasures: z.string().nullable().optional(),
-  whyItMatters: z.string().nullable().optional(),
+  title: z.string().max(MAX_FIELD_LENGTH).nullable().optional(),
+  shortDescription: z.string().max(MAX_FIELD_LENGTH).nullable().optional(),
+  whatItMeasures: z.string().max(MAX_FIELD_LENGTH).nullable().optional(),
+  whyItMatters: z.string().max(MAX_FIELD_LENGTH).nullable().optional(),
 }).refine(
   (data) => OVERRIDABLE_FIELDS.some((f) => data[f] !== undefined),
   { message: 'At least one field must be provided' },
@@ -62,7 +63,7 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
             whyItMatters: override?.whyItMatters ?? builtIn.whyItMatters,
             unitNote: builtIn.unitNote,
             directionOfBetter: builtIn.directionOfBetter,
-            hasOverride: !!override,
+            hasOverride: overrideFields.length > 0,
             overrideFields,
           };
         });
@@ -89,6 +90,11 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
+
+        if (!BUILT_IN_METRIC_CODES.includes(code as any)) {
+          return res.status(400).json({ message: 'Unknown metric code' });
+        }
+
         const parsed = upsertSchema.safeParse(req.body);
         if (!parsed.success) {
           return res.status(400).json({
@@ -100,43 +106,37 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
         const data = parsed.data;
         const userId = (req as any).user?.id ?? null;
 
-        // Upsert: insert or update on conflict
-        const existing = await db
-          .select({ id: siteMetricExplanations.id })
-          .from(siteMetricExplanations)
-          .where(eq(siteMetricExplanations.metricCode, code))
-          .limit(1);
+        // Build the conflict-update set from only the provided fields
+        const conflictSet: Record<string, any> = {
+          updatedBy: userId,
+          updatedAt: new Date(),
+        };
+        if (data.title !== undefined) conflictSet.title = data.title ?? null;
+        if (data.shortDescription !== undefined) conflictSet.shortDescription = data.shortDescription ?? null;
+        if (data.whatItMeasures !== undefined) conflictSet.whatItMeasures = data.whatItMeasures ?? null;
+        if (data.whyItMatters !== undefined) conflictSet.whyItMatters = data.whyItMatters ?? null;
 
-        if (existing.length > 0) {
-          await db
-            .update(siteMetricExplanations)
-            .set({
-              ...(data.title !== undefined && { title: data.title ?? null }),
-              ...(data.shortDescription !== undefined && { shortDescription: data.shortDescription ?? null }),
-              ...(data.whatItMeasures !== undefined && { whatItMeasures: data.whatItMeasures ?? null }),
-              ...(data.whyItMatters !== undefined && { whyItMatters: data.whyItMatters ?? null }),
-              updatedBy: userId,
-              updatedAt: new Date(),
-            })
-            .where(eq(siteMetricExplanations.metricCode, code));
-        } else {
-          await db.insert(siteMetricExplanations).values({
+        const [updated] = await db
+          .insert(siteMetricExplanations)
+          .values({
             metricCode: code,
             title: data.title ?? null,
             shortDescription: data.shortDescription ?? null,
             whatItMeasures: data.whatItMeasures ?? null,
             whyItMatters: data.whyItMatters ?? null,
             updatedBy: userId,
-          });
+          })
+          .onConflictDoUpdate({
+            target: siteMetricExplanations.metricCode,
+            set: conflictSet,
+          })
+          .returning();
+
+        if (!updated) {
+          return res.status(500).json({ message: 'Row not found after upsert' });
         }
 
-        // Return the merged result
         const builtIn = BUILT_IN_METRIC_EXPLANATIONS[code];
-        const [updated] = await db
-          .select()
-          .from(siteMetricExplanations)
-          .where(eq(siteMetricExplanations.metricCode, code));
-
         const overrideFields: string[] = [];
         for (const field of OVERRIDABLE_FIELDS) {
           if (updated[field] != null) overrideFields.push(field);
@@ -150,7 +150,7 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
           whyItMatters: updated.whyItMatters ?? builtIn?.whyItMatters ?? '',
           unitNote: builtIn?.unitNote ?? '',
           directionOfBetter: builtIn?.directionOfBetter ?? 'higher',
-          hasOverride: true,
+          hasOverride: overrideFields.length > 0,
           overrideFields,
         });
       } catch (error: any) {
@@ -174,6 +174,10 @@ export function registerAdminMetricExplanationRoutes(app: Express) {
     async (req: Request, res: Response) => {
       try {
         const { code } = req.params;
+
+        if (!BUILT_IN_METRIC_CODES.includes(code as any)) {
+          return res.status(400).json({ message: 'Unknown metric code' });
+        }
 
         const deleted = await db
           .delete(siteMetricExplanations)

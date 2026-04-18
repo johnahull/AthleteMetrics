@@ -20,7 +20,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import request from 'supertest';
 import express, { type Express } from 'express';
 import bcrypt from 'bcrypt';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { db } from '../../packages/api/db';
 import {
   organizations,
@@ -139,8 +139,10 @@ afterEach(async () => {
     }
   }
 
-  // Clean up overrides
-  await db.delete(siteMetricExplanations);
+  // Clean up overrides created by this test suite only
+  await db.delete(siteMetricExplanations).where(
+    inArray(siteMetricExplanations.metricCode, ['FLY10_TIME']),
+  );
 
   if (siteAdmin?.id && testOrg?.id) {
     await db.delete(userOrganizations).where(
