@@ -162,7 +162,23 @@ export class OAuthService extends BaseService {
         };
       }
 
-      // 3. New user - create account with OAuth
+      // 3. Block new-user creation if a pending invitation exists for this email.
+      // Otherwise OAuth creates an orphan account while the invitation quietly
+      // waits — producing two users with the same email.
+      const pendingInvitations = await this.storage.getPendingInvitationsByEmail(profile.email);
+      if (pendingInvitations.length > 0) {
+        console.warn('[OAuth] Blocked new OAuth user: pending invitation exists for email', {
+          email: profile.email,
+          invitationCount: pendingInvitations.length,
+          provider: profile.provider,
+        });
+        return {
+          success: false,
+          error: 'A pending invitation exists for this email. Please accept the invitation from your email first, then sign in.',
+        };
+      }
+
+      // 4. New user - create account with OAuth
       const newUser = await this.createOAuthUser(profile);
       return { success: true, userId: newUser.id };
 

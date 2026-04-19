@@ -631,8 +631,8 @@ export default function Athletes() {
 
   const handleBulkExportDashr = async () => {
     const selected = athletes
-      .filter(a => selectedAthletes.has(a.id))
-      .map(a => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
+      .filter((a: any) => selectedAthletes.has(a.id))
+      .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
     const today = new Date().toISOString().split('T')[0];
     const filename = sanitizeDashrFilename(`athletes-${today}`);
     try {
