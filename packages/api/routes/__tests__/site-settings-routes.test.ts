@@ -430,6 +430,12 @@ describe("Site Settings API Routes", () => {
         .patch("/api/site-settings")
         .send({ sprintFvEnabled: true });
 
+      // Intermediate readback: proves the enable PATCH actually persisted.
+      // Without this, the test passes pre-fix because the DB default is false
+      // and enable→disable silent-drops in both directions end at false.
+      const intermediate = await request(app).get("/api/site-settings");
+      expect(intermediate.body.sprintFvEnabled).toBe(true);
+
       const disableResponse = await request(app)
         .patch("/api/site-settings")
         .send({ sprintFvEnabled: false });
