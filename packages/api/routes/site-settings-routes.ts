@@ -81,6 +81,7 @@ router.get("/", requireSiteAdmin, async (req, res) => {
       return res.json({
         aiModel: "gpt-5-nano",
         wellnessModuleEnabled: true,
+        sprintFvEnabled: false,
         updatedAt: new Date().toISOString(),
         updatedBy: null,
       });

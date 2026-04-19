@@ -365,7 +365,12 @@ export interface IStorage {
 
   // Site Settings (Global Settings)
   getSiteSettings(): Promise<SiteSettings | undefined>;
-  updateSiteSettings(settings: { aiModel: string; updatedBy: string | null }): Promise<SiteSettings>;
+  updateSiteSettings(settings: {
+    aiModel?: string;
+    wellnessModuleEnabled?: boolean;
+    sprintFvEnabled?: boolean;
+    updatedBy: string | null;
+  }): Promise<SiteSettings>;
 
   // Reports
   getReport(id: string): Promise<Report | undefined>;
@@ -5494,7 +5499,12 @@ export class DatabaseStorage implements IStorage {
     return settings || undefined;
   }
 
-  async updateSiteSettings(settings: { aiModel?: string; wellnessModuleEnabled?: boolean; updatedBy: string | null }): Promise<SiteSettings> {
+  async updateSiteSettings(settings: {
+    aiModel?: string;
+    wellnessModuleEnabled?: boolean;
+    sprintFvEnabled?: boolean;
+    updatedBy: string | null;
+  }): Promise<SiteSettings> {
     // Singleton pattern - check if settings exist
     const existing = await this.getSiteSettings();
 
@@ -5513,6 +5523,10 @@ export class DatabaseStorage implements IStorage {
         updateData.wellnessModuleEnabled = settings.wellnessModuleEnabled;
       }
 
+      if (settings.sprintFvEnabled !== undefined) {
+        updateData.sprintFvEnabled = settings.sprintFvEnabled;
+      }
+
       const [updated] = await db
         .update(siteSettings)
         .set(updateData)
@@ -5526,6 +5540,7 @@ export class DatabaseStorage implements IStorage {
         .values({
           aiModel: settings.aiModel || 'gpt-5-nano',
           wellnessModuleEnabled: settings.wellnessModuleEnabled ?? true,
+          sprintFvEnabled: settings.sprintFvEnabled ?? false,
           updatedBy: settings.updatedBy,
         })
         .returning();
