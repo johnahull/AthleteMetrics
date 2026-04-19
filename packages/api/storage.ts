@@ -126,6 +126,7 @@ export interface IStorage {
   getInvitation(token: string): Promise<Invitation | undefined>;
   getInvitationById(id: string): Promise<Invitation | undefined>;
   getInvitationByToken(token: string): Promise<Invitation | undefined>;
+  getPendingInvitationsByEmail(email: string): Promise<Invitation[]>;
   updateInvitation(id: string, invitation: Partial<Omit<Invitation, 'id' | 'createdAt'>>): Promise<Invitation>;
   acceptInvitation(token: string, userInfo: { email: string; username: string; password: string; firstName: string; lastName: string }): Promise<{ user: User }>;
 
@@ -1655,6 +1656,18 @@ export class DatabaseStorage implements IStorage {
     const [invitation] = await db.select().from(invitations)
       .where(eq(invitations.token, token));
     return invitation || undefined;
+  }
+
+  async getPendingInvitationsByEmail(email: string): Promise<Invitation[]> {
+    // Case-insensitive match: OAuth providers often lowercase emails while
+    // admins may enter invitations with mixed case.
+    return await db.select().from(invitations)
+      .where(and(
+        sql`LOWER(${invitations.email}) = LOWER(${email})`,
+        eq(invitations.isUsed, false),
+        isNull(invitations.cancelledAt),
+        gte(invitations.expiresAt, new Date()),
+      ));
   }
 
   async acceptInvitation(

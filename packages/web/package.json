@@ -53,6 +53,7 @@
     "dexie-react-hooks": "^4.2.0",
     "drizzle-zod": "^0.7.0",
     "embla-carousel-react": "^8.6.0",
+    "exceljs": "^4.4.0",
     "framer-motion": "^11.13.1",
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.2",

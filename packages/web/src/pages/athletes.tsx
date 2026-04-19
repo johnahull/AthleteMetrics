@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X, ArrowUpDown, ArrowUp, ArrowDown, GitMerge } from "lucide-react";
+import { Plus, Search, Eye, Edit, Trash2, FileUp, UsersRound, Mail, Clock, AlertCircle, Copy, RotateCcw, UserMinus, Power, X, ArrowUpDown, ArrowUp, ArrowDown, GitMerge, Download } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -22,6 +22,7 @@ import { AthletesCardView } from "@/components/athletes-card-view";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { useSports, usePositionsForSports } from "@/lib/sports-api";
 import { ProfileMergeWizard } from "@/components/athletes";
+import { downloadDashrXlsx, sanitizeDashrFilename } from "@/utils/dashr-export";
 
 export default function Athletes() {
   const responsiveMode = useResponsiveMode();
@@ -625,6 +626,27 @@ export default function Athletes() {
 
     if (confirmed) {
       bulkInviteMutation.mutate(selectedAthletesArray);
+    }
+  };
+
+  const handleBulkExportDashr = async () => {
+    const selected = athletes
+      .filter((a: any) => selectedAthletes.has(a.id))
+      .map((a: any) => ({ firstName: a.firstName ?? '', lastName: a.lastName ?? '' }));
+    const today = new Date().toISOString().split('T')[0];
+    const filename = sanitizeDashrFilename(`athletes-${today}`);
+    try {
+      await downloadDashrXlsx(filename, selected);
+      toast({
+        title: 'Exported to Dashr',
+        description: `${selected.length} athlete${selected.length !== 1 ? 's' : ''} → ${filename}`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Export failed',
+        description: err instanceof Error ? err.message : 'Could not build Dashr workbook',
+        variant: 'destructive',
+      });
     }
   };
 
@@ -1512,6 +1534,16 @@ export default function Athletes() {
             >
               <Mail className="h-4 w-4 mr-2" />
               Bulk Invite
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleBulkExportDashr}
+              className="text-white hover:bg-emerald-600 bg-emerald-700"
+              data-testid="bulk-export-dashr-button"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export to Dashr
             </Button>
             <Button
               variant="ghost"
