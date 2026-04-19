@@ -393,6 +393,54 @@ describe("Site Settings API Routes", () => {
       expect(response.status).toBe(400);
       expect(response.body.message).toContain("Validation error");
     });
+
+    it("should persist sprintFvEnabled=true across updates (regression)", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      const enableResponse = await request(app)
+        .patch("/api/site-settings")
+        .send({ sprintFvEnabled: true });
+
+      expect(enableResponse.status).toBe(200);
+      expect(enableResponse.body.sprintFvEnabled).toBe(true);
+
+      const readback = await request(app).get("/api/site-settings");
+      expect(readback.status).toBe(200);
+      expect(readback.body.sprintFvEnabled).toBe(true);
+
+      const publicReadback = await request(app).get("/api/site-settings/public");
+      expect(publicReadback.status).toBe(200);
+      expect(publicReadback.body.sprintFvEnabled).toBe(true);
+    });
+
+    it("should persist sprintFvEnabled=false across updates (regression)", async () => {
+      mockSessionUser = {
+        id: testSiteAdminId,
+        email: `siteadmin-settings-${Date.now()}@test.com`,
+        role: "site_admin",
+        isSiteAdmin: true,
+      };
+
+      await request(app)
+        .patch("/api/site-settings")
+        .send({ sprintFvEnabled: true });
+
+      const disableResponse = await request(app)
+        .patch("/api/site-settings")
+        .send({ sprintFvEnabled: false });
+
+      expect(disableResponse.status).toBe(200);
+      expect(disableResponse.body.sprintFvEnabled).toBe(false);
+
+      const readback = await request(app).get("/api/site-settings");
+      expect(readback.status).toBe(200);
+      expect(readback.body.sprintFvEnabled).toBe(false);
+    });
   });
 
   describe("GET /api/ai-models", () => {
