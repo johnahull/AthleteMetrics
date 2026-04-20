@@ -182,6 +182,22 @@ describe('renderMarkdown', () => {
     expect(md).toMatch(/- Reduce volume of high-velocity sprint work/);
   });
 
+  it('formats F-V gap/deltas as key=value pairs, not raw JSON', () => {
+    const md = renderMarkdown(sampleData());
+    const fvStart = md.indexOf('## Sprint Force-Velocity Profile');
+    const fvEnd = md.indexOf('## Active Goals');
+    const fvSection = md.slice(fvStart, fvEnd);
+    // Must NOT contain raw JSON object braces — those are a sign of
+    // JSON.stringify(obj) leaking through into Markdown.
+    expect(fvSection).not.toMatch(/\{"orientation"/);
+    expect(fvSection).not.toMatch(/\{"f0Pct"/);
+    // Must contain readable key=value form.
+    expect(fvSection).toMatch(/orientation=force/);
+    expect(fvSection).toMatch(/magnitudePct=18/);
+    expect(fvSection).toMatch(/f0Pct=-18/);
+    expect(fvSection).toMatch(/v0Pct=5/);
+  });
+
   it('ends with the prompt-starter callout', () => {
     const md = renderMarkdown(sampleData());
     expect(md).toMatch(/\*\*Prompt suggestion:\*\*/);
@@ -301,5 +317,12 @@ describe('filenameFor', () => {
   it('strips non-alphanumeric characters (pipes, slashes)', () => {
     const fn = filenameFor('A|B/Name', 'markdown', new Date('2026-04-19T00:00:00Z'));
     expect(fn).toBe('ab-name-2026-04-19.md');
+  });
+
+  it("falls back to 'athlete' when the slug would be empty", () => {
+    // All-symbol/whitespace names would otherwise produce "-2026-04-19.md"
+    // which is a malformed filename leading with a dash.
+    const fn = filenameFor('!!!', 'markdown', new Date('2026-04-19T00:00:00Z'));
+    expect(fn).toBe('athlete-2026-04-19.md');
   });
 });

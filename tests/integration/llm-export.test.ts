@@ -56,10 +56,12 @@ let testOrg: any;
 let otherOrg: any;
 let testCoach: any;
 let otherCoach: any;
+let testOrgAdmin: any;
 let testAthlete: any;
 let siteAdmin: any;
 let coachAuthCookie: string;
 let otherCoachAuthCookie: string;
+let orgAdminAuthCookie: string;
 let athleteAuthCookie: string;
 let siteAdminAuthCookie: string;
 
@@ -117,6 +119,18 @@ beforeEach(async () => {
     })
     .returning();
 
+  [testOrgAdmin] = await db
+    .insert(users)
+    .values({
+      username: `llmexport_orgadmin_${suffix}`,
+      emails: [`llmexport_orgadmin_${suffix}@test.com`],
+      password: hashedPassword,
+      firstName: 'Org',
+      lastName: 'Admin',
+      fullName: 'Org Admin',
+    })
+    .returning();
+
   [testAthlete] = await db
     .insert(users)
     .values({
@@ -144,37 +158,53 @@ beforeEach(async () => {
 
   await db.insert(userOrganizations).values([
     { userId: testCoach.id, organizationId: testOrg.id, role: 'coach' },
+    { userId: testOrgAdmin.id, organizationId: testOrg.id, role: 'org_admin' },
     { userId: testAthlete.id, organizationId: testOrg.id, role: 'athlete' },
     { userId: otherCoach.id, organizationId: otherOrg.id, role: 'coach' },
   ]);
 
+  // Assert login status on every fixture login. A silent 401 here would let
+  // subsequent tests fail with a cryptic "Cannot read property '0' of undefined"
+  // when they try to read set-cookie — hard to diagnose. Explicit assertions
+  // fail the test at the actual point of fixture drift.
   const coachLogin = await request(app).post('/api/auth/login').send({
     username: testCoach.username,
     password: 'TestCoach123!',
   });
+  expect(coachLogin.status).toBe(200);
   coachAuthCookie = coachLogin.headers['set-cookie'][0];
 
   const otherCoachLogin = await request(app).post('/api/auth/login').send({
     username: otherCoach.username,
     password: 'TestCoach123!',
   });
+  expect(otherCoachLogin.status).toBe(200);
   otherCoachAuthCookie = otherCoachLogin.headers['set-cookie'][0];
+
+  const orgAdminLogin = await request(app).post('/api/auth/login').send({
+    username: testOrgAdmin.username,
+    password: 'TestCoach123!',
+  });
+  expect(orgAdminLogin.status).toBe(200);
+  orgAdminAuthCookie = orgAdminLogin.headers['set-cookie'][0];
 
   const athleteLogin = await request(app).post('/api/auth/login').send({
     username: testAthlete.username,
     password: 'TestCoach123!',
   });
+  expect(athleteLogin.status).toBe(200);
   athleteAuthCookie = athleteLogin.headers['set-cookie'][0];
 
   const siteAdminLogin = await request(app).post('/api/auth/login').send({
     username: siteAdmin.username,
     password: 'TestCoach123!',
   });
+  expect(siteAdminLogin.status).toBe(200);
   siteAdminAuthCookie = siteAdminLogin.headers['set-cookie'][0];
 });
 
 afterEach(async () => {
-  const userIds = [testCoach, otherCoach, testAthlete, siteAdmin]
+  const userIds = [testCoach, otherCoach, testOrgAdmin, testAthlete, siteAdmin]
     .filter(Boolean)
     .map((u) => u.id);
   if (userIds.length > 0) {
@@ -192,6 +222,7 @@ afterEach(async () => {
   otherOrg = undefined;
   testCoach = undefined;
   otherCoach = undefined;
+  testOrgAdmin = undefined;
   testAthlete = undefined;
   siteAdmin = undefined;
 });
@@ -263,6 +294,15 @@ describe('GET /api/athletes/:id/llm-export', () => {
       .set('Cookie', athleteAuthCookie);
     expect(res.status).toBe(403);
     expect(res.body.message).toMatch(/coaches and organization admins/i);
+  });
+
+  it('returns 200 for an org_admin exporting an in-org athlete', async () => {
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', orgAdminAuthCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/markdown/);
+    expect(res.text).toMatch(/^# Athlete Performance Export — Jane Doe/m);
   });
 
   it('returns 200 for a site admin exporting any athlete', async () => {

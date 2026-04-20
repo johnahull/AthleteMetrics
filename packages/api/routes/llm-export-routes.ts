@@ -82,9 +82,9 @@ export function registerLlmExportRoutes(app: Express) {
           const athleteTeams = await storage.getUserTeams(athleteId);
 
           if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
-            return res.status(403).json({
-              message: 'Athlete has no organization or team assignments',
-            });
+            // Generic body to avoid signalling whether the athlete exists or
+            // what state their org/team assignments are in.
+            return res.status(403).json({ message: 'Access denied' });
           }
 
           const userOrgIds = userOrgs.map((o) => o.organizationId);

@@ -115,15 +115,32 @@ function fmtDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+// Flattens an F-V analysis value (scalar or small flat object from analysisJson)
+// into a short human-readable form. Avoids surfacing raw JSON braces in the
+// Markdown that a coach reads — LLMs still parse this cleanly.
+function formatAnalysisValue(v: unknown): string {
+  if (v === null || v === undefined) return '—';
+  if (typeof v === 'number') return fmtNum(v);
+  if (typeof v === 'string' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) return v.map(formatAnalysisValue).join(', ');
+  if (typeof v === 'object') {
+    return Object.entries(v as Record<string, unknown>)
+      .map(([k, val]) => `${k}=${formatAnalysisValue(val)}`)
+      .join(', ');
+  }
+  return String(v);
+}
+
 export function filenameFor(fullName: string, format: ExportFormat, date: Date): string {
   const withoutDiacritics = fullName
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
   const withoutPipes = withoutDiacritics.replace(/\|/g, '');
-  const slugged = withoutPipes
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+  const slugged =
+    withoutPipes
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'athlete';
   const ext = format === 'markdown' ? 'md' : 'json';
   return `${slugged}-${fmtDate(date)}.${ext}`;
 }
@@ -212,10 +229,10 @@ function renderFvSection(d: AthleteExportData): string {
   if (fv.fitR2 != null) lines.push(`- Model fit (R²): ${fv.fitR2}`);
   lines.push('', `**Classification:** ${fv.classification ?? '—'}`);
   if (fv.gap !== null && fv.gap !== undefined) {
-    lines.push(`**F-V imbalance gap:** ${JSON.stringify(fv.gap)}`);
+    lines.push(`**F-V imbalance gap:** ${formatAnalysisValue(fv.gap)}`);
   }
   if (fv.deltas !== null && fv.deltas !== undefined) {
-    lines.push(`**Deltas vs optimal:** ${JSON.stringify(fv.deltas)}`);
+    lines.push(`**Deltas vs optimal:** ${formatAnalysisValue(fv.deltas)}`);
   }
   if (fv.trainingRecommendations.length) {
     lines.push('', '**Training recommendations:**');
@@ -457,19 +474,30 @@ export async function gatherAthleteExportData(
     ),
     safe(
       'Sprint F-V profile',
-      () =>
-        db
+      () => {
+        // Multi-org athletes can have F-V sessions recorded under multiple orgs.
+        // Scope to the caller's org when known so Coach A (Org 1) doesn't see
+        // sessions entered by Coach B (Org 2).
+        const conditions = [eq(sprintFvProfiles.userId, athleteId)];
+        if (organizationId) {
+          conditions.push(eq(sprintFvProfiles.organizationId, organizationId));
+        }
+        return db
           .select()
           .from(sprintFvProfiles)
-          .where(eq(sprintFvProfiles.userId, athleteId))
+          .where(and(...conditions))
           .orderBy(desc(sprintFvProfiles.date))
           .limit(1)
-          .then((r) => r[0] ?? null),
+          .then((r) => r[0] ?? null);
+      },
       null,
     ),
     safe(
       'Active goals',
       () =>
+        // goals has no organizationId column — goals belong to the athlete's
+        // account, not a particular org. Route-layer access control gates
+        // whether the caller can see this athlete at all.
         db
           .select()
           .from(goals)
@@ -479,13 +507,21 @@ export async function gatherAthleteExportData(
     ),
     safe(
       'Recent wellness responses',
-      () =>
-        db
+      () => {
+        // wellness_responses.organizationId is a historical stamp (notNull).
+        // Scope so only responses entered under the caller's org leak into
+        // the export for multi-org athletes.
+        const conditions = [eq(wellnessResponses.userId, athleteId)];
+        if (organizationId) {
+          conditions.push(eq(wellnessResponses.organizationId, organizationId));
+        }
+        return db
           .select()
           .from(wellnessResponses)
-          .where(eq(wellnessResponses.userId, athleteId))
+          .where(and(...conditions))
           .orderBy(desc(wellnessResponses.submittedAt))
-          .limit(10),
+          .limit(10);
+      },
       [] as Array<typeof wellnessResponses.$inferSelect>,
     ),
     safe(
