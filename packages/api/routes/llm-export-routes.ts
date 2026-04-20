@@ -30,6 +30,14 @@ const llmExportLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// PostgreSQL raises "invalid input syntax for type uuid" when a UUID-typed
+// column is queried with a non-UUID string. Several DB lookups in this route
+// query `users.id` (UUID), so a malformed route param escapes as a generic
+// 500. Validate the shape up-front and return 404 — 400 would leak the fact
+// that the route specifically inspects UUID format, narrowing the oracle.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function registerLlmExportRoutes(app: Express) {
   app.get(
     '/api/athletes/:id/llm-export',
@@ -41,6 +49,10 @@ export function registerLlmExportRoutes(app: Express) {
         const currentUser = req.session.user;
         if (!currentUser?.id) {
           return res.status(401).json({ message: 'User not authenticated' });
+        }
+
+        if (!UUID_RE.test(athleteId)) {
+          return res.status(404).json({ message: 'Athlete not found' });
         }
 
         // Express parses repeated query params (?format=a&format=b) as string[].

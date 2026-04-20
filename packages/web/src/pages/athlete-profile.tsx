@@ -395,7 +395,7 @@ export default function AthleteProfile() {
           {canExportForLlm && athleteId && (
             <LlmExportButton
               athleteId={athleteId}
-              athleteName={athlete?.fullName || athlete?.username}
+              athleteName={athlete?.fullName}
             />
           )}
           {canEditMeasurements && (

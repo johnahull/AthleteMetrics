@@ -288,6 +288,22 @@ describe('GET /api/athletes/:id/llm-export', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 404 (not 500) for a non-UUID athlete id', async () => {
+    // Regression: without an up-front UUID guard, postgres raises
+    // "invalid input syntax for type uuid" when the route-level
+    // `storage.getAthlete(athleteId)` hits a UUID column with garbage
+    // input. That error is not caught by the `AthleteNotFoundError`
+    // branch and surfaces as a generic 500, which is both a poor UX and
+    // a weak signal (a deliberate 404 is harder to distinguish from
+    // "athlete exists but you can't read it" — consistent with the
+    // existing role-check-before-lookup design).
+    const res = await request(app)
+      .get('/api/athletes/not-a-uuid/llm-export')
+      .set('Cookie', coachAuthCookie);
+    expect(res.status).toBe(404);
+    expect(res.body.message).toMatch(/athlete not found/i);
+  });
+
   it('returns 403 when a coach has lost all org memberships since login (userOrgs.length === 0)', async () => {
     // Simulate a session that persists past a permission revocation: the coach
     // logged in while a member of testOrg, then had that membership removed

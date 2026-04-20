@@ -153,7 +153,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               {canExportForLlm && athleteId && (
                 <LlmExportButton
                   athleteId={athleteId}
-                  athleteName={athlete?.fullName || athlete?.userName}
+                  athleteName={athlete?.userName}
                 />
               )}
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>

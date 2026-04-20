@@ -320,8 +320,12 @@ function renderNotesSection(d: AthleteExportData): string {
     return lines.join('\n');
   }
   lines.push('');
-  lines.push(`- **Medical:** ${m ?? '_none on file_'}`);
-  lines.push(`- **Coach:** ${c ?? '_none on file_'}`);
+  // Notes render as list items, not table cells, so a stray `|` would only be
+  // a visual artifact — but `*`, `_`, and backticks in free-text notes would
+  // smuggle unintended emphasis or code-fence toggles into the export. Apply
+  // the inline escape for consistency with the header/H1 fields.
+  lines.push(`- **Medical:** ${m ? escapeMdInline(m) : '_none on file_'}`);
+  lines.push(`- **Coach:** ${c ? escapeMdInline(c) : '_none on file_'}`);
   return lines.join('\n');
 }
 
