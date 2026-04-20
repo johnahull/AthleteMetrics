@@ -47,7 +47,7 @@
     "vars:testing": "railway variables --environment testing"
   },
   "devDependencies": {
-    "@jest/globals": "^29.7.0",
+    "@jest/globals": "^30.3.0",
     "@playwright/test": "^1.59.1",
     "@replit/vite-plugin-cartographer": "^0.3.2",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
