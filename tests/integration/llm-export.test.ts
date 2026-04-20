@@ -156,6 +156,12 @@ beforeEach(async () => {
     })
     .returning();
 
+  // These users have no `role` column set on `users` — it's only set on
+  // `userOrganizations`. At login, `determineUserRoleAndContext` resolves
+  // the session role from the first `userOrganizations` row for the user,
+  // which is how `req.session.user.role` picks up 'coach' / 'org_admin' /
+  // 'athlete' below. If that resolution ever moves back to `users.role`,
+  // these fixtures would silently stop reflecting the intended role.
   await db.insert(userOrganizations).values([
     { userId: testCoach.id, organizationId: testOrg.id, role: 'coach' },
     { userId: testOrgAdmin.id, organizationId: testOrg.id, role: 'org_admin' },
@@ -341,6 +347,19 @@ describe('GET /api/athletes/:id/llm-export', () => {
       .get(`/api/athletes/${fakeId}/llm-export`)
       .set('Cookie', coachAuthCookie);
     expect(res.status).toBe(404);
+  });
+
+  it('returns 403 (not 404) when a role-denied user probes a non-existent athlete id', async () => {
+    // An athlete-role caller must not be able to use 404 vs 403 as an
+    // existence oracle. Role denial should take precedence over resource
+    // lookup, so a caller without permission sees the same 403 whether the
+    // target exists or not.
+    const fakeId = '00000000-0000-0000-0000-000000000000';
+    const res = await request(app)
+      .get(`/api/athletes/${fakeId}/llm-export`)
+      .set('Cookie', athleteAuthCookie);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/coaches and organization admins/i);
   });
 
   it('renders every H2 section placeholder even when athlete has no data', async () => {

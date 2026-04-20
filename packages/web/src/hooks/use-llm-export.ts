@@ -108,7 +108,7 @@ export function useLlmExport({
         typeof navigator !== 'undefined' &&
         !!navigator.clipboard &&
         typeof navigator.clipboard.writeText === 'function' &&
-        window.isSecureContext !== false;
+        window.isSecureContext;
 
       if (canUseClipboard) {
         await navigator.clipboard.writeText(text);

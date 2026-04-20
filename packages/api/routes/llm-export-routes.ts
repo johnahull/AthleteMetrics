@@ -56,11 +56,6 @@ export function registerLlmExportRoutes(app: Express) {
           });
         }
 
-        const athlete = await storage.getAthlete(athleteId);
-        if (!athlete) {
-          return res.status(404).json({ message: 'Athlete not found' });
-        }
-
         const userIsSiteAdmin = isSiteAdmin(currentUser);
         let targetOrganizationId: string | null = null;
 
@@ -69,11 +64,21 @@ export function registerLlmExportRoutes(app: Express) {
         // any role not explicitly named here (athlete, parent, guest, …) is
         // denied, so new roles added to the system default to no-access until
         // a policy decision is made.
+        //
+        // Role check runs *before* the athlete-existence lookup so a denied
+        // caller cannot distinguish "athlete exists but you can't read it"
+        // (403) from "athlete does not exist" (404). The 404-vs-403 split is
+        // an existence oracle for unauthorised callers; flatten it to 403.
         const ALLOWED_LLM_EXPORT_ROLES = new Set(['coach', 'org_admin']);
         if (!userIsSiteAdmin && !ALLOWED_LLM_EXPORT_ROLES.has(currentUser.role)) {
           return res.status(403).json({
             message: 'LLM export is only available to coaches and organization admins',
           });
+        }
+
+        const athlete = await storage.getAthlete(athleteId);
+        if (!athlete) {
+          return res.status(404).json({ message: 'Athlete not found' });
         }
 
         if (!userIsSiteAdmin) {

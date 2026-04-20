@@ -428,21 +428,26 @@ export async function gatherAthleteExportData(
   opts: { monthsBack?: number } = {},
 ): Promise<AthleteExportData> {
   const monthsBack = opts.monthsBack ?? 12;
-  // Calendar-month arithmetic without the month-end rollover bug.
-  // Naïve `setMonth(getMonth() - 12)` on, say, Mar 31 in a non-leap year
-  // would land on Apr 1 (Feb 31 → Mar 3). We set day to 1 before stepping
-  // back months and then re-apply the original day clamped to the target
-  // month's length.
+  // Calendar-month arithmetic in UTC, without the month-end rollover bug.
+  // All Date arithmetic below uses UTC methods to match fmtDate's UTC output.
+  // On a non-UTC server the local-TZ variant would silently produce a cutoff
+  // one day off near midnight.
+  //
+  // Naïve `setUTCMonth(getUTCMonth() - 12)` on Mar 31 would land on Apr 1
+  // (Feb 31 → Mar 3 in a non-leap year). We set day to 1 before stepping
+  // back months, then clamp the original day to the target month's length.
   const now = new Date();
   const historyCutoff = new Date(now);
-  historyCutoff.setDate(1);
-  historyCutoff.setMonth(historyCutoff.getMonth() - monthsBack);
+  historyCutoff.setUTCDate(1);
+  historyCutoff.setUTCMonth(historyCutoff.getUTCMonth() - monthsBack);
   const daysInTargetMonth = new Date(
-    historyCutoff.getFullYear(),
-    historyCutoff.getMonth() + 1,
-    0,
-  ).getDate();
-  historyCutoff.setDate(Math.min(now.getDate(), daysInTargetMonth));
+    Date.UTC(
+      historyCutoff.getUTCFullYear(),
+      historyCutoff.getUTCMonth() + 1,
+      0,
+    ),
+  ).getUTCDate();
+  historyCutoff.setUTCDate(Math.min(now.getUTCDate(), daysInTargetMonth));
   const cutoffStr = fmtDate(historyCutoff);
 
   const warnings: string[] = [];
