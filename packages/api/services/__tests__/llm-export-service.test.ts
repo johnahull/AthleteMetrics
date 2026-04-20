@@ -276,6 +276,17 @@ describe('renderMarkdown', () => {
     expect(section).toContain('hydration=good');
   });
 
+  it('escapes markdown emphasis characters in the athlete name in the H1', () => {
+    const data = sampleData({
+      athlete: { ...sampleData().athlete, fullName: 'Jane *Star* Doe_Smith' },
+    });
+    const md = renderMarkdown(data);
+    // H1 is the first line; unescaped `*` or `_` inside the heading would
+    // render as emphasis. Consistent with the header org-name handling.
+    const h1 = md.split('\n')[0];
+    expect(h1).toContain('Jane \\*Star\\* Doe\\_Smith');
+  });
+
   it('escapes markdown-breaking characters in the organization name in the header', () => {
     const data = sampleData({
       organization: { id: 'org-1', name: 'Acme_Athletics * HS' },

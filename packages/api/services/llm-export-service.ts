@@ -66,6 +66,11 @@ export interface AthleteExportData {
     drf: number | null;
     fitR2: number | null;
     classification: string | null;
+    // `gap` and `deltas` are JSONB passthrough from analysisJson. Their
+    // full shape lives in SprintFvAnalysisJson (packages/shared/schema/
+    // tables/sprint-fv-profiles.ts). Typed as unknown here because the
+    // renderer is structure-agnostic: formatAnalysisValue walks the value
+    // as scalar, array, or key=value object regardless of nested shape.
     gap: unknown;
     deltas: unknown;
     trainingRecommendations: string[];
@@ -336,7 +341,9 @@ function renderGlossarySection(d: AthleteExportData): string {
 
 export function renderMarkdown(d: AthleteExportData): string {
   const header = [
-    `# Athlete Performance Export — ${escapeCell(d.athlete.fullName)}`,
+    // Chain escapes: pipe-escape for any later table reuse + inline emphasis
+    // escape so `*`/`_`/`` ` `` in the name don't trigger formatting in the H1.
+    `# Athlete Performance Export — ${escapeMdInline(escapeCell(d.athlete.fullName))}`,
     `*Generated ${d.generatedAt.toISOString()}${d.organization ? ` · ${escapeMdInline(d.organization.name)}` : ''}*`,
   ].join('\n');
 
