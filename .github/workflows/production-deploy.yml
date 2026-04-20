@@ -332,7 +332,7 @@ jobs:
 
       - name: Post deployment comment
         if: always()
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const status = '${{ job.status }}';
