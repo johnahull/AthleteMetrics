@@ -4,12 +4,18 @@ import type { FormError } from "@/components/ui/form-error-summary";
 export function useFormErrors() {
   const { formState: { errors } } = useFormContext();
 
-  // Convert React Hook Form errors to FormError array
-  const formErrors: FormError[] = Object.entries(errors).map(([field, error]) => ({
-    field,
-    message: (error?.message as string) || "This field is required",
-    ref: error?.ref as React.RefObject<HTMLElement> | undefined,
-  }));
+  // react-hook-form's FieldErrors values are a union (FieldError | nested shapes).
+  // Only FieldError carries `ref`; narrow via property check before accessing it.
+  const formErrors: FormError[] = Object.entries(errors).map(([field, error]) => {
+    const ref = error && typeof error === "object" && "ref" in error
+      ? (error.ref as React.RefObject<HTMLElement> | undefined)
+      : undefined;
+    return {
+      field,
+      message: (error?.message as string) || "This field is required",
+      ref,
+    };
+  });
 
   const scrollToError = (field: string) => {
     const error = formErrors.find(e => e.field === field);
