@@ -46,6 +46,7 @@ vi.mock('../../packages/api/vite.js', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { storage } from '../../packages/api/storage';
 
 async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_SALT_ROUNDS);
@@ -293,6 +294,10 @@ describe('GET /api/athletes/:id/llm-export', () => {
     // (e.g. offboarded from the org). Their session still carries role='coach'
     // but getCachedUserOrganizations now returns empty. The route should
     // short-circuit on that lookup, not fall through to the shared-org check.
+    //
+    // Security-audit requirement: a revoked coach probing the endpoint must
+    // leave an authorization_failed event in the audit log so the pattern is
+    // detectable (repeated probes from a deactivated account is a signal).
     await db
       .delete(userOrganizations)
       .where(
@@ -302,11 +307,24 @@ describe('GET /api/athletes/:id/llm-export', () => {
         ),
       );
 
+    const createSecurityEventSpy = vi
+      .spyOn(storage, 'createSecurityEvent')
+      .mockResolvedValue(undefined as any);
+
     const res = await request(app)
       .get(`/api/athletes/${testAthlete.id}/llm-export`)
       .set('Cookie', coachAuthCookie);
     expect(res.status).toBe(403);
     expect(res.body.message).toMatch(/no organization access/i);
+
+    expect(createSecurityEventSpy).toHaveBeenCalledTimes(1);
+    const [securityEvent] = createSecurityEventSpy.mock.calls[0];
+    expect(securityEvent.eventType).toBe('authorization_failed');
+    expect(securityEvent.userId).toBe(testCoach.id);
+    expect(securityEvent.eventData).toContain('"resource":"athlete"');
+    expect(securityEvent.eventData).toContain('"action":"read"');
+
+    createSecurityEventSpy.mockRestore();
   });
 
   it('returns 403 when a coach from another org requests the athlete', async () => {

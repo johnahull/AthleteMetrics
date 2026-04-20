@@ -50,6 +50,20 @@ function slugify(name: string | null | undefined): string {
   );
 }
 
+/**
+ * Format today's date in ISO yyyy-mm-dd (UTC) to match the server's
+ * `filenameFor` output. Clipboard-fallback downloads go through the client's
+ * fallback path rather than surfacing `Content-Disposition`, so we mirror the
+ * server's filename convention exactly to keep artifacts consistent.
+ */
+function todayIsoUtc(): string {
+  const now = new Date();
+  const yyyy = now.getUTCFullYear();
+  const mm = String(now.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(now.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function filenameFromResponse(
   response: Response,
   fallback: string,
@@ -118,7 +132,7 @@ export function useLlmExport({
       // Clipboard unavailable — fall back to download so the coach still gets the data.
       const filename = filenameFromResponse(
         response,
-        `${slugify(athleteName)}.md`,
+        `${slugify(athleteName)}-${todayIsoUtc()}.md`,
       );
       triggerBlobDownload(new Blob([text], { type: 'text/markdown' }), filename);
       return { ok: true, clipboardFallback: true };
@@ -137,7 +151,7 @@ export function useLlmExport({
         const response = await fetchExport(athleteId, format);
         const blob = await response.blob();
         const ext = format === 'markdown' ? 'md' : 'json';
-        const fallback = `${slugify(athleteName)}.${ext}`;
+        const fallback = `${slugify(athleteName)}-${todayIsoUtc()}.${ext}`;
         const filename = filenameFromResponse(response, fallback);
         triggerBlobDownload(blob, filename);
         return true;

@@ -87,6 +87,18 @@ export function registerLlmExportRoutes(app: Express) {
             currentUser.id,
           );
           if (userOrgs.length === 0) {
+            // Audit the revoked-coach probe pattern: a session that survived
+            // org-membership removal is a signal worth capturing. Without
+            // this log, the only other 403 branch (`sharedOrgId === null`,
+            // below) is the only audited path — revoked coaches would probe
+            // silently.
+            logAuthorizationFailure(currentUser.id, 'read', 'athlete', {
+              userOrgIds: [],
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+              route: req.path,
+              method: req.method,
+            });
             return res
               .status(403)
               .json({ message: 'Access denied - no organization access' });
