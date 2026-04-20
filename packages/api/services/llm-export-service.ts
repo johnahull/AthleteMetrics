@@ -288,13 +288,19 @@ function renderGoalsSection(d: AthleteExportData): string {
   }
   lines.push('');
   for (const g of d.activeGoals) {
+    // Units and goalType come from user-configurable metric definitions —
+    // today's values are safe (`s`, `in`, `minimize`) but custom metrics
+    // may allow free-text unit strings. Escape inline so a stray `*` or
+    // `_` can't toggle emphasis across the rest of the section.
+    const units = escapeMdInline(g.units);
+    const goalType = escapeMdInline(g.goalType);
     const parts = [
       `${escapeCell(g.metricLabel)}:`,
-      `baseline ${fmtNum(g.baselineValue)} ${g.units}`,
-      `→ current ${fmtNum(g.currentValue)} ${g.units}`,
-      `→ target ${fmtNum(g.targetValue)} ${g.units}`,
+      `baseline ${fmtNum(g.baselineValue)} ${units}`,
+      `→ current ${fmtNum(g.currentValue)} ${units}`,
+      `→ target ${fmtNum(g.targetValue)} ${units}`,
       `by ${g.targetDate}`,
-      `(${g.goalType})`,
+      `(${goalType})`,
     ];
     lines.push(`- ${parts.join(' ')}`);
     if (g.notes) lines.push(`  - Notes: ${escapeMdInline(g.notes)}`);

@@ -159,10 +159,13 @@ export function registerLlmExportRoutes(app: Express) {
               route: req.path,
               method: req.method,
             });
-            return res.status(403).json({
-              message:
-                'Access denied - athlete belongs to a different organization',
-            });
+            // Generic body to match the sibling branch at line 138 — a caller
+            // must not be able to distinguish "athlete is unaffiliated" from
+            // "athlete belongs to a different org" by comparing 403 bodies.
+            // Differentiated messages let a probing coach oracle an athlete's
+            // org-affiliation state; the audit log captures the granular
+            // reason server-side where it belongs.
+            return res.status(403).json({ message: 'Access denied' });
           }
           targetOrganizationId = sharedOrgId;
         } else {
