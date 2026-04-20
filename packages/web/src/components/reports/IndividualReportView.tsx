@@ -18,6 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Send } from "lucide-react";
+import { LlmExportButton } from "@/components/athletes/LlmExportButton";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
@@ -142,7 +143,13 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 Generated on {format(new Date(reportData.generatedAt), "PPP")}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {athleteId && (
+                <LlmExportButton
+                  athleteId={athleteId}
+                  athleteName={athlete?.userName}
+                />
+              )}
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>
                 <FileDown className="h-4 w-4 mr-2" />
                 {isPdfDownloading ? "Downloading..." : "Export PDF"}
