@@ -125,8 +125,12 @@ export function registerLlmExportRoutes(app: Express) {
               .json({ message: 'Access denied - no organization access' });
           }
 
-          const athleteOrgs = await getCachedUserOrganizations(req, athleteId);
-          const athleteTeams = await storage.getUserTeams(athleteId);
+          // Two independent lookups — fetch in parallel to halve the
+          // authorization round-trip cost.
+          const [athleteOrgs, athleteTeams] = await Promise.all([
+            getCachedUserOrganizations(req, athleteId),
+            storage.getUserTeams(athleteId),
+          ]);
 
           if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
             // Generic body to avoid signalling whether the athlete exists or
@@ -184,6 +188,15 @@ export function registerLlmExportRoutes(app: Express) {
           'Content-Disposition',
           `attachment; filename="${filename}"`,
         );
+        // TODO(audit): emit a `data_export` security event for successful
+        // exports so exfiltration patterns are detectable — the payload
+        // includes medical notes and is intended for external-LLM paste.
+        // Deferred: the `createSecurityEventSchema` enum in
+        // `@shared/enhanced-auth-schema` does not currently include a
+        // `data_export` variant, so this needs a schema+migration change
+        // tracked in its own PR. Success-path audit here would be too
+        // loosely typed to sit on `authorization_failed` or
+        // `suspicious_activity`.
         res.status(200).send(content);
       } catch (err) {
         // If the athlete was deleted between the route-level existence check

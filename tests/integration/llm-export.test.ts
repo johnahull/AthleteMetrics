@@ -370,6 +370,25 @@ describe('GET /api/athletes/:id/llm-export', () => {
     expect(res.headers['content-type']).toMatch(/^text\/markdown/);
   });
 
+  it('returns 200 for a site admin exporting an athlete with no org affiliation', async () => {
+    // Edge case: the route's site-admin branch falls back to
+    // `targetOrganizationId = null` when the athlete is unaffiliated
+    // (no userOrganizations rows). An independent athlete — e.g. a
+    // self-registered user who hasn't accepted an org invitation yet —
+    // must still be exportable by site admins, not trip a 500 from a
+    // non-null assertion downstream.
+    await db
+      .delete(userOrganizations)
+      .where(eq(userOrganizations.userId, testAthlete.id));
+
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', siteAdminAuthCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/markdown/);
+    expect(res.text).toMatch(/^# Athlete Performance Export — Jane Doe/m);
+  });
+
   it('returns 404 for a non-existent athlete id', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const res = await request(app)
