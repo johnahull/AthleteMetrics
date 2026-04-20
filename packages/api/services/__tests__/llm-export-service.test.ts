@@ -298,6 +298,20 @@ describe('renderMarkdown', () => {
     const headerLine = md.split('\n')[1];
     expect(headerLine).toContain('Acme\\_Athletics \\* HS');
   });
+
+  it('renders a display-name fallback when the athlete fullName is empty', () => {
+    // If users.fullName, firstName, and lastName are all null (a malformed or
+    // partially-created record), the assembler produces an empty fullName.
+    // Without a renderer-side fallback, the H1 would render as
+    // "# Athlete Performance Export — " with nothing after the em-dash, which
+    // looks broken in both human and LLM consumption.
+    const data = sampleData({
+      athlete: { ...sampleData().athlete, fullName: '' },
+    });
+    const md = renderMarkdown(data);
+    const h1 = md.split('\n')[0];
+    expect(h1).toBe('# Athlete Performance Export — Unknown Athlete');
+  });
 });
 
 describe('AthleteNotFoundError', () => {

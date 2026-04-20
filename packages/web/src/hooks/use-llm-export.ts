@@ -42,8 +42,15 @@ function slugify(name: string | null | undefined): string {
   const withoutDiacritics = name
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+  // Keep this in sync with `filenameFor` in
+  // packages/api/services/llm-export-service.ts: pipes are stripped
+  // *without* replacement (so `a|b` → `ab`, not `a-b`) before the generic
+  // non-alphanumeric collapse. This matters because the server populates
+  // `Content-Disposition` with its slug, and if the clipboard-fallback
+  // path runs, we want the client-generated filename to match byte-for-byte.
+  const withoutPipes = withoutDiacritics.replace(/\|/g, '');
   return (
-    withoutDiacritics
+    withoutPipes
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '') || SLUG_FALLBACK

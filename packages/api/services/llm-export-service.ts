@@ -351,10 +351,16 @@ function renderGlossarySection(d: AthleteExportData): string {
 }
 
 export function renderMarkdown(d: AthleteExportData): string {
+  // Display-name fallback: malformed or partially-created user records can
+  // have fullName / firstName / lastName all null, producing an empty
+  // `fullName` in the assembled data. Without this guard, the H1 would be
+  // `# Athlete Performance Export — ` (trailing em-dash), which looks broken
+  // to both coaches and LLMs. `filenameFor` has its own separate fallback.
+  const displayName = d.athlete.fullName.trim() || 'Unknown Athlete';
   const header = [
     // Chain escapes: pipe-escape for any later table reuse + inline emphasis
     // escape so `*`/`_`/`` ` `` in the name don't trigger formatting in the H1.
-    `# Athlete Performance Export — ${escapeMdInline(escapeCell(d.athlete.fullName))}`,
+    `# Athlete Performance Export — ${escapeMdInline(escapeCell(displayName))}`,
     `*Generated ${d.generatedAt.toISOString()}${d.organization ? ` · ${escapeMdInline(d.organization.name)}` : ''}*`,
   ].join('\n');
 

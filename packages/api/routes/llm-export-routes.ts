@@ -38,6 +38,11 @@ const llmExportLimiter = rateLimit({
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// LLM export is a coaching tool: only coaches, org admins, and site admins
+// may generate one. Allocated once at module load rather than per-request;
+// the Set is immutable after construction and safe to share.
+const ALLOWED_LLM_EXPORT_ROLES = new Set(['coach', 'org_admin']);
+
 export function registerLlmExportRoutes(app: Express) {
   app.get(
     '/api/athletes/:id/llm-export',
@@ -71,17 +76,15 @@ export function registerLlmExportRoutes(app: Express) {
         const userIsSiteAdmin = isSiteAdmin(currentUser);
         let targetOrganizationId: string | null = null;
 
-        // LLM export is a coaching tool: only coaches, org admins, and site
-        // admins may generate one. This is an *allowlist*, not a denylist —
-        // any role not explicitly named here (athlete, parent, guest, …) is
-        // denied, so new roles added to the system default to no-access until
-        // a policy decision is made.
+        // The allowlist is an *allowlist*, not a denylist — any role not
+        // explicitly named (athlete, parent, guest, …) is denied, so new
+        // roles added to the system default to no-access until a policy
+        // decision is made.
         //
         // Role check runs *before* the athlete-existence lookup so a denied
         // caller cannot distinguish "athlete exists but you can't read it"
         // (403) from "athlete does not exist" (404). The 404-vs-403 split is
         // an existence oracle for unauthorised callers; flatten it to 403.
-        const ALLOWED_LLM_EXPORT_ROLES = new Set(['coach', 'org_admin']);
         if (!userIsSiteAdmin && !ALLOWED_LLM_EXPORT_ROLES.has(currentUser.role)) {
           return res.status(403).json({
             message: 'LLM export is only available to coaches and organization admins',
