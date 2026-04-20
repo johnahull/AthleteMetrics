@@ -153,6 +153,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
               {canExportForLlm && athleteId && (
                 <LlmExportButton
                   athleteId={athleteId}
+                  // The `AthletePerformance` DTO's `userName` is mapped from
+                  // the underlying user's `fullName` in report-service.ts:549
+                  // — it is the athlete's display name, not a login handle,
+                  // despite the field name suggesting otherwise.
                   athleteName={athlete?.userName}
                 />
               )}

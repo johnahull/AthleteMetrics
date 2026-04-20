@@ -162,6 +162,13 @@ export function filenameFor(fullName: string, format: ExportFormat, date: Date):
   const withoutDiacritics = fullName
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
+  // Pipes are stripped *without* replacement so `a|b` becomes `ab`, not `a-b`.
+  // This is different from the generic non-alphanumeric collapse below, which
+  // replaces runs of bad chars with a single dash. Rationale: pipes typically
+  // appear mid-name in bad data (copy-paste artifacts) rather than as word
+  // separators, so concatenation produces a cleaner slug than dash-splitting.
+  // Covered by the "strips non-alphanumeric characters (pipes, slashes)" unit
+  // test — don't remove without updating that contract.
   const withoutPipes = withoutDiacritics.replace(/\|/g, '');
   const slugged =
     withoutPipes
@@ -268,7 +275,7 @@ function renderFvSection(d: AthleteExportData): string {
     }
   }
   if (fv.notes) {
-    lines.push('', `*Notes:* ${fv.notes}`);
+    lines.push('', `*Notes:* ${escapeMdInline(fv.notes)}`);
   }
   return lines.join('\n');
 }
@@ -290,7 +297,7 @@ function renderGoalsSection(d: AthleteExportData): string {
       `(${g.goalType})`,
     ];
     lines.push(`- ${parts.join(' ')}`);
-    if (g.notes) lines.push(`  - Notes: ${g.notes}`);
+    if (g.notes) lines.push(`  - Notes: ${escapeMdInline(g.notes)}`);
   }
   return lines.join('\n');
 }
