@@ -18,6 +18,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { TierBadge } from "@/components/benchmarks/TierBadge";
 import { FileDown, Share2, Send } from "lucide-react";
+import { LlmExportButton } from "@/components/athletes/LlmExportButton";
+import { useAuth } from "@/lib/auth";
 import { ShareReportDialog } from "./ShareReportDialog";
 import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
@@ -38,6 +40,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
   const generateReport = useGenerateReport(report.id);
   const [reportData, setReportData] = useState<any>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+
+  // LLM export is a coaching tool — athletes don't see the button even on their own report.
+  const canExportForLlm =
+    !!user && (user.isSiteAdmin || user.role === "coach" || user.role === "org_admin");
 
   // Determine if AI is enabled for this organization
   const { data: organization } = useQuery<{ aiEnabled?: boolean; aiEnabledBySiteAdmin?: boolean }>({
@@ -142,7 +149,17 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 Generated on {format(new Date(reportData.generatedAt), "PPP")}
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
+              {canExportForLlm && athleteId && (
+                <LlmExportButton
+                  athleteId={athleteId}
+                  // The `AthletePerformance` DTO's `userName` is mapped from
+                  // the underlying user's `fullName` in report-service.ts:549
+                  // — it is the athlete's display name, not a login handle,
+                  // despite the field name suggesting otherwise.
+                  athleteName={athlete?.userName}
+                />
+              )}
               <Button variant="outline" onClick={handleDownloadPDF} disabled={isPdfDownloading}>
                 <FileDown className="h-4 w-4 mr-2" />
                 {isPdfDownloading ? "Downloading..." : "Export PDF"}
