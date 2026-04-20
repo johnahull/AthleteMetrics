@@ -281,6 +281,28 @@ describe('GET /api/athletes/:id/llm-export', () => {
     expect(res.status).toBe(400);
   });
 
+  it('returns 403 when a coach has lost all org memberships since login (userOrgs.length === 0)', async () => {
+    // Simulate a session that persists past a permission revocation: the coach
+    // logged in while a member of testOrg, then had that membership removed
+    // (e.g. offboarded from the org). Their session still carries role='coach'
+    // but getCachedUserOrganizations now returns empty. The route should
+    // short-circuit on that lookup, not fall through to the shared-org check.
+    await db
+      .delete(userOrganizations)
+      .where(
+        and(
+          eq(userOrganizations.userId, testCoach.id),
+          eq(userOrganizations.organizationId, testOrg.id),
+        ),
+      );
+
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', coachAuthCookie);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/no organization access/i);
+  });
+
   it('returns 403 when a coach from another org requests the athlete', async () => {
     const res = await request(app)
       .get(`/api/athletes/${testAthlete.id}/llm-export`)

@@ -40,7 +40,13 @@ export function registerLlmExportRoutes(app: Express) {
           return res.status(401).json({ message: 'User not authenticated' });
         }
 
-        const rawFormat = (req.query.format ?? 'markdown') as string;
+        // Express parses repeated query params (?format=a&format=b) as string[].
+        // Pick the first entry so the subsequent === comparison is always a
+        // string compare, not a silent array-to-string coercion.
+        const rawFormatParam = req.query.format;
+        const rawFormat = Array.isArray(rawFormatParam)
+          ? rawFormatParam[0]
+          : (rawFormatParam ?? 'markdown');
         if (rawFormat !== 'markdown' && rawFormat !== 'json') {
           return res.status(400).json({
             message: "Invalid format — must be 'markdown' or 'json'",

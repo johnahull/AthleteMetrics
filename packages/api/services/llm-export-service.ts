@@ -395,14 +395,32 @@ async function loadMetricGlossary(
   return out;
 }
 
+// Upper bound on measurements returned in a single export. Prevents a
+// memory/markdown-size spike for high-volume athletes (weekly testing across
+// many metrics could otherwise return 500+ rows).
+const MEASUREMENT_HISTORY_LIMIT = 1000;
+
 export async function gatherAthleteExportData(
   athleteId: string,
   organizationId: string | null,
   opts: { monthsBack?: number } = {},
 ): Promise<AthleteExportData> {
   const monthsBack = opts.monthsBack ?? 12;
-  const historyCutoff = new Date();
+  // Calendar-month arithmetic without the month-end rollover bug.
+  // Naïve `setMonth(getMonth() - 12)` on, say, Mar 31 in a non-leap year
+  // would land on Apr 1 (Feb 31 → Mar 3). We set day to 1 before stepping
+  // back months and then re-apply the original day clamped to the target
+  // month's length.
+  const now = new Date();
+  const historyCutoff = new Date(now);
+  historyCutoff.setDate(1);
   historyCutoff.setMonth(historyCutoff.getMonth() - monthsBack);
+  const daysInTargetMonth = new Date(
+    historyCutoff.getFullYear(),
+    historyCutoff.getMonth() + 1,
+    0,
+  ).getDate();
+  historyCutoff.setDate(Math.min(now.getDate(), daysInTargetMonth));
   const cutoffStr = fmtDate(historyCutoff);
 
   const warnings: string[] = [];
@@ -464,11 +482,15 @@ export async function gatherAthleteExportData(
         if (organizationId) {
           conditions.push(eq(measurements.organizationId, organizationId));
         }
+        // Cap the 12-month window: an athlete testing ~weekly across 8 metrics
+        // would produce ~400 rows. 1000 gives plenty of headroom while keeping
+        // the export bounded in both memory and Markdown size.
         return db
           .select()
           .from(measurements)
           .where(and(...conditions))
-          .orderBy(desc(measurements.date));
+          .orderBy(desc(measurements.date))
+          .limit(MEASUREMENT_HISTORY_LIMIT);
       },
       [] as Array<typeof measurements.$inferSelect>,
     ),
@@ -575,7 +597,21 @@ export async function gatherAthleteExportData(
     })
     .filter((x): x is NonNullable<typeof x> => x !== null);
 
-  // Sprint F-V parsing (all decimals are strings coming out of drizzle)
+  // Sprint F-V parsing (all decimals are strings coming out of drizzle).
+  //
+  // The `analysisJson.classification.classification` double-access is
+  // intentional and matches the schema in
+  // packages/shared/schema/tables/sprint-fv-profiles.ts:
+  //   analysisJson: {
+  //     classification: {                          <-- the category group
+  //       classification: 'force-deficit' | ...    <-- the verdict
+  //       trainingRecommendations: [...],
+  //       imbalancePercent, dominantQuality, explanation,
+  //     },
+  //     optimalGap, accelerationProfile, powerProfile, deltas?,
+  //   }
+  // The outer `classification` is the *group of classification outputs*;
+  // the inner `classification` is the specific verdict string. Don't flatten.
   const fv = fvRow
     ? {
         date: fvRow.date,
