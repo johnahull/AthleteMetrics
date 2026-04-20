@@ -133,6 +133,22 @@ export function registerLlmExportRoutes(app: Express) {
           ]);
 
           if (athleteOrgs.length === 0 && athleteTeams.length === 0) {
+            // Audit for parity with the other two 403 branches (revoked coach
+            // at line 116, cross-org at line 154). A coach probing
+            // unaffiliated athletes is as much a detection signal as probing
+            // cross-org athletes — without logging here, the "unaffiliated
+            // athlete sweep" pattern would be invisible.
+            // Omit `attemptedOrgId` — there is no athlete-side org to attempt
+            // against. That absence is itself the branch-distinguishing
+            // signal when a defender reads the audit log (the cross-org
+            // branch always populates attemptedOrgId).
+            logAuthorizationFailure(currentUser.id, 'read', 'athlete', {
+              userOrgIds: userOrgs.map((o) => o.organizationId),
+              ipAddress: req.ip,
+              userAgent: req.get('user-agent'),
+              route: req.path,
+              method: req.method,
+            });
             // Generic body to avoid signalling whether the athlete exists or
             // what state their org/team assignments are in.
             return res.status(403).json({ message: 'Access denied' });

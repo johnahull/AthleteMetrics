@@ -345,6 +345,41 @@ describe('GET /api/athletes/:id/llm-export', () => {
     expect(res.status).toBe(403);
   });
 
+  it('returns 403 and audits when a coach probes an athlete with no org/team affiliation', async () => {
+    // Third 403 branch: the requesting coach is valid, but the target
+    // athlete is unaffiliated (no userOrganizations rows, no userTeams).
+    // Must return 403 AND emit an authorization_failed audit event — a
+    // coach sweeping unaffiliated athletes is a detection signal on par
+    // with cross-org probes and revoked-coach probes.
+    await db
+      .delete(userOrganizations)
+      .where(eq(userOrganizations.userId, testAthlete.id));
+
+    const createSecurityEventSpy = vi
+      .spyOn(storage, 'createSecurityEvent')
+      .mockResolvedValue(undefined as any);
+
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', coachAuthCookie);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Access denied');
+
+    expect(createSecurityEventSpy).toHaveBeenCalledTimes(1);
+    const [securityEvent] = createSecurityEventSpy.mock.calls[0];
+    expect(securityEvent.eventType).toBe('authorization_failed');
+    expect(securityEvent.userId).toBe(testCoach.id);
+    expect(securityEvent.eventData).toContain('"resource":"athlete"');
+    expect(securityEvent.eventData).toContain('"action":"read"');
+    // Branch-distinguishing signal: attemptedOrgId is absent on the
+    // unaffiliated-athlete branch (the cross-org branch always populates
+    // it). Defenders reading the audit log can disambiguate the two
+    // 403 branches by presence/absence of this field.
+    expect(securityEvent.eventData).not.toContain('"attemptedOrgId"');
+
+    createSecurityEventSpy.mockRestore();
+  });
+
   it('returns 403 for an athlete attempting to export their own profile (policy denial — coaching tool only)', async () => {
     const res = await request(app)
       .get(`/api/athletes/${testAthlete.id}/llm-export`)
