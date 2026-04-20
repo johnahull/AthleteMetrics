@@ -57,8 +57,11 @@ let otherOrg: any;
 let testCoach: any;
 let otherCoach: any;
 let testAthlete: any;
+let siteAdmin: any;
 let coachAuthCookie: string;
 let otherCoachAuthCookie: string;
+let athleteAuthCookie: string;
+let siteAdminAuthCookie: string;
 
 beforeAll(async () => {
   app = express();
@@ -126,6 +129,19 @@ beforeEach(async () => {
     })
     .returning();
 
+  [siteAdmin] = await db
+    .insert(users)
+    .values({
+      username: `llmexport_siteadmin_${suffix}`,
+      emails: [`llmexport_siteadmin_${suffix}@test.com`],
+      password: hashedPassword,
+      firstName: 'Site',
+      lastName: 'Admin',
+      fullName: 'Site Admin',
+      isSiteAdmin: true,
+    })
+    .returning();
+
   await db.insert(userOrganizations).values([
     { userId: testCoach.id, organizationId: testOrg.id, role: 'coach' },
     { userId: testAthlete.id, organizationId: testOrg.id, role: 'athlete' },
@@ -143,10 +159,22 @@ beforeEach(async () => {
     password: 'TestCoach123!',
   });
   otherCoachAuthCookie = otherCoachLogin.headers['set-cookie'][0];
+
+  const athleteLogin = await request(app).post('/api/auth/login').send({
+    username: testAthlete.username,
+    password: 'TestCoach123!',
+  });
+  athleteAuthCookie = athleteLogin.headers['set-cookie'][0];
+
+  const siteAdminLogin = await request(app).post('/api/auth/login').send({
+    username: siteAdmin.username,
+    password: 'TestCoach123!',
+  });
+  siteAdminAuthCookie = siteAdminLogin.headers['set-cookie'][0];
 });
 
 afterEach(async () => {
-  const userIds = [testCoach, otherCoach, testAthlete]
+  const userIds = [testCoach, otherCoach, testAthlete, siteAdmin]
     .filter(Boolean)
     .map((u) => u.id);
   if (userIds.length > 0) {
@@ -165,6 +193,7 @@ afterEach(async () => {
   testCoach = undefined;
   otherCoach = undefined;
   testAthlete = undefined;
+  siteAdmin = undefined;
 });
 
 afterAll(async () => {
@@ -226,6 +255,22 @@ describe('GET /api/athletes/:id/llm-export', () => {
       .get(`/api/athletes/${testAthlete.id}/llm-export`)
       .set('Cookie', otherCoachAuthCookie);
     expect(res.status).toBe(403);
+  });
+
+  it('returns 403 for an athlete attempting to export their own profile (policy denial — coaching tool only)', async () => {
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', athleteAuthCookie);
+    expect(res.status).toBe(403);
+    expect(res.body.message).toMatch(/coaches and organization admins/i);
+  });
+
+  it('returns 200 for a site admin exporting any athlete', async () => {
+    const res = await request(app)
+      .get(`/api/athletes/${testAthlete.id}/llm-export`)
+      .set('Cookie', siteAdminAuthCookie);
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/^text\/markdown/);
   });
 
   it('returns 404 for a non-existent athlete id', async () => {

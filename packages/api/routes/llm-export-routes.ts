@@ -55,18 +55,16 @@ export function registerLlmExportRoutes(app: Express) {
         const userIsSiteAdmin = isSiteAdmin(currentUser);
         let targetOrganizationId: string | null = null;
 
+        // LLM export is a coaching tool: only coaches, org admins, and site
+        // admins may generate one. Athletes (including self-export) are denied —
+        // this is a policy decision distinct from standard athlete:read access.
         if (currentUser.role === 'athlete') {
-          if (currentUser.athleteId !== athleteId) {
-            return res.status(403).json({
-              message: 'Athletes can only export their own profile',
-            });
-          }
-          const selfOrgs = await getCachedUserOrganizations(
-            req,
-            currentUser.id,
-          );
-          targetOrganizationId = selfOrgs[0]?.organizationId ?? null;
-        } else if (!userIsSiteAdmin) {
+          return res.status(403).json({
+            message: 'LLM export is only available to coaches and organization admins',
+          });
+        }
+
+        if (!userIsSiteAdmin) {
           const userOrgs = await getCachedUserOrganizations(
             req,
             currentUser.id,
@@ -89,7 +87,7 @@ export function registerLlmExportRoutes(app: Express) {
           const userOrgIds = userOrgs.map((o) => o.organizationId);
           const athleteOrgIds = athleteOrgs.map((o) => o.organizationId);
           const athleteTeamOrgIds = athleteTeams.map(
-            (t: any) => t.team.organizationId,
+            (t) => t.team.organizationId,
           );
           const allAthleteOrgIds = Array.from(
             new Set([...athleteOrgIds, ...athleteTeamOrgIds]),
@@ -123,7 +121,7 @@ export function registerLlmExportRoutes(app: Express) {
         const { content, filename, contentType } = await buildAthleteLlmExport(
           athleteId,
           format,
-          { organizationId: targetOrganizationId ?? '' },
+          { organizationId: targetOrganizationId },
         );
 
         res.setHeader('Content-Type', contentType);

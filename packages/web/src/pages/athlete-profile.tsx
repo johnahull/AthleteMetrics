@@ -172,14 +172,11 @@ export default function AthleteProfile() {
   // Check if user can edit measurements (coaches and site admins)
   const canEditMeasurements = user?.role === "coach" || user?.role === "org_admin" || user?.isSiteAdmin;
 
-  // The LLM export button is gated to viewers who can read this athlete:
-  //   site admins, coaches/org-admins, or the athlete viewing themselves.
+  // LLM export is a coaching tool — only coaches, org admins, and site admins.
+  // Athletes (including self-view) do not see the button.
   const canExportForLlm =
     !!user &&
-    (user.isSiteAdmin ||
-      user.role === "coach" ||
-      user.role === "org_admin" ||
-      (user.role === "athlete" && user.athleteId === athleteId));
+    (user.isSiteAdmin || user.role === "coach" || user.role === "org_admin");
 
   // Calculate dashboard data (memoized to avoid recalculation on every render)
   // IMPORTANT: Must be before any early returns to comply with Rules of Hooks

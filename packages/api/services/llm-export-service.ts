@@ -334,7 +334,6 @@ export function renderJson(d: AthleteExportData): AthleteLlmExport {
 
 async function loadMetricGlossary(
   codes: string[],
-  organizationId: string,
 ): Promise<Record<string, { label: string; units: string; explanation: string }>> {
   if (!codes.length) return {};
   const rows = await db
@@ -348,18 +347,16 @@ async function loadMetricGlossary(
     .from(siteMetrics)
     .where(inArray(siteMetrics.code, codes));
 
-  const explanationMap: Record<string, MetricExplanation> = buildMetricExplanationsMap(
-    [] as unknown as Parameters<typeof buildMetricExplanationsMap>[0],
-    [] as unknown as Parameters<typeof buildMetricExplanationsMap>[1],
-    [] as unknown as Parameters<typeof buildMetricExplanationsMap>[2],
-  ) as Record<string, MetricExplanation>;
+  const explanationMap: Record<string, MetricExplanation> =
+    buildMetricExplanationsMap(codes);
 
+  const siteCodes = new Set(rows.map((r) => r.code));
   const out: Record<string, { label: string; units: string; explanation: string }> = {};
   for (const r of rows) {
     const expl = explanationMap[r.code];
     out[r.code] = {
-      label: r.label ?? r.code,
-      units: r.unit ?? '',
+      label: r.label ?? expl?.title ?? r.code,
+      units: r.unit ?? expl?.unitNote ?? '',
       explanation:
         r.whatItMeasures ??
         r.shortDescription ??
@@ -367,12 +364,23 @@ async function loadMetricGlossary(
         'No explanation available.',
     };
   }
+  // Codes absent from site_metrics still deserve a glossary entry from static explanations.
+  for (const code of codes) {
+    if (siteCodes.has(code)) continue;
+    const expl = explanationMap[code];
+    if (!expl) continue;
+    out[code] = {
+      label: expl.title ?? code,
+      units: expl.unitNote ?? '',
+      explanation: expl.whatItMeasures ?? 'No explanation available.',
+    };
+  }
   return out;
 }
 
 export async function gatherAthleteExportData(
   athleteId: string,
-  organizationId: string,
+  organizationId: string | null,
   opts: { monthsBack?: number } = {},
 ): Promise<AthleteExportData> {
   const monthsBack = opts.monthsBack ?? 12;
@@ -418,26 +426,33 @@ export async function gatherAthleteExportData(
           .where(and(eq(userTeams.userId, athleteId), eq(userTeams.isActive, true))),
       [] as Array<{ name: string; level: string | null; season: string | null }>,
     ),
-    db
-      .select({ id: organizations.id, name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, organizationId))
-      .limit(1)
-      .then((r) => r[0] ?? null),
+    organizationId
+      ? db
+          .select({ id: organizations.id, name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, organizationId))
+          .limit(1)
+          .then((r) => r[0] ?? null)
+      : Promise.resolve(null),
     safe(
       'Measurement history',
-      () =>
-        db
+      () => {
+        // When organizationId is null (site admin viewing an unaffiliated athlete),
+        // scope by athlete identity alone. For all other callers we keep multi-tenant
+        // isolation by requiring org match.
+        const conditions = [
+          eq(measurements.userId, athleteId),
+          gte(measurements.date, cutoffStr),
+        ];
+        if (organizationId) {
+          conditions.push(eq(measurements.organizationId, organizationId));
+        }
+        return db
           .select()
           .from(measurements)
-          .where(
-            and(
-              eq(measurements.userId, athleteId),
-              eq(measurements.organizationId, organizationId),
-              gte(measurements.date, cutoffStr),
-            ),
-          )
-          .orderBy(desc(measurements.date)),
+          .where(and(...conditions))
+          .orderBy(desc(measurements.date));
+      },
       [] as Array<typeof measurements.$inferSelect>,
     ),
     safe(
@@ -505,7 +520,7 @@ export async function gatherAthleteExportData(
   const metricCodes = Object.keys(history);
   const glossary = await safe(
     'Metric glossary',
-    () => loadMetricGlossary(metricCodes, organizationId),
+    () => loadMetricGlossary(metricCodes),
     {} as Record<string, { label: string; units: string; explanation: string }>,
   );
 
@@ -605,7 +620,7 @@ export async function gatherAthleteExportData(
 export async function buildAthleteLlmExport(
   athleteId: string,
   format: ExportFormat,
-  opts: { organizationId: string; monthsBack?: number },
+  opts: { organizationId: string | null; monthsBack?: number },
 ): Promise<{ content: string; filename: string; contentType: string }> {
   const data = await gatherAthleteExportData(athleteId, opts.organizationId, {
     monthsBack: opts.monthsBack,
