@@ -4,10 +4,16 @@
  * GET /api/athletes/:id/llm-export?format=markdown|json
  *
  * Assembles an athlete-centric export suitable for pasting into an LLM to
- * design a training program. Permission model mirrors GET /api/athletes/:id:
- *   - site admin: any athlete
- *   - athlete role: only self
+ * design a training program. This is a *coaching tool*, not a self-service
+ * export — permission model is an allowlist (see `ALLOWED_LLM_EXPORT_ROLES`):
+ *   - site_admin: any athlete
  *   - coach / org_admin: athletes in their org (via org membership OR team membership)
+ *   - athlete role: denied, even for self-access
+ *     (coaches are the audience for LLM-generated training programs)
+ *   - all other roles (guest, parent, …): denied
+ *
+ * The athlete-self-denial is covered by integration test
+ * "returns 403 for an athlete attempting to export their own profile".
  */
 
 import type { Express } from 'express';
@@ -169,6 +175,11 @@ export function registerLlmExportRoutes(app: Express) {
         );
 
         res.setHeader('Content-Type', contentType);
+        // NOTE: `filename=` is the RFC 6266 unquoted-ASCII form. This is
+        // only correct because `filenameFor` strips diacritics and collapses
+        // non-alphanumerics, so the slug is guaranteed [a-z0-9-]. If Unicode
+        // filenames are ever introduced, switch to `filename*=UTF-8''<encoded>`
+        // per RFC 5987 to avoid malformed headers on strict HTTP stacks.
         res.setHeader(
           'Content-Disposition',
           `attachment; filename="${filename}"`,

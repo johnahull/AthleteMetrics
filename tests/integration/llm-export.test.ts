@@ -23,7 +23,6 @@ import {
   it,
   expect,
   beforeAll,
-  afterAll,
   beforeEach,
   afterEach,
   vi,
@@ -232,10 +231,6 @@ afterEach(async () => {
   testOrgAdmin = undefined;
   testAthlete = undefined;
   siteAdmin = undefined;
-});
-
-afterAll(async () => {
-  // nothing — beforeEach/afterEach own their fixtures
 });
 
 describe('GET /api/athletes/:id/llm-export', () => {
