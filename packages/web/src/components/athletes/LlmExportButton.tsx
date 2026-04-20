@@ -8,9 +8,11 @@
  *
  *   Secondary (right half): dropdown with explicit Markdown / JSON downloads.
  *
- * Visibility is decided by the parent (coaches/site-admin see it on any athlete
- * in their org; athletes see it on their own profile). We do not render
- * disabled teasers for unauthorized viewers.
+ * Visibility is decided by the parent. LLM export is a coaching tool, so only
+ * coaches, org admins, and site admins should render this button. Athletes,
+ * parents, and guests do not see it — the backend route enforces the same
+ * allowlist, so unauthorized requests are also denied at the API layer.
+ * We do not render disabled teasers for unauthorized viewers.
  */
 
 import { useEffect, useRef, useState } from 'react';

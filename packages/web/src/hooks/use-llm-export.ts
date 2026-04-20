@@ -29,9 +29,7 @@ interface CopyResult {
 interface UseLlmExportReturn {
   copy: () => Promise<CopyResult>;
   download: (format: LlmExportFormat) => Promise<boolean>;
-  isCopying: boolean;
   isDownloading: boolean;
-  copiedAt: number | null;
 }
 
 const EXPORT_URL = (athleteId: string, format: LlmExportFormat) =>
@@ -99,12 +97,9 @@ export function useLlmExport({
   athleteName,
   onError,
 }: UseLlmExportOptions): UseLlmExportReturn {
-  const [isCopying, setIsCopying] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [copiedAt, setCopiedAt] = useState<number | null>(null);
 
   const copy = useCallback(async (): Promise<CopyResult> => {
-    setIsCopying(true);
     try {
       const response = await fetchExport(athleteId, 'markdown');
       const text = await response.text();
@@ -117,7 +112,6 @@ export function useLlmExport({
 
       if (canUseClipboard) {
         await navigator.clipboard.writeText(text);
-        setCopiedAt(Date.now());
         return { ok: true };
       }
 
@@ -133,8 +127,6 @@ export function useLlmExport({
         err instanceof Error ? err : new Error('Failed to copy export');
       onError?.(error);
       return { ok: false };
-    } finally {
-      setIsCopying(false);
     }
   }, [athleteId, athleteName, onError]);
 
@@ -161,5 +153,5 @@ export function useLlmExport({
     [athleteId, athleteName, onError],
   );
 
-  return { copy, download, isCopying, isDownloading, copiedAt };
+  return { copy, download, isDownloading };
 }

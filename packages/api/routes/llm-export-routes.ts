@@ -56,9 +56,12 @@ export function registerLlmExportRoutes(app: Express) {
         let targetOrganizationId: string | null = null;
 
         // LLM export is a coaching tool: only coaches, org admins, and site
-        // admins may generate one. Athletes (including self-export) are denied —
-        // this is a policy decision distinct from standard athlete:read access.
-        if (currentUser.role === 'athlete') {
+        // admins may generate one. This is an *allowlist*, not a denylist —
+        // any role not explicitly named here (athlete, parent, guest, …) is
+        // denied, so new roles added to the system default to no-access until
+        // a policy decision is made.
+        const ALLOWED_LLM_EXPORT_ROLES = new Set(['coach', 'org_admin']);
+        if (!userIsSiteAdmin && !ALLOWED_LLM_EXPORT_ROLES.has(currentUser.role)) {
           return res.status(403).json({
             message: 'LLM export is only available to coaches and organization admins',
           });
