@@ -100,8 +100,30 @@ export interface AthleteLlmExport extends Omit<AthleteExportData, 'generatedAt'>
 
 const EMPTY = '_No data yet._';
 
+/**
+ * Thrown by gatherAthleteExportData when the athlete row disappears between
+ * the route-level existence check and the service's own parallel query.
+ * Routes catch this and translate to 404, not 500.
+ */
+export class AthleteNotFoundError extends Error {
+  constructor(athleteId: string) {
+    super(`Athlete not found: ${athleteId}`);
+    this.name = 'AthleteNotFoundError';
+  }
+}
+
 function escapeCell(v: string): string {
   return v.replace(/\|/g, '\\|');
+}
+
+/**
+ * Escape markdown inline formatting characters. Use when interpolating a
+ * string into prose/headers wrapped in `*...*` or `_..._` — an unescaped
+ * asterisk or underscore inside the wrapper would close the run of emphasis
+ * early and break the output.
+ */
+function escapeMdInline(v: string): string {
+  return v.replace(/([*_`])/g, '\\$1');
 }
 
 function fmtNum(n: number): string {
@@ -277,7 +299,7 @@ function renderWellnessSection(d: AthleteExportData): string {
   lines.push('', '| Date | Responses |', '|---|---|');
   for (const w of d.recentWellness) {
     const summary = Object.entries(w.responses)
-      .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+      .map(([k, v]) => `${k}=${formatAnalysisValue(v)}`)
       .join(', ');
     lines.push(`| ${w.date} | ${escapeCell(summary)} |`);
   }
@@ -315,7 +337,7 @@ function renderGlossarySection(d: AthleteExportData): string {
 export function renderMarkdown(d: AthleteExportData): string {
   const header = [
     `# Athlete Performance Export — ${escapeCell(d.athlete.fullName)}`,
-    `*Generated ${d.generatedAt.toISOString()}${d.organization ? ` · ${d.organization.name}` : ''}*`,
+    `*Generated ${d.generatedAt.toISOString()}${d.organization ? ` · ${escapeMdInline(d.organization.name)}` : ''}*`,
   ].join('\n');
 
   const body = [
@@ -560,7 +582,7 @@ export async function gatherAthleteExportData(
   ]);
 
   if (!athleteRow) {
-    throw new Error('Athlete not found');
+    throw new AthleteNotFoundError(athleteId);
   }
 
   // Group measurements into history + current snapshot (most recent per metric)

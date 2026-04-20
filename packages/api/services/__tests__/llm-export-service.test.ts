@@ -3,6 +3,7 @@ import {
   renderMarkdown,
   renderJson,
   filenameFor,
+  AthleteNotFoundError,
   type AthleteExportData,
 } from '../llm-export-service';
 
@@ -248,6 +249,52 @@ describe('renderMarkdown', () => {
   it('omits the warnings footer when warnings are empty', () => {
     const md = renderMarkdown(sampleData());
     expect(md).not.toMatch(/\*\*Warnings:\*\*/);
+  });
+
+  it('formats nested wellness response values as key=value, not raw JSON', () => {
+    const data = sampleData({
+      recentWellness: [
+        {
+          date: '2026-04-12',
+          submittedAt: '2026-04-12T07:30:00Z',
+          // A template with nested structure (e.g. a Likert response with metadata)
+          responses: {
+            sleep: 7,
+            nutrition: { meals: 3, hydration: 'good' },
+          },
+        },
+      ],
+    });
+    const md = renderMarkdown(data);
+    const start = md.indexOf('## Recent Wellness');
+    const end = md.indexOf('## Medical & Coach Notes');
+    const section = md.slice(start, end);
+    // Must not leak raw JSON braces
+    expect(section).not.toMatch(/\{"meals"/);
+    // Should expose nested fields in readable key=value form
+    expect(section).toContain('meals=3');
+    expect(section).toContain('hydration=good');
+  });
+
+  it('escapes markdown-breaking characters in the organization name in the header', () => {
+    const data = sampleData({
+      organization: { id: 'org-1', name: 'Acme_Athletics * HS' },
+    });
+    const md = renderMarkdown(data);
+    // Header is wrapped in single asterisks to produce an italic run. A bare `*`
+    // or `_` inside the name would prematurely close the italic — escaping with
+    // a backslash preserves the wrapper while rendering the literal character.
+    const headerLine = md.split('\n')[1];
+    expect(headerLine).toContain('Acme\\_Athletics \\* HS');
+  });
+});
+
+describe('AthleteNotFoundError', () => {
+  it('is a distinct error type the route can use to return 404', () => {
+    const err = new AthleteNotFoundError('athlete-missing');
+    expect(err).toBeInstanceOf(Error);
+    expect(err).toBeInstanceOf(AthleteNotFoundError);
+    expect(err.message).toMatch(/athlete-missing/);
   });
 });
 

@@ -17,7 +17,10 @@ import { requireAuth } from '../middleware';
 import { isSiteAdmin } from '../utils/auth-helpers';
 import { getCachedUserOrganizations } from '../helpers/cached-org-access';
 import { logAuthorizationFailure } from '../helpers/audit-logging';
-import { buildAthleteLlmExport } from '../services/llm-export-service';
+import {
+  AthleteNotFoundError,
+  buildAthleteLlmExport,
+} from '../services/llm-export-service';
 
 const llmExportLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -140,6 +143,12 @@ export function registerLlmExportRoutes(app: Express) {
         );
         res.status(200).send(content);
       } catch (err) {
+        // If the athlete was deleted between the route-level existence check
+        // and the service's own query, the service throws AthleteNotFoundError.
+        // Surface as a 404 rather than the generic 500.
+        if (err instanceof AthleteNotFoundError) {
+          return res.status(404).json({ message: 'Athlete not found' });
+        }
         console.error('LLM export failed:', err);
         res.status(500).json({
           message: 'Failed to generate LLM export',
