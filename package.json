@@ -100,7 +100,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-code": "^2.1.92",
-    "@anthropic-ai/sdk": "^0.69.0",
+    "@anthropic-ai/sdk": "^0.90.0",
     "@google/generative-ai": "^0.24.1",
     "@react-pdf/renderer": "^4.3.1",
     "@types/canvas-confetti": "^1.9.0",
