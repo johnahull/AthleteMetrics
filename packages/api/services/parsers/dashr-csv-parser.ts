@@ -238,6 +238,14 @@ function extractSplits(row: DashrRow): ParsedSplit[] {
   const splits: ParsedSplit[] = [];
   const unit = getDistanceUnit(row);
 
+  // NOTE: metric codes are built by template literal below (`DASH_${dist}${unit}`).
+  // Non-standard distances (e.g. a 15m split from an unusual DashR export) will
+  // silently produce metric codes that don't exist in site_metrics — they pass
+  // through to the measurements table (which has no FK on `metric`) but are
+  // orphaned from org-level enablement. This is pre-existing behaviour for the
+  // yards path and is retained for meters; if future exports ship unusual
+  // distances, validate against a known-code allowlist here.
+
   // Split 1: uses "Split Time 1" / "Split Distance 1"
   const split1Time = parseFloat_(row['Split Time 1']);
   const split1Dist = parseFloat_(row['Split Distance 1']);

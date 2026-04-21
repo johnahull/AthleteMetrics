@@ -143,8 +143,15 @@ export function resolveSplitsFromMeasurements(
   const metersCount = Object.keys(metersSplits).length;
 
   if (yardsCount >= MIN_SPLITS_REQUIRED && metersCount >= MIN_SPLITS_REQUIRED) {
+    const yardsList = Object.entries(yardsIds)
+      .map(([d, id]) => `DASH_${d}YD (${id})`)
+      .join(', ');
+    const metersList = Object.entries(metersIds)
+      .map(([d, id]) => `DASH_${d}M (${id})`)
+      .join(', ');
     throw new SprintFvValidationError(
-      'Mixed yards and meters splits found for this athlete on this date. Sprint F-V profiles must use a single distance unit — please remove the stray measurements and try again.',
+      'Mixed yards and meters splits found for this athlete on this date. Sprint F-V profiles must use a single distance unit — please remove the stray measurements and try again. ' +
+        `Yards splits used: ${yardsList}. Meters splits used: ${metersList}.`,
     );
   }
 
