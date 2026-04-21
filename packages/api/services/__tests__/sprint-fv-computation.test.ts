@@ -8,9 +8,9 @@ import { computeFvProfile, type ComputedFvProfile } from '../sprint-fv-computati
  */
 
 describe('computeFvProfile', () => {
-  describe('basic computation with 4 splits', () => {
-    // Typical college sprinter: 30m in ~4.5s
-    const splits = { '5': 1.10, '10': 1.82, '20': 3.15, '30': 4.45 };
+  describe('basic computation with 4 splits (10/20/30/40 protocol)', () => {
+    // Typical college sprinter: 40m in ~5.6s, mono-exponential shape
+    const splits = { '10': 1.82, '20': 3.15, '30': 4.45, '40': 5.72 };
     const bodyMassKg = 80;
     let result: ComputedFvProfile;
 
@@ -88,9 +88,9 @@ describe('computeFvProfile', () => {
     });
   });
 
-  describe('yard to meter conversion', () => {
-    // Same athlete, data in yards
-    const splitsYards = { '5': 1.03, '10': 1.70, '20': 2.95, '30': 4.18 };
+  describe('yard to meter conversion (10/20/30/40 yards)', () => {
+    // Same athlete, data in yards — 40yd ≈ 36.58m
+    const splitsYards = { '10': 1.70, '20': 2.95, '30': 4.18, '40': 5.35 };
     const bodyMassKg = 80;
 
     it('should convert yards to meters internally', () => {
@@ -102,7 +102,7 @@ describe('computeFvProfile', () => {
     });
 
     it('should produce similar Pmax for equivalent performances in yards vs meters', () => {
-      // A 30yd sprint ≈ 27.4m; times should be slightly different
+      // A 40yd sprint ≈ 36.58m; times should be slightly different
       // but the physics (Pmax) should be in the same ballpark
       const resultYards = computeFvProfile(splitsYards, bodyMassKg, 'yards');
       expect(resultYards.pmaxRel).toBeGreaterThan(5);
@@ -111,7 +111,8 @@ describe('computeFvProfile', () => {
   });
 
   describe('3 of 4 splits (minimum data)', () => {
-    const splits3 = { '5': 1.10, '10': 1.82, '30': 4.45 };
+    // Uses 10/20/40 — legal under the new protocol, missing 30
+    const splits3 = { '10': 1.82, '20': 3.15, '40': 5.72 };
     const bodyMassKg = 75;
 
     it('should compute with only 3 splits', () => {
@@ -129,29 +130,29 @@ describe('computeFvProfile', () => {
 
   describe('edge cases', () => {
     it('should throw with fewer than 3 splits', () => {
-      expect(() => computeFvProfile({ '5': 1.10, '10': 1.82 }, 80, 'meters'))
+      expect(() => computeFvProfile({ '10': 1.82, '20': 3.15 }, 80, 'meters'))
         .toThrow(/at least 3/i);
     });
 
     it('should throw with non-monotonically-increasing times', () => {
-      // 20m time is less than 10m time — physically impossible
-      expect(() => computeFvProfile({ '5': 1.10, '10': 3.00, '20': 2.50, '30': 4.45 }, 80, 'meters'))
+      // 30m time is less than 20m time — physically impossible
+      expect(() => computeFvProfile({ '10': 1.82, '20': 4.00, '30': 3.50, '40': 5.72 }, 80, 'meters'))
         .toThrow(/monotonically/i);
     });
 
     it('should throw with zero or negative times', () => {
-      expect(() => computeFvProfile({ '5': 0, '10': 1.82, '20': 3.15, '30': 4.45 }, 80, 'meters'))
+      expect(() => computeFvProfile({ '10': 0, '20': 3.15, '30': 4.45, '40': 5.72 }, 80, 'meters'))
         .toThrow(/positive/i);
     });
 
     it('should throw with zero body mass', () => {
-      expect(() => computeFvProfile({ '5': 1.10, '10': 1.82, '20': 3.15, '30': 4.45 }, 0, 'meters'))
+      expect(() => computeFvProfile({ '10': 1.82, '20': 3.15, '30': 4.45, '40': 5.72 }, 0, 'meters'))
         .toThrow(/body mass/i);
     });
 
     it('should handle very fast sprinter (elite)', () => {
-      // Elite male: 30m in ~3.6s
-      const splits = { '5': 0.85, '10': 1.42, '20': 2.50, '30': 3.55 };
+      // Elite male: 40m in ~4.6s
+      const splits = { '10': 1.42, '20': 2.50, '30': 3.55, '40': 4.58 };
       const result = computeFvProfile(splits, 85, 'meters');
       expect(result.vmax).toBeGreaterThan(9);
       expect(result.f0Rel).toBeGreaterThan(6);
@@ -159,8 +160,8 @@ describe('computeFvProfile', () => {
     });
 
     it('should handle slow athlete (recreational)', () => {
-      // Recreational: 30m in ~6.0s
-      const splits = { '5': 1.50, '10': 2.50, '20': 4.30, '30': 6.00 };
+      // Recreational: 40m in ~7.8s
+      const splits = { '10': 2.50, '20': 4.30, '30': 6.00, '40': 7.80 };
       const result = computeFvProfile(splits, 70, 'meters');
       expect(result.vmax).toBeGreaterThan(5);
       expect(result.vmax).toBeLessThan(8);

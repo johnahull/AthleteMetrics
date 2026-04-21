@@ -19,15 +19,32 @@ import { computeFvProfile } from './sprint-fv-computation';
 import { classifyProfile, computeOptimalGap, computeDeltas, analyzeAcceleration, analyzePower, validateParameters } from './sprint-fv-analysis';
 import type { SprintFvAnalysisJson } from '@shared/schema/tables/sprint-fv-profiles';
 
-// Hardcoded split metric codes — maps metric code to distance in the code's unit
-const SPLIT_METRICS: Record<string, number> = {
-  'DASH_5YD': 5,
-  'DASH_10YD': 10,
-  'DASH_20YD': 20,
-  'DASH_30YD': 30,
-};
+/**
+ * Split-metric code maps — indexed by distance unit.
+ *
+ * The Sprint F-V protocol uses 10/20/30/40 splits in either yards or meters.
+ * 5-yard splits are intentionally excluded: they sit in the region where
+ * start-protocol timing lag dominates, and their information is already
+ * implicit in the model's v(0)=0 assumption plus the 10y split.
+ */
+export const SPLIT_METRICS_YARDS = {
+  DASH_10YD: 10,
+  DASH_20YD: 20,
+  DASH_30YD: 30,
+  DASH_40YD: 40,
+} as const;
 
-const SPLIT_METRIC_CODES = Object.keys(SPLIT_METRICS);
+export const SPLIT_METRICS_METERS = {
+  DASH_10M: 10,
+  DASH_20M: 20,
+  DASH_30M: 30,
+  DASH_40M: 40,
+} as const;
+
+const SPLIT_METRIC_CODES: string[] = [
+  ...Object.keys(SPLIT_METRICS_YARDS),
+  ...Object.keys(SPLIT_METRICS_METERS),
+];
 const YARDS_TO_METERS = 0.9144;
 const MIN_SPLITS_REQUIRED = 3;
 
@@ -61,6 +78,94 @@ export class SprintFvValidationError extends Error {
     super(message);
     this.name = 'SprintFvValidationError';
   }
+}
+
+/**
+ * Minimal shape of a measurement row consumed by the split resolver.
+ * Keeping this narrower than the full drizzle row lets the algorithm be
+ * unit-tested without standing up a database.
+ */
+export interface SplitMeasurementInput {
+  id: string;
+  metric: string;
+  value: string;
+}
+
+export interface ResolvedSplits {
+  distanceUnit: 'yards' | 'meters';
+  splitTimes: Record<string, number>;
+  usedMeasurementIds: Record<string, string>;
+}
+
+/**
+ * Collapse a list of split measurements into a single session, picking the
+ * fastest time per distance and resolving the distance unit.
+ *
+ * Resolution rules:
+ *   - If ≥3 yards splits → yards
+ *   - Else if ≥3 meters splits → meters
+ *   - If BOTH have ≥3 → mixed-unit error (cannot silently pick one)
+ *   - Else → insufficient-splits error
+ */
+export function resolveSplitsFromMeasurements(
+  rows: readonly SplitMeasurementInput[],
+): ResolvedSplits {
+  const yardsSplits: Record<string, number> = {};
+  const yardsIds: Record<string, string> = {};
+  const metersSplits: Record<string, number> = {};
+  const metersIds: Record<string, string> = {};
+
+  for (const m of rows) {
+    const time = parseFloat(m.value);
+    if (!isFinite(time) || time <= 0) continue;
+
+    const yardsDistance = (SPLIT_METRICS_YARDS as Record<string, number>)[m.metric];
+    if (yardsDistance !== undefined) {
+      const key = String(yardsDistance);
+      if (!(key in yardsSplits) || time < yardsSplits[key]) {
+        yardsSplits[key] = time;
+        yardsIds[key] = m.id;
+      }
+      continue;
+    }
+
+    const metersDistance = (SPLIT_METRICS_METERS as Record<string, number>)[m.metric];
+    if (metersDistance !== undefined) {
+      const key = String(metersDistance);
+      if (!(key in metersSplits) || time < metersSplits[key]) {
+        metersSplits[key] = time;
+        metersIds[key] = m.id;
+      }
+    }
+  }
+
+  const yardsCount = Object.keys(yardsSplits).length;
+  const metersCount = Object.keys(metersSplits).length;
+
+  if (yardsCount >= MIN_SPLITS_REQUIRED && metersCount >= MIN_SPLITS_REQUIRED) {
+    const yardsList = Object.entries(yardsIds)
+      .map(([d, id]) => `DASH_${d}YD (${id})`)
+      .join(', ');
+    const metersList = Object.entries(metersIds)
+      .map(([d, id]) => `DASH_${d}M (${id})`)
+      .join(', ');
+    throw new SprintFvValidationError(
+      'Mixed yards and meters splits found for this athlete on this date. Sprint F-V profiles must use a single distance unit — please remove the stray measurements and try again. ' +
+        `Yards splits used: ${yardsList}. Meters splits used: ${metersList}.`,
+    );
+  }
+
+  if (yardsCount >= MIN_SPLITS_REQUIRED) {
+    return { distanceUnit: 'yards', splitTimes: yardsSplits, usedMeasurementIds: yardsIds };
+  }
+  if (metersCount >= MIN_SPLITS_REQUIRED) {
+    return { distanceUnit: 'meters', splitTimes: metersSplits, usedMeasurementIds: metersIds };
+  }
+
+  const best = Math.max(yardsCount, metersCount);
+  throw new SprintFvValidationError(
+    `Insufficient unique splits: found ${best} distinct distances, need at least ${MIN_SPLITS_REQUIRED}`,
+  );
 }
 
 export interface EligibleSession {
@@ -217,32 +322,11 @@ export class SprintFvService {
       }
     }
 
-    // 2. Build split times map — pick fastest time per distance (handles duplicate trials)
-    const splitTimes: Record<string, number> = {};
-    const usedMeasurementIds: Record<string, string> = {};
-    for (const m of splitMeasurements) {
-      const distance = SPLIT_METRICS[m.metric];
-      if (distance !== undefined) {
-        const time = parseFloat(m.value);
-        if (!isFinite(time) || time <= 0) continue;
-        const key = String(distance);
-        if (!(key in splitTimes) || time < splitTimes[key]) {
-          splitTimes[key] = time;
-          usedMeasurementIds[key] = m.id;
-        }
-      }
-    }
-
-    // 2b. Validate deduplicated split count (duplicates for same distance are collapsed above)
-    const uniqueSplitCount = Object.keys(splitTimes).length;
-    if (uniqueSplitCount < MIN_SPLITS_REQUIRED) {
-      throw new SprintFvValidationError(
-        `Insufficient unique splits: found ${uniqueSplitCount} distinct distances, need at least ${MIN_SPLITS_REQUIRED}`
-      );
-    }
-
-    // 3. Determine distance unit (all split metrics are in yards based on code names)
-    const distanceUnit = 'yards' as const;
+    // 2. Resolve splits — pick fastest per distance, determine yards vs meters unit,
+    // and reject mixed-unit sessions.
+    const { distanceUnit, splitTimes, usedMeasurementIds } = resolveSplitsFromMeasurements(
+      splitMeasurements.map(m => ({ id: m.id, metric: m.metric, value: m.value })),
+    );
 
     // 4. Get body mass
     let bodyMassKg: number;
@@ -309,9 +393,13 @@ export class SprintFvService {
       date = firstM.date;
     }
 
-    // 7. Compute sprint distance in meters for analysis
+    // 7. Compute sprint distance in meters for analysis.
+    // splitTimes keys are raw distances in the session's native unit, so meters
+    // sessions already have meter-valued keys and must not be re-converted.
     const maxDistance = Math.max(...Object.keys(splitTimes).map(Number));
-    const sprintDistanceM = maxDistance * YARDS_TO_METERS;
+    const sprintDistanceM = distanceUnit === 'meters'
+      ? maxDistance
+      : maxDistance * YARDS_TO_METERS;
 
     // 8. Run analysis engine
     const classification = classifyProfile(computed.f0Rel, computed.v0, sprintDistanceM);

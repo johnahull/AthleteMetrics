@@ -2,15 +2,18 @@
  * Sprint Force-Velocity Profile Tables
  *
  * Stores computed JB Morin sprint F-V profiles derived from existing
- * split time measurements (DASH_5YD, DASH_10YD, DASH_20YD, DASH_30YD).
+ * split time measurements across the 10/20/30/40 distance protocol
+ * (DASH_10YD..DASH_40YD or DASH_10M..DASH_40M — yards and meters
+ * are tracked as parallel metric types).
  */
 
 import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, decimal, timestamp, date, jsonb, index } from "drizzle-orm/pg-core";
 
 /**
- * Split times stored as JSON: distance (string) → time in seconds
- * e.g., { "5": 1.12, "10": 1.83, "20": 3.21, "30": 4.52 }
+ * Split times stored as JSON: distance (string, in the profile's distanceUnit) → time in seconds
+ * e.g., { "10": 1.70, "20": 2.95, "30": 4.18, "40": 5.30 }
+ * The distance key is unit-implicit; distanceUnit on the profile row disambiguates.
  */
 export type SplitTimesJson = Record<string, number>;
 

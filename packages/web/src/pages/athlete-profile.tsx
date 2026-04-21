@@ -13,6 +13,7 @@ import { ArrowLeft, Calendar, MapPin, Trophy, TrendingUp, User, Zap, Edit, Plus,
 import { calculateFly10Speed } from "@/lib/speed-utils";
 import AthleteModal from "@/components/athlete-modal";
 import AthleteMeasurementForm from "@/components/athlete-measurement-form";
+import { LlmExportButton } from "@/components/athletes/LlmExportButton";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
@@ -170,6 +171,12 @@ export default function AthleteProfile() {
 
   // Check if user can edit measurements (coaches and site admins)
   const canEditMeasurements = user?.role === "coach" || user?.role === "org_admin" || user?.isSiteAdmin;
+
+  // LLM export is a coaching tool — only coaches, org admins, and site admins.
+  // Athletes (including self-view) do not see the button.
+  const canExportForLlm =
+    !!user &&
+    (user.isSiteAdmin || user.role === "coach" || user.role === "org_admin");
 
   // Calculate dashboard data (memoized to avoid recalculation on every render)
   // IMPORTANT: Must be before any early returns to comply with Rules of Hooks
@@ -376,8 +383,8 @@ export default function AthleteProfile() {
             )}
           </div>
         </div>
-        <div className="flex space-x-3">
-          <Button 
+        <div className="flex space-x-3 flex-wrap gap-y-2">
+          <Button
             onClick={() => setShowEditModal(true)}
             variant="outline"
             data-testid="button-edit-athlete"
@@ -385,8 +392,14 @@ export default function AthleteProfile() {
             <Edit className="h-4 w-4 mr-2" />
             Edit Athlete
           </Button>
+          {canExportForLlm && athleteId && (
+            <LlmExportButton
+              athleteId={athleteId}
+              athleteName={athlete?.fullName}
+            />
+          )}
           {canEditMeasurements && (
-            <Button 
+            <Button
               onClick={() => setShowAddMeasurementModal(true)}
               data-testid="button-add-measurement"
             >
