@@ -149,12 +149,12 @@ describe('Sprint F-V Profile Integration Tests', () => {
       role: 'coach',
     });
 
-    // Insert split time measurements for the athlete
+    // Insert split time measurements for the athlete (10/20/30/40 protocol).
     const splitMetrics = [
-      { metric: 'DASH_5YD', value: '1.10' },
       { metric: 'DASH_10YD', value: '1.82' },
       { metric: 'DASH_20YD', value: '3.15' },
       { metric: 'DASH_30YD', value: '4.45' },
+      { metric: 'DASH_40YD', value: '5.75' },
     ];
 
     for (const m of splitMetrics) {
@@ -210,10 +210,10 @@ describe('Sprint F-V Profile Integration Tests', () => {
 
       const session = res.body.sessions[0];
       expect(session.date).toBe(TEST_DATE);
-      expect(session.availableSplits).toContain('DASH_5YD');
       expect(session.availableSplits).toContain('DASH_10YD');
       expect(session.availableSplits).toContain('DASH_20YD');
       expect(session.availableSplits).toContain('DASH_30YD');
+      expect(session.availableSplits).toContain('DASH_40YD');
       expect(session.hasWeight).toBe(true);
       expect(session.profileExists).toBe(false);
     });
