@@ -466,3 +466,77 @@ describe('FLY10_TIME derivation', () => {
     expect(fly10).toBeUndefined();
   });
 });
+
+// ============================================================================
+// Metric (meters) units support — 10/20/30/40m protocol
+// ============================================================================
+
+describe('DashrCsvParser — Metric units', () => {
+  it('maps a 40m Dash with Units=Metric to DASH_40M', () => {
+    // 40m dash with splits at 10, 20, 30 and final at 40 — all in meters
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Metric,,1.850000,10.000000,,3.200000,20.000000,,4.550000,30.000000,,,,,,,,,,,5.800000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const athlete = result.athletes[0];
+    expect(athlete).toBeDefined();
+
+    const dash = athlete.drills.find(d => d.metric === 'DASH_40M');
+    expect(dash).toBeDefined();
+    expect(dash!.value).toBe(5.8);
+
+    // Splits should also be in DASH_*M codes
+    const splitMetrics = (dash!.splits || []).map(s => s.metric).sort();
+    expect(splitMetrics).toEqual(['DASH_10M', 'DASH_20M', 'DASH_30M']);
+  });
+
+  it('maps shorter metric dashes (10m, 20m, 30m) correctly', () => {
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,Alex,,Reed,Dash,,Metric,,,,,,,,,,,,,,,,,,,,1.850000,10.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '01/01/2025 10:01:00,Alex,,Reed,Dash,,Metric,,,,,,,,,,,,,,,,,,,,3.200000,20.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+      '01/01/2025 10:02:00,Alex,,Reed,Dash,,Metric,,,,,,,,,,,,,,,,,,,,4.550000,30.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const metrics = result.athletes[0].drills.map(d => d.metric).sort();
+    expect(metrics).toContain('DASH_10M');
+    expect(metrics).toContain('DASH_20M');
+    expect(metrics).toContain('DASH_30M');
+    expect(metrics).not.toContain('DASH_10YD');
+  });
+
+  it('maps Flying 10m with Units=Metric to FLY10M_TIME', () => {
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Flying,,Metric,20.000000,,,,,,,,,,,,,,,,,,,1.150000,10.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly = result.athletes[0].drills.find(d => d.metric === 'FLY10M_TIME');
+    expect(fly).toBeDefined();
+    expect(fly!.value).toBe(1.15);
+  });
+
+  it('derives FLY10M_TIME from a 40m Dash 20m→30m segment', () => {
+    // 40m dash with 20m=3.20, 30m=4.55 → FLY10M = 1.35
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Metric,,1.850000,10.000000,,3.200000,20.000000,,4.550000,30.000000,,,,,,,,,,,5.800000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const fly = result.athletes[0].drills.find(d => d.metric === 'FLY10M_TIME');
+    expect(fly).toBeDefined();
+    // 4.55 - 3.20 = 1.35
+    expect(fly!.value).toBeCloseTo(1.35, 3);
+    // Metric unit system must not leak into yards fly10
+    const fly10Yd = result.athletes[0].drills.find(d => d.metric === 'FLY10_TIME');
+    expect(fly10Yd).toBeUndefined();
+  });
+
+  it('keeps Imperial-unit rows on the yards-metric path', () => {
+    // Sanity check: Metric path must not accidentally catch Imperial rows
+    const csv = makeCsv([
+      '01/01/2025 10:00:00,John,,Doe,Dash,,Imperial,,,,,,,,,,,,,,,,,,,,5.200000,40.000000,,,,,,,,,,,,,,,,,,,,,,,,,,,,,',
+    ]);
+    const result = parser.parse(csv);
+    const metrics = result.athletes[0].drills.map(d => d.metric);
+    expect(metrics).toContain('DASH_40YD');
+    expect(metrics).not.toContain('DASH_40M');
+  });
+});

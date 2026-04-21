@@ -10,6 +10,7 @@ export const MAX_INSIGHTS_LENGTH = 10000;
 // Metric type constants (legacy compatibility)
 export const MetricType = {
   FLY10_TIME: 'FLY10_TIME',
+  FLY10M_TIME: 'FLY10M_TIME',
   VERTICAL_JUMP: 'VERTICAL_JUMP',
   AGILITY_505: 'AGILITY_505',
   AGILITY_505_L: 'AGILITY_505_L',
@@ -23,6 +24,10 @@ export const MetricType = {
   DASH_20YD: 'DASH_20YD',
   DASH_30YD: 'DASH_30YD',
   DASH_40YD: 'DASH_40YD',
+  DASH_10M: 'DASH_10M',
+  DASH_20M: 'DASH_20M',
+  DASH_30M: 'DASH_30M',
+  DASH_40M: 'DASH_40M',
   TOP_SPEED: 'TOP_SPEED',
   RSI: 'RSI',
 } as const;
@@ -33,6 +38,7 @@ export const MetricType = {
 // Defines metric types: lower_is_better, higher_is_better, tracking
 export const VALID_METRICS = [
   { key: 'FLY10_TIME', metricType: 'lower_is_better' },
+  { key: 'FLY10M_TIME', metricType: 'lower_is_better' },
   { key: 'VERTICAL_JUMP', metricType: 'higher_is_better' },
   { key: 'AGILITY_505', metricType: 'lower_is_better' },
   { key: 'AGILITY_505_L', metricType: 'lower_is_better' },
@@ -46,6 +52,10 @@ export const VALID_METRICS = [
   { key: 'DASH_20YD', metricType: 'lower_is_better' },
   { key: 'DASH_30YD', metricType: 'lower_is_better' },
   { key: 'DASH_40YD', metricType: 'lower_is_better' },
+  { key: 'DASH_10M', metricType: 'lower_is_better' },
+  { key: 'DASH_20M', metricType: 'lower_is_better' },
+  { key: 'DASH_30M', metricType: 'lower_is_better' },
+  { key: 'DASH_40M', metricType: 'lower_is_better' },
   { key: 'RSI', metricType: 'higher_is_better' },
   { key: 'TOP_SPEED', metricType: 'higher_is_better' },
   { key: 'HEIGHT', metricType: 'tracking' },

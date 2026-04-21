@@ -27,7 +27,12 @@ const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }
   DASH_20YD: { min: 2.0, max: 6.0, label: '20yd dash' },
   DASH_30YD: { min: 3.0, max: 8.0, label: '30yd dash' },
   DASH_40YD: { min: 4.0, max: 10.0, label: '40yd dash' },
+  DASH_10M: { min: 1.0, max: 4.0, label: '10m dash' },
+  DASH_20M: { min: 2.0, max: 6.0, label: '20m dash' },
+  DASH_30M: { min: 3.0, max: 8.0, label: '30m dash' },
+  DASH_40M: { min: 4.0, max: 10.0, label: '40m dash' },
   FLY10_TIME: { min: 0.8, max: 3.0, label: '10yd fly' },
+  FLY10M_TIME: { min: 0.8, max: 3.0, label: '10m fly' },
   AGILITY_505: { min: 1.5, max: 5.0, label: '505 agility' },
   AGILITY_505_L: { min: 1.5, max: 5.0, label: '505 agility (L)' },
   AGILITY_505_R: { min: 1.5, max: 5.0, label: '505 agility (R)' },
@@ -36,6 +41,15 @@ const OUTLIER_RANGES: Record<string, { min: number; max: number; label: string }
   AGILITY_5105_R: { min: 3.5, max: 8.0, label: '5-10-5 agility (R)' },
   RSI: { min: 0.1, max: 4.0, label: 'RSI' },
 };
+
+/**
+ * Returns the unit suffix to use for dash/fly metric codes based on the row's Units column.
+ * DashR exports "Imperial" or "Metric" in this field.
+ */
+function getDistanceUnit(row: DashrRow): 'YD' | 'M' {
+  const units = (row['Units'] || '').trim().toLowerCase();
+  return units === 'metric' ? 'M' : 'YD';
+}
 
 interface DashrRow {
   [key: string]: string;
@@ -173,22 +187,24 @@ function mapDrillType(row: DashrRow): string | null {
   const type = (row['Type'] || '').trim();
   const finalDist = parseFloat_(row['Final Distance']);
   const direction = (row['Direction'] || '').trim().toUpperCase();
+  const unit = getDistanceUnit(row);
 
   switch (type) {
     case 'Dash': {
-      // Map based on final distance — only known metric codes
-      if (finalDist === 10) return MetricType.DASH_10YD;
-      if (finalDist === 20) return MetricType.DASH_20YD;
-      if (finalDist === 30) return MetricType.DASH_30YD;
-      if (finalDist === 40) return MetricType.DASH_40YD;
+      // Map based on final distance — only known metric codes.
+      // Unit suffix (YD vs M) is controlled by the row's Units column.
+      if (finalDist === 10) return unit === 'M' ? MetricType.DASH_10M : MetricType.DASH_10YD;
+      if (finalDist === 20) return unit === 'M' ? MetricType.DASH_20M : MetricType.DASH_20YD;
+      if (finalDist === 30) return unit === 'M' ? MetricType.DASH_30M : MetricType.DASH_30YD;
+      if (finalDist === 40) return unit === 'M' ? MetricType.DASH_40M : MetricType.DASH_40YD;
       // Unknown dash distance — return null so it's skipped with a warning,
       // rather than creating a non-standard metric code in the database.
       return null;
     }
 
     case 'Flying': {
-      // Flying sprints: map to FLY10_TIME when Final Distance = 10
-      if (finalDist === 10) return MetricType.FLY10_TIME;
+      // Flying sprints: map to FLY10_TIME / FLY10M_TIME when Final Distance = 10
+      if (finalDist === 10) return unit === 'M' ? MetricType.FLY10M_TIME : MetricType.FLY10_TIME;
       // Other flying distances aren't standard metrics
       return null;
     }
@@ -220,12 +236,13 @@ function mapDrillType(row: DashrRow): string | null {
  */
 function extractSplits(row: DashrRow): ParsedSplit[] {
   const splits: ParsedSplit[] = [];
+  const unit = getDistanceUnit(row);
 
   // Split 1: uses "Split Time 1" / "Split Distance 1"
   const split1Time = parseFloat_(row['Split Time 1']);
   const split1Dist = parseFloat_(row['Split Distance 1']);
   if (split1Time && split1Time > 0 && split1Dist && split1Dist > 0) {
-    const metric = `DASH_${split1Dist}YD`;
+    const metric = `DASH_${split1Dist}${unit}`;
     splits.push({ metric, value: split1Time, units: 's' });
   }
 
@@ -234,7 +251,7 @@ function extractSplits(row: DashrRow): ParsedSplit[] {
     const time = parseFloat_(row[`Start Time ${i}`]);
     const dist = parseFloat_(row[`Split Distance ${i}`]);
     if (time && time > 0 && dist && dist > 0) {
-      const metric = `DASH_${dist}YD`;
+      const metric = `DASH_${dist}${unit}`;
       splits.push({ metric, value: time, units: 's' });
     }
   }
@@ -273,15 +290,24 @@ function checkOutlier(metric: string, value: number): string | null {
 }
 
 /**
- * Derive FLY10_TIME from an athlete's dash drill splits.
+ * Derive FLY10_TIME / FLY10M_TIME from an athlete's dash drill splits.
  *
- * FLY10 = time at 30yd - time at 20yd (the "flying 10" segment at full speed).
- * Only derives when the athlete has no direct FLY10_TIME measurement.
- * When multiple candidates exist, picks the fastest (lowest) value.
+ * FLY10 = time at 30(yd|m) − time at 20(yd|m) — the "flying 10" segment
+ * after initial acceleration. A separate derivation runs per unit system;
+ * yards dashes produce FLY10_TIME, meters dashes produce FLY10M_TIME.
+ * When multiple candidates exist in the same unit, picks the fastest.
  */
-function deriveFly10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult | null {
-  // Skip if athlete already has a direct FLY10_TIME
-  if (drills.some(d => d.metric === MetricType.FLY10_TIME)) return null;
+function deriveFly10ForAthlete(
+  drills: ParsedDrillResult[],
+  unit: 'YD' | 'M',
+): ParsedDrillResult | null {
+  const flyMetric = unit === 'M' ? MetricType.FLY10M_TIME : MetricType.FLY10_TIME;
+  const dash20 = unit === 'M' ? 'DASH_20M' : 'DASH_20YD';
+  const dash30 = unit === 'M' ? 'DASH_30M' : 'DASH_30YD';
+  const dash40 = unit === 'M' ? 'DASH_40M' : 'DASH_40YD';
+
+  // Skip if athlete already has a direct measurement in this unit system
+  if (drills.some(d => d.metric === flyMetric)) return null;
 
   const candidates: { value: number; source: string }[] = [];
 
@@ -292,22 +318,22 @@ function deriveFly10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult |
     let time30: number | undefined;
     let source: string | undefined;
 
-    if (drill.metric === 'DASH_30YD') {
-      // 30yd dash: FLY10 = finalTime (30yd) - split at 20yd
-      const split20 = drill.splits.find(s => s.metric === 'DASH_20YD');
+    if (drill.metric === dash30) {
+      // 30(yd|m) dash: FLY10 = finalTime − split at 20(yd|m)
+      const split20 = drill.splits.find(s => s.metric === dash20);
       if (split20) {
         time20 = split20.value;
         time30 = drill.value;
-        source = 'DASH_30YD';
+        source = dash30;
       }
-    } else if (drill.metric === 'DASH_40YD') {
-      // 40yd dash: FLY10 = split at 30yd - split at 20yd
-      const split20 = drill.splits.find(s => s.metric === 'DASH_20YD');
-      const split30 = drill.splits.find(s => s.metric === 'DASH_30YD');
+    } else if (drill.metric === dash40) {
+      // 40(yd|m) dash: FLY10 = split at 30(yd|m) − split at 20(yd|m)
+      const split20 = drill.splits.find(s => s.metric === dash20);
+      const split30 = drill.splits.find(s => s.metric === dash30);
       if (split20 && split30) {
         time20 = split20.value;
         time30 = split30.value;
-        source = 'DASH_40YD';
+        source = dash40;
       }
     }
 
@@ -323,10 +349,10 @@ function deriveFly10ForAthlete(drills: ParsedDrillResult[]): ParsedDrillResult |
 
   // Pick fastest (lowest) FLY10
   const best = candidates.reduce((a, b) => (a.value <= b.value ? a : b));
-  const outlierReason = checkOutlier(MetricType.FLY10_TIME, best.value);
+  const outlierReason = checkOutlier(flyMetric, best.value);
 
   return {
-    metric: MetricType.FLY10_TIME,
+    metric: flyMetric,
     value: best.value,
     units: 's',
     derivedFrom: `${best.source} splits`,
@@ -495,12 +521,14 @@ export class DashrCsvParser implements DeviceImportParser {
       athleteMap.get(key)!.drills.push(drill);
     }
 
-    // Derive FLY10_TIME from dash splits when no direct measurement exists
+    // Derive FLY10_TIME / FLY10M_TIME from dash splits when no direct
+    // measurement exists. Each unit system is evaluated independently:
+    // an athlete with both yards dashes and a metric dash gets both derived.
     for (const [, athlete] of athleteMap) {
-      const fly10 = deriveFly10ForAthlete(athlete.drills);
-      if (fly10) {
-        athlete.drills.push(fly10);
-      }
+      const fly10Yd = deriveFly10ForAthlete(athlete.drills, 'YD');
+      if (fly10Yd) athlete.drills.push(fly10Yd);
+      const fly10M = deriveFly10ForAthlete(athlete.drills, 'M');
+      if (fly10M) athlete.drills.push(fly10M);
     }
 
     const athletes = Array.from(athleteMap.values());

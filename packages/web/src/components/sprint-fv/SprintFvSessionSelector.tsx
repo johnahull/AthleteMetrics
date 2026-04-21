@@ -60,8 +60,8 @@ export function SprintFvSessionSelector({ userId }: Props) {
       <Card className="border-dashed">
         <CardContent className="py-12 text-center">
           <p className="text-muted-foreground">
-            No sprint sessions found. Record split times (DASH_5YD through DASH_30YD)
-            to generate F-V profiles.
+            No sprint sessions found. Record split times at 10/20/30/40 yards or
+            meters on the same date to generate F-V profiles.
           </p>
         </CardContent>
       </Card>
