@@ -79,6 +79,15 @@ vi.mock('@/hooks/use-available-metrics', () => ({
   })),
 }));
 
+// Mock useAthleteMetricExplanations hook to avoid QueryClient requirement
+vi.mock('@/hooks/useAthleteMetricExplanations', () => ({
+  useAthleteMetricExplanations: vi.fn(() => ({
+    explanations: {},
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 // Mock MeasurementHistoryTable component
 vi.mock('@/components/athlete/MeasurementHistoryTable', () => ({
   MeasurementHistoryTable: ({ measurements, isLoading }: { measurements: Measurement[]; isLoading: boolean }) => (

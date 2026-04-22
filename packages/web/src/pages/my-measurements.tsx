@@ -37,6 +37,8 @@ import { Loader2, AlertCircle, Plus, Table as TableIcon, Calendar, LineChart, Fi
 import { Redirect, Link } from 'wouter';
 import { useToast } from '@/hooks/use-toast';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
+import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
+import { AthleteMetricExplanation } from '@/components/athlete/AthleteMetricExplanation';
 import type { Measurement } from '@shared/schema';
 
 type StatusFilter = 'all' | 'verified' | 'unverified';
@@ -66,6 +68,13 @@ export default function MyMeasurementsPage() {
 
   // Get available metrics for labels
   const { metrics: availableMetrics } = useAvailableMetrics();
+
+  // Fetch metric explanations for every metric the athlete has measurements for
+  const measurementMetricCodes = useMemo(
+    () => Array.from(new Set(measurements.map((m: Measurement) => m.metric))),
+    [measurements],
+  );
+  const { explanations: metricExplanations } = useAthleteMetricExplanations(measurementMetricCodes);
 
   // Build dynamic metric filter options based on athlete's actual measurements
   const metricTypes = useMemo(() => {
@@ -276,6 +285,22 @@ export default function MyMeasurementsPage() {
                 </Select>
               </div>
             </div>
+
+            {/* Metric explanation header — shown when filtered to a single metric */}
+            {metricFilter !== 'all' && metricExplanations[metricFilter] && (
+              <div
+                className="mt-6 rounded-md border-l-2 border-l-blue-400/70 border-y border-r border-blue-100/80 bg-gradient-to-br from-blue-50/60 via-white to-white p-4 shadow-sm"
+                data-testid="metric-explanation-header"
+              >
+                <AthleteMetricExplanation
+                  code={metricFilter}
+                  explanation={metricExplanations[metricFilter]}
+                  fallbackLabel={
+                    metricTypes.find((m) => m.value === metricFilter)?.label ?? metricFilter
+                  }
+                />
+              </div>
+            )}
 
             {/* Table View */}
             <TabsContent value="table" className="mt-6">

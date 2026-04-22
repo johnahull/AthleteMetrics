@@ -26,6 +26,7 @@ import {
   type ComparisonScope,
 } from '@/components/athlete/PeerComparisonFilters';
 import { PeerMetricCard, type BenchmarkStatus } from '@/components/athlete/PeerMetricCard';
+import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -143,6 +144,13 @@ export default function MyPeerComparisonPage() {
     if (!percentilesData?.percentiles) return [];
     return [...percentilesData.percentiles].sort((a, b) => b.percentile - a.percentile);
   }, [percentilesData?.percentiles]);
+
+  // Fetch metric explanations for every metric currently displayed
+  const percentileMetricCodes = useMemo(
+    () => sortedPercentiles.map((r) => r.metric),
+    [sortedPercentiles],
+  );
+  const { explanations: metricExplanations } = useAthleteMetricExplanations(percentileMetricCodes);
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -295,6 +303,7 @@ export default function MyPeerComparisonPage() {
                   benchmark={benchmarksByMetric.get(result.metric)}
                   filters={effectiveFilters}
                   lowerIsBetter={isLowerBetterMetric(result.metric)}
+                  explanation={metricExplanations[result.metric]}
                 />
               ))}
             </div>
