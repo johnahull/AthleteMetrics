@@ -45,6 +45,7 @@ import { registerPushNotificationRoutes } from "./push-notification-routes";
 import { registerNotificationPreferencesRoutes } from "./notification-preferences-routes";
 import { registerOrgNotificationRoutes } from "./org-notification-routes";
 import { registerAdminNotificationRoutes } from "./admin-notification-routes";
+import { registerWebhookRoutes } from "./webhook-routes";
 
 /**
  * Register all application routes
@@ -177,6 +178,9 @@ export function registerAllRoutes(app: Express) {
 
   // Event report routes (event-specific reports with event percentiles)
   registerEventReportRoutes(app);
+
+  // External webhook routes (Jotform waiver intake — issue #370)
+  registerWebhookRoutes(app);
 
   console.log("✅ All routes registered successfully");
 }
