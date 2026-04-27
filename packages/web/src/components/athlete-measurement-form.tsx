@@ -28,6 +28,26 @@ const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).
 
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
 
+/**
+ * Extract a structured `{message, field}` from an apiRequest error.
+ * Mirrors measurement-form.tsx — see comment there.
+ */
+function parseFieldError(
+  error: Error,
+): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
+  if (!error?.message) return null;
+  const stripped = error.message.replace(/^\d+:\s*/, '');
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 export default function AthleteMeasurementForm({ athleteId, athleteName, onSuccess }: AthleteMeasurementFormProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -68,14 +88,21 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
         metric: firstMetricCode,
         value: 0,
         flyInDistance: undefined,
+        auxiliaryValue: undefined,
         notes: "",
       });
       onSuccess?.();
     },
-    onError: () => {
+    onError: (error: Error) => {
+      const fieldErr = parseFieldError(error);
+      if (fieldErr && fieldErr.field === 'auxiliaryValue') {
+        form.setError('auxiliaryValue', { type: 'server', message: fieldErr.message });
+      } else if (fieldErr && fieldErr.field === 'primaryValue') {
+        form.setError('value', { type: 'server', message: fieldErr.message });
+      }
       toast({
         title: "Error",
-        description: "Failed to add measurement",
+        description: fieldErr?.message ?? "Failed to add measurement",
         variant: "destructive",
       });
     },

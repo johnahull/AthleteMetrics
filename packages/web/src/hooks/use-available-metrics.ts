@@ -164,7 +164,7 @@ export function useAvailableMetrics(): {
             formula: cm.formula || undefined,
             dependentMetrics: cm.dependentMetrics || undefined,
             isCustom: true,
-            auxiliaryInputConfig: (cm as any).auxiliaryInputConfig || undefined,
+            auxiliaryInputConfig: cm.auxiliaryInputConfig || undefined,
           }));
         result.push(...customMetricsList);
       }

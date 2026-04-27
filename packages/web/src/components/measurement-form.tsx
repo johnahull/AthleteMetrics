@@ -29,6 +29,28 @@ const dynamicMeasurementSchema = insertMeasurementSchema.omit({ metric: true }).
   metric: z.string().min(1, "Metric is required"),
 });
 
+/**
+ * Extract a structured `{message, field}` from an apiRequest error.
+ * apiRequest throws `Error("<status>: <raw body>")`. The body for
+ * PairedInputValidationError is `{"message":"...","field":"..."}`. Returns
+ * null if the body isn't a recognizable structured error.
+ */
+function parseFieldError(
+  error: Error,
+): { message: string; field: 'primaryValue' | 'auxiliaryValue' | 'formula' } | null {
+  if (!error?.message) return null;
+  const stripped = error.message.replace(/^\d+:\s*/, '');
+  try {
+    const parsed = JSON.parse(stripped);
+    if (parsed && typeof parsed.message === 'string' && typeof parsed.field === 'string') {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 type DynamicInsertMeasurement = z.infer<typeof dynamicMeasurementSchema>;
 
 // Type guards for safer runtime checking
@@ -124,6 +146,7 @@ export default function MeasurementForm() {
         metric: firstMetricCode,
         value: 0,
         flyInDistance: undefined,
+        auxiliaryValue: undefined,
         notes: "",
         teamId: "",
         season: "",
@@ -134,9 +157,19 @@ export default function MeasurementForm() {
     },
     onError: (error) => {
       console.error("Measurement creation error:", error);
+      // Backend PairedInputValidationError responses include {message, field}
+      // — surface the message inline on the offending input rather than as a
+      // generic toast. apiRequest throws Error("<status>: <raw body>"), so we
+      // strip the status prefix and try to JSON-parse what's left.
+      const fieldErr = parseFieldError(error);
+      if (fieldErr && fieldErr.field === 'auxiliaryValue') {
+        form.setError('auxiliaryValue', { type: 'server', message: fieldErr.message });
+      } else if (fieldErr && fieldErr.field === 'primaryValue') {
+        form.setError('value', { type: 'server', message: fieldErr.message });
+      }
       toast({
         title: "Error",
-        description: `Failed to add measurement: ${error.message}`,
+        description: fieldErr?.message ?? `Failed to add measurement: ${error.message}`,
         variant: "destructive",
       });
     },

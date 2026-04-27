@@ -167,6 +167,15 @@ export function MetricProgressCard({
     if (!mostRecentMeasurement) return false;
     const ninetyDaysAgo = new Date();
     ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+    // The badge represents "best in the last 90 days" — if the most-recent
+    // measurement is itself older than 90 days, there is no recent activity
+    // to be "best of." Without this guard, the every() loop would skip every
+    // out-of-window measurement and return true vacuously, rendering the
+    // badge for stale data.
+    const mostRecentDate = new Date(mostRecentMeasurement.date);
+    if (mostRecentDate < ninetyDaysAgo) return false;
+
     const currentNum = parseFloat(String(mostRecentMeasurement.value));
     const lowerIsBetter = isLowerBetter(metric);
     return measurements.every((m) => {
@@ -321,19 +330,23 @@ export function MetricProgressCard({
           </div>
 
           {/* Paired-input source context: e.g., "3 reps @ 315 lbs" — secondary muted text.
-              Renders below the headline value, never dominating it. */}
+              Renders below the headline value, never dominating it.
+              Only renders when sourceValues has BOTH load and reps — falling back
+              to measurement.value would be wrong since value is the COMPUTED 1RM,
+              not the original load. Custom formulas using different variable names
+              would silently render misleading data; better to omit the line. */}
           {mostRecentMeasurement?.auxiliaryValue !== undefined &&
             mostRecentMeasurement?.auxiliaryValue !== null &&
-            mostRecentMeasurement?.calculationMetadata?.sourceValues && (
+            mostRecentMeasurement?.calculationMetadata?.sourceValues &&
+            typeof mostRecentMeasurement.calculationMetadata.sourceValues.load === 'number' &&
+            typeof mostRecentMeasurement.calculationMetadata.sourceValues.reps === 'number' && (
               <p
                 data-testid="paired-source-context"
                 className="text-sm text-gray-500 ml-0 sm:ml-12 mb-1"
               >
-                {mostRecentMeasurement.calculationMetadata.sourceValues.reps ??
-                  mostRecentMeasurement.auxiliaryValue}
+                {mostRecentMeasurement.calculationMetadata.sourceValues.reps}
                 {' reps @ '}
-                {mostRecentMeasurement.calculationMetadata.sourceValues.load ??
-                  mostRecentMeasurement.value}
+                {mostRecentMeasurement.calculationMetadata.sourceValues.load}
                 {' '}
                 {units}
               </p>
