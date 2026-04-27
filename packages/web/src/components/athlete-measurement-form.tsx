@@ -11,6 +11,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema";
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 import { z } from "zod";
 
 interface AthleteMeasurementFormProps {
@@ -81,6 +82,7 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
   });
 
   const metric = form.watch("metric");
+  const selectedMetric = availableMetrics.find((m) => m.code === metric);
   // Get unit from metric config dynamically
   const units = availableMetrics.find(m => m.code === metric)?.unit || "";
 
@@ -161,40 +163,53 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
               )}
             />
 
-            {/* Value */}
-            <FormField
-              control={form.control}
-              name="value"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Value <span className="text-red-500">*</span>
-                  </FormLabel>
-                  <div className="flex">
-                    <FormControl>
-                      <Input 
-                        {...field}
-                        type="number"
-                        step="0.01"
-                        placeholder="Enter value"
-                        disabled={createMeasurementMutation.isPending}
-                        className={units ? "rounded-r-none" : ""}
-                        data-testid="input-measurement-value"
-                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        value={field.value || ''}
-                      />
-                    </FormControl>
-                    {units && (
-                      <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
-                        {units}
-                      </div>
-                    )}
-                  </div>
-                  <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Paired-input metrics (e.g. 1RM-est) take over the Value slot
+                with a richer (load + reps + live preview) component. */}
+            {selectedMetric?.auxiliaryInputConfig ? (
+              <PairedInputFields
+                metricCode={selectedMetric.code}
+                config={selectedMetric.auxiliaryInputConfig}
+                disabled={createMeasurementMutation.isPending}
+                onMetricSwitch={(newCode) => {
+                  form.setValue("metric", newCode, { shouldValidate: true });
+                  form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+                }}
+              />
+            ) : (
+              <FormField
+                control={form.control}
+                name="value"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      Value <span className="text-red-500">*</span>
+                    </FormLabel>
+                    <div className="flex">
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.01"
+                          placeholder="Enter value"
+                          disabled={createMeasurementMutation.isPending}
+                          className={units ? "rounded-r-none" : ""}
+                          data-testid="input-measurement-value"
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                          value={field.value || ''}
+                        />
+                      </FormControl>
+                      {units && (
+                        <div className="px-4 py-2 bg-gray-100 border border-l-0 border-gray-300 rounded-r-lg text-gray-600 text-sm">
+                          {units}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500">Units auto-selected based on metric</p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Fly-In Distance (only for FLY10_TIME) */}
             {metric === "FLY10_TIME" && (

@@ -21,6 +21,7 @@ import { FormErrorSummary } from "@/components/ui/form-error-summary";
 import { useFormErrors } from "@/hooks/useFormErrors";
 import { z } from "zod";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { PairedInputFields } from "@/components/measurement/PairedInputFields";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
@@ -68,6 +69,7 @@ export default function MeasurementForm() {
       metric: firstMetricCode,
       value: 0,
       flyInDistance: undefined,
+      auxiliaryValue: undefined,
       notes: "",
       teamId: "",
       season: "",
@@ -444,8 +446,23 @@ export default function MeasurementForm() {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Value - Only show if not a derived metric OR if override is checked */}
-          {(!selectedMetric?.isDerived || overrideCalculated || calculationPreview?.calculatedValue === null) && (
+          {/* Paired-input metrics (e.g., 1RM-est) get a dedicated component with
+              relabeled primary input, auxiliary stepper, live preview, and
+              tiered guardrails. Mutually exclusive with the default Value field
+              and with the derived-metric calculation preview. */}
+          {selectedMetric?.auxiliaryInputConfig ? (
+            <PairedInputFields
+              metricCode={selectedMetric.code}
+              config={selectedMetric.auxiliaryInputConfig}
+              disabled={createMeasurementMutation.isPending}
+              onMetricSwitch={(newCode) => {
+                form.setValue("metric", newCode, { shouldValidate: true });
+                form.setValue("auxiliaryValue", undefined as any, { shouldValidate: false });
+              }}
+            />
+          ) : (
+            /* Value - Only show if not a derived metric OR if override is checked */
+            (!selectedMetric?.isDerived || overrideCalculated || calculationPreview?.calculatedValue === null) && (
             <FormField
               control={form.control}
               name="value"
@@ -479,7 +496,7 @@ export default function MeasurementForm() {
                 </FormItem>
               )}
             />
-          )}
+          ))}
 
           {/* Fly-In Distance (only for FLY10_TIME) */}
           {metric === "FLY10_TIME" && (
