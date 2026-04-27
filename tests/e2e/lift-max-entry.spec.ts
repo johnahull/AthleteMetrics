@@ -134,6 +134,11 @@ test.describe('Lift-max paired-input entry', () => {
     });
 
     await expect(page.locator('[data-testid="paired-input-fields"]')).not.toBeVisible();
-    await expect(page.locator('[data-testid="measurement-value"]')).toBeVisible();
+    // measurement-form.tsx uses "measurement-value"; athlete-measurement-form.tsx
+    // uses "input-measurement-value". Match either so the test runs against
+    // both entry-points without depending on which one is mounted at /data-entry.
+    await expect(
+      page.locator('[data-testid="measurement-value"], [data-testid="input-measurement-value"]'),
+    ).toBeVisible();
   });
 });

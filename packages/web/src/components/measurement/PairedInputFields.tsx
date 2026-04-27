@@ -121,11 +121,17 @@ export function PairedInputFields({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preview?.computedValue]);
 
+  // Stepper soft-ceiling: allow stepping into the warn (13-15) and block (>15)
+  // tiers so coaches can use the stepper UI to surface those affordances.
+  // Hard ceiling at the redirect threshold (16) so the stepper doesn't run
+  // away. The actual hard validation is enforced by the backend via the
+  // metric's auxiliaryInputConfig.validationMax.
+  const STEPPER_BLOCK_THRESHOLD = 16;
   const handleStep = (delta: number) => {
     const current = typeof auxiliaryValue === "number" ? auxiliaryValue : 0;
     const next = Math.max(
       config.validationMin ?? 0,
-      Math.min(config.validationMax ?? 100, current + delta),
+      Math.min(STEPPER_BLOCK_THRESHOLD, current + delta),
     );
     form.setValue("auxiliaryValue", next, { shouldValidate: true });
   };
@@ -270,12 +276,19 @@ export function PairedInputFields({
             <PopoverContent className="w-80 text-sm" align="end">
               <div className="font-medium mb-1">Formula</div>
               <code className="text-xs bg-gray-100 px-2 py-1 rounded block">
-                {config.computeFormula}
+                {/* preview.formula is what the backend actually evaluated.
+                    Falls back to the metric definition's compute formula
+                    before the preview round-trips. Either way reflects the
+                    real formula — works for Epley, Brzycki, or any custom. */}
+                {preview?.formula ?? config.computeFormula}
               </code>
               {preview && typeof primaryValue === "number" && typeof auxiliaryValue === "number" && (
                 <div className="mt-2 text-xs text-gray-600">
-                  {primaryValue} × (1 + {auxiliaryValue}/30) ={" "}
-                  {preview.computedValue.toFixed(1)} {preview.primaryUnit}
+                  With load = <strong>{primaryValue}</strong>, reps ={' '}
+                  <strong>{auxiliaryValue}</strong>{': '}
+                  <strong>
+                    {preview.computedValue.toFixed(1)} {preview.primaryUnit}
+                  </strong>
                 </div>
               )}
             </PopoverContent>
