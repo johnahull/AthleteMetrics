@@ -116,13 +116,22 @@ describe('Migration 0131: Squat Jump + EUR', () => {
   });
 
   describe.skipIf(!process.env.DATABASE_URL)('Database state (when applied)', () => {
+    // Normalize result across drivers: postgres-js returns array-like; Neon
+    // returns {rows: [...]}. Both are valid drizzle drivers.
+    const rowsOf = (result: unknown): any[] => {
+      if (Array.isArray(result)) return result;
+      const r = result as { rows?: unknown };
+      return Array.isArray(r.rows) ? r.rows : [];
+    };
+
     it('JUMP_SJ_HEIGHT and POWER_EUR exist; POWER_EUR is derived', async () => {
       const r = await db.execute(sql`
         SELECT code, is_derived, formula FROM site_metrics
          WHERE code IN ('JUMP_SJ_HEIGHT', 'POWER_EUR') ORDER BY code
       `);
-      expect(r.rows).toHaveLength(2);
-      const eur = (r.rows as any[]).find(row => row.code === 'POWER_EUR');
+      const rows = rowsOf(r);
+      expect(rows).toHaveLength(2);
+      const eur = rows.find(row => row.code === 'POWER_EUR');
       expect(eur.is_derived).toBe(true);
       expect(eur.formula).toBe(EUR_FORMULA);
     });
@@ -132,7 +141,7 @@ describe('Migration 0131: Squat Jump + EUR', () => {
         SELECT sport, COUNT(*)::int AS n FROM site_benchmarks
          WHERE metric_code = 'JUMP_SJ_HEIGHT' GROUP BY sport ORDER BY sport
       `);
-      expect(r.rows).toHaveLength(2);
+      expect(rowsOf(r)).toHaveLength(2);
     });
   });
 });
