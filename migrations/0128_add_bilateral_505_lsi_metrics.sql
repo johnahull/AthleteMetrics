@@ -230,9 +230,14 @@ ON CONFLICT (metric_code, name) DO UPDATE SET
 -- ============================================================================
 -- Block F — Per-leg benchmark_set_items mirroring AGILITY_505 memberships
 --
--- For every existing benchmark_set_items row that points at an AGILITY_505
--- site_benchmark, create two parallel rows pointing at the freshly-seeded
--- _L and _R copies. ID derivation matches Block E: <source bsi id>-l / -r.
+-- For every existing benchmark_set_items row that points at a tiered
+-- AGILITY_505 site_benchmark (tier_group_id IS NOT NULL, matching Block E),
+-- create two parallel rows pointing at the freshly-seeded _L and _R copies.
+-- ID derivation matches Block E: <source bsi id>-l / -r.
+--
+-- The tier_group_id filter mirrors Block E so non-tiered AGILITY_505 rows
+-- (which Block E does not duplicate) do not produce dangling _l/_r references
+-- here.
 -- ============================================================================
 INSERT INTO benchmark_set_items (
   id, set_id, benchmark_id, benchmark_type, display_order, custom_label
@@ -249,6 +254,7 @@ JOIN site_benchmarks sb
   ON bsi.benchmark_id = sb.id
  AND bsi.benchmark_type = 'site'
 WHERE sb.metric_code = 'AGILITY_505'
+  AND sb.tier_group_id IS NOT NULL
 ON CONFLICT (set_id, benchmark_id, benchmark_type) DO UPDATE SET
   display_order = EXCLUDED.display_order,
   custom_label = EXCLUDED.custom_label;
@@ -268,6 +274,7 @@ JOIN site_benchmarks sb
   ON bsi.benchmark_id = sb.id
  AND bsi.benchmark_type = 'site'
 WHERE sb.metric_code = 'AGILITY_505'
+  AND sb.tier_group_id IS NOT NULL
 ON CONFLICT (set_id, benchmark_id, benchmark_type) DO UPDATE SET
   display_order = EXCLUDED.display_order,
   custom_label = EXCLUDED.custom_label;
