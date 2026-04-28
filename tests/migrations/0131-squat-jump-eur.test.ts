@@ -1,7 +1,7 @@
 /**
  * Test suite for Migration 0131: Squat Jump + EUR (AM-FEAT-012)
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -22,21 +22,22 @@ describe('Migration 0131: Squat Jump + EUR', () => {
   describe('Up-migration SQL file', () => {
     let upSql: string;
 
+    beforeAll(() => {
+      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
+    });
+
     it('exists and contains both new metrics', () => {
       expect(fs.existsSync(UP_SQL_PATH)).toBe(true);
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toContain("'JUMP_SJ_HEIGHT'");
       expect(upSql).toContain("'POWER_EUR'");
       expect(upSql).toContain(EUR_FORMULA);
     });
 
     it('JUMP_SJ_HEIGHT uses inches (codebase convention for jump metrics)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/'JUMP_SJ_HEIGHT'[\s\S]*?'in'/);
     });
 
     it('seeds soccer SJ values per spec (Block C)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       // D1 Avg = 10.2 in (= 26 cm)
       expect(upSql).toMatch(/'d1-soc-sj-d1-avg'[\s\S]*?10\.200/);
       // D1 Top 25% = 11.8 in (= 30 cm)
@@ -48,7 +49,6 @@ describe('Migration 0131: Squat Jump + EUR', () => {
     });
 
     it('seeds volleyball SJ values per spec (Block D)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       // VB D1 Avg = 15.0 in (= 38 cm)
       expect(upSql).toMatch(/'d1-vb-sj-d1-avg'[\s\S]*?15\.000/);
       // VB D1 Top 25% = 17.3 in (= 44 cm)
@@ -58,18 +58,15 @@ describe('Migration 0131: Squat Jump + EUR', () => {
     });
 
     it('flags MS-tier rows as LOW confidence', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/'hs-ms-soc-sj'[\s\S]*?LOW[\s\S]*?pending BTA internal data/);
       expect(upSql).toMatch(/'hs-ms-vb-sj'[\s\S]*?LOW/);
     });
 
     it('documents the EUR protocol-mismatch caveat', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/PROTOCOL NOTE[\s\S]*?hands-free CMJ[\s\S]*?with arm swing/);
     });
 
     it('ON CONFLICT pairing intact', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       const sqlOnly = upSql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
       const insertCount = (sqlOnly.match(/INSERT INTO/g) || []).length;
       const conflictCount = (sqlOnly.match(/ON CONFLICT \([^)]+\)\s+DO\s+(UPDATE|NOTHING)/g) || []).length;
@@ -118,30 +115,24 @@ describe('Migration 0131: Squat Jump + EUR', () => {
     });
   });
 
-  describe('Database state (when applied)', () => {
+  describe.skipIf(!process.env.DATABASE_URL)('Database state (when applied)', () => {
     it('JUMP_SJ_HEIGHT and POWER_EUR exist; POWER_EUR is derived', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT code, is_derived, formula FROM site_metrics
-           WHERE code IN ('JUMP_SJ_HEIGHT', 'POWER_EUR') ORDER BY code
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect(r.rows).toHaveLength(2);
-        const eur = (r.rows as any[]).find(r => r.code === 'POWER_EUR');
-        expect(eur.is_derived).toBe(true);
-        expect(eur.formula).toBe(EUR_FORMULA);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT code, is_derived, formula FROM site_metrics
+         WHERE code IN ('JUMP_SJ_HEIGHT', 'POWER_EUR') ORDER BY code
+      `);
+      expect(r.rows).toHaveLength(2);
+      const eur = (r.rows as any[]).find(row => row.code === 'POWER_EUR');
+      expect(eur.is_derived).toBe(true);
+      expect(eur.formula).toBe(EUR_FORMULA);
     });
 
     it('SJ benchmarks exist for both sports', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT sport, COUNT(*)::int AS n FROM site_benchmarks
-           WHERE metric_code = 'JUMP_SJ_HEIGHT' GROUP BY sport ORDER BY sport
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect(r.rows).toHaveLength(2);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT sport, COUNT(*)::int AS n FROM site_benchmarks
+         WHERE metric_code = 'JUMP_SJ_HEIGHT' GROUP BY sport ORDER BY sport
+      `);
+      expect(r.rows).toHaveLength(2);
     });
   });
 });

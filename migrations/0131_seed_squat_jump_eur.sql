@@ -44,7 +44,12 @@ INSERT INTO site_metrics (
   1, 'red', 'ArrowUp',
   0, 50
 )
-ON CONFLICT (code) DO NOTHING;
+ON CONFLICT (code) DO UPDATE SET
+  label = EXCLUDED.label,
+  description = EXCLUDED.description,
+  metric_type = EXCLUDED.metric_type,
+  unit = EXCLUDED.unit,
+  is_active = true;
 
 -- ============================================================================
 -- Block B — POWER_EUR derived metric (Eccentric Utilization Ratio)
