@@ -55,10 +55,10 @@ INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_de
 VALUES
   ('DASH_10YD',     '10yd Dash',         'Acceleration', 's',   'lower_is_better',  true, true, 0, '10-yard sprint time, primary acceleration metric.', 3),
   ('DASH_20YD',     '20-yard Dash',      'Speed',        's',   'lower_is_better',  true, true, 0, '20-yard sprint time, drive + transition phase.', 3),
-  ('FLY10_TIME',    '10-Yard Fly Time',  'speed',        's',   'lower_is_better',  true, true, 0, '10-yard fly time after a flying start; max-velocity capture.', 3),
+  ('FLY10_TIME',    '10-Yard Fly Time',  'Speed',        's',   'lower_is_better',  true, true, 0, '10-yard fly time after a flying start; max-velocity capture.', 3),
   ('TOP_SPEED_MPH', 'Top Speed (MPH)',   'Speed',        'mph', 'higher_is_better', true, true, 0, 'Maximum sprint speed in miles per hour, derived from gate splits.', 3),
-  ('AGILITY_505',   '5-0-5 Agility',     'agility',      's',   'lower_is_better',  true, true, 0, '5-0-5 change-of-direction test; 10m approach + 5m to turn line + 5m back.', 3),
-  ('AGILITY_5105',  '5-10-5 Agility',    'agility',      's',   'lower_is_better',  true, true, 0, '5-10-5 Pro Agility shuttle.', 3),
+  ('AGILITY_505',   '5-0-5 Agility',     'Agility',      's',   'lower_is_better',  true, true, 0, '5-0-5 change-of-direction test; 10m approach + 5m to turn line + 5m back.', 3),
+  ('AGILITY_5105',  '5-10-5 Agility',    'Agility',      's',   'lower_is_better',  true, true, 0, '5-10-5 Pro Agility shuttle.', 3),
   ('VERTICAL_JUMP', 'Vertical Jump (in)','Power',        'in',  'higher_is_better', true, true, 0, 'Vertical jump height in inches.', 1),
   ('APPROACH_JUMP', 'Approach Jump (in)','Power',        'in',  'higher_is_better', true, true, 0, 'Volleyball attack approach jump touch height; primary VB recruiting metric.', 3),
   ('BLOCK_JUMP',    'Block Jump (in)',   'Power',        'in',  'higher_is_better', true, true, 0, 'Volleyball block jump touch height.', 3)
@@ -475,7 +475,12 @@ BEGIN
   SELECT COUNT(*) INTO v_sets FROM benchmark_sets WHERE id LIKE 'd1-womens-%' OR id LIKE 'hs-%-female-%';
   SELECT COUNT(*) INTO v_d1_rows FROM site_benchmarks WHERE id LIKE 'd1-soc-%' OR id LIKE 'd1-vb-%';
   SELECT COUNT(*) INTO v_hs_rows FROM site_benchmarks WHERE id LIKE 'hs-ms-%' OR id LIKE 'hs-jv-%' OR id LIKE 'hs-var-%';
-  SELECT COUNT(*) INTO v_set_items FROM benchmark_set_items WHERE id LIKE 'bsi-%';
+  SELECT COUNT(*) INTO v_set_items FROM benchmark_set_items
+   WHERE set_id IN (
+     'd1-womens-soccer','d1-womens-volleyball',
+     'hs-ms-female-soccer','hs-jv-female-soccer','hs-varsity-female-soccer',
+     'hs-ms-female-volleyball','hs-jv-female-volleyball','hs-varsity-female-volleyball'
+   );
 
   RAISE NOTICE 'Migration 0129 complete: % benchmark sets, % D1 benchmark rows (soccer + VB), % HS benchmark rows, % benchmark_set_items.',
     v_sets, v_d1_rows, v_hs_rows, v_set_items;

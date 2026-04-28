@@ -205,6 +205,13 @@ describe('Migration 0129: D1 + HS Female Benchmark Seeding', () => {
 
   // ==========================================================================
   // Layer 2 — Live DB inspection (skips if migration not applied)
+  //
+  // INTENTIONAL DESIGN: All tests in this describe block catch every exception
+  // and emit console.warn instead of rethrowing. This means a DB connection
+  // failure, missing table, or unapplied migration produces a passing (skipped)
+  // test rather than a failure. Layer 2 only provides signal when the DB is
+  // reachable AND migration 0129 has been applied. In CI without a live DB,
+  // these tests pass silently — passing does NOT prove correctness in that case.
   // ==========================================================================
   describe('Database state (when migration is applied)', () => {
     it('all 8 benchmark sets exist with correct sport/level/gender', async () => {
