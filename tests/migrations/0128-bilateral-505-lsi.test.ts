@@ -65,10 +65,10 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
       // All three tier rows share the same tier_group_id
       const tgMatches = upSql.match(new RegExp(LSI_TIER_GROUP_UUID, 'g')) || [];
       expect(tgMatches.length).toBeGreaterThanOrEqual(3);
-      // Tier ranges per spec
-      expect(upSql).toMatch(/'range', 95, 100/);  // Normal
-      expect(upSql).toMatch(/'range', 90, 95/);   // Monitor
-      expect(upSql).toMatch(/'range', 0, 90/);    // Elevated Risk
+      // Tier ranges per spec — bounds must be non-overlapping given inclusive evaluation
+      expect(upSql).toMatch(/'range', 95, 100/);         // Normal:        95 ≤ LSI ≤ 100
+      expect(upSql).toMatch(/'range', 90, 94\.999/);     // Monitor:       90 ≤ LSI ≤ 94.999
+      expect(upSql).toMatch(/'range', 0, 89\.999/);      // Elevated Risk:  0 ≤ LSI ≤ 89.999
     });
 
     it('wires LSI tiers into the screening set (Block D)', () => {
@@ -133,9 +133,9 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
     it('reverses every block by deterministic ID or scoped metric_code', () => {
       downSql = fs.readFileSync(DOWN_SQL_PATH, 'utf-8');
 
-      // Block F → benchmark_set_items by metric_code-scoped subquery
+      // Block F → benchmark_set_items scoped by tier-only _L/_R benchmarks
       expect(downSql).toMatch(
-        /DELETE FROM benchmark_set_items[\s\S]*metric_code IN \('AGILITY_505_L', 'AGILITY_505_R'\)/,
+        /DELETE FROM benchmark_set_items[\s\S]*metric_code IN \('AGILITY_505_L', 'AGILITY_505_R'\)[\s\S]*tier_group_id IS NOT NULL/,
       );
 
       // Block D → 3 deterministic IDs
@@ -232,127 +232,137 @@ describe('Migration 0128: Bilateral 5-0-5 + LSI Screening', () => {
   // ==========================================================================
   describe('Database state (when migration is applied)', () => {
     it('AGILITY_505_LSI is registered as a derived metric', async () => {
+      let result;
       try {
-        const result = await db.execute(sql`
+        result = await db.execute(sql`
           SELECT code, is_derived, formula, dependent_metrics, calculation_config, metric_type, unit
             FROM site_metrics
            WHERE code = 'AGILITY_505_LSI'
         `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('AGILITY_505_LSI not found - migration 0128 may not have been applied');
-          return;
-        }
-        const row = result.rows[0] as any;
-        expect(row.is_derived).toBe(true);
-        expect(row.formula).toBe(LSI_FORMULA);
-        expect(row.dependent_metrics).toEqual(['AGILITY_505_L', 'AGILITY_505_R']);
-        expect(row.calculation_config).toMatchObject({ dateMatchStrategy: 'same_date' });
-        expect(row.metric_type).toBe('higher_is_better');
-        expect(row.unit).toBe('%');
       } catch (error) {
         console.warn('DB query failed (DB may not be reachable):', (error as Error).message);
+        return;
       }
+      if (!result.rows || result.rows.length === 0) {
+        console.warn('AGILITY_505_LSI not found - migration 0128 may not have been applied');
+        return;
+      }
+      const row = result.rows[0] as any;
+      expect(row.is_derived).toBe(true);
+      expect(row.formula).toBe(LSI_FORMULA);
+      expect(row.dependent_metrics).toEqual(['AGILITY_505_L', 'AGILITY_505_R']);
+      expect(row.calculation_config).toMatchObject({ dateMatchStrategy: 'same_date' });
+      expect(row.metric_type).toBe('higher_is_better');
+      expect(row.unit).toBe('%');
     });
 
     it('screening benchmark set exists with Female gender', async () => {
+      let result;
       try {
-        const result = await db.execute(sql`
+        result = await db.execute(sql`
           SELECT id, gender, is_template, is_active
             FROM benchmark_sets
            WHERE id = 'set-screening-female-bilateral-asymmetry'
         `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('Screening set not found - migration 0128 may not have been applied');
-          return;
-        }
-        const row = result.rows[0] as any;
-        expect(row.gender).toBe('Female');
-        expect(row.is_template).toBe(true);
-        expect(row.is_active).toBe(true);
       } catch (error) {
         console.warn('DB query failed:', (error as Error).message);
+        return;
       }
+      if (!result.rows || result.rows.length === 0) {
+        console.warn('Screening set not found - migration 0128 may not have been applied');
+        return;
+      }
+      const row = result.rows[0] as any;
+      expect(row.gender).toBe('Female');
+      expect(row.is_template).toBe(true);
+      expect(row.is_active).toBe(true);
     });
 
     it('exactly 3 LSI tier rows share the LSI tier_group_id', async () => {
+      let result;
       try {
-        const result = await db.execute(sql`
+        result = await db.execute(sql`
           SELECT tier_name, tier_order, min_value, max_value, tier_color
             FROM site_benchmarks
            WHERE tier_group_id = ${LSI_TIER_GROUP_UUID}::uuid
            ORDER BY tier_order
         `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('LSI tier rows not found - migration 0128 may not have been applied');
-          return;
-        }
-        expect(result.rows).toHaveLength(3);
-
-        const [normal, monitor, elevated] = result.rows as any[];
-        expect(normal.tier_name).toBe('Normal');
-        expect(normal.tier_color).toBe('green');
-        expect(Number(normal.min_value)).toBe(95);
-        expect(Number(normal.max_value)).toBe(100);
-
-        expect(monitor.tier_name).toBe('Monitor');
-        expect(monitor.tier_color).toBe('yellow');
-        expect(Number(monitor.min_value)).toBe(90);
-        expect(Number(monitor.max_value)).toBe(95);
-
-        expect(elevated.tier_name).toBe('Elevated Risk');
-        expect(elevated.tier_color).toBe('red');
-        expect(Number(elevated.min_value)).toBe(0);
-        expect(Number(elevated.max_value)).toBe(90);
       } catch (error) {
         console.warn('DB query failed:', (error as Error).message);
+        return;
       }
+      if (!result.rows || result.rows.length === 0) {
+        console.warn('LSI tier rows not found - migration 0128 may not have been applied');
+        return;
+      }
+      expect(result.rows).toHaveLength(3);
+
+      const [normal, monitor, elevated] = result.rows as any[];
+      expect(normal.tier_name).toBe('Normal');
+      expect(normal.tier_color).toBe('green');
+      expect(Number(normal.min_value)).toBe(95);
+      expect(Number(normal.max_value)).toBe(100);
+
+      expect(monitor.tier_name).toBe('Monitor');
+      expect(monitor.tier_color).toBe('yellow');
+      expect(Number(monitor.min_value)).toBe(90);
+      expect(Number(monitor.max_value)).toBe(94.999);
+
+      expect(elevated.tier_name).toBe('Elevated Risk');
+      expect(elevated.tier_color).toBe('red');
+      expect(Number(elevated.min_value)).toBe(0);
+      expect(Number(elevated.max_value)).toBe(89.999);
     });
 
     it('LSI tiers are wired into the screening set (3 benchmark_set_items)', async () => {
+      let result;
       try {
-        const result = await db.execute(sql`
+        result = await db.execute(sql`
           SELECT bsi.benchmark_id, bsi.benchmark_type, bsi.display_order
             FROM benchmark_set_items bsi
            WHERE bsi.set_id = 'set-screening-female-bilateral-asymmetry'
            ORDER BY bsi.display_order
         `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('Screening set items not found - migration 0128 may not have been applied');
-          return;
-        }
-        expect(result.rows).toHaveLength(3);
-        const ids = result.rows.map((r: any) => r.benchmark_id);
-        expect(ids).toContain('bench-screening-asym-lsi-normal');
-        expect(ids).toContain('bench-screening-asym-lsi-monitor');
-        expect(ids).toContain('bench-screening-asym-lsi-elevated');
       } catch (error) {
         console.warn('DB query failed:', (error as Error).message);
+        return;
       }
+      if (!result.rows || result.rows.length === 0) {
+        console.warn('Screening set items not found - migration 0128 may not have been applied');
+        return;
+      }
+      expect(result.rows).toHaveLength(3);
+      const ids = result.rows.map((r: any) => r.benchmark_id);
+      expect(ids).toContain('bench-screening-asym-lsi-normal');
+      expect(ids).toContain('bench-screening-asym-lsi-monitor');
+      expect(ids).toContain('bench-screening-asym-lsi-elevated');
     });
 
     it('per-leg AGILITY_505_L / _R rows match AGILITY_505 row count (when AM-FEAT-007 applied)', async () => {
+      let result;
       try {
-        const result = await db.execute(sql`
+        result = await db.execute(sql`
           SELECT metric_code, COUNT(*)::int AS n
             FROM site_benchmarks
            WHERE metric_code IN ('AGILITY_505', 'AGILITY_505_L', 'AGILITY_505_R')
              AND tier_group_id IS NOT NULL
            GROUP BY metric_code
         `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('No AGILITY_505 tier rows found - AM-FEAT-007 may not have been applied');
-          return;
-        }
-        const counts = Object.fromEntries(
-          (result.rows as any[]).map((r) => [r.metric_code, r.n]),
-        );
-        // If AM-FEAT-007 is applied, _L and _R counts must match the AGILITY_505 count
-        if (counts['AGILITY_505']) {
-          expect(counts['AGILITY_505_L']).toBe(counts['AGILITY_505']);
-          expect(counts['AGILITY_505_R']).toBe(counts['AGILITY_505']);
-        }
       } catch (error) {
         console.warn('DB query failed:', (error as Error).message);
+        return;
+      }
+      if (!result.rows || result.rows.length === 0) {
+        console.warn('No AGILITY_505 tier rows found - AM-FEAT-007 may not have been applied');
+        return;
+      }
+      const counts = Object.fromEntries(
+        (result.rows as any[]).map((r) => [r.metric_code, r.n]),
+      );
+      // If AM-FEAT-007 is applied, _L and _R counts must match the AGILITY_505 count
+      if (counts['AGILITY_505']) {
+        expect(counts['AGILITY_505_L']).toBe(counts['AGILITY_505']);
+        expect(counts['AGILITY_505_R']).toBe(counts['AGILITY_505']);
       }
     });
   });

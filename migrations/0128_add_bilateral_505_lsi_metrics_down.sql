@@ -22,6 +22,7 @@ DELETE FROM benchmark_set_items
      SELECT id
        FROM site_benchmarks
       WHERE metric_code IN ('AGILITY_505_L', 'AGILITY_505_R')
+        AND tier_group_id IS NOT NULL
    );
 
 -- ============================================================================

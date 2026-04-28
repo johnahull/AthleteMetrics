@@ -108,7 +108,7 @@ INSERT INTO site_benchmarks (
    'AGILITY_505_LSI',
    'LSI Monitor (90-95%)',
    'LSI 90–95%. Borderline; bias bilateral loading toward weak side. Source: Bishop et al.',
-   'range', 90, 95,
+   'range', 90, 94.999,
    'a505a505-0128-4505-9151-aaaaaaaaaaaa'::uuid, 2, 'Monitor', 'yellow',
    'Female', true, true, 2),
 
@@ -116,7 +116,7 @@ INSERT INTO site_benchmarks (
    'AGILITY_505_LSI',
    'LSI Elevated Risk (<90%)',
    'LSI < 90% — clinically meaningful asymmetry. Targeted unilateral strength on weak side; do not progress to high-intensity reactive work until corrected. Sources: Bishop, Hewett, Dos''Santos.',
-   'range', 0, 90,
+   'range', 0, 89.999,
    'a505a505-0128-4505-9151-aaaaaaaaaaaa'::uuid, 3, 'Elevated Risk', 'red',
    'Female', true, true, 3)
 ON CONFLICT (metric_code, name) DO UPDATE SET
