@@ -165,54 +165,50 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
   });
 
   // ==========================================================================
-  // Layer 3 — Live DB inspection (skips if migration not applied)
+  // Layer 3 — Live DB inspection (skips cleanly if DATABASE_URL not set)
   // ==========================================================================
-  describe('Database state (when migration is applied)', () => {
+  describe.skipIf(!process.env.DATABASE_URL)('Database state (when migration is applied)', () => {
+    const rowsOf = (result: unknown): any[] => {
+      if (Array.isArray(result)) return result;
+      const r = result as { rows?: unknown };
+      return Array.isArray(r.rows) ? r.rows : [];
+    };
+
     it('COND_YYIR1_DISTANCE base metric exists', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT code, metric_type, unit FROM site_metrics WHERE code = 'COND_YYIR1_DISTANCE'
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        const row = r.rows[0] as any;
-        expect(row.metric_type).toBe('higher_is_better');
-        expect(row.unit).toBe('m');
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT code, metric_type, unit FROM site_metrics WHERE code = 'COND_YYIR1_DISTANCE'
+      `);
+      const rows = rowsOf(r);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].metric_type).toBe('higher_is_better');
+      expect(rows[0].unit).toBe('m');
     });
 
     it('COND_VO2MAX_EST is registered as a derived metric', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT is_derived, formula, dependent_metrics FROM site_metrics WHERE code = 'COND_VO2MAX_EST'
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        const row = r.rows[0] as any;
-        expect(row.is_derived).toBe(true);
-        expect(row.formula).toBe(VO2MAX_FORMULA);
-        expect(row.dependent_metrics).toEqual(['COND_YYIR1_DISTANCE']);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT is_derived, formula, dependent_metrics FROM site_metrics WHERE code = 'COND_VO2MAX_EST'
+      `);
+      const rows = rowsOf(r);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].is_derived).toBe(true);
+      expect(rows[0].formula).toBe(VO2MAX_FORMULA);
+      expect(rows[0].dependent_metrics).toEqual(['COND_YYIR1_DISTANCE']);
     });
 
     it('all 4 D1 soccer YYIR1 rows exist with correct values', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT id, benchmark_value::numeric AS v
-            FROM site_benchmarks
-           WHERE id LIKE 'd1-soc-yyir1-%' ORDER BY id
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect(r.rows).toHaveLength(4);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT id, benchmark_value::numeric AS v
+          FROM site_benchmarks
+         WHERE id LIKE 'd1-soc-yyir1-%' ORDER BY id
+      `);
+      expect(rowsOf(r)).toHaveLength(4);
     });
 
     it('all 4 HS-soccer YYIR1 rows exist', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT id FROM site_benchmarks WHERE id LIKE 'hs-%-soc-yyir1%'
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect(r.rows).toHaveLength(4);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT id FROM site_benchmarks WHERE id LIKE 'hs-%-soc-yyir1%'
+      `);
+      expect(rowsOf(r)).toHaveLength(4);
     });
   });
 });
