@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, uuid, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -279,7 +279,7 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Tier grouping fields (migration 0077)
-  tierGroupId: varchar("tier_group_id"),
+  tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
   tierName: varchar("tier_name", { length: 50 }),
   tierColor: varchar("tier_color", { length: 20 }),
@@ -337,7 +337,7 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Tier grouping fields (migration 0077)
-  tierGroupId: varchar("tier_group_id"),
+  tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
   tierName: varchar("tier_name", { length: 50 }),
   tierColor: varchar("tier_color", { length: 20 }),
