@@ -244,14 +244,23 @@ describe('Migration 0129: D1 + HS Female Benchmark Seeding', () => {
       expect(Number(rows[0].value)).toBeCloseTo(1.65, 2);
     });
 
-    it('HS soccer set has 7 metrics (DASH_10YD, DASH_20YD, FLY10_TIME, TOP_SPEED_MPH, VERTICAL_JUMP, AGILITY_505, AGILITY_5105)', async () => {
+    it('HS Varsity soccer set has the 7 metrics this migration seeds', async () => {
+      // Downstream migrations (0130 YYIR1, 0131 SJ, 0132 DASH_30YD/40YD) may add
+      // more set_items — assert that this migration's 7 metric_codes are present,
+      // not that the set's total count is exactly 7.
       const result = await db.execute(sql`
-        SELECT COUNT(*)::int AS n
-          FROM benchmark_set_items
-         WHERE set_id = 'hs-varsity-female-soccer'
+        SELECT DISTINCT sb.metric_code
+          FROM benchmark_set_items bsi
+          JOIN site_benchmarks sb ON bsi.benchmark_id = sb.id
+         WHERE bsi.set_id = 'hs-varsity-female-soccer'
       `);
-      const rows = rowsOf(result);
-      expect(rows[0].n).toBe(7);
+      const codes = rowsOf(result).map(r => r.metric_code);
+      for (const expected of [
+        'DASH_10YD','DASH_20YD','FLY10_TIME','TOP_SPEED_MPH',
+        'VERTICAL_JUMP','AGILITY_505','AGILITY_5105',
+      ]) {
+        expect(codes).toContain(expected);
+      }
     });
 
     it('VB volleyball set excludes TOP_SPEED_MPH, FLY10_TIME, DASH_20YD at HS level', async () => {
