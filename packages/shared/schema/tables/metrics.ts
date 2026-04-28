@@ -45,6 +45,19 @@ export const siteMetrics = pgTable("site_metrics", {
     missingSourceBehavior: 'skip' | 'error';
     constants?: Record<string, number>;
   }>(),
+  // Paired-input metric config — for metrics where one row captures (primary, auxiliary) inputs
+  // and the formula computes the stored value (e.g., 1RM estimate from load + reps).
+  // Mutually exclusive with isDerived at the application layer.
+  auxiliaryInputConfig: jsonb("auxiliary_input_config").$type<{
+    label: string;              // Auxiliary input label (e.g., "Reps")
+    unit: string;               // Auxiliary input unit (e.g., "reps")
+    validationMin?: number;
+    validationMax?: number;
+    required: boolean;
+    computeFormula: string;     // mathjs expression with variables `load` and `reps`
+    primaryInputLabel: string;  // e.g., "Weight Lifted"
+    primaryInputUnit: string;   // e.g., "lbs"
+  }>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: 'set null' }), // Site admin who created
   updatedAt: timestamp("updated_at"),
@@ -139,6 +152,18 @@ export const customOrgMetrics = pgTable("custom_org_metrics", {
     dateMatchStrategy: 'same_date' | 'latest_before' | 'closest';
     maxDateDifference?: number;
     missingSourceBehavior: 'skip' | 'error';
+  }>(),
+  // Paired-input metric config — see siteMetrics.auxiliaryInputConfig for semantics.
+  // Mutually exclusive with isDerived at the application layer.
+  auxiliaryInputConfig: jsonb("auxiliary_input_config").$type<{
+    label: string;
+    unit: string;
+    validationMin?: number;
+    validationMax?: number;
+    required: boolean;
+    computeFormula: string;
+    primaryInputLabel: string;
+    primaryInputUnit: string;
   }>(),
 
   // Display settings

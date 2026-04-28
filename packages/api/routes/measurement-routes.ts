@@ -8,6 +8,11 @@ import rateLimit, { type Options } from "express-rate-limit";
 import { MeasurementService } from "../services/measurement-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
 import { insertMeasurementSchema, teams, userTeams, siteMetrics } from "@shared/schema";
+import {
+  computePairedInputMeasurement,
+  PairedInputValidationError,
+  type AuxiliaryInputConfig,
+} from "../services/paired-input-compute";
 import { dateStringSchema } from "@shared/date-utils";
 import { isSiteAdmin, type SessionUser } from "../utils/auth-helpers";
 import {
@@ -390,6 +395,9 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
       }
+      if (error instanceof PairedInputValidationError) {
+        return res.status(400).json({ message: error.message, field: error.field });
+      }
       const message = error instanceof Error ? error.message : "Failed to create measurement";
       res.status(400).json({ message });
     }
@@ -546,6 +554,9 @@ export function registerMeasurementRoutes(app: Express) {
       console.error("Update measurement error:", error);
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      if (error instanceof PairedInputValidationError) {
+        return res.status(400).json({ message: error.message, field: error.field });
       }
       const message = error instanceof Error ? error.message : "Failed to update measurement";
       res.status(400).json({ message });
@@ -924,6 +935,83 @@ export function registerMeasurementRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid query parameters", errors: error.errors });
       }
       const message = error instanceof Error ? error.message : "Failed to calculate preview";
+      res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Live preview for paired-input metrics (e.g., 1RM estimate from load + reps).
+   *
+   * Distinct from /calculate-preview, which queries cross-row source measurements
+   * by date. This endpoint takes the user's current form inputs and computes the
+   * derived value via the metric's auxiliaryInputConfig formula. No DB writes,
+   * no per-athlete data — purely a stateless calculator the form polls on input.
+   */
+  app.post("/api/measurements/calculate-lift-preview", measurementLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const bodySchema = z.object({
+        metricCode: z.string().min(1).regex(/^[A-Z0-9_]+$/),
+        primary: z.number(),
+        auxiliary: z.number().nullable().optional(),
+      });
+
+      const { metricCode, primary, auxiliary } = bodySchema.parse(req.body);
+
+      const [metric] = await db
+        .select({
+          code: siteMetrics.code,
+          unit: siteMetrics.unit,
+          auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, metricCode));
+
+      if (!metric) {
+        return res.status(404).json({ message: "Metric not found" });
+      }
+
+      if (!metric.auxiliaryInputConfig) {
+        return res.status(400).json({
+          message: "Metric does not support paired-input preview",
+          field: "metricCode",
+        });
+      }
+
+      const config = metric.auxiliaryInputConfig as AuxiliaryInputConfig;
+      if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+        return res.status(400).json({
+          message: "Metric has invalid auxiliary input configuration",
+          field: "metricCode",
+        });
+      }
+
+      const result = computePairedInputMeasurement(
+        config,
+        metricCode,
+        primary,
+        auxiliary ?? null
+      );
+
+      return res.json({
+        computedValue: result.value,
+        formula: config.computeFormula,
+        primaryUnit: result.units,
+        auxiliaryLabel: config.label,
+      });
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid input data", errors: error.errors });
+      }
+      if (error instanceof PairedInputValidationError) {
+        return res.status(400).json({ message: error.message, field: error.field });
+      }
+      console.error("Calculate lift preview error:", error);
+      const message = error instanceof Error ? error.message : "Failed to calculate lift preview";
       res.status(500).json({ message });
     }
   });

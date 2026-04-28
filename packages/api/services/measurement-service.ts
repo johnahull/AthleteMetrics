@@ -24,6 +24,11 @@ import { PAGINATION } from '../constants/pagination';
 import { DerivedMetricCalculator, type TriggerContext } from './derived-metric-calculator';
 import { AchievementService } from './achievement-service';
 import { notifyNewMeasurement } from './measurement-notification-service';
+import {
+  computePairedInputMeasurement,
+  PairedInputValidationError,
+  type AuxiliaryInputConfig,
+} from './paired-input-compute';
 
 // Singleton achievement service instance for performance
 const achievementService = new AchievementService();
@@ -165,15 +170,57 @@ export class MeasurementService {
         }
       }
 
-      // Get units from siteMetrics table (supports derived metrics and custom metrics)
+      // Get units AND paired-input config from siteMetrics table
+      // (supports derived metrics, custom metrics, and paired-input metrics)
       const [metricConfig] = await tx
-        .select({ unit: siteMetrics.unit })
+        .select({
+          unit: siteMetrics.unit,
+          auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+        })
         .from(siteMetrics)
         .where(eq(siteMetrics.code, measurement.metric));
 
       // Use metric's configured unit, or default to 'in' for unknown metrics
       // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
-      const units = metricConfig?.unit ?? 'in';
+      let units = metricConfig?.unit ?? 'in';
+
+      // PAIRED-INPUT METRICS: If the metric defines an auxiliaryInputConfig,
+      // the incoming `value` is the primary input (e.g., weight lifted) and
+      // `auxiliaryValue` is the secondary input (e.g., reps). The service
+      // computes the stored value via the metric's formula (e.g., Epley 1RM).
+      // Note: Zod-parsed inputs are numbers; we stringify when persisting
+      // to Drizzle's decimal columns (which preserve precision via strings).
+      let computedNumericValue: number = measurement.value;
+      const auxiliaryNumericValue: number | null = measurement.auxiliaryValue ?? null;
+      let pairedInputMetadata: NonNullable<Measurement['calculationMetadata']> | null = null;
+      let isCalculatedFromPairedInput = false;
+
+      if (metricConfig?.auxiliaryInputConfig) {
+        const config = metricConfig.auxiliaryInputConfig as AuxiliaryInputConfig;
+        if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+          throw new PairedInputValidationError('formula', 'Metric has invalid auxiliary input configuration');
+        }
+
+        const result = computePairedInputMeasurement(
+          config,
+          measurement.metric,
+          measurement.value,
+          auxiliaryNumericValue
+        );
+
+        computedNumericValue = result.value;
+        units = result.units;
+        if (result.calculationMetadata) {
+          pairedInputMetadata = {
+            ...result.calculationMetadata,
+            triggeredBy: {
+              event: 'measurement_insert',
+              userId: submittedBy,
+            },
+          };
+          isCalculatedFromPairedInput = true;
+        }
+      }
 
       // Auto-populate team context if not explicitly provided
       let teamId = measurement.teamId;
@@ -267,17 +314,27 @@ export class MeasurementService {
           submittedBy,
           date: measurementDate.toISOString(),
           metric: measurement.metric,
-          value: String(measurement.value),
+          value: String(computedNumericValue),
           units,
           age,
           notes: measurement.notes || null,
           flyInDistance: measurement.flyInDistance ? String(measurement.flyInDistance) : null,
+          auxiliaryValue: auxiliaryNumericValue !== null ? String(auxiliaryNumericValue) : null,
           teamId: teamId || null,
           season: season || null,
           teamContextAuto,
           teamNameSnapshot,
           organizationId: organizationId || null,
           isVerified,
+          isCalculated: isCalculatedFromPairedInput,
+          calculationMetadata: pairedInputMetadata,
+          // Paired-input metrics are computed from inline inputs (not from
+          // other measurement rows), but the chk_calculated_measurements_valid
+          // CHECK constraint requires this column to be non-null when
+          // is_calculated=true. Empty array signals "computed, but no source
+          // measurement rows" — semantically distinct from cross-row derived
+          // metrics which list their dependencies here.
+          calculatedFromMeasurementIds: isCalculatedFromPairedInput ? [] : null,
         })
         .returning();
 
@@ -294,6 +351,9 @@ export class MeasurementService {
       });
     } catch (error) {
       // Preserve error specificity - don't wrap validation errors
+      if (error instanceof PairedInputValidationError) {
+        throw error;
+      }
       if (error instanceof Error) {
         // Re-throw validation errors without modification
         if (error.message.includes('User not found') ||
@@ -537,25 +597,117 @@ export class MeasurementService {
         if (measurement.userId) updateData.userId = measurement.userId;
         // submittedBy cannot be updated after creation (intentionally excluded)
         if (measurement.date) updateData.date = measurement.date;
-        if (measurement.metric) {
-          updateData.metric = measurement.metric;
-
-          // CRITICAL: Recalculate units when metric changes
-          // Get units from siteMetrics table (supports derived metrics and custom metrics)
-          const [metricConfig] = await tx
-            .select({ unit: siteMetrics.unit })
-            .from(siteMetrics)
-            .where(eq(siteMetrics.code, measurement.metric));
-
-          // Use metric's configured unit, or default to 'in' for unknown metrics
-          // Use nullish coalescing to allow empty string units (e.g., RSI is a ratio)
-          updateData.units = metricConfig?.unit ?? 'in';
-        }
+        if (measurement.metric) updateData.metric = measurement.metric;
         if (measurement.value !== undefined)
           updateData.value = String(measurement.value);
         if (measurement.notes !== undefined) updateData.notes = measurement.notes;
         if (measurement.flyInDistance !== undefined)
           updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
+        // auxiliaryValue is intentionally NOT written here unconditionally.
+        // It is only set inside the paired-input recompute block (below) or
+        // the clearing branch, so non-paired-input measurements cannot
+        // accidentally persist a stale auxiliary value.
+
+        // Determine the effective metric code for unit/auxiliary lookup
+        // (could be the new one if metric is changing, or the existing one)
+        const effectiveMetricCode = measurement.metric ?? existing.metric;
+
+        // Fetch the metric's unit + auxiliaryInputConfig for unit refresh AND
+        // potential paired-input recompute. We always fetch when the metric
+        // changes (to refresh units / detect new paired-input shape), or when
+        // value/auxiliary changes (to recompute for an existing paired-input).
+        const metricIsChanging = !!measurement.metric;
+        const valueOrAuxChanged =
+          measurement.value !== undefined || measurement.auxiliaryValue !== undefined;
+        const needsMetricLookup = metricIsChanging || valueOrAuxChanged;
+
+        if (needsMetricLookup) {
+          const [metricConfig] = await tx
+            .select({
+              unit: siteMetrics.unit,
+              auxiliaryInputConfig: siteMetrics.auxiliaryInputConfig,
+            })
+            .from(siteMetrics)
+            .where(eq(siteMetrics.code, effectiveMetricCode));
+
+          if (metricIsChanging) {
+            updateData.units = metricConfig?.unit ?? 'in';
+          }
+
+          // Paired-input recompute: fires whenever the effective metric is
+          // paired-input AND something relevant changed (metric switched to
+          // paired-input, or one of the inputs was edited). Uses merged
+          // (incoming + existing) inputs so partial updates work.
+          if (metricConfig?.auxiliaryInputConfig && (valueOrAuxChanged || metricIsChanging)) {
+            const config = metricConfig.auxiliaryInputConfig as AuxiliaryInputConfig;
+            if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+              throw new PairedInputValidationError('formula', 'Metric has invalid auxiliary input configuration');
+            }
+
+            // For an existing paired-input measurement, `existing.value` is the
+            // already-computed result (e.g., 346.5 lb 1RM estimate) — NOT the
+            // original primary input (315 lb load). The original load lives in
+            // calculationMetadata.sourceValues.load. Use it when the caller
+            // didn't supply a new value, so partial updates (e.g. just changing
+            // reps) recompute against the original load, not the prior estimate.
+            const existingSourceLoad =
+              existing.calculationMetadata?.sourceValues?.load ?? null;
+
+            if (existing.calculationMetadata && existingSourceLoad === null && measurement.value === undefined) {
+              console.warn(
+                `[updateMeasurement] id=${id}: calculationMetadata present but sourceValues.load missing — falling back to existing.value, which may cause drift`
+              );
+            }
+
+            const primaryRaw = measurement.value !== undefined
+              ? measurement.value
+              : (existingSourceLoad !== null ? existingSourceLoad : existing.value);
+            const auxRaw = measurement.auxiliaryValue !== undefined
+              ? measurement.auxiliaryValue
+              : existing.auxiliaryValue;
+            const primaryNum = primaryRaw !== null && primaryRaw !== undefined
+              ? Number(primaryRaw)
+              : null;
+            const auxNum = auxRaw !== null && auxRaw !== undefined ? Number(auxRaw) : null;
+
+            const result = computePairedInputMeasurement(
+              config,
+              effectiveMetricCode,
+              primaryNum,
+              auxNum
+            );
+
+            updateData.value = String(result.value);
+            updateData.auxiliaryValue = auxNum !== null ? String(auxNum) : null;
+            updateData.units = result.units;
+            updateData.isCalculated = !!result.calculationMetadata;
+            if (result.calculationMetadata) {
+              updateData.calculationMetadata = {
+                ...result.calculationMetadata,
+                triggeredBy: { event: 'measurement_update' },
+              };
+              // Paired-input: computed from inline inputs, not from other
+              // measurement rows. Empty array satisfies the
+              // chk_calculated_measurements_valid CHECK constraint while
+              // signalling "no source rows". Cross-row derived metrics
+              // list their dependencies here instead.
+              updateData.calculatedFromMeasurementIds = [];
+            }
+          } else if (
+            metricIsChanging &&
+            !metricConfig?.auxiliaryInputConfig &&
+            existing.isCalculated
+          ) {
+            // Metric is being changed AWAY from a paired-input (or any calculated)
+            // metric — clear stale state so the new measurement reads cleanly.
+            // Without this, isCalculated would stay true and the "est." chip
+            // would render incorrectly on the new (non-computed) metric.
+            updateData.isCalculated = false;
+            updateData.calculationMetadata = null;
+            updateData.calculatedFromMeasurementIds = null;
+            updateData.auxiliaryValue = null;
+          }
+        }
 
         // Check if there are any valid fields to update
         if (Object.keys(updateData).length === 0) {
@@ -589,6 +741,9 @@ export class MeasurementService {
       });
     } catch (error) {
       // Preserve error specificity
+      if (error instanceof PairedInputValidationError) {
+        throw error;
+      }
       if (error instanceof Error) {
         if (error.message.includes('not found')) {
           throw error;
@@ -1137,6 +1292,7 @@ export class MeasurementService {
         value: measurements.value,
         units: measurements.units,
         flyInDistance: measurements.flyInDistance,
+        auxiliaryValue: measurements.auxiliaryValue,
         notes: measurements.notes,
         teamId: measurements.teamId,
         teamNameSnapshot: measurements.teamNameSnapshot,

@@ -23,6 +23,7 @@ function createTestMeasurement(overrides: Partial<Measurement>): Measurement {
     value: '30.0',
     units: 'in',
     flyInDistance: null,
+    auxiliaryValue: null,
     teamId: 'test-team',
     organizationId: 'test-org',
     date: '2024-01-01',

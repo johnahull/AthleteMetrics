@@ -1624,6 +1624,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  // Auxiliary input for paired-input metrics (e.g., reps for 1RM-est metrics).
+  // Server validates against the metric's auxiliaryInputConfig at insert time.
+  auxiliaryValue: z.number().nullable().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),

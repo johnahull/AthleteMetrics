@@ -23,6 +23,7 @@ export const measurements = pgTable("measurements", {
   value: decimal("value", { precision: 10, scale: 3 }).notNull(),
   units: text("units").notNull(), // "s" or "in"
   flyInDistance: decimal("fly_in_distance", { precision: 10, scale: 3 }), // Optional yards for FLY10_TIME
+  auxiliaryValue: decimal("auxiliary_value", { precision: 10, scale: 3 }), // Secondary input for paired-input metrics (e.g., reps for 1RM-est)
   notes: text("notes"),
   // Team context fields - immutable snapshot of team at time of measurement
   // IMPORTANT: teamId is historical reference WITHOUT foreign key constraint
