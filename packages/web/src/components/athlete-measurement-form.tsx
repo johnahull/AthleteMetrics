@@ -12,6 +12,7 @@ import { insertMeasurementSchema, type InsertMeasurement } from "@shared/schema"
 import { Save } from "lucide-react";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
+import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 import { z } from "zod";
 
 interface AthleteMeasurementFormProps {
@@ -82,15 +83,17 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
         title: "Success",
         description: "Measurement added successfully",
       });
-      form.reset({
-        userId: athleteId,
-        date: new Date().toISOString().split('T')[0],
-        metric: firstMetricCode,
-        value: 0,
-        flyInDistance: undefined,
-        auxiliaryValue: undefined,
-        notes: "",
-      });
+      // Invalidate last-set context so the next entry references this submission
+      queryClient.invalidateQueries({ queryKey: ["last-set-context"] });
+      // Batch-entry preservation: keep metric + date so the athlete can log a
+      // second working set without re-picking the metric. Clear only the
+      // values, then return focus to the primary input field.
+      form.resetField("value", { defaultValue: 0 });
+      form.resetField("auxiliaryValue", { defaultValue: undefined });
+      form.resetField("flyInDistance", { defaultValue: undefined });
+      form.resetField("notes", { defaultValue: "" });
+      form.clearErrors();
+      setTimeout(() => form.setFocus("value"), 0);
       onSuccess?.();
     },
     onError: (error: Error) => {
@@ -128,6 +131,13 @@ export default function AthleteMeasurementForm({ athleteId, athleteName, onSucce
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+          {/* Last-set context: shown when a metric is selected and the athlete
+              has prior measurements for it. Click-to-copy seeds the form with
+              the previous values, useful for matching/beating a prior set. */}
+          {selectedMetric && (
+            <LastSetContextLine athleteId={athleteId} metric={selectedMetric} />
+          )}
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Date */}
             <FormField
