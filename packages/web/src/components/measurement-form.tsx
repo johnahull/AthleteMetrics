@@ -22,6 +22,7 @@ import { useFormErrors } from "@/hooks/useFormErrors";
 import { z } from "zod";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { PairedInputFields } from "@/components/measurement/PairedInputFields";
+import { LastSetContextLine } from "@/components/measurement/LastSetContextLine";
 
 // Create dynamic measurement schema that accepts any metric string
 // Backend will validate against org-enabled metrics
@@ -136,24 +137,27 @@ export default function MeasurementForm() {
       queryClient.invalidateQueries({ queryKey: ["/api/measurements"] });
       queryClient.invalidateQueries({ queryKey: ["/api/analytics/dashboard"] });
       queryClient.invalidateQueries({ queryKey: ["/api/search/global"] });
+      // Invalidate the last-set context too — the measurement we just created
+      // may now be the "last set" the next entry should reference.
+      queryClient.invalidateQueries({ queryKey: ["last-set-context"] });
       toast({
         title: "Success",
         description: "Measurement added successfully",
       });
-      form.reset({
-        userId: "",
-        date: new Date().toISOString().split('T')[0],
-        metric: firstMetricCode,
-        value: 0,
-        flyInDistance: undefined,
-        auxiliaryValue: undefined,
-        notes: "",
-        teamId: "",
-        season: "",
-      });
-      setSelectedAthlete(null);
-      resetTeamState();
+      // Batch-entry preservation per plan §6: keep athlete + metric + date +
+      // team + season after a successful submit so a coach can log the next
+      // working set without re-picking everything. Clear only the inputs that
+      // belong to "this set" (value / auxiliary / fly-in / notes), and return
+      // focus to the primary value input. To start a totally fresh entry,
+      // coach changes the athlete/metric explicitly.
+      form.resetField("value", { defaultValue: 0 });
+      form.resetField("auxiliaryValue", { defaultValue: undefined });
+      form.resetField("flyInDistance", { defaultValue: undefined });
+      form.resetField("notes", { defaultValue: "" });
+      form.clearErrors();
       setOverrideCalculated(false);
+      // Defer focus until after the reset has propagated through React state.
+      setTimeout(() => form.setFocus("value"), 0);
     },
     onError: (error) => {
       console.error("Measurement creation error:", error);
@@ -476,6 +480,18 @@ export default function MeasurementForm() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Last-set context: shown when an athlete + metric is selected and
+            the athlete has prior measurements. Click-to-copy pulls the source
+            values back into the form (the original load/reps for paired-input,
+            or the raw value for single-value metrics). Helps batch entry and
+            quick "did they beat last time?" comparisons. */}
+        {selectedAthlete && selectedMetric && (
+          <LastSetContextLine
+            athleteId={selectedAthlete.id}
+            metric={selectedMetric}
+          />
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
