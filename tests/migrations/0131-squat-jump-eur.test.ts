@@ -70,7 +70,7 @@ describe('Migration 0131: Squat Jump + EUR', () => {
       const sqlOnly = upSql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
       const insertCount = (sqlOnly.match(/INSERT INTO/g) || []).length;
       const conflictCount = (sqlOnly.match(/ON CONFLICT \([^)]+\)\s+DO\s+(UPDATE|NOTHING)/g) || []).length;
-      expect(insertCount).toBeGreaterThanOrEqual(5);
+      expect(insertCount).toBe(5);
       expect(conflictCount).toBe(insertCount);
     });
   });
@@ -113,6 +113,11 @@ describe('Migration 0131: Squat Jump + EUR', () => {
       const v = evaluateFormula(EUR_FORMULA, { VERTICAL_JUMP: 45, JUMP_SJ_HEIGHT: 38 });
       expect(v).toBeCloseTo(1.184, 2);
     });
+
+    it('returns null when JUMP_SJ_HEIGHT is 0 (division-by-zero protection)', () => {
+      const v = evaluateFormula(EUR_FORMULA, { VERTICAL_JUMP: 28, JUMP_SJ_HEIGHT: 0 });
+      expect(v).toBeNull();
+    });
   });
 
   describe.skipIf(!process.env.DATABASE_URL)('Database state (when applied)', () => {
@@ -140,6 +145,7 @@ describe('Migration 0131: Squat Jump + EUR', () => {
         }
         expect(rows).toHaveLength(2);
         const eur = rows.find(row => row.code === 'POWER_EUR');
+        expect(eur).toBeDefined();
         expect(eur.is_derived).toBe(true);
         expect(eur.formula).toBe(EUR_FORMULA);
       } catch (err) {

@@ -42,13 +42,15 @@ INSERT INTO site_metrics (
   62,
   'Squat Jump (SJ) height: athlete descends to ~90° knee angle, holds for 3-5 seconds to dissipate elastic energy, then jumps with no dip and no arm swing. Hands fixed on hips throughout. Isolates concentric leg power without stretch-shortening cycle (SSC) contribution. Compared with VERTICAL_JUMP via POWER_EUR derived metric to diagnose SSC efficiency vs. concentric-strength deficit.',
   1, 'red', 'ArrowUp',
-  0, 50
+  1, 50
 )
 ON CONFLICT (code) DO UPDATE SET
   label = EXCLUDED.label,
   description = EXCLUDED.description,
   metric_type = EXCLUDED.metric_type,
   unit = EXCLUDED.unit,
+  validation_min = EXCLUDED.validation_min,
+  validation_max = EXCLUDED.validation_max,
   is_active = true;
 
 -- ============================================================================
@@ -84,6 +86,8 @@ ON CONFLICT (code) DO UPDATE SET
   is_derived = EXCLUDED.is_derived,
   metric_type = EXCLUDED.metric_type,
   unit = EXCLUDED.unit,
+  validation_min = EXCLUDED.validation_min,
+  validation_max = EXCLUDED.validation_max,
   is_active = true;
 
 -- ============================================================================
