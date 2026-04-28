@@ -51,17 +51,21 @@
 -- but environments have drifted (dev DB is missing some, testing has all).
 -- This block makes the migration self-contained against any environment.
 -- ============================================================================
+-- Categories all lowercase to match schema convention (per metrics.ts:17 and prior
+-- migrations 0022 / 0107 — `speed`, `agility`, `power`). Mixed-case categories on
+-- a fresh DB would create separate UI buckets ("Speed" vs "speed") in import
+-- wizards and metric-management views.
 INSERT INTO site_metrics (code, label, category, unit, metric_type, is_system_default, is_active, display_order, description, decimal_precision)
 VALUES
-  ('DASH_10YD',     '10yd Dash',         'Acceleration', 's',   'lower_is_better',  true, true, 0, '10-yard sprint time, primary acceleration metric.', 3),
-  ('DASH_20YD',     '20-yard Dash',      'Speed',        's',   'lower_is_better',  true, true, 0, '20-yard sprint time, drive + transition phase.', 3),
-  ('FLY10_TIME',    '10-Yard Fly Time',  'speed',        's',   'lower_is_better',  true, true, 0, '10-yard fly time after a flying start; max-velocity capture.', 3),
-  ('TOP_SPEED_MPH', 'Top Speed (MPH)',   'Speed',        'mph', 'higher_is_better', true, true, 0, 'Maximum sprint speed in miles per hour, derived from gate splits.', 3),
-  ('AGILITY_505',   '5-0-5 Agility',     'agility',      's',   'lower_is_better',  true, true, 0, '5-0-5 change-of-direction test; 10m approach + 5m to turn line + 5m back.', 3),
-  ('AGILITY_5105',  '5-10-5 Agility',    'agility',      's',   'lower_is_better',  true, true, 0, '5-10-5 Pro Agility shuttle.', 3),
-  ('VERTICAL_JUMP', 'Vertical Jump (in)','Power',        'in',  'higher_is_better', true, true, 0, 'Vertical jump height in inches.', 1),
-  ('APPROACH_JUMP', 'Approach Jump (in)','Power',        'in',  'higher_is_better', true, true, 0, 'Volleyball attack approach jump touch height; primary VB recruiting metric.', 3),
-  ('BLOCK_JUMP',    'Block Jump (in)',   'Power',        'in',  'higher_is_better', true, true, 0, 'Volleyball block jump touch height.', 3)
+  ('DASH_10YD',     '10yd Dash',         'speed',   's',   'lower_is_better',  true, true, 0, '10-yard sprint time, primary acceleration metric.', 3),
+  ('DASH_20YD',     '20-yard Dash',      'speed',   's',   'lower_is_better',  true, true, 0, '20-yard sprint time, drive + transition phase.', 3),
+  ('FLY10_TIME',    '10-Yard Fly Time',  'speed',   's',   'lower_is_better',  true, true, 0, '10-yard fly time after a flying start; max-velocity capture.', 3),
+  ('TOP_SPEED_MPH', 'Top Speed (MPH)',   'speed',   'mph', 'higher_is_better', true, true, 0, 'Maximum sprint speed in miles per hour, derived from gate splits.', 3),
+  ('AGILITY_505',   '5-0-5 Agility',     'agility', 's',   'lower_is_better',  true, true, 0, '5-0-5 change-of-direction test; 10m approach + 5m to turn line + 5m back.', 3),
+  ('AGILITY_5105',  '5-10-5 Agility',    'agility', 's',   'lower_is_better',  true, true, 0, '5-10-5 Pro Agility shuttle.', 3),
+  ('VERTICAL_JUMP', 'Vertical Jump (in)','power',   'in',  'higher_is_better', true, true, 0, 'Vertical jump height in inches.', 1),
+  ('APPROACH_JUMP', 'Approach Jump (in)','power',   'in',  'higher_is_better', true, true, 0, 'Volleyball attack approach jump touch height; primary VB recruiting metric.', 3),
+  ('BLOCK_JUMP',    'Block Jump (in)',   'power',   'in',  'higher_is_better', true, true, 0, 'Volleyball block jump touch height.', 3)
 ON CONFLICT (code) DO NOTHING;
 
 -- ============================================================================
