@@ -14,6 +14,14 @@
 -- applied. It restores the schema state to "0129 not applied" but does not
 -- attempt to recreate any earlier `0105`-style values (those were rejected
 -- by John and never landed anywhere; restoring them is not desired).
+--
+-- Block A0 site_metrics rows (DASH_10YD, DASH_20YD, FLY10_TIME, TOP_SPEED_MPH,
+-- AGILITY_505, AGILITY_5105, VERTICAL_JUMP, APPROACH_JUMP, BLOCK_JUMP) are
+-- intentionally NOT removed by this down migration. They are shared prerequisites
+-- that may have existed before 0129 (migration 0107 was supposed to seed them),
+-- and removing them could break other migrations or data that depend on them.
+-- An operator expecting a clean rollback should be aware: these metric definitions
+-- will remain in site_metrics after this down migration runs.
 
 -- ============================================================================
 -- Step 1 — benchmark_set_items rows (Block F reversal)
