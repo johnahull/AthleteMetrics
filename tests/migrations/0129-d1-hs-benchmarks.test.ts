@@ -204,94 +204,72 @@ describe('Migration 0129: D1 + HS Female Benchmark Seeding', () => {
   });
 
   // ==========================================================================
-  // Layer 2 — Live DB inspection (skips if migration not applied)
+  // Layer 2 — Live DB inspection (skips cleanly if DATABASE_URL not set)
   // ==========================================================================
-  describe('Database state (when migration is applied)', () => {
+  describe.skipIf(!process.env.DATABASE_URL)('Database state (when migration is applied)', () => {
+    // Normalize across drivers: postgres-js returns array-like; Neon returns {rows: [...]}.
+    const rowsOf = (result: unknown): any[] => {
+      if (Array.isArray(result)) return result;
+      const r = result as { rows?: unknown };
+      return Array.isArray(r.rows) ? r.rows : [];
+    };
+
     it('all 8 benchmark sets exist with correct sport/level/gender', async () => {
-      try {
-        const result = await db.execute(sql`
-          SELECT id, sport, level, gender, is_template
-            FROM benchmark_sets
-           WHERE id = ANY(ARRAY[
-             'd1-womens-soccer','d1-womens-volleyball',
-             'hs-ms-female-soccer','hs-jv-female-soccer','hs-varsity-female-soccer',
-             'hs-ms-female-volleyball','hs-jv-female-volleyball','hs-varsity-female-volleyball'
-           ]::text[])
-           ORDER BY id
-        `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('Benchmark sets not found - migration 0129 may not have been applied');
-          return;
-        }
-        expect(result.rows).toHaveLength(8);
-        for (const row of result.rows as any[]) {
-          expect(row.gender).toBe('Female');
-          expect(row.is_template).toBe(true);
-        }
-      } catch (error) {
-        console.warn('DB query failed (DB may not be reachable):', (error as Error).message);
+      const result = await db.execute(sql`
+        SELECT id, sport, level, gender, is_template
+          FROM benchmark_sets
+         WHERE id = ANY(ARRAY[
+           'd1-womens-soccer','d1-womens-volleyball',
+           'hs-ms-female-soccer','hs-jv-female-soccer','hs-varsity-female-soccer',
+           'hs-ms-female-volleyball','hs-jv-female-volleyball','hs-varsity-female-volleyball'
+         ]::text[])
+         ORDER BY id
+      `);
+      const rows = rowsOf(result);
+      expect(rows).toHaveLength(8);
+      for (const row of rows) {
+        expect(row.gender).toBe('Female');
+        expect(row.is_template).toBe(true);
       }
     });
 
     it('soccer DASH_10YD D1 Top 25% is 1.65 (per John 2026-04-24 decision)', async () => {
-      try {
-        const result = await db.execute(sql`
-          SELECT benchmark_value::text AS value
-            FROM site_benchmarks
-           WHERE id = 'd1-soc-dash10-d1-top25'
-        `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('DASH_10YD D1 Top 25% row not found - migration may not have been applied');
-          return;
-        }
-        expect(Number((result.rows[0] as any).value)).toBeCloseTo(1.65, 2);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-      }
+      const result = await db.execute(sql`
+        SELECT benchmark_value::text AS value
+          FROM site_benchmarks
+         WHERE id = 'd1-soc-dash10-d1-top25'
+      `);
+      const rows = rowsOf(result);
+      expect(rows).toHaveLength(1);
+      expect(Number(rows[0].value)).toBeCloseTo(1.65, 2);
     });
 
     it('HS soccer set has 7 metrics (DASH_10YD, DASH_20YD, FLY10_TIME, TOP_SPEED_MPH, VERTICAL_JUMP, AGILITY_505, AGILITY_5105)', async () => {
-      try {
-        const result = await db.execute(sql`
-          SELECT COUNT(*)::int AS n
-            FROM benchmark_set_items
-           WHERE set_id = 'hs-varsity-female-soccer'
-        `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('Set items not found - migration may not have been applied');
-          return;
-        }
-        expect((result.rows[0] as any).n).toBe(7);
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-      }
+      const result = await db.execute(sql`
+        SELECT COUNT(*)::int AS n
+          FROM benchmark_set_items
+         WHERE set_id = 'hs-varsity-female-soccer'
+      `);
+      const rows = rowsOf(result);
+      expect(rows[0].n).toBe(7);
     });
 
     it('VB volleyball set excludes TOP_SPEED_MPH, FLY10_TIME, DASH_20YD at HS level', async () => {
-      try {
-        const result = await db.execute(sql`
-          SELECT sb.metric_code
-            FROM benchmark_set_items bsi
-            JOIN site_benchmarks sb ON bsi.benchmark_id = sb.id
-           WHERE bsi.set_id = 'hs-varsity-female-volleyball'
-           ORDER BY sb.metric_code
-        `);
-        if (!result.rows || result.rows.length === 0) {
-          console.warn('VB set items not found - migration may not have been applied');
-          return;
-        }
-        const codes = (result.rows as any[]).map(r => r.metric_code);
-        expect(codes).not.toContain('TOP_SPEED_MPH');
-        expect(codes).not.toContain('FLY10_TIME');
-        expect(codes).not.toContain('DASH_20YD');
-        // Should contain the VB-relevant metrics
-        expect(codes).toContain('DASH_10YD');
-        expect(codes).toContain('VERTICAL_JUMP');
-        expect(codes).toContain('APPROACH_JUMP');
-        expect(codes).toContain('BLOCK_JUMP');
-      } catch (error) {
-        console.warn('DB query failed:', (error as Error).message);
-      }
+      const result = await db.execute(sql`
+        SELECT sb.metric_code
+          FROM benchmark_set_items bsi
+          JOIN site_benchmarks sb ON bsi.benchmark_id = sb.id
+         WHERE bsi.set_id = 'hs-varsity-female-volleyball'
+         ORDER BY sb.metric_code
+      `);
+      const codes = rowsOf(result).map(r => r.metric_code);
+      expect(codes).not.toContain('TOP_SPEED_MPH');
+      expect(codes).not.toContain('FLY10_TIME');
+      expect(codes).not.toContain('DASH_20YD');
+      expect(codes).toContain('DASH_10YD');
+      expect(codes).toContain('VERTICAL_JUMP');
+      expect(codes).toContain('APPROACH_JUMP');
+      expect(codes).toContain('BLOCK_JUMP');
     });
   });
 });
