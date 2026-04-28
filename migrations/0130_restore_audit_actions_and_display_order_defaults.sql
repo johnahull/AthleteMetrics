@@ -24,15 +24,24 @@
 --   B. Re-define `audit_logs_action_valid` with the canonical action list
 --      (verbatim from `0122_add_sprint_fv_module_toggled_audit_action.sql`).
 --   C. Re-define `audit_logs_resource_type_valid` with the canonical resource_type
---      list (verbatim from `0114_add_parent_unlink_audit_action.sql`).
+--      list (verbatim from `0114_add_parent_unlink_audit_action.sql`; that file's
+--      internal header says "Migration 0109" — a pre-existing numbering inconsistency).
 --
 -- All operations are idempotent: re-running this migration on a clean DB
 -- produces the same end-state without observable change.
 --
--- Lock minimization:
+-- Lock behavior:
 --   Sections B and C use `ADD CONSTRAINT … NOT VALID` followed by
---   `VALIDATE CONSTRAINT` to keep the AccessExclusive window short on
---   audit_logs (validation runs under the lighter ShareUpdateExclusive lock).
+--   `VALIDATE CONSTRAINT`. Note: the lighter ShareUpdateExclusiveLock that
+--   VALIDATE normally uses only applies when the two steps run in *separate*
+--   transactions. Because the migration runner wraps this entire file in a
+--   single transaction (sql.begin()), the AccessExclusiveLock acquired by
+--   DROP+ADD is held through VALIDATE until commit.
+--   In practice this is a non-issue here: on prod/staging the constraint
+--   definition is byte-identical to the current state, so VALIDATE completes
+--   in microseconds with zero rows to scan. For future migrations that
+--   genuinely modify a large table's constraint, split VALIDATE into a
+--   separate migration file to get the lock-reduction benefit.
 
 -- ============================================================================
 -- Section A — display_order defaults on three benchmark tables
