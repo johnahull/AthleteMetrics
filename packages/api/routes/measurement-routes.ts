@@ -983,6 +983,13 @@ export function registerMeasurementRoutes(app: Express) {
       }
 
       const config = metric.auxiliaryInputConfig as AuxiliaryInputConfig;
+      if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+        return res.status(400).json({
+          message: "Metric has invalid auxiliary input configuration",
+          field: "metricCode",
+        });
+      }
+
       const result = computePairedInputMeasurement(
         config,
         metricCode,

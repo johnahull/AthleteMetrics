@@ -16,6 +16,12 @@ export interface AuxiliaryInputConfig {
   validationMin?: number;
   validationMax?: number;
   required: boolean;
+  /**
+   * Math.js expression evaluated against `{ load, reps }`.
+   * Variable names MUST be exactly `load` (primary input) and `reps`
+   * (auxiliary input). Org-custom formulas must use these same names or
+   * `evaluateFormula` will return null and computation will fail.
+   */
   computeFormula: string;
   primaryInputLabel: string;
   primaryInputUnit: string;
@@ -48,7 +54,7 @@ export function computePairedInputMeasurement(
   primaryValue: number | null,
   auxiliaryValue: number | null
 ): PairedInputComputeResult {
-  if (primaryValue === null || primaryValue === undefined || primaryValue <= 0) {
+  if (primaryValue === null || primaryValue <= 0) {
     throw new PairedInputValidationError(
       'primaryValue',
       `${config.primaryInputLabel} is required and must be positive`

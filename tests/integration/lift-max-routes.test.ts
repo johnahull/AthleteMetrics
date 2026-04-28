@@ -378,6 +378,37 @@ describe('PUT /api/measurements/:id (paired-input recompute)', () => {
     }
   });
 
+  it('recomputes correctly when only value (load) changes, keeping existing reps', async () => {
+    // Verifies the existingSourceLoad path: when reps are unchanged and load is
+    // corrected, the recompute uses the new load (not the prior estimated 1RM).
+    const createRes = await request(app)
+      .post('/api/measurements')
+      .set('Cookie', athleteCookie)
+      .send({
+        userId: athlete.id,
+        date: '2026-04-27',
+        metric: TEST_METRIC_CODE,
+        value: 315,
+        auxiliaryValue: 3,
+        teamId: team.id,
+      });
+    expect(createRes.status).toBe(201);
+    expect(parseFloat(createRes.body.value)).toBe(346.5); // 315 * 1.1
+    const measurementId = createRes.body.id;
+
+    // Correct load from 315 → 320, keep reps=3. Expected: 320 * (1 + 3/30) = 352.
+    const updateRes = await request(app)
+      .put(`/api/measurements/${measurementId}`)
+      .set('Cookie', athleteCookie)
+      .send({ value: 320 });
+
+    expect(updateRes.status).toBe(200);
+    expect(parseFloat(updateRes.body.value)).toBe(352);
+    expect(parseFloat(updateRes.body.auxiliaryValue)).toBe(3);
+    expect(updateRes.body.isCalculated).toBe(true);
+    expect(updateRes.body.calculationMetadata.sourceValues).toEqual({ load: 320, reps: 3 });
+  });
+
   it('clears paired-input state when metric is changed AWAY from paired-input', async () => {
     const NON_PAIRED_CODE = 'TEST_NON_PAIRED_TARGET';
     await db.insert(siteMetrics).values({

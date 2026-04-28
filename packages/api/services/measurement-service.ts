@@ -197,6 +197,9 @@ export class MeasurementService {
 
       if (metricConfig?.auxiliaryInputConfig) {
         const config = metricConfig.auxiliaryInputConfig as AuxiliaryInputConfig;
+        if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+          throw new PairedInputValidationError('formula', 'Metric has invalid auxiliary input configuration');
+        }
 
         const result = computePairedInputMeasurement(
           config,
@@ -600,10 +603,10 @@ export class MeasurementService {
         if (measurement.notes !== undefined) updateData.notes = measurement.notes;
         if (measurement.flyInDistance !== undefined)
           updateData.flyInDistance = measurement.flyInDistance ? String(measurement.flyInDistance) : null;
-        if (measurement.auxiliaryValue !== undefined)
-          updateData.auxiliaryValue = measurement.auxiliaryValue !== null
-            ? String(measurement.auxiliaryValue)
-            : null;
+        // auxiliaryValue is intentionally NOT written here unconditionally.
+        // It is only set inside the paired-input recompute block (below) or
+        // the clearing branch, so non-paired-input measurements cannot
+        // accidentally persist a stale auxiliary value.
 
         // Determine the effective metric code for unit/auxiliary lookup
         // (could be the new one if metric is changing, or the existing one)
@@ -637,6 +640,9 @@ export class MeasurementService {
           // (incoming + existing) inputs so partial updates work.
           if (metricConfig?.auxiliaryInputConfig && (valueOrAuxChanged || metricIsChanging)) {
             const config = metricConfig.auxiliaryInputConfig as AuxiliaryInputConfig;
+            if (typeof config.computeFormula !== 'string' || !config.computeFormula) {
+              throw new PairedInputValidationError('formula', 'Metric has invalid auxiliary input configuration');
+            }
 
             // For an existing paired-input measurement, `existing.value` is the
             // already-computed result (e.g., 346.5 lb 1RM estimate) — NOT the
@@ -646,6 +652,13 @@ export class MeasurementService {
             // reps) recompute against the original load, not the prior estimate.
             const existingSourceLoad =
               existing.calculationMetadata?.sourceValues?.load ?? null;
+
+            if (existing.calculationMetadata && existingSourceLoad === null && measurement.value === undefined) {
+              console.warn(
+                `[updateMeasurement] id=${id}: calculationMetadata present but sourceValues.load missing — falling back to existing.value, which may cause drift`
+              );
+            }
+
             const primaryRaw = measurement.value !== undefined
               ? measurement.value
               : (existingSourceLoad !== null ? existingSourceLoad : existing.value);
@@ -665,6 +678,7 @@ export class MeasurementService {
             );
 
             updateData.value = String(result.value);
+            updateData.auxiliaryValue = auxNum !== null ? String(auxNum) : null;
             updateData.units = result.units;
             updateData.isCalculated = !!result.calculationMetadata;
             if (result.calculationMetadata) {
@@ -672,9 +686,11 @@ export class MeasurementService {
                 ...result.calculationMetadata,
                 triggeredBy: { event: 'measurement_update' },
               };
-              // See createMeasurement: paired-input rows need a non-null
-              // (but empty) calculated_from_measurement_ids to satisfy
-              // chk_calculated_measurements_valid.
+              // Paired-input: computed from inline inputs, not from other
+              // measurement rows. Empty array satisfies the
+              // chk_calculated_measurements_valid CHECK constraint while
+              // signalling "no source rows". Cross-row derived metrics
+              // list their dependencies here instead.
               updateData.calculatedFromMeasurementIds = [];
             }
           } else if (

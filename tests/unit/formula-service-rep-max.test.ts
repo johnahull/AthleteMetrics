@@ -59,16 +59,13 @@ describe('formula-service: rep-max formulas', () => {
       expect(brzycki!).toBeLessThan(epley!);
     });
 
-    it('returns null when reps approaches the 36.97 asymptote (denominator → 0)', () => {
-      // 1.0278 - 0.0278 * 37 ≈ -0.0008 — produces a near-infinite value, but technically finite
-      // At reps=36.97, denominator is exactly zero — division by zero returns null per formula-service contract
+    it('returns a huge finite value as reps approach the Brzycki asymptote', () => {
+      // At reps=36.97: denominator = 1.0278 - 0.0278*36.97 ≈ 0.000034 (near zero but finite).
+      // The formula-service isFinite guard does NOT fire — result is a huge number, not null.
+      // This documents that Brzycki is unsafe at high reps; validation must enforce reasonable caps.
       const result = evaluateFormula(BRZYCKI, { load: 315, reps: 36.97 });
-      // The formula service's isFinite guard catches actual division-by-zero (returns null)
-      // For values approaching but not crossing zero, the result is finite but huge
-      // This documents that Brzycki is unsafe at high reps — validation must enforce reasonable caps
-      if (result !== null) {
-        expect(Math.abs(result)).toBeGreaterThan(10000); // Implausibly large = sentinel of misuse
-      }
+      expect(result).not.toBeNull();
+      expect(Math.abs(result!)).toBeGreaterThan(10000);
     });
   });
 
