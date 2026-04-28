@@ -104,42 +104,41 @@ describe('Migration 0132: Full Sprint Battery (AM-FEAT-010)', () => {
     });
   });
 
-  describe('Database state (when migration is applied)', () => {
+  describe.skipIf(!process.env.DATABASE_URL)('Database state (when migration is applied)', () => {
+    const rowsOf = (result: unknown): any[] => {
+      if (Array.isArray(result)) return result;
+      const r = result as { rows?: unknown };
+      return Array.isArray(r.rows) ? r.rows : [];
+    };
+
     it('DII and DIII soccer benchmark sets exist', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT id, level, gender FROM benchmark_sets
-           WHERE id IN ('dii-womens-soccer','diii-womens-soccer') ORDER BY id
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect(r.rows).toHaveLength(2);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT id, level, gender FROM benchmark_sets
+         WHERE id IN ('dii-womens-soccer','diii-womens-soccer') ORDER BY id
+      `);
+      expect(rowsOf(r)).toHaveLength(2);
     });
 
     it('DII and DIII sets each contain all 5 sprint distances', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT bsi.set_id, COUNT(*)::int AS n
-            FROM benchmark_set_items bsi
-           WHERE bsi.set_id IN ('dii-womens-soccer','diii-womens-soccer')
-           GROUP BY bsi.set_id
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        for (const row of r.rows as any[]) {
-          expect(row.n).toBe(5);
-        }
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT bsi.set_id, COUNT(*)::int AS n
+          FROM benchmark_set_items bsi
+         WHERE bsi.set_id IN ('dii-womens-soccer','diii-womens-soccer')
+         GROUP BY bsi.set_id
+      `);
+      const rows = rowsOf(r);
+      expect(rows).toHaveLength(2);
+      for (const row of rows) {
+        expect(row.n).toBe(5);
+      }
     });
 
     it('VB DASH_20YD rows are gone after cleanup', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT COUNT(*)::int AS n FROM site_benchmarks
-           WHERE id IN ('d1-vb-dash20-hs-avg','d1-vb-dash20-d1-avg','d1-vb-dash20-d1-top25')
-        `);
-        if (!r.rows || r.rows.length === 0) { console.warn('Not applied'); return; }
-        expect((r.rows[0] as any).n).toBe(0);
-      } catch (e) { console.warn('DB unreachable:', (e as Error).message); }
+      const r = await db.execute(sql`
+        SELECT COUNT(*)::int AS n FROM site_benchmarks
+         WHERE id IN ('d1-vb-dash20-hs-avg','d1-vb-dash20-d1-avg','d1-vb-dash20-d1-top25')
+      `);
+      expect(rowsOf(r)[0].n).toBe(0);
     });
   });
 });
