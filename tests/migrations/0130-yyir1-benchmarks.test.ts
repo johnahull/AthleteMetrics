@@ -234,6 +234,11 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
           return;
         }
         expect(rows).toHaveLength(4);
+        const byId = Object.fromEntries(rows.map(row => [row.id, Number(row.v)]));
+        expect(byId['d1-soc-yyir1-hs-avg']).toBe(950);
+        expect(byId['d1-soc-yyir1-d1-avg']).toBe(1300);
+        expect(byId['d1-soc-yyir1-d1-top25']).toBe(1650);
+        expect(byId['d1-soc-yyir1-elite']).toBe(1700);
       } catch (err) {
         // Narrow to 42P01 (relation does not exist) — re-throw real query
         // failures (column typo, permission error) so they don't silently pass.
@@ -242,10 +247,12 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
       }
     });
 
-    it('all 4 HS-soccer YYIR1 rows exist', async () => {
+    it('all 4 HS-soccer YYIR1 rows exist with correct values', async () => {
       try {
         const r = await db.execute(sql`
-          SELECT id FROM site_benchmarks WHERE id LIKE 'hs-%-soc-yyir1%'
+          SELECT id, benchmark_value::numeric AS v
+            FROM site_benchmarks
+           WHERE id LIKE 'hs-%-soc-yyir1%' ORDER BY id
         `);
         const rows = rowsOf(r);
         if (rows.length === 0) {
@@ -253,6 +260,11 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
           return;
         }
         expect(rows).toHaveLength(4);
+        const byId = Object.fromEntries(rows.map(row => [row.id, Number(row.v)]));
+        expect(byId['hs-ms-soc-yyir1']).toBe(750);
+        expect(byId['hs-jv-soc-yyir1']).toBe(950);
+        expect(byId['hs-var-soc-yyir1-avg']).toBe(1000);
+        expect(byId['hs-var-soc-yyir1-top25']).toBe(1400);
       } catch (err) {
         // Narrow to 42P01 (relation does not exist) — re-throw real query
         // failures (column typo, permission error) so they don't silently pass.

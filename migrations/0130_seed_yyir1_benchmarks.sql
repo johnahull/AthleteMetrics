@@ -124,6 +124,8 @@ INSERT INTO site_benchmarks (
 -- Conflict target is the explicit id PK so re-runs don't trip the PK before
 -- the arbiter index (see ON CONFLICT index inference: only conflicts on the
 -- inferred constraint are caught; PK conflicts on any other constraint raise).
+-- Note: 'd1-soc-yyir1-elite' uses level='D1' because there is no 'Pro' value
+-- in the level enum yet; AM-FEAT-011 may extend the enum.
 ON CONFLICT (id) DO UPDATE SET
   metric_code = EXCLUDED.metric_code,
   name = EXCLUDED.name,
@@ -132,6 +134,7 @@ ON CONFLICT (id) DO UPDATE SET
   benchmark_value = EXCLUDED.benchmark_value,
   tier_name = EXCLUDED.tier_name,
   tier_color = EXCLUDED.tier_color,
+  display_order = EXCLUDED.display_order,
   is_active = true,
   updated_at = NOW();
 
@@ -173,6 +176,9 @@ ON CONFLICT (id) DO UPDATE SET
   benchmark_value = EXCLUDED.benchmark_value,
   tier_name = EXCLUDED.tier_name,
   tier_color = EXCLUDED.tier_color,
+  display_order = EXCLUDED.display_order,
+  age_min = EXCLUDED.age_min,
+  age_max = EXCLUDED.age_max,
   is_active = true,
   updated_at = NOW();
 
