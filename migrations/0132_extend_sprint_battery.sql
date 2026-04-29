@@ -54,6 +54,10 @@ VALUES
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   description = EXCLUDED.description,
+  sport = EXCLUDED.sport,
+  level = EXCLUDED.level,
+  gender = EXCLUDED.gender,
+  is_template = EXCLUDED.is_template,
   is_active = true,
   updated_at = NOW();
 
