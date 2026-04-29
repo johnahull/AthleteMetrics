@@ -89,6 +89,8 @@ ON CONFLICT (code) DO UPDATE SET
   decimal_precision = EXCLUDED.decimal_precision,
   validation_min = EXCLUDED.validation_min,
   validation_max = EXCLUDED.validation_max,
+  color = EXCLUDED.color,
+  icon = EXCLUDED.icon,
   is_active = true;
 
 -- ============================================================================
@@ -124,8 +126,10 @@ INSERT INTO site_benchmarks (
 -- Conflict target is the explicit id PK so re-runs don't trip the PK before
 -- the arbiter index (see ON CONFLICT index inference: only conflicts on the
 -- inferred constraint are caught; PK conflicts on any other constraint raise).
--- Note: 'd1-soc-yyir1-elite' uses level='D1' because there is no 'Pro' value
--- in the level enum yet; AM-FEAT-011 may extend the enum.
+-- TODO AM-FEAT-011: 'd1-soc-yyir1-elite' uses level='D1' because there is no
+-- 'Pro' value in the level enum yet. Change to level='Pro' once the enum is
+-- extended; level='D1' filters currently include this Elite/Pro row, which
+-- inflates D1 ranges in level-filtered comparisons.
 ON CONFLICT (id) DO UPDATE SET
   metric_code = EXCLUDED.metric_code,
   name = EXCLUDED.name,
@@ -184,6 +188,10 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- ============================================================================
 -- Block E — benchmark_set_items linkages
+--
+-- Requires: migration 0129 (PR #402) must have seeded the d1-womens-soccer
+-- set and the three hs-{ms,jv,varsity}-female-soccer sets. If 0129 has not
+-- been applied first, these inserts will fail with a foreign-key violation.
 -- ============================================================================
 INSERT INTO benchmark_set_items (id, set_id, benchmark_id, benchmark_type, display_order)
 VALUES

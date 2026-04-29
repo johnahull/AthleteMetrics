@@ -6,7 +6,7 @@
  *   2. Formula evaluation        — verifies VO₂max formula via evaluateFormula()
  *   3. Live DB row inspection    — gracefully skips if migration not applied
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -30,21 +30,22 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
   describe('Up-migration SQL file', () => {
     let upSql: string;
 
+    beforeAll(() => {
+      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
+    });
+
     it('exists at expected path', () => {
       expect(fs.existsSync(UP_SQL_PATH)).toBe(true);
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql.length).toBeGreaterThan(0);
     });
 
     it('declares COND_YYIR1_DISTANCE base metric (Block A)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toContain("'COND_YYIR1_DISTANCE'");
       expect(upSql).toContain("'higher_is_better'");
       expect(upSql).toMatch(/'m',/);
     });
 
     it('declares COND_VO2MAX_EST derived metric (Block B)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toContain("'COND_VO2MAX_EST'");
       expect(upSql).toContain(VO2MAX_FORMULA);
       expect(upSql).toContain("ARRAY['COND_YYIR1_DISTANCE']");
@@ -52,7 +53,6 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
     });
 
     it('seeds D1 women\'s soccer YYIR1 rows (Block C)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       // HS Avg = 950
       expect(upSql).toMatch(/'d1-soc-yyir1-hs-avg'[\s\S]*?950\.000/);
       // D1 Avg = 1300
@@ -64,12 +64,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
     });
 
     it('inline-notes DII / DIII thresholds in D1 Avg description (Option A)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/d1-soc-yyir1-d1-avg[\s\S]*?DII threshold[\s\S]*?DIII threshold/);
     });
 
     it('seeds HS age-grouped soccer YYIR1 rows (Block D)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       // MS = 750 (LOW confidence)
       expect(upSql).toMatch(/'hs-ms-soc-yyir1'[\s\S]*?750\.000/);
       // JV = 950
@@ -81,18 +79,24 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
     });
 
     it('flags MS-tier as LOW confidence in description', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/'hs-ms-soc-yyir1'[\s\S]*?LOW[\s\S]*?pending BTA internal data/);
     });
 
     it('does not seed volleyball (out of scope per spec)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).not.toMatch(/'d1-vb-yyir1/);
       expect(upSql).not.toMatch(/'hs-.*-vb-yyir1/);
     });
 
+    it('Block E linkages reference the correct PR #402 set IDs', () => {
+      // Hard dependency: 0129 (PR #402) seeds these; copy-paste typos here
+      // would produce FK violations on apply.
+      expect(upSql).toContain("'d1-womens-soccer'");
+      expect(upSql).toContain("'hs-ms-female-soccer'");
+      expect(upSql).toContain("'hs-jv-female-soccer'");
+      expect(upSql).toContain("'hs-varsity-female-soccer'");
+    });
+
     it('uses ON CONFLICT for every INSERT (DO NOTHING for base metric, DO UPDATE for the rest)', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       const sqlOnly = upSql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
       const insertCount = (sqlOnly.match(/INSERT INTO/g) || []).length;
       const conflictCount = (sqlOnly.match(/ON CONFLICT \([^)]+\)\s+DO\s+(UPDATE|NOTHING)/g) || []).length;
@@ -102,7 +106,6 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
     });
 
     it('emits a RAISE NOTICE summary at the end', () => {
-      upSql = fs.readFileSync(UP_SQL_PATH, 'utf-8');
       expect(upSql).toMatch(/RAISE NOTICE\s+'Migration 0130 complete/);
     });
   });
