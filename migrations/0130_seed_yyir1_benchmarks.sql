@@ -218,7 +218,8 @@ ON CONFLICT (id) DO UPDATE SET
   set_id = EXCLUDED.set_id,
   benchmark_id = EXCLUDED.benchmark_id,
   benchmark_type = EXCLUDED.benchmark_type,
-  display_order = EXCLUDED.display_order;
+  display_order = EXCLUDED.display_order,
+  is_active = true;
 
 -- ============================================================================
 -- Block F — Summary
@@ -228,7 +229,7 @@ DECLARE
   v_yyir1_rows INTEGER;
   v_set_items  INTEGER;
 BEGIN
-  SELECT COUNT(*) INTO v_yyir1_rows FROM site_benchmarks WHERE metric_code = 'COND_YYIR1_DISTANCE';
+  SELECT COUNT(*) INTO v_yyir1_rows FROM site_benchmarks WHERE id LIKE '%yyir1%';
   SELECT COUNT(*) INTO v_set_items FROM benchmark_set_items WHERE benchmark_id LIKE '%yyir1%';
 
   RAISE NOTICE 'Migration 0130 complete: COND_YYIR1_DISTANCE + COND_VO2MAX_EST metrics, % YYIR1 benchmark rows, % YYIR1 set_items.',

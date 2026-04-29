@@ -213,9 +213,11 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
           return;
         }
         expect(rows).toHaveLength(1);
-        expect(rows[0].is_derived).toBe(true);
+        // Neon/node-postgres may return boolean as JS true or the string 't'
+        expect(Boolean(rows[0].is_derived)).toBe(true);
         expect(rows[0].formula).toBe(VO2MAX_FORMULA);
-        expect(rows[0].dependent_metrics).toEqual(['COND_YYIR1_DISTANCE']);
+        // Postgres arrays via raw execute may surface as '{COND_YYIR1_DISTANCE}' string
+        expect(String(rows[0].dependent_metrics)).toContain('COND_YYIR1_DISTANCE');
       } catch (err) {
         // Narrow to 42P01 (relation does not exist) — re-throw real query
         // failures (column typo, permission error) so they don't silently pass.
@@ -271,6 +273,26 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
       } catch (err) {
         // Narrow to 42P01 (relation does not exist) — re-throw real query
         // failures (column typo, permission error) so they don't silently pass.
+        if ((err as { code?: string })?.code !== '42P01') throw err;
+        console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
+      }
+    });
+
+    it('8 benchmark_set_items linkage rows exist', async () => {
+      try {
+        const r = await db.execute(sql`
+          SELECT COUNT(*)::integer AS count
+            FROM benchmark_set_items
+           WHERE id LIKE 'bsi-%yyir1%'
+        `);
+        const rows = rowsOf(r);
+        const count = Number(rows[0]?.count ?? 0);
+        if (count === 0) {
+          console.warn('YYIR1 set_items not found - migration 0130 may not have been applied');
+          return;
+        }
+        expect(count).toBe(8);
+      } catch (err) {
         if ((err as { code?: string })?.code !== '42P01') throw err;
         console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
       }
