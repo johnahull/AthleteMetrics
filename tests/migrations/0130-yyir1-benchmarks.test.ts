@@ -192,7 +192,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
         expect(rows[0].metric_type).toBe('higher_is_better');
         expect(rows[0].unit).toBe('m');
       } catch (err) {
-        console.warn('Skipping live-DB check (migration 0130 may not have been applied):', err);
+        // Narrow to 42P01 (relation does not exist) — re-throw real query
+        // failures (column typo, permission error) so they don't silently pass.
+        if ((err as { code?: string })?.code !== '42P01') throw err;
+        console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
       }
     });
 
@@ -211,7 +214,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
         expect(rows[0].formula).toBe(VO2MAX_FORMULA);
         expect(rows[0].dependent_metrics).toEqual(['COND_YYIR1_DISTANCE']);
       } catch (err) {
-        console.warn('Skipping live-DB check (migration 0130 may not have been applied):', err);
+        // Narrow to 42P01 (relation does not exist) — re-throw real query
+        // failures (column typo, permission error) so they don't silently pass.
+        if ((err as { code?: string })?.code !== '42P01') throw err;
+        console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
       }
     });
 
@@ -229,7 +235,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
         }
         expect(rows).toHaveLength(4);
       } catch (err) {
-        console.warn('Skipping live-DB check (migration 0130 may not have been applied):', err);
+        // Narrow to 42P01 (relation does not exist) — re-throw real query
+        // failures (column typo, permission error) so they don't silently pass.
+        if ((err as { code?: string })?.code !== '42P01') throw err;
+        console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
       }
     });
 
@@ -245,7 +254,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
         }
         expect(rows).toHaveLength(4);
       } catch (err) {
-        console.warn('Skipping live-DB check (migration 0130 may not have been applied):', err);
+        // Narrow to 42P01 (relation does not exist) — re-throw real query
+        // failures (column typo, permission error) so they don't silently pass.
+        if ((err as { code?: string })?.code !== '42P01') throw err;
+        console.warn('Skipping live-DB check — table missing, migration 0130 may not be applied');
       }
     });
   });

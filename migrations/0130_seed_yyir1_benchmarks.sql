@@ -85,6 +85,10 @@ ON CONFLICT (code) DO UPDATE SET
   is_derived = EXCLUDED.is_derived,
   metric_type = EXCLUDED.metric_type,
   unit = EXCLUDED.unit,
+  display_order = EXCLUDED.display_order,
+  decimal_precision = EXCLUDED.decimal_precision,
+  validation_min = EXCLUDED.validation_min,
+  validation_max = EXCLUDED.validation_max,
   is_active = true;
 
 -- ============================================================================
@@ -117,7 +121,12 @@ INSERT INTO site_benchmarks (
    'COND_YYIR1_DISTANCE', 'Soccer Elite/Pro Threshold',
    'Elite / pro female cohorts: > 1700 m, speed level 17.5+. Multi-source pro female aggregated data. Confidence: HIGH.',
    'gte', 1700.000, 'Elite/Pro', 'green', 'Female', 'SOCCER', 'D1', true, true, 4)
-ON CONFLICT (metric_code, name) DO UPDATE SET
+-- Conflict target is the explicit id PK so re-runs don't trip the PK before
+-- the arbiter index (see ON CONFLICT index inference: only conflicts on the
+-- inferred constraint are caught; PK conflicts on any other constraint raise).
+ON CONFLICT (id) DO UPDATE SET
+  metric_code = EXCLUDED.metric_code,
+  name = EXCLUDED.name,
   description = EXCLUDED.description,
   comparison_operator = EXCLUDED.comparison_operator,
   benchmark_value = EXCLUDED.benchmark_value,
@@ -156,7 +165,9 @@ INSERT INTO site_benchmarks (
    'COND_YYIR1_DISTANCE', 'HS Varsity Female Soccer (Ages 16-18) Top 25%',
    '~1400 m. Approaches D1 Average — high-tier HS achievable. Confidence: MEDIUM.',
    'gte', 1400.000, 'Varsity Top 25%', 'green', 'Female', 'SOCCER', 'HS', 16, 18, true, true, 2)
-ON CONFLICT (metric_code, name) DO UPDATE SET
+ON CONFLICT (id) DO UPDATE SET
+  metric_code = EXCLUDED.metric_code,
+  name = EXCLUDED.name,
   description = EXCLUDED.description,
   comparison_operator = EXCLUDED.comparison_operator,
   benchmark_value = EXCLUDED.benchmark_value,
@@ -181,7 +192,10 @@ VALUES
   ('bsi-hs-jv-soc-yyir1',         'hs-jv-female-soccer',      'hs-jv-soc-yyir1',         'site', 50),
   ('bsi-hs-var-soc-yyir1-avg',    'hs-varsity-female-soccer', 'hs-var-soc-yyir1-avg',    'site', 50),
   ('bsi-hs-var-soc-yyir1-top25',  'hs-varsity-female-soccer', 'hs-var-soc-yyir1-top25',  'site', 51)
-ON CONFLICT (set_id, benchmark_id, benchmark_type) DO UPDATE SET
+ON CONFLICT (id) DO UPDATE SET
+  set_id = EXCLUDED.set_id,
+  benchmark_id = EXCLUDED.benchmark_id,
+  benchmark_type = EXCLUDED.benchmark_type,
   display_order = EXCLUDED.display_order;
 
 -- ============================================================================
