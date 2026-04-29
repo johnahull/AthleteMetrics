@@ -91,6 +91,8 @@ ON CONFLICT (code) DO UPDATE SET
   validation_max = EXCLUDED.validation_max,
   color = EXCLUDED.color,
   icon = EXCLUDED.icon,
+  category = EXCLUDED.category,
+  is_system_default = EXCLUDED.is_system_default,
   is_active = true;
 
 -- ============================================================================
@@ -139,6 +141,9 @@ ON CONFLICT (id) DO UPDATE SET
   tier_name = EXCLUDED.tier_name,
   tier_color = EXCLUDED.tier_color,
   display_order = EXCLUDED.display_order,
+  gender = EXCLUDED.gender,
+  sport = EXCLUDED.sport,
+  level = EXCLUDED.level,
   is_active = true,
   updated_at = NOW();
 
@@ -183,6 +188,9 @@ ON CONFLICT (id) DO UPDATE SET
   display_order = EXCLUDED.display_order,
   age_min = EXCLUDED.age_min,
   age_max = EXCLUDED.age_max,
+  gender = EXCLUDED.gender,
+  sport = EXCLUDED.sport,
+  level = EXCLUDED.level,
   is_active = true,
   updated_at = NOW();
 
