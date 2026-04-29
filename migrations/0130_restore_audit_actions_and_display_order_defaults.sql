@@ -228,7 +228,13 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     'org_training_enabled',
 
     -- Parent/COPPA actions
-    'parent_unlinked_child'
+    'parent_unlinked_child',
+
+    -- Profile management actions
+    -- Note: `profile_merge` is emitted by services/profile-merge-service.ts:634
+    -- but was never added to a forward-only constraint migration. Added here
+    -- so VALIDATE CONSTRAINT does not fail against existing prod audit rows.
+    'profile_merge'
 )) NOT VALID;
 
 ALTER TABLE audit_logs VALIDATE CONSTRAINT audit_logs_action_valid;
@@ -256,7 +262,16 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (reso
     'site_settings',
     'membership_request',
     'event',
-    'parent_athlete_link'
+    'parent_athlete_link',
+
+    -- Resource types emitted by code that were never added to a forward-only
+    -- constraint migration. Added here so VALIDATE CONSTRAINT does not fail
+    -- against existing prod audit rows. Follow-up: canonicalize singular vs
+    -- plural naming (site_metric/site_metrics, site_benchmark/site_benchmarks).
+    'user_organization',     -- routes/organization-routes.ts:791
+    'organization_type',     -- middleware/organization-type-middleware.ts:695
+    'site_metrics',          -- services/organization-type-service.ts:327 (plural — coexists with site_metric)
+    'site_benchmarks'        -- services/organization-type-service.ts:398 (plural — coexists with site_benchmark)
 )) NOT VALID;
 
 ALTER TABLE audit_logs VALIDATE CONSTRAINT audit_logs_resource_type_valid;
