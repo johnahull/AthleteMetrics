@@ -31,17 +31,19 @@
 -- produces the same end-state without observable change.
 --
 -- Lock behavior:
---   Sections B and C use `ADD CONSTRAINT … NOT VALID` followed by
---   `VALIDATE CONSTRAINT`. Note: the lighter ShareUpdateExclusiveLock that
---   VALIDATE normally uses only applies when the two steps run in *separate*
---   transactions. Because the migration runner wraps this entire file in a
---   single transaction (sql.begin()), the AccessExclusiveLock acquired by
---   DROP+ADD is held through VALIDATE until commit.
---   In practice this is a non-issue here: on prod/staging the constraint
---   definition is byte-identical to the current state, so VALIDATE completes
---   in microseconds with zero rows to scan. For future migrations that
---   genuinely modify a large table's constraint, split VALIDATE into a
---   separate migration file to get the lock-reduction benefit.
+--   Sections B and C use plain `ADD CONSTRAINT` (without NOT VALID).
+--   This acquires AccessExclusiveLock and performs a full sequential scan of
+--   audit_logs to validate all existing rows. On prod/staging where the
+--   constraint definition is byte-identical to the current state, all rows
+--   already conform so the scan completes quickly — but it still scans every
+--   row; "zero rows to scan" would be wrong. Schedule this migration in a
+--   low-traffic window if audit_logs is large.
+--   Note: the ShareUpdateExclusiveLock benefit of `ADD … NOT VALID; VALIDATE`
+--   only applies when the two steps run in *separate* transactions. Using that
+--   pattern inside a single sql.begin() provides no lock-duration reduction
+--   (the AccessExclusiveLock is held from DROP+ADD through the end of the
+--   transaction regardless), so plain `ADD CONSTRAINT` is used here to avoid
+--   implying a lock-reduction technique that is not active.
 
 -- ============================================================================
 -- Section A — display_order defaults on three benchmark tables
@@ -233,11 +235,9 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_action_valid CHECK (action IN (
     -- Profile management actions
     -- Note: `profile_merge` is emitted by services/profile-merge-service.ts:634
     -- but was never added to a forward-only constraint migration. Added here
-    -- so VALIDATE CONSTRAINT does not fail against existing prod audit rows.
+    -- so existing prod audit rows satisfy the constraint.
     'profile_merge'
-)) NOT VALID;
-
-ALTER TABLE audit_logs VALIDATE CONSTRAINT audit_logs_action_valid;
+));
 
 COMMENT ON CONSTRAINT audit_logs_action_valid ON audit_logs IS
   'Valid audit log actions — full canonical list as of migration 0122; restored by 0130 after _down rollback drift.';
@@ -265,16 +265,14 @@ ALTER TABLE audit_logs ADD CONSTRAINT audit_logs_resource_type_valid CHECK (reso
     'parent_athlete_link',
 
     -- Resource types emitted by code that were never added to a forward-only
-    -- constraint migration. Added here so VALIDATE CONSTRAINT does not fail
-    -- against existing prod audit rows. Follow-up: canonicalize singular vs
-    -- plural naming (site_metric/site_metrics, site_benchmark/site_benchmarks).
+    -- constraint migration. Added here so existing prod audit rows satisfy the
+    -- constraint. Follow-up: canonicalize singular vs plural naming
+    -- (site_metric/site_metrics, site_benchmark/site_benchmarks).
     'user_organization',     -- routes/organization-routes.ts:791
     'organization_type',     -- middleware/organization-type-middleware.ts:695
     'site_metrics',          -- services/organization-type-service.ts:327 (plural — coexists with site_metric)
     'site_benchmarks'        -- services/organization-type-service.ts:398 (plural — coexists with site_benchmark)
-)) NOT VALID;
-
-ALTER TABLE audit_logs VALIDATE CONSTRAINT audit_logs_resource_type_valid;
+));
 
 COMMENT ON CONSTRAINT audit_logs_resource_type_valid ON audit_logs IS
   'Valid audit log resource_type values — full canonical list as of migration 0114; restored by 0130.';
