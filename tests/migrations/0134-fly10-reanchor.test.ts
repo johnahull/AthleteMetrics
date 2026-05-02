@@ -42,9 +42,9 @@ describe('Migration 0134: FLY10_TIME re-anchoring', () => {
 
     it('updates each of the 5 FLY10_TIME row IDs with the spec-canonical value', () => {
       for (const [rowId, value] of Object.entries(NEW_VALUES)) {
-        const expectedValue = value.toFixed(3);
+        const escapedValue = value.toFixed(3).replace('.', '\\.');
         // Each UPDATE block must contain the row id, the new benchmark_value, and an updated description
-        expect(upSql).toMatch(new RegExp(`benchmark_value = ${expectedValue}[\\s\\S]*?WHERE id = '${rowId}'`));
+        expect(upSql).toMatch(new RegExp(`benchmark_value = ${escapedValue}[\\s\\S]*?WHERE id = '${rowId}'`));
       }
     });
 
@@ -52,7 +52,7 @@ describe('Migration 0134: FLY10_TIME re-anchoring', () => {
       const sqlOnly = upSql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n');
       expect(sqlOnly).not.toMatch(/\bINSERT INTO\b/);
       expect(sqlOnly).not.toMatch(/\bDELETE FROM\b/);
-      const updateCount = (sqlOnly.match(/^UPDATE site_benchmarks$/gm) || []).length;
+      const updateCount = (sqlOnly.match(/\bUPDATE site_benchmarks\b/g) || []).length;
       expect(updateCount).toBe(5);
     });
 
@@ -87,7 +87,8 @@ describe('Migration 0134: FLY10_TIME re-anchoring', () => {
         'hs-var-soc-fly10':      '1.480',
       };
       for (const [rowId, oldValue] of Object.entries(oldValues)) {
-        expect(downSql).toMatch(new RegExp(`benchmark_value = ${oldValue}[\\s\\S]*?WHERE id = '${rowId}'`));
+        const escapedValue = oldValue.replace('.', '\\.');
+        expect(downSql).toMatch(new RegExp(`benchmark_value = ${escapedValue}[\\s\\S]*?WHERE id = '${rowId}'`));
       }
     });
   });
@@ -100,42 +101,34 @@ describe('Migration 0134: FLY10_TIME re-anchoring', () => {
     };
 
     it('all 5 FLY10_TIME values match the re-anchored spec values', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT id, benchmark_value::numeric AS value
-            FROM site_benchmarks
-           WHERE id IN (
-             'd1-soc-fly10-d1-avg', 'd1-soc-fly10-d1-top25',
-             'hs-ms-soc-fly10', 'hs-jv-soc-fly10', 'hs-var-soc-fly10'
-           )
-           ORDER BY id
-        `);
-        const rows = rowsOf(r);
-        if (rows.length === 0) {
-          console.warn('FLY10_TIME rows not found — migrations 0129 + 0134 may not be applied');
-          return;
-        }
-        expect(rows).toHaveLength(5);
-        for (const row of rows) {
-          const expected = NEW_VALUES[row.id as keyof typeof NEW_VALUES];
-          expect(Number(row.value)).toBeCloseTo(expected, 3);
-        }
-      } catch (err) {
-        console.warn('Skipping live-DB check:', err);
+      const r = await db.execute(sql`
+        SELECT id, benchmark_value::numeric AS value
+          FROM site_benchmarks
+         WHERE id IN (
+           'd1-soc-fly10-d1-avg', 'd1-soc-fly10-d1-top25',
+           'hs-ms-soc-fly10', 'hs-jv-soc-fly10', 'hs-var-soc-fly10'
+         )
+         ORDER BY id
+      `);
+      const rows = rowsOf(r);
+      if (rows.length === 0) {
+        console.warn('FLY10_TIME rows not found — migrations 0129 + 0134 may not be applied');
+        return;
+      }
+      expect(rows).toHaveLength(5);
+      for (const row of rows) {
+        const expected = NEW_VALUES[row.id as keyof typeof NEW_VALUES];
+        expect(Number(row.value)).toBeCloseTo(expected, 3);
       }
     });
 
     it('descriptions reflect 2026-04-29 re-anchoring', async () => {
-      try {
-        const r = await db.execute(sql`
-          SELECT description FROM site_benchmarks WHERE id = 'd1-soc-fly10-d1-avg'
-        `);
-        const rows = rowsOf(r);
-        if (rows.length === 0) return;
-        expect(rows[0].description).toMatch(/2026-04-29|20\.455/);
-      } catch (err) {
-        console.warn('Skipping live-DB check:', err);
-      }
+      const r = await db.execute(sql`
+        SELECT description FROM site_benchmarks WHERE id = 'd1-soc-fly10-d1-avg'
+      `);
+      const rows = rowsOf(r);
+      if (rows.length === 0) return;
+      expect(rows[0].description).toMatch(/2026-04-29|20\.455/);
     });
   });
 });
