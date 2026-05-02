@@ -124,14 +124,17 @@ INSERT INTO site_benchmarks (
   ('d1-soc-yyir1-elite',
    'COND_YYIR1_DISTANCE', 'Soccer Elite/Pro Threshold',
    'Elite / pro female cohorts: > 1700 m, speed level 17.5+. Multi-source pro female aggregated data. Confidence: HIGH.',
-   'gte', 1700.000, 'Elite/Pro', 'green', 'Female', 'SOCCER', 'D1', true, true, 4)
+   'gte', 1700.000, 'Elite/Pro', 'green', 'Female', 'SOCCER', 'D1', true, false, 4)
 -- Conflict target is the explicit id PK so re-runs don't trip the PK before
 -- the arbiter index (see ON CONFLICT index inference: only conflicts on the
 -- inferred constraint are caught; PK conflicts on any other constraint raise).
--- TODO AM-FEAT-011: 'd1-soc-yyir1-elite' uses level='D1' because there is no
--- 'Pro' value in the level enum yet. Change to level='Pro' once the enum is
--- extended; level='D1' filters currently include this Elite/Pro row, which
--- inflates D1 ranges in level-filtered comparisons.
+-- 'd1-soc-yyir1-elite' is seeded with is_active=false + level='D1' because the
+-- level enum has no 'Pro' value yet. Leaving it active polluted level='D1'
+-- filters with the Elite/Pro row (≥1700 m) alongside D1 Average (≥1300 m) and
+-- D1 Top 25% (≥1650 m), inflating D1 ranges in level-filtered comparisons.
+-- Once a 'Pro' level enum value is added, change level to 'Pro' and flip
+-- is_active to true. is_active = EXCLUDED.is_active (not hardcoded true) so
+-- this row stays inactive on re-run.
 ON CONFLICT (id) DO UPDATE SET
   metric_code = EXCLUDED.metric_code,
   name = EXCLUDED.name,
@@ -144,7 +147,7 @@ ON CONFLICT (id) DO UPDATE SET
   gender = EXCLUDED.gender,
   sport = EXCLUDED.sport,
   level = EXCLUDED.level,
-  is_active = true,
+  is_active = EXCLUDED.is_active,
   updated_at = NOW();
 
 -- ============================================================================
