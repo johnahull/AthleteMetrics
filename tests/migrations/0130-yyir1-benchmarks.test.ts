@@ -63,6 +63,13 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
       expect(upSql).toMatch(/'d1-soc-yyir1-elite'[\s\S]*?1700\.000/);
     });
 
+    it("'d1-soc-yyir1-elite' is seeded inactive (level='D1' workaround until Pro enum lands)", () => {
+      // Locks in the decision: elite row stays inactive while it carries
+      // level='D1', so it doesn't pollute level='D1' filters. Flip to true
+      // when the level enum gains a 'Pro' value and the row is updated.
+      expect(upSql).toMatch(/'d1-soc-yyir1-elite'[\s\S]*?'D1',\s*true,\s*false,\s*4/);
+    });
+
     it('inline-notes DII / DIII thresholds in D1 Avg description (Option A)', () => {
       expect(upSql).toMatch(/d1-soc-yyir1-d1-avg[\s\S]*?DII threshold[\s\S]*?DIII threshold/);
     });
@@ -226,10 +233,10 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
       }
     });
 
-    it('all 4 D1 soccer YYIR1 rows exist with correct values', async () => {
+    it('all 4 D1 soccer YYIR1 rows exist with correct values and active flags', async () => {
       try {
         const r = await db.execute(sql`
-          SELECT id, benchmark_value::numeric AS v
+          SELECT id, benchmark_value::numeric AS v, is_active
             FROM site_benchmarks
            WHERE id LIKE 'd1-soc-yyir1-%' ORDER BY id
         `);
@@ -239,11 +246,17 @@ describe('Migration 0130: Yo-Yo IR1 Benchmark Seeding', () => {
           return;
         }
         expect(rows).toHaveLength(4);
-        const byId = Object.fromEntries(rows.map(row => [row.id, Number(row.v)]));
-        expect(byId['d1-soc-yyir1-hs-avg']).toBe(950);
-        expect(byId['d1-soc-yyir1-d1-avg']).toBe(1300);
-        expect(byId['d1-soc-yyir1-d1-top25']).toBe(1650);
-        expect(byId['d1-soc-yyir1-elite']).toBe(1700);
+        const byId = Object.fromEntries(rows.map(row => [row.id, { v: Number(row.v), active: row.is_active }]));
+        expect(byId['d1-soc-yyir1-hs-avg'].v).toBe(950);
+        expect(byId['d1-soc-yyir1-d1-avg'].v).toBe(1300);
+        expect(byId['d1-soc-yyir1-d1-top25'].v).toBe(1650);
+        expect(byId['d1-soc-yyir1-elite'].v).toBe(1700);
+        // Active flags: only elite row is inactive (Pro enum workaround;
+        // 0134 also enforces this for already-deployed databases).
+        expect(byId['d1-soc-yyir1-hs-avg'].active).toBe(true);
+        expect(byId['d1-soc-yyir1-d1-avg'].active).toBe(true);
+        expect(byId['d1-soc-yyir1-d1-top25'].active).toBe(true);
+        expect(byId['d1-soc-yyir1-elite'].active).toBe(false);
       } catch (err) {
         // Narrow to 42P01 (relation does not exist) — re-throw real query
         // failures (column typo, permission error) so they don't silently pass.
