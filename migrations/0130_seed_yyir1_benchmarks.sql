@@ -218,8 +218,7 @@ ON CONFLICT (id) DO UPDATE SET
   set_id = EXCLUDED.set_id,
   benchmark_id = EXCLUDED.benchmark_id,
   benchmark_type = EXCLUDED.benchmark_type,
-  display_order = EXCLUDED.display_order,
-  is_active = true;
+  display_order = EXCLUDED.display_order;
 
 -- ============================================================================
 -- Block F — Summary
