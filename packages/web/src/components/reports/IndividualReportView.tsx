@@ -246,17 +246,24 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                             {benchmarks.map((b: any, idx: number) => (
                               <div key={idx}>
                                 {b.tierName ? (
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-medium">{b.tierGroupName || b.benchmarkName}:</span>
-                                    <TierBadge
-                                      tierName={b.tierName}
-                                      tierColor={b.tierColor || 'gray'}
-                                      tierOrder={b.tierOrder}
-                                      nextTierName={b.nextTierName}
-                                      distanceToNextTier={b.distanceToNextTier}
-                                      unit={unit}
-                                      showProgress={true}
-                                    />
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-medium">{b.tierGroupName || b.benchmarkName}:</span>
+                                      <TierBadge
+                                        tierName={b.tierName}
+                                        tierColor={b.tierColor || 'gray'}
+                                        tierOrder={b.tierOrder}
+                                        nextTierName={b.nextTierName}
+                                        distanceToNextTier={b.distanceToNextTier}
+                                        unit={unit}
+                                        showProgress={true}
+                                      />
+                                    </div>
+                                    {b.coachingNote && (
+                                      <p className="mt-1 text-xs italic text-muted-foreground">
+                                        {b.coachingNote}
+                                      </p>
+                                    )}
                                   </div>
                                 ) : (
                                   <div className="text-sm">
