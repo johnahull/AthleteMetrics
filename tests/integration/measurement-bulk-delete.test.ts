@@ -116,6 +116,9 @@ beforeEach(async () => {
     role: 'athlete',
   });
 
+  // NOTE: users table has no 'role' column — role is per-organization
+  // via userOrganizations.role. Site admin is the only role expressed
+  // directly on users via isSiteAdmin: true.
   [orgAdmin] = await db.insert(users).values({
     username: `bd_orgadmin_${ts}`,
     emails: [`bd_orgadmin_${ts}@test.com`],
@@ -123,7 +126,6 @@ beforeEach(async () => {
     firstName: 'Org',
     lastName: 'Admin',
     fullName: 'Org Admin',
-    role: 'org_admin',
   }).returning();
   await db.insert(userOrganizations).values({
     userId: orgAdmin.id,
@@ -138,7 +140,6 @@ beforeEach(async () => {
     firstName: 'Site',
     lastName: 'Admin',
     fullName: 'Site Admin',
-    role: 'site_admin',
     isSiteAdmin: true,
   }).returning();
 
@@ -149,7 +150,6 @@ beforeEach(async () => {
     firstName: 'Coach',
     lastName: 'User',
     fullName: 'Coach User',
-    role: 'coach',
   }).returning();
   await db.insert(userOrganizations).values({
     userId: coachUser.id,
@@ -164,7 +164,6 @@ beforeEach(async () => {
     firstName: 'Guest',
     lastName: 'User',
     fullName: 'Guest User',
-    role: 'guest',
   }).returning();
   await db.insert(userOrganizations).values({
     userId: guestUser.id,
@@ -179,7 +178,6 @@ beforeEach(async () => {
     firstName: 'Lone',
     lastName: 'Athlete',
     fullName: 'Lone Athlete',
-    role: 'athlete',
   }).returning();
   await db.insert(userOrganizations).values({
     userId: athleteUser.id,
@@ -192,7 +190,9 @@ beforeEach(async () => {
     userId: athleteA.id,
     organizationId: orgA.id,
     metric: 'VERTICAL_JUMP',
-    value: 28,
+    value: '28',
+    units: 'in',
+    age: 18,
     date: '2025-03-01',
     submittedBy: orgAdmin.id,
   }).returning();
@@ -201,7 +201,9 @@ beforeEach(async () => {
     userId: athleteB.id,
     organizationId: orgB.id,
     metric: 'VERTICAL_JUMP',
-    value: 30,
+    value: '30',
+    units: 'in',
+    age: 19,
     date: '2025-03-01',
     submittedBy: siteAdmin.id,
   }).returning();
@@ -210,7 +212,9 @@ beforeEach(async () => {
     userId: athleteUser.id,
     organizationId: orgA.id,
     metric: 'VERTICAL_JUMP',
-    value: 22,
+    value: '22',
+    units: 'in',
+    age: 17,
     date: '2025-03-01',
     submittedBy: athleteUser.id,
   }).returning();
@@ -331,6 +335,19 @@ describe('POST /api/measurements/bulk-delete', () => {
       .post('/api/measurements/bulk-delete')
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: ['not-a-uuid'] });
+    expect(res.status).toBe(400);
+  });
+
+  it('400 when measurementIds exceeds the 100-id cap', async () => {
+    // Generate 101 valid UUIDs to exercise the Zod max(100) constraint
+    const overSized = Array.from({ length: 101 }, (_, i) => {
+      const hex = i.toString(16).padStart(12, '0');
+      return `00000000-0000-0000-0000-${hex}`;
+    });
+    const res = await request(app)
+      .post('/api/measurements/bulk-delete')
+      .set('Cookie', orgAdminCookie)
+      .send({ measurementIds: overSized });
     expect(res.status).toBe(400);
   });
 
