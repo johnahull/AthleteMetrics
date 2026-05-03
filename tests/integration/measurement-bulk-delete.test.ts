@@ -320,6 +320,8 @@ describe('POST /api/measurements/bulk-delete', () => {
     expect(res.body.failed).toBe(1);
     expect(res.body.errors[0].id).toBe(measurementInOrgB.id);
     expect(res.body.errors[0].message).toMatch(/different organization/i);
+    // Enriched message hints at the bulk-delete scoping limitation
+    expect(res.body.errors[0].message).toMatch(/scoped to your primary organization/i);
 
     // Cross-org measurement still exists
     const remaining = await db.select().from(measurements)

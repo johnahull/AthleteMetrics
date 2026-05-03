@@ -852,6 +852,20 @@ export function registerMeasurementRoutes(app: Express) {
         expectedOrganizationId
       );
 
+      // Rewrite cross-org rejections so multi-org admins/coaches understand
+      // why a row they expected to be in scope ended up in errors[]. The
+      // service emits a generic message that is shared with single-row delete
+      // and bulkVerify; we enrich it here without touching the shared layer.
+      if (expectedOrganizationId) {
+        for (const err of result.errors) {
+          if (err.message === 'Access denied - measurement belongs to different organization') {
+            err.message =
+              'Measurement belongs to a different organization than your bulk-delete scope. ' +
+              'Bulk delete is scoped to your primary organization; switch organizations to delete the others.';
+          }
+        }
+      }
+
       // Audit-log writes must not propagate to the client: a failure here
       // would otherwise turn a successful delete into a 5xx that prompts
       // clients to retry, which would then 404 on the already-deleted rows.
@@ -894,6 +908,9 @@ export function registerMeasurementRoutes(app: Express) {
           : `${result.deleted} measurement(s) deleted, ${result.failed} failed`
       });
     } catch (error) {
+      // Log the full error server-side, but never echo it back to the client:
+      // raw error.message can leak DB constraint names, table names, and
+      // other internal structure.
       console.error("Bulk delete measurements error:", error);
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid request data", errors: error.errors });
@@ -901,8 +918,7 @@ export function registerMeasurementRoutes(app: Express) {
       // Non-Zod errors here are server-side (unexpected service throws,
       // unhandled DB errors, etc.); 500 is the correct semantics rather
       // than 400, which would tell the client the request was malformed.
-      const message = error instanceof Error ? error.message : "Failed to bulk delete measurements";
-      res.status(500).json({ message });
+      res.status(500).json({ message: "Failed to bulk delete measurements" });
     }
   });
 
