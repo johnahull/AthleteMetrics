@@ -47,6 +47,8 @@ let athleteA: any;
 let athleteB: any;
 let orgAdmin: any;
 let siteAdmin: any;
+let coachUser: any;
+let guestUser: any;
 let athleteUser: any;
 let measurementInOrgA: any;
 let measurementInOrgB: any;
@@ -54,6 +56,8 @@ let athleteOwnMeasurement: any;
 
 let orgAdminCookie: string;
 let siteAdminCookie: string;
+let coachCookie: string;
+let guestCookie: string;
 let athleteCookie: string;
 
 async function hashPassword(password: string): Promise<string> {
@@ -138,6 +142,36 @@ beforeEach(async () => {
     isSiteAdmin: true,
   }).returning();
 
+  [coachUser] = await db.insert(users).values({
+    username: `bd_coach_${ts}`,
+    emails: [`bd_coach_${ts}@test.com`],
+    password: hashed,
+    firstName: 'Coach',
+    lastName: 'User',
+    fullName: 'Coach User',
+    role: 'coach',
+  }).returning();
+  await db.insert(userOrganizations).values({
+    userId: coachUser.id,
+    organizationId: orgA.id,
+    role: 'coach',
+  });
+
+  [guestUser] = await db.insert(users).values({
+    username: `bd_guest_${ts}`,
+    emails: [`bd_guest_${ts}@test.com`],
+    password: hashed,
+    firstName: 'Guest',
+    lastName: 'User',
+    fullName: 'Guest User',
+    role: 'guest',
+  }).returning();
+  await db.insert(userOrganizations).values({
+    userId: guestUser.id,
+    organizationId: orgA.id,
+    role: 'guest',
+  });
+
   [athleteUser] = await db.insert(users).values({
     username: `bd_loneathlete_${ts}`,
     emails: [`bd_loneathlete_${ts}@test.com`],
@@ -185,6 +219,10 @@ beforeEach(async () => {
     .send({ username: orgAdmin.username, password: 'TestPass123!' })).headers['set-cookie'][0];
   siteAdminCookie = (await request(app).post('/api/auth/login')
     .send({ username: siteAdmin.username, password: 'TestPass123!' })).headers['set-cookie'][0];
+  coachCookie = (await request(app).post('/api/auth/login')
+    .send({ username: coachUser.username, password: 'TestPass123!' })).headers['set-cookie'][0];
+  guestCookie = (await request(app).post('/api/auth/login')
+    .send({ username: guestUser.username, password: 'TestPass123!' })).headers['set-cookie'][0];
   athleteCookie = (await request(app).post('/api/auth/login')
     .send({ username: athleteUser.username, password: 'TestPass123!' })).headers['set-cookie'][0];
 });
@@ -199,9 +237,9 @@ afterEach(async () => {
     [athleteA?.id, athleteB?.id, athleteUser?.id].filter(Boolean) as string[]));
 
   await db.delete(userOrganizations).where(inArray(userOrganizations.userId,
-    [athleteA?.id, athleteB?.id, orgAdmin?.id, athleteUser?.id].filter(Boolean) as string[]));
+    [athleteA?.id, athleteB?.id, orgAdmin?.id, coachUser?.id, guestUser?.id, athleteUser?.id].filter(Boolean) as string[]));
   await db.delete(users).where(inArray(users.id,
-    [athleteA?.id, athleteB?.id, orgAdmin?.id, siteAdmin?.id, athleteUser?.id].filter(Boolean) as string[]));
+    [athleteA?.id, athleteB?.id, orgAdmin?.id, siteAdmin?.id, coachUser?.id, guestUser?.id, athleteUser?.id].filter(Boolean) as string[]));
   await db.delete(organizations).where(inArray(organizations.id,
     [orgA?.id, orgB?.id].filter(Boolean) as string[]));
 });
@@ -220,6 +258,64 @@ describe('POST /api/measurements/bulk-delete', () => {
       .set('Cookie', athleteCookie)
       .send({ measurementIds: [athleteOwnMeasurement.id] });
     expect(res.status).toBe(403);
+  });
+
+  it('403 when guest with org membership attempts bulk delete', async () => {
+    const res = await request(app)
+      .post('/api/measurements/bulk-delete')
+      .set('Cookie', guestCookie)
+      .send({ measurementIds: [measurementInOrgA.id] });
+    expect(res.status).toBe(403);
+
+    // Defense-in-depth: measurement must still exist
+    const remaining = await db.select().from(measurements)
+      .where(eq(measurements.id, measurementInOrgA.id));
+    expect(remaining.length).toBe(1);
+  });
+
+  it('200 when coach deletes measurements within own org', async () => {
+    const res = await request(app)
+      .post('/api/measurements/bulk-delete')
+      .set('Cookie', coachCookie)
+      .send({ measurementIds: [measurementInOrgA.id] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(1);
+    expect(res.body.failed).toBe(0);
+
+    const remaining = await db.select().from(measurements)
+      .where(eq(measurements.id, measurementInOrgA.id));
+    expect(remaining.length).toBe(0);
+  });
+
+  it('207 when coach attempts cross-org delete (other-org rejected)', async () => {
+    const res = await request(app)
+      .post('/api/measurements/bulk-delete')
+      .set('Cookie', coachCookie)
+      .send({ measurementIds: [measurementInOrgB.id] });
+
+    expect(res.status).toBe(207);
+    expect(res.body.deleted).toBe(0);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.errors[0].id).toBe(measurementInOrgB.id);
+    expect(res.body.errors[0].message).toMatch(/different organization/i);
+
+    // Cross-org measurement still exists
+    const remaining = await db.select().from(measurements)
+      .where(eq(measurements.id, measurementInOrgB.id));
+    expect(remaining.length).toBe(1);
+  });
+
+  it('207 with deleted=0 when org admin posts only cross-org IDs', async () => {
+    const res = await request(app)
+      .post('/api/measurements/bulk-delete')
+      .set('Cookie', orgAdminCookie)
+      .send({ measurementIds: [measurementInOrgB.id] });
+
+    expect(res.status).toBe(207);
+    expect(res.body.deleted).toBe(0);
+    expect(res.body.failed).toBe(1);
+    expect(res.body.message).toMatch(/all measurements failed/i);
   });
 
   it('400 when measurementIds is empty', async () => {

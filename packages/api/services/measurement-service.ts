@@ -1089,12 +1089,20 @@ export class MeasurementService {
     measurementIds: string[],
     expectedOrganizationId?: string
   ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
-    const errors: Array<{ id: string; message: string }> = [];
-    let recalcKeys: Array<{ userId: string; metric: string; date: string }> = [];
-    let actualDeleted = 0;
+    type RecalcKey = { userId: string; metric: string; date: string };
+    type TxResult = {
+      deleted: number;
+      errors: Array<{ id: string; message: string }>;
+      recalcKeys: RecalcKey[];
+    };
 
+    let txResult: TxResult;
     try {
-      await db.transaction(async (tx) => {
+      // All mutable state lives inside the closure so a transaction retry
+      // (e.g. on serialization failure) starts from a clean slate.
+      txResult = await db.transaction(async (tx): Promise<TxResult> => {
+        const errors: Array<{ id: string; message: string }> = [];
+
         const existingMeasurements = await tx
           .select()
           .from(measurements)
@@ -1118,28 +1126,35 @@ export class MeasurementService {
           }
 
           validIds.push(id);
-          recalcKeys.push({
-            userId: measurement.userId,
-            metric: measurement.metric,
-            date: measurement.date,
+        }
+
+        if (validIds.length === 0) {
+          return { deleted: 0, errors, recalcKeys: [] };
+        }
+
+        const deletedRows = await tx
+          .delete(measurements)
+          .where(inArray(measurements.id, validIds))
+          .returning({
+            id: measurements.id,
+            userId: measurements.userId,
+            metric: measurements.metric,
+            date: measurements.date,
           });
-        }
 
-        if (validIds.length > 0) {
-          const result = await tx
-            .delete(measurements)
-            .where(inArray(measurements.id, validIds))
-            .returning({ id: measurements.id });
+        const deletedIdSet = new Set(deletedRows.map(r => r.id));
+        const missingIds = validIds.filter(id => !deletedIdSet.has(id));
+        missingIds.forEach(id => {
+          errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+        });
 
-          actualDeleted = result.length;
+        const recalcKeys: RecalcKey[] = deletedRows.map(r => ({
+          userId: r.userId,
+          metric: r.metric,
+          date: r.date,
+        }));
 
-          if (actualDeleted !== validIds.length) {
-            const missingIds = validIds.filter(id => !result.some(r => r.id === id));
-            missingIds.forEach(id => {
-              errors.push({ id, message: 'Measurement was deleted or modified during operation' });
-            });
-          }
-        }
+        return { deleted: deletedRows.length, errors, recalcKeys };
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -1150,10 +1165,10 @@ export class MeasurementService {
       };
     }
 
-    if (recalcKeys.length > 0) {
+    if (txResult.recalcKeys.length > 0) {
       const calculator = new DerivedMetricCalculator(db);
       const seen = new Set<string>();
-      for (const key of recalcKeys) {
+      for (const key of txResult.recalcKeys) {
         const dedupeKey = `${key.userId}|${key.metric}|${key.date}`;
         if (seen.has(dedupeKey)) continue;
         seen.add(dedupeKey);
@@ -1174,9 +1189,9 @@ export class MeasurementService {
     }
 
     return {
-      deleted: actualDeleted,
-      failed: errors.length,
-      errors,
+      deleted: txResult.deleted,
+      failed: txResult.errors.length,
+      errors: txResult.errors,
     };
   }
 

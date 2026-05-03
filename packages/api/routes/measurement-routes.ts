@@ -810,20 +810,22 @@ export function registerMeasurementRoutes(app: Express) {
   /**
    * Bulk delete measurements (site admins, org admins, coaches)
    *
-   * Athletes are blocked at this endpoint — they must use single-row delete which
-   * applies stricter ownership/verified checks. Org admins/coaches are scoped to
-   * their first organization membership; cross-org IDs land in errors[] (207).
+   * Athletes and guests are blocked at this endpoint — they must use single-row
+   * delete which applies stricter ownership/verified checks. Org admins/coaches
+   * are scoped to their first organization membership; cross-org IDs land in
+   * errors[] (207).
    */
-  app.post("/api/measurements/bulk-delete", measurementDeleteLimiter, requireAuth, async (req, res) => {
+  app.post("/api/measurements/bulk-delete", measurementBatchLimiter, requireAuth, async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
         return res.status(401).json({ message: "User not authenticated" });
       }
 
-      if (user.role === 'athlete') {
+      const permission = canUseBatchEndpoint(user);
+      if (!permission.allowed) {
         return res.status(403).json({
-          message: "Athletes cannot bulk delete measurements. Delete measurements individually."
+          message: permission.reason ?? "Insufficient permissions to bulk delete measurements"
         });
       }
 
