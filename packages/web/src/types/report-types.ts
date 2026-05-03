@@ -41,6 +41,9 @@ export interface BenchmarkComparison {
   distanceToNextTier?: number | null;
   nextTierName?: string | null;
   isBestTier?: boolean;
+  /** Tier-specific coaching prose (migration 0137). Surfaced under the tier
+   *  label in reports when present. Null for non-coaching tier rows. */
+  coachingNote?: string | null;
   allTiers?: Array<{
     tierName: string;
     tierColor: string;

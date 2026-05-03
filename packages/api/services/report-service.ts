@@ -118,6 +118,9 @@ interface BenchmarkComparison {
   distanceToNextTier?: number | null;
   nextTierName?: string | null;
   isBestTier?: boolean;
+  /** Tier-specific coaching prose (migration 0137). Surfaced under the tier
+   *  label in reports when present. Null for non-coaching tier rows. */
+  coachingNote?: string | null;
   // All tiers in this group (for rendering legends/references)
   allTiers?: Array<{
     tierName: string;
@@ -1320,6 +1323,7 @@ export class ReportService extends BaseService {
       tierColor?: string;
       tierGroupId?: string;
       tierOrder?: number;
+      coachingNote?: string | null;
     }>>,
     includeEventPercentiles?: boolean
   ): Promise<AthletePerformance[]> {
@@ -1711,6 +1715,7 @@ export class ReportService extends BaseService {
       distanceToNextTier,
       nextTierName,
       isBestTier,
+      coachingNote: matchedTier.coachingNote ?? null,
       allTiers: allTiers.map((t: any) => ({
         tierName: t.tierName || t.name,
         tierColor: t.tierColor || 'gray',
@@ -1735,6 +1740,7 @@ export class ReportService extends BaseService {
     tierColor?: string;
     tierGroupId?: string;
     tierOrder?: number;
+    coachingNote?: string | null;
   }>>> {
     const benchmarksByMetric: Record<string, Array<{
       name: string;
@@ -1746,6 +1752,7 @@ export class ReportService extends BaseService {
       tierColor?: string;
       tierGroupId?: string;
       tierOrder?: number;
+      coachingNote?: string | null;
     }>> = {};
 
     if (!benchmarkConfig) {
@@ -1805,6 +1812,7 @@ export class ReportService extends BaseService {
             tierColor: benchmark.tierColor ?? undefined,
             tierGroupId: benchmark.tierGroupId ?? undefined,
             tierOrder: benchmark.tierOrder ?? undefined,
+            coachingNote: benchmark.coachingNote ?? null,
           });
         }
         // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
@@ -1817,6 +1825,7 @@ export class ReportService extends BaseService {
             tierColor: benchmark.tierColor ?? undefined,
             tierGroupId: benchmark.tierGroupId ?? undefined,
             tierOrder: benchmark.tierOrder ?? undefined,
+            coachingNote: benchmark.coachingNote ?? null,
           });
         }
         // Skip benchmarks with neither (invalid data)
@@ -1864,6 +1873,8 @@ export class ReportService extends BaseService {
             tierColor: benchmark.tierColor ?? undefined,
             tierGroupId: benchmark.tierGroupId ?? undefined,
             tierOrder: benchmark.tierOrder ?? undefined,
+            // customBenchmarks doesn't carry coaching_note (site-level only)
+            coachingNote: null,
           });
         }
         // Handle single-value benchmarks (may also be part of a tier group with lte/gte operator)
@@ -1876,6 +1887,7 @@ export class ReportService extends BaseService {
             tierColor: benchmark.tierColor ?? undefined,
             tierGroupId: benchmark.tierGroupId ?? undefined,
             tierOrder: benchmark.tierOrder ?? undefined,
+            coachingNote: null,
           });
         }
         // Skip benchmarks with neither (invalid data)

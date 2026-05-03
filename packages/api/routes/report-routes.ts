@@ -4032,11 +4032,17 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
               }
               // Prefix with rank indicator
               const rankPrefix = comp.tierOrder ? `#${comp.tierOrder} ` : '';
+              // Append per-tier coaching note when present (migration 0137).
+              // Newline-separated so autoTable wraps it as secondary text below
+              // the tier label.
+              const tierCellText = comp.coachingNote
+                ? `${rankPrefix}${tierLabel}\n${comp.coachingNote}`
+                : `${rankPrefix}${tierLabel}`;
               tierData.push({
                 cells: [
                   label,
                   comp.tierGroupName || comp.benchmarkName,
-                  `${rankPrefix}${tierLabel}`,
+                  tierCellText,
                   `${comp.athleteValue.toFixed(2)}${unit ? ` ${unit}` : ''}`,
                 ],
                 tierColor: comp.tierColor || 'gray',
