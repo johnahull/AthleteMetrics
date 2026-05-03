@@ -808,6 +808,88 @@ export function registerMeasurementRoutes(app: Express) {
   });
 
   /**
+   * Bulk delete measurements (site admins, org admins, coaches)
+   *
+   * Athletes are blocked at this endpoint — they must use single-row delete which
+   * applies stricter ownership/verified checks. Org admins/coaches are scoped to
+   * their first organization membership; cross-org IDs land in errors[] (207).
+   */
+  app.post("/api/measurements/bulk-delete", measurementDeleteLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      if (user.role === 'athlete') {
+        return res.status(403).json({
+          message: "Athletes cannot bulk delete measurements. Delete measurements individually."
+        });
+      }
+
+      const bodySchema = z.object({
+        measurementIds: z.array(z.string().uuid()).min(1).max(100)
+      });
+
+      const { measurementIds } = bodySchema.parse(req.body);
+
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        expectedOrganizationId = userOrgs[0]?.organizationId;
+        if (!expectedOrganizationId) {
+          return res.status(403).json({
+            message: "No organization membership found"
+          });
+        }
+      }
+
+      const result = await measurementService.bulkDelete(
+        measurementIds,
+        expectedOrganizationId
+      );
+
+      if (result.deleted > 0 || result.failed > 0) {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: 'measurements_bulk_delete',
+          resourceType: 'measurement',
+          resourceId: `bulk:${result.deleted}/${measurementIds.length}`,
+          details: JSON.stringify({
+            totalRequested: measurementIds.length,
+            deleted: result.deleted,
+            failed: result.failed,
+            errors: result.errors.length > 0 ? result.errors : undefined,
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      }
+
+      const statusCode = result.failed === 0 ? 200 : 207;
+
+      res.status(statusCode).json({
+        deleted: result.deleted,
+        failed: result.failed,
+        errors: result.errors,
+        message: result.failed === 0
+          ? `All ${result.deleted} measurement(s) deleted successfully`
+          : result.deleted === 0
+          ? `All measurements failed deletion`
+          : `${result.deleted} measurement(s) deleted, ${result.failed} failed`
+      });
+    } catch (error) {
+      console.error("Bulk delete measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      const message = error instanceof Error ? error.message : "Failed to bulk delete measurements";
+      res.status(400).json({ message });
+    }
+  });
+
+  /**
    * Get calculation preview for derived metrics
    */
   app.get("/api/measurements/calculate-preview", measurementLimiter, requireAuth, async (req, res) => {
