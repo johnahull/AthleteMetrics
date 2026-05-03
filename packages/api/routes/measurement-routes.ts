@@ -808,6 +808,121 @@ export function registerMeasurementRoutes(app: Express) {
   });
 
   /**
+   * Bulk delete measurements (site admins, org admins, coaches)
+   *
+   * Athletes and guests are blocked at this endpoint — they must use single-row
+   * delete which applies stricter ownership/verified checks. Org admins/coaches
+   * are scoped to their first organization membership; cross-org IDs land in
+   * errors[] (207).
+   */
+  app.post("/api/measurements/bulk-delete", measurementBatchLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const permission = canUseBatchEndpoint(user);
+      if (!permission.allowed) {
+        return res.status(403).json({
+          message: permission.reason ?? "Insufficient permissions to bulk delete measurements"
+        });
+      }
+
+      const bodySchema = z.object({
+        measurementIds: z.array(z.string().uuid()).min(1).max(100)
+      });
+
+      const { measurementIds } = bodySchema.parse(req.body);
+
+      let expectedOrganizationId: string | undefined = undefined;
+      if (!isSiteAdmin(user)) {
+        const userOrgs = await storage.getUserOrganizations(user.id);
+        expectedOrganizationId = userOrgs[0]?.organizationId;
+        if (!expectedOrganizationId) {
+          return res.status(403).json({
+            message: "Bulk delete requires an organization membership. " +
+              "Your account is not a member of any organization — ask a site admin to add you to one.",
+          });
+        }
+      }
+
+      const result = await measurementService.bulkDelete(
+        measurementIds,
+        expectedOrganizationId
+      );
+
+      // Rewrite cross-org rejections so multi-org admins/coaches understand
+      // why a row they expected to be in scope ended up in errors[]. The
+      // service emits a generic message that is shared with single-row delete
+      // and bulkVerify; we enrich it here without touching the shared layer.
+      if (expectedOrganizationId) {
+        for (const err of result.errors) {
+          if (err.message === 'Access denied - measurement belongs to different organization') {
+            err.message =
+              'Measurement belongs to a different organization than your bulk-delete scope. ' +
+              'Bulk delete is scoped to your primary organization; switch organizations to delete the others.';
+          }
+        }
+      }
+
+      // Audit-log writes must not propagate to the client: a failure here
+      // would otherwise turn a successful delete into a 5xx that prompts
+      // clients to retry, which would then 404 on the already-deleted rows.
+      try {
+        await storage.createAuditLog({
+          userId: user.id,
+          action: 'measurements_bulk_delete',
+          resourceType: 'measurement',
+          resourceId: `bulk:${result.deleted}/${measurementIds.length}`,
+          details: JSON.stringify({
+            totalRequested: measurementIds.length,
+            deleted: result.deleted,
+            failed: result.failed,
+            errors: result.errors.length > 0 ? result.errors : undefined,
+            scopedOrganizationId: expectedOrganizationId,
+            timestamp: new Date().toISOString()
+          }),
+          ipAddress: req.ip || null,
+          userAgent: req.get('user-agent') || null,
+        });
+      } catch (auditErr) {
+        console.error('Audit log failed after bulk delete', {
+          userId: user.id,
+          deleted: result.deleted,
+          failed: result.failed,
+          error: auditErr instanceof Error ? auditErr.message : String(auditErr),
+        });
+      }
+
+      const statusCode = result.failed === 0 ? 200 : 207;
+
+      res.status(statusCode).json({
+        deleted: result.deleted,
+        failed: result.failed,
+        errors: result.errors,
+        message: result.failed === 0
+          ? `All ${result.deleted} measurement(s) deleted successfully`
+          : result.deleted === 0
+          ? `All measurements failed deletion`
+          : `${result.deleted} measurement(s) deleted, ${result.failed} failed`
+      });
+    } catch (error) {
+      // Log the full error server-side, but never echo it back to the client:
+      // raw error.message can leak DB constraint names, table names, and
+      // other internal structure.
+      console.error("Bulk delete measurements error:", error);
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
+      // Non-Zod errors here are server-side (unexpected service throws,
+      // unhandled DB errors, etc.); 500 is the correct semantics rather
+      // than 400, which would tell the client the request was malformed.
+      res.status(500).json({ message: "Failed to bulk delete measurements" });
+    }
+  });
+
+  /**
    * Get calculation preview for derived metrics
    */
   app.get("/api/measurements/calculate-preview", measurementLimiter, requireAuth, async (req, res) => {

@@ -1073,6 +1073,129 @@ export class MeasurementService {
   }
 
   /**
+   * Bulk delete measurements
+   *
+   * Per-row best-effort: rows missing or belonging to another organization are
+   * collected into errors[] and the rest are deleted. Mirrors bulkVerify semantics.
+   *
+   * After deletion, derived metrics for each affected (athlete, metric, date) are
+   * recalculated post-transaction so dependent calculated values stay consistent.
+   *
+   * @param measurementIds IDs to delete
+   * @param expectedOrganizationId IDOR scope (undefined = site admin, no org restriction)
+   * @returns Per-row result with successes, failures, and error details
+   */
+  async bulkDelete(
+    measurementIds: string[],
+    expectedOrganizationId?: string
+  ): Promise<{ deleted: number; failed: number; errors: Array<{ id: string; message: string }> }> {
+    type RecalcKey = { userId: string; metric: string; date: string };
+    type TxResult = {
+      deleted: number;
+      errors: Array<{ id: string; message: string }>;
+      recalcKeys: RecalcKey[];
+    };
+
+    let txResult: TxResult;
+    try {
+      // All mutable state lives inside the closure so a transaction retry
+      // (e.g. on serialization failure) starts from a clean slate.
+      txResult = await db.transaction(async (tx): Promise<TxResult> => {
+        const errors: Array<{ id: string; message: string }> = [];
+
+        const existingMeasurements = await tx
+          .select()
+          .from(measurements)
+          .where(inArray(measurements.id, measurementIds))
+          .for('update');
+
+        const foundMap = new Map(existingMeasurements.map(m => [m.id, m]));
+
+        const validIds: string[] = [];
+        for (const id of measurementIds) {
+          const measurement = foundMap.get(id);
+
+          if (!measurement) {
+            errors.push({ id, message: 'Measurement not found' });
+            continue;
+          }
+
+          if (expectedOrganizationId && measurement.organizationId !== expectedOrganizationId) {
+            errors.push({ id, message: 'Access denied - measurement belongs to different organization' });
+            continue;
+          }
+
+          validIds.push(id);
+        }
+
+        if (validIds.length === 0) {
+          return { deleted: 0, errors, recalcKeys: [] };
+        }
+
+        const deletedRows = await tx
+          .delete(measurements)
+          .where(inArray(measurements.id, validIds))
+          .returning({
+            id: measurements.id,
+            userId: measurements.userId,
+            metric: measurements.metric,
+            date: measurements.date,
+          });
+
+        const deletedIdSet = new Set(deletedRows.map(r => r.id));
+        const missingIds = validIds.filter(id => !deletedIdSet.has(id));
+        missingIds.forEach(id => {
+          errors.push({ id, message: 'Measurement was deleted or modified during operation' });
+        });
+
+        const recalcKeys: RecalcKey[] = deletedRows.map(r => ({
+          userId: r.userId,
+          metric: r.metric,
+          date: r.date,
+        }));
+
+        return { deleted: deletedRows.length, errors, recalcKeys };
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      return {
+        deleted: 0,
+        failed: measurementIds.length,
+        errors: measurementIds.map(id => ({ id, message })),
+      };
+    }
+
+    if (txResult.recalcKeys.length > 0) {
+      const calculator = new DerivedMetricCalculator(db);
+      const seen = new Set<string>();
+      for (const key of txResult.recalcKeys) {
+        const dedupeKey = `${key.userId}|${key.metric}|${key.date}`;
+        if (seen.has(dedupeKey)) continue;
+        seen.add(dedupeKey);
+        try {
+          await calculator.recalculateForAthlete(key.userId, key.metric, key.date, {
+            triggerContext: { event: 'measurement_delete' },
+          });
+        } catch (e) {
+          // Recalc failures must not roll back successful deletions; log and continue
+          console.error('Derived metric recalc failed after bulk delete', {
+            userId: key.userId,
+            metric: key.metric,
+            date: key.date,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
+      }
+    }
+
+    return {
+      deleted: txResult.deleted,
+      failed: txResult.errors.length,
+      errors: txResult.errors,
+    };
+  }
+
+  /**
    * Get measurements with filters and pagination
    * @param filters Measurement filters including pagination options
    * @param allowCrossOrganization Whether to allow queries without organizationId (site admin only)
