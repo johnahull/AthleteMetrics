@@ -66,10 +66,22 @@ async function hashPassword(password: string): Promise<string> {
 
 beforeAll(async () => {
   app = express();
+  // Trust X-Forwarded-For so each test can claim a unique source IP and
+  // avoid sharing the per-route rate-limit bucket (BATCH limit is 10/15min,
+  // we run more than 10 cases against this endpoint in this file).
+  app.set('trust proxy', 1);
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   await registerRoutes(app);
 });
+
+// Unique source IP per test to keep each one in its own rate-limit bucket.
+let nextTestIp = 1;
+function uniqueIp() {
+  // 10.0.0.x range is private and won't collide with anything real
+  const octet = nextTestIp++;
+  return `10.0.0.${octet}`;
+}
 
 beforeEach(async () => {
   const ts = Date.now();
@@ -252,6 +264,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('401 when unauthenticated', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .send({ measurementIds: [measurementInOrgA.id] });
     expect(res.status).toBe(401);
   });
@@ -259,6 +272,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('403 when athlete attempts bulk delete (admin-only endpoint)', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', athleteCookie)
       .send({ measurementIds: [athleteOwnMeasurement.id] });
     expect(res.status).toBe(403);
@@ -267,6 +281,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('403 when guest with org membership attempts bulk delete', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', guestCookie)
       .send({ measurementIds: [measurementInOrgA.id] });
     expect(res.status).toBe(403);
@@ -280,6 +295,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('200 when coach deletes measurements within own org', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', coachCookie)
       .send({ measurementIds: [measurementInOrgA.id] });
 
@@ -295,6 +311,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('207 when coach attempts cross-org delete (other-org rejected)', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', coachCookie)
       .send({ measurementIds: [measurementInOrgB.id] });
 
@@ -313,6 +330,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('207 with deleted=0 when org admin posts only cross-org IDs', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: [measurementInOrgB.id] });
 
@@ -325,6 +343,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('400 when measurementIds is empty', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: [] });
     expect(res.status).toBe(400);
@@ -333,6 +352,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('400 when measurementIds contains non-uuid', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: ['not-a-uuid'] });
     expect(res.status).toBe(400);
@@ -346,6 +366,7 @@ describe('POST /api/measurements/bulk-delete', () => {
     });
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: overSized });
     expect(res.status).toBe(400);
@@ -354,6 +375,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('200 when org admin deletes measurements within own org', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: [measurementInOrgA.id] });
 
@@ -370,6 +392,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('207 partial success when some measurements belong to different org', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', orgAdminCookie)
       .send({ measurementIds: [measurementInOrgA.id, measurementInOrgB.id] });
 
@@ -391,6 +414,7 @@ describe('POST /api/measurements/bulk-delete', () => {
   it('200 when site admin deletes measurements across organizations', async () => {
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', siteAdminCookie)
       .send({ measurementIds: [measurementInOrgA.id, measurementInOrgB.id] });
 
@@ -403,10 +427,63 @@ describe('POST /api/measurements/bulk-delete', () => {
     expect(remaining.length).toBe(0);
   });
 
+  it('403 when authenticated user has no organization membership', async () => {
+    const ts = Date.now();
+    const hashed = await hashPassword('TestPass123!');
+    const [orphanUser] = await db.insert(users).values({
+      username: `bd_orphan_${ts}`,
+      emails: [`bd_orphan_${ts}@test.com`],
+      password: hashed,
+      firstName: 'Orphan',
+      lastName: 'User',
+      fullName: 'Orphan User',
+    }).returning();
+
+    try {
+      // No userOrganizations row inserted — user has no membership.
+      // Login still works because session.user.role falls back to 'athlete',
+      // but we want to specifically exercise the empty-orgs branch.
+      // Promote to coach via a temporary org to log in, then delete the membership.
+      const [tempOrg] = await db.insert(organizations).values({
+        name: `Bulk Delete Orphan Bridge ${ts}`,
+        description: 'temporary',
+        isActive: true,
+      }).returning();
+      await db.insert(userOrganizations).values({
+        userId: orphanUser.id,
+        organizationId: tempOrg.id,
+        role: 'coach',
+      });
+      const orphanCookie = (await request(app).post('/api/auth/login')
+        .send({ username: orphanUser.username, password: 'TestPass123!' })).headers['set-cookie'][0];
+      // Drop the membership AFTER login so the session role is 'coach' but the
+      // route's storage.getUserOrganizations returns an empty array.
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, orphanUser.id));
+      await db.delete(organizations).where(eq(organizations.id, tempOrg.id));
+
+      const res = await request(app)
+        .post('/api/measurements/bulk-delete')
+        .set('X-Forwarded-For', uniqueIp())
+        .set('Cookie', orphanCookie)
+        .send({ measurementIds: [measurementInOrgA.id] });
+
+      expect(res.status).toBe(403);
+      expect(res.body.message).toMatch(/organization membership/i);
+
+      // Defense-in-depth: targeted measurement still exists
+      const remaining = await db.select().from(measurements)
+        .where(eq(measurements.id, measurementInOrgA.id));
+      expect(remaining.length).toBe(1);
+    } finally {
+      await db.delete(users).where(eq(users.id, orphanUser.id));
+    }
+  });
+
   it('reports missing IDs in errors[] without crashing', async () => {
     const fakeId = '00000000-0000-0000-0000-000000000000';
     const res = await request(app)
       .post('/api/measurements/bulk-delete')
+      .set('X-Forwarded-For', uniqueIp())
       .set('Cookie', siteAdminCookie)
       .send({ measurementIds: [measurementInOrgA.id, fakeId] });
 

@@ -841,7 +841,8 @@ export function registerMeasurementRoutes(app: Express) {
         expectedOrganizationId = userOrgs[0]?.organizationId;
         if (!expectedOrganizationId) {
           return res.status(403).json({
-            message: "No organization membership found"
+            message: "Bulk delete requires an organization membership. " +
+              "Your account is not a member of any organization — ask a site admin to add you to one.",
           });
         }
       }
@@ -851,7 +852,10 @@ export function registerMeasurementRoutes(app: Express) {
         expectedOrganizationId
       );
 
-      if (result.deleted > 0 || result.failed > 0) {
+      // Audit-log writes must not propagate to the client: a failure here
+      // would otherwise turn a successful delete into a 5xx that prompts
+      // clients to retry, which would then 404 on the already-deleted rows.
+      try {
         await storage.createAuditLog({
           userId: user.id,
           action: 'measurements_bulk_delete',
@@ -862,10 +866,18 @@ export function registerMeasurementRoutes(app: Express) {
             deleted: result.deleted,
             failed: result.failed,
             errors: result.errors.length > 0 ? result.errors : undefined,
+            scopedOrganizationId: expectedOrganizationId,
             timestamp: new Date().toISOString()
           }),
           ipAddress: req.ip || null,
           userAgent: req.get('user-agent') || null,
+        });
+      } catch (auditErr) {
+        console.error('Audit log failed after bulk delete', {
+          userId: user.id,
+          deleted: result.deleted,
+          failed: result.failed,
+          error: auditErr instanceof Error ? auditErr.message : String(auditErr),
         });
       }
 
@@ -886,8 +898,11 @@ export function registerMeasurementRoutes(app: Express) {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: "Invalid request data", errors: error.errors });
       }
+      // Non-Zod errors here are server-side (unexpected service throws,
+      // unhandled DB errors, etc.); 500 is the correct semantics rather
+      // than 400, which would tell the client the request was malformed.
       const message = error instanceof Error ? error.message : "Failed to bulk delete measurements";
-      res.status(400).json({ message });
+      res.status(500).json({ message });
     }
   });
 
