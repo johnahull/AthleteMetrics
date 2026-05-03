@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, uuid, integer, decimal, timestamp, date, boolean, unique, index, jsonb, time } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -279,7 +279,7 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Tier grouping fields (migration 0077)
-  tierGroupId: varchar("tier_group_id"),
+  tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
   tierName: varchar("tier_name", { length: 50 }),
   tierColor: varchar("tier_color", { length: 20 }),
@@ -337,7 +337,7 @@ export const customBenchmarks = pgTable("custom_benchmarks", {
   minValue: decimal("min_value", { precision: 10, scale: 2 }),
   maxValue: decimal("max_value", { precision: 10, scale: 2 }),
   // Tier grouping fields (migration 0077)
-  tierGroupId: varchar("tier_group_id"),
+  tierGroupId: uuid("tier_group_id"),
   tierOrder: integer("tier_order"),
   tierName: varchar("tier_name", { length: 50 }),
   tierColor: varchar("tier_color", { length: 20 }),
@@ -1624,6 +1624,9 @@ export const insertMeasurementSchema = createInsertSchema(measurements).omit({
   metric: z.string().min(1, "Metric is required").regex(/^[A-Z0-9_]+$/, "Invalid metric code format"),
   value: z.number().positive("Value must be positive"),
   flyInDistance: z.number().positive().optional(),
+  // Auxiliary input for paired-input metrics (e.g., reps for 1RM-est metrics).
+  // Server validates against the metric's auxiliaryInputConfig at insert time.
+  auxiliaryValue: z.number().nullable().optional(),
   notes: z.string().max(1000, "Notes cannot exceed 1000 characters").optional(),
   // Optional team context - will be auto-populated if not provided
   teamId: z.string().optional(),

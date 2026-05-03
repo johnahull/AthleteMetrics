@@ -79,6 +79,15 @@ vi.mock('@/hooks/use-available-metrics', () => ({
   })),
 }));
 
+// Mock useAthleteMetricExplanations hook to avoid QueryClient requirement
+vi.mock('@/hooks/useAthleteMetricExplanations', () => ({
+  useAthleteMetricExplanations: vi.fn(() => ({
+    explanations: {},
+    isLoading: false,
+    error: null,
+  })),
+}));
+
 // Mock MeasurementHistoryTable component
 vi.mock('@/components/athlete/MeasurementHistoryTable', () => ({
   MeasurementHistoryTable: ({ measurements, isLoading }: { measurements: Measurement[]; isLoading: boolean }) => (
@@ -149,6 +158,7 @@ describe('My Measurements Page', () => {
         units: 's',
         isVerified: true,
         flyInDistance: null,
+        auxiliaryValue: null,
         notes: 'Great run',
         teamId: null,
         teamNameSnapshot: null,
@@ -178,6 +188,7 @@ describe('My Measurements Page', () => {
         units: 'in',
         isVerified: false,
         flyInDistance: null,
+        auxiliaryValue: null,
         notes: 'Self-entry',
         teamId: null,
         teamNameSnapshot: null,
@@ -207,6 +218,7 @@ describe('My Measurements Page', () => {
         units: 's',
         isVerified: true,
         flyInDistance: null,
+        auxiliaryValue: null,
         notes: null,
         teamId: null,
         teamNameSnapshot: null,

@@ -22,6 +22,7 @@ import { useAthleteProfile } from '@/hooks/useAthleteProfile';
 import { useAthleteWellnessStatus } from '@/hooks/useAthleteWellnessStatus';
 import { useActiveGoals, GoalStatus, GoalType } from '@/hooks/useGoals';
 import { useAvailableMetrics } from '@/hooks/use-available-metrics';
+import { useAthleteMetricExplanations } from '@/hooks/useAthleteMetricExplanations';
 import { AthleteHomeHero } from '@/components/athlete/AthleteHomeHero';
 import { RecentActivityTimeline } from '@/components/athlete/RecentActivityTimeline';
 import { WellnessStatusCard } from '@/components/athlete/WellnessStatusCard';
@@ -54,6 +55,20 @@ export default function MyDashboardPage() {
 
   // Fetch available metrics to get isDerived and dependentMetrics info
   const { metrics: availableMetrics } = useAvailableMetrics();
+
+  // Fetch metric explanations for every metric the athlete has access to
+  const availableMetricCodes = useMemo(
+    () => dashboardData?.availableMetrics ?? [],
+    [dashboardData?.availableMetrics],
+  );
+  const { explanations } = useAthleteMetricExplanations(availableMetricCodes);
+
+  // Map of metric code → human label, so derived-metric cards can render
+  // their dependency footer without falling back to the raw code.
+  const metricLabelMap = useMemo(
+    () => Object.fromEntries(availableMetrics.map((m) => [m.code, m.label])),
+    [availableMetrics],
+  );
 
   // Fetch site settings to check wellness module status (public endpoint for athletes)
   const { data: siteSettings } = useQuery<SiteSettings>({
@@ -201,6 +216,8 @@ export default function MyDashboardPage() {
                 personalRecord={dashboardData.personalRecords.find(pr => pr.metric === metric)}
                 isDerived={metricConfig?.isDerived}
                 dependentMetrics={metricConfig?.dependentMetrics}
+                dependentMetricLabels={metricLabelMap}
+                explanation={explanations[metric]}
               />
             );
           })}

@@ -10,7 +10,7 @@
  */
 
 import React, { useMemo, useEffect, useRef } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { TrendingUp, TrendingDown, Minus, Trophy } from 'lucide-react';
 import confetti from 'canvas-confetti';
@@ -23,8 +23,10 @@ import {
   type TrendDirection,
 } from '@/utils/metric-trend-utils';
 import { MetricContextTooltip } from './MetricContextTooltip';
+import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
 import { getMetricDisplayName } from '@/lib/metrics';
+import type { MetricExplanation } from '@shared/metric-explanations';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
 
@@ -53,6 +55,9 @@ interface MetricProgressCardProps {
   showConfetti?: boolean;
   isDerived?: boolean;
   dependentMetrics?: string[];
+  /** Map of metric code → human label, used to render the derived-metric footer. */
+  dependentMetricLabels?: Record<string, string>;
+  explanation?: MetricExplanation;
 }
 
 /**
@@ -91,6 +96,8 @@ export function MetricProgressCard({
   showConfetti = true,
   isDerived = false,
   dependentMetrics = [],
+  dependentMetricLabels,
+  explanation,
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
 
@@ -148,7 +155,11 @@ export function MetricProgressCard({
     return (
       <Card data-testid="metric-progress-card">
         <CardHeader>
-          <CardTitle className="text-lg">{displayName}</CardTitle>
+          <AthleteMetricExplanation
+            code={metric}
+            explanation={explanation}
+            fallbackLabel={displayName}
+          />
         </CardHeader>
         <CardContent>
           <div
@@ -209,12 +220,18 @@ export function MetricProgressCard({
       aria-label={`${displayName} performance progress card`}
     >
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span>{displayName}</span>
-            {isDerived && (
-              <Badge variant="outline" className="text-xs">fx</Badge>
-            )}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <AthleteMetricExplanation
+              code={metric}
+              explanation={explanation}
+              fallbackLabel={displayName}
+              titleSuffix={
+                isDerived ? (
+                  <Badge variant="outline" className="text-xs">fx</Badge>
+                ) : undefined
+              }
+            />
           </div>
           {trendData && (
             <Badge
@@ -228,7 +245,7 @@ export function MetricProgressCard({
               </span>
             </Badge>
           )}
-        </CardTitle>
+        </div>
       </CardHeader>
       <CardContent>
         {/* Current and PR Values */}
@@ -315,7 +332,7 @@ export function MetricProgressCard({
       </CardContent>
       {isDerived && dependentMetrics.length > 0 && (
         <CardFooter className="pt-2 pb-3 text-xs text-muted-foreground border-t">
-          Calculated from: {dependentMetrics.map(m => getMetricDisplayName(m)).join(', ')}
+          Calculated from: {dependentMetrics.map(m => dependentMetricLabels?.[m] ?? getMetricDisplayName(m)).join(', ')}
         </CardFooter>
       )}
     </Card>

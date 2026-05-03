@@ -16,8 +16,6 @@ import {
   customBenchmarks,
   organizationBenchmarks,
   siteMetrics,
-  customOrgMetrics,
-  siteMetricExplanations,
   events,
   organizations,
   type Report,
@@ -29,12 +27,8 @@ import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
 import { deriveTierGroupName } from '../utils/report-utils';
-import {
-  buildMetricExplanationsMap,
-  type MetricExplanation,
-  type CustomMetricsMap,
-  type SiteOverridesMap,
-} from '@shared/metric-explanations';
+import { type MetricExplanation } from '@shared/metric-explanations';
+import { getMetricExplanationsMap } from './metric-explanation-service';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -216,93 +210,6 @@ export class ReportService extends BaseService {
   }
 
   /**
-   * Build athlete/parent-friendly explanations for each metric in a report.
-   * Built-in metric codes resolve against the shared static content; codes
-   * that aren't built-ins fall back to the org's custom metric description.
-   */
-  async getMetricExplanationsMap(
-    metricCodes: string[],
-    organizationId: string,
-  ): Promise<Record<string, MetricExplanation>> {
-    if (metricCodes.length === 0) return {};
-
-    // Query site metrics, site-admin overrides, and custom org metrics in parallel
-    const [siteMetricRows, siteOverrideRows, customRows] = await Promise.all([
-      db
-        .select({
-          code: siteMetrics.code,
-          shortDescription: siteMetrics.shortDescription,
-          whatItMeasures: siteMetrics.whatItMeasures,
-          whyItMatters: siteMetrics.whyItMatters,
-        })
-        .from(siteMetrics)
-        .where(inArray(siteMetrics.code, metricCodes)),
-      db.select().from(siteMetricExplanations).where(inArray(siteMetricExplanations.metricCode, metricCodes)),
-      db
-        .select({
-          code: customOrgMetrics.code,
-          label: customOrgMetrics.label,
-          description: customOrgMetrics.description,
-          shortDescription: customOrgMetrics.shortDescription,
-          whatItMeasures: customOrgMetrics.whatItMeasures,
-          whyItMatters: customOrgMetrics.whyItMatters,
-          unit: customOrgMetrics.unit,
-          metricType: customOrgMetrics.metricType,
-        })
-        .from(customOrgMetrics)
-        .where(
-          and(
-            eq(customOrgMetrics.organizationId, organizationId),
-            inArray(customOrgMetrics.code, metricCodes),
-          ),
-        ),
-    ]);
-
-    // Build site overrides map — site_metric_explanations overrides take priority,
-    // then fall back to site_metrics columns
-    const siteOverrides: SiteOverridesMap = {};
-
-    // First, populate from site_metrics explanation columns
-    for (const row of siteMetricRows) {
-      const entry: Record<string, string | null> = {};
-      if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
-      if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
-      if (row.whyItMatters != null) entry.whyItMatters = row.whyItMatters;
-      if (Object.keys(entry).length > 0) {
-        siteOverrides[row.code] = entry;
-      }
-    }
-
-    // Then, layer site_metric_explanations on top (higher priority)
-    for (const row of siteOverrideRows) {
-      const entry: Record<string, string | null> = { ...siteOverrides[row.metricCode] };
-      if (row.title != null) entry.title = row.title;
-      if (row.shortDescription != null) entry.shortDescription = row.shortDescription;
-      if (row.whatItMeasures != null) entry.whatItMeasures = row.whatItMeasures;
-      if (row.whyItMatters != null) entry.whyItMatters = row.whyItMatters;
-      if (Object.keys(entry).length > 0) {
-        siteOverrides[row.metricCode] = entry;
-      }
-    }
-
-    // Build custom metrics map
-    const customMap: CustomMetricsMap = {};
-    for (const row of customRows) {
-      customMap[row.code] = {
-        label: row.label,
-        description: row.description,
-        shortDescription: row.shortDescription,
-        whatItMeasures: row.whatItMeasures,
-        whyItMatters: row.whyItMatters,
-        unit: row.unit,
-        metricType: row.metricType,
-      };
-    }
-
-    return buildMetricExplanationsMap(metricCodes, customMap, siteOverrides);
-  }
-
-  /**
    * Generate a team report with team-level aggregations and athlete rankings
    */
   async generateTeamReport(
@@ -373,7 +280,7 @@ export class ReportService extends BaseService {
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
-    const metricExplanations = await this.getMetricExplanationsMap(
+    const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
     );
@@ -563,7 +470,7 @@ export class ReportService extends BaseService {
 
     // Get metric display labels and units
     const { labels: metricLabels, units: metricUnits } = await this.getMetricLabelsAndUnits(config.metrics);
-    const metricExplanations = await this.getMetricExplanationsMap(
+    const metricExplanations = await getMetricExplanationsMap(
       config.metrics,
       report.organizationId,
     );

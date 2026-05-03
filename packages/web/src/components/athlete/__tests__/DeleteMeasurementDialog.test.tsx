@@ -26,6 +26,7 @@ const mockMeasurement: Measurement = {
   verifiedBy: null,
   age: 18,
   flyInDistance: null,
+  auxiliaryValue: null,
   teamId: null,
   teamNameSnapshot: null,
   organizationId: 'org-1',

@@ -24,7 +24,9 @@ import {
   type PeerFilterCriteria,
 } from '@/hooks/usePeerComparison';
 import { DistributionBoxPlot } from '@/components/charts/DistributionBoxPlot';
-import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
+import { getMetricUnits } from '@/lib/metrics';
+import { AthleteMetricExplanation } from './AthleteMetricExplanation';
+import type { MetricExplanation } from '@shared/metric-explanations';
 
 export interface BenchmarkStatus {
   metricCode: string;
@@ -41,6 +43,7 @@ export interface PeerMetricCardProps {
   benchmark?: BenchmarkStatus;
   filters?: PeerFilterCriteria;
   lowerIsBetter?: boolean;
+  explanation?: MetricExplanation;
 }
 
 /**
@@ -82,6 +85,7 @@ export function PeerMetricCard({
   benchmark,
   filters,
   lowerIsBetter = false,
+  explanation,
 }: PeerMetricCardProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -95,7 +99,7 @@ export function PeerMetricCard({
     { enabled: isExpanded && result.percentile >= 0 }
   );
 
-  const displayName = getMetricDisplayName(result.metric);
+  const displayName = explanation?.title ?? result.metric;
   const units = getMetricUnits(result.metric);
   const percentileLabel = getPercentileLabel(result.percentile);
 
@@ -130,9 +134,16 @@ export function PeerMetricCard({
     <Card className="hover:shadow-md transition-shadow">
       <CardContent className="p-4">
         {/* Header: Metric name and value */}
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-medium text-gray-900">{displayName}</h3>
-          <span className="text-lg font-semibold text-gray-800">
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <AthleteMetricExplanation
+              code={result.metric}
+              explanation={explanation}
+              fallbackLabel={displayName}
+              titleClassName="text-base"
+            />
+          </div>
+          <span className="text-lg font-semibold text-gray-800 whitespace-nowrap">
             {formatValue(result.athleteValue)} {units}
           </span>
         </div>
