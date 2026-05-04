@@ -147,7 +147,11 @@ describe('Migration 0131: Squat Jump + EUR', () => {
         const eur = rows.find(row => row.code === 'POWER_EUR');
         expect(eur).toBeDefined();
         expect(eur.is_derived).toBe(true);
-        expect(eur.formula).toBe(EUR_FORMULA);
+        // Loosened to assert only what 0131 itself contributes — that
+        // POWER_EUR uses JUMP_SJ_HEIGHT as denominator. Migration 0135
+        // repoints the numerator from VERTICAL_JUMP to JUMP_CMJ_HOH;
+        // pinning the full formula here would fail on a fully-migrated DB.
+        expect(eur.formula).toContain('JUMP_SJ_HEIGHT');
       } catch (err) {
         console.warn('Skipping live-DB check (migration 0131 may not have been applied):', err);
       }

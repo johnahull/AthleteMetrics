@@ -26,6 +26,10 @@ export const siteBenchmarks = pgTable("site_benchmarks", {
   tierOrder: integer("tier_order"),
   tierName: varchar("tier_name", { length: 50 }),
   tierColor: varchar("tier_color", { length: 20 }),
+  // Tier-specific coaching prose surfaced in reports (migration 0137).
+  // Null for non-coaching benchmarks (e.g., source-citation tiers); populated
+  // for diagnostic/screening tiers that imply a training prescription.
+  coachingNote: text("coaching_note"),
   // Organization type filtering (NULL = applies to all org types)
   applicableOrgTypes: text("applicable_org_types").array().$type<(typeof organizationTypeEnum)[number][]>(),
   // Athlete attribute filters (NULL = applies to all)
