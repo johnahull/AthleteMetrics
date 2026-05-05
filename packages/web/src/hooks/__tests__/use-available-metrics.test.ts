@@ -236,8 +236,7 @@ describe('useAvailableMetrics', () => {
         expect(result.current.metrics).toHaveLength(3);
       });
 
-      // Metrics should be returned sorted alphabetically by label:
-      // "10-Yard Fly" < "5-0-5 Agility" < "Vertical Jump"
+      // digit-prefixed label "10-Yard Fly" sorts before "5-0-5 Agility" (locale-aware, '1' < '5')
       expect(result.current.metrics.map(m => m.code)).toEqual([
         'FLY10_TIME',
         'AGILITY_505',
