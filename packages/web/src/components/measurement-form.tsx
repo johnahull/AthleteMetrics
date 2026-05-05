@@ -58,7 +58,7 @@ export default function MeasurementForm() {
   // Get available metrics using centralized hook (filters by active+enabled)
   const { metrics: availableMetrics } = useAvailableMetrics();
 
-  const firstMetricCode = availableMetrics[0]?.code || "FLY10_TIME";
+  const firstMetricCode = "FLY10_TIME";
 
   const form = useForm<DynamicInsertMeasurement>({
     resolver: zodResolver(dynamicMeasurementSchema),

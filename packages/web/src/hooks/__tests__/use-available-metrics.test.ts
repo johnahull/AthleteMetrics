@@ -37,6 +37,18 @@ vi.mock('@/lib/metrics-api', () => ({
   useOrganizationMetrics: () => mockOrgMetrics,
 }));
 
+// Mock useCustomOrgMetrics — without this the hook would fire a real fetch
+// when an org context is set, leaking unpredictable data into tests.
+const mockCustomOrgMetrics = {
+  data: undefined as any[] | undefined,
+  isLoading: false,
+  error: null as Error | null,
+};
+
+vi.mock('@/lib/custom-metrics-api', () => ({
+  useCustomOrgMetrics: () => mockCustomOrgMetrics,
+}));
+
 describe('useAvailableMetrics', () => {
   let queryClient: QueryClient;
   let wrapper: React.FC<{ children: React.ReactNode }>;
@@ -65,6 +77,10 @@ describe('useAvailableMetrics', () => {
     mockOrgMetrics.data = undefined;
     mockOrgMetrics.isLoading = false;
     mockOrgMetrics.error = null;
+
+    mockCustomOrgMetrics.data = undefined;
+    mockCustomOrgMetrics.isLoading = false;
+    mockCustomOrgMetrics.error = null;
   });
 
   afterEach(() => {
@@ -220,10 +236,146 @@ describe('useAvailableMetrics', () => {
         expect(result.current.metrics).toHaveLength(3);
       });
 
+      // digit-prefixed label "10-Yard Fly" sorts before "5-0-5 Agility" (locale-aware, '1' < '5')
       expect(result.current.metrics.map(m => m.code)).toEqual([
         'FLY10_TIME',
-        'VERTICAL_JUMP',
         'AGILITY_505',
+        'VERTICAL_JUMP',
+      ]);
+    });
+  });
+
+  describe('alphabetical sorting', () => {
+    it('should sort org metrics alphabetically by label', async () => {
+      mockAuthState.user = { id: 'user-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = 'org-123';
+      // Provide metrics in non-alphabetical insertion order
+      mockOrgMetrics.data = [
+        createMockOrgMetric({
+          metricCode: 'VERTICAL_JUMP',
+          siteMetric: createMockSiteMetric({ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }),
+        }),
+        createMockOrgMetric({
+          metricCode: 'BROAD_JUMP',
+          siteMetric: createMockSiteMetric({ code: 'BROAD_JUMP', label: 'Broad Jump', unit: 'in' }),
+        }),
+        createMockOrgMetric({
+          metricCode: 'AGILITY_505',
+          siteMetric: createMockSiteMetric({ code: 'AGILITY_505', label: '5-0-5 Agility', unit: 's' }),
+        }),
+      ];
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.metrics.map(m => m.label)).toEqual([
+        '5-0-5 Agility',
+        'Broad Jump',
+        'Vertical Jump',
+      ]);
+    });
+
+    it('should sort case-insensitively when applying custom labels', async () => {
+      mockAuthState.user = { id: 'user-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = 'org-123';
+      mockOrgMetrics.data = [
+        createMockOrgMetric({
+          metricCode: 'M1',
+          customLabel: 'banana sprint',
+          siteMetric: createMockSiteMetric({ code: 'M1', label: 'banana sprint' }),
+        }),
+        createMockOrgMetric({
+          metricCode: 'M2',
+          customLabel: 'Apple Toss',
+          siteMetric: createMockSiteMetric({ code: 'M2', label: 'Apple Toss' }),
+        }),
+      ];
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      // 'Apple Toss' must come before 'banana sprint' regardless of case
+      expect(result.current.metrics.map(m => m.label)).toEqual([
+        'Apple Toss',
+        'banana sprint',
+      ]);
+    });
+
+    it('should sort org metrics and custom org metrics together as one list', async () => {
+      mockAuthState.user = { id: 'user-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = 'org-123';
+      mockOrgMetrics.data = [
+        createMockOrgMetric({
+          metricCode: 'VERTICAL_JUMP',
+          siteMetric: createMockSiteMetric({ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }),
+        }),
+        createMockOrgMetric({
+          metricCode: 'BROAD_JUMP',
+          siteMetric: createMockSiteMetric({ code: 'BROAD_JUMP', label: 'Broad Jump', unit: 'in' }),
+        }),
+      ];
+      // Custom metric whose label sorts between the two site metrics —
+      // proves the merged result is sorted, not just each source independently.
+      mockCustomOrgMetrics.data = [
+        {
+          code: 'CUSTOM_PUSHUPS',
+          label: 'Custom Pushups',
+          unit: 'reps',
+          metricType: 'higher_is_better',
+          category: null,
+          description: null,
+          isActive: true,
+          isDerived: false,
+          formula: null,
+          dependentMetrics: null,
+        },
+      ];
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.isLoading).toBe(false);
+      });
+
+      expect(result.current.metrics.map(m => m.label)).toEqual([
+        'Broad Jump',
+        'Custom Pushups',
+        'Vertical Jump',
+      ]);
+    });
+
+    it('should sort site fallback metrics alphabetically by label', async () => {
+      mockAuthState.user = { id: 'athlete-1', isSiteAdmin: false };
+      mockAuthState.organizationContext = undefined;
+      mockAuthState.userOrganizations = [];
+
+      const mockActiveMetrics = [
+        createMockSiteMetric({ code: 'VERTICAL_JUMP', label: 'Vertical Jump', unit: 'in' }),
+        createMockSiteMetric({ code: 'BROAD_JUMP', label: 'Broad Jump', unit: 'in' }),
+        createMockSiteMetric({ code: 'FLY10_TIME', label: '10-Yard Fly' }),
+      ];
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockActiveMetrics,
+      });
+
+      const { result } = renderHook(() => useAvailableMetrics(), { wrapper });
+
+      await waitFor(() => {
+        expect(result.current.metrics).toHaveLength(3);
+      });
+
+      expect(result.current.metrics.map(m => m.label)).toEqual([
+        '10-Yard Fly',
+        'Broad Jump',
+        'Vertical Jump',
       ]);
     });
   });

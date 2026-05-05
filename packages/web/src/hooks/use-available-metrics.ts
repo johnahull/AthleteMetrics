@@ -150,13 +150,9 @@ export function useAvailableMetrics(): {
           }));
         result.push(...customMetricsList);
       }
-
-      return result;
-    }
-
-    // Fallback to active site metrics (for users without org context, e.g., independent athletes)
-    if (siteMetrics) {
-      return siteMetrics
+    } else if (siteMetrics) {
+      // Fallback to active site metrics (for users without org context, e.g., independent athletes)
+      const fallback = siteMetrics
         .filter(sm => sm.isActive) // Only active metrics
         .map(sm => ({
           code: sm.code,
@@ -171,9 +167,16 @@ export function useAvailableMetrics(): {
           dependentMetrics: sm.dependentMetrics || undefined,
           isCustom: false,
         }));
+      result.push(...fallback);
     }
 
-    return [];
+    // Sort alphabetically by label so every dropdown that consumes this hook
+    // (e.g. /publish, measurement forms, analytics selectors) shows metrics
+    // in a consistent, predictable order. `sensitivity: 'base'` makes the
+    // sort case- and accent-insensitive.
+    return result.sort((a, b) =>
+      a.label.localeCompare(b.label, undefined, { sensitivity: 'base' })
+    );
   }, [currentOrgId, orgMetrics, customOrgMetrics, siteMetrics, loadingOrg, loadingCustom, loadingSite]);
 
   return {
