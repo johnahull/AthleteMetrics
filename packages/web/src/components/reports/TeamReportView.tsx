@@ -33,7 +33,6 @@ import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
-import { getMetricDisplayName } from "@/lib/metrics";
 import {
   getPerformanceColor,
   getQuartileBadge,
@@ -494,7 +493,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
+                  <CardTitle>{metricLabels?.[stat.metric] ?? stat.metric}</CardTitle>
                   <CardDescription>
                     {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}

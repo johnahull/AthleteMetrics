@@ -37,9 +37,7 @@ describe('measurementsToCSVString', () => {
     expect(lines[1]).toContain('2024-01-15');
   });
 
-  it('should use metric codes (database labels injected by caller in production)', () => {
-    // NOTE: getMetricDisplayName now returns metric codes directly.
-    // In production, labels come from useMetricConfig hook via database.
+  it('should resolve metric codes to labels when metricLabels is provided', () => {
     const measurements: Partial<Measurement>[] = [
       {
         id: '1',
@@ -65,11 +63,60 @@ describe('measurementsToCSVString', () => {
       }
     ];
 
+    const metricLabels = {
+      FLY10_TIME: '10-Yard Fly Time',
+      VERTICAL_JUMP: 'Vertical Jump',
+    };
+
+    const csv = measurementsToCSVString(measurements as Measurement[], metricLabels);
+
+    // Labels replace raw codes when provided
+    expect(csv).toContain('10-Yard Fly Time');
+    expect(csv).toContain('Vertical Jump');
+    expect(csv).not.toContain('FLY10_TIME');
+    expect(csv).not.toContain('VERTICAL_JUMP');
+  });
+
+  it('should fall back to raw metric code when metricLabels is omitted', () => {
+    const measurements: Partial<Measurement>[] = [
+      {
+        id: '1',
+        date: '2024-01-15',
+        metric: 'FLY10_TIME',
+        value: '1.500',
+        units: 's',
+        isVerified: true,
+        season: null,
+        teamNameSnapshot: null,
+        notes: null,
+      },
+    ];
+
     const csv = measurementsToCSVString(measurements as Measurement[]);
 
-    // Now returns metric codes (fallback behavior)
+    // No metricLabels argument: falls back to the metric code
     expect(csv).toContain('FLY10_TIME');
-    expect(csv).toContain('VERTICAL_JUMP');
+  });
+
+  it('should fall back to raw metric code when label for code is missing', () => {
+    const measurements: Partial<Measurement>[] = [
+      {
+        id: '1',
+        date: '2024-01-15',
+        metric: 'UNKNOWN_METRIC',
+        value: '1.500',
+        units: 's',
+        isVerified: true,
+        season: null,
+        teamNameSnapshot: null,
+        notes: null,
+      },
+    ];
+
+    // metricLabels provided but missing the specific code
+    const csv = measurementsToCSVString(measurements as Measurement[], { FLY10_TIME: '10-Yard Fly Time' });
+
+    expect(csv).toContain('UNKNOWN_METRIC');
   });
 
   it('should show "Verified" or "Unverified" for status', () => {
@@ -188,9 +235,7 @@ describe('measurementsToCSVString', () => {
     expect(csv).toContain('Varsity Football');
   });
 
-  it('should handle all metric types (outputs metric codes)', () => {
-    // NOTE: getMetricDisplayName now returns metric codes directly.
-    // In production, labels come from useMetricConfig hook via database.
+  it('should resolve all metric types when metricLabels covers them', () => {
     const metricTypes = [
       'FLY10_TIME',
       'VERTICAL_JUMP',
@@ -201,6 +246,17 @@ describe('measurementsToCSVString', () => {
       'TOP_SPEED',
       'RSI',
     ];
+
+    const metricLabels: Record<string, string> = {
+      FLY10_TIME: '10-Yard Fly Time',
+      VERTICAL_JUMP: 'Vertical Jump',
+      AGILITY_505: '5-0-5 Agility',
+      AGILITY_5105: '5-10-5 Agility',
+      T_TEST: 'T-Test',
+      DASH_40YD: '40-Yard Dash',
+      TOP_SPEED: 'Top Speed',
+      RSI: 'Reactive Strength Index',
+    };
 
     const measurements: Partial<Measurement>[] = metricTypes.map((metric, i) => ({
       id: `${i}`,
@@ -214,17 +270,16 @@ describe('measurementsToCSVString', () => {
       notes: null,
     }));
 
-    const csv = measurementsToCSVString(measurements as Measurement[]);
+    const csv = measurementsToCSVString(measurements as Measurement[], metricLabels);
 
-    // Now outputs metric codes (fallback behavior - labels come from database in production)
-    expect(csv).toContain('FLY10_TIME');
-    expect(csv).toContain('VERTICAL_JUMP');
-    expect(csv).toContain('AGILITY_505');
-    expect(csv).toContain('AGILITY_5105');
-    expect(csv).toContain('T_TEST');
-    expect(csv).toContain('DASH_40YD');
-    expect(csv).toContain('TOP_SPEED');
-    expect(csv).toContain('RSI');
+    expect(csv).toContain('10-Yard Fly Time');
+    expect(csv).toContain('Vertical Jump');
+    expect(csv).toContain('5-0-5 Agility');
+    expect(csv).toContain('5-10-5 Agility');
+    expect(csv).toContain('T-Test');
+    expect(csv).toContain('40-Yard Dash');
+    expect(csv).toContain('Top Speed');
+    expect(csv).toContain('Reactive Strength Index');
   });
 });
 

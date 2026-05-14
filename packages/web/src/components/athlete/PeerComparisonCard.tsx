@@ -36,7 +36,7 @@ import {
   getPercentileLabel,
   type PercentileResult,
 } from '@/hooks/usePeerComparison';
-import { getMetricDisplayName } from '@/lib/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 interface PeerComparisonCardProps {
   userId: string;
@@ -86,7 +86,8 @@ function PercentileIndicator({ percentile }: { percentile: number }) {
  * Single metric row display
  */
 function MetricPercentileRow({ result }: { result: PercentileResult }) {
-  const displayName = getMetricDisplayName(result.metric);
+  const { getLabel } = useMetricLabels();
+  const displayName = getLabel(result.metric);
 
   return (
     <div className="space-y-1.5">

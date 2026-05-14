@@ -4,11 +4,25 @@
  */
 
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { StatisticsSummaryCard } from '../StatisticsSummaryCard';
 import type { Measurement } from '@shared/schema';
+
+const METRIC_LABEL_FIXTURE: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+  DASH_40YD: '40-Yard Dash',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABEL_FIXTURE,
+    getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    isLoading: false,
+  }),
+}));
 
 // Helper to create minimal test measurement
 function createTestMeasurement(overrides: Partial<Measurement>): Measurement {

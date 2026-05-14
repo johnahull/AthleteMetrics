@@ -44,6 +44,7 @@ import {
   type PreviewAthlete,
   type ParsedSession,
 } from '@/hooks/useDeviceImport';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { ChevronDown, ChevronRight, AlertTriangle, Upload, Loader2 } from 'lucide-react';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -127,6 +128,7 @@ function AthleteReviewRow({
   onIncluded,
 }: AthleteReviewRowProps) {
   const [open, setOpen] = useState(false);
+  const { getLabel } = useMetricLabels();
   const effectiveMatchId = overrideMatchedId ?? athlete.matchedAthleteId;
   const effectiveMatchType =
     overrideMatchedId && overrideMatchedId !== athlete.matchedAthleteId
@@ -206,7 +208,7 @@ function AthleteReviewRow({
             <div className="space-y-1 text-xs">
               {athlete.drills.map((drill, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="font-mono text-muted-foreground w-28">{drill.metric}</span>
+                  <span className="text-muted-foreground w-28">{getLabel(drill.metric)}</span>
                   <span className="font-semibold">
                     {drill.value} {drill.units}
                   </span>
@@ -222,7 +224,7 @@ function AthleteReviewRow({
                   )}
                   {drill.splits && drill.splits.length > 0 && (
                     <span className="text-muted-foreground">
-                      ({drill.splits.map((s) => `${s.metric}: ${s.value}${s.units}`).join(', ')})
+                      ({drill.splits.map((s) => `${getLabel(s.metric)}: ${s.value}${s.units}`).join(', ')})
                     </span>
                   )}
                 </div>

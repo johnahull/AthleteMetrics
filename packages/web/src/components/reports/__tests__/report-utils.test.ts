@@ -217,18 +217,18 @@ describe('report-utils', () => {
         { metric: 'FLY10_TIME' },
         { metric: 'UNKNOWN_METRIC' },
       ];
-      // getMetricDisplayName should be used for unknown metrics
+      // Unknown metrics fall back to the raw metric code
       const result = getMetricsList(teamStatistics, mockMetricLabels);
-      expect(result).toContain('10-Yard Fly');
-      // The unknown metric should appear in some form
-      expect(result.includes('UNKNOWN_METRIC') || result.includes('Unknown')).toBe(true);
+      expect(result).toBe('10-Yard Fly, UNKNOWN_METRIC');
     });
 
-    it('should handle undefined metricLabels', () => {
-      const teamStatistics = [{ metric: 'FLY10_TIME' }];
-      // Should use getMetricDisplayName fallback
+    it('should handle undefined metricLabels by falling back to metric codes', () => {
+      const teamStatistics = [
+        { metric: 'FLY10_TIME' },
+        { metric: 'VERTICAL_JUMP' },
+      ];
       const result = getMetricsList(teamStatistics, undefined);
-      expect(result.length).toBeGreaterThan(0);
+      expect(result).toBe('FLY10_TIME, VERTICAL_JUMP');
     });
   });
 
@@ -265,6 +265,26 @@ describe('report-utils', () => {
       const result = getCompositeIndexDescription(weights, mockMetricLabels);
       expect(result).toContain('33%');
       expect(result).toContain('67%');
+    });
+
+    it('should fall back to metric code when label is missing', () => {
+      const weights = {
+        FLY10_TIME: 0.5,
+        UNKNOWN_METRIC: 0.5,
+      };
+      const result = getCompositeIndexDescription(weights, mockMetricLabels);
+      expect(result).toContain('10-Yard Fly (50%)');
+      expect(result).toContain('UNKNOWN_METRIC (50%)');
+    });
+
+    it('should fall back to metric codes when metricLabels is undefined', () => {
+      const weights = {
+        FLY10_TIME: 0.4,
+        VERTICAL_JUMP: 0.6,
+      };
+      const result = getCompositeIndexDescription(weights, undefined);
+      expect(result).toContain('FLY10_TIME (40%)');
+      expect(result).toContain('VERTICAL_JUMP (60%)');
     });
   });
 

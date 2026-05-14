@@ -10,6 +10,22 @@ import userEvent from '@testing-library/user-event';
 import { MeasurementHistoryTable } from '../MeasurementHistoryTable';
 import type { Measurement } from '@shared/schema';
 
+const METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+  AGILITY_505: '5-0-5 Agility',
+  DASH_40YD: '40-Yard Dash',
+  T_TEST: 'T-Test',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABELS,
+    getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
+
 // Mock measurements data
 const mockMeasurements: Measurement[] = [
   {
@@ -133,13 +149,11 @@ describe('MeasurementHistoryTable', () => {
     });
 
     it('should display metric display name instead of raw key', () => {
-      // NOTE: getMetricDisplayName now returns metric codes as fallback.
-      // In production, labels come from database via useMetricConfig hook.
       render(<MeasurementHistoryTable measurements={mockMeasurements} />);
 
-      // Now displays metric codes (fallback behavior - labels from DB in production)
-      expect(screen.getByText('FLY10_TIME')).toBeInTheDocument();
-      expect(screen.getByText('VERTICAL_JUMP')).toBeInTheDocument();
+      // Now displays user-facing labels resolved via useMetricLabels
+      expect(screen.getByText('10-Yard Fly Time')).toBeInTheDocument();
+      expect(screen.getByText('Vertical Jump')).toBeInTheDocument();
     });
 
     it('should display value with units', () => {
@@ -194,8 +208,8 @@ describe('MeasurementHistoryTable', () => {
     it('should not show actual data when loading', () => {
       render(<MeasurementHistoryTable measurements={mockMeasurements} isLoading={true} />);
 
-      // Data should not be visible during loading (metric codes instead of display names)
-      expect(screen.queryByText('FLY10_TIME')).not.toBeInTheDocument();
+      // Data should not be visible during loading
+      expect(screen.queryByText('10-Yard Fly Time')).not.toBeInTheDocument();
     });
   });
 
@@ -239,8 +253,10 @@ describe('MeasurementHistoryTable', () => {
       const rows = screen.getAllByRole('row').slice(1);
       const firstRow = rows[0];
 
-      // Should be sorted alphabetically by metric code (fallback behavior)
-      expect(within(firstRow).getByText(/FLY10_TIME|AGILITY_505|VERTICAL_JUMP/i)).toBeInTheDocument();
+      // Should be sorted alphabetically by metric label
+      // Labels: "10-Yard Fly Time", "5-0-5 Agility", "Vertical Jump"
+      // Ascending alphabetical order starts with "10-Yard Fly Time"
+      expect(within(firstRow).getByText('10-Yard Fly Time')).toBeInTheDocument();
     });
 
     it('should sort by value when clicking value column header', async () => {

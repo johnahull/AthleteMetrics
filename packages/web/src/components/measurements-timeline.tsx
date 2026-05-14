@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 interface Measurement {
   id: string;
@@ -27,6 +28,7 @@ interface MeasurementsTimelineProps {
 }
 
 export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps) {
+  const { getLabel } = useMetricLabels();
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -136,7 +138,7 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
                   variant="secondary"
                 >
                   <Icon className="h-3 w-3 mr-1" />
-                  {measurement.metricName || measurement.metricType.replace(/_/g, ' ')}
+                  {measurement.metricName || getLabel(measurement.metricType)}
                 </Badge>
               </div>
             </CardHeader>

@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, ChevronUp, Download, Pencil, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { getMetricDisplayName } from '@/constants/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { AthleteOrgContext } from '@/lib/athlete-org-context';
 import { Link } from 'wouter';
 
@@ -63,6 +63,7 @@ export function MeasurementHistoryTable({
   showSourceColumn = false,
 }: MeasurementHistoryTableProps) {
   const showActions = Boolean(onEdit || onDelete);
+  const { getLabel } = useMetricLabels();
 
   // Try to get filter mode from context to determine if we should show org column
   const athleteOrgContext = useContext(AthleteOrgContext);
@@ -83,9 +84,7 @@ export function MeasurementHistoryTable({
           comparison = new Date(a.date).getTime() - new Date(b.date).getTime();
           break;
         case 'metric':
-          comparison = getMetricDisplayName(a.metric).localeCompare(
-            getMetricDisplayName(b.metric)
-          );
+          comparison = getLabel(a.metric).localeCompare(getLabel(b.metric));
           break;
         case 'value':
           comparison = parseFloat(a.value) - parseFloat(b.value);
@@ -96,7 +95,7 @@ export function MeasurementHistoryTable({
     });
 
     return sorted;
-  }, [measurements, sortField, sortDirection]);
+  }, [measurements, sortField, sortDirection, getLabel]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -266,10 +265,10 @@ export function MeasurementHistoryTable({
                   }}
                   tabIndex={0}
                   aria-expanded={isExpanded}
-                  aria-label={`${getMetricDisplayName(measurement.metric)}: ${measurement.value} ${measurement.units}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
+                  aria-label={`${getLabel(measurement.metric)}: ${measurement.value} ${measurement.units}. Press Enter to ${isExpanded ? 'collapse' : 'expand'} notes.`}
                 >
                   <TableCell>{formatDate(measurement.date)}</TableCell>
-                  <TableCell>{getMetricDisplayName(measurement.metric)}</TableCell>
+                  <TableCell>{getLabel(measurement.metric)}</TableCell>
                   <TableCell>
                     {measurement.value} {measurement.units}
                   </TableCell>
@@ -315,7 +314,7 @@ export function MeasurementHistoryTable({
                                 e.stopPropagation();
                                 onEdit(measurement);
                               }}
-                              aria-label={`Edit ${getMetricDisplayName(measurement.metric)} measurement`}
+                              aria-label={`Edit ${getLabel(measurement.metric)} measurement`}
                             >
                               <Pencil className="h-4 w-4" />
                             </Button>
@@ -329,7 +328,7 @@ export function MeasurementHistoryTable({
                                 e.stopPropagation();
                                 onDelete(measurement);
                               }}
-                              aria-label={`Delete ${getMetricDisplayName(measurement.metric)} measurement`}
+                              aria-label={`Delete ${getLabel(measurement.metric)} measurement`}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

@@ -6,7 +6,8 @@
 import React, { useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { calculateStatistics } from '@shared/analytics-utils';
-import { getMetricDisplayName, getMetricUnits, getMetricType } from '@/lib/metrics';
+import { getMetricUnits, getMetricType } from '@/lib/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import type { MetricType } from '@shared/analytics-types';
 
 /**
@@ -35,13 +36,6 @@ function formatNumber(value: number, decimals: number = 2): string {
   return value.toFixed(decimals);
 }
 
-/**
- * Generate default title from metric name using shared utility
- */
-function getDefaultTitle(metric: string): string {
-  return `${getMetricDisplayName(metric)} Statistics`;
-}
-
 export function StatisticsSummaryCard({
   measurements,
   metric,
@@ -49,6 +43,7 @@ export function StatisticsSummaryCard({
   distributionMode = 'quartiles',
   metricType: metricTypeOverride,
 }: StatisticsSummaryCardProps) {
+  const { getLabel } = useMetricLabels();
   // Resolve metric direction: DB override > fallback chain
   const metricDirection = metricTypeOverride || getMetricType(metric);
   // Extract numeric values from measurements (already filtered by caller)
@@ -60,7 +55,7 @@ export function StatisticsSummaryCard({
 
   // Get units for this metric
   const units = getMetricUnits(metric);
-  const displayTitle = title || getDefaultTitle(metric);
+  const displayTitle = title || `${getLabel(metric)} Statistics`;
 
   // Handle empty state
   if (stats.count === 0) {

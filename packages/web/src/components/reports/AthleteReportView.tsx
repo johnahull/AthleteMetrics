@@ -44,7 +44,6 @@ import { format } from "date-fns";
 import ReactMarkdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
-import { getMetricDisplayName } from "@/lib/metrics";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "@/lib/report-utils";
 import {
   getPerformanceColor,
@@ -642,7 +641,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
+                  <CardTitle>{metricLabels?.[stat.metric] ?? stat.metric}</CardTitle>
                   <CardDescription>
                     {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ""}` : "N/A"}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ""}`}

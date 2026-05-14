@@ -14,8 +14,7 @@
  */
 
 import { format } from 'date-fns';
-import { getMetricDisplayName } from '@/lib/metrics';
-import type { TimeframeConfig, AthleteRanking, TeamStatistic } from '@/types/report-types';
+import type { TimeframeConfig, AthleteRanking } from '@/types/report-types';
 
 // ============================================================================
 // Performance Visualization
@@ -136,7 +135,7 @@ export function getMetricsList(
   }
 
   return teamStatistics
-    .map((stat) => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
+    .map((stat) => metricLabels?.[stat.metric] ?? stat.metric)
     .join(', ');
 }
 
@@ -157,7 +156,7 @@ export function getCompositeIndexDescription(
 
   const weightDescriptions = Object.entries(weights)
     .map(([metricCode, weight]) => {
-      const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
+      const metricName = metricLabels?.[metricCode] ?? metricCode;
       const percentage = (weight * 100).toFixed(0);
       return `${metricName} (${percentage}%)`;
     })

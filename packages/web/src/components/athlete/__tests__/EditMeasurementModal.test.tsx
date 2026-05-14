@@ -12,6 +12,19 @@ import '@testing-library/jest-dom';
 import { EditMeasurementModal } from '../EditMeasurementModal';
 import type { Measurement } from '@shared/schema';
 
+const METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABELS,
+    getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
+
 // Mock measurement data
 const mockMeasurement: Measurement = {
   id: 'measurement-1',
@@ -95,8 +108,6 @@ describe('EditMeasurementModal', () => {
     });
 
     it('should display metric name in title or description', () => {
-      // NOTE: getMetricDisplayName now returns metric codes as fallback.
-      // In production, labels come from database via useMetricConfig hook.
       render(
         <EditMeasurementModal
           open={true}
@@ -106,8 +117,8 @@ describe('EditMeasurementModal', () => {
         />
       );
 
-      // Now displays metric code (fallback behavior)
-      expect(screen.getByText(/FLY10_TIME/i)).toBeInTheDocument();
+      // Displays user-facing label resolved via useMetricLabels
+      expect(screen.getByText(/10-Yard Fly Time/i)).toBeInTheDocument();
     });
   });
 
