@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { useAvailableMetrics } from './use-available-metrics';
 
 export interface UseMetricLabelsResult {
@@ -27,8 +27,8 @@ export function useMetricLabels(): UseMetricLabelsResult {
     [metrics],
   );
 
-  const getLabel = useMemo(
-    () => (code: string) => labels[code] ?? code,
+  const getLabel = useCallback(
+    (code: string) => labels[code] ?? code,
     [labels],
   );
 

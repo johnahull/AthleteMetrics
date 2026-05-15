@@ -85,10 +85,7 @@ function PercentileIndicator({ percentile }: { percentile: number }) {
 /**
  * Single metric row display
  */
-function MetricPercentileRow({ result }: { result: PercentileResult }) {
-  const { getLabel } = useMetricLabels();
-  const displayName = getLabel(result.metric);
-
+function MetricPercentileRow({ result, displayName }: { result: PercentileResult; displayName: string }) {
   return (
     <div className="space-y-1.5">
       <div className="flex items-center justify-between text-sm">
@@ -168,6 +165,9 @@ export function PeerComparisonCard({
   availableMetrics,
   compact = false,
 }: PeerComparisonCardProps) {
+  // Resolve metric labels once for the whole card (single subscription, not per row)
+  const { getLabel } = useMetricLabels();
+
   // Check opt-in status
   const { data: peerStatus, isLoading: statusLoading } = usePeerComparisonStatus(userId);
 
@@ -268,7 +268,7 @@ export function PeerComparisonCard({
         {/* Metrics list */}
         <div className="space-y-3">
           {sortedPercentiles.slice(0, compact ? 3 : 5).map((result) => (
-            <MetricPercentileRow key={result.metric} result={result} />
+            <MetricPercentileRow key={result.metric} result={result} displayName={getLabel(result.metric)} />
           ))}
         </div>
 

@@ -18,6 +18,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
 import { useToast } from "@/hooks/use-toast";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ReportLoadingState } from "./ReportLoadingState";
@@ -136,6 +137,10 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
   }
 
   const { athlete, metricLabels, metricUnits } = reportData;
+  // Backstop label resolution with the org's currently-active metric labels —
+  // see the matching block in AthleteTeamReportView below for rationale.
+  const { getLabel } = useMetricLabels();
+  const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   return (
     <div className="space-y-6">
@@ -217,7 +222,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                   const percentile = athlete.percentiles[metricCode];
                   const teamAverage = athlete.teamAverages?.[metricCode];
                   const benchmarks = athlete.benchmarkComparisons[metricCode] || [];
-                  const metricLabel = metricLabels?.[metricCode] || metricCode;
+                  const metricLabel = resolveLabel(metricCode);
                   const unit = metricUnits?.[metricCode] || "";
 
                   return (
@@ -338,6 +343,11 @@ function AthleteTeamReportView({ report }: { report: Report }) {
   }
 
   const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits } = reportData;
+  // Backstop label resolution with the org's currently-active metric labels in
+  // case the report payload omits a code (e.g. custom org metric added after
+  // the report ran but before it rendered).
+  const { getLabel } = useMetricLabels();
+  const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
 
   // Collect all unique benchmark names
   const allBenchmarkNames = new Set<string>();
@@ -491,7 +501,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
 
                   return (
                     <TableRow key={stat.metric}>
-                      <TableCell className="font-medium">{metricLabels?.[stat.metric] || stat.metric}</TableCell>
+                      <TableCell className="font-medium">{resolveLabel(stat.metric)}</TableCell>
                       <TableCell>
                         {stat.average !== null && stat.average !== undefined
                           ? (isFly10Metric(stat.metric)
@@ -641,7 +651,7 @@ function AthleteTeamReportView({ report }: { report: Report }) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{metricLabels?.[stat.metric] ?? stat.metric}</CardTitle>
+                  <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
                   <CardDescription>
                     {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ""}` : "N/A"}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ""}`}

@@ -12,6 +12,13 @@ import type { Report } from '@/types/report-types';
 vi.mock('@/hooks/use-reports');
 vi.mock('@/hooks/use-teams');
 vi.mock('@/lib/auth');
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: {},
+    getLabel: (code: string) => code,
+    isLoading: false,
+  }),
+}));
 
 const mockGenerateReportMutate = vi.fn();
 
