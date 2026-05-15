@@ -138,7 +138,18 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
                   variant="secondary"
                 >
                   <Icon className="h-3 w-3 mr-1" />
-                  {measurement.metricName || getLabel(measurement.metricType)}
+                  {(() => {
+                    // Three-tier resolution:
+                    //   1. Server-supplied metricName (preferred — built against the report payload)
+                    //   2. Live org-aware label from useMetricLabels (handles custom org metrics + label overrides)
+                    //   3. Underscore-split fallback (e.g. FLY10_TIME → "FLY10 TIME") so archived/deleted
+                    //      metrics that no longer appear in availableMetrics still read as prose,
+                    //      preserving the pre-migration UX for legacy data.
+                    if (measurement.metricName) return measurement.metricName;
+                    const resolved = getLabel(measurement.metricType);
+                    if (resolved !== measurement.metricType) return resolved;
+                    return measurement.metricType.replace(/_/g, ' ');
+                  })()}
                 </Badge>
               </div>
             </CardHeader>
