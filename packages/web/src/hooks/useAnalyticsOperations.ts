@@ -9,6 +9,7 @@ import { useAuth } from '@/lib/auth';
 import { useAnalyticsContext, useAnalyticsActions } from '@/contexts/AnalyticsContext';
 import { getRecommendedChartType } from '@/components/charts/ChartContainer';
 import { devLog } from '@/utils/dev-logger';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import type {
   AnalyticsRequest,
   AnalyticsResponse,
@@ -318,6 +319,10 @@ export function useChartConfiguration() {
  */
 export function useAnalyticsExport() {
   const { state } = useAnalyticsContext();
+  // Org-aware metric labels — passed into the CSV exporter so the file
+  // contains "10-Yard Fly Time" not "FLY10_TIME", and custom org metrics +
+  // per-org label overrides flow through.
+  const { labels: metricLabels } = useMetricLabels();
 
   const handleExport = useCallback(async (
     format: 'csv' | 'png' | 'clipboard' | 'share',
@@ -343,8 +348,12 @@ export function useAnalyticsExport() {
       format === 'share' ? 'png' : format
     );
 
-    // Generate title for sharing using display label from METRIC_CONFIG
-    const primaryLabel = METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label || state.metrics.primary;
+    // Generate title for sharing using the org-aware label, falling back to
+    // METRIC_CONFIG for any code not in availableMetrics.
+    const primaryLabel =
+      metricLabels[state.metrics.primary] ||
+      METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label ||
+      state.metrics.primary;
     const chartTitle = `${primaryLabel} Performance Chart`;
 
     switch (format) {
@@ -352,7 +361,8 @@ export function useAnalyticsExport() {
         exportAnalyticsDataAsCSV(
           state.analyticsData,
           state.selectedChartType,
-          state.metrics
+          state.metrics,
+          metricLabels
         );
         devLog.log('CSV export completed:', { filename });
         break;
@@ -391,7 +401,7 @@ export function useAnalyticsExport() {
         throw new Error(`Unhandled export format: ${_exhaustiveCheck}`);
       }
     }
-  }, [state.analyticsData, state.selectedChartType, state.metrics]);
+  }, [state.analyticsData, state.selectedChartType, state.metrics, metricLabels]);
 
   return {
     handleExport,
