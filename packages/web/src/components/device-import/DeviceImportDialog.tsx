@@ -117,6 +117,9 @@ interface AthleteReviewRowProps {
   included: boolean;
   onOverride: (csvName: string, athleteId: string | undefined) => void;
   onIncluded: (csvName: string, included: boolean) => void;
+  /** Metric-code → label resolver; hoisted from the parent so we don't
+   *  re-call useMetricLabels() once per row. */
+  getLabel: (code: string) => string;
 }
 
 function AthleteReviewRow({
@@ -126,9 +129,9 @@ function AthleteReviewRow({
   included,
   onOverride,
   onIncluded,
+  getLabel,
 }: AthleteReviewRowProps) {
   const [open, setOpen] = useState(false);
-  const { getLabel } = useMetricLabels();
   const effectiveMatchId = overrideMatchedId ?? athlete.matchedAthleteId;
   const effectiveMatchType =
     overrideMatchedId && overrideMatchedId !== athlete.matchedAthleteId
@@ -250,6 +253,11 @@ export function DeviceImportDialog({
   const [source] = useState<string>('dashr');
   const [duplicateStrategy, setDuplicateStrategy] = useState<'skip' | 'replace'>('skip');
   const [addMissingEventMetrics, setAddMissingEventMetrics] = useState(false);
+
+  // Resolve metric labels once for the whole dialog so each AthleteReviewRow
+  // doesn't re-subscribe to useAvailableMetrics; getLabel is referentially
+  // stable across renders thanks to useCallback inside useMetricLabels.
+  const { getLabel } = useMetricLabels();
 
   const {
     step,
@@ -577,6 +585,7 @@ export function DeviceImportDialog({
                     included={override?.included ?? athlete.included}
                     onOverride={setAthleteOverride}
                     onIncluded={setAthleteIncluded}
+                    getLabel={getLabel}
                   />
                 );
               })}

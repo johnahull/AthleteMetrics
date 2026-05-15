@@ -99,5 +99,19 @@ test.describe('Dashboard metric label display', () => {
     for (const code of METRIC_CODES) {
       expect(bodyText, `metric code "${code}" leaked into athlete view`).not.toContain(code);
     }
+
+    // Positive assertion: prove a real label or the empty-state copy is on the
+    // page. Without this, an athlete page that fails to load measurements
+    // (e.g. redirect broke, fetch errored) would satisfy the negative check
+    // trivially. We accept either a known label or the "No recent
+    // measurements" / "No measurements" copy so seeded-data variance across
+    // CI/local doesn't make the test brittle.
+    const hasEmptyState =
+      EMPTY_STATE_TEXT.test(bodyText) || /No measurements/i.test(bodyText);
+    const hasKnownLabel = KNOWN_LABELS.some((label) => bodyText.includes(label));
+    expect(
+      hasEmptyState || hasKnownLabel,
+      `Athlete view neither shows a known metric label nor an empty-state message — cannot confirm labels are wired up. Body sample: ${bodyText.slice(0, 200)}`,
+    ).toBeTruthy();
   });
 });
