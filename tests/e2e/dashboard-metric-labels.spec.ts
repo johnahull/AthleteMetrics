@@ -91,14 +91,14 @@ test.describe('Dashboard metric label display', () => {
   test('org admin: labels render, codes do not leak', async ({ page }) => {
     await loginAs(page, 'org_admin');
     await page.goto(`${TESTING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await assertNoMetricCodesLeaked(page, 'org_admin');
   });
 
   test('coach: labels render, codes do not leak', async ({ page }) => {
     await loginAs(page, 'coach');
     await page.goto(`${TESTING_URL}/dashboard`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await assertNoMetricCodesLeaked(page, 'coach');
   });
 
@@ -108,7 +108,7 @@ test.describe('Dashboard metric label display', () => {
     // landing page rather than the org dashboard.
     await loginAs(page, 'athlete');
     await page.goto(`${TESTING_URL}/`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await assertNoMetricCodesLeaked(page, 'athlete');
   });
 });

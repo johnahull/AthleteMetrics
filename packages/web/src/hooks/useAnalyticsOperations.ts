@@ -349,10 +349,12 @@ export function useAnalyticsExport() {
     );
 
     // Generate title for sharing using the org-aware label, falling back to
-    // METRIC_CONFIG for any code not in availableMetrics.
+    // METRIC_CONFIG for any code not in availableMetrics. `??` (not `||`) so
+    // a legitimately-empty label string isn't silently bypassed — matches the
+    // resolution operator used everywhere else in this PR.
     const primaryLabel =
-      metricLabels[state.metrics.primary] ||
-      METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label ||
+      metricLabels[state.metrics.primary] ??
+      METRIC_CONFIG[state.metrics.primary as keyof typeof METRIC_CONFIG]?.label ??
       state.metrics.primary;
     const chartTitle = `${primaryLabel} Performance Chart`;
 

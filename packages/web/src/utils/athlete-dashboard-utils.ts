@@ -193,7 +193,11 @@ export function generateActivityTimeline(
 }
 
 /**
- * Get display name for a metric
+ * Last-resort metric display name when the caller didn't supply a labels map
+ * AND the code isn't one of the known built-ins. Underscore-split fallback
+ * keeps unknown codes legible (e.g. CUSTOM_DEADLIFT_1RM → "CUSTOM DEADLIFT
+ * 1RM"), matching the same fallback shape used by
+ * resolveTimelineLabel in measurements-timeline.tsx.
  */
 function getMetricDisplayName(metric: string): string {
   const displayNames: Record<string, string> = {
@@ -207,5 +211,5 @@ function getMetricDisplayName(metric: string): string {
     RSI: 'Reactive Strength Index',
   };
 
-  return displayNames[metric] || metric;
+  return displayNames[metric] ?? metric.replace(/_/g, ' ');
 }

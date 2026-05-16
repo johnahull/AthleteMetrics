@@ -43,12 +43,14 @@ describe('athlete-dashboard-utils — metricLabels parameter', () => {
       expect(prs[0].displayName).toBe('10-Yard Fly Time');
     });
 
-    it('falls back to the raw code when neither labels nor built-in map know it', () => {
+    it('underscore-splits unknown codes when neither labels nor built-in map know them', () => {
+      // Matches the same last-resort fallback shape used in
+      // resolveTimelineLabel for consistency across surfaces.
       const measurements = [m('CUSTOM_DEADLIFT_1RM', 200, '2024-01-01')];
 
       const prs = calculatePersonalRecords(measurements);
 
-      expect(prs[0].displayName).toBe('CUSTOM_DEADLIFT_1RM');
+      expect(prs[0].displayName).toBe('CUSTOM DEADLIFT 1RM');
     });
 
     it('resolves custom org codes via the supplied labels map', () => {
