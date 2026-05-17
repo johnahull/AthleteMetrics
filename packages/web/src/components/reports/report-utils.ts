@@ -14,8 +14,7 @@
  */
 
 import { format } from 'date-fns';
-import { getMetricDisplayName } from '@/lib/metrics';
-import type { TimeframeConfig, AthleteRanking, TeamStatistic } from '@/types/report-types';
+import type { TimeframeConfig, AthleteRanking } from '@/types/report-types';
 
 // ============================================================================
 // Performance Visualization
@@ -55,6 +54,35 @@ export function getQuartileBadge(
   if (percentile >= 50) return { label: 'Above Avg', variant: 'secondary' };
   if (percentile >= 25) return { label: 'Below Avg', variant: 'outline' };
   return { label: 'Bottom 25%', variant: 'destructive' };
+}
+
+// ============================================================================
+// Metric Label Resolution
+// ============================================================================
+
+/**
+ * Last-resort metric display name when the caller didn't supply a labels map
+ * AND the code isn't one of the known built-ins. Underscore-split fallback
+ * keeps unknown codes legible (e.g. CUSTOM_DEADLIFT_1RM → "CUSTOM DEADLIFT
+ * 1RM"), matching the same shape used by `resolveTimelineLabel` in
+ * `measurements-timeline.tsx` and the local helper in
+ * `athlete-dashboard-utils.ts`.
+ *
+ * Exported callers should normally pass `metricLabels` from
+ * `useMetricLabels().labels`; this private helper is only the safety net.
+ */
+function resolveFallbackLabel(metric: string): string {
+  const displayNames: Record<string, string> = {
+    FLY10_TIME: '10-Yard Fly Time',
+    VERTICAL_JUMP: 'Vertical Jump',
+    DASH_40YD: '40-Yard Dash',
+    AGILITY_505: '5-0-5 Agility',
+    AGILITY_5105: '5-10-5 Agility',
+    T_TEST: 'T-Test Agility',
+    TOP_SPEED: 'Top Speed',
+    RSI: 'Reactive Strength Index',
+  };
+  return displayNames[metric] ?? metric.replace(/_/g, ' ');
 }
 
 // ============================================================================
@@ -136,7 +164,7 @@ export function getMetricsList(
   }
 
   return teamStatistics
-    .map((stat) => metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric))
+    .map((stat) => metricLabels?.[stat.metric] ?? resolveFallbackLabel(stat.metric))
     .join(', ');
 }
 
@@ -157,7 +185,7 @@ export function getCompositeIndexDescription(
 
   const weightDescriptions = Object.entries(weights)
     .map(([metricCode, weight]) => {
-      const metricName = metricLabels?.[metricCode] || getMetricDisplayName(metricCode);
+      const metricName = metricLabels?.[metricCode] ?? resolveFallbackLabel(metricCode);
       const percentage = (weight * 100).toFixed(0);
       return `${metricName} (${percentage}%)`;
     })

@@ -22,6 +22,19 @@ vi.mock('@/lib/auth', () => ({
   useAuth: () => mockUseAuth(),
 }));
 
+// Mock useMetricLabels so the hook resolves labels deterministically
+const METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+};
+vi.mock('../use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABELS,
+    getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
+
 // Mock the utility functions
 vi.mock('@/utils/athlete-dashboard-utils', () => ({
   calculateMonthlyMeasurementCount: vi.fn(() => 5),

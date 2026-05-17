@@ -43,9 +43,16 @@ export function getLastMeasurementDate(measurements: Measurement[]): Date | null
 }
 
 /**
- * Calculate personal records for all metrics
+ * Calculate personal records for all metrics.
+ *
+ * Pass `metricLabels` (from `useMetricLabels().labels`) to surface custom org
+ * metrics and per-org label overrides. Falls back to a built-in name map for
+ * unmigrated callers, then to the raw code.
  */
-export function calculatePersonalRecords(measurements: Measurement[]) {
+export function calculatePersonalRecords(
+  measurements: Measurement[],
+  metricLabels?: Record<string, string>,
+) {
   const metricGroups: Record<string, Measurement[]> = {};
 
   // Group measurements by metric
@@ -101,7 +108,7 @@ export function calculatePersonalRecords(measurements: Measurement[]) {
 
     personalRecords.push({
       metric,
-      displayName: getMetricDisplayName(metric),
+      displayName: metricLabels?.[metric] ?? getMetricDisplayName(metric),
       value: bestValue,
       units: bestMeasurement.units,
       date: bestMeasurement.date,
@@ -115,9 +122,15 @@ export function calculatePersonalRecords(measurements: Measurement[]) {
 }
 
 /**
- * Generate recent activity timeline data with insights
+ * Generate recent activity timeline data with insights.
+ *
+ * Pass `metricLabels` (from `useMetricLabels().labels`) to surface custom org
+ * metrics and per-org label overrides. Falls back as in `calculatePersonalRecords`.
  */
-export function generateActivityTimeline(measurements: Measurement[]) {
+export function generateActivityTimeline(
+  measurements: Measurement[],
+  metricLabels?: Record<string, string>,
+) {
   // Get last 5 measurements sorted by date
   const recentMeasurements = [...measurements]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -170,7 +183,7 @@ export function generateActivityTimeline(measurements: Measurement[]) {
       id: measurement.id,
       date: measurement.date,
       metric: measurement.metric,
-      displayName: getMetricDisplayName(measurement.metric),
+      displayName: metricLabels?.[measurement.metric] ?? getMetricDisplayName(measurement.metric),
       value,
       units: measurement.units,
       insight,
@@ -180,7 +193,11 @@ export function generateActivityTimeline(measurements: Measurement[]) {
 }
 
 /**
- * Get display name for a metric
+ * Last-resort metric display name when the caller didn't supply a labels map
+ * AND the code isn't one of the known built-ins. Underscore-split fallback
+ * keeps unknown codes legible (e.g. CUSTOM_DEADLIFT_1RM → "CUSTOM DEADLIFT
+ * 1RM"), matching the same fallback shape used by
+ * resolveTimelineLabel in measurements-timeline.tsx.
  */
 function getMetricDisplayName(metric: string): string {
   const displayNames: Record<string, string> = {
@@ -194,5 +211,5 @@ function getMetricDisplayName(metric: string): string {
     RSI: 'Reactive Strength Index',
   };
 
-  return displayNames[metric] || metric;
+  return displayNames[metric] ?? metric.replace(/_/g, ' ');
 }

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Users, Plus, AlertCircle, RefreshCw } from "lucide-react";
-import { getMetricDisplayName } from "@/lib/metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { format } from "date-fns";
 
 interface RecentAthlete {
@@ -24,6 +24,7 @@ export default function RecentAthletesWidget({
   organizationId,
   onAddMeasurement,
 }: RecentAthletesWidgetProps) {
+  const { getLabel: getMetricLabel } = useMetricLabels();
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["/api/athletes/recent", organizationId],
     queryFn: async () => {
@@ -160,7 +161,7 @@ export default function RecentAthletesWidget({
                     {athlete.firstName} {athlete.lastName}
                   </p>
                   <div className="flex items-center space-x-2 text-xs text-gray-500">
-                    <span>{getMetricDisplayName(athlete.lastMeasurementType)}</span>
+                    <span>{getMetricLabel(athlete.lastMeasurementType)}</span>
                     <span>•</span>
                     <span>
                       {format(new Date(athlete.lastMeasurementDate), "MMM d")}

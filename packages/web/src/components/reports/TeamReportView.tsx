@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useGenerateReport } from "@/hooks/use-reports";
 import { useReportPdf } from "@/hooks/use-report-pdf";
 import { useToast } from "@/hooks/use-toast";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { useTeams } from "@/hooks/use-teams";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -33,7 +34,6 @@ import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { format } from "date-fns";
-import { getMetricDisplayName } from "@/lib/metrics";
 import {
   getPerformanceColor,
   getQuartileBadge,
@@ -130,6 +130,11 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   }
 
   const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations } = reportData;
+  // Backstop label resolution with the org's currently-active metric labels in
+  // case the report payload omits a code (e.g. custom org metric added after
+  // the report ran but before it rendered).
+  const { getLabel } = useMetricLabels();
+  const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
 
   // Collect all unique benchmark names across all metrics
@@ -299,7 +304,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                     <TableRow key={stat.metric}>
                       <TableCell className="font-medium align-top">
                         <MetricExplanation
-                          label={metricLabels?.[stat.metric] || stat.metric}
+                          label={resolveLabel(stat.metric)}
                           explanation={metricExplanations?.[stat.metric]}
                         />
                       </TableCell>
@@ -428,7 +433,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
                 <TableBody>
                   {tierDistributions.map(({ metricCode, tierGroupName, tiers }) => (
                     <TableRow key={`${metricCode}:${tierGroupName}`}>
-                      <TableCell className="font-medium">{metricLabels?.[metricCode] || metricCode}</TableCell>
+                      <TableCell className="font-medium">{resolveLabel(metricCode)}</TableCell>
                       <TableCell>{tierGroupName}</TableCell>
                       <TableCell>
                         <div className="flex flex-wrap gap-2">
@@ -494,7 +499,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
             return (
               <Card key={stat.metric}>
                 <CardHeader>
-                  <CardTitle>{metricLabels?.[stat.metric] || getMetricDisplayName(stat.metric)}</CardTitle>
+                  <CardTitle>{resolveLabel(stat.metric)}</CardTitle>
                   <CardDescription>
                     {labels.team} Average: {stat.average !== null ? `${stat.average.toFixed(2)} ${stat.units || ''}` : 'N/A'}
                     {stat.standardDeviation !== null && ` | SD: ±${stat.standardDeviation.toFixed(2)} ${stat.units || ''}`}

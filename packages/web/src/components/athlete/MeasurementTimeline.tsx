@@ -32,7 +32,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { VerificationBadge } from './VerificationBadge';
 import type { Measurement } from '@shared/schema';
-import { getMetricDisplayName } from '@/constants/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 export interface MeasurementTimelineProps {
   measurements: Measurement[];
@@ -133,6 +133,8 @@ export function MeasurementTimeline({
   measurements,
   isLoading = false,
 }: MeasurementTimelineProps) {
+  const { getLabel } = useMetricLabels();
+
   // Show loading skeleton
   if (isLoading) {
     return <TimelineLoadingSkeleton />;
@@ -159,7 +161,7 @@ export function MeasurementTimeline({
           <div className="space-y-4 pl-4 border-l-2 border-muted">
             {monthMeasurements.map((measurement) => {
               const date = parseLocalDate(measurement.date);
-              const displayName = getMetricDisplayName(measurement.metric);
+              const displayName = getLabel(measurement.metric);
               const truncatedNote = truncateNote(measurement.notes);
 
               return (

@@ -16,7 +16,7 @@ import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { Search, Target, Layers } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
-import { getMetricDisplayName } from "@/constants/metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 
 interface BenchmarkCatalogProps {
   open: boolean;
@@ -27,6 +27,7 @@ interface BenchmarkCatalogProps {
 export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCatalogProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const { getMetricConfig } = useMetricConfig();
+  const { getLabel } = useMetricLabels();
 
   // Fetch site benchmarks available for this organization (filtered by org type)
   const { data: siteBenchmarks, isLoading: loadingSite } = useSiteBenchmarksForOrg(organizationId, false);
@@ -132,7 +133,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           <div className="flex items-center gap-2 mb-2">
                             <Target className="h-4 w-4" />
                             <h4 className="font-semibold">{benchmark.name}</h4>
-                            <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
+                            <Badge variant="outline">{getLabel(benchmark.metricCode)}</Badge>
                           </div>
                           {benchmark.description && (
                             <p className="text-sm text-muted-foreground mb-2">
@@ -204,7 +205,7 @@ export function BenchmarkCatalog({ open, onClose, organizationId }: BenchmarkCat
                           <div className="flex items-center gap-2 mb-2">
                             <Target className="h-4 w-4" />
                             <h4 className="font-semibold">{benchmark.name}</h4>
-                            <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
+                            <Badge variant="outline">{getLabel(benchmark.metricCode)}</Badge>
                             <Badge variant="secondary">Custom</Badge>
                           </div>
                           {benchmark.description && (

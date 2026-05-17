@@ -25,7 +25,7 @@ import {
 import { MetricContextTooltip } from './MetricContextTooltip';
 import { AthleteMetricExplanation } from './AthleteMetricExplanation';
 import { isLowerBetter } from '@/constants/metrics';
-import { getMetricDisplayName } from '@/lib/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import type { MetricExplanation } from '@shared/metric-explanations';
 
 // Chart.js is already registered globally in App.tsx via chart-setup.ts
@@ -100,6 +100,7 @@ export function MetricProgressCard({
   explanation,
 }: MetricProgressCardProps) {
   const confettiTriggered = useRef(false);
+  const { getLabel: getMetricLabel } = useMetricLabels();
 
   // Trigger confetti for recent PRs
   useEffect(() => {
@@ -332,7 +333,7 @@ export function MetricProgressCard({
       </CardContent>
       {isDerived && dependentMetrics.length > 0 && (
         <CardFooter className="pt-2 pb-3 text-xs text-muted-foreground border-t">
-          Calculated from: {dependentMetrics.map(m => dependentMetricLabels?.[m] ?? getMetricDisplayName(m)).join(', ')}
+          Calculated from: {dependentMetrics.map(m => dependentMetricLabels?.[m] ?? getMetricLabel(m)).join(', ')}
         </CardFooter>
       )}
     </Card>

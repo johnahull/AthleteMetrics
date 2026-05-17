@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge';
 import { OrgBadge, MultiOrgBadge } from '@/components/athlete/OrgBadge';
 import { Loader2, AlertCircle, Link2, Building2, BarChart3, Shield, ArrowRight } from 'lucide-react';
 import { Redirect, Link } from 'wouter';
-import { getMetricDisplayName, getMetricUnits } from '@/lib/metrics';
+import { getMetricUnits } from '@/lib/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function UnifiedDashboardPage() {
@@ -22,6 +23,7 @@ export default function UnifiedDashboardPage() {
   const { data: profile, isLoading: profileLoading, error: profileError } = useGlobalAthleteProfile();
   const { data: dashboard, isLoading: dashboardLoading } = useUnifiedDashboard();
   const { data: measurements, isLoading: measurementsLoading } = useUnifiedMeasurements();
+  const { getLabel: getMetricLabel } = useMetricLabels();
 
   // Redirect if not logged in
   if (!authLoading && !user) {
@@ -187,7 +189,7 @@ export default function UnifiedDashboardPage() {
                   className="p-4 rounded-lg border bg-card text-card-foreground"
                 >
                   <div className="text-sm font-medium text-muted-foreground mb-1">
-                    {getMetricDisplayName(metric)}
+                    {getMetricLabel(metric)}
                   </div>
                   <div className="text-xl font-bold">
                     {stats.latest?.value || 'N/A'}
@@ -228,7 +230,7 @@ export default function UnifiedDashboardPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
-                        {getMetricDisplayName(m.metric)}
+                        {getMetricLabel(m.metric)}
                       </span>
                       {m.organizationName && (
                         <OrgBadge organizationName={m.organizationName} />
