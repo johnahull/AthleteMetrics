@@ -16,6 +16,18 @@ updates:
     # Auto-merge configuration for patch updates
     pull-request-branch-name:
       separator: "/"
+    ignore:
+      # React 18 → 19 requires a coordinated migration (react, react-dom,
+      # type packages, Radix UI, react-query, react-hook-form, wouter, etc.)
+      # Suppress major bumps until that migration is planned. See PR #392.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
 
   # Enable security updates for GitHub Actions
   - package-ecosystem: "github-actions"
