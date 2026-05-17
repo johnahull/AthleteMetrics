@@ -15,7 +15,8 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { AlertCircle, TrendingUp } from 'lucide-react';
 import type { Measurement } from '@shared/schema';
-import { getMetricDisplayName, getMetricUnit, isLowerBetter } from '@/constants/metrics';
+import { getMetricUnit, isLowerBetter } from '@/constants/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 // Import chart setup to register Chart.js components
 import '@/lib/chart-setup';
@@ -106,6 +107,7 @@ export function MeasurementProgressChart({
   const [internalShowTrendLine, setInternalShowTrendLine] = useState(true);
   const showTrendLine = controlledShowTrendLine ?? internalShowTrendLine;
   const handleTrendLineChange = onShowTrendLineChange ?? setInternalShowTrendLine;
+  const { getLabel } = useMetricLabels();
 
   // Check if measurements have mixed metrics
   const uniqueMetrics = useMemo(() => {
@@ -189,7 +191,7 @@ export function MeasurementProgressChart({
     // Build datasets array with proper typing
     const datasets: ChartDataset<'line', number[]>[] = [
       {
-        label: `${getMetricDisplayName(metric)} (${getMetricUnit(metric, units)})`,
+        label: `${getLabel(metric)} (${getMetricUnit(metric, units)})`,
         data,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.5)',
@@ -224,7 +226,7 @@ export function MeasurementProgressChart({
       labels,
       datasets,
     };
-  }, [processedData, showTrendLine, trendData]);
+  }, [processedData, showTrendLine, trendData, getLabel]);
 
   const chartOptions: ChartOptions<'line'> = useMemo(
     () => ({
@@ -359,7 +361,7 @@ export function MeasurementProgressChart({
       <div
         className="h-80"
         role="img"
-        aria-label={`Line chart showing ${getMetricDisplayName(measurements[0]?.metric || '')} progress over time${showTrendLine ? ' with trend line' : ''}`}
+        aria-label={`Line chart showing ${getLabel(measurements[0]?.metric || '')} progress over time${showTrendLine ? ' with trend line' : ''}`}
       >
         <Line data={chartData} options={chartOptions} />
       </div>

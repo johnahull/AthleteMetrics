@@ -4,10 +4,25 @@
  * TDD Test Suite for athlete measurement timeline view
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { MeasurementTimeline } from '../MeasurementTimeline';
 import type { Measurement } from '@shared/schema';
+
+const METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+  DASH_40YD: '40-Yard Dash',
+  T_TEST: 'T-Test',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABELS,
+    getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
 
 // Mock measurements data
 const mockMeasurements: Measurement[] = [
@@ -148,13 +163,13 @@ describe('MeasurementTimeline', () => {
 
       const measurementCards = screen.getAllByTestId(/^measurement-card-/);
 
-      // First card should be the most recent (Dec 15) - now shows raw metric codes
-      expect(within(measurementCards[0]).getByText('FLY10_TIME')).toBeInTheDocument();
+      // First card should be the most recent (Dec 15) - shows labels via useMetricLabels
+      expect(within(measurementCards[0]).getByText('10-Yard Fly Time')).toBeInTheDocument();
       // Value and unit are separate text nodes in the component
       expect(within(measurementCards[0]).getByText('1.52', { exact: false })).toBeInTheDocument();
 
       // Second card should be Dec 10
-      expect(within(measurementCards[1]).getByText('VERTICAL_JUMP')).toBeInTheDocument();
+      expect(within(measurementCards[1]).getByText('Vertical Jump')).toBeInTheDocument();
       expect(within(measurementCards[1]).getByText('28.5', { exact: false })).toBeInTheDocument();
     });
 
@@ -172,15 +187,13 @@ describe('MeasurementTimeline', () => {
 
   describe('Measurement card content', () => {
     it('should display metric name in human-readable format', () => {
-      // NOTE: getMetricDisplayName now returns metric codes as fallback.
-      // In production, labels come from database via useMetricConfig hook.
       render(<MeasurementTimeline measurements={mockMeasurements} />);
 
-      // Now displays metric codes (fallback behavior)
-      expect(screen.getByText('FLY10_TIME')).toBeInTheDocument();
-      expect(screen.getByText('VERTICAL_JUMP')).toBeInTheDocument();
-      expect(screen.getByText('DASH_40YD')).toBeInTheDocument();
-      expect(screen.getByText('T_TEST')).toBeInTheDocument();
+      // Now displays user-facing labels resolved via useMetricLabels
+      expect(screen.getByText('10-Yard Fly Time')).toBeInTheDocument();
+      expect(screen.getByText('Vertical Jump')).toBeInTheDocument();
+      expect(screen.getByText('40-Yard Dash')).toBeInTheDocument();
+      expect(screen.getByText('T-Test')).toBeInTheDocument();
     });
 
     it('should display value with units', () => {

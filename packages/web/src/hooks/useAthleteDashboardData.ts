@@ -20,7 +20,8 @@ import {
   calculatePersonalRecords,
   generateActivityTimeline,
 } from '@/utils/athlete-dashboard-utils';
-import { getMetricDisplayName, LOWER_IS_BETTER_METRICS } from '@/lib/metrics';
+import { LOWER_IS_BETTER_METRICS } from '@/lib/metrics';
+import { useMetricLabels } from './use-metric-labels';
 import type { Measurement } from '@shared/schema';
 
 export interface PersonalRecord {
@@ -95,6 +96,9 @@ export function useAthleteDashboardData(
   // For athlete's own view, include unverified self-entered measurements
   const measurementsQuery = useAthleteMeasurements(athleteId, { enabled, includeUnverified });
 
+  // Resolve metric codes to user-facing labels
+  const { getLabel, labels: metricLabels } = useMetricLabels();
+
   // Calculate dashboard data from measurements
   // Group measurements by metric inline to avoid duplicate API calls
   const dashboardData = useMemo((): DashboardData | null => {
@@ -127,10 +131,10 @@ export function useAthleteDashboardData(
     const lastMeasurementDate = getLastMeasurementDate(measurements);
 
     // Calculate personal records
-    const personalRecords = calculatePersonalRecords(measurements);
+    const personalRecords = calculatePersonalRecords(measurements, metricLabels);
 
     // Generate activity timeline
-    const activityTimeline = generateActivityTimeline(measurements);
+    const activityTimeline = generateActivityTimeline(measurements, metricLabels);
 
     // Calculate metric progress for each metric
     const metricProgress: MetricProgress[] = availableMetrics.map((metric) => {
@@ -155,7 +159,7 @@ export function useAthleteDashboardData(
 
       return {
         metric,
-        displayName: getMetricDisplayName(metric),
+        displayName: getLabel(metric),
         measurements: sortedMeasurements,
         currentValue,
         trend,
@@ -173,7 +177,7 @@ export function useAthleteDashboardData(
       measurements,
       availableMetrics,
     };
-  }, [measurementsQuery.data, athleteQuery.data]);
+  }, [measurementsQuery.data, athleteQuery.data, getLabel, metricLabels]);
 
   return {
     data: dashboardData,

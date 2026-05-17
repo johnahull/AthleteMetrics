@@ -12,6 +12,20 @@ import type { Report } from '@/types/report-types';
 vi.mock('@/hooks/use-reports');
 vi.mock('@/hooks/use-teams');
 vi.mock('@/lib/auth');
+// Real labels for the metric codes used in the report fixtures, so any
+// regression where a code leaks through resolveLabel() into rendered output
+// is distinguishable from the legitimate "label rendered" case.
+const TEST_METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+};
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: TEST_METRIC_LABELS,
+    getLabel: (code: string) => TEST_METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
 
 const mockGenerateReportMutate = vi.fn();
 

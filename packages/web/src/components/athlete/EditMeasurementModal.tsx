@@ -30,7 +30,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import type { Measurement } from '@shared/schema';
-import { getMetricDisplayName, getMetricUnit } from '@/constants/metrics';
+import { getMetricUnit } from '@/constants/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 // Form validation schema
 const editMeasurementSchema = z.object({
@@ -85,6 +86,8 @@ export function EditMeasurementModal({
     },
   });
 
+  const { getLabel } = useMetricLabels();
+
   // Reset form when measurement changes
   React.useEffect(() => {
     if (measurement && open) {
@@ -101,7 +104,7 @@ export function EditMeasurementModal({
     return null;
   }
 
-  const metricDisplayName = getMetricDisplayName(measurement.metric);
+  const metricDisplayName = getLabel(measurement.metric);
   const metricUnits = getMetricUnit(measurement.metric, measurement.units);
 
   const handleSubmit = (data: EditMeasurementFormData) => {

@@ -44,6 +44,7 @@ import {
   type PreviewAthlete,
   type ParsedSession,
 } from '@/hooks/useDeviceImport';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { ChevronDown, ChevronRight, AlertTriangle, Upload, Loader2 } from 'lucide-react';
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -116,6 +117,9 @@ interface AthleteReviewRowProps {
   included: boolean;
   onOverride: (csvName: string, athleteId: string | undefined) => void;
   onIncluded: (csvName: string, included: boolean) => void;
+  /** Metric-code → label resolver; hoisted from the parent so we don't
+   *  re-call useMetricLabels() once per row. */
+  getLabel: (code: string) => string;
 }
 
 function AthleteReviewRow({
@@ -125,6 +129,7 @@ function AthleteReviewRow({
   included,
   onOverride,
   onIncluded,
+  getLabel,
 }: AthleteReviewRowProps) {
   const [open, setOpen] = useState(false);
   const effectiveMatchId = overrideMatchedId ?? athlete.matchedAthleteId;
@@ -206,7 +211,7 @@ function AthleteReviewRow({
             <div className="space-y-1 text-xs">
               {athlete.drills.map((drill, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="font-mono text-muted-foreground w-28">{drill.metric}</span>
+                  <span className="text-muted-foreground w-28">{getLabel(drill.metric)}</span>
                   <span className="font-semibold">
                     {drill.value} {drill.units}
                   </span>
@@ -222,7 +227,7 @@ function AthleteReviewRow({
                   )}
                   {drill.splits && drill.splits.length > 0 && (
                     <span className="text-muted-foreground">
-                      ({drill.splits.map((s) => `${s.metric}: ${s.value}${s.units}`).join(', ')})
+                      ({drill.splits.map((s) => `${getLabel(s.metric)}: ${s.value}${s.units}`).join(', ')})
                     </span>
                   )}
                 </div>
@@ -248,6 +253,11 @@ export function DeviceImportDialog({
   const [source] = useState<string>('dashr');
   const [duplicateStrategy, setDuplicateStrategy] = useState<'skip' | 'replace'>('skip');
   const [addMissingEventMetrics, setAddMissingEventMetrics] = useState(false);
+
+  // Resolve metric labels once for the whole dialog so each AthleteReviewRow
+  // doesn't re-subscribe to useAvailableMetrics; getLabel is referentially
+  // stable across renders thanks to useCallback inside useMetricLabels.
+  const { getLabel } = useMetricLabels();
 
   const {
     step,
@@ -575,6 +585,7 @@ export function DeviceImportDialog({
                     included={override?.included ?? athlete.included}
                     onOverride={setAthleteOverride}
                     onIncluded={setAthleteIncluded}
+                    getLabel={getLabel}
                   />
                 );
               })}

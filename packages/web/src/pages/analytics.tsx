@@ -19,9 +19,10 @@ import { useToast } from "@/hooks/use-toast";
 import DistributionChart from "@/components/charts/distribution-chart";
 import ScatterChart from "@/components/charts/scatter-chart";
 import { StatisticsSummaryCard } from "@/components/analytics/StatisticsSummaryCard";
-import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender, SoccerPosition, type Team, type Measurement } from "@shared/schema";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -40,6 +41,7 @@ const editMeasurementSchema = z.object({
 
 export default function Analytics() {
   const labels = useContextualLabels();
+  const { getLabel: getMetricLabel } = useMetricLabels();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -772,7 +774,7 @@ export default function Analytics() {
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
                           getMetricColor(measurement.metric)
                         }`}>
-                          {getMetricDisplayName(measurement.metric)}
+                          {getMetricLabel(measurement.metric)}
                         </span>
                       </td>
                       <td className="px-4 py-3 font-mono text-gray-900">

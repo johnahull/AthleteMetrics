@@ -14,12 +14,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Download, RotateCcw, Trash2, AlertTriangle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
-import { getMetricDisplayName, getMetricUnits, getMetricColor } from "@/lib/metrics";
+import { getMetricUnits, getMetricColor } from "@/lib/metrics";
 import { Gender } from "@shared/schema";
 import { DATE_CONSTANTS } from "@shared/constants";
 import jsPDF from "jspdf";
 import { useToast } from "@/hooks/use-toast";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { StatisticsSummaryCard, type DistributionMode } from "@/components/analytics/StatisticsSummaryCard";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 
@@ -27,6 +28,7 @@ export default function Publish() {
   const labels = useContextualLabels();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { getLabel: getMetricLabel } = useMetricLabels();
 
   // Get available metrics using centralized hook (filters by active+enabled)
   const { metrics: availableMetrics } = useAvailableMetrics();
@@ -379,7 +381,7 @@ export default function Publish() {
 
     // Title
     pdf.setFontSize(16);
-    pdf.text(`${getMetricDisplayName(filters.metric)} Results`, pageWidth / 2, 20, { align: "center" });
+    pdf.text(`${getMetricLabel(filters.metric)} Results`, pageWidth / 2, 20, { align: "center" });
 
     // Date and filters info
     pdf.setFontSize(10);
@@ -432,9 +434,12 @@ export default function Publish() {
       yPos += 12;
     });
 
-    // Save the PDF
+    // Save the PDF. Sanitize the label before using it in the filename:
+    // custom org metric labels can contain `/`, `:`, `*`, `?`, `|`, `\`, `<`,
+    // `>`, `"` which are invalid filename characters on Windows/macOS.
     const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
-    const fileName = `${getMetricDisplayName(filters.metric)}_Results_${dateStr}.pdf`;
+    const safeLabel = getMetricLabel(filters.metric).replace(/[/\\:*?"<>|]/g, '-');
+    const fileName = `${safeLabel}_Results_${dateStr}.pdf`;
     pdf.save(fileName);
   };
 
@@ -706,7 +711,7 @@ export default function Publish() {
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
               <h3 className="text-lg font-semibold text-gray-900">
-                Results {filters.metric ? `- ${getMetricDisplayName(filters.metric)}` : ""}
+                Results {filters.metric ? `- ${getMetricLabel(filters.metric)}` : ""}
               </h3>
               {filters.metric && (
                 <Select
@@ -939,7 +944,7 @@ export default function Publish() {
                             {measurement.value}{getMetricUnits(filters.metric)}
                           </span>
                           <span className={`px-2 py-1 rounded-full text-xs font-medium ${getMetricColor(filters.metric)}`}>
-                            {getMetricDisplayName(filters.metric)}
+                            {getMetricLabel(filters.metric)}
                           </span>
                         </div>
                       </td>
