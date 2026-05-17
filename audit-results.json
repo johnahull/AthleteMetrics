@@ -1,6 +1,39 @@
 {
   "auditReportVersion": 2,
   "vulnerabilities": {
+    "@anthropic-ai/sdk": {
+      "name": "@anthropic-ai/sdk",
+      "severity": "moderate",
+      "isDirect": true,
+      "via": [
+        {
+          "source": 1117805,
+          "name": "@anthropic-ai/sdk",
+          "dependency": "@anthropic-ai/sdk",
+          "title": "Claude SDK for TypeScript has Insecure Default File Permissions in Local Filesystem Memory Tool",
+          "url": "https://github.com/advisories/GHSA-p7fg-763f-g4gf",
+          "severity": "moderate",
+          "cwe": [
+            "CWE-732"
+          ],
+          "cvss": {
+            "score": 0,
+            "vectorString": null
+          },
+          "range": ">=0.79.0 <0.91.1"
+        }
+      ],
+      "effects": [],
+      "range": "0.79.0 - 0.91.0",
+      "nodes": [
+        "node_modules/@anthropic-ai/sdk"
+      ],
+      "fixAvailable": {
+        "name": "@anthropic-ai/sdk",
+        "version": "0.96.0",
+        "isSemVerMajor": true
+      }
+    },
     "drizzle-orm": {
       "name": "drizzle-orm",
       "severity": "high",
@@ -39,18 +72,18 @@
     "vulnerabilities": {
       "info": 0,
       "low": 0,
-      "moderate": 0,
+      "moderate": 1,
       "high": 1,
       "critical": 0,
-      "total": 1
+      "total": 2
     },
     "dependencies": {
-      "prod": 735,
-      "dev": 690,
+      "prod": 796,
+      "dev": 684,
       "optional": 116,
-      "peer": 7,
+      "peer": 32,
       "peerOptional": 0,
-      "total": 1459
+      "total": 1535
     }
   }
 }
