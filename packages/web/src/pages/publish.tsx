@@ -434,9 +434,12 @@ export default function Publish() {
       yPos += 12;
     });
 
-    // Save the PDF
+    // Save the PDF. Sanitize the label before using it in the filename:
+    // custom org metric labels can contain `/`, `:`, `*`, `?`, `|`, `\`, `<`,
+    // `>`, `"` which are invalid filename characters on Windows/macOS.
     const dateStr = filters.dateFrom ? filters.dateFrom : new Date().toISOString().split('T')[0];
-    const fileName = `${getMetricLabel(filters.metric)}_Results_${dateStr}.pdf`;
+    const safeLabel = getMetricLabel(filters.metric).replace(/[/\\:*?"<>|]/g, '-');
+    const fileName = `${safeLabel}_Results_${dateStr}.pdf`;
     pdf.save(fileName);
   };
 

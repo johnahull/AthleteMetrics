@@ -77,7 +77,7 @@ describe('measurementsToCSVString', () => {
     expect(csv).not.toContain('VERTICAL_JUMP');
   });
 
-  it('should fall back to raw metric code when metricLabels is omitted', () => {
+  it('underscore-splits the metric code when metricLabels is omitted', () => {
     const measurements: Partial<Measurement>[] = [
       {
         id: '1',
@@ -94,11 +94,13 @@ describe('measurementsToCSVString', () => {
 
     const csv = measurementsToCSVString(measurements as Measurement[]);
 
-    // No metricLabels argument: falls back to the metric code
-    expect(csv).toContain('FLY10_TIME');
+    // No metricLabels argument: falls back to underscore-split prose so a
+    // CSV without a labels map still reads as text, not raw underscored codes.
+    expect(csv).toContain('FLY10 TIME');
+    expect(csv).not.toContain('FLY10_TIME');
   });
 
-  it('should fall back to raw metric code when label for code is missing', () => {
+  it('underscore-splits unknown codes when not in the supplied labels map', () => {
     const measurements: Partial<Measurement>[] = [
       {
         id: '1',
@@ -116,7 +118,8 @@ describe('measurementsToCSVString', () => {
     // metricLabels provided but missing the specific code
     const csv = measurementsToCSVString(measurements as Measurement[], { FLY10_TIME: '10-Yard Fly Time' });
 
-    expect(csv).toContain('UNKNOWN_METRIC');
+    expect(csv).toContain('UNKNOWN METRIC');
+    expect(csv).not.toContain('UNKNOWN_METRIC');
   });
 
   it('should show "Verified" or "Unverified" for status', () => {

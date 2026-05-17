@@ -40,7 +40,9 @@ function escapeCSVField(value: string | null | undefined): string {
  * @param measurements - Array of measurements to export
  * @param metricLabels - Optional mapping of metric codes to display names.
  *   When provided, codes resolve to labels (e.g. "FLY10_TIME" -> "10-Yard Fly Time").
- *   When omitted or unknown, falls back to the raw metric code.
+ *   When omitted or unknown, falls back to the underscore-split form
+ *   (e.g. "FLY10 TIME") — matches every other fallback shape in this PR so
+ *   a CSV downloaded without a labels map still reads as prose, not raw codes.
  * @returns CSV string with headers and data rows
  */
 export function measurementsToCSVString(
@@ -54,7 +56,7 @@ export function measurementsToCSVString(
   }
 
   const rows = measurements.map(measurement => {
-    const metricName = metricLabels?.[measurement.metric] ?? measurement.metric;
+    const metricName = metricLabels?.[measurement.metric] ?? measurement.metric.replace(/_/g, ' ');
     const status = measurement.isVerified ? 'Verified' : 'Unverified';
     const season = measurement.season || '';
     const team = measurement.teamNameSnapshot || '';
