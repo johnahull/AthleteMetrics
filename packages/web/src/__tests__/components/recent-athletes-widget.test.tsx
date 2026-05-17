@@ -177,10 +177,12 @@ describe("RecentAthletesWidget", () => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
       });
 
-      // Check measurement types are displayed (now as raw metric codes - fallback behavior)
-      expect(screen.getByText("FLY10_TIME")).toBeInTheDocument();
-      expect(screen.getByText("VERTICAL_JUMP")).toBeInTheDocument();
-      expect(screen.getByText("DASH_40YD")).toBeInTheDocument();
+      // Check measurement types are displayed. With no metricLabels fixture
+      // in scope (test doesn't seed the query cache), getLabel falls back to
+      // the underscore-split form — still prose, not the underscored code.
+      expect(screen.getByText("FLY10 TIME")).toBeInTheDocument();
+      expect(screen.getByText("VERTICAL JUMP")).toBeInTheDocument();
+      expect(screen.getByText("DASH 40YD")).toBeInTheDocument();
 
       // Check dates are formatted and displayed
       const dates = screen.getAllByText(/Nov \d{1,2}/i);

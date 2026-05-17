@@ -52,12 +52,15 @@ describe('useMetricLabels', () => {
     expect(result.current.getLabel('FLY10_TIME')).toBe('10-Yard Fly Time');
   });
 
-  it('getLabel falls back to the code when the metric is unknown', () => {
+  it('getLabel underscore-splits unknown codes for a readable fallback', () => {
     mockAvailableMetrics.metrics = [fixture('FLY10_TIME', '10-Yard Fly Time')];
 
     const { result } = renderHook(() => useMetricLabels());
 
-    expect(result.current.getLabel('ARCHIVED_METRIC')).toBe('ARCHIVED_METRIC');
+    // Codes not in the labels map (archived/deleted/migrated/loading) fall
+    // back to the underscore-split form so users see prose, not raw codes.
+    expect(result.current.getLabel('ARCHIVED_METRIC')).toBe('ARCHIVED METRIC');
+    expect(result.current.getLabel('CUSTOM_DEADLIFT_1RM')).toBe('CUSTOM DEADLIFT 1RM');
   });
 
   it('returns isLoading from the underlying useAvailableMetrics', () => {
@@ -68,14 +71,17 @@ describe('useMetricLabels', () => {
     expect(result.current.isLoading).toBe(true);
   });
 
-  it('returns an empty map (and code-fallback resolution) while loading', () => {
+  it('returns an empty map while loading; getLabel underscore-splits codes', () => {
     mockAvailableMetrics.isLoading = true;
     mockAvailableMetrics.metrics = [];
 
     const { result } = renderHook(() => useMetricLabels());
 
     expect(result.current.labels).toEqual({});
-    expect(result.current.getLabel('FLY10_TIME')).toBe('FLY10_TIME');
+    // During the loading window the fallback path runs for every code; it
+    // produces underscore-split prose so a first-paint flash doesn't show
+    // raw underscored codes to the user.
+    expect(result.current.getLabel('FLY10_TIME')).toBe('FLY10 TIME');
   });
 
   it('reflects custom labels from the upstream hook', () => {

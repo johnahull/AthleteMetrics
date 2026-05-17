@@ -28,21 +28,18 @@ interface MeasurementsTimelineProps {
 }
 
 /**
- * Three-tier label resolution for a timeline entry:
+ * Two-tier label resolution for a timeline entry:
  *   1. Server-supplied metricName (preferred — built against the payload)
- *   2. Org-aware live label from useMetricLabels (covers custom org metrics
- *      and per-org label overrides)
- *   3. Underscore-split fallback (e.g. FLY10_TIME → "FLY10 TIME") so legacy
- *      codes no longer in availableMetrics still read as prose
+ *   2. Org-aware live label from useMetricLabels — handles custom org
+ *      metrics, per-org label overrides, AND the unknown-code fallback
+ *      (underscore-split prose) internally, so no third tier is needed
+ *      here.
  */
 function resolveTimelineLabel(
   measurement: Measurement,
   getLabel: (code: string) => string,
 ): string {
-  if (measurement.metricName) return measurement.metricName;
-  const resolved = getLabel(measurement.metricType);
-  if (resolved !== measurement.metricType) return resolved;
-  return measurement.metricType.replace(/_/g, ' ');
+  return measurement.metricName ?? getLabel(measurement.metricType);
 }
 
 export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps) {

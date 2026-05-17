@@ -8,6 +8,16 @@ export interface UseMetricLabelsResult {
 }
 
 /**
+ * Underscore-split fallback used when no real label is known. Lives at the
+ * module top so it has a stable identity and can be shared with consumers
+ * who want the same "code → readable string" shape without depending on the
+ * hook (e.g. non-React utilities).
+ */
+export function splitMetricCode(code: string): string {
+  return code.replace(/_/g, ' ');
+}
+
+/**
  * Resolves metric codes to human-readable labels for display in the UI.
  *
  * Backed by `useAvailableMetrics`, which already merges:
@@ -16,19 +26,18 @@ export interface UseMetricLabelsResult {
  *   - Fallback active site metrics for users with no org context
  *
  * Unknown codes (archived/deleted/migrated-away metrics referenced by old
- * measurements) fall back to returning the code itself — a clearer signal
- * than an empty string and consistent with patterns already in the codebase.
+ * measurements, OR codes seen while the upstream query is still loading)
+ * fall back to an underscore-split form (`FLY10_TIME` → `"FLY10 TIME"`).
+ * That gives users readable prose even in the worst case and keeps render
+ * output consistent across surfaces — every label-rendering site now reads
+ * the same way for the same unknown code.
  *
  * **About `isLoading`:** while the upstream `useAvailableMetrics` query is
- * in flight, `labels` is `{}` and `getLabel(code)` returns the code itself.
- * Consumers that render label-bearing content during the initial fetch will
- * see a brief code flash on first paint before the cache warms. Most
- * surfaces in the app are gated by a parent query's loading state (a
- * skeleton or empty state hides the row), so the flash is invisible in
- * practice. If you build a new high-visibility surface where the flash
- * would be jarring, check `isLoading` and render a skeleton until it's
- * `false`. Do *not* render the label fallback (`code`) to users when
- * `isLoading === true` — that's the bug this hook exists to prevent.
+ * in flight, `labels` is `{}` and `getLabel(code)` falls back to the
+ * underscore-split form. That's intentional: it's a strictly nicer first-
+ * paint than the raw underscored code, so most surfaces don't need to gate
+ * render on `isLoading`. The flag is still exposed for surfaces that want
+ * to render a skeleton until labels resolve.
  */
 export function useMetricLabels(): UseMetricLabelsResult {
   const { metrics, isLoading } = useAvailableMetrics();
@@ -39,7 +48,7 @@ export function useMetricLabels(): UseMetricLabelsResult {
   );
 
   const getLabel = useCallback(
-    (code: string) => labels[code] ?? code,
+    (code: string) => labels[code] ?? splitMetricCode(code),
     [labels],
   );
 
