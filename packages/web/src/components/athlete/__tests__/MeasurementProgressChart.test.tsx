@@ -21,6 +21,19 @@ vi.mock('react-chartjs-2', () => ({
   ))
 }));
 
+const METRIC_LABELS: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABELS,
+    getLabel: (code: string) => METRIC_LABELS[code] ?? code,
+    isLoading: false,
+  }),
+}));
+
 // Import after mocks
 import { MeasurementProgressChart } from '../MeasurementProgressChart';
 
@@ -105,8 +118,8 @@ describe('MeasurementProgressChart', () => {
     it('should render chart with metric name as label', () => {
       render(<MeasurementProgressChart measurements={mockMeasurements} />);
 
-      // Now uses raw metric code as fallback since METRIC_DISPLAY_NAMES is empty
-      expect(screen.getByTestId('chart-dataset-label')).toHaveTextContent(/FLY10_TIME/i);
+      // Uses user-facing label resolved via useMetricLabels
+      expect(screen.getByTestId('chart-dataset-label')).toHaveTextContent(/10-Yard Fly Time/i);
     });
   });
 

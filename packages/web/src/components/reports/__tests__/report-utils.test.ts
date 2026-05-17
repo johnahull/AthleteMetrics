@@ -212,23 +212,32 @@ describe('report-utils', () => {
       expect(getMetricsList(teamStatistics, mockMetricLabels)).toBe('10-Yard Fly, Vertical Jump');
     });
 
-    it('should fall back to metric code when label not found', () => {
+    it('falls back to the underscore-split form when label not found', () => {
       const teamStatistics = [
         { metric: 'FLY10_TIME' },
         { metric: 'UNKNOWN_METRIC' },
       ];
-      // getMetricDisplayName should be used for unknown metrics
+      // Codes not in the supplied labels map go through the private
+      // resolveFallbackLabel helper: underscore-split prose, not raw code.
       const result = getMetricsList(teamStatistics, mockMetricLabels);
-      expect(result).toContain('10-Yard Fly');
-      // The unknown metric should appear in some form
-      expect(result.includes('UNKNOWN_METRIC') || result.includes('Unknown')).toBe(true);
+      expect(result).toBe('10-Yard Fly, UNKNOWN METRIC');
     });
 
-    it('should handle undefined metricLabels', () => {
-      const teamStatistics = [{ metric: 'FLY10_TIME' }];
-      // Should use getMetricDisplayName fallback
+    it('falls back to the built-in name map when metricLabels is undefined', () => {
+      const teamStatistics = [
+        { metric: 'FLY10_TIME' },
+        { metric: 'VERTICAL_JUMP' },
+      ];
+      // Both FLY10_TIME and VERTICAL_JUMP are in the private built-in map,
+      // so they render with full labels even with no metricLabels supplied.
       const result = getMetricsList(teamStatistics, undefined);
-      expect(result.length).toBeGreaterThan(0);
+      expect(result).toBe('10-Yard Fly Time, Vertical Jump');
+    });
+
+    it('underscore-splits genuinely unknown codes when metricLabels is undefined', () => {
+      const teamStatistics = [{ metric: 'CUSTOM_DEADLIFT_1RM' }];
+      const result = getMetricsList(teamStatistics, undefined);
+      expect(result).toBe('CUSTOM DEADLIFT 1RM');
     });
   });
 
@@ -265,6 +274,27 @@ describe('report-utils', () => {
       const result = getCompositeIndexDescription(weights, mockMetricLabels);
       expect(result).toContain('33%');
       expect(result).toContain('67%');
+    });
+
+    it('underscore-splits unknown codes when not in the supplied labels map', () => {
+      const weights = {
+        FLY10_TIME: 0.5,
+        UNKNOWN_METRIC: 0.5,
+      };
+      const result = getCompositeIndexDescription(weights, mockMetricLabels);
+      expect(result).toContain('10-Yard Fly (50%)');
+      expect(result).toContain('UNKNOWN METRIC (50%)');
+    });
+
+    it('falls back to the built-in name map when metricLabels is undefined', () => {
+      const weights = {
+        FLY10_TIME: 0.4,
+        VERTICAL_JUMP: 0.6,
+      };
+      const result = getCompositeIndexDescription(weights, undefined);
+      // Both codes are in the private built-in map; full labels are used.
+      expect(result).toContain('10-Yard Fly Time (40%)');
+      expect(result).toContain('Vertical Jump (60%)');
     });
   });
 

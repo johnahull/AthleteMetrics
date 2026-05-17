@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 interface Measurement {
   id: string;
@@ -26,7 +27,23 @@ interface MeasurementsTimelineProps {
   measurements: Measurement[];
 }
 
+/**
+ * Two-tier label resolution for a timeline entry:
+ *   1. Server-supplied metricName (preferred — built against the payload)
+ *   2. Org-aware live label from useMetricLabels — handles custom org
+ *      metrics, per-org label overrides, AND the unknown-code fallback
+ *      (underscore-split prose) internally, so no third tier is needed
+ *      here.
+ */
+function resolveTimelineLabel(
+  measurement: Measurement,
+  getLabel: (code: string) => string,
+): string {
+  return measurement.metricName ?? getLabel(measurement.metricType);
+}
+
 export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps) {
+  const { getLabel } = useMetricLabels();
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     const now = new Date();
@@ -136,7 +153,7 @@ export function MeasurementsTimeline({ measurements }: MeasurementsTimelineProps
                   variant="secondary"
                 >
                   <Icon className="h-3 w-3 mr-1" />
-                  {measurement.metricName || measurement.metricType.replace(/_/g, ' ')}
+                  {resolveTimelineLabel(measurement, getLabel)}
                 </Badge>
               </div>
             </CardHeader>

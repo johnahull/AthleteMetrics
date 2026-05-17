@@ -5,7 +5,6 @@
  */
 
 import type { Measurement } from '@shared/schema';
-import { getMetricDisplayName } from '@/constants/metrics';
 
 /**
  * Escape CSV field value
@@ -39,9 +38,17 @@ function escapeCSVField(value: string | null | undefined): string {
 /**
  * Convert measurements to CSV string
  * @param measurements - Array of measurements to export
+ * @param metricLabels - Optional mapping of metric codes to display names.
+ *   When provided, codes resolve to labels (e.g. "FLY10_TIME" -> "10-Yard Fly Time").
+ *   When omitted or unknown, falls back to the underscore-split form
+ *   (e.g. "FLY10 TIME") — matches every other fallback shape in this PR so
+ *   a CSV downloaded without a labels map still reads as prose, not raw codes.
  * @returns CSV string with headers and data rows
  */
-export function measurementsToCSVString(measurements: Measurement[]): string {
+export function measurementsToCSVString(
+  measurements: Measurement[],
+  metricLabels?: Record<string, string>
+): string {
   const headers = 'Date,Metric,Value,Units,Status,Season,Team,Notes';
 
   if (measurements.length === 0) {
@@ -49,7 +56,7 @@ export function measurementsToCSVString(measurements: Measurement[]): string {
   }
 
   const rows = measurements.map(measurement => {
-    const metricName = getMetricDisplayName(measurement.metric);
+    const metricName = metricLabels?.[measurement.metric] ?? measurement.metric.replace(/_/g, ' ');
     const status = measurement.isVerified ? 'Verified' : 'Unverified';
     const season = measurement.season || '';
     const team = measurement.teamNameSnapshot || '';
@@ -75,17 +82,21 @@ export function measurementsToCSVString(measurements: Measurement[]): string {
  * Export measurements to CSV file and trigger download
  * @param measurements - Array of measurements to export
  * @param filename - Optional filename (default: "measurements-YYYY-MM-DD.csv")
+ * @param metricLabels - Optional mapping of metric codes to display names.
+ *   When provided, codes resolve to labels (e.g. "FLY10_TIME" -> "10-Yard Fly Time").
+ *   When omitted or unknown, falls back to the raw metric code.
  */
 export function exportMeasurementsToCSV(
   measurements: Measurement[],
-  filename?: string
+  filename?: string,
+  metricLabels?: Record<string, string>
 ): void {
   // Generate default filename with current date
   const defaultFilename = `measurements-${new Date().toISOString().split('T')[0]}.csv`;
   const finalFilename = filename || defaultFilename;
 
   // Convert measurements to CSV string
-  const csvContent = measurementsToCSVString(measurements);
+  const csvContent = measurementsToCSVString(measurements, metricLabels);
 
   // Create Blob with CSV content
   const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });

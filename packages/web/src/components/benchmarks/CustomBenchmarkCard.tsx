@@ -8,7 +8,7 @@ import { useMetricConfig } from "@/hooks/use-metric-config";
 import { Edit, Trash2, Target, Layers } from "lucide-react";
 import { CustomBenchmarkDeleteDialog } from "./CustomBenchmarkDeleteDialog";
 import { TierBadgeCompact } from "./TierBadge";
-import { getMetricDisplayName } from "@/constants/metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import type { CustomBenchmark } from "@shared/schema";
 
 interface CustomBenchmarkCardProps {
@@ -25,6 +25,7 @@ export function CustomBenchmarkCard({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const { toast } = useToast();
   const { getMetricConfig } = useMetricConfig();
+  const { getLabel } = useMetricLabels();
 
   const deleteMutation = useDeleteCustomBenchmark();
 
@@ -93,7 +94,7 @@ export function CustomBenchmarkCard({
                 {benchmark.name}
               </CardTitle>
               <div className="flex flex-wrap gap-2 mt-2">
-                <Badge variant="outline">{getMetricDisplayName(benchmark.metricCode)}</Badge>
+                <Badge variant="outline">{getLabel(benchmark.metricCode)}</Badge>
                 <Badge variant="secondary">Custom</Badge>
                 <Badge variant={benchmark.isActive ? "default" : "secondary"}>
                   {benchmark.isActive ? "Active" : "Inactive"}

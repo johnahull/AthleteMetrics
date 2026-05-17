@@ -12,6 +12,7 @@ import { useAuth } from '@/lib/auth';
 import { hasPermission, type Permission } from '@shared/role-types';
 import { getCommandActions, filterActionsByQuery, filterActionsByPermissions } from '@/lib/command-palette-actions';
 import { getRecentItems, addRecentItem, type RecentItem } from '@/lib/recent-items';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { User, Users, Activity, Clock } from 'lucide-react';
 
 export function CommandPalette() {
@@ -19,6 +20,7 @@ export function CommandPalette() {
   const [query, setQuery] = useState('');
   const [, setLocation] = useLocation();
   const { user } = useAuth();
+  const { getLabel } = useMetricLabels();
 
   // Navigation function compatible with wouter
   const navigate = (path: string) => setLocation(path);
@@ -206,7 +208,7 @@ export function CommandPalette() {
                 <div className="flex flex-col">
                   <span>{measurement.athleteName}</span>
                   <span className="text-xs text-muted-foreground">
-                    {measurement.metric} • {measurement.value} • {measurement.date}
+                    {getLabel(measurement.metric)} • {measurement.value} • {measurement.date}
                   </span>
                 </div>
               </CommandItem>

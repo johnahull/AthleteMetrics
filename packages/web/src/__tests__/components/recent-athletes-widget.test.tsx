@@ -19,6 +19,19 @@ import RecentAthletesWidget from "@/components/recent-athletes-widget";
 // Mock fetch API
 global.fetch = vi.fn();
 
+// Mock useMetricLabels with empty labels so the widget falls through to the
+// hook's underscore-split fallback (FLY10_TIME → "FLY10 TIME"). This is
+// what these tests assert below; making the mock explicit prevents a future
+// setupFiles change that seeds the React Query cache from silently
+// breaking the expectations.
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: {},
+    getLabel: (code: string) => code.replace(/_/g, ' '),
+    isLoading: false,
+  }),
+}));
+
 const createWrapper = () => {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -177,10 +190,12 @@ describe("RecentAthletesWidget", () => {
         expect(screen.getByText("John Smith")).toBeInTheDocument();
       });
 
-      // Check measurement types are displayed (now as raw metric codes - fallback behavior)
-      expect(screen.getByText("FLY10_TIME")).toBeInTheDocument();
-      expect(screen.getByText("VERTICAL_JUMP")).toBeInTheDocument();
-      expect(screen.getByText("DASH_40YD")).toBeInTheDocument();
+      // Check measurement types are displayed. With no metricLabels fixture
+      // in scope (test doesn't seed the query cache), getLabel falls back to
+      // the underscore-split form — still prose, not the underscored code.
+      expect(screen.getByText("FLY10 TIME")).toBeInTheDocument();
+      expect(screen.getByText("VERTICAL JUMP")).toBeInTheDocument();
+      expect(screen.getByText("DASH 40YD")).toBeInTheDocument();
 
       // Check dates are formatted and displayed
       const dates = screen.getAllByText(/Nov \d{1,2}/i);

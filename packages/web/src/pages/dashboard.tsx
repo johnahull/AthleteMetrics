@@ -4,9 +4,10 @@ import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Users, UsersRound, Clock, ArrowUp, Activity } from "lucide-react";
 import { formatFly10TimeWithSpeed } from "@/lib/speed-utils";
-import { getMetricDisplayName, getMetricColor, getMetricIcon, formatMetricValue, getMetricUnits } from "@/lib/metrics";
+import { getMetricColor, getMetricIcon, formatMetricValue, getMetricUnits } from "@/lib/metrics";
 import { useAuth } from "@/lib/auth";
 import { useAvailableMetrics } from "@/hooks/use-available-metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import { useAthleteDashboardData } from "@/hooks/useAthleteDashboardData";
 import { MetricProgressCard } from "@/components/athlete/MetricProgressCard";
 import { useDashboardTrends } from "@/hooks/use-dashboard-trends";
@@ -83,6 +84,7 @@ export default function Dashboard() {
 
   // Get available metrics for the organization
   const { metrics: availableMetrics, isLoading: metricsLoading } = useAvailableMetrics();
+  const { getLabel: getMetricLabel } = useMetricLabels();
 
   // Use role from user session data
   const userRole = user?.role || 'athlete';
@@ -552,7 +554,7 @@ export default function Dashboard() {
             <MetricProgressCard
               key={metric}
               metric={metric}
-              displayName={getMetricDisplayName(metric)}
+              displayName={getMetricLabel(metric)}
               measurements={athleteMeasurementsByMetric[metric] || []}
               units={getMetricUnits(metric)}
               personalRecord={athleteDashboardData.personalRecords.find(pr => pr.metric === metric)}
@@ -580,7 +582,7 @@ export default function Dashboard() {
 
       {/* Recent Activity - Only show when org is selected */}
       {effectiveOrganizationId && (
-      <Card className="bg-white">
+      <Card className="bg-white" data-testid="recent-measurements-card">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -617,7 +619,7 @@ export default function Dashboard() {
                 athleteId: m.user?.id || '',
                 athleteName: `${m.user?.firstName || ''} ${m.user?.lastName || ''}`.trim() || 'Unknown',
                 metricType: m.metricType || '',
-                metricName: m.metricType ? getMetricDisplayName(m.metricType) : 'Unknown',
+                metricName: m.metricType ? getMetricLabel(m.metricType) : 'Unknown',
                 value: parseFloat(m.value) || 0,
                 date: m.date,
                 notes: m.notes,
@@ -666,7 +668,7 @@ export default function Dashboard() {
                     </td>
                     <td className="py-3">
                       <span className={`px-2 py-1 rounded-full text-xs ${getMetricColor(measurement.metric)}`}>
-                        {getMetricDisplayName(measurement.metric)}
+                        {getMetricLabel(measurement.metric)}
                       </span>
                     </td>
                     <td className="py-3 font-mono">

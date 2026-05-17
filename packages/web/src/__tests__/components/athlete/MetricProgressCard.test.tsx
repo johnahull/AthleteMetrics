@@ -18,6 +18,19 @@ vi.mock('react-chartjs-2', () => ({
   ),
 }));
 
+const METRIC_LABEL_FIXTURE: Record<string, string> = {
+  FLY10_TIME: '10-Yard Fly Time',
+  VERTICAL_JUMP: 'Vertical Jump',
+};
+
+vi.mock('@/hooks/use-metric-labels', () => ({
+  useMetricLabels: () => ({
+    labels: METRIC_LABEL_FIXTURE,
+    getLabel: (code: string) => METRIC_LABEL_FIXTURE[code] ?? code,
+    isLoading: false,
+  }),
+}));
+
 describe('MetricProgressCard', () => {
   const mockMeasurements = [
     { value: 1.55, date: '2023-12-15' },

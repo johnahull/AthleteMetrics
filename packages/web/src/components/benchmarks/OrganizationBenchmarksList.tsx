@@ -11,7 +11,7 @@ import { BenchmarkCatalog } from "./BenchmarkCatalog";
 import { BenchmarkEnablementToggle } from "./BenchmarkEnablementToggle";
 import { BenchmarkFilters } from "./BenchmarkFilters";
 import { Link } from "wouter";
-import { getMetricDisplayName } from "@/constants/metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 
 interface OrganizationBenchmarksListProps {
@@ -22,6 +22,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
   const [showCatalog, setShowCatalog] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const { getMetricConfig } = useMetricConfig();
+  const { getLabel } = useMetricLabels();
   const [filters, setFilters] = useState<{
     metricCode?: string;
     gender?: string;
@@ -185,7 +186,7 @@ export function OrganizationBenchmarksList({ organizationId }: OrganizationBench
                     <div className="flex flex-wrap gap-3 text-sm">
                       <div>
                         <span className="font-medium">Metric:</span>{" "}
-                        <span className="text-muted-foreground">{getMetricDisplayName(benchmark.metricCode)}</span>
+                        <span className="text-muted-foreground">{getLabel(benchmark.metricCode)}</span>
                       </div>
                       <div>
                         <span className="font-medium">Target:</span>{" "}

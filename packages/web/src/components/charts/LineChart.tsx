@@ -9,6 +9,7 @@ import type {
   BenchmarkLine
 } from '@shared/analytics-types';
 import { useMetricConfig } from '@/hooks/use-metric-config';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
 import { parseColorToRgba } from '@/lib/color-utils';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -42,6 +43,7 @@ export function LineChart({
   showBenchmarks = true
 }: LineChartProps) {
   const { getMetricConfig } = useMetricConfig();
+  const { getLabel } = useMetricLabels();
 
   // State for athlete visibility toggles
   const [athleteToggles, setAthleteToggles] = useState<Record<string, boolean>>({});
@@ -633,12 +635,12 @@ export function LineChart({
 
       <div
         role="img"
-        aria-label={`Line chart showing ${lineData.metric} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
+        aria-label={`Line chart showing ${getLabel(lineData.metric)} performance over time${benchmarks && benchmarks.length > 0 ? ` with ${benchmarks.length} benchmark reference ${benchmarks.length === 1 ? 'line' : 'lines'}` : ''}`}
         aria-describedby="linechart-description"
         className="flex-1 min-h-[300px]"
       >
         <span id="linechart-description" className="sr-only">
-          {`Performance trend chart for ${lineData.metric}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}
+          {`Performance trend chart for ${getLabel(lineData.metric)}. ${visibleAthleteCount} ${visibleAthleteCount === 1 ? 'athlete' : 'athletes'} displayed.${benchmarks && benchmarks.length > 0 ? ` Benchmark lines: ${benchmarks.map(b => b.name).join(', ')}.` : ''}`}
         </span>
         <Line data={lineData} options={options} />
       </div>

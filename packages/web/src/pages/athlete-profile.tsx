@@ -33,7 +33,8 @@ import {
   calculatePersonalRecords,
   generateActivityTimeline,
 } from "@/utils/athlete-dashboard-utils";
-import { getMetricDisplayName, getMetricUnits } from "@/lib/metrics";
+import { getMetricUnits } from "@/lib/metrics";
+import { useMetricLabels } from "@/hooks/use-metric-labels";
 
 // Edit measurement form schema
 const editMeasurementSchema = z.object({
@@ -56,6 +57,7 @@ export default function AthleteProfile() {
   const { user, organizationContext } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { getLabel } = useMetricLabels();
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddMeasurementModal, setShowAddMeasurementModal] = useState(false);
@@ -439,7 +441,7 @@ export default function AthleteProfile() {
               <MetricProgressCard
                 key={metric}
                 metric={metric}
-                displayName={getMetricDisplayName(metric)}
+                displayName={getLabel(metric)}
                 measurements={measurementsByMetric[metric]}
                 units={getMetricUnits(metric)}
                 personalRecord={personalRecords.find(pr => pr.metric === metric)}
@@ -576,7 +578,7 @@ export default function AthleteProfile() {
                       </td>
                       <td className="py-3 px-4 text-sm">
                         <Badge variant={getMetricBadgeVariant(measurement.metric)}>
-                          {getMetricDisplayName(measurement.metric)}
+                          {getLabel(measurement.metric)}
                         </Badge>
                       </td>
                       <td className="py-3 px-4 text-sm font-mono text-gray-900">

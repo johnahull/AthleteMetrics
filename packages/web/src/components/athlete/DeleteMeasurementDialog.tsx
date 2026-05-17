@@ -18,7 +18,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Loader2 } from 'lucide-react';
 import type { Measurement } from '@shared/schema';
-import { getMetricDisplayName } from '@/constants/metrics';
+import { useMetricLabels } from '@/hooks/use-metric-labels';
 
 export interface DeleteMeasurementDialogProps {
   open: boolean;
@@ -35,12 +35,14 @@ export function DeleteMeasurementDialog({
   onCancel,
   isDeleting = false,
 }: DeleteMeasurementDialogProps) {
+  const { getLabel } = useMetricLabels();
+
   // Don't render if no measurement
   if (!measurement) {
     return null;
   }
 
-  const metricDisplayName = getMetricDisplayName(measurement.metric);
+  const metricDisplayName = getLabel(measurement.metric);
 
   const handleConfirm = () => {
     onConfirm(measurement.id);
