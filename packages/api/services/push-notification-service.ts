@@ -265,8 +265,11 @@ export class PushNotificationService {
 
       return result;
     } catch (error: any) {
-      // Check if error is unique constraint violation (PostgreSQL error code 23505)
-      if (error.code === '23505' && error.constraint === 'push_subscriptions_endpoint_unique') {
+      // Check if error is unique constraint violation (PostgreSQL error code 23505).
+      // drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError, moving the
+      // original PostgreSQL error (with .code/.constraint) onto .cause.
+      const pgError = typeof error.code === 'string' ? error : error.cause;
+      if (pgError?.code === '23505' && pgError?.constraint === 'push_subscriptions_endpoint_unique') {
         // Endpoint already exists - must belong to different user
         throw new Error('This device is already registered to a different user');
       }

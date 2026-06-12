@@ -35,6 +35,18 @@ const PG_ERROR_CODES = {
   FOREIGN_KEY_VIOLATION: '23503',
 } as const;
 
+// drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError; the original
+// PostgreSQL error (carrying `.code`) is on `.cause`. Walk the cause chain so
+// both wrapped and raw driver errors are recognized.
+function getPgErrorCode(err: any): string | undefined {
+  let current = err;
+  while (current) {
+    if (typeof current.code === 'string') return current.code;
+    current = current.cause;
+  }
+  return undefined;
+}
+
 /**
  * Register sports management routes
  */
@@ -248,7 +260,7 @@ export function registerSportsRoutes(app: Express) {
           res.status(201).json(newSport);
         } catch (insertError: any) {
           // Handle unique constraint violation
-          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+          if (getPgErrorCode(insertError) === PG_ERROR_CODES.UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: `Sport with code '${code}' already exists`,
             });
@@ -468,7 +480,7 @@ export function registerSportsRoutes(app: Express) {
           res.status(201).json(newPosition);
         } catch (insertError: any) {
           // Handle unique constraint violation
-          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+          if (getPgErrorCode(insertError) === PG_ERROR_CODES.UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: `Position with code '${code}' already exists for this sport`,
             });

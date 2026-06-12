@@ -872,8 +872,11 @@ export function registerImportExportRoutes(app: Express) {
                       }
                       createdTeams.get(normalizedTeamName)!.athleteCount++;
                     } catch (createError: any) {
-                      // Check if this is a unique constraint violation (team was created by concurrent request)
-                      if (createError.code === '23505' || createError.message?.includes('unique')) {
+                      // Check if this is a unique constraint violation (team was created by concurrent request).
+                      // drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError, moving the
+                      // original PostgreSQL error (with .code) onto .cause.
+                      const pgCode = typeof createError.code === 'string' ? createError.code : createError.cause?.code;
+                      if (pgCode === '23505' || createError.message?.includes('unique') || createError.cause?.message?.includes('unique')) {
                         // Re-fetch the team that was just created by another request
                         const allTeams = await storage.getTeams();
                         team = allTeams.find(t =>
