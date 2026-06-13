@@ -13,6 +13,7 @@ import crypto from "crypto";
 import { eq, and, inArray, desc, ne, isNull, isNotNull, count, sql, ilike, or } from "drizzle-orm";
 import { BaseService } from "./base-service";
 import { emailService } from "./email-service";
+import { getPgErrorCode, getPgError, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 
 export interface PrivacySettings {
   allowCrossOrgLinking?: boolean;
@@ -112,7 +113,8 @@ export class GlobalAthleteService extends BaseService {
         await this.createAutoLink(userId, newGlobalAthlete.id, email, user, null, linkType);
       } catch (error: any) {
         // Handle race condition: another process created the global athlete
-        if (error.code === '23505' && error.constraint?.includes('primary_email')) {
+        const pgError = getPgError(error);
+        if (pgError?.code === PG_UNIQUE_VIOLATION && pgError?.constraint?.includes('primary_email')) {
           // Unique violation on primary_email - fetch the newly created global athlete
           const existing = await this.findByVerifiedEmail(email);
           if (existing && existing.allowCrossOrgLinking) {

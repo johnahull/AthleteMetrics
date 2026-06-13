@@ -24,6 +24,7 @@ import {
   siteMetrics,
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 
 // Validation regex patterns
 const SPORT_CODE_REGEX = /^[A-Za-z0-9_]+$/;
@@ -31,21 +32,9 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 // PostgreSQL error codes
 const PG_ERROR_CODES = {
-  UNIQUE_VIOLATION: '23505',
+  UNIQUE_VIOLATION: PG_UNIQUE_VIOLATION,
   FOREIGN_KEY_VIOLATION: '23503',
 } as const;
-
-// drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError; the original
-// PostgreSQL error (carrying `.code`) is on `.cause`. Walk the cause chain so
-// both wrapped and raw driver errors are recognized.
-function getPgErrorCode(err: any): string | undefined {
-  let current = err;
-  while (current) {
-    if (typeof current.code === 'string') return current.code;
-    current = current.cause;
-  }
-  return undefined;
-}
 
 /**
  * Register sports management routes
