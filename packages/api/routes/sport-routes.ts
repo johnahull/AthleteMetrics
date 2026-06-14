@@ -24,6 +24,7 @@ import {
   siteMetrics,
 } from "@shared/schema";
 import { eq, and, sql, desc, asc } from "drizzle-orm";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 
 // Validation regex patterns
 const SPORT_CODE_REGEX = /^[A-Za-z0-9_]+$/;
@@ -31,7 +32,7 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 
 // PostgreSQL error codes
 const PG_ERROR_CODES = {
-  UNIQUE_VIOLATION: '23505',
+  UNIQUE_VIOLATION: PG_UNIQUE_VIOLATION,
   FOREIGN_KEY_VIOLATION: '23503',
 } as const;
 
@@ -248,7 +249,7 @@ export function registerSportsRoutes(app: Express) {
           res.status(201).json(newSport);
         } catch (insertError: any) {
           // Handle unique constraint violation
-          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+          if (getPgErrorCode(insertError) === PG_ERROR_CODES.UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: `Sport with code '${code}' already exists`,
             });
@@ -468,7 +469,7 @@ export function registerSportsRoutes(app: Express) {
           res.status(201).json(newPosition);
         } catch (insertError: any) {
           // Handle unique constraint violation
-          if (insertError.code === PG_ERROR_CODES.UNIQUE_VIOLATION) {
+          if (getPgErrorCode(insertError) === PG_ERROR_CODES.UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: `Position with code '${code}' already exists for this sport`,
             });

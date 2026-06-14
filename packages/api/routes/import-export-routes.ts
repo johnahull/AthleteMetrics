@@ -20,6 +20,7 @@ import { globalAthleteService } from "../services/global-athlete-service";
 import { isValidEmail } from "@shared/email-validation";
 import { templateGeneratorService } from "../services/template-generator-service";
 import { metricService } from "../services/metric-service";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { importValidationService, type ValidationContext } from "../services/import-validation-service";
 import { logAuthorizationFailure } from "../helpers/audit-logging";
 import { getCachedUserOrganizations } from "../helpers/cached-org-access";
@@ -872,8 +873,11 @@ export function registerImportExportRoutes(app: Express) {
                       }
                       createdTeams.get(normalizedTeamName)!.athleteCount++;
                     } catch (createError: any) {
-                      // Check if this is a unique constraint violation (team was created by concurrent request)
-                      if (createError.code === '23505' || createError.message?.includes('unique')) {
+                      // Check if this is a unique constraint violation (team was created by concurrent request).
+                      // drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError, moving the
+                      // original PostgreSQL error (with .code) onto .cause.
+                      const pgCode = getPgErrorCode(createError);
+                      if (pgCode === PG_UNIQUE_VIOLATION || createError.message?.includes('unique')) {
                         // Re-fetch the team that was just created by another request
                         const allTeams = await storage.getTeams();
                         team = allTeams.find(t =>

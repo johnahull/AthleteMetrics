@@ -258,6 +258,8 @@ git diff main develop                     # Full diff
 - `npm run check` - Run TypeScript type checking
 - `npm run db:push` - Push database schema changes to PostgreSQL
 
+> **Note — peer-dep conflict:** `drizzle-orm >=0.44` declares optional React Native SQLite peer deps that conflict with this project's React 18. Run `npm install --legacy-peer-deps` (or `npm install --force`) when doing a fresh install. CI is unaffected (`npm ci` installs directly from the lockfile).
+
 ### Database Operations
 - `npm run db:push` - Apply schema changes from `packages/shared/schema.ts` to database (development only)
 - `npm run db:migrate` - Run drizzle migrations (0000-0013)

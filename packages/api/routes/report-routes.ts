@@ -37,6 +37,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
 import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
@@ -1915,7 +1916,7 @@ export function registerReportRoutes(app: Express) {
           });
         } catch (insertError: any) {
           // Check for unique constraint violation
-          if (insertError.code === '23505') { // PostgreSQL unique violation
+          if (getPgErrorCode(insertError) === PG_UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: "Report already shared with this athlete",
             });
