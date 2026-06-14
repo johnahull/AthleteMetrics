@@ -877,7 +877,7 @@ export function registerImportExportRoutes(app: Express) {
                       // drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError, moving the
                       // original PostgreSQL error (with .code) onto .cause.
                       const pgCode = getPgErrorCode(createError);
-                      if (pgCode === PG_UNIQUE_VIOLATION || createError.message?.includes('unique') || createError.cause?.message?.includes('unique')) {
+                      if (pgCode === PG_UNIQUE_VIOLATION || createError.message?.includes('unique')) {
                         // Re-fetch the team that was just created by another request
                         const allTeams = await storage.getTeams();
                         team = allTeams.find(t =>
