@@ -56,6 +56,7 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
+  showTrends: z.boolean().default(false),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
   if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
@@ -105,6 +106,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
+      showTrends: false,
     },
   });
 
@@ -126,6 +128,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
+  const showTrends = watch("showTrends");
 
   // Fetch organization's enabled metrics using standardized hook
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
@@ -325,6 +328,8 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
         weights: data.compositeWeights,
       };
     }
+
+    config.showTrends = data.showTrends;
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
       config.filters = {
@@ -908,6 +913,16 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <p className="text-sm text-muted-foreground">
                   Click "Create Report" to finish
                 </p>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="showTrends"
+                  checked={showTrends}
+                  onCheckedChange={(checked) => setValue("showTrends", checked as boolean)}
+                />
+                <Label htmlFor="showTrends" className="cursor-pointer">
+                  Show progress over time
+                </Label>
               </div>
             </div>
           )}
