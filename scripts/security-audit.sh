@@ -23,6 +23,18 @@ set -e
 #   drizzle-kit (^0.25.4) declared esbuild ranges; deferred until those tools widen them.
 #   Affected (transitively): esbuild, vite, vite-node, vitest, @vitest/*, tsx,
 #   drizzle-kit, @esbuild-kit/*, @vitejs/plugin-react.
+# - undici advisories (GHSA-vmh5-mc38-953g, GHSA-vxpw-j846-p89q, GHSA-hm92-r4w5-c3mj,
+#   GHSA-p88m-4jfj-68fv, GHSA-pr7r-676h-xcf6, GHSA-35p6-xmwp-9g52, GHSA-g8m3-5g58-fq7m)
+#   undici reaches this project ONLY transitively as jsdom's HTTP client:
+#   isomorphic-dompurify -> jsdom -> undici. isomorphic-dompurify uses jsdom solely to
+#   provide a DOM for sanitizing HTML strings (DOMPurify); it issues no network requests,
+#   so undici's HTTP-client vulnerabilities (SOCKS5/proxy routing, WebSocket DoS,
+#   keep-alive/cache/Set-Cookie handling) are not reachable in our usage. jsdom@29 pins
+#   undici to ^7; the patched line is 7.28.0 but npm's `overrides` does not move the
+#   nested resolution off 7.25.0 (npm 10.x quirk), and undici 8.x would break jsdom's
+#   ^7 peer range. All seven undici advisory IDs are listed so the audit gate treats the
+#   undici/jsdom/isomorphic-dompurify chain as fully attributable to excluded advisories.
+#   Revisit when jsdom widens its undici range or isomorphic-dompurify ships a fixed jsdom.
 
 echo "🔍 Running npm security audit..."
 
@@ -34,7 +46,7 @@ npm audit --audit-level=moderate --json > audit-results.json || true
 
 # List of excluded vulnerability advisory IDs (false positives)
 # These are vulnerabilities that don't affect our usage patterns
-EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr"
+EXCLUDED_ADVISORIES="GHSA-5j98-mcp5-4vw2 GHSA-mmgp-wc2j-qcv7 GHSA-gv7w-rqvm-qjhr GHSA-vmh5-mc38-953g GHSA-vxpw-j846-p89q GHSA-hm92-r4w5-c3mj GHSA-p88m-4jfj-68fv GHSA-pr7r-676h-xcf6 GHSA-35p6-xmwp-9g52 GHSA-g8m3-5g58-fq7m"
 
 # Validate that audit results were generated
 if [ ! -f "audit-results.json" ] || [ ! -s "audit-results.json" ]; then
