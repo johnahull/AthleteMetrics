@@ -377,15 +377,6 @@ export default function PublicReport() {
               </Card>
             )}
 
-            {/* Time-series trends */}
-            {trends && Object.keys(trends).length > 0 && (
-              <TrendSection
-                trends={trends}
-                metricLabels={trendMetricLabels}
-                metricUnits={trendMetricUnits}
-              />
-            )}
-
             {/* Glossary of metrics (Individual) */}
             {Object.keys(metricExplanations).length > 0 && (
               <ReportMetricsGlossary
@@ -394,6 +385,16 @@ export default function PublicReport() {
               />
             )}
           </>
+        )}
+
+        {/* Time-series trends — gated on the real top-level snapshot reportType
+            (reportConfig has no reportType for stored snapshots) */}
+        {snapshotData.reportType === "individual" && trends && Object.keys(trends).length > 0 && (
+          <TrendSection
+            trends={trends}
+            metricLabels={trendMetricLabels}
+            metricUnits={trendMetricUnits}
+          />
         )}
       </div>
     </div>

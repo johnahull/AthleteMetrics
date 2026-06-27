@@ -30,12 +30,12 @@ setup('authenticate', async ({ page }) => {
   await page.goto('/login');
   await page.waitForLoadState('networkidle');
 
-  // Wait for login form to be visible
-  await page.waitForSelector('input[name="username"]', { timeout: 30000 });
+  // Wait for login form to be visible (form fields use id, not name)
+  await page.waitForSelector('#username, input[name="username"]', { timeout: 30000 });
 
   // Fill in credentials
-  await page.fill('input[name="username"]', username);
-  await page.fill('input[name="password"]', password);
+  await page.fill('#username, input[name="username"]', username);
+  await page.fill('#password, input[name="password"]', password);
 
   // Submit login form
   await page.click('button[type="submit"]');
