@@ -16,7 +16,9 @@ import { Lock } from "lucide-react";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
+import { TrendSection } from "@/components/reports/TrendSection";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
+import type { ReportTrends } from "@shared/report-trends-types";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -56,6 +58,9 @@ export default function PublicReport() {
   const { snapshotData } = snapshot;
   const { reportConfig, generatedAt, dataSnapshot } = snapshotData;
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
+  const trends = (snapshotData.trends ?? undefined) as ReportTrends | undefined;
+  const trendMetricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
+  const trendMetricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const glossaryOrderSet = new Set<string>();
   if (Array.isArray(dataSnapshot?.performanceSnapshot)) {
     for (const m of dataSnapshot.performanceSnapshot) {
@@ -345,6 +350,15 @@ export default function PublicReport() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Time-series trends */}
+            {trends && Object.keys(trends).length > 0 && (
+              <TrendSection
+                trends={trends}
+                metricLabels={trendMetricLabels}
+                metricUnits={trendMetricUnits}
+              />
             )}
 
             {/* Glossary of metrics (Individual) */}
