@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { captureTrendCharts } from "@/lib/chartExport";
 import { Lock } from "lucide-react";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { useToast } from "@/hooks/use-toast";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
@@ -24,6 +25,7 @@ import type { ReportTrends } from "@shared/report-trends-types";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
+  const { toast } = useToast();
   const [, params] = useRoute("/public/reports/:token");
   const token = params?.token || "";
 
@@ -77,21 +79,33 @@ export default function PublicReport() {
   const glossaryOrder = Array.from(glossaryOrderSet);
 
   async function handleDownloadPdf() {
-    const chartImages = await captureTrendCharts();
-    const res = await fetch(`/api/public/reports/${token}/pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ format: 'visual', chartImages }),
-    });
-    const blob = await res.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'report.pdf';
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    try {
+      const chartImages = await captureTrendCharts();
+      const res = await fetch(`/api/public/reports/${token}/pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: 'visual', chartImages }),
+      });
+      if (!res.ok) {
+        throw new Error('Failed to download PDF');
+      }
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'report.pdf';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Error downloading PDF:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Download failed',
+        description: 'Could not download the report PDF. Please try again.',
+      });
+    }
   }
 
   return (
