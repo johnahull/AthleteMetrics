@@ -186,6 +186,45 @@ export async function exportChartAsPNG(
 }
 
 /**
+ * Render a DOM element (e.g. a chart card) to a PNG data URL via html2canvas.
+ * Returns the data URL string (does not trigger a download).
+ */
+export async function getChartPngDataUrl(containerElement: HTMLElement): Promise<string> {
+  // Dynamically import html2canvas
+  const html2canvas = (await import('html2canvas')).default;
+
+  const canvas = await html2canvas(containerElement, {
+    backgroundColor: '#ffffff',
+    scale: 2,
+    logging: false,
+    useCORS: true,
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Capture every BenchmarkTrendChart currently in the DOM.
+ * Each chart wrapper carries data-chart-metric={metricCode}.
+ */
+export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string }>> {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric]'));
+  const out: Array<{ metricCode: string; dataUrl: string }> = [];
+
+  for (const node of nodes) {
+    const metricCode = node.getAttribute('data-chart-metric');
+    if (!metricCode) continue;
+
+    out.push({
+      metricCode,
+      dataUrl: await getChartPngDataUrl(node),
+    });
+  }
+
+  return out;
+}
+
+/**
  * Copy chart to clipboard as image
  * Uses html2canvas to capture and Clipboard API to copy
  */
