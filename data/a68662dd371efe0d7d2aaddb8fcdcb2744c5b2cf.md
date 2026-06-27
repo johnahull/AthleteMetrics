@@ -1,0 +1,346 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: benchmark-management.spec.ts >> Benchmark Management - Site Admin Tests >> should edit an existing site benchmark
+- Location: tests/e2e/benchmark-management.spec.ts:90:3
+
+# Error details
+
+```
+TimeoutError: locator.click: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator('text=Test Benchmark mo1tr37x05lkfvjttcb').locator('..').locator('button[title*="Edit"], button:has(svg)').first()
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - img [ref=e8]
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - heading "AthleteMetrics" [level=1] [ref=e12]
+          - generic [ref=e13]: BETA
+        - paragraph [ref=e14]: Analytics Platform
+    - navigation [ref=e15]:
+      - link "Dashboard" [ref=e16] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e17]:
+          - img [ref=e18]
+          - generic [ref=e23]: Dashboard
+      - link "Organizations" [ref=e24] [cursor=pointer]:
+        - /url: /organizations
+        - generic [ref=e25]:
+          - img [ref=e26]
+          - generic [ref=e30]: Organizations
+      - link "User Management" [ref=e31] [cursor=pointer]:
+        - /url: /user-management
+        - generic [ref=e32]:
+          - img [ref=e33]
+          - generic [ref=e45]: User Management
+      - link "Global Athletes" [ref=e46] [cursor=pointer]:
+        - /url: /global-athletes
+        - generic [ref=e47]:
+          - img [ref=e48]
+          - generic [ref=e51]: Global Athletes
+      - link "Measurements" [ref=e52] [cursor=pointer]:
+        - /url: /admin/measurements
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: Measurements
+      - link "Wellness Templates" [ref=e57] [cursor=pointer]:
+        - /url: /wellness-templates
+        - generic [ref=e58]:
+          - img [ref=e59]
+          - generic [ref=e63]: Wellness Templates
+      - link "Metrics" [ref=e64] [cursor=pointer]:
+        - /url: /metrics
+        - generic [ref=e65]:
+          - img [ref=e66]
+          - generic [ref=e69]: Metrics
+      - link "Sports" [ref=e70] [cursor=pointer]:
+        - /url: /sports
+        - generic [ref=e71]:
+          - img [ref=e72]
+          - generic [ref=e78]: Sports
+      - link "Benchmarks" [ref=e79] [cursor=pointer]:
+        - /url: /benchmarks
+        - generic [ref=e80]:
+          - img [ref=e81]
+          - generic [ref=e85]: Benchmarks
+      - link "Site Settings" [ref=e86] [cursor=pointer]:
+        - /url: /admin
+        - generic [ref=e87]:
+          - img [ref=e88]
+          - generic [ref=e91]: Site Settings
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - img [ref=e95]
+          - generic [ref=e98]:
+            - paragraph [ref=e99]: E2E OrgAdmin
+            - paragraph [ref=e100]: site admin
+        - button [ref=e101] [cursor=pointer]:
+          - img [ref=e102]
+      - link "Profile" [ref=e105] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Profile
+      - link "Notifications" [ref=e111] [cursor=pointer]:
+        - /url: /notification-settings
+        - generic [ref=e112]:
+          - img [ref=e113]
+          - generic [ref=e116]: Notifications
+      - button "Sign Out" [ref=e117] [cursor=pointer]:
+        - img [ref=e118]
+        - generic [ref=e121]: Sign Out
+  - main [ref=e122]:
+    - generic [ref=e123]:
+      - button "Toggle menu" [ref=e124] [cursor=pointer]:
+        - img
+        - generic [ref=e125]: Hide Menu
+      - generic [ref=e126]:
+        - generic [ref=e128]:
+          - img [ref=e129]
+          - generic [ref=e133]: Online
+        - generic [ref=e134]: AthleteMetrics
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - generic [ref=e137]: Welcome,
+            - generic [ref=e138]: E2E
+          - button "Logout" [ref=e139] [cursor=pointer]:
+            - img
+            - generic [ref=e140]: Logout
+    - generic [ref=e141]:
+      - region "Notifications (F8)":
+        - list
+      - generic [ref=e144]:
+        - generic [ref=e145]:
+          - img [ref=e146]
+          - heading "404 Page Not Found" [level=1] [ref=e148]
+        - paragraph [ref=e149]: Did you forget to add the page to the router?
+      - generic [ref=e150]:
+        - generic [ref=e151]:
+          - link "Privacy Policy" [ref=e152] [cursor=pointer]:
+            - /url: /privacy
+          - generic [ref=e153]: "|"
+          - link "Terms of Service" [ref=e154] [cursor=pointer]:
+            - /url: /terms
+        - generic [ref=e155]: © 2026 AthleteMetrics. All rights reserved.
+```
+
+# Test source
+
+```ts
+  12  |  *
+  13  |  * Total: 18 E2E tests
+  14  |  */
+  15  | 
+  16  | const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
+  17  | 
+  18  | // Helper to generate unique test data
+  19  | function generateTestBenchmark() {
+  20  |   const uniqueId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+  21  |   return {
+  22  |     name: `Test Benchmark ${uniqueId}`,
+  23  |     description: `E2E test benchmark created at ${new Date().toISOString()}`,
+  24  |     benchmarkValue: Math.random() * 10 + 1, // Random value between 1-11
+  25  |     metricCode: 'FLY10_TIME', // Use existing metric
+  26  |   };
+  27  | }
+  28  | 
+  29  | test.describe('Benchmark Management - Site Admin Tests', () => {
+  30  |   let createdBenchmarkIds: string[] = [];
+  31  | 
+  32  |   test.beforeEach(async ({ page }) => {
+  33  |     await loginAsDefaultUser(page);
+  34  |     createdBenchmarkIds = [];
+  35  |   });
+  36  | 
+  37  |   test.afterEach(async ({ page }) => {
+  38  |     // Cleanup: Delete created benchmarks
+  39  |     for (const benchmarkId of createdBenchmarkIds) {
+  40  |       try {
+  41  |         await page.request.delete(`${STAGING_URL}/api/benchmarks/${benchmarkId}`);
+  42  |       } catch (error) {
+  43  |         console.warn(`Failed to cleanup benchmark ${benchmarkId}:`, error);
+  44  |       }
+  45  |     }
+  46  |   });
+  47  | 
+  48  |   test('should create a new site benchmark', async ({ page }) => {
+  49  |     const testBenchmark = generateTestBenchmark();
+  50  | 
+  51  |     // Navigate to benchmarks page (assuming /admin/benchmarks route)
+  52  |     await page.goto(`${STAGING_URL}/admin/benchmarks`);
+  53  |     await page.waitForLoadState('networkidle');
+  54  | 
+  55  |     // Click "New Benchmark" button
+  56  |     await page.click('button:has-text("New Benchmark")');
+  57  | 
+  58  |     // Wait for form modal
+  59  |     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+  60  | 
+  61  |     // Fill in benchmark details
+  62  |     await page.selectOption('select', testBenchmark.metricCode); // Metric dropdown
+  63  |     await page.fill('input[placeholder*="benchmark"]', testBenchmark.name);
+  64  |     await page.fill('textarea[placeholder*="Describe"]', testBenchmark.description);
+  65  |     await page.fill('input[type="number"]', testBenchmark.benchmarkValue.toString());
+  66  | 
+  67  |     // Select comparison operator
+  68  |     await page.selectOption('select >> nth=1', 'lte'); // Lower is better
+  69  | 
+  70  |     // Listen for API response
+  71  |     const responsePromise = page.waitForResponse(response =>
+  72  |       response.url().includes('/api/benchmarks') && response.request().method() === 'POST'
+  73  |     );
+  74  | 
+  75  |     // Submit form
+  76  |     await page.click('button[type="submit"]:has-text("Create Benchmark")');
+  77  | 
+  78  |     // Capture benchmark ID
+  79  |     const response = await responsePromise;
+  80  |     const data = await response.json();
+  81  |     createdBenchmarkIds.push(data.id);
+  82  | 
+  83  |     // Verify success message
+  84  |     await expect(page.locator('text=Benchmark Created')).toBeVisible({ timeout: 5000 });
+  85  | 
+  86  |     // Verify benchmark appears in list
+  87  |     await expect(page.locator(`text=${testBenchmark.name}`)).toBeVisible();
+  88  |   });
+  89  | 
+  90  |   test('should edit an existing site benchmark', async ({ page }) => {
+  91  |     // First create a benchmark via API
+  92  |     const testBenchmark = generateTestBenchmark();
+  93  |     const createResponse = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+  94  |       data: {
+  95  |         metricCode: testBenchmark.metricCode,
+  96  |         name: testBenchmark.name,
+  97  |         description: testBenchmark.description,
+  98  |         benchmarkValue: testBenchmark.benchmarkValue,
+  99  |         comparisonOperator: 'lte',
+  100 |         isActive: true,
+  101 |       },
+  102 |     });
+  103 |     const created = await createResponse.json();
+  104 |     createdBenchmarkIds.push(created.id);
+  105 | 
+  106 |     // Navigate to benchmarks page
+  107 |     await page.goto(`${STAGING_URL}/admin/benchmarks`);
+  108 |     await page.waitForLoadState('networkidle');
+  109 | 
+  110 |     // Find and click edit button for the benchmark
+  111 |     const benchmarkCard = page.locator(`text=${testBenchmark.name}`).locator('..');
+> 112 |     await benchmarkCard.locator('button[title*="Edit"], button:has(svg)').first().click();
+      |                                                                                   ^ TimeoutError: locator.click: Timeout 15000ms exceeded.
+  113 | 
+  114 |     // Wait for form modal
+  115 |     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+  116 | 
+  117 |     // Update benchmark name
+  118 |     const updatedName = `${testBenchmark.name} - Updated`;
+  119 |     await page.fill('input[placeholder*="benchmark"]', updatedName);
+  120 | 
+  121 |     // Submit
+  122 |     await page.click('button[type="submit"]:has-text("Update Benchmark")');
+  123 | 
+  124 |     // Verify success
+  125 |     await expect(page.locator('text=Benchmark Updated')).toBeVisible({ timeout: 5000 });
+  126 |     await expect(page.locator(`text=${updatedName}`)).toBeVisible();
+  127 |   });
+  128 | 
+  129 |   test('should toggle benchmark active status', async ({ page }) => {
+  130 |     // Create a benchmark via API
+  131 |     const testBenchmark = generateTestBenchmark();
+  132 |     const createResponse = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+  133 |       data: {
+  134 |         metricCode: testBenchmark.metricCode,
+  135 |         name: testBenchmark.name,
+  136 |         description: testBenchmark.description,
+  137 |         benchmarkValue: testBenchmark.benchmarkValue,
+  138 |         comparisonOperator: 'gte',
+  139 |         isActive: true,
+  140 |       },
+  141 |     });
+  142 |     const created = await createResponse.json();
+  143 |     createdBenchmarkIds.push(created.id);
+  144 | 
+  145 |     // Navigate to benchmarks page
+  146 |     await page.goto(`${STAGING_URL}/admin/benchmarks`);
+  147 |     await page.waitForLoadState('networkidle');
+  148 | 
+  149 |     // Find the benchmark card
+  150 |     const benchmarkCard = page.locator(`text=${testBenchmark.name}`).locator('..');
+  151 | 
+  152 |     // Toggle status (should have a switch/toggle)
+  153 |     await benchmarkCard.locator('button[role="switch"], input[type="checkbox"]').click();
+  154 | 
+  155 |     // Verify status update
+  156 |     await expect(page.locator('text=Status Updated')).toBeVisible({ timeout: 5000 });
+  157 |   });
+  158 | 
+  159 |   test('should delete a non-system benchmark', async ({ page }) => {
+  160 |     // Create a benchmark via API
+  161 |     const testBenchmark = generateTestBenchmark();
+  162 |     const createResponse = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+  163 |       data: {
+  164 |         metricCode: testBenchmark.metricCode,
+  165 |         name: testBenchmark.name,
+  166 |         description: testBenchmark.description,
+  167 |         benchmarkValue: testBenchmark.benchmarkValue,
+  168 |         comparisonOperator: 'eq',
+  169 |         isActive: true,
+  170 |       },
+  171 |     });
+  172 |     const created = await createResponse.json();
+  173 |     // Don't add to cleanup array since we're deleting it in the test
+  174 | 
+  175 |     // Navigate to benchmarks page
+  176 |     await page.goto(`${STAGING_URL}/admin/benchmarks`);
+  177 |     await page.waitForLoadState('networkidle');
+  178 | 
+  179 |     // Find the benchmark card
+  180 |     const benchmarkCard = page.locator(`text=${testBenchmark.name}`).locator('..');
+  181 | 
+  182 |     // Click delete button
+  183 |     await benchmarkCard.locator('button:has-text("Delete"), button:has(svg)').last().click();
+  184 | 
+  185 |     // Confirm deletion in dialog
+  186 |     await page.waitForSelector('[role="dialog"]', { timeout: 5000 });
+  187 |     await page.click('button:has-text("Delete Benchmark")');
+  188 | 
+  189 |     // Verify success
+  190 |     await expect(page.locator('text=Benchmark Deleted')).toBeVisible({ timeout: 5000 });
+  191 |     await expect(page.locator(`text=${testBenchmark.name}`)).not.toBeVisible();
+  192 |   });
+  193 | 
+  194 |   test('should prevent deletion of system default benchmarks', async ({ page }) => {
+  195 |     // Navigate to benchmarks page
+  196 |     await page.goto(`${STAGING_URL}/admin/benchmarks`);
+  197 |     await page.waitForLoadState('networkidle');
+  198 | 
+  199 |     // Look for a system default benchmark (should have "System Default" badge)
+  200 |     const systemBenchmark = page.locator('text=System Default').locator('..');
+  201 | 
+  202 |     if (await systemBenchmark.count() > 0) {
+  203 |       // Find delete button - should be disabled
+  204 |       const deleteButton = systemBenchmark.locator('button:has-text("Delete")').first();
+  205 |       await expect(deleteButton).toBeDisabled();
+  206 |     } else {
+  207 |       // Skip if no system defaults exist yet
+  208 |       test.skip();
+  209 |     }
+  210 |   });
+  211 | 
+  212 |   test('should filter benchmarks by search query', async ({ page }) => {
+```

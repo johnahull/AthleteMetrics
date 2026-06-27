@@ -1,0 +1,735 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: derived-metrics.spec.ts >> Derived Metrics - Site Admin Creation >> should show formula tooltip on [fx] badge hover
+- Location: tests/e2e/derived-metrics.spec.ts:186:3
+
+# Error details
+
+```
+TimeoutError: locator.hover: Timeout 15000ms exceeded.
+Call log:
+  - waiting for locator('[data-testid="metric-row-DERIVED_TEST_MO1U6BTCAGD3OGK02BA"] [data-testid="derived-badge"]')
+
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e6]:
+      - img [ref=e8]
+      - generic [ref=e10]:
+        - generic [ref=e11]:
+          - heading "AthleteMetrics" [level=1] [ref=e12]
+          - generic [ref=e13]: BETA
+        - paragraph [ref=e14]: Analytics Platform
+    - navigation [ref=e15]:
+      - link "Dashboard" [ref=e16] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e17]:
+          - img [ref=e18]
+          - generic [ref=e23]: Dashboard
+      - link "Organizations" [ref=e24] [cursor=pointer]:
+        - /url: /organizations
+        - generic [ref=e25]:
+          - img [ref=e26]
+          - generic [ref=e30]: Organizations
+      - link "User Management" [ref=e31] [cursor=pointer]:
+        - /url: /user-management
+        - generic [ref=e32]:
+          - img [ref=e33]
+          - generic [ref=e45]: User Management
+      - link "Global Athletes" [ref=e46] [cursor=pointer]:
+        - /url: /global-athletes
+        - generic [ref=e47]:
+          - img [ref=e48]
+          - generic [ref=e51]: Global Athletes
+      - link "Measurements" [ref=e52] [cursor=pointer]:
+        - /url: /admin/measurements
+        - generic [ref=e53]:
+          - img [ref=e54]
+          - generic [ref=e56]: Measurements
+      - link "Wellness Templates" [ref=e57] [cursor=pointer]:
+        - /url: /wellness-templates
+        - generic [ref=e58]:
+          - img [ref=e59]
+          - generic [ref=e63]: Wellness Templates
+      - link "Metrics" [ref=e64] [cursor=pointer]:
+        - /url: /metrics
+        - generic [ref=e65]:
+          - img [ref=e66]
+          - generic [ref=e69]: Metrics
+      - link "Sports" [ref=e70] [cursor=pointer]:
+        - /url: /sports
+        - generic [ref=e71]:
+          - img [ref=e72]
+          - generic [ref=e78]: Sports
+      - link "Benchmarks" [ref=e79] [cursor=pointer]:
+        - /url: /benchmarks
+        - generic [ref=e80]:
+          - img [ref=e81]
+          - generic [ref=e85]: Benchmarks
+      - link "Site Settings" [ref=e86] [cursor=pointer]:
+        - /url: /admin
+        - generic [ref=e87]:
+          - img [ref=e88]
+          - generic [ref=e91]: Site Settings
+    - generic [ref=e92]:
+      - generic [ref=e93]:
+        - generic [ref=e94]:
+          - img [ref=e95]
+          - generic [ref=e98]:
+            - paragraph [ref=e99]: E2E OrgAdmin
+            - paragraph [ref=e100]: site admin
+        - button [ref=e101] [cursor=pointer]:
+          - img [ref=e102]
+      - link "Profile" [ref=e105] [cursor=pointer]:
+        - /url: /profile
+        - generic [ref=e106]:
+          - img [ref=e107]
+          - generic [ref=e110]: Profile
+      - link "Notifications" [ref=e111] [cursor=pointer]:
+        - /url: /notification-settings
+        - generic [ref=e112]:
+          - img [ref=e113]
+          - generic [ref=e116]: Notifications
+      - button "Sign Out" [ref=e117] [cursor=pointer]:
+        - img [ref=e118]
+        - generic [ref=e121]: Sign Out
+  - main [ref=e122]:
+    - generic [ref=e123]:
+      - button "Toggle menu" [ref=e124] [cursor=pointer]:
+        - img
+        - generic [ref=e125]: Hide Menu
+      - generic [ref=e126]:
+        - generic [ref=e128]:
+          - img [ref=e129]
+          - generic [ref=e133]: Online
+        - generic [ref=e134]: AthleteMetrics
+        - generic [ref=e135]:
+          - generic [ref=e136]:
+            - generic [ref=e137]: Welcome,
+            - generic [ref=e138]: E2E
+          - button "Logout" [ref=e139] [cursor=pointer]:
+            - img
+            - generic [ref=e140]: Logout
+    - generic [ref=e141]:
+      - region "Notifications (F8)":
+        - list
+      - generic [ref=e142]:
+        - generic [ref=e143]:
+          - generic [ref=e144]:
+            - heading "Metrics Management" [level=1] [ref=e145]
+            - paragraph [ref=e146]: Manage the catalog of available metrics for all organizations
+          - generic [ref=e147]:
+            - combobox [ref=e148] [cursor=pointer]:
+              - generic [ref=e149]: All Metrics
+              - img [ref=e150]
+            - button "Add Metric" [ref=e152] [cursor=pointer]:
+              - img
+              - text: Add Metric
+        - generic [ref=e153]:
+          - generic [ref=e155]: Site Metrics
+          - table [ref=e158]:
+            - rowgroup [ref=e159]:
+              - row "Code Label Category Unit Type Sports Status Actions" [ref=e160]:
+                - columnheader "Code" [ref=e161]
+                - columnheader "Label" [ref=e162]
+                - columnheader "Category" [ref=e163]
+                - columnheader "Unit" [ref=e164]
+                - columnheader "Type" [ref=e165]
+                - columnheader "Sports" [ref=e166]
+                - columnheader "Status" [ref=e167]
+                - columnheader "Actions" [ref=e168]
+            - rowgroup [ref=e169]:
+              - row "FLY10_TIME 10-Yard Fly Time speed s Lower is better All Sports System Default Active" [ref=e170]:
+                - cell "FLY10_TIME" [ref=e171]
+                - cell "10-Yard Fly Time" [ref=e172]:
+                  - generic [ref=e173]: 10-Yard Fly Time
+                - cell "speed" [ref=e174]:
+                  - generic [ref=e175]: speed
+                - cell "s" [ref=e176]
+                - cell "Lower is better" [ref=e177]:
+                  - generic [ref=e178]: Lower is better
+                - cell "All Sports" [ref=e179]:
+                  - generic [ref=e180]: All Sports
+                - cell "System Default Active" [ref=e181]:
+                  - generic [ref=e182]:
+                    - generic [ref=e183]: System Default
+                    - generic [ref=e184]: Active
+                - cell [ref=e185]:
+                  - generic [ref=e186]:
+                    - button [ref=e187] [cursor=pointer]:
+                      - img
+                    - button [ref=e188] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "VERTICAL_JUMP Vertical Jump power in Higher is better All Sports System Default Active" [ref=e189]:
+                - cell "VERTICAL_JUMP" [ref=e190]
+                - cell "Vertical Jump" [ref=e191]:
+                  - generic [ref=e192]: Vertical Jump
+                - cell "power" [ref=e193]:
+                  - generic [ref=e194]: power
+                - cell "in" [ref=e195]
+                - cell "Higher is better" [ref=e196]:
+                  - generic [ref=e197]: Higher is better
+                - cell "All Sports" [ref=e198]:
+                  - generic [ref=e199]: All Sports
+                - cell "System Default Active" [ref=e200]:
+                  - generic [ref=e201]:
+                    - generic [ref=e202]: System Default
+                    - generic [ref=e203]: Active
+                - cell [ref=e204]:
+                  - generic [ref=e205]:
+                    - button [ref=e206] [cursor=pointer]:
+                      - img
+                    - button [ref=e207] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_505 5-0-5 Agility agility s Lower is better All Sports System Default Active" [ref=e208]:
+                - cell "AGILITY_505" [ref=e209]
+                - cell "5-0-5 Agility" [ref=e210]:
+                  - generic [ref=e211]: 5-0-5 Agility
+                - cell "agility" [ref=e212]:
+                  - generic [ref=e213]: agility
+                - cell "s" [ref=e214]
+                - cell "Lower is better" [ref=e215]:
+                  - generic [ref=e216]: Lower is better
+                - cell "All Sports" [ref=e217]:
+                  - generic [ref=e218]: All Sports
+                - cell "System Default Active" [ref=e219]:
+                  - generic [ref=e220]:
+                    - generic [ref=e221]: System Default
+                    - generic [ref=e222]: Active
+                - cell [ref=e223]:
+                  - generic [ref=e224]:
+                    - button [ref=e225] [cursor=pointer]:
+                      - img
+                    - button [ref=e226] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_5105 5-10-5 Agility agility s Lower is better All Sports System Default Active" [ref=e227]:
+                - cell "AGILITY_5105" [ref=e228]
+                - cell "5-10-5 Agility" [ref=e229]:
+                  - generic [ref=e230]: 5-10-5 Agility
+                - cell "agility" [ref=e231]:
+                  - generic [ref=e232]: agility
+                - cell "s" [ref=e233]
+                - cell "Lower is better" [ref=e234]:
+                  - generic [ref=e235]: Lower is better
+                - cell "All Sports" [ref=e236]:
+                  - generic [ref=e237]: All Sports
+                - cell "System Default Active" [ref=e238]:
+                  - generic [ref=e239]:
+                    - generic [ref=e240]: System Default
+                    - generic [ref=e241]: Active
+                - cell [ref=e242]:
+                  - generic [ref=e243]:
+                    - button [ref=e244] [cursor=pointer]:
+                      - img
+                    - button [ref=e245] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "T_TEST T-Test Agility agility s Lower is better All Sports System Default Active" [ref=e246]:
+                - cell "T_TEST" [ref=e247]
+                - cell "T-Test Agility" [ref=e248]:
+                  - generic [ref=e249]: T-Test Agility
+                - cell "agility" [ref=e250]:
+                  - generic [ref=e251]: agility
+                - cell "s" [ref=e252]
+                - cell "Lower is better" [ref=e253]:
+                  - generic [ref=e254]: Lower is better
+                - cell "All Sports" [ref=e255]:
+                  - generic [ref=e256]: All Sports
+                - cell "System Default Active" [ref=e257]:
+                  - generic [ref=e258]:
+                    - generic [ref=e259]: System Default
+                    - generic [ref=e260]: Active
+                - cell [ref=e261]:
+                  - generic [ref=e262]:
+                    - button [ref=e263] [cursor=pointer]:
+                      - img
+                    - button [ref=e264] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "DASH_40YD 40-Yard Dash speed s Lower is better All Sports System Default Active" [ref=e265]:
+                - cell "DASH_40YD" [ref=e266]
+                - cell "40-Yard Dash" [ref=e267]:
+                  - generic [ref=e268]: 40-Yard Dash
+                - cell "speed" [ref=e269]:
+                  - generic [ref=e270]: speed
+                - cell "s" [ref=e271]
+                - cell "Lower is better" [ref=e272]:
+                  - generic [ref=e273]: Lower is better
+                - cell "All Sports" [ref=e274]:
+                  - generic [ref=e275]: All Sports
+                - cell "System Default Active" [ref=e276]:
+                  - generic [ref=e277]:
+                    - generic [ref=e278]: System Default
+                    - generic [ref=e279]: Active
+                - cell [ref=e280]:
+                  - generic [ref=e281]:
+                    - button [ref=e282] [cursor=pointer]:
+                      - img
+                    - button [ref=e283] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "RSI Reactive Strength Index power - Higher is better All Sports System Default Active" [ref=e284]:
+                - cell "RSI" [ref=e285]
+                - cell "Reactive Strength Index" [ref=e286]:
+                  - generic [ref=e287]: Reactive Strength Index
+                - cell "power" [ref=e288]:
+                  - generic [ref=e289]: power
+                - cell "-" [ref=e290]
+                - cell "Higher is better" [ref=e291]:
+                  - generic [ref=e292]: Higher is better
+                - cell "All Sports" [ref=e293]:
+                  - generic [ref=e294]: All Sports
+                - cell "System Default Active" [ref=e295]:
+                  - generic [ref=e296]:
+                    - generic [ref=e297]: System Default
+                    - generic [ref=e298]: Active
+                - cell [ref=e299]:
+                  - generic [ref=e300]:
+                    - button [ref=e301] [cursor=pointer]:
+                      - img
+                    - button [ref=e302] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "TOP_SPEED Top Speed speed mph Higher is better All Sports System Default Active" [ref=e303]:
+                - cell "TOP_SPEED" [ref=e304]
+                - cell "Top Speed" [ref=e305]:
+                  - generic [ref=e306]: Top Speed
+                - cell "speed" [ref=e307]:
+                  - generic [ref=e308]: speed
+                - cell "mph" [ref=e309]
+                - cell "Higher is better" [ref=e310]:
+                  - generic [ref=e311]: Higher is better
+                - cell "All Sports" [ref=e312]:
+                  - generic [ref=e313]: All Sports
+                - cell "System Default Active" [ref=e314]:
+                  - generic [ref=e315]:
+                    - generic [ref=e316]: System Default
+                    - generic [ref=e317]: Active
+                - cell [ref=e318]:
+                  - generic [ref=e319]:
+                    - button [ref=e320] [cursor=pointer]:
+                      - img
+                    - button [ref=e321] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "DASH_5YD 5-Yard Dash Split speed s Lower is better All Sports System Default Active" [ref=e322]:
+                - cell "DASH_5YD" [ref=e323]
+                - cell "5-Yard Dash Split" [ref=e324]:
+                  - generic [ref=e325]: 5-Yard Dash Split
+                - cell "speed" [ref=e326]:
+                  - generic [ref=e327]: speed
+                - cell "s" [ref=e328]
+                - cell "Lower is better" [ref=e329]:
+                  - generic [ref=e330]: Lower is better
+                - cell "All Sports" [ref=e331]:
+                  - generic [ref=e332]: All Sports
+                - cell "System Default Active" [ref=e333]:
+                  - generic [ref=e334]:
+                    - generic [ref=e335]: System Default
+                    - generic [ref=e336]: Active
+                - cell [ref=e337]:
+                  - generic [ref=e338]:
+                    - button [ref=e339] [cursor=pointer]:
+                      - img
+                    - button [ref=e340] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "DASH_10YD 10-Yard Dash Split speed s Lower is better All Sports System Default Active" [ref=e341]:
+                - cell "DASH_10YD" [ref=e342]
+                - cell "10-Yard Dash Split" [ref=e343]:
+                  - generic [ref=e344]: 10-Yard Dash Split
+                - cell "speed" [ref=e345]:
+                  - generic [ref=e346]: speed
+                - cell "s" [ref=e347]
+                - cell "Lower is better" [ref=e348]:
+                  - generic [ref=e349]: Lower is better
+                - cell "All Sports" [ref=e350]:
+                  - generic [ref=e351]: All Sports
+                - cell "System Default Active" [ref=e352]:
+                  - generic [ref=e353]:
+                    - generic [ref=e354]: System Default
+                    - generic [ref=e355]: Active
+                - cell [ref=e356]:
+                  - generic [ref=e357]:
+                    - button [ref=e358] [cursor=pointer]:
+                      - img
+                    - button [ref=e359] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "DASH_20YD 20-Yard Dash Split speed s Lower is better All Sports System Default Active" [ref=e360]:
+                - cell "DASH_20YD" [ref=e361]
+                - cell "20-Yard Dash Split" [ref=e362]:
+                  - generic [ref=e363]: 20-Yard Dash Split
+                - cell "speed" [ref=e364]:
+                  - generic [ref=e365]: speed
+                - cell "s" [ref=e366]
+                - cell "Lower is better" [ref=e367]:
+                  - generic [ref=e368]: Lower is better
+                - cell "All Sports" [ref=e369]:
+                  - generic [ref=e370]: All Sports
+                - cell "System Default Active" [ref=e371]:
+                  - generic [ref=e372]:
+                    - generic [ref=e373]: System Default
+                    - generic [ref=e374]: Active
+                - cell [ref=e375]:
+                  - generic [ref=e376]:
+                    - button [ref=e377] [cursor=pointer]:
+                      - img
+                    - button [ref=e378] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "DASH_30YD 30-Yard Dash Split speed s Lower is better All Sports System Default Active" [ref=e379]:
+                - cell "DASH_30YD" [ref=e380]
+                - cell "30-Yard Dash Split" [ref=e381]:
+                  - generic [ref=e382]: 30-Yard Dash Split
+                - cell "speed" [ref=e383]:
+                  - generic [ref=e384]: speed
+                - cell "s" [ref=e385]
+                - cell "Lower is better" [ref=e386]:
+                  - generic [ref=e387]: Lower is better
+                - cell "All Sports" [ref=e388]:
+                  - generic [ref=e389]: All Sports
+                - cell "System Default Active" [ref=e390]:
+                  - generic [ref=e391]:
+                    - generic [ref=e392]: System Default
+                    - generic [ref=e393]: Active
+                - cell [ref=e394]:
+                  - generic [ref=e395]:
+                    - button [ref=e396] [cursor=pointer]:
+                      - img
+                    - button [ref=e397] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_505_L 5-0-5 Agility (Left) agility s Lower is better All Sports System Default Active" [ref=e398]:
+                - cell "AGILITY_505_L" [ref=e399]
+                - cell "5-0-5 Agility (Left)" [ref=e400]:
+                  - generic [ref=e401]: 5-0-5 Agility (Left)
+                - cell "agility" [ref=e402]:
+                  - generic [ref=e403]: agility
+                - cell "s" [ref=e404]
+                - cell "Lower is better" [ref=e405]:
+                  - generic [ref=e406]: Lower is better
+                - cell "All Sports" [ref=e407]:
+                  - generic [ref=e408]: All Sports
+                - cell "System Default Active" [ref=e409]:
+                  - generic [ref=e410]:
+                    - generic [ref=e411]: System Default
+                    - generic [ref=e412]: Active
+                - cell [ref=e413]:
+                  - generic [ref=e414]:
+                    - button [ref=e415] [cursor=pointer]:
+                      - img
+                    - button [ref=e416] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_505_R 5-0-5 Agility (Right) agility s Lower is better All Sports System Default Active" [ref=e417]:
+                - cell "AGILITY_505_R" [ref=e418]
+                - cell "5-0-5 Agility (Right)" [ref=e419]:
+                  - generic [ref=e420]: 5-0-5 Agility (Right)
+                - cell "agility" [ref=e421]:
+                  - generic [ref=e422]: agility
+                - cell "s" [ref=e423]
+                - cell "Lower is better" [ref=e424]:
+                  - generic [ref=e425]: Lower is better
+                - cell "All Sports" [ref=e426]:
+                  - generic [ref=e427]: All Sports
+                - cell "System Default Active" [ref=e428]:
+                  - generic [ref=e429]:
+                    - generic [ref=e430]: System Default
+                    - generic [ref=e431]: Active
+                - cell [ref=e432]:
+                  - generic [ref=e433]:
+                    - button [ref=e434] [cursor=pointer]:
+                      - img
+                    - button [ref=e435] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_5105_L 5-10-5 Agility (Left) agility s Lower is better All Sports System Default Active" [ref=e436]:
+                - cell "AGILITY_5105_L" [ref=e437]
+                - cell "5-10-5 Agility (Left)" [ref=e438]:
+                  - generic [ref=e439]: 5-10-5 Agility (Left)
+                - cell "agility" [ref=e440]:
+                  - generic [ref=e441]: agility
+                - cell "s" [ref=e442]
+                - cell "Lower is better" [ref=e443]:
+                  - generic [ref=e444]: Lower is better
+                - cell "All Sports" [ref=e445]:
+                  - generic [ref=e446]: All Sports
+                - cell "System Default Active" [ref=e447]:
+                  - generic [ref=e448]:
+                    - generic [ref=e449]: System Default
+                    - generic [ref=e450]: Active
+                - cell [ref=e451]:
+                  - generic [ref=e452]:
+                    - button [ref=e453] [cursor=pointer]:
+                      - img
+                    - button [ref=e454] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+              - row "AGILITY_5105_R 5-10-5 Agility (Right) agility s Lower is better All Sports System Default Active" [ref=e455]:
+                - cell "AGILITY_5105_R" [ref=e456]
+                - cell "5-10-5 Agility (Right)" [ref=e457]:
+                  - generic [ref=e458]: 5-10-5 Agility (Right)
+                - cell "agility" [ref=e459]:
+                  - generic [ref=e460]: agility
+                - cell "s" [ref=e461]
+                - cell "Lower is better" [ref=e462]:
+                  - generic [ref=e463]: Lower is better
+                - cell "All Sports" [ref=e464]:
+                  - generic [ref=e465]: All Sports
+                - cell "System Default Active" [ref=e466]:
+                  - generic [ref=e467]:
+                    - generic [ref=e468]: System Default
+                    - generic [ref=e469]: Active
+                - cell [ref=e470]:
+                  - generic [ref=e471]:
+                    - button [ref=e472] [cursor=pointer]:
+                      - img
+                    - button [ref=e473] [cursor=pointer]:
+                      - img
+                    - button [disabled]:
+                      - img
+      - generic [ref=e474]:
+        - generic [ref=e475]:
+          - link "Privacy Policy" [ref=e476] [cursor=pointer]:
+            - /url: /privacy
+          - generic [ref=e477]: "|"
+          - link "Terms of Service" [ref=e478] [cursor=pointer]:
+            - /url: /terms
+        - generic [ref=e479]: © 2026 AthleteMetrics. All rights reserved.
+```
+
+# Test source
+
+```ts
+  99  |     await page.waitForTimeout(600); // Wait for 500ms debounce + buffer
+  100 | 
+  101 |     // Verify formula validation passed (no error message)
+  102 |     const validationError = await page.locator('[data-testid="formula-error"]').isVisible().catch(() => false);
+  103 |     expect(validationError).toBe(false);
+  104 | 
+  105 |     // Select dependent metrics (FLY10_TIME)
+  106 |     await page.click('[data-testid="dependent-metrics-selector"]');
+  107 |     await page.click('[data-testid="metric-option-FLY10_TIME"]');
+  108 |     await page.click('[data-testid="dependent-metrics-selector"]'); // Close dropdown
+  109 | 
+  110 |     // Configure date matching strategy
+  111 |     await page.selectOption('[name="dateMatchStrategy"]', 'same_date');
+  112 | 
+  113 |     // Submit form
+  114 |     await page.click('[data-testid="submit-metric-button"]');
+  115 | 
+  116 |     // Wait for success message
+  117 |     await expect(page.locator('[data-testid="success-toast"]')).toBeVisible({ timeout: 5000 });
+  118 |     await expect(page.locator('[data-testid="success-toast"]')).toContainText('Metric created successfully');
+  119 | 
+  120 |     // Verify metric appears in table with [fx] badge
+  121 |     const newMetricRow = page.locator(`[data-testid="metric-row-${derivedMetric.code}"]`);
+  122 |     await expect(newMetricRow).toBeVisible();
+  123 |     await expect(newMetricRow).toContainText(derivedMetric.label);
+  124 |     await expect(newMetricRow).toContainText('[fx]'); // Derived badge
+  125 | 
+  126 |     // Track for cleanup
+  127 |     createdMetricCodes.push(derivedMetric.code);
+  128 |   });
+  129 | 
+  130 |   test('should validate formula syntax in real-time', async ({ page }) => {
+  131 |     await page.goto(`${TESTING_URL}/metrics`);
+  132 | 
+  133 |     await page.click('[data-testid="add-metric-button"]');
+  134 |     await page.waitForSelector('[role="dialog"]');
+  135 | 
+  136 |     // Fill in basic fields
+  137 |     await page.fill('[name="code"]', 'TEST_INVALID_FORMULA');
+  138 |     await page.fill('[name="label"]', 'Invalid Formula Test');
+  139 |     await page.selectOption('[name="category"]', 'speed');
+  140 | 
+  141 |     // Enable derived metric
+  142 |     await page.click('[data-testid="derived-metric-toggle"]');
+  143 |     await page.waitForSelector('[name="formula"]');
+  144 | 
+  145 |     // Enter invalid formula
+  146 |     await page.fill('[name="formula"]', 'invalid syntax here');
+  147 | 
+  148 |     // Wait for validation
+  149 |     await page.waitForTimeout(600);
+  150 | 
+  151 |     // Should show validation error
+  152 |     await expect(page.locator('[data-testid="formula-error"]')).toBeVisible();
+  153 |     await expect(page.locator('[data-testid="formula-error"]')).toContainText(/invalid/i);
+  154 |   });
+  155 | 
+  156 |   test('should prevent circular dependencies', async ({ page }) => {
+  157 |     // First create a derived metric A that depends on B
+  158 |     const metricA = {
+  159 |       ...generateDerivedMetric(),
+  160 |       code: 'CIRCULAR_A',
+  161 |       formula: 'circular_b * 2',
+  162 |       dependentMetrics: ['CIRCULAR_B'],
+  163 |     };
+  164 | 
+  165 |     await page.goto(`${TESTING_URL}/metrics`);
+  166 |     await page.click('[data-testid="add-metric-button"]');
+  167 |     await page.waitForSelector('[role="dialog"]');
+  168 | 
+  169 |     // Fill in metric A
+  170 |     await page.fill('[name="code"]', metricA.code);
+  171 |     await page.fill('[name="label"]', 'Circular A');
+  172 |     await page.selectOption('[name="category"]', 'speed');
+  173 |     await page.fill('[name="unit"]', 'mph');
+  174 |     await page.selectOption('[name="metricType"]', 'higher_is_better');
+  175 | 
+  176 |     // Enable derived
+  177 |     await page.click('[data-testid="derived-metric-toggle"]');
+  178 |     await page.waitForSelector('[name="formula"]');
+  179 |     await page.fill('[name="formula"]', metricA.formula);
+  180 | 
+  181 |     // Should show error about missing CIRCULAR_B
+  182 |     await page.waitForTimeout(600);
+  183 |     await expect(page.locator('[data-testid="formula-error"]')).toContainText(/undefined variable/i);
+  184 |   });
+  185 | 
+  186 |   test('should show formula tooltip on [fx] badge hover', async ({ page }) => {
+  187 |     const derivedMetric = generateDerivedMetric();
+  188 | 
+  189 |     // Create via API
+  190 |     await page.request.post(`${TESTING_URL}/api/metrics`, {
+  191 |       data: derivedMetric,
+  192 |     });
+  193 |     createdMetricCodes.push(derivedMetric.code);
+  194 | 
+  195 |     await page.goto(`${TESTING_URL}/metrics`);
+  196 | 
+  197 |     // Hover over [fx] badge
+  198 |     const fxBadge = page.locator(`[data-testid="metric-row-${derivedMetric.code}"] [data-testid="derived-badge"]`);
+> 199 |     await fxBadge.hover();
+      |                   ^ TimeoutError: locator.hover: Timeout 15000ms exceeded.
+  200 | 
+  201 |     // Should show tooltip with formula
+  202 |     await expect(page.locator('[role="tooltip"]')).toBeVisible({ timeout: 2000 });
+  203 |     await expect(page.locator('[role="tooltip"]')).toContainText(derivedMetric.formula);
+  204 |   });
+  205 | });
+  206 | 
+  207 | test.describe('Derived Metrics - Auto-Calculation Workflow', () => {
+  208 |   let testAthleteId: string;
+  209 |   let derivedMetricCode: string;
+  210 | 
+  211 |   test.beforeEach(async ({ page }) => {
+  212 |     await loginAsDefaultUser(page);
+  213 | 
+  214 |     // Create a test athlete
+  215 |     const athleteResponse = await page.request.post(`${TESTING_URL}/api/athletes`, {
+  216 |       data: {
+  217 |         firstName: 'Derived',
+  218 |         lastName: 'Test',
+  219 |         email: `derived-test-${Date.now()}@example.com`,
+  220 |         birthYear: 2000,
+  221 |         sports: ['Football'],
+  222 |         status: 'active',
+  223 |       },
+  224 |     });
+  225 |     const athlete = await athleteResponse.json();
+  226 |     testAthleteId = athlete.id;
+  227 | 
+  228 |     // Create a derived metric (top speed from fly10)
+  229 |     const derivedMetric = generateDerivedMetric();
+  230 |     derivedMetricCode = derivedMetric.code;
+  231 |     await page.request.post(`${TESTING_URL}/api/metrics`, {
+  232 |       data: derivedMetric,
+  233 |     });
+  234 |   });
+  235 | 
+  236 |   test.afterEach(async ({ page }) => {
+  237 |     // Cleanup
+  238 |     try {
+  239 |       await page.request.delete(`${TESTING_URL}/api/athletes/${testAthleteId}`);
+  240 |       await page.request.delete(`${TESTING_URL}/api/metrics/${derivedMetricCode}`);
+  241 |     } catch (error) {
+  242 |       console.warn('Cleanup failed:', error);
+  243 |     }
+  244 |   });
+  245 | 
+  246 |   test('should auto-calculate derived value when source measurement is entered', async ({ page }) => {
+  247 |     await page.goto(`${TESTING_URL}/data-entry`);
+  248 | 
+  249 |     // Select athlete
+  250 |     await page.click('[data-testid="athlete-select"]');
+  251 |     await page.fill('[data-testid="athlete-search"]', 'Derived Test');
+  252 |     await page.click(`[data-testid="athlete-option-${testAthleteId}"]`);
+  253 | 
+  254 |     // Select FLY10_TIME metric
+  255 |     await page.click('[data-testid="metric-select"]');
+  256 |     await page.click('[data-testid="metric-option-FLY10_TIME"]');
+  257 | 
+  258 |     // Enter fly10 time value (e.g., 1.00 seconds)
+  259 |     await page.fill('[data-testid="value-input"]', '1.00');
+  260 | 
+  261 |     // Select date
+  262 |     await page.fill('[data-testid="date-input"]', new Date().toISOString().split('T')[0]);
+  263 | 
+  264 |     // Should show calculated preview for derived metric
+  265 |     const calculatedPreview = page.locator('[data-testid="calculated-preview"]');
+  266 |     await expect(calculatedPreview).toBeVisible({ timeout: 2000 });
+  267 |     await expect(calculatedPreview).toContainText(derivedMetricCode);
+  268 |     await expect(calculatedPreview).toContainText('20.45'); // 10 / 1.00 * 2.045
+  269 | 
+  270 |     // Submit measurement
+  271 |     await page.click('[data-testid="submit-measurement"]');
+  272 | 
+  273 |     // Wait for success
+  274 |     await expect(page.locator('[data-testid="success-toast"]')).toBeVisible({ timeout: 5000 });
+  275 | 
+  276 |     // Verify derived measurement was created
+  277 |     // Navigate to athlete dashboard
+  278 |     await page.goto(`${TESTING_URL}/athletes/${testAthleteId}`);
+  279 | 
+  280 |     // Should show both measurements
+  281 |     await expect(page.locator('[data-testid="metric-card-FLY10_TIME"]')).toBeVisible();
+  282 |     await expect(page.locator(`[data-testid="metric-card-${derivedMetricCode}"]`)).toBeVisible();
+  283 | 
+  284 |     // Derived metric should show [fx] badge
+  285 |     const derivedCard = page.locator(`[data-testid="metric-card-${derivedMetricCode}"]`);
+  286 |     await expect(derivedCard.locator('[data-testid="derived-badge"]')).toBeVisible();
+  287 | 
+  288 |     // Should show "Calculated from" footer
+  289 |     await expect(derivedCard).toContainText('Calculated from');
+  290 |     await expect(derivedCard).toContainText('FLY10_TIME');
+  291 |   });
+  292 | 
+  293 |   test('should allow direct measurement to override calculated value', async ({ page }) => {
+  294 |     // First, create a fly10 measurement to trigger calculation
+  295 |     await page.request.post(`${TESTING_URL}/api/measurements`, {
+  296 |       data: {
+  297 |         athleteId: testAthleteId,
+  298 |         metricCode: 'FLY10_TIME',
+  299 |         value: 1.00,
+```

@@ -1,4 +1,35 @@
 {
-  "cookies": [],
-  "origins": []
+  "cookies": [
+    {
+      "name": "__cf_bm",
+      "value": "nqaJ6_NSwTVirMAsSV1CWX17BcjAgfZp9ljvoQOcXZc-1782576324.832891-1.0.1.1-EP_HHRv8yS.Pz4jEuVwfxXSZx6F271ZGQ4XgfHF4nDFqeOZaiFqwscGrXmUbkRf3tlzkKruoBywxN5FhleGPbO4O6AcOmd7Xv5tFW98l8nzcBvX6im5e3Ugf7SDjHOBx",
+      "domain": ".replit.com",
+      "path": "/",
+      "expires": 1782578124.8452,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "connect.sid",
+      "value": "s%3AOM3uV-8f6p-lZuFHVp4zaP2sctthrbam.bTe3HGl1Biq1jwb0Z0pGM%2BzWma40njZfnYvjyjqSTDM",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1782662726.908672,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Strict"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "http://localhost:5000",
+      "localStorage": [
+        {
+          "name": "pwa-page-views",
+          "value": "1"
+        }
+      ]
+    }
+  ]
 }
