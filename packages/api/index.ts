@@ -59,7 +59,16 @@ const app = express();
 // Trust proxy when running behind a proxy (like in Replit environment)
 app.set('trust proxy', 1);
 
-app.use(express.json());
+// PDF export routes (POST /api/reports/:id/pdf and POST /api/public/reports/:token/pdf)
+// accept large chart-image payloads and mount their own higher-limit JSON parser.
+// Skip the default 100kb global parser for them so it does not 413 before the
+// route-level parser runs. All other routes keep the small default limit.
+const defaultJsonParser = express.json();
+app.use((req, res, next) =>
+  req.method === 'POST' && req.path.endsWith('/pdf')
+    ? next()
+    : defaultJsonParser(req, res, next),
+);
 app.use(express.urlencoded({ extended: false }));
 
 // Cache database connection modules for performance

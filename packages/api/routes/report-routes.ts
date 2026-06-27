@@ -3,7 +3,7 @@
  * Includes report CRUD, generation, snapshots, and PDF export
  */
 
-import type { Express } from "express";
+import express, { type Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
@@ -1442,6 +1442,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/:id/pdf",
+    express.json({ limit: '15mb' }),
     reportGenerationLimiter,
     requireAuth,
     async (req, res) => {
@@ -1518,6 +1519,7 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/public/reports/:token/pdf",
+    express.json({ limit: '15mb' }),
     publicSnapshotLimiter,
     async (req, res) => {
       try {

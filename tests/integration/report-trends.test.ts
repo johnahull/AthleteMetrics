@@ -57,9 +57,18 @@ let coachAuthCookie: string;
 let createdReportIds: string[] = [];
 
 beforeAll(async () => {
-  // Create Express app and register routes
+  // Create Express app and register routes.
+  // Mirror packages/api/index.ts: the global JSON parser uses the small default
+  // (100kb) limit, but POST /pdf routes are skipped here so their own
+  // route-level express.json({ limit: '15mb' }) parser can accept large
+  // chart-image payloads. This keeps the test faithful to production.
   app = express();
-  app.use(express.json());
+  const defaultJsonParser = express.json();
+  app.use((req, res, next) =>
+    req.method === 'POST' && req.path.endsWith('/pdf')
+      ? next()
+      : defaultJsonParser(req, res, next),
+  );
   app.use(express.urlencoded({ extended: false }));
   await registerRoutes(app);
 });
@@ -260,6 +269,39 @@ describe('POST /api/reports/:id/pdf — chart image embedding', () => {
     expect(Buffer.isBuffer(response.body)).toBe(true);
     // A real PDF is well over 1KB; assert the body is non-trivial.
     expect(response.body.length).toBeGreaterThan(1000);
+  });
+
+  it('accepts a chart-image payload larger than the default 100kb body limit', async () => {
+    const report = await createIndividualReport(true);
+
+    // Pad the JSON body well past the default express.json() 100kb limit so the
+    // global parser would 413 without the route-level 15mb override. The PDF
+    // generator only reads `chartImages`, so the padding is harmlessly ignored
+    // while still producing a valid (single tiny PNG) PDF.
+    const padding = 'a'.repeat(200 * 1024); // ~200kb
+
+    const response = await request(app)
+      .post(`/api/reports/${report.id}/pdf`)
+      .set('Cookie', coachAuthCookie)
+      .send({
+        athleteId: testAthlete.id,
+        format: 'visual',
+        chartImages: [
+          { metricCode: 'VERTICAL_JUMP', dataUrl: TINY_PNG_DATA_URL },
+        ],
+        _padding: padding,
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    // The key assertion: the large body is NOT rejected with 413 Payload Too Large.
+    expect(response.status).not.toBe(413);
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
   });
 
   it('requires authentication', async () => {
