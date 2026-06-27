@@ -1437,6 +1437,135 @@ export function registerReportRoutes(app: Express) {
   );
 
   /**
+   * Generate PDF for a report with client-captured trend charts
+   * POST /api/reports/:id/pdf
+   */
+  app.post(
+    "/api/reports/:id/pdf",
+    reportGenerationLimiter,
+    requireAuth,
+    async (req, res) => {
+      const reportId = req.params.id;
+      const { athleteId, format = 'simplified', chartImages = [] } = req.body || {};
+      let report: Report | undefined;
+
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Generate report data
+        let reportData: unknown;
+        if (report.reportType === 'team') {
+          reportData = await reportService.generateTeamReport(reportId, user.id);
+        } else {
+          if (!athleteId) {
+            return res
+              .status(400)
+              .json({ message: "Athlete ID required for individual reports" });
+          }
+          reportData = await reportService.generateIndividualReport(
+            reportId,
+            user.id,
+            athleteId
+          );
+        }
+
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
+        // Generate PDF
+        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org, chartImages);
+
+        // Send PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
+        );
+        res.send(Buffer.from(pdf.output("arraybuffer")));
+      } catch (error) {
+        console.error("Error generating PDF:", {
+          reportId,
+          reportType: report?.reportType || 'unknown',
+          athleteId,
+          format,
+          error: error instanceof Error ? error.message : error,
+        });
+        res.status(500).json({
+          message:
+            error instanceof Error ? error.message : "Failed to generate PDF",
+        });
+      }
+    }
+  );
+
+  /**
+   * Generate PDF for public snapshot with client-captured trend charts (NO AUTH REQUIRED)
+   * POST /api/public/reports/:token/pdf
+   */
+  app.post(
+    "/api/public/reports/:token/pdf",
+    publicSnapshotLimiter,
+    async (req, res) => {
+      try {
+        const token = req.params.token;
+        const { format = 'simplified', chartImages = [] } = req.body || {};
+
+        const snapshot = await reportService.getPublicSnapshot(token);
+
+        if (!snapshot) {
+          return res.status(404).json({ message: "Snapshot not found" });
+        }
+
+        // Get report details
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, snapshot.reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
+        // Generate PDF from snapshot data
+        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org, chartImages);
+
+        // Send PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
+        );
+        res.send(Buffer.from(pdf.output("arraybuffer")));
+      } catch (error) {
+        console.error("Error generating public PDF:", error);
+        res.status(500).json({
+          message:
+            error instanceof Error ? error.message : "Failed to generate PDF",
+        });
+      }
+    }
+  );
+
+  /**
    * Generate AI coaching insights for a report
    * POST /api/reports/:id/generate-insights
    *
@@ -3529,7 +3658,29 @@ function tierTint(colorName: string): [number, number, number] {
   ] as [number, number, number];
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
+function addTrendChartsToPdf(
+  doc: jsPDF,
+  chartImages: Array<{ metricCode: string; dataUrl: string }>,
+  metricLabels: Record<string, string> = {},
+): void {
+  if (!chartImages.length) return;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const margin = 14;
+  const imgWidth = pageWidth - margin * 2;
+
+  for (const img of chartImages) {
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.setTextColor(40, 40, 40);
+    doc.text(metricLabels[img.metricCode] || img.metricCode, margin, 20);
+
+    const props = doc.getImageProperties(img.dataUrl);
+    const imgHeight = (props.height / props.width) * imgWidth;
+    doc.addImage(img.dataUrl, 'PNG', margin, 28, imgWidth, imgHeight);
+  }
+}
+
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string }> = []): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
@@ -4369,6 +4520,10 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   // Add footer to content pages — skip page 1 when a cover page was inserted
   const footerStartPage = reportData.reportType === 'individual' ? 2 : 1;
   addFooterToAllPages(doc, org?.name, footerStartPage);
+
+  if (reportData.reportType === 'individual' && chartImages.length > 0) {
+    addTrendChartsToPdf(doc, chartImages, reportData.metricLabels || {});
+  }
 
   return doc;
 }
