@@ -11,7 +11,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
+import { captureTrendCharts } from "@/lib/chartExport";
 import { Lock } from "lucide-react";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
@@ -74,6 +76,24 @@ export default function PublicReport() {
   }
   const glossaryOrder = Array.from(glossaryOrderSet);
 
+  async function handleDownloadPdf() {
+    const chartImages = await captureTrendCharts();
+    const res = await fetch(`/api/public/reports/${token}/pdf`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ format: 'visual', chartImages }),
+    });
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'report.pdf';
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto py-8 space-y-6">
@@ -85,7 +105,12 @@ export default function PublicReport() {
               Generated on {format(new Date(generatedAt), "PPP")} · {snapshotData.orgBranding?.tagline ?? "Athletic Performance Report"}
             </p>
           </div>
-          <Badge variant="outline">AthleteMetrics</Badge>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
+              Download PDF
+            </Button>
+            <Badge variant="outline">AthleteMetrics</Badge>
+          </div>
         </div>
 
         {/* Coach Report View */}
