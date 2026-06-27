@@ -1,0 +1,79 @@
+// packages/web/src/components/charts/trend-utils.ts
+import type { AnnotationOptions } from 'chartjs-plugin-annotation';
+import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
+import { parseColorToRgba } from '@/lib/color-utils';
+
+export function shouldReverseYAxis(direction: 'higher' | 'lower'): boolean {
+  return direction === 'lower';
+}
+
+export function formatDelta(delta: { pct: number }): string {
+  const rounded = Math.round(delta.pct);
+  if (rounded > 0) return `▲ +${rounded}%`;
+  if (rounded < 0) return `▼ ${Math.abs(rounded)}%`;
+  return '→ 0%';
+}
+
+/** Which tier does `value` fall in? Above the top band counts as the best tier. */
+export function currentTierName(overlay: BenchmarkOverlay, value: number): string | null {
+  if (overlay.kind !== 'tiers' || overlay.tiers.length === 0) return null;
+  for (const t of overlay.tiers) {
+    const aboveMin = t.min == null || value >= t.min;
+    const belowMax = t.max == null || value < t.max;
+    if (aboveMin && belowMax) return t.name;
+  }
+  // Above the highest max -> best (last) tier
+  const top = overlay.tiers[overlay.tiers.length - 1];
+  if (top.max != null && value >= top.max) return top.name;
+  return null;
+}
+
+/** Build Chart.js annotation map (tier boxes or threshold lines) for an overlay. */
+export function overlayToAnnotations(overlay: BenchmarkOverlay): Record<string, AnnotationOptions> {
+  const out: Record<string, AnnotationOptions> = {};
+  if (overlay.kind === 'tiers') {
+    overlay.tiers.forEach((t, i) => {
+      out[`tier-${i}`] = {
+        type: 'box',
+        yMin: t.min ?? undefined,
+        yMax: t.max ?? undefined,
+        backgroundColor: parseColorToRgba(t.color, 0.35),
+        borderWidth: 0,
+        label: { display: true, content: t.name, position: 'start', color: '#475569', font: { size: 10 } },
+      } as AnnotationOptions;
+    });
+  } else if (overlay.kind === 'thresholds') {
+    overlay.lines.forEach((l, i) => {
+      out[`line-${i}`] = {
+        type: 'line',
+        yMin: l.value,
+        yMax: l.value,
+        borderColor: l.color,
+        borderWidth: 2,
+        borderDash: [5, 5],
+        label: { display: true, content: l.name, position: 'end', backgroundColor: l.color, color: 'white', padding: 4, font: { size: 10 } },
+      } as AnnotationOptions;
+    });
+  }
+  return out;
+}
+
+/** Build a single-series Chart.js dataset config from a metric trend. */
+export function buildTrendChartData(trend: MetricTrend, label: string) {
+  return {
+    labels: trend.series.map(p => new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
+    datasets: [
+      {
+        label,
+        data: trend.series.map(p => p.value),
+        borderColor: 'rgba(37, 99, 235, 1)',
+        backgroundColor: 'rgba(37, 99, 235, 0.1)',
+        borderWidth: 2.5,
+        pointRadius: 3,
+        pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+        fill: false,
+        tension: 0.1,
+      },
+    ],
+  };
+}
