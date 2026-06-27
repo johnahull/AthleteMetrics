@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TierBadge } from "@/components/benchmarks/TierBadge";
+import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { format } from "date-fns";
 import { captureTrendCharts } from "@/lib/chartExport";
 import { Lock } from "lucide-react";
@@ -60,23 +62,39 @@ export default function PublicReport() {
   }
 
   const { snapshotData } = snapshot;
-  const { reportConfig, generatedAt, dataSnapshot } = snapshotData;
+  const { generatedAt } = snapshotData;
+  // `reportType` is a TOP-LEVEL field on the stored snapshot (the verbatim return
+  // of generateTeamReport / generateIndividualReport). It is NOT on reportConfig.
+  const reportType = snapshotData.reportType as 'team' | 'individual' | undefined;
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
+  const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
+  const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = (snapshotData.trends ?? undefined) as ReportTrends | undefined;
-  const trendMetricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
-  const trendMetricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
-  const glossaryOrderSet = new Set<string>();
-  if (Array.isArray(dataSnapshot?.performanceSnapshot)) {
-    for (const m of dataSnapshot.performanceSnapshot) {
-      if (m?.metricCode) glossaryOrderSet.add(m.metricCode);
+
+  // Real produced shapes (mirror IndividualReportView / TeamReportView).
+  const athlete = snapshotData.athlete as any;
+  const teamStatistics = (snapshotData.teamStatistics ?? []) as any[];
+  const athleteRankings = (snapshotData.athleteRankings ?? []) as any[];
+
+  // Glossary order recomputed from the real data (was previously read from a
+  // stale `dataSnapshot` shape that the producer no longer emits).
+  const glossaryOrder =
+    reportType === 'individual'
+      ? Object.keys(athlete?.measurements ?? {})
+      : teamStatistics.map((s) => s.metric);
+
+  // Team: collect all unique benchmark names across metrics (mirrors TeamReportView).
+  const allBenchmarkNames = new Set<string>();
+  teamStatistics.forEach((stat) => {
+    if (Array.isArray(stat.benchmarks)) {
+      stat.benchmarks.forEach((b: any) => allBenchmarkNames.add(b.name));
     }
-  }
-  if (Array.isArray(dataSnapshot?.performance)) {
-    for (const m of dataSnapshot.performance) {
-      if (m?.metricCode) glossaryOrderSet.add(m.metricCode);
-    }
-  }
-  const glossaryOrder = Array.from(glossaryOrderSet);
+  });
+  const benchmarkColumns = Array.from(allBenchmarkNames);
+
+  const hasComposite =
+    Array.isArray(athleteRankings) &&
+    athleteRankings.some((a) => a?.compositeIndex !== undefined);
 
   async function handleDownloadPdf() {
     try {
@@ -127,11 +145,11 @@ export default function PublicReport() {
           </div>
         </div>
 
-        {/* Coach Report View */}
-        {reportConfig.reportType === 'team' && (
+        {/* Coach / Team Report View */}
+        {reportType === 'team' && (
           <>
             {/* Performance Snapshot */}
-            {dataSnapshot.performanceSnapshot && (
+            {teamStatistics.length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Performance Snapshot</CardTitle>
@@ -142,107 +160,90 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead>Test</TableHead>
                         <TableHead>{labels.team} Average</TableHead>
-                        <TableHead>Benchmarks</TableHead>
+                        {benchmarkColumns.map((name) => (
+                          <TableHead key={name}>{name}</TableHead>
+                        ))}
                         <TableHead>Top Performer</TableHead>
                         <TableHead>Range</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dataSnapshot.performanceSnapshot.map((metric: any) => (
-                        <TableRow key={metric.metricCode}>
-                          <TableCell className="font-medium align-top">
-                            <MetricExplanation
-                              label={metric.metricName}
-                              explanation={metricExplanations[metric.metricCode]}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {metric.teamAverage?.toFixed(2) || "N/A"} {metric.unit}
-                          </TableCell>
-                          <TableCell>
-                            {metric.benchmarks && metric.benchmarks.length > 0 ? (
-                              <div className="space-y-1">
-                                {metric.benchmarks.map((b: any, idx: number) => (
-                                  <div key={idx} className="text-sm">
-                                    {b.name}: {b.value} {metric.unit}
+                      {teamStatistics.map((stat: any) => {
+                        const benchmarkMap = new Map<string, any>();
+                        if (Array.isArray(stat.benchmarks)) {
+                          stat.benchmarks.forEach((b: any) => benchmarkMap.set(b.name, b));
+                        }
+                        const units = stat.units || '';
+                        return (
+                          <TableRow key={stat.metric}>
+                            <TableCell className="font-medium align-top">
+                              <MetricExplanation
+                                label={metricLabels[stat.metric] || stat.metric}
+                                explanation={metricExplanations[stat.metric]}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {stat.average !== null && stat.average !== undefined
+                                ? (isFly10Metric(stat.metric)
+                                    ? formatFly10Dual(stat.average)
+                                    : `${stat.average.toFixed(2)} ${units}`)
+                                : "N/A"}
+                            </TableCell>
+                            {benchmarkColumns.map((name) => {
+                              const b = benchmarkMap.get(name);
+                              if (!b) return <TableCell key={name}>-</TableCell>;
+                              if (b.minValue != null && b.maxValue != null) {
+                                return (
+                                  <TableCell key={name}>
+                                    <span style={b.tierColor ? { color: b.tierColor } : undefined}>
+                                      {`${b.minValue.toFixed(2)} - ${b.maxValue.toFixed(2)} ${units}`}
+                                    </span>
+                                  </TableCell>
+                                );
+                              }
+                              if (b.value != null) {
+                                return (
+                                  <TableCell key={name}>
+                                    {`${b.value.toFixed(2)} ${units}`}
+                                  </TableCell>
+                                );
+                              }
+                              return <TableCell key={name}>-</TableCell>;
+                            })}
+                            <TableCell>
+                              {stat.topPerformer ? (
+                                <div>
+                                  <div className="font-medium">{stat.topPerformer.userName}</div>
+                                  <div className="text-sm text-muted-foreground">
+                                    {stat.topPerformer.value !== null && stat.topPerformer.value !== undefined
+                                      ? (isFly10Metric(stat.metric)
+                                          ? formatFly10Dual(stat.topPerformer.value)
+                                          : `${stat.topPerformer.value.toFixed(2)} ${units}`)
+                                      : "N/A"}
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {metric.topPerformer ? (
-                              <div>
-                                <div className="font-medium">
-                                  {metric.topPerformer.name}
                                 </div>
-                                <div className="text-sm text-muted-foreground">
-                                  {metric.topPerformer.value} {metric.unit}
-                                </div>
-                              </div>
-                            ) : (
-                              "N/A"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {metric.range
-                              ? `${metric.range.min} - ${metric.range.max} ${metric.unit}`
-                              : "N/A"}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                              ) : (
+                                "N/A"
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {stat.min !== null && stat.min !== undefined && stat.max !== null && stat.max !== undefined
+                                ? (isFly10Metric(stat.metric)
+                                    ? `${formatFly10Dual(stat.min)} - ${formatFly10Dual(stat.max)}`
+                                    : `${stat.min.toFixed(2)} - ${stat.max.toFixed(2)} ${units}`)
+                                : "N/A"}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
             )}
 
-            {/* Metric Rankings */}
-            {dataSnapshot.metricRankings &&
-              Object.entries(dataSnapshot.metricRankings).map(
-                ([metricCode, rankings]: any) => (
-                  <Card key={metricCode}>
-                    <CardHeader>
-                      <CardTitle>{rankings.metricName} Rankings</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="w-16">Rank</TableHead>
-                            <TableHead>Athlete</TableHead>
-                            <TableHead>{labels.team}</TableHead>
-                            <TableHead>Score</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {rankings.rankings.map((athlete: any, idx: number) => (
-                            <TableRow key={athlete.userId}>
-                              <TableCell>
-                                <Badge variant={idx < 3 ? "default" : "secondary"}>
-                                  #{idx + 1}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {athlete.name}
-                              </TableCell>
-                              <TableCell>{athlete.teamName || "-"}</TableCell>
-                              <TableCell>
-                                {athlete.value?.toFixed(2)} {rankings.unit}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </CardContent>
-                  </Card>
-                )
-              )}
-
-            {/* Composite Index */}
-            {dataSnapshot.compositeIndex && (
+            {/* Composite Index Rankings — only when composite is enabled */}
+            {hasComposite && (
               <Card>
                 <CardHeader>
                   <CardTitle>Composite Index Rankings</CardTitle>
@@ -253,71 +254,63 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead className="w-16">Rank</TableHead>
                         <TableHead>Athlete</TableHead>
-                        <TableHead>{labels.team}</TableHead>
                         <TableHead>Composite Score</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dataSnapshot.compositeIndex.rankings.map(
-                        (athlete: any, idx: number) => (
-                          <TableRow key={athlete.userId}>
-                            <TableCell>
-                              <Badge variant={idx < 3 ? "default" : "secondary"}>
-                                #{idx + 1}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {athlete.name}
-                            </TableCell>
-                            <TableCell>{athlete.teamName || "-"}</TableCell>
-                            <TableCell>
-                              {athlete.compositeScore?.toFixed(2)}
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                      {athleteRankings.map((a: any, idx: number) => (
+                        <TableRow key={a.userId}>
+                          <TableCell>
+                            <Badge variant={idx < 3 ? "default" : "secondary"}>
+                              #{idx + 1}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">{a.userName}</TableCell>
+                          <TableCell>{a.compositeIndex?.toFixed(2) ?? "N/A"}</TableCell>
+                        </TableRow>
+                      ))}
                     </TableBody>
                   </Table>
                 </CardContent>
               </Card>
             )}
+
+            {/* Glossary of metrics (Team) */}
+            {Object.keys(metricExplanations).length > 0 && (
+              <ReportMetricsGlossary
+                explanations={metricExplanations}
+                metricOrder={glossaryOrder}
+              />
+            )}
           </>
         )}
 
-        {/* Glossary of metrics (Team) */}
-        {reportConfig.reportType === 'team' && Object.keys(metricExplanations).length > 0 && (
-          <ReportMetricsGlossary
-            explanations={metricExplanations}
-            metricOrder={glossaryOrder}
-          />
-        )}
-
         {/* Individual Report View */}
-        {reportConfig.reportType === "individual" && (
+        {reportType === "individual" && athlete && (
           <>
             {/* Athlete Info */}
-            {dataSnapshot.athlete && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Athlete Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div>
-                    <h3 className="text-lg font-semibold">
-                      {dataSnapshot.athlete.firstName}{" "}
-                      {dataSnapshot.athlete.lastName}
-                    </h3>
-                    {dataSnapshot.athlete.teamName && (
-                      <p className="text-muted-foreground">
-                        {dataSnapshot.athlete.teamName}
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader>
+                <CardTitle>Athlete Information</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div>
+                  <h3 className="text-lg font-semibold">{athlete.userName}</h3>
+                  {athlete.teams && athlete.teams.length > 0 && (
+                    <p className="text-muted-foreground">{athlete.teams[0]}</p>
+                  )}
+                  {athlete.age && (
+                    <p className="text-muted-foreground">Age: {athlete.age}</p>
+                  )}
+                  {athlete.gender && (
+                    <p className="text-muted-foreground">Gender: {athlete.gender}</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Performance Table */}
-            {dataSnapshot.performance && (
+            {athlete.measurements && Object.keys(athlete.measurements).length > 0 && (
               <Card>
                 <CardHeader>
                   <CardTitle>Performance Summary</CardTitle>
@@ -328,63 +321,90 @@ export default function PublicReport() {
                       <TableRow>
                         <TableHead>Metric</TableHead>
                         <TableHead>Best Result</TableHead>
-                        <TableHead>{labels.team} Rank</TableHead>
+                        <TableHead>{labels.team} Average</TableHead>
                         <TableHead>Percentile</TableHead>
-                        <TableHead>Benchmarks</TableHead>
+                        <TableHead>Benchmark Comparisons</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {dataSnapshot.performance.map((metric: any) => (
-                        <TableRow key={metric.metricCode}>
-                          <TableCell className="font-medium align-top">
-                            <MetricExplanation
-                              label={metric.metricName}
-                              explanation={metricExplanations[metric.metricCode]}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            {metric.bestValue?.toFixed(2) || "N/A"} {metric.unit}
-                          </TableCell>
-                          <TableCell>
-                            {metric.teamRank ? (
-                              <Badge>#{metric.teamRank}</Badge>
-                            ) : (
-                              "N/A"
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {metric.percentile
-                              ? `${metric.percentile.toFixed(0)}th`
-                              : "N/A"}
-                          </TableCell>
-                          <TableCell>
-                            {metric.benchmarks && metric.benchmarks.length > 0 ? (
-                              <div className="space-y-1">
-                                {metric.benchmarks.map((b: any, idx: number) => (
-                                  <div key={idx} className="text-sm">
-                                    <span className="font-medium">{b.name}:</span>{" "}
-                                    {b.value} {metric.unit}
-                                    {b.comparison && (
-                                      <Badge
-                                        variant={
-                                          b.comparison === "above"
-                                            ? "default"
-                                            : "secondary"
-                                        }
-                                        className="ml-2"
-                                      >
-                                        {b.comparison}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              "-"
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
+                      {Object.entries(athlete.measurements).map(([metricCode, value]) => {
+                        const percentile = athlete.percentiles?.[metricCode];
+                        const teamAverage = athlete.teamAverages?.[metricCode];
+                        const benchmarks = athlete.benchmarkComparisons?.[metricCode] || [];
+                        const metricLabel = metricLabels[metricCode] || metricCode;
+                        const unit = metricUnits[metricCode] || '';
+
+                        return (
+                          <TableRow key={metricCode}>
+                            <TableCell className="font-medium align-top">
+                              <MetricExplanation
+                                label={metricLabel}
+                                explanation={metricExplanations[metricCode]}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              {typeof value === 'number'
+                                ? (isFly10Metric(metricCode)
+                                    ? formatFly10Dual(value)
+                                    : `${value.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                                : "N/A"}
+                            </TableCell>
+                            <TableCell>
+                              {typeof teamAverage === 'number'
+                                ? (isFly10Metric(metricCode)
+                                    ? formatFly10Dual(teamAverage)
+                                    : `${teamAverage.toFixed(2)}${unit ? ` ${unit}` : ''}`)
+                                : "N/A"}
+                            </TableCell>
+                            <TableCell>
+                              {typeof percentile === 'number' ? (
+                                <Badge>{percentile.toFixed(1)}th percentile</Badge>
+                              ) : (
+                                "N/A"
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {benchmarks.length > 0 ? (
+                                <div className="space-y-2">
+                                  {benchmarks.map((b: any, idx: number) => (
+                                    <div key={idx}>
+                                      {b.tierName ? (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm font-medium">{b.tierGroupName || b.benchmarkName}:</span>
+                                          <TierBadge
+                                            tierName={b.tierName}
+                                            tierColor={b.tierColor || 'gray'}
+                                            tierOrder={b.tierOrder}
+                                            nextTierName={b.nextTierName}
+                                            distanceToNextTier={b.distanceToNextTier}
+                                            unit={unit}
+                                            showProgress={true}
+                                          />
+                                        </div>
+                                      ) : (
+                                        <div className="text-sm">
+                                          <span className="font-medium">{b.benchmarkName}:</span>{" "}
+                                          {isFly10Metric(metricCode)
+                                            ? formatFly10Dual(b.benchmarkValue)
+                                            : `${b.benchmarkValue.toFixed(2)}${unit ? ` ${unit}` : ''}`}
+                                          <Badge
+                                            variant={b.meetsOrExceeds ? "default" : "secondary"}
+                                            className="ml-2"
+                                          >
+                                            {b.meetsOrExceeds ? "✓ Meets" : "✗ Below"}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                "-"
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>
@@ -401,13 +421,12 @@ export default function PublicReport() {
           </>
         )}
 
-        {/* Time-series trends — gated on the real top-level snapshot reportType
-            (reportConfig has no reportType for stored snapshots) */}
-        {snapshotData.reportType === "individual" && trends && Object.keys(trends).length > 0 && (
+        {/* Time-series trends — gated on the real top-level snapshot reportType */}
+        {reportType === "individual" && trends && Object.keys(trends).length > 0 && (
           <TrendSection
             trends={trends}
-            metricLabels={trendMetricLabels}
-            metricUnits={trendMetricUnits}
+            metricLabels={metricLabels}
+            metricUnits={metricUnits}
           />
         )}
       </div>

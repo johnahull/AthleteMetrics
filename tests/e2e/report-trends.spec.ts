@@ -54,6 +54,7 @@ test.describe('Report Time-Range Trends', () => {
   let reportId: string;
   let teamId: string;
   let athleteId: string;
+  let athleteFirstName: string;
   let createdSnapshotIds: string[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -72,9 +73,10 @@ test.describe('Report Time-Range Trends', () => {
     teamId = (await teamRes.json()).id;
 
     // Adult athlete (adult avoids COPPA public-link restriction)
+    athleteFirstName = `TrendAthlete_${suffix}`;
     const athleteRes = await page.request.post(`${STAGING_URL}/api/athletes`, {
       data: {
-        firstName: `TrendAthlete_${suffix}`,
+        firstName: athleteFirstName,
         lastName: 'Trends',
         birthDate: '2000-01-01',
         emails: [],
@@ -192,6 +194,18 @@ test.describe('Report Time-Range Trends', () => {
       await expect(
         incognitoPage.locator(`[data-chart-metric="${TREND_METRIC}"]`)
       ).toBeVisible();
+
+      // The public report must render the real performance content (regression
+      // guard for the stale-snapshot-shape bug): the athlete's name and at least
+      // one performance metric row/value must be visible. These rendered blank
+      // before the consumer was fixed to read the real produced snapshot shape.
+      await expect(
+        incognitoPage.getByText(athleteFirstName, { exact: false }).first()
+      ).toBeVisible({ timeout: 15000 });
+      await expect(incognitoPage.getByText('Performance Summary')).toBeVisible();
+      // The seeded FLY10 best value (1.22) is shown via dual format (seconds + mph);
+      // assert the seconds value is present in the performance table.
+      await expect(incognitoPage.getByText(/1\.22/).first()).toBeVisible();
     } finally {
       await incognitoPage.close();
       await incognitoContext.close();
