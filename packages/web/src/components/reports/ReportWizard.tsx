@@ -914,15 +914,25 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   Click "Create Report" to finish
                 </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="showTrends"
-                  checked={showTrends}
-                  onCheckedChange={(checked) => setValue("showTrends", checked as boolean)}
-                />
-                <Label htmlFor="showTrends" className="cursor-pointer">
-                  Show progress over time
-                </Label>
+              <div className="border rounded-lg p-4 bg-muted/30">
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id="showTrends"
+                    checked={showTrends}
+                    onCheckedChange={(checked) => setValue("showTrends", checked as boolean)}
+                    className="mt-1"
+                  />
+                  <div className="space-y-1">
+                    <Label htmlFor="showTrends" className="cursor-pointer font-medium">
+                      Show progress over time
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Add trend charts plotting each metric's measurements across the
+                      report's timeframe, with benchmarks overlaid. Needs at least 2
+                      measurements per metric in the selected date range.
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
