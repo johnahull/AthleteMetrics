@@ -2214,6 +2214,7 @@ export const insertReportSchema = createInsertSchema(reports).omit({
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
     // Audience for tailored AI coaching insights language
     audience: z.enum(['coach', 'athlete', 'parent']).optional(),
+    showTrends: z.boolean().optional(),
   }),
   isTemplate: z.boolean().default(false),
 });
@@ -2252,6 +2253,7 @@ export const updateReportSchema = z.object({
     athleteId: z.string().optional(), // Single athlete ID (stored in database)
     // Audience for tailored AI coaching insights language
     audience: z.enum(['coach', 'athlete', 'parent']).optional(),
+    showTrends: z.boolean().optional(),
   }).optional(),
   isTemplate: z.boolean().optional(),
 });
