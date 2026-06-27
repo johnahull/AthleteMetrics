@@ -123,14 +123,14 @@ const m = (metric: string, date: string, value: number) => ({ metric, date, valu
 
 describe('assembleTrends', () => {
   it('builds an ascending series with delta for a higher-is-better metric', () => {
-    const rows = [m('VJ', '2025-02-01', 25.5), m('VJ', '2025-09-01', 18)]; // unordered
+    const rows = [m('VJ', '2026-02-01', 25.5), m('VJ', '2025-09-01', 18)]; // unordered
     const trends = assembleTrends(
       rows,
       ['VJ'],
       { VJ: 'higher' },
       { VJ: [] },
     );
-    expect(trends.VJ.series.map(p => p.date)).toEqual(['2025-09-01', '2025-02-01']);
+    expect(trends.VJ.series.map(p => p.date)).toEqual(['2025-09-01', '2026-02-01']);
     expect(trends.VJ.series.map(p => p.value)).toEqual([18, 25.5]);
     expect(trends.VJ.direction).toBe('higher');
     expect(trends.VJ.delta.from).toBe(18);
@@ -139,7 +139,7 @@ describe('assembleTrends', () => {
   });
 
   it('computes positive improvement pct for a lower-is-better metric', () => {
-    const rows = [m('DASH', '2025-09-01', 5.6), m('DASH', '2025-02-01', 4.92)];
+    const rows = [m('DASH', '2026-02-01', 4.92), m('DASH', '2025-09-01', 5.6)];
     const trends = assembleTrends(rows, ['DASH'], { DASH: 'lower' }, { DASH: [] });
     expect(trends.DASH.direction).toBe('lower');
     expect(trends.DASH.delta.from).toBe(5.6);
