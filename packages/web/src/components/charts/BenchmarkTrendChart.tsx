@@ -32,12 +32,6 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
     plugins: {
       legend: { display: false },
       title: { display: true, text: label, font: { size: 14, weight: 'bold' } },
-      subtitle: {
-        // Axis is NOT inverted; the cue tells the reader which way is improvement.
-        display: true,
-        text: `${cue.betterText} · improvement = ${cue.word} (${cue.arrow})`,
-        font: { size: 10 },
-      },
       annotation: Object.keys(annotations).length > 0 ? { annotations } : undefined,
     },
     scales: {
@@ -51,11 +45,21 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
   return (
     <div
       data-chart-metric={metricCode}
-      className="w-full h-[300px]"
+      className="w-full"
       role="img"
       aria-label={`Progress over time for ${label}. ${cue.betterText}; improvement is ${cue.word}.`}
     >
-      <Line data={data} options={options} />
+      {/* Plain-language direction cue (HTML, not canvas) so it renders crisply
+          on screen and is captured into the PDF. */}
+      <div className="mb-1">
+        <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+          <span aria-hidden="true">{cue.arrow}</span>
+          {cue.betterText} — improvement trends {cue.word}
+        </span>
+      </div>
+      <div className="w-full h-[300px]">
+        <Line data={data} options={options} />
+      </div>
     </div>
   );
 }
