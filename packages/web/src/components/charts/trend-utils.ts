@@ -3,8 +3,19 @@ import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
 import { parseColorToRgba } from '@/lib/color-utils';
 
-export function shouldReverseYAxis(direction: 'higher' | 'lower'): boolean {
-  return direction === 'lower';
+/**
+ * Direction cue for a metric's trend chart. The y-axis is NOT inverted — values
+ * render in conventional orientation — so we surface which way "better" points:
+ * higher-is-better improves upward, lower-is-better improves downward.
+ */
+export function directionCue(direction: 'higher' | 'lower'): {
+  betterText: string;
+  arrow: string;
+  word: string;
+} {
+  return direction === 'lower'
+    ? { betterText: 'Lower is better', arrow: '↓', word: 'downward' }
+    : { betterText: 'Higher is better', arrow: '↑', word: 'upward' };
 }
 
 export function formatDelta(delta: { pct: number }): string {

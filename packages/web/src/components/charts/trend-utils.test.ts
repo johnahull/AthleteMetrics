@@ -1,7 +1,7 @@
 // packages/web/src/components/charts/trend-utils.test.ts
 import { describe, it, expect } from 'vitest';
 import {
-  shouldReverseYAxis,
+  directionCue,
   formatDelta,
   currentTierName,
   overlayToAnnotations,
@@ -10,9 +10,9 @@ import {
 import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
 
 describe('trend-utils', () => {
-  it('reverses the y-axis only for lower-is-better metrics', () => {
-    expect(shouldReverseYAxis('lower')).toBe(true);
-    expect(shouldReverseYAxis('higher')).toBe(false);
+  it('cues downward improvement for lower-is-better, upward for higher-is-better', () => {
+    expect(directionCue('lower')).toEqual({ betterText: 'Lower is better', arrow: '↓', word: 'downward' });
+    expect(directionCue('higher')).toEqual({ betterText: 'Higher is better', arrow: '↑', word: 'upward' });
   });
 
   it('formats improvement with an up arrow and rounded percent', () => {

@@ -4,7 +4,7 @@ import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
 import type { MetricTrend } from '@shared/report-trends-types';
-import { buildTrendChartData, overlayToAnnotations, shouldReverseYAxis } from './trend-utils';
+import { buildTrendChartData, overlayToAnnotations, directionCue } from './trend-utils';
 
 // Chart.js + annotation plugin are registered globally in lib/chart-setup.ts
 
@@ -17,10 +17,13 @@ interface BenchmarkTrendChartProps {
 
 export function BenchmarkTrendChart({ metricCode, trend, label, unit }: BenchmarkTrendChartProps) {
   const data = useMemo(() => buildTrendChartData(trend, label), [trend, label]);
+  const cue = useMemo(() => directionCue(trend.direction), [trend.direction]);
   const annotations = useMemo<Record<string, AnnotationOptions>>(
     () => overlayToAnnotations(trend.benchmark),
     [trend.benchmark],
   );
+
+  const yTitle = unit ? `${label} (${unit})` : label;
 
   const options: ChartOptions<'line'> = {
     responsive: true,
@@ -30,8 +33,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
       legend: { display: false },
       title: { display: true, text: label, font: { size: 14, weight: 'bold' } },
       subtitle: {
+        // Axis is NOT inverted; the cue tells the reader which way is improvement.
         display: true,
-        text: trend.direction === 'lower' ? 'Lower is better · axis flipped so up = improvement' : 'Higher is better',
+        text: `${cue.betterText} · improvement = ${cue.word} (${cue.arrow})`,
         font: { size: 10 },
       },
       annotation: Object.keys(annotations).length > 0 ? { annotations } : undefined,
@@ -39,8 +43,7 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
     scales: {
       x: { title: { display: true, text: 'Date' } },
       y: {
-        reverse: shouldReverseYAxis(trend.direction),
-        title: { display: true, text: unit ? `${label} (${unit})` : label },
+        title: { display: true, text: `${yTitle}  ${cue.arrow} better` },
       },
     },
   };
@@ -50,7 +53,7 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
       data-chart-metric={metricCode}
       className="w-full h-[300px]"
       role="img"
-      aria-label={`Progress over time for ${label}`}
+      aria-label={`Progress over time for ${label}. ${cue.betterText}; improvement is ${cue.word}.`}
     >
       <Line data={data} options={options} />
     </div>
