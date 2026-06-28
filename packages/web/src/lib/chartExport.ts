@@ -209,26 +209,25 @@ export async function getChartPngDataUrl(containerElement: HTMLElement): Promise
  */
 export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string }>> {
   const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric]'));
-  const out: Array<{ metricCode: string; dataUrl: string }> = [];
 
-  for (const node of nodes) {
-    const metricCode = node.getAttribute('data-chart-metric');
-    if (!metricCode) continue;
+  // Capture charts concurrently for speed, but isolate per-chart failures: a
+  // single html2canvas error must not reject the whole capture and silently
+  // abort the PDF download. Each failed chart resolves to null and is dropped;
+  // array order (and thus the rendered order in the PDF) is preserved.
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      const metricCode = node.getAttribute('data-chart-metric');
+      if (!metricCode) return null;
+      try {
+        return { metricCode, dataUrl: await getChartPngDataUrl(node) };
+      } catch (error) {
+        devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
+        return null;
+      }
+    }),
+  );
 
-    try {
-      out.push({
-        metricCode,
-        dataUrl: await getChartPngDataUrl(node),
-      });
-    } catch (error) {
-      // Isolate per-chart failures: a single html2canvas error must not reject
-      // the whole capture and silently abort the PDF download. Skip the failed
-      // chart and keep the rest.
-      devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
-    }
-  }
-
-  return out;
+  return results.filter((r): r is { metricCode: string; dataUrl: string } => r !== null);
 }
 
 /**

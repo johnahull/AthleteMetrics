@@ -329,7 +329,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       };
     }
 
-    config.showTrends = data.showTrends;
+    // showTrends only applies to individual reports. Gate the assignment (not
+    // just the checkbox render) so a stale form value can't persist
+    // showTrends: true onto a team report after switching report type.
+    if (data.reportType === "individual") {
+      config.showTrends = data.showTrends;
+    }
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
       config.filters = {

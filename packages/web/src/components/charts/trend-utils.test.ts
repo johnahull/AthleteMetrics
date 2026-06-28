@@ -15,12 +15,16 @@ describe('trend-utils', () => {
     expect(directionCue('higher')).toEqual({ betterText: 'Higher is better', arrow: '↑', word: 'upward' });
   });
 
-  it('formats improvement with an up arrow and rounded percent', () => {
-    expect(formatDelta({ from: 18, to: 25.5, pct: 41.7 })).toBe('▲ +42%');
+  it('labels improvement-signed positive delta as improvement (no misleading arrow)', () => {
+    expect(formatDelta({ from: 18, to: 25.5, pct: 41.7 })).toBe('+42% improvement');
   });
 
-  it('formats a decline with a down arrow', () => {
-    expect(formatDelta({ from: 25, to: 20, pct: -20 })).toBe('▼ 20%');
+  it('labels a negative (worse) delta as decline', () => {
+    expect(formatDelta({ from: 25, to: 20, pct: -20 })).toBe('20% decline');
+  });
+
+  it('labels a zero delta as no change', () => {
+    expect(formatDelta({ from: 20, to: 20, pct: 0 })).toBe('No change');
   });
 
   it('finds the tier a value falls into', () => {

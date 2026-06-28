@@ -18,11 +18,18 @@ export function directionCue(direction: 'higher' | 'lower'): {
     : { betterText: 'Higher is better', arrow: '↑', word: 'upward' };
 }
 
+/**
+ * Direction-aware delta label. `delta.pct` is already improvement-signed
+ * (positive = better, regardless of whether higher or lower is better for the
+ * metric), so we use neutral "improvement"/"decline" wording instead of a ▲/▼
+ * arrow. An up arrow next to a lower-is-better value that *dropped* (an
+ * improvement) reads as if the value rose — the wording avoids that confusion.
+ */
 export function formatDelta(delta: { pct: number }): string {
   const rounded = Math.round(delta.pct);
-  if (rounded > 0) return `▲ +${rounded}%`;
-  if (rounded < 0) return `▼ ${Math.abs(rounded)}%`;
-  return '→ 0%';
+  if (rounded > 0) return `+${rounded}% improvement`;
+  if (rounded < 0) return `${Math.abs(rounded)}% decline`;
+  return 'No change';
 }
 
 /** Which tier does `value` fall in? Above the top band counts as the best tier. */
