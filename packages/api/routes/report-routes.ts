@@ -1230,71 +1230,10 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Snapshot not found" });
       }
 
-      // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
-      // from an org with COPPA enabled), public link access is never permitted.
-      // Only authenticated users who belong to the report's org (or are a site_admin,
-      // or are a parent of an athlete in that org) may access the data.
-      if (snapshot.publicAccessRestricted) {
-        // Write audit log regardless of whether user is authenticated
-        coppaService.writeCoppaAudit({
-          action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
-          ip: req.ip,
-          userAgent: req.get('User-Agent'),
-          details: { token: req.params.token, authenticated: !!req.session?.user },
-        }).catch((err) => {
-          console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
-        });
-
-        const sessionUser = req.session?.user;
-        if (!sessionUser) {
-          return res.status(403).json({
-            code: 'minor_data_restricted',
-            message: 'This report contains data for minor athletes and cannot be shared via public link.',
-          });
-        }
-
-        // Site admins may always access restricted snapshots.
-        if (!sessionUser.isSiteAdmin) {
-          // Resolve the report's owning organization so we can check membership.
-          const [reportRow] = await db
-            .select({ organizationId: reports.organizationId })
-            .from(reports)
-            .where(eq(reports.id, snapshot.reportId))
-            .limit(1);
-
-          if (!reportRow) {
-            return res.status(403).json({
-              code: 'minor_data_restricted',
-              message: 'This report contains data for minor athletes. Access is restricted.',
-            });
-          }
-
-          const orgId = reportRow.organizationId;
-          const userOrgs = await storage.getUserOrganizations(sessionUser.id);
-          const isMember = userOrgs.some((o) => o.organizationId === orgId);
-
-          if (!isMember) {
-            // Check if the authenticated user is a parent of an athlete in this org.
-            const [parentLink] = await db
-              .select({ id: parentAthleteLinks.id })
-              .from(parentAthleteLinks)
-              .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
-              .where(and(
-                eq(parentAthleteLinks.parentUserId, sessionUser.id),
-                eq(parentAthleteLinks.isActive, true),
-                eq(userOrganizations.organizationId, orgId),
-              ))
-              .limit(1);
-
-            if (!parentLink) {
-              return res.status(403).json({
-                code: 'minor_data_restricted',
-                message: 'This report contains data for minor athletes. Access is restricted to organization members.',
-              });
-            }
-          }
-        }
-      }
+      // COPPA: if the snapshot is flagged publicAccessRestricted (contains minor
+      // data from a COPPA-enabled org), enforce the shared access gate. Same
+      // helper guards the public PDF-export routes so they cannot diverge.
+      if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
       res.json(snapshot);
     } catch (error) {
@@ -1400,6 +1339,10 @@ export function registerReportRoutes(app: Express) {
         if (!snapshot) {
           return res.status(404).json({ message: "Snapshot not found" });
         }
+
+        // COPPA: PDF export must honor the same restriction as the snapshot
+        // route — a token alone cannot unlock minor data via the PDF path.
+        if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
         // Get report details
         const report = await db
@@ -1538,6 +1481,10 @@ export function registerReportRoutes(app: Express) {
         if (!snapshot) {
           return res.status(404).json({ message: "Snapshot not found" });
         }
+
+        // COPPA: PDF export must honor the same restriction as the snapshot
+        // route — a token alone cannot unlock minor data via the PDF path.
+        if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
         // Get report details
         const report = await db
@@ -3668,6 +3615,88 @@ function tierTint(colorName: string): [number, number, number] {
 }
 
 /**
+ * COPPA gate for public snapshot access, shared by the public snapshot-data
+ * route and the public PDF-export routes so they cannot diverge.
+ *
+ * If the snapshot is flagged `publicAccessRestricted` (contains minor data from
+ * a COPPA-enabled org), public-link access is only permitted for an
+ * authenticated site_admin, a member of the report's org, or a parent of an
+ * athlete in that org. Writes the access-blocked audit log and the 403 response
+ * itself; returns `false` when the caller must stop, `true` when allowed.
+ */
+async function enforcePublicSnapshotAccess(
+  req: express.Request,
+  res: express.Response,
+  snapshot: { reportId: string; publicAccessRestricted?: boolean | null },
+): Promise<boolean> {
+  if (!snapshot.publicAccessRestricted) return true;
+
+  // Audit the blocked attempt regardless of whether the user is authenticated.
+  coppaService.writeCoppaAudit({
+    action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    details: { token: req.params.token, authenticated: !!req.session?.user },
+  }).catch((err) => {
+    console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
+  });
+
+  const sessionUser = req.session?.user;
+  if (!sessionUser) {
+    res.status(403).json({
+      code: 'minor_data_restricted',
+      message: 'This report contains data for minor athletes and cannot be shared via public link.',
+    });
+    return false;
+  }
+
+  // Site admins may always access restricted snapshots.
+  if (!sessionUser.isSiteAdmin) {
+    const [reportRow] = await db
+      .select({ organizationId: reports.organizationId })
+      .from(reports)
+      .where(eq(reports.id, snapshot.reportId))
+      .limit(1);
+
+    if (!reportRow) {
+      res.status(403).json({
+        code: 'minor_data_restricted',
+        message: 'This report contains data for minor athletes. Access is restricted.',
+      });
+      return false;
+    }
+
+    const orgId = reportRow.organizationId;
+    const userOrgs = await storage.getUserOrganizations(sessionUser.id);
+    const isMember = userOrgs.some((o) => o.organizationId === orgId);
+
+    if (!isMember) {
+      // Allow an authenticated parent of an athlete in this org.
+      const [parentLink] = await db
+        .select({ id: parentAthleteLinks.id })
+        .from(parentAthleteLinks)
+        .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
+        .where(and(
+          eq(parentAthleteLinks.parentUserId, sessionUser.id),
+          eq(parentAthleteLinks.isActive, true),
+          eq(userOrganizations.organizationId, orgId),
+        ))
+        .limit(1);
+
+      if (!parentLink) {
+        res.status(403).json({
+          code: 'minor_data_restricted',
+          message: 'This report contains data for minor athletes. Access is restricted to organization members.',
+        });
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+/**
  * Normalize the client-supplied chartImages payload into a safe array.
  * Destructuring defaults only guard `undefined`; a client sending `null`, a
  * string, or malformed items would otherwise reach jsPDF and throw a 500.
@@ -3681,7 +3710,9 @@ function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl
       !!img &&
       typeof img.metricCode === 'string' &&
       typeof img.dataUrl === 'string' &&
-      img.dataUrl.startsWith('data:image/'),
+      // addTrendChartsToPdf calls doc.addImage(dataUrl, 'PNG', …); require a PNG
+      // data URL so a JPEG/WebP can't be silently mis-decoded as PNG.
+      img.dataUrl.startsWith('data:image/png;base64,'),
   );
 }
 
