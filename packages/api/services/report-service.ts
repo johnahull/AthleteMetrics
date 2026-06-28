@@ -462,10 +462,13 @@ export class ReportService extends BaseService {
     let trends: ReportTrends | undefined;
     if (config.showTrends) {
       const directions: Record<string, 'higher' | 'lower'> = {};
-      for (const metric of config.metrics) {
-        const info = await this.getMetricInfo(metric);
-        directions[metric] = info.lowerIsBetter ? 'lower' : 'higher';
-      }
+      // getMetricInfo memoizes, but a selected metric with no measurements in
+      // range was not pre-warmed by the bestPerformances loop above — resolve
+      // any remaining cold lookups concurrently instead of serially.
+      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+      config.metrics.forEach((metric, i) => {
+        directions[metric] = infos[i].lowerIsBetter ? 'lower' : 'higher';
+      });
       trends = assembleTrends(
         athleteMeasurements.map(m => ({
           metric: m.metric,

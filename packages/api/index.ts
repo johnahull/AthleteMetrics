@@ -64,10 +64,16 @@ app.set('trust proxy', 1);
 // Skip the default 100kb global parser for them so it does not 413 before the
 // route-level parser runs. All other routes keep the small default limit.
 const defaultJsonParser = express.json();
+// Only the two known PDF-export endpoints get the large route-level parser.
+// Match them explicitly (prefix + `/pdf` suffix) rather than any path ending in
+// `/pdf`, so a future POST route ending in `/pdf` can't silently inherit the
+// 15 MB limit by skipping the 100kb default.
+const isLargePdfUpload = (req: Request) =>
+  req.method === 'POST' &&
+  req.path.endsWith('/pdf') &&
+  (req.path.startsWith('/api/reports/') || req.path.startsWith('/api/public/reports/'));
 app.use((req, res, next) =>
-  req.method === 'POST' && req.path.endsWith('/pdf')
-    ? next()
-    : defaultJsonParser(req, res, next),
+  isLargePdfUpload(req) ? next() : defaultJsonParser(req, res, next),
 );
 app.use(express.urlencoded({ extended: false }));
 

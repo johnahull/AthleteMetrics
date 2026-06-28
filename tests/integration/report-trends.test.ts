@@ -64,10 +64,12 @@ beforeAll(async () => {
   // chart-image payloads. This keeps the test faithful to production.
   app = express();
   const defaultJsonParser = express.json();
+  const isLargePdfUpload = (req: express.Request) =>
+    req.method === 'POST' &&
+    req.path.endsWith('/pdf') &&
+    (req.path.startsWith('/api/reports/') || req.path.startsWith('/api/public/reports/'));
   app.use((req, res, next) =>
-    req.method === 'POST' && req.path.endsWith('/pdf')
-      ? next()
-      : defaultJsonParser(req, res, next),
+    isLargePdfUpload(req) ? next() : defaultJsonParser(req, res, next),
   );
   app.use(express.urlencoded({ extended: false }));
   await registerRoutes(app);
@@ -176,6 +178,13 @@ afterEach(async () => {
         eq(userOrganizations.organizationId, testOrg.id)
       )
     );
+  }
+  // Delete the coach here (each test creates a fresh timestamped coach in
+  // beforeEach); otherwise intermediate coaches orphan and only the last one
+  // gets cleaned up in afterAll.
+  if (testCoach) {
+    await db.delete(users).where(eq(users.id, testCoach.id));
+    testCoach = null;
   }
   if (testOrg) {
     await db.delete(organizations).where(eq(organizations.id, testOrg.id));
@@ -315,5 +324,31 @@ describe('POST /api/reports/:id/pdf — chart image embedding', () => {
       });
 
     expect(response.status).toBe(401);
+  });
+
+  it('degrades to a chart-less PDF (not a 500) when chartImages is malformed', async () => {
+    const report = await createIndividualReport(true);
+
+    // A client sending a non-array chartImages (null/string/object) must not
+    // crash the PDF generator. The route normalizes it to [] and still returns
+    // a valid PDF — just without trend chart pages.
+    const response = await request(app)
+      .post(`/api/reports/${report.id}/pdf`)
+      .set('Cookie', coachAuthCookie)
+      .send({
+        athleteId: testAthlete.id,
+        format: 'visual',
+        chartImages: null,
+      })
+      .buffer(true)
+      .parse((res, callback) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+        res.on('end', () => callback(null, Buffer.concat(chunks)));
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.headers['content-type']).toContain('application/pdf');
+    expect(response.body.length).toBeGreaterThan(1000);
   });
 });

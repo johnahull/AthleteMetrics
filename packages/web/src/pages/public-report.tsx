@@ -69,7 +69,7 @@ export default function PublicReport() {
   const metricExplanations = (snapshotData.metricExplanations ?? {}) as Record<string, MetricExplanationData>;
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
-  const trends = (snapshotData.trends ?? undefined) as ReportTrends | undefined;
+  const trends = snapshotData.trends as ReportTrends | undefined;
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;

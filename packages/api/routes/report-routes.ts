@@ -1442,12 +1442,16 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/reports/:id/pdf",
-    express.json({ limit: '15mb' }),
+    // Rate-limit and authenticate BEFORE parsing the (up to 15 MB) body, so an
+    // unauthenticated or over-quota caller is rejected on headers alone and the
+    // large chart-image payload is never buffered into memory.
     reportGenerationLimiter,
     requireAuth,
+    express.json({ limit: '15mb' }),
     async (req, res) => {
       const reportId = req.params.id;
-      const { athleteId, format = 'simplified', chartImages = [] } = req.body || {};
+      const { athleteId, format = 'simplified' } = req.body || {};
+      const chartImages = normalizeChartImages(req.body?.chartImages);
       let report: Report | undefined;
 
       try {
@@ -1519,12 +1523,15 @@ export function registerReportRoutes(app: Express) {
    */
   app.post(
     "/api/public/reports/:token/pdf",
-    express.json({ limit: '15mb' }),
+    // Rate-limit before parsing the (up to 15 MB) body so large payloads cannot
+    // bypass the per-IP counter or exhaust memory ahead of the limiter.
     publicSnapshotLimiter,
+    express.json({ limit: '15mb' }),
     async (req, res) => {
       try {
         const token = req.params.token;
-        const { format = 'simplified', chartImages = [] } = req.body || {};
+        const { format = 'simplified' } = req.body || {};
+        const chartImages = normalizeChartImages(req.body?.chartImages);
 
         const snapshot = await reportService.getPublicSnapshot(token);
 
@@ -3660,6 +3667,24 @@ function tierTint(colorName: string): [number, number, number] {
   ] as [number, number, number];
 }
 
+/**
+ * Normalize the client-supplied chartImages payload into a safe array.
+ * Destructuring defaults only guard `undefined`; a client sending `null`, a
+ * string, or malformed items would otherwise reach jsPDF and throw a 500.
+ * Coerce to [] and keep only well-formed PNG data-URL entries so a bad payload
+ * degrades to "no charts" instead of crashing the export.
+ */
+function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (img): img is { metricCode: string; dataUrl: string } =>
+      !!img &&
+      typeof img.metricCode === 'string' &&
+      typeof img.dataUrl === 'string' &&
+      img.dataUrl.startsWith('data:image/'),
+  );
+}
+
 function addTrendChartsToPdf(
   doc: jsPDF,
   chartImages: Array<{ metricCode: string; dataUrl: string }>,
@@ -4539,13 +4564,15 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
     });
   }
 
-  // Add footer to content pages — skip page 1 when a cover page was inserted
-  const footerStartPage = reportData.reportType === 'individual' ? 2 : 1;
-  addFooterToAllPages(doc, org?.name, footerStartPage);
-
+  // Append trend-chart pages BEFORE adding footers, so the pages those charts
+  // create are included in the footer pass below.
   if (reportData.reportType === 'individual' && chartImages.length > 0) {
     addTrendChartsToPdf(doc, chartImages, reportData.metricLabels || {});
   }
+
+  // Add footer to content pages — skip page 1 when a cover page was inserted
+  const footerStartPage = reportData.reportType === 'individual' ? 2 : 1;
+  addFooterToAllPages(doc, org?.name, footerStartPage);
 
   return doc;
 }

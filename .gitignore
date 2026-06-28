@@ -73,6 +73,12 @@ screenshots-testing/
 .local-e2e-config.json
 tests/e2e/.local-e2e-config.json
 .playwright-mcp/
+# Playwright `show-trace` extraction output (trace-viewer app + recording blobs)
+/trace/
+/data/
+
+# Vite PWA dev-server output (auto-generated service worker + workbox)
+packages/web/dev-dist/
 
 # Editor swap files
 *.swp

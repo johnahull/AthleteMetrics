@@ -215,10 +215,17 @@ export async function captureTrendCharts(): Promise<Array<{ metricCode: string; 
     const metricCode = node.getAttribute('data-chart-metric');
     if (!metricCode) continue;
 
-    out.push({
-      metricCode,
-      dataUrl: await getChartPngDataUrl(node),
-    });
+    try {
+      out.push({
+        metricCode,
+        dataUrl: await getChartPngDataUrl(node),
+      });
+    } catch (error) {
+      // Isolate per-chart failures: a single html2canvas error must not reject
+      // the whole capture and silently abort the PDF download. Skip the failed
+      // chart and keep the rest.
+      devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
+    }
   }
 
   return out;
