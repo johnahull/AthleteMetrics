@@ -3667,18 +3667,38 @@ function addTrendChartsToPdf(
 ): void {
   if (!chartImages.length) return;
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
   const imgWidth = pageWidth - margin * 2;
+  const bottomLimit = pageHeight - margin;
+  const maxPerPage = 2; // flow ~2 charts per page for readability
+
+  // Start the trends section on a fresh page, then flow charts down it.
+  doc.addPage();
+  let yPos = 20;
+  let onPage = 0;
 
   for (const img of chartImages) {
-    doc.addPage();
-    doc.setFontSize(16);
-    doc.setTextColor(40, 40, 40);
-    doc.text(metricLabels[img.metricCode] || img.metricCode, margin, 20);
-
     const props = doc.getImageProperties(img.dataUrl);
     const imgHeight = (props.height / props.width) * imgWidth;
-    doc.addImage(img.dataUrl, 'PNG', margin, 28, imgWidth, imgHeight);
+    const blockHeight = 6 + imgHeight + 10; // label + image + gap
+
+    // Break to a new page when the page is full (max per page) or the next
+    // chart would overflow the bottom margin. Never break before the first
+    // chart on a page, so an oversized chart still renders.
+    if (onPage > 0 && (onPage >= maxPerPage || yPos + blockHeight > bottomLimit)) {
+      doc.addPage();
+      yPos = 20;
+      onPage = 0;
+    }
+
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text(metricLabels[img.metricCode] || img.metricCode, margin, yPos);
+    yPos += 6;
+    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+    yPos += imgHeight + 10;
+    onPage += 1;
   }
 }
 
