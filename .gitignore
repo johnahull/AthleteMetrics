@@ -73,6 +73,15 @@ screenshots-testing/
 .local-e2e-config.json
 tests/e2e/.local-e2e-config.json
 .playwright-mcp/
+# Playwright `show-trace` extraction output (trace-viewer app + recording blobs)
+/trace/
+/data/
+# Stray single-file Playwright HTML report at repo root (not the Vite entry,
+# which lives at packages/web/index.html)
+/index.html
+
+# Vite PWA dev-server output (auto-generated service worker + workbox)
+packages/web/dev-dist/
 
 # Editor swap files
 *.swp
@@ -88,3 +97,6 @@ E2E_*.md
 *_COMPLETION.md
 *_IMPLEMENTATION*.md
 *_REFACTORING*.md
+
+# Superpowers brainstorm mockups
+.superpowers/

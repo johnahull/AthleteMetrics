@@ -29,6 +29,8 @@ import { BaseService } from './base-service';
 import { deriveTierGroupName } from '../utils/report-utils';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
+import { assembleTrends } from './report-trends';
+import type { ReportTrends } from '@shared/report-trends-types';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -64,6 +66,7 @@ interface ReportConfig {
   };
   compositeIndex?: CompositeIndexConfig;
   filters?: ReportFilters;
+  showTrends?: boolean; // when true, individual reports include time-series trends
 }
 
 interface AthletePerformance {
@@ -168,6 +171,7 @@ interface IndividualReportData {
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
+  trends?: ReportTrends; // present only when reportConfig.showTrends is true
 }
 
 export class ReportService extends BaseService {
@@ -454,6 +458,29 @@ export class ReportService extends BaseService {
       config
     );
 
+    // Build time-series trends when the report opts in (additive; off by default)
+    let trends: ReportTrends | undefined;
+    if (config.showTrends) {
+      const directions: Record<string, 'higher' | 'lower'> = {};
+      // getMetricInfo memoizes, but a selected metric with no measurements in
+      // range was not pre-warmed by the bestPerformances loop above — resolve
+      // any remaining cold lookups concurrently instead of serially.
+      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+      config.metrics.forEach((metric, i) => {
+        directions[metric] = infos[i].lowerIsBetter ? 'lower' : 'higher';
+      });
+      trends = assembleTrends(
+        athleteMeasurements.map(m => ({
+          metric: m.metric,
+          date: typeof m.date === 'string' ? m.date : new Date(m.date).toISOString().split('T')[0],
+          value: m.value,
+        })),
+        config.metrics,
+        directions,
+        benchmarkComparisons,
+      );
+    }
+
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,
       userName: athlete.fullName,
@@ -514,6 +541,7 @@ export class ReportService extends BaseService {
       metricUnits,
       metricExplanations,
       eventContext,
+      trends,
     };
   }
 

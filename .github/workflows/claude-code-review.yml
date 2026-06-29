@@ -39,7 +39,11 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          allowed_bots: "claude"
+          # The @claude fix action authors commits as claude[bot] but PUSHES them
+          # under the GITHUB_TOKEN identity (github-actions), so the synchronize
+          # event it triggers is attributed to "github-actions", not "claude".
+          # Include it so a bot-applied fix doesn't leave claude-review red.
+          allowed_bots: "claude,github-actions"
 
           prompt: |
             Review PR #${{ github.event.pull_request.number }}.

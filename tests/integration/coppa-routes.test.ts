@@ -1037,6 +1037,36 @@ describe('A3: GET /api/public/reports/:token — COPPA public access enforcement
     const recentEntry = auditEntries.find(e => e.createdAt >= before);
     expect(recentEntry).toBeDefined();
   });
+
+  // The PDF-export routes must enforce the SAME gate as the snapshot route —
+  // a valid token alone cannot unlock minor data via the PDF path.
+  it('restricted snapshot via POST /pdf without auth → 403 minor_data_restricted', async () => {
+    const res = await request(app)
+      .post(`/api/public/reports/${restrictedToken}/pdf`)
+      .send({ format: 'visual', chartImages: [] });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('minor_data_restricted');
+  });
+
+  it('restricted snapshot via GET /pdf without auth → 403 minor_data_restricted', async () => {
+    const res = await request(app)
+      .get(`/api/public/reports/${restrictedToken}/pdf`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('minor_data_restricted');
+  });
+
+  it('unrestricted snapshot via POST /pdf without auth → not blocked (no 403)', async () => {
+    const res = await request(app)
+      .post(`/api/public/reports/${unrestrictedToken}/pdf`)
+      .send({ format: 'visual', chartImages: [] });
+
+    // The COPPA gate must not block an unrestricted snapshot. (PDF generation
+    // from the minimal test fixture may itself fail, so we only assert the
+    // request is not gated with the restriction 403.)
+    expect(res.status).not.toBe(403);
+  });
 });
 
 // ============================================================================

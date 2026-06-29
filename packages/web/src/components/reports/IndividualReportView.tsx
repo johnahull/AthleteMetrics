@@ -25,6 +25,7 @@ import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
+import { TrendSection } from "@/components/reports/TrendSection";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
@@ -108,7 +109,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits, metricExplanations } = reportData;
+  const { athlete, metricLabels, metricUnits, metricExplanations, trends } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
 
   return (
@@ -293,6 +294,10 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {trends && Object.keys(trends).length > 0 && (
+        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} />
       )}
 
       {metricExplanations && (

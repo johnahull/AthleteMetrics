@@ -210,10 +210,12 @@ describe('TeamReportView - PDF Export', () => {
     // Wait for fetch to be called
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reports/report-123/pdf?format=visual',
+        '/api/reports/report-123/pdf',
         expect.objectContaining({
-          method: 'GET',
+          method: 'POST',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
         })
       );
     });
@@ -464,10 +466,12 @@ describe('TeamReportView - PDF Export', () => {
     // Verify fetch was called with format=visual parameter
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reports/report-123/pdf?format=visual',
+        '/api/reports/report-123/pdf',
         expect.objectContaining({
-          method: 'GET',
+          method: 'POST',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
         })
       );
     });
@@ -510,10 +514,12 @@ describe('TeamReportView - PDF Export', () => {
     // Verify fetch was called with format=simplified parameter
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith(
-        '/api/reports/report-123/pdf?format=simplified',
+        '/api/reports/report-123/pdf',
         expect.objectContaining({
-          method: 'GET',
+          method: 'POST',
           credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ format: 'simplified', athleteId: undefined, chartImages: [] }),
         })
       );
     });

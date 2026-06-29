@@ -1,4 +1,5 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
+import type { ReportTrends } from '@shared/report-trends-types';
 
 export interface Benchmark {
   name: string;
@@ -111,6 +112,7 @@ export interface IndividualReportConfig {
       label: string;
     }>;
   };
+  showTrends?: boolean;
 }
 
 export interface OrgBranding {
@@ -152,6 +154,7 @@ export interface IndividualReportData {
   metricUnits?: Record<string, string>;
   metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
+  trends?: ReportTrends;
 }
 
 export type PdfFormat = 'visual' | 'simplified';

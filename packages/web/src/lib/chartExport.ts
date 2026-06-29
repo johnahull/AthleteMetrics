@@ -186,6 +186,51 @@ export async function exportChartAsPNG(
 }
 
 /**
+ * Render a DOM element (e.g. a chart card) to a PNG data URL via html2canvas.
+ * Returns the data URL string (does not trigger a download).
+ */
+export async function getChartPngDataUrl(containerElement: HTMLElement): Promise<string> {
+  // Dynamically import html2canvas
+  const html2canvas = (await import('html2canvas')).default;
+
+  const canvas = await html2canvas(containerElement, {
+    backgroundColor: '#ffffff',
+    scale: 2,
+    logging: false,
+    useCORS: true,
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Capture every BenchmarkTrendChart currently in the DOM.
+ * Each chart wrapper carries data-chart-metric={metricCode}.
+ */
+export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string }>> {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric]'));
+
+  // Capture charts concurrently for speed, but isolate per-chart failures: a
+  // single html2canvas error must not reject the whole capture and silently
+  // abort the PDF download. Each failed chart resolves to null and is dropped;
+  // array order (and thus the rendered order in the PDF) is preserved.
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      const metricCode = node.getAttribute('data-chart-metric');
+      if (!metricCode) return null;
+      try {
+        return { metricCode, dataUrl: await getChartPngDataUrl(node) };
+      } catch (error) {
+        devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
+        return null;
+      }
+    }),
+  );
+
+  return results.filter((r): r is { metricCode: string; dataUrl: string } => r !== null);
+}
+
+/**
  * Copy chart to clipboard as image
  * Uses html2canvas to capture and Clipboard API to copy
  */
