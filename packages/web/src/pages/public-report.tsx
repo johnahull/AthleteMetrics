@@ -23,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { MetricExplanation } from "@/components/reports/MetricExplanation";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
+import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
+import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
 import type { ReportTrends } from "@shared/report-trends-types";
 
@@ -413,6 +415,38 @@ export default function PublicReport() {
                       })}
                     </TableBody>
                   </Table>
+                </CardContent>
+              </Card>
+            )}
+
+            {athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
+              <PercentileRadarSection
+                athleteId={athlete.userId}
+                athleteName={athlete.userName}
+                percentiles={athlete.percentiles}
+                measurements={athlete.measurements}
+              />
+            )}
+
+            {athlete?.benchmarkComparisons &&
+              Object.values(athlete.benchmarkComparisons).some((cs: any) =>
+                cs.some((c: any) => c.allTiers?.length)
+              ) && (
+              <Card>
+                <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  {Object.entries(athlete.benchmarkComparisons).map(([code, comps]: [string, any]) => {
+                    const tiered = comps.find((c: any) => c.allTiers && c.allTiers.length > 0);
+                    if (!tiered) return null;
+                    return (
+                      <TierProgressChart
+                        key={code}
+                        label={metricLabels[code] || code}
+                        comparison={tiered}
+                        unit={metricUnits[code]}
+                      />
+                    );
+                  })}
                 </CardContent>
               </Card>
             )}
