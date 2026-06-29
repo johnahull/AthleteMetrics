@@ -18,7 +18,7 @@ export function PercentileRadarSection({ athleteId, athleteName, percentiles, me
     <Card data-report-chart="radar" data-report-chart-title="All-around profile">
       <CardHeader><CardTitle>All-Around Profile (percentiles)</CardTitle></CardHeader>
       <CardContent>
-        <div className="h-[340px]">
+        <div className="h-[340px] overflow-hidden">
           <RadarChart
             data={data}
             config={{
@@ -29,6 +29,7 @@ export function PercentileRadarSection({ athleteId, athleteName, percentiles, me
               responsive: true,
             }}
             highlightAthlete={athleteId}
+            compact
           />
         </div>
       </CardContent>

@@ -62,6 +62,7 @@ interface RadarChartProps {
   selectedAthleteIds?: string[];
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
+  compact?: boolean;
 }
 
 export function RadarChart({
@@ -71,7 +72,8 @@ export function RadarChart({
   highlightAthlete,
   selectedAthleteIds,
   onAthleteSelectionChange,
-  maxAthletes = 5
+  maxAthletes = 5,
+  compact = false
 }: RadarChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -358,6 +360,7 @@ export function RadarChart({
         max: 100,
         ticks: {
           stepSize: 20,
+          display: !compact,
           callback: (value) => `${value}%`
         },
         pointLabels: {
@@ -468,35 +471,37 @@ export function RadarChart({
       <Radar data={radarData} options={options} />
 
       {/* Performance summary */}
-      <div className="mt-4 text-sm">
-        <div className="text-center text-muted-foreground mb-2">
-          Values shown as percentile ranks (0-100%) relative to group
-        </div>
-
-        {highlightAthlete && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-center">
-            {radarData.metrics.map((metric, index) => {
-              const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
-              const value = athlete?.metrics[metric];
-              const percentile = athlete?.percentileRanks?.[metric];
-              const unit = getMetricConfig(metric)?.unit || '';
-              const label = getMetricConfig(metric)?.label || metric;
-
-              return (
-                <div key={metric} className="space-y-1">
-                  <div className="font-medium text-xs">{label}</div>
-                  <div className="text-lg font-bold">
-                    {value?.toFixed(2)}{unit}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {percentile?.toFixed(0)}th percentile
-                  </div>
-                </div>
-              );
-            })}
+      {!compact && (
+        <div className="mt-4 text-sm">
+          <div className="text-center text-muted-foreground mb-2">
+            Values shown as percentile ranks (0-100%) relative to group
           </div>
-        )}
-      </div>
+
+          {highlightAthlete && (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 text-center">
+              {radarData.metrics.map((metric, index) => {
+                const athlete = radarData.data.find(a => a.athleteId === highlightAthlete);
+                const value = athlete?.metrics[metric];
+                const percentile = athlete?.percentileRanks?.[metric];
+                const unit = getMetricConfig(metric)?.unit || '';
+                const label = getMetricConfig(metric)?.label || metric;
+
+                return (
+                  <div key={metric} className="space-y-1">
+                    <div className="font-medium text-xs">{label}</div>
+                    <div className="text-lg font-bold">
+                      {value?.toFixed(2)}{unit}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {percentile?.toFixed(0)}th percentile
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
