@@ -268,4 +268,73 @@ describe('GET /api/analytics/benchmark-tiers', () => {
       .query({ athleteId: testAthlete.id, metric: 'VERTICAL_JUMP' });
     expect(response.status).toBe(401);
   });
+
+  it('returns 403 when the requester shares no org with the athlete (cross-org)', async () => {
+    // Second org + an athlete that belongs ONLY to that org. The coach belongs
+    // only to testOrg, so there is no shared organization → access denied.
+    const [otherOrg] = await db.insert(organizations).values({
+      name: `Other Tiers Org ${Date.now()}`,
+      description: 'Second org for cross-org isolation test',
+      isActive: true,
+    }).returning();
+
+    const otherAthletePassword = await hashPassword('OtherAthlete123!');
+    const [otherAthlete] = await db.insert(users).values({
+      username: `othertiersathlete_${Date.now()}`,
+      emails: [`othertiersathlete_${Date.now()}@test.com`],
+      password: otherAthletePassword,
+      firstName: 'Other',
+      lastName: 'Athlete',
+      fullName: 'Other Athlete',
+    }).returning();
+
+    await db.insert(userOrganizations).values({
+      userId: otherAthlete.id,
+      organizationId: otherOrg.id,
+      role: 'athlete',
+    });
+
+    try {
+      const response = await request(app)
+        .get('/api/analytics/benchmark-tiers')
+        .query({ athleteId: otherAthlete.id, metric: 'VERTICAL_JUMP' })
+        .set('Cookie', coachAuthCookie);
+
+      expect(response.status).toBe(403);
+    } finally {
+      await db.delete(userOrganizations).where(eq(userOrganizations.userId, otherAthlete.id));
+      await db.delete(users).where(eq(users.id, otherAthlete.id));
+      await db.delete(organizations).where(eq(organizations.id, otherOrg.id));
+    }
+  });
+
+  it('excludes unverified measurements from the athlete best value (verified-only)', async () => {
+    // beforeEach seeded two VERIFIED measurements (24.0, 27.5) → best verified 27.5 ("Good").
+    // Add an UNVERIFIED measurement of 35.0 which, if counted, would be the better value
+    // and place the athlete in "Elite". The endpoint must ignore it.
+    await db.insert(measurements).values({
+      userId: testAthlete.id,
+      submittedBy: testCoach.id,
+      date: '2024-05-15',
+      age: 17,
+      metric: 'VERTICAL_JUMP',
+      value: '35.000',
+      units: 'in',
+      organizationId: testOrg.id,
+      isVerified: false,
+    });
+
+    const response = await request(app)
+      .get('/api/analytics/benchmark-tiers')
+      .query({ athleteId: testAthlete.id, metric: 'VERTICAL_JUMP' })
+      .set('Cookie', coachAuthCookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body.comparison).not.toBeNull();
+
+    const c = response.body.comparison;
+    // Reflects only the VERIFIED best (27.5), not the better unverified 35.0.
+    expect(c.athleteValue).toBe(27.5);
+    expect(c.tierName).toBe('Good');
+  });
 });

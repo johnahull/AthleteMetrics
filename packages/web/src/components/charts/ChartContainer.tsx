@@ -547,12 +547,10 @@ export function ChartContainer({
                     />
                   </ErrorBoundary>
                 ) : chartType === 'tier_progress' ? (
-                  // Placeholder until real BenchmarkComparison data is wired via
-                  // BaseAnalyticsView in a later task. TierProgressChart requires a
-                  // `comparison: BenchmarkComparison` prop the container does not yet provide.
-                  <div className="flex items-center justify-center h-64 text-muted-foreground">
-                    Tier progress
-                  </div>
+                  // tier_progress is rendered by BaseAnalyticsView, never by ChartContainer.
+                  // Render nothing here (no-op) so it does not fall through to the
+                  // "Unsupported chart type" fallback below.
+                  null
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}

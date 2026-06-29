@@ -933,6 +933,9 @@ export function registerAnalyticsRoutes(app: Express) {
       const lowerIsBetter = metricRow ? metricRow.metricType === "lower_is_better" : true;
 
       // Compute the athlete's best verified value for the metric in this org.
+      // NOTE: This endpoint intentionally filters isVerified = true (consistent with
+      // other analytics queries). The report path does NOT filter by verified, so the
+      // report and this analytics tier-progress may show different tiers for the same athlete.
       const measurementRows = await db
         .select({ value: measurements.value })
         .from(measurements)
