@@ -3714,24 +3714,26 @@ const MAX_CHARTS_PER_PDF_PAGE = 2;
  * data-URL entries so a bad/oversized payload degrades gracefully instead of
  * crashing the export or pinning the event loop.
  */
-function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string }> {
+function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string; title?: string }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .slice(0, MAX_CHART_IMAGES)
     .filter(
-      (img): img is { metricCode: string; dataUrl: string } =>
+      (img): img is { metricCode: string; dataUrl: string; title?: string } =>
         !!img &&
         typeof img.metricCode === 'string' &&
         typeof img.dataUrl === 'string' &&
         // addTrendChartsToPdf calls doc.addImage(dataUrl, 'PNG', …); require a PNG
         // data URL so a JPEG/WebP can't be silently mis-decoded as PNG.
-        img.dataUrl.startsWith('data:image/png;base64,'),
+        img.dataUrl.startsWith('data:image/png;base64,') &&
+        // Validate title is a string if present
+        (img.title === undefined || typeof img.title === 'string'),
     );
 }
 
 function addTrendChartsToPdf(
   doc: jsPDF,
-  chartImages: Array<{ metricCode: string; dataUrl: string }>,
+  chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }>,
   metricLabels: Record<string, string> = {},
 ): void {
   if (!chartImages.length) return;
@@ -3768,7 +3770,7 @@ function addTrendChartsToPdf(
 
       doc.setFontSize(14);
       doc.setTextColor(40, 40, 40);
-      doc.text(metricLabels[img.metricCode] || img.metricCode, margin, yPos);
+      doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
       yPos += 6;
       doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
       yPos += imgHeight + 10;
@@ -3779,7 +3781,7 @@ function addTrendChartsToPdf(
   }
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string }> = []): Promise<jsPDF> {
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 

@@ -204,11 +204,12 @@ export async function getChartPngDataUrl(containerElement: HTMLElement): Promise
 }
 
 /**
- * Capture every BenchmarkTrendChart currently in the DOM.
- * Each chart wrapper carries data-chart-metric={metricCode}.
+ * Capture every chart currently in the DOM (both trend charts and report charts).
+ * Trend charts carry data-chart-metric={metricCode}.
+ * Report charts carry data-report-chart={metricCode} with optional data-report-chart-title={title}.
  */
-export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string }>> {
-  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric]'));
+export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string; title?: string }>> {
+  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric], [data-report-chart]'));
 
   // Capture charts concurrently for speed, but isolate per-chart failures: a
   // single html2canvas error must not reject the whole capture and silently
@@ -216,10 +217,11 @@ export async function captureTrendCharts(): Promise<Array<{ metricCode: string; 
   // array order (and thus the rendered order in the PDF) is preserved.
   const results = await Promise.all(
     nodes.map(async (node) => {
-      const metricCode = node.getAttribute('data-chart-metric');
+      const metricCode = node.getAttribute('data-chart-metric') || node.getAttribute('data-report-chart') || '';
       if (!metricCode) return null;
+      const title = node.getAttribute('data-report-chart-title') || undefined;
       try {
-        return { metricCode, dataUrl: await getChartPngDataUrl(node) };
+        return { metricCode, dataUrl: await getChartPngDataUrl(node), title } as { metricCode: string; dataUrl: string; title?: string };
       } catch (error) {
         devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
         return null;
@@ -227,7 +229,7 @@ export async function captureTrendCharts(): Promise<Array<{ metricCode: string; 
     }),
   );
 
-  return results.filter((r): r is { metricCode: string; dataUrl: string } => r !== null);
+  return results.filter((r): r is { metricCode: string; dataUrl: string; title?: string } => r !== null);
 }
 
 /**
