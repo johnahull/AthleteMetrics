@@ -2,6 +2,25 @@ import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { deriveTierGroupName } from '@shared/benchmark-utils';
 
 /**
+ * Shape of a raw benchmark/tier row as stored in the database and passed to
+ * {@link evaluateTierBenchmark}. Decimal columns (`minValue`, `maxValue`,
+ * `benchmarkValue`) arrive as strings, which is why this function `parseFloat`s
+ * them. Distinct from the shared `TierInfo` (whose min/max are already numbers).
+ */
+export interface TierBenchmarkRow {
+  tierName?: string | null;
+  name?: string | null;
+  tierColor?: string | null;
+  tierOrder?: number | null;
+  minValue?: string | number | null;
+  maxValue?: string | number | null;
+  benchmarkValue?: string | number | null;
+  comparisonOperator?: string | null;
+  tierGroupId?: string | null;
+  coachingNote?: string | null;
+}
+
+/**
  * Pure tier-evaluation logic extracted from ReportService.
  *
  * Given an athlete value, whether lower values are better, and the set of tiers
@@ -11,7 +30,7 @@ import { deriveTierGroupName } from '@shared/benchmark-utils';
 export function evaluateTierBenchmark(
   athleteValue: number,
   lowerIsBetter: boolean,
-  allTiers: any[]
+  allTiers: TierBenchmarkRow[]
 ): BenchmarkComparison | null {
   if (allTiers.length === 0) return null;
 
@@ -20,10 +39,10 @@ export function evaluateTierBenchmark(
   // boundaries (e.g., Tier 1: 1.00–1.20, Tier 2: 1.20–1.40), the inclusive
   // range check (>= min && <= max) matches both — first match wins, assigning
   // the better tier. This is intentional: boundary values favor the better tier.
-  let matchedTier: any = null;
+  let matchedTier: TierBenchmarkRow | null = null;
   for (const tier of allTiers) {
-    const minVal = tier.minValue != null ? parseFloat(tier.minValue) : null;
-    const maxVal = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
+    const minVal = tier.minValue != null ? parseFloat(String(tier.minValue)) : null;
+    const maxVal = tier.maxValue != null ? parseFloat(String(tier.maxValue)) : null;
 
     if (minVal !== null && maxVal !== null) {
       if (athleteValue >= minVal && athleteValue <= maxVal) {
@@ -32,7 +51,7 @@ export function evaluateTierBenchmark(
       }
     } else if (tier.benchmarkValue != null) {
       // Single-value tier with comparison operator
-      const bv = parseFloat(tier.benchmarkValue);
+      const bv = parseFloat(String(tier.benchmarkValue));
       if (tier.comparisonOperator === 'lte' && athleteValue <= bv) {
         matchedTier = tier;
         break;
@@ -53,8 +72,8 @@ export function evaluateTierBenchmark(
   if (!matchedTier) {
     const bestTier = allTiers[0]; // tierOrder 1 = best
     const worstTier = allTiers[allTiers.length - 1];
-    const bestMin = bestTier.minValue != null ? parseFloat(bestTier.minValue) : null;
-    const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
+    const bestMin = bestTier.minValue != null ? parseFloat(String(bestTier.minValue)) : null;
+    const bestMax = bestTier.maxValue != null ? parseFloat(String(bestTier.maxValue)) : null;
 
     // Check if athlete exceeds the best tier
     let beatsBest = false;
@@ -74,8 +93,8 @@ export function evaluateTierBenchmark(
       // Find nearest tier by minimum distance to any boundary
       let minDistance = Infinity;
       for (const tier of allTiers) {
-        const tMin = tier.minValue != null ? parseFloat(tier.minValue) : null;
-        const tMax = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
+        const tMin = tier.minValue != null ? parseFloat(String(tier.minValue)) : null;
+        const tMax = tier.maxValue != null ? parseFloat(String(tier.maxValue)) : null;
         if (tMin !== null) {
           const d = Math.abs(athleteValue - tMin);
           if (d < minDistance) { minDistance = d; matchedTier = tier; }
@@ -100,22 +119,22 @@ export function evaluateTierBenchmark(
     // Find the next better tier (largest tierOrder strictly less than matchedOrder).
     // Handles non-sequential tier orders (e.g., 1, 5, 10) — allTiers is sorted ascending.
     const nextTier = allTiers
-      .filter((t: any) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
+      .filter((t) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
       .at(-1);
     if (nextTier) {
       nextTierName = nextTier.tierName || null;
       // Calculate distance to the boundary of the next tier
       if (lowerIsBetter) {
         // For time-based metrics, athlete needs to decrease to reach next tier's maxValue
-        const boundary = nextTier.maxValue != null ? parseFloat(nextTier.maxValue) :
-                        nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
+        const boundary = nextTier.maxValue != null ? parseFloat(String(nextTier.maxValue)) :
+                        nextTier.benchmarkValue != null ? parseFloat(String(nextTier.benchmarkValue)) : null;
         if (boundary !== null) {
           distanceToNextTier = Math.abs(athleteValue - boundary);
         }
       } else {
         // For higher-is-better metrics, athlete needs to increase to reach next tier's minValue
-        const boundary = nextTier.minValue != null ? parseFloat(nextTier.minValue) :
-                        nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
+        const boundary = nextTier.minValue != null ? parseFloat(String(nextTier.minValue)) :
+                        nextTier.benchmarkValue != null ? parseFloat(String(nextTier.benchmarkValue)) : null;
         if (boundary !== null) {
           distanceToNextTier = Math.abs(boundary - athleteValue);
         }
@@ -124,15 +143,15 @@ export function evaluateTierBenchmark(
   }
 
   // Use the tier group's base name (derive from first tier's name minus tier-specific suffix)
-  const tierGroupName = matchedTier.tierGroupId
-    ? deriveTierGroupName(allTiers[0]?.name || matchedTier.name)
-    : matchedTier.name;
+  const tierGroupName: string = (matchedTier.tierGroupId
+    ? deriveTierGroupName(allTiers[0]?.name || matchedTier.name || '')
+    : matchedTier.name) ?? '';
 
   // Use midpoint of range as benchmarkValue for compatibility
-  const minVal = matchedTier.minValue != null ? parseFloat(matchedTier.minValue) : null;
-  const maxVal = matchedTier.maxValue != null ? parseFloat(matchedTier.maxValue) : null;
+  const minVal = matchedTier.minValue != null ? parseFloat(String(matchedTier.minValue)) : null;
+  const maxVal = matchedTier.maxValue != null ? parseFloat(String(matchedTier.maxValue)) : null;
   const displayValue = matchedTier.benchmarkValue != null
-    ? parseFloat(matchedTier.benchmarkValue)
+    ? parseFloat(String(matchedTier.benchmarkValue))
     : (minVal !== null && maxVal !== null ? (minVal + maxVal) / 2 : 0);
 
   return {
@@ -142,20 +161,20 @@ export function evaluateTierBenchmark(
     meetsOrExceeds: isBestTier || matchedOrder <= Math.ceil(allTiers.length / 2),
     percentageDiff: 0,
     comparisonOperator: 'range',
-    tierName: matchedTier.tierName || matchedTier.name,
+    tierName: matchedTier.tierName || matchedTier.name || undefined,
     tierColor: matchedTier.tierColor || 'gray',
-    tierOrder: matchedTier.tierOrder,
+    tierOrder: matchedTier.tierOrder ?? undefined,
     tierGroupName,
     distanceToNextTier,
     nextTierName,
     isBestTier,
     coachingNote: matchedTier.coachingNote ?? null,
-    allTiers: allTiers.map((t: any) => ({
-      tierName: t.tierName || t.name,
+    allTiers: allTiers.map((t) => ({
+      tierName: t.tierName || t.name || '',
       tierColor: t.tierColor || 'gray',
       tierOrder: t.tierOrder || 0,
-      minValue: t.minValue != null ? parseFloat(t.minValue) : null,
-      maxValue: t.maxValue != null ? parseFloat(t.maxValue) : null,
+      minValue: t.minValue != null ? parseFloat(String(t.minValue)) : null,
+      maxValue: t.maxValue != null ? parseFloat(String(t.maxValue)) : null,
     })),
   };
 }

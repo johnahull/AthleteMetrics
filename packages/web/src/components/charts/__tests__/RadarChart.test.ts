@@ -23,4 +23,11 @@ describe('radarPlotValue', () => {
   it('falls back to 50 when neither statistics nor percentile rank is available', () => {
     expect(radarPlotValue({ metrics: {}, percentileRanks: {} }, 'VJ', undefined)).toBe(50);
   });
+
+  it('returns neutral 50 (not NaN) when the metric is in statistics but missing for the athlete', () => {
+    // Stats present for VJ but athlete has no VJ value -> normalization would be NaN.
+    expect(
+      radarPlotValue({ metrics: {}, percentileRanks: {} }, 'VJ', { VJ: { min: 10, max: 30 } }),
+    ).toBe(50);
+  });
 });

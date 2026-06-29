@@ -46,8 +46,12 @@ export function radarPlotValue(
 ): number {
   const stats = statistics?.[metric];
   if (stats) {
+    // Guard against a metric that exists in `statistics` but not for this athlete:
+    // `athlete.metrics[metric]` would be undefined and produce NaN below.
+    const value = athlete.metrics[metric];
+    if (!Number.isFinite(value)) return 50;
     if (stats.max === stats.min) return 50;
-    const raw = ((athlete.metrics[metric] - stats.min) / (stats.max - stats.min)) * 100;
+    const raw = ((value - stats.min) / (stats.max - stats.min)) * 100;
     const pct = lowerIsBetter ? 100 - raw : raw;
     return Math.max(0, Math.min(100, pct));
   }

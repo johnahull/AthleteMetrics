@@ -74,6 +74,43 @@ describe('evaluateTierBenchmark', () => {
     expect(c.distanceToNextTier).toBeNull();
   });
 
+  it('assigns the BETTER tier when a value sits exactly on a shared boundary', () => {
+    // 28 is the shared boundary between Elite (min 28) and Varsity (max 28).
+    // Iteration runs best-first (tierOrder ascending); the inclusive range check
+    // (>= min && <= max) matches Elite first, so the better tier wins.
+    const c = evaluateTierBenchmark(28, false, tiers)!;
+    expect(c.tierName).toBe('Elite');
+    expect(c.tierOrder).toBe(1);
+    expect(c.isBestTier).toBe(true);
+  });
+
+  it('snaps a value in a GAP between non-contiguous ranges to the nearest boundary', () => {
+    // Non-contiguous, pre-sorted ascending by tierOrder. Gap is (25, 30).
+    const gapTiers = [
+      { tierName: 'Elite', tierColor: '#a', tierOrder: 1, minValue: '30', maxValue: '40', name: 'VJ Elite' },
+      { tierName: 'Varsity', tierColor: '#b', tierOrder: 2, minValue: '20', maxValue: '25', name: 'VJ Varsity' },
+    ];
+    // 26 sits in the gap: distance to Varsity.max (25) = 1, to Elite.min (30) = 4.
+    // Nearest boundary is Varsity's, so the athlete is assigned Varsity (tierOrder 2),
+    // and the distance to the next better tier is Elite.min (30) - 26 = 4.
+    const c = evaluateTierBenchmark(26, false, gapTiers)!;
+    expect(c.tierName).toBe('Varsity');
+    expect(c.tierOrder).toBe(2);
+    expect(c.isBestTier).toBe(false);
+    expect(c.nextTierName).toBe('Elite');
+    expect(c.distanceToNextTier).toBeCloseTo(4);
+  });
+
+  it('falls back to the matched tier name when tierGroupId is absent', () => {
+    // The `tiers` rows have no tierGroupId, so tierGroupName/benchmarkName fall
+    // back to the matched tier's own `name` ('VJ Varsity') rather than a derived
+    // group name.
+    const c = evaluateTierBenchmark(25.5, false, tiers)!;
+    expect(c.tierName).toBe('Varsity');
+    expect(c.tierGroupName).toBe('VJ Varsity');
+    expect(c.benchmarkName).toBe('VJ Varsity');
+  });
+
   it('surfaces the coachingNote of the matched tier', () => {
     const noteTiers = [
       { tierName: 'Elite', tierColor: '#a', tierOrder: 1, minValue: '28', maxValue: '40', name: 'VJ Elite', coachingNote: 'Keep it up' },
