@@ -20,6 +20,26 @@ describe('tier-progress-utils', () => {
   it('positions the athlete within the overall value range (0..1)', () => {
     expect(athletePositionPct(cmp)).toBeCloseTo(0.458, 2); // (25.5-20)/(32-20)
   });
+  it('lands the marker within the correct segment for unequal/open-ended bands', () => {
+    const n = 3;
+    const openEnded: BenchmarkComparison = {
+      ...cmp,
+      athleteValue: 25, // falls in the open-ended top tier
+      tierName: 'Elite',
+      allTiers: [
+        { tierName: 'Below', tierColor: '#fde68a', tierOrder: 3, minValue: null, maxValue: 10 },
+        { tierName: 'Mid', tierColor: '#86efac', tierOrder: 2, minValue: 10, maxValue: 20 },
+        { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: 20, maxValue: null },
+      ],
+    };
+    const pos = athletePositionPct(openEnded);
+    const index = 2; // Elite is worst->best index 2
+    // Marker must sit within the Elite segment's index range.
+    expect(pos).toBeGreaterThanOrEqual(index / n);
+    expect(pos).toBeLessThanOrEqual((index + 1) / n);
+    // Open-ended band uses the segment center -> (2 + 0.5) / 3.
+    expect(pos).toBeCloseTo((index + 0.5) / n, 5);
+  });
   it('captions distance to next tier', () => {
     expect(nextTierCaption(cmp, 'in')).toBe('2.5 in to Elite');
     expect(nextTierCaption({ ...cmp, isBestTier: true, nextTierName: null, distanceToNextTier: null }, 'in')).toBe('Top tier ✓');

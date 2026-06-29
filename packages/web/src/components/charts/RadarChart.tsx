@@ -25,6 +25,35 @@ import { getAthleteColor } from '@/utils/chart-constants';
 
 // Register Chart.js components
 
+/**
+ * Pure helper for the value an athlete should plot on a radar axis.
+ *
+ * - Report case (no `statistics` for the metric): plot the athlete's precomputed
+ *   `percentileRanks[metric]` directly (fallback 50 only when that is missing too).
+ * - Analytics case (`statistics[metric]` present): linear min/max normalization to 0-100,
+ *   inverted for lower-is-better metrics, clamped to [0,100].
+ *
+ * Note: the RadarChart component intentionally keeps its original group-rank
+ * `normalizeValue` math for the analytics path (see below) so analytics output stays
+ * byte-identical; this helper drives the no-statistics report path. The statistics
+ * branch is provided as a pure, testable normalization for direct callers.
+ */
+export function radarPlotValue(
+  athlete: { metrics: Record<string, number>; percentileRanks?: Record<string, number> },
+  metric: string,
+  statistics?: Record<string, { min: number; max: number } | undefined>,
+  lowerIsBetter = false,
+): number {
+  const stats = statistics?.[metric];
+  if (stats) {
+    if (stats.max === stats.min) return 50;
+    const raw = ((athlete.metrics[metric] - stats.min) / (stats.max - stats.min)) * 100;
+    const pct = lowerIsBetter ? 100 - raw : raw;
+    return Math.max(0, Math.min(100, pct));
+  }
+  return athlete.percentileRanks?.[metric] ?? 50;
+}
+
 interface RadarChartProps {
   data: MultiMetricData[];
   config: ChartConfiguration;
@@ -185,25 +214,31 @@ export function RadarChart({
       return (rank / allValues.length) * 100;
     };
 
+    // Statistics present => analytics mode (group of athletes with normalization context).
+    // Absent => report mode (single athlete with precomputed percentile ranks).
+    const hasStatistics = !!statistics && Object.keys(statistics).length > 0;
+
     const datasets = [];
 
-    // Group average dataset
-    const normalizedGroupAverages = groupAverages.map((avg, index) => 
-      normalizeValue(avg, metrics[index])
-    );
+    // Group average dataset — only meaningful when there is a group (analytics mode).
+    if (hasStatistics) {
+      const normalizedGroupAverages = groupAverages.map((avg, index) =>
+        normalizeValue(avg, metrics[index])
+      );
 
-    datasets.push({
-      label: 'Group Average',
-      data: normalizedGroupAverages,
-      backgroundColor: 'rgba(156, 163, 175, 0.2)',
-      borderColor: 'rgba(156, 163, 175, 1)',
-      borderWidth: 2,
-      pointBackgroundColor: 'rgba(156, 163, 175, 1)',
-      pointBorderColor: '#fff',
-      pointHoverBackgroundColor: '#fff',
-      pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
-      pointRadius: 4
-    });
+      datasets.push({
+        label: 'Group Average',
+        data: normalizedGroupAverages,
+        backgroundColor: 'rgba(156, 163, 175, 0.2)',
+        borderColor: 'rgba(156, 163, 175, 1)',
+        borderWidth: 2,
+        pointBackgroundColor: 'rgba(156, 163, 175, 1)',
+        pointBorderColor: '#fff',
+        pointHoverBackgroundColor: '#fff',
+        pointHoverBorderColor: 'rgba(156, 163, 175, 1)',
+        pointRadius: 4
+      });
+    }
 
     // Individual athlete datasets - filter by selection
     const athletesToShow = highlightAthlete ?
@@ -220,8 +255,13 @@ export function RadarChart({
 
     athletesToShow.forEach((athlete, index) => {
       const athleteValues = metrics.map(metric => {
-        const value = athlete.metrics[metric];
-        return value !== undefined ? normalizeValue(value, metric) : 0;
+        if (hasStatistics) {
+          // Analytics path — unchanged group-rank normalization.
+          const value = athlete.metrics[metric];
+          return value !== undefined ? normalizeValue(value, metric) : 0;
+        }
+        // Report path — plot the precomputed percentile rank directly.
+        return radarPlotValue(athlete, metric, undefined, getMetricConfig(metric)?.lowerIsBetter);
       });
 
       const color = colors[index % colors.length];

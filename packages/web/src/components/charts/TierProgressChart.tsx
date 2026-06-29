@@ -34,7 +34,7 @@ export function TierProgressChart({ label, comparison, unit }: TierProgressChart
         />
       </div>
       <div className="mt-1 text-xs text-muted-foreground">
-        You: {comparison.athleteValue}{unit ? ` ${unit}` : ''} · {comparison.tierName} · {caption}
+        You: {Math.round(comparison.athleteValue * 100) / 100}{unit ? ` ${unit}` : ''} · {comparison.tierName} · {caption}
       </div>
     </div>
   );
