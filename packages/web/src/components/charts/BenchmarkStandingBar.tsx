@@ -7,11 +7,12 @@ import {
 
 interface BenchmarkStandingBarProps {
   label: string;
+  metricCode: string;
   comparison: BenchmarkComparison;
   unit?: string;
 }
 
-export function BenchmarkStandingBar({ label, comparison, unit }: BenchmarkStandingBarProps) {
+export function BenchmarkStandingBar({ label, metricCode, comparison, unit }: BenchmarkStandingBarProps) {
   const pos = benchmarkStandingPct(comparison);
   const meets = comparison.meetsOrExceeds;
   const dir = benchmarkBetterDirection(comparison); // 'higher' | 'lower' | 'none'
@@ -23,7 +24,7 @@ export function BenchmarkStandingBar({ label, comparison, unit }: BenchmarkStand
   const goodSide = dir === 'higher' ? 'right' : dir === 'lower' ? 'left' : null;
 
   return (
-    <div data-report-chart={`bench:${label}`} data-report-chart-title={`${label} — vs benchmark`} className="w-full">
+    <div data-report-chart={`bench:${metricCode}:${comparison.benchmarkName}`} data-report-chart-title={`${label} — vs benchmark`} className="w-full">
       <div className="flex items-baseline justify-between mb-1">
         <span className="text-sm font-medium">{label}</span>
         {dir !== 'none' && (

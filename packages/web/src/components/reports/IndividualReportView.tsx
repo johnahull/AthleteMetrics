@@ -323,6 +323,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                   <TierProgressChart
                     key={code}
                     label={metricLabels?.[code] || code}
+                    metricCode={code}
                     comparison={tiered}
                     unit={metricUnits?.[code]}
                   />
@@ -332,6 +333,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <BenchmarkStandingBar
                   key={`${code}-${i}`}
                   label={metricLabels?.[code] || code}
+                  metricCode={code}
                   comparison={c}
                   unit={metricUnits?.[code]}
                 />

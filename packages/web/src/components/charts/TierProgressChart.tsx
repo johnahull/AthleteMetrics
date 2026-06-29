@@ -4,18 +4,19 @@ import { tierSegments, athletePositionPct, nextTierCaption } from './tier-progre
 
 interface TierProgressChartProps {
   label: string;
+  metricCode: string;
   comparison: BenchmarkComparison;
   unit?: string;
 }
 
-export function TierProgressChart({ label, comparison, unit }: TierProgressChartProps) {
+export function TierProgressChart({ label, metricCode, comparison, unit }: TierProgressChartProps) {
   const segs = tierSegments(comparison);
   if (segs.length === 0) return null;
   const pos = athletePositionPct(comparison);
   const caption = nextTierCaption(comparison, unit);
 
   return (
-    <div data-report-chart={`tier:${label}`} data-report-chart-title={`${label} — tier`} className="w-full">
+    <div data-report-chart={`tier:${metricCode}`} data-report-chart-title={`${label} — tier`} className="w-full">
       <div className="text-sm font-medium mb-1">{label}</div>
       <div className="relative h-6 w-full flex rounded overflow-hidden border">
         {segs.map((t) => (

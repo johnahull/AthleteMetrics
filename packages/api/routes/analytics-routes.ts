@@ -32,7 +32,7 @@ import {
   organizationBenchmarks,
 } from "@shared/schema";
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
-import { evaluateTierBenchmark } from "../services/benchmark-tiers";
+import { evaluateTierBenchmark, selectTierGroup } from "../services/benchmark-tiers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import {
   getPresetDateRange,
@@ -900,28 +900,7 @@ export function registerAnalyticsRoutes(app: Express) {
         ...siteRows.map(({ b }) => ({ ...b, _source: "site" })),
         ...customRows.map(({ b }) => ({ ...b, _source: "custom" })),
       ];
-      const groups = new Map<string, any[]>();
-      for (const row of allTierRows) {
-        const key = `${row._source}:${row.tierGroupId}`;
-        const group = groups.get(key) || [];
-        group.push(row);
-        groups.set(key, group);
-      }
-
-      let tiers: any[] = [];
-      if (groups.size > 0) {
-        const sortedKeys = [...groups.keys()].sort((a, b) => {
-          const minOrder = (g: any[]) => Math.min(...g.map((t) => t.displayOrder ?? 999));
-          const da = minOrder(groups.get(a)!);
-          const dbOrder = minOrder(groups.get(b)!);
-          if (da !== dbOrder) return da - dbOrder;
-          return a < b ? -1 : a > b ? 1 : 0;
-        });
-        tiers = groups
-          .get(sortedKeys[0])!
-          .slice()
-          .sort((x, y) => (x.tierOrder ?? 0) - (y.tierOrder ?? 0));
-      }
+      const tiers = selectTierGroup(allTierRows);
 
       // Determine metric direction (mirrors ReportService.getMetricInfo).
       const metricRow = await db

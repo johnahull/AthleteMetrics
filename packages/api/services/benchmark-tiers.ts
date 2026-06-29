@@ -20,6 +20,35 @@ export interface TierBenchmarkRow {
   coachingNote?: string | null;
 }
 
+/** A tier row tagged with its source table + group, as fetched for grouping. */
+export interface SourcedTierRow extends TierBenchmarkRow {
+  _source?: string;
+  tierGroupId?: string | null;
+  displayOrder?: number | null;
+}
+
+/** Group sourced tier rows by `${_source}:${tierGroupId}`, pick ONE group
+ *  deterministically (lowest min displayOrder, then group key), and return that
+ *  group's rows sorted ascending by tierOrder. Returns [] when there are none. */
+export function selectTierGroup(rows: SourcedTierRow[]): SourcedTierRow[] {
+  const groups = new Map<string, SourcedTierRow[]>();
+  for (const row of rows) {
+    const key = `${row._source}:${row.tierGroupId}`;
+    const group = groups.get(key) || [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  if (groups.size === 0) return [];
+  const minOrder = (g: SourcedTierRow[]) => Math.min(...g.map((t) => t.displayOrder ?? 999));
+  const sortedKeys = [...groups.keys()].sort((a, b) => {
+    const da = minOrder(groups.get(a)!);
+    const dbOrder = minOrder(groups.get(b)!);
+    if (da !== dbOrder) return da - dbOrder;
+    return a < b ? -1 : a > b ? 1 : 0;
+  });
+  return groups.get(sortedKeys[0])!.slice().sort((x, y) => (x.tierOrder ?? 0) - (y.tierOrder ?? 0));
+}
+
 /**
  * Pure tier-evaluation logic extracted from ReportService.
  *

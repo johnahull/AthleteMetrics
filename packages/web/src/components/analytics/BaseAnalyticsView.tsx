@@ -591,6 +591,7 @@ function BaseAnalyticsViewContent({
               ) : tierData?.comparison ? (
                 <TierProgressChart
                   label={tierMetricLabel}
+                  metricCode={tierMetric}
                   comparison={tierData.comparison}
                   unit={tierUnit}
                 />

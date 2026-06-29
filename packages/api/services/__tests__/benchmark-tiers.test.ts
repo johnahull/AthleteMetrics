@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateTierBenchmark } from '../benchmark-tiers';
+import { evaluateTierBenchmark, selectTierGroup, type SourcedTierRow } from '../benchmark-tiers';
 
 const tiers = [
   { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: '28', maxValue: '40', name: 'VJ Elite' },
@@ -119,5 +119,46 @@ describe('evaluateTierBenchmark', () => {
     const c = evaluateTierBenchmark(26, false, noteTiers)!;
     expect(c.tierName).toBe('Varsity');
     expect(c.coachingNote).toBe('Push harder');
+  });
+});
+
+describe('selectTierGroup', () => {
+  it('returns [] for no rows', () => {
+    expect(selectTierGroup([])).toEqual([]);
+  });
+
+  it('returns a single group sorted ascending by tierOrder', () => {
+    const rows: SourcedTierRow[] = [
+      { tierName: 'JV', tierOrder: 3, _source: 'site', tierGroupId: 'g1', displayOrder: 0 },
+      { tierName: 'Elite', tierOrder: 1, _source: 'site', tierGroupId: 'g1', displayOrder: 0 },
+      { tierName: 'Varsity', tierOrder: 2, _source: 'site', tierGroupId: 'g1', displayOrder: 0 },
+    ];
+    const result = selectTierGroup(rows);
+    expect(result.map((t) => t.tierName)).toEqual(['Elite', 'Varsity', 'JV']);
+  });
+
+  it('picks the group with the lower displayOrder', () => {
+    const rows: SourcedTierRow[] = [
+      { tierName: 'A1', tierOrder: 1, _source: 'site', tierGroupId: 'g1', displayOrder: 5 },
+      { tierName: 'A2', tierOrder: 2, _source: 'site', tierGroupId: 'g1', displayOrder: 5 },
+      { tierName: 'B1', tierOrder: 1, _source: 'custom', tierGroupId: 'g2', displayOrder: 1 },
+      { tierName: 'B2', tierOrder: 2, _source: 'custom', tierGroupId: 'g2', displayOrder: 1 },
+    ];
+    const result = selectTierGroup(rows);
+    // g2 has lower displayOrder (1 < 5), so it is chosen.
+    expect(result.map((t) => t.tierName)).toEqual(['B1', 'B2']);
+  });
+
+  it('breaks displayOrder ties deterministically by group key', () => {
+    const rows: SourcedTierRow[] = [
+      // Same displayOrder for both groups -> tie broken by group key string.
+      // Keys: 'site:g1' vs 'custom:g2'. 'custom:g2' < 'site:g1', so custom group wins.
+      { tierName: 'Site1', tierOrder: 1, _source: 'site', tierGroupId: 'g1', displayOrder: 2 },
+      { tierName: 'Site2', tierOrder: 2, _source: 'site', tierGroupId: 'g1', displayOrder: 2 },
+      { tierName: 'Cust1', tierOrder: 1, _source: 'custom', tierGroupId: 'g2', displayOrder: 2 },
+      { tierName: 'Cust2', tierOrder: 2, _source: 'custom', tierGroupId: 'g2', displayOrder: 2 },
+    ];
+    const result = selectTierGroup(rows);
+    expect(result.map((t) => t.tierName)).toEqual(['Cust1', 'Cust2']);
   });
 });
