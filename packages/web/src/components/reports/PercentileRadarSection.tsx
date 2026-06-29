@@ -18,7 +18,12 @@ export function PercentileRadarSection({ athleteId, athleteName, percentiles, me
     <Card data-report-chart="radar" data-report-chart-title="All-around profile">
       <CardHeader><CardTitle>All-Around Profile (percentiles)</CardTitle></CardHeader>
       <CardContent>
-        <div className="h-[340px] overflow-hidden">
+        <p className="text-sm text-muted-foreground mb-3">
+          Each spoke is a performance test. The farther a point sits from the center, the
+          higher this athlete ranks against the group — the outer edge is the 100th
+          percentile (best). A larger, more even shape means a stronger all-around athlete.
+        </p>
+        <div className="h-[340px] overflow-hidden max-w-md mx-auto">
           <RadarChart
             data={data}
             config={{
