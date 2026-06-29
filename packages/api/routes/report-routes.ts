@@ -1297,7 +1297,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org);
+        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1360,7 +1360,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org);
+        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1435,7 +1435,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org, chartImages);
+        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1502,7 +1502,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org, chartImages);
+        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -3696,24 +3696,37 @@ async function enforcePublicSnapshotAccess(
   return true;
 }
 
+// Upper bound on chart images embedded per PDF. A real individual report plots
+// one chart per selected metric (well under this); the cap stops the
+// unauthenticated public PDF endpoint from being driven to do an unbounded
+// number of synchronous jsPDF getImageProperties/addImage calls per request.
+const MAX_CHART_IMAGES = 20;
+
+// Trend charts flowed per PDF page. 2 keeps each chart legible at roughly
+// half-height on A4 portrait; bumping it shrinks the charts.
+const MAX_CHARTS_PER_PDF_PAGE = 2;
+
 /**
- * Normalize the client-supplied chartImages payload into a safe array.
+ * Normalize the client-supplied chartImages payload into a safe, bounded array.
  * Destructuring defaults only guard `undefined`; a client sending `null`, a
  * string, or malformed items would otherwise reach jsPDF and throw a 500.
- * Coerce to [] and keep only well-formed PNG data-URL entries so a bad payload
- * degrades to "no charts" instead of crashing the export.
+ * Coerce to [], cap the count at MAX_CHART_IMAGES, and keep only well-formed PNG
+ * data-URL entries so a bad/oversized payload degrades gracefully instead of
+ * crashing the export or pinning the event loop.
  */
 function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string }> {
   if (!Array.isArray(raw)) return [];
-  return raw.filter(
-    (img): img is { metricCode: string; dataUrl: string } =>
-      !!img &&
-      typeof img.metricCode === 'string' &&
-      typeof img.dataUrl === 'string' &&
-      // addTrendChartsToPdf calls doc.addImage(dataUrl, 'PNG', …); require a PNG
-      // data URL so a JPEG/WebP can't be silently mis-decoded as PNG.
-      img.dataUrl.startsWith('data:image/png;base64,'),
-  );
+  return raw
+    .slice(0, MAX_CHART_IMAGES)
+    .filter(
+      (img): img is { metricCode: string; dataUrl: string } =>
+        !!img &&
+        typeof img.metricCode === 'string' &&
+        typeof img.dataUrl === 'string' &&
+        // addTrendChartsToPdf calls doc.addImage(dataUrl, 'PNG', …); require a PNG
+        // data URL so a JPEG/WebP can't be silently mis-decoded as PNG.
+        img.dataUrl.startsWith('data:image/png;base64,'),
+    );
 }
 
 function addTrendChartsToPdf(
@@ -3727,7 +3740,7 @@ function addTrendChartsToPdf(
   const margin = 14;
   const imgWidth = pageWidth - margin * 2;
   const bottomLimit = pageHeight - margin;
-  const maxPerPage = 2; // flow ~2 charts per page for readability
+  const maxPerPage = MAX_CHARTS_PER_PDF_PAGE;
 
   // Start the trends section on a fresh page, then flow charts down it.
   doc.addPage();

@@ -62,6 +62,9 @@ export function assembleTrends(
     const series = rows
       .filter(r => r.metric === metric)
       .map(r => ({ date: r.date, value: parseFloat(r.value) }))
+      // Drop non-numeric measurement values: a malformed `value` would parse to
+      // NaN and poison `from`/`to`/`pct` and the rendered chart line.
+      .filter(p => !Number.isNaN(p.value))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     if (series.length < 2) continue;

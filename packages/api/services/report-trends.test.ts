@@ -37,6 +37,19 @@ describe('assembleTrends', () => {
     expect(trends.VJ).toBeUndefined();
   });
 
+  it('drops non-numeric (NaN) measurement values without poisoning the series/delta', () => {
+    const rows = [
+      m('VJ', '2025-09-01', 18),
+      { metric: 'VJ', date: '2025-12-01', value: 'corrupt' }, // parseFloat -> NaN, must be dropped
+      m('VJ', '2026-02-01', 25.5),
+    ];
+    const trends = assembleTrends(rows, ['VJ'], { VJ: 'higher' }, { VJ: [] });
+    expect(trends.VJ.series.map(p => p.value)).toEqual([18, 25.5]);
+    expect(trends.VJ.delta.from).toBe(18);
+    expect(trends.VJ.delta.to).toBe(25.5);
+    expect(Number.isNaN(trends.VJ.delta.pct)).toBe(false);
+  });
+
   it('derives tier zones when comparisons carry allTiers', () => {
     const overlay = deriveOverlay([
       {
