@@ -70,19 +70,22 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
   let teamId: string;
   let athleteId: string;
   let athleteFirstName: string;
-  let benchmarkId: string | null;
+  let benchmarkIds: string[] = [];
   let createdSnapshotIds: string[] = [];
 
-  // Single-value benchmark seeded for the Benchmark Standing bar. VERTICAL_JUMP is
-  // higher-is-better, so operator 'gte' with value 26 (< seeded best of 28) means
-  // the athlete "meets" the benchmark — producing a single-value comparison.
-  const BENCH_METRIC = 'VERTICAL_JUMP';
-  const BENCH_VALUE = 26;
+  // Single-value benchmarks seeded for the Benchmark Standing bars — one in each
+  // direction so the bar's direction handling is exercised:
+  //  - VERTICAL_JUMP (higher-is-better, 'gte'): athlete 28 >= 26 → meets
+  //  - FLY10_TIME (lower-is-better, 'lte'): athlete 1.22 > 1.20 → misses
+  const BENCHES: Array<{ metricCode: string; value: number; op: 'gte' | 'lte' }> = [
+    { metricCode: 'VERTICAL_JUMP', value: 26, op: 'gte' },
+    { metricCode: 'FLY10_TIME', value: 1.2, op: 'lte' },
+  ];
 
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
     createdSnapshotIds = [];
-    benchmarkId = null;
+    benchmarkIds = [];
 
     orgId = await resolveOrgId(page);
     expect(orgId, 'an organization is required to create a report').toBeTruthy();
@@ -142,23 +145,26 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
       data: { benchmarksEnabled: true },
     });
 
-    const benchRes = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
-      data: {
-        metricCode: BENCH_METRIC,
-        name: `BenchStanding_${suffix}`,
-        benchmarkValue: BENCH_VALUE,
-        comparisonOperator: 'gte', // higher-is-better; 28 >= 26 → meets
-      },
-    });
-    expect(benchRes.ok(), 'site benchmark was created').toBeTruthy();
-    benchmarkId = (await benchRes.json()).id;
-    expect(benchmarkId, 'benchmark id returned').toBeTruthy();
+    for (const b of BENCHES) {
+      const benchRes = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+        data: {
+          metricCode: b.metricCode,
+          name: `BenchStanding_${b.metricCode}_${suffix}`,
+          benchmarkValue: b.value,
+          comparisonOperator: b.op,
+        },
+      });
+      expect(benchRes.ok(), `site benchmark ${b.metricCode} was created`).toBeTruthy();
+      const id = (await benchRes.json()).id;
+      expect(id, 'benchmark id returned').toBeTruthy();
+      benchmarkIds.push(id);
 
-    const enableRes = await page.request.post(
-      `${STAGING_URL}/api/organizations/${orgId}/benchmarks/${benchmarkId}/enable`,
-      { data: { benchmarkType: 'site' } }
-    );
-    expect(enableRes.ok(), 'benchmark was enabled for the org').toBeTruthy();
+      const enableRes = await page.request.post(
+        `${STAGING_URL}/api/organizations/${orgId}/benchmarks/${id}/enable`,
+        { data: { benchmarkType: 'site' } }
+      );
+      expect(enableRes.ok(), `benchmark ${b.metricCode} enabled for the org`).toBeTruthy();
+    }
 
     // Individual report with "Show progress over time" enabled.
     // The create endpoint returns { reports: [...] } (one report per athlete).
@@ -176,7 +182,7 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
           // Select the seeded single-value site benchmark so the Benchmark
           // Standing bar ([data-report-chart^="bench:"]) renders.
           benchmarks: {
-            site: [benchmarkId],
+            site: benchmarkIds,
           },
         },
       },
@@ -210,7 +216,7 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
       console.warn('Failed to cleanup team:', error);
     }
     try {
-      if (benchmarkId) await page.request.delete(`${STAGING_URL}/api/benchmarks/${benchmarkId}`);
+      for (const id of benchmarkIds) await page.request.delete(`${STAGING_URL}/api/benchmarks/${id}`);
     } catch (error) {
       console.warn('Failed to cleanup benchmark:', error);
     }
@@ -242,7 +248,7 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
     // --- Benchmark Standing for the seeded single-value site benchmark ---
     const benchBars = page.locator('[data-report-chart^="bench:"]');
     await expect(benchBars.first()).toBeVisible({ timeout: 15000 });
-    expect(await benchBars.count()).toBeGreaterThanOrEqual(1);
+    expect(await benchBars.count()).toBeGreaterThanOrEqual(2);
 
     // Screenshot capture (UI screenshot convention) - desktop then mobile
     await page.setViewportSize({ width: 1280, height: 720 });
