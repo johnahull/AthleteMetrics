@@ -6,6 +6,8 @@ import {
   currentTierName,
   overlayToAnnotations,
   buildTrendChartData,
+  personalBestIndex,
+  radarDataFromPercentiles,
 } from './trend-utils';
 import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
 
@@ -112,5 +114,27 @@ describe('trend-utils', () => {
       expect(chartData.datasets[0].data).toEqual([24, 27.5]);
       expect(chartData.datasets[0].label).toBe('Vertical Jump');
     });
+  });
+});
+
+describe('personalBestIndex', () => {
+  it('returns the max index for higher-is-better', () => {
+    expect(personalBestIndex([{date:'a',value:18},{date:'b',value:25},{date:'c',value:22}], 'higher')).toBe(1);
+  });
+  it('returns the min index for lower-is-better', () => {
+    expect(personalBestIndex([{date:'a',value:1.4},{date:'b',value:1.22},{date:'c',value:1.3}], 'lower')).toBe(1);
+  });
+  it('returns -1 for empty series', () => {
+    expect(personalBestIndex([], 'higher')).toBe(-1);
+  });
+});
+
+describe('radarDataFromPercentiles', () => {
+  it('builds one MultiMetricData with precomputed percentileRanks', () => {
+    const md = radarDataFromPercentiles('u1', 'Jordan', { VJ: 80, DASH: 65 }, { VJ: 25.5, DASH: 4.9 });
+    expect(md.athleteId).toBe('u1');
+    expect(md.athleteName).toBe('Jordan');
+    expect(md.percentileRanks).toEqual({ VJ: 80, DASH: 65 });
+    expect(md.metrics).toEqual({ VJ: 25.5, DASH: 4.9 });
   });
 });

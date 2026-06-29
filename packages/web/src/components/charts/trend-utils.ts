@@ -1,6 +1,7 @@
 // packages/web/src/components/charts/trend-utils.ts
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
-import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
+import type { BenchmarkOverlay, MetricTrend, TrendPoint } from '@shared/report-trends-types';
+import type { MultiMetricData } from '@shared/analytics-types';
 import { parseColorToRgba } from '@/lib/color-utils';
 
 /**
@@ -94,4 +95,26 @@ export function buildTrendChartData(trend: MetricTrend, label: string) {
       },
     ],
   };
+}
+
+/** Index of the personal-best point (min for lower-is-better, max otherwise); -1 if empty. */
+export function personalBestIndex(series: TrendPoint[], direction: 'higher' | 'lower'): number {
+  if (series.length === 0) return -1;
+  let bestIdx = 0;
+  for (let i = 1; i < series.length; i++) {
+    const better = direction === 'lower' ? series[i].value < series[bestIdx].value
+                                         : series[i].value > series[bestIdx].value;
+    if (better) bestIdx = i;
+  }
+  return bestIdx;
+}
+
+/** Adapt the report's precomputed percentiles into RadarChart's MultiMetricData. */
+export function radarDataFromPercentiles(
+  athleteId: string,
+  athleteName: string,
+  percentiles: Record<string, number>,
+  measurements: Record<string, number>,
+): MultiMetricData {
+  return { athleteId, athleteName, metrics: { ...measurements }, percentileRanks: { ...percentiles } };
 }
