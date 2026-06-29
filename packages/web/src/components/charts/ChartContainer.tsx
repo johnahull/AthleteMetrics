@@ -72,6 +72,7 @@ const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ 
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
+const TierProgressChart = React.lazy(() => import('./TierProgressChart').then(m => ({ default: m.TierProgressChart })));
 
 // Re-export ExportFormat from chartExport for backwards compatibility
 export type { ExportFormat };
@@ -265,6 +266,7 @@ export function ChartContainer({
       case 'time_series_box_swarm':
       case 'time_series_violin':
       case 'violin_plot':
+      case 'tier_progress':
         return null;
       default:
         return null;
@@ -333,7 +335,7 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'time_series_violin', 'violin_plot'];
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'time_series_violin', 'violin_plot', 'tier_progress'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
@@ -544,6 +546,13 @@ export function ChartContainer({
                       selectedGroups={selectedGroups}
                     />
                   </ErrorBoundary>
+                ) : chartType === 'tier_progress' ? (
+                  // Placeholder until real BenchmarkComparison data is wired via
+                  // BaseAnalyticsView in a later task. TierProgressChart requires a
+                  // `comparison: BenchmarkComparison` prop the container does not yet provide.
+                  <div className="flex items-center justify-center h-64 text-muted-foreground">
+                    Tier progress
+                  </div>
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
