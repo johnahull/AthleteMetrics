@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { evaluateTierBenchmark } from './benchmark-tiers';
+import { evaluateTierBenchmark } from '../benchmark-tiers';
 
 const tiers = [
   { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: '28', maxValue: '40', name: 'VJ Elite' },

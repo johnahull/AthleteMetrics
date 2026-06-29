@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tierSegments, athletePositionPct, nextTierCaption } from './tier-progress-utils';
+import { tierSegments, athletePositionPct, nextTierCaption } from '../tier-progress-utils';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 const cmp: BenchmarkComparison = {

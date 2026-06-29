@@ -72,7 +72,6 @@ const MultiLineChart = React.lazy(() => import('./MultiLineChart').then(m => ({ 
 const TimeSeriesBoxSwarmChart = React.lazy(() => import('./TimeSeriesBoxSwarmChart').then(m => ({ default: m.TimeSeriesBoxSwarmChart })));
 const TimeSeriesViolinChart = React.lazy(() => import('./TimeSeriesViolinChart').then(m => ({ default: m.TimeSeriesViolinChart })));
 const ViolinChart = React.lazy(() => import('./ViolinChart').then(m => ({ default: m.ViolinChart })));
-const TierProgressChart = React.lazy(() => import('./TierProgressChart').then(m => ({ default: m.TierProgressChart })));
 
 // Re-export ExportFormat from chartExport for backwards compatibility
 export type { ExportFormat };

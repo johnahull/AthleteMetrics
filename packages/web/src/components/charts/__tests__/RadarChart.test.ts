@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { radarPlotValue } from './RadarChart';
+import { radarPlotValue } from '../RadarChart';
 
 describe('radarPlotValue', () => {
   it('uses the precomputed percentile rank in the report case (no statistics)', () => {

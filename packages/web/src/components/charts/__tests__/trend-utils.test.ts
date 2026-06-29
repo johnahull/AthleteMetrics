@@ -8,7 +8,7 @@ import {
   buildTrendChartData,
   personalBestIndex,
   radarDataFromPercentiles,
-} from './trend-utils';
+} from '../trend-utils';
 import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
 
 describe('trend-utils', () => {
