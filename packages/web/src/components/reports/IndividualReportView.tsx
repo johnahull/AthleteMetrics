@@ -28,6 +28,7 @@ import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
+import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
@@ -309,22 +310,32 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
       {athlete?.benchmarkComparisons &&
         Object.values(athlete.benchmarkComparisons).some((cs: any) =>
-          cs.some((c: any) => c.allTiers?.length)
+          cs && cs.length > 0
         ) && (
         <Card>
           <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
           <CardContent className="space-y-4">
             {Object.entries(athlete.benchmarkComparisons).map(([code, comps]: [string, any]) => {
-              const tiered = comps.find((c: any) => c.allTiers && c.allTiers.length > 0);
-              if (!tiered) return null;
-              return (
-                <TierProgressChart
-                  key={code}
+              const list = comps || [];
+              const tiered = list.find((c: any) => c.allTiers && c.allTiers.length > 0);
+              if (tiered) {
+                return (
+                  <TierProgressChart
+                    key={code}
+                    label={metricLabels?.[code] || code}
+                    comparison={tiered}
+                    unit={metricUnits?.[code]}
+                  />
+                );
+              }
+              return list.map((c: any, i: number) => (
+                <BenchmarkStandingBar
+                  key={`${code}-${i}`}
                   label={metricLabels?.[code] || code}
-                  comparison={tiered}
+                  comparison={c}
                   unit={metricUnits?.[code]}
                 />
-              );
+              ));
             })}
           </CardContent>
         </Card>

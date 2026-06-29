@@ -50,6 +50,22 @@ export function athletePositionPct(cmp: BenchmarkComparison): number {
   return (index + f) / n;
 }
 
+/** Marker position 0..1 on a track centered on the benchmark (0.5).
+ *  Athlete sits on the "better" side (right, >0.5) when meetsOrExceeds, else
+ *  left (<0.5). Offset = relative diff vs benchmark, clamped to 0.45. */
+export function benchmarkStandingPct(cmp: BenchmarkComparison): number {
+  const bv = Math.abs(cmp.benchmarkValue);
+  const rel = bv === 0 ? 0 : Math.min(Math.abs(cmp.athleteValue - cmp.benchmarkValue) / bv, 0.45);
+  return cmp.meetsOrExceeds ? 0.5 + rel : 0.5 - rel;
+}
+
+/** "✓ Meets · 1.13 s" style standing caption with absolute difference. */
+export function benchmarkStandingCaption(cmp: BenchmarkComparison, unit?: string): string {
+  const u = unit ? ` ${unit}` : '';
+  const diff = Math.round(Math.abs(cmp.athleteValue - cmp.benchmarkValue) * 100) / 100;
+  return cmp.meetsOrExceeds ? `✓ Meets (by ${diff}${u})` : `✗ Below by ${diff}${u}`;
+}
+
 /** "2.5 in to Elite" / "Top tier ✓". */
 export function nextTierCaption(cmp: BenchmarkComparison, unit?: string): string {
   if (cmp.isBestTier || !cmp.nextTierName || cmp.distanceToNextTier == null) return 'Top tier ✓';

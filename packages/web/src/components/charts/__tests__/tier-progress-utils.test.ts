@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tierSegments, athletePositionPct, nextTierCaption } from '../tier-progress-utils';
+import { tierSegments, athletePositionPct, nextTierCaption, benchmarkStandingPct, benchmarkStandingCaption } from '../tier-progress-utils';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 const cmp: BenchmarkComparison = {
@@ -43,5 +43,33 @@ describe('tier-progress-utils', () => {
   it('captions distance to next tier', () => {
     expect(nextTierCaption(cmp, 'in')).toBe('2.5 in to Elite');
     expect(nextTierCaption({ ...cmp, isBestTier: true, nextTierName: null, distanceToNextTier: null }, 'in')).toBe('Top tier ✓');
+  });
+});
+
+describe('benchmarkStandingPct', () => {
+  it('places the marker right of center when the athlete meets/exceeds', () => {
+    expect(benchmarkStandingPct({ meetsOrExceeds: true, athleteValue: 22, benchmarkValue: 20 } as BenchmarkComparison)).toBeCloseTo(0.6, 5);
+  });
+  it('places the marker left of center when the athlete is below', () => {
+    expect(benchmarkStandingPct({ meetsOrExceeds: false, athleteValue: 18, benchmarkValue: 20 } as BenchmarkComparison)).toBeCloseTo(0.4, 5);
+  });
+  it('clamps the offset to 0.45 in either direction', () => {
+    expect(benchmarkStandingPct({ meetsOrExceeds: true, athleteValue: 100, benchmarkValue: 20 } as BenchmarkComparison)).toBeCloseTo(0.95, 5);
+    expect(benchmarkStandingPct({ meetsOrExceeds: false, athleteValue: 100, benchmarkValue: 20 } as BenchmarkComparison)).toBeCloseTo(0.05, 5);
+  });
+  it('returns center when the benchmark value is zero', () => {
+    expect(benchmarkStandingPct({ meetsOrExceeds: true, athleteValue: 5, benchmarkValue: 0 } as BenchmarkComparison)).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe('benchmarkStandingCaption', () => {
+  it('captions a below-benchmark standing with absolute difference', () => {
+    expect(benchmarkStandingCaption({ meetsOrExceeds: false, athleteValue: 1.13, benchmarkValue: 1.10 } as BenchmarkComparison, 's')).toBe('✗ Below by 0.03 s');
+  });
+  it('captions a meets standing with absolute difference', () => {
+    expect(benchmarkStandingCaption({ meetsOrExceeds: true, athleteValue: 22, benchmarkValue: 20 } as BenchmarkComparison, 'in')).toBe('✓ Meets (by 2 in)');
+  });
+  it('omits the unit when none is provided', () => {
+    expect(benchmarkStandingCaption({ meetsOrExceeds: true, athleteValue: 22, benchmarkValue: 20 } as BenchmarkComparison)).toBe('✓ Meets (by 2)');
   });
 });
