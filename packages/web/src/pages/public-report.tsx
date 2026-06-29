@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useRoute } from "wouter";
 import { usePublicReport } from "@/hooks/use-reports";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ export default function PublicReport() {
   const labels = useContextualLabels();
   const { toast } = useToast();
   const [, params] = useRoute("/public/reports/:token");
+  const [isPdfDownloading, setIsPdfDownloading] = useState(false);
   const token = params?.token || "";
 
   const { data: snapshot, isLoading, error } = usePublicReport(token);
@@ -97,6 +99,8 @@ export default function PublicReport() {
     athleteRankings.some((a) => a?.compositeIndex !== undefined);
 
   async function handleDownloadPdf() {
+    if (isPdfDownloading) return;
+    setIsPdfDownloading(true);
     try {
       const chartImages = await captureTrendCharts();
       const res = await fetch(`/api/public/reports/${token}/pdf`, {
@@ -123,6 +127,8 @@ export default function PublicReport() {
         title: 'Download failed',
         description: 'Could not download the report PDF. Please try again.',
       });
+    } finally {
+      setIsPdfDownloading(false);
     }
   }
 
@@ -138,8 +144,8 @@ export default function PublicReport() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={handleDownloadPdf}>
-              Download PDF
+            <Button variant="outline" size="sm" onClick={handleDownloadPdf} disabled={isPdfDownloading}>
+              {isPdfDownloading ? 'Downloading…' : 'Download PDF'}
             </Button>
             <Badge variant="outline">AthleteMetrics</Badge>
           </div>

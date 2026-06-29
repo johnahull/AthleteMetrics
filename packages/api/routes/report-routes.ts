@@ -3735,26 +3735,34 @@ function addTrendChartsToPdf(
   let onPage = 0;
 
   for (const img of chartImages) {
-    const props = doc.getImageProperties(img.dataUrl);
-    const imgHeight = (props.height / props.width) * imgWidth;
-    const blockHeight = 6 + imgHeight + 10; // label + image + gap
+    // Isolate each chart: a corrupt payload that passes the data:image/png;base64,
+    // prefix check but has truncated bytes will throw inside getImageProperties or
+    // addImage. Catching per-chart means one bad capture skips rather than aborting
+    // the entire PDF with a 500.
+    try {
+      const props = doc.getImageProperties(img.dataUrl);
+      const imgHeight = (props.height / props.width) * imgWidth;
+      const blockHeight = 6 + imgHeight + 10; // label + image + gap
 
-    // Break to a new page when the page is full (max per page) or the next
-    // chart would overflow the bottom margin. Never break before the first
-    // chart on a page, so an oversized chart still renders.
-    if (onPage > 0 && (onPage >= maxPerPage || yPos + blockHeight > bottomLimit)) {
-      doc.addPage();
-      yPos = 20;
-      onPage = 0;
+      // Break to a new page when the page is full (max per page) or the next
+      // chart would overflow the bottom margin. Never break before the first
+      // chart on a page, so an oversized chart still renders.
+      if (onPage > 0 && (onPage >= maxPerPage || yPos + blockHeight > bottomLimit)) {
+        doc.addPage();
+        yPos = 20;
+        onPage = 0;
+      }
+
+      doc.setFontSize(14);
+      doc.setTextColor(40, 40, 40);
+      doc.text(metricLabels[img.metricCode] || img.metricCode, margin, yPos);
+      yPos += 6;
+      doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+      yPos += imgHeight + 10;
+      onPage += 1;
+    } catch (err) {
+      console.error('[pdf] skipping corrupt chart for', img.metricCode, err);
     }
-
-    doc.setFontSize(14);
-    doc.setTextColor(40, 40, 40);
-    doc.text(metricLabels[img.metricCode] || img.metricCode, margin, yPos);
-    yPos += 6;
-    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
-    yPos += imgHeight + 10;
-    onPage += 1;
   }
 }
 
