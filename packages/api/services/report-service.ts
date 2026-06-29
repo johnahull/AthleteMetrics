@@ -31,6 +31,7 @@ import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import type { ReportTrends } from '@shared/report-trends-types';
+import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -101,36 +102,6 @@ interface TeamStatistics {
   benchmarks?: Array<{
     name: string;
     value: number;
-  }>;
-}
-
-interface BenchmarkComparison {
-  benchmarkName: string;
-  benchmarkValue: number;
-  athleteValue: number;
-  /** For single-value benchmarks: true if athlete meets the threshold.
-   *  For tier benchmarks: true if athlete is in the top half of tiers (heuristic). */
-  meetsOrExceeds: boolean;
-  percentageDiff: number;
-  comparisonOperator: string;
-  // Tier fields (present only for tier/range benchmarks)
-  tierName?: string;
-  tierColor?: string;
-  tierOrder?: number;
-  tierGroupName?: string;
-  distanceToNextTier?: number | null;
-  nextTierName?: string | null;
-  isBestTier?: boolean;
-  /** Tier-specific coaching prose (migration 0137). Surfaced under the tier
-   *  label in reports when present. Null for non-coaching tier rows. */
-  coachingNote?: string | null;
-  // All tiers in this group (for rendering legends/references)
-  allTiers?: Array<{
-    tierName: string;
-    tierColor: string;
-    tierOrder: number;
-    minValue: number | null;
-    maxValue: number | null;
   }>;
 }
 
