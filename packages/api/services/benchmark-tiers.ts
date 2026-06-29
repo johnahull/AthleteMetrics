@@ -1,8 +1,6 @@
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { deriveTierGroupName } from '@shared/benchmark-utils';
 
-export { deriveTierGroupName };
-
 /**
  * Pure tier-evaluation logic extracted from ReportService.
  *

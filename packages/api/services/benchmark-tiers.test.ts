@@ -37,4 +37,50 @@ describe('evaluateTierBenchmark', () => {
   it('returns null for empty tiers', () => {
     expect(evaluateTierBenchmark(10, false, [])).toBeNull();
   });
+
+  it('matches single-value tiers with comparisonOperator "lte"', () => {
+    const lteTiers = [
+      { tierName: 'Gold', tierColor: '#g', tierOrder: 1, benchmarkValue: '1.10', comparisonOperator: 'lte', name: 'T Gold' },
+      { tierName: 'Silver', tierColor: '#s', tierOrder: 2, benchmarkValue: '1.30', comparisonOperator: 'lte', name: 'T Silver' },
+    ];
+    const c = evaluateTierBenchmark(1.25, true, lteTiers)!;
+    expect(c.tierName).toBe('Silver');
+    expect(c.isBestTier).toBe(false);
+  });
+
+  it('matches single-value tiers with comparisonOperator "gte"', () => {
+    const gteTiers = [
+      { tierName: 'Gold', tierColor: '#g', tierOrder: 1, benchmarkValue: '30', comparisonOperator: 'gte', name: 'V Gold' },
+      { tierName: 'Silver', tierColor: '#s', tierOrder: 2, benchmarkValue: '20', comparisonOperator: 'gte', name: 'V Silver' },
+    ];
+    const c = evaluateTierBenchmark(25, false, gteTiers)!;
+    expect(c.tierName).toBe('Silver');
+    expect(c.isBestTier).toBe(false);
+  });
+
+  it('snaps a value outside all ranges to the nearest tier by boundary distance', () => {
+    // 10 is below every range; nearest boundary is JV's minValue (20), distance 10.
+    const c = evaluateTierBenchmark(10, false, tiers)!;
+    expect(c.tierName).toBe('JV');
+    expect(c.tierOrder).toBe(3);
+    expect(c.isBestTier).toBe(false);
+  });
+
+  it('assigns the best tier when a value beats the best tier boundary', () => {
+    // 50 exceeds Elite's maxValue (40) for a higher-is-better metric.
+    const c = evaluateTierBenchmark(50, false, tiers)!;
+    expect(c.tierName).toBe('Elite');
+    expect(c.isBestTier).toBe(true);
+    expect(c.distanceToNextTier).toBeNull();
+  });
+
+  it('surfaces the coachingNote of the matched tier', () => {
+    const noteTiers = [
+      { tierName: 'Elite', tierColor: '#a', tierOrder: 1, minValue: '28', maxValue: '40', name: 'VJ Elite', coachingNote: 'Keep it up' },
+      { tierName: 'Varsity', tierColor: '#b', tierOrder: 2, minValue: '24', maxValue: '28', name: 'VJ Varsity', coachingNote: 'Push harder' },
+    ];
+    const c = evaluateTierBenchmark(26, false, noteTiers)!;
+    expect(c.tierName).toBe('Varsity');
+    expect(c.coachingNote).toBe('Push harder');
+  });
 });
