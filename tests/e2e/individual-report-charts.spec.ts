@@ -70,11 +70,19 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
   let teamId: string;
   let athleteId: string;
   let athleteFirstName: string;
+  let benchmarkId: string | null;
   let createdSnapshotIds: string[] = [];
+
+  // Single-value benchmark seeded for the Benchmark Standing bar. VERTICAL_JUMP is
+  // higher-is-better, so operator 'gte' with value 26 (< seeded best of 28) means
+  // the athlete "meets" the benchmark — producing a single-value comparison.
+  const BENCH_METRIC = 'VERTICAL_JUMP';
+  const BENCH_VALUE = 26;
 
   test.beforeEach(async ({ page }) => {
     await loginAsDefaultUser(page);
     createdSnapshotIds = [];
+    benchmarkId = null;
 
     orgId = await resolveOrgId(page);
     expect(orgId, 'an organization is required to create a report').toBeTruthy();
@@ -121,6 +129,37 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
       }
     }
 
+    // Seed a single-value SITE benchmark and enable it for the org so the
+    // Benchmark Standing bar renders. Inline config.benchmarks.userDefined does
+    // NOT work for individual reports — getBenchmarkComparisons() sources
+    // single-value comparisons from the reportBenchmarks table (nothing writes it
+    // via API) OR from site/custom benchmarks that are org-enabled AND selected in
+    // config.benchmarks.{site|custom}. We use the site-benchmark path here.
+
+    // Benchmarks must be enabled at the org level before a benchmark can be
+    // enabled for the org (benchmarkService.enableBenchmarkForOrg checks this).
+    await page.request.patch(`${STAGING_URL}/api/organizations/${orgId}`, {
+      data: { benchmarksEnabled: true },
+    });
+
+    const benchRes = await page.request.post(`${STAGING_URL}/api/benchmarks`, {
+      data: {
+        metricCode: BENCH_METRIC,
+        name: `BenchStanding_${suffix}`,
+        benchmarkValue: BENCH_VALUE,
+        comparisonOperator: 'gte', // higher-is-better; 28 >= 26 → meets
+      },
+    });
+    expect(benchRes.ok(), 'site benchmark was created').toBeTruthy();
+    benchmarkId = (await benchRes.json()).id;
+    expect(benchmarkId, 'benchmark id returned').toBeTruthy();
+
+    const enableRes = await page.request.post(
+      `${STAGING_URL}/api/organizations/${orgId}/benchmarks/${benchmarkId}/enable`,
+      { data: { benchmarkType: 'site' } }
+    );
+    expect(enableRes.ok(), 'benchmark was enabled for the org').toBeTruthy();
+
     // Individual report with "Show progress over time" enabled.
     // The create endpoint returns { reports: [...] } (one report per athlete).
     const createRes = await page.request.post(`${STAGING_URL}/api/reports`, {
@@ -134,6 +173,11 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
           timeframe: { type: 'preset', preset: 'all_time' },
           metrics: METRIC_CODES,
           showTrends: true,
+          // Select the seeded single-value site benchmark so the Benchmark
+          // Standing bar ([data-report-chart^="bench:"]) renders.
+          benchmarks: {
+            site: [benchmarkId],
+          },
         },
       },
     });
@@ -165,6 +209,11 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
     } catch (error) {
       console.warn('Failed to cleanup team:', error);
     }
+    try {
+      if (benchmarkId) await page.request.delete(`${STAGING_URL}/api/benchmarks/${benchmarkId}`);
+    } catch (error) {
+      console.warn('Failed to cleanup benchmark:', error);
+    }
   });
 
   test('renders the radar, trend charts (PB markers) and tier-progress on the live report', async ({ page }) => {
@@ -189,6 +238,11 @@ test.describe('Individual Report Charts (radar, tier-progress, trends)', () => {
     if ((await tierCharts.count()) > 0) {
       await expect(tierCharts.first()).toBeVisible();
     }
+
+    // --- Benchmark Standing for the seeded single-value site benchmark ---
+    const benchBars = page.locator('[data-report-chart^="bench:"]');
+    await expect(benchBars.first()).toBeVisible({ timeout: 15000 });
+    expect(await benchBars.count()).toBeGreaterThanOrEqual(1);
 
     // Screenshot capture (UI screenshot convention) - desktop then mobile
     await page.setViewportSize({ width: 1280, height: 720 });
