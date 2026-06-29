@@ -35,8 +35,14 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
   const styledData = useMemo(() => {
     const d = buildTrendChartData(trend, label);
     const ds = d.datasets[0] as Record<string, unknown>;
-    ds.pointRadius = trend.series.map((_, i) => (i === pbIdx ? 6 : 3));
+    // PB point: large gold star with a dark border so it clearly stands out
+    // from the regular blue circles.
+    ds.pointRadius = trend.series.map((_, i) => (i === pbIdx ? 10 : 3));
+    ds.pointHoverRadius = trend.series.map((_, i) => (i === pbIdx ? 12 : 5));
     ds.pointStyle = trend.series.map((_, i) => (i === pbIdx ? 'star' : 'circle'));
+    ds.pointBackgroundColor = trend.series.map((_, i) => (i === pbIdx ? '#f59e0b' : '#2563eb'));
+    ds.pointBorderColor = trend.series.map((_, i) => (i === pbIdx ? '#b45309' : '#2563eb'));
+    ds.pointBorderWidth = trend.series.map((_, i) => (i === pbIdx ? 2 : 1));
     return d;
   }, [trend, label, pbIdx]);
 
@@ -75,8 +81,28 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
         } as AnnotationOptions;
       }
     }
+    // Label the personal-best point so it's unmistakable (not just a styled point).
+    if (pbIdx >= 0 && trend.series.length > 1) {
+      const pbLabel = new Date(trend.series[pbIdx].date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+      ann.personalBest = {
+        type: 'label',
+        xValue: pbLabel,
+        yValue: trend.series[pbIdx].value,
+        content: ['★ Personal best'],
+        color: '#b45309',
+        backgroundColor: 'rgba(251, 191, 36, 0.18)',
+        borderRadius: 4,
+        padding: 4,
+        font: { size: 10, weight: 'bold' },
+        position: 'center',
+        yAdjust: -22,
+      } as AnnotationOptions;
+    }
     return ann;
-  }, [trend.benchmark, trend.series, trend.direction]);
+  }, [trend.benchmark, trend.series, trend.direction, pbIdx]);
 
   const yTitle = unit ? `${label} (${unit})` : label;
 
