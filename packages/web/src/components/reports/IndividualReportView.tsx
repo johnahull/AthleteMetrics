@@ -356,7 +356,6 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           athleteName={athlete.userName}
           distributions={distributions}
           metricLabels={metricLabels}
-          metricUnits={metricUnits}
         />
       )}
 

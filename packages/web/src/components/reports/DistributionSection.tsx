@@ -7,7 +7,6 @@ interface Props {
   athleteName: string;
   distributions: ReportDistributions;
   metricLabels?: Record<string, string>;
-  metricUnits?: Record<string, string>;
 }
 
 export function DistributionSection({
@@ -15,7 +14,6 @@ export function DistributionSection({
   athleteName,
   distributions,
   metricLabels = {},
-  metricUnits = {},
 }: Props) {
   const entries = Object.entries(distributions);
   if (entries.length === 0) return null;
@@ -31,7 +29,13 @@ export function DistributionSection({
         </p>
         {entries.map(([code, dist]) => {
           const label = metricLabels[code] || code;
-          const points = dist.values.map((v, i) => ({
+          // Drop one occurrence of the athlete's own value from the peer dots — the
+          // athlete is shown separately as the highlighted star (the box stats still
+          // reflect the full population, computed on the backend).
+          const peerVals = [...dist.values];
+          const selfIdx = peerVals.indexOf(dist.athleteValue);
+          if (selfIdx !== -1) peerVals.splice(selfIdx, 1);
+          const points = peerVals.map((v, i) => ({
             athleteId: `peer-${i}`,
             athleteName: '',
             value: v,

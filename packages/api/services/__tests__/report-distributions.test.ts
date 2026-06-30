@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeDistribution, MAX_DISTRIBUTION_POINTS } from '../report-distributions';
+import { computeDistribution } from '../report-distributions';
 
 describe('computeDistribution', () => {
   it('computes five-number stats from the full set', () => {

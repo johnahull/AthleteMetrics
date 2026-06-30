@@ -473,7 +473,6 @@ export default function PublicReport() {
                 athleteName={snapshotData.athlete.userName}
                 distributions={snapshotData.distributions}
                 metricLabels={metricLabels}
-                metricUnits={metricUnits}
               />
             )}
 
