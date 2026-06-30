@@ -56,7 +56,12 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
-  showTrends: z.boolean().default(false),
+  charts: z.object({
+    radar: z.boolean().default(true),
+    benchmarkStanding: z.boolean().default(true),
+    trends: z.boolean().default(true),
+    distribution: z.boolean().default(true),
+  }).default({ radar: true, benchmarkStanding: true, trends: true, distribution: true }),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
   if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
@@ -106,7 +111,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
-      showTrends: false,
+      charts: { radar: true, benchmarkStanding: true, trends: true, distribution: true },
     },
   });
 
@@ -128,7 +133,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
-  const showTrends = watch("showTrends");
+  const charts = watch("charts");
 
   // Fetch organization's enabled metrics using standardized hook
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
@@ -329,12 +334,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       };
     }
 
-    // showTrends only applies to individual reports. Gate the assignment (not
-    // just the checkbox render) so a stale form value can't persist
-    // showTrends: true onto a team report after switching report type.
-    if (data.reportType === "individual") {
-      config.showTrends = data.showTrends;
-    }
+    config.charts = data.charts;
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
       config.filters = {
@@ -919,25 +919,23 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   Click "Create Report" to finish
                 </p>
               </div>
-              <div className="border rounded-lg p-4 bg-muted/30">
-                <div className="flex items-start space-x-3">
-                  <Checkbox
-                    id="showTrends"
-                    checked={showTrends}
-                    onCheckedChange={(checked) => setValue("showTrends", checked as boolean)}
-                    className="mt-1"
-                  />
-                  <div className="space-y-1">
-                    <Label htmlFor="showTrends" className="cursor-pointer font-medium">
-                      Show progress over time
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Add trend charts plotting each metric's measurements across the
-                      report's timeframe, with benchmarks overlaid. Needs at least 2
-                      measurements per metric in the selected date range.
-                    </p>
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <Label className="font-medium">Charts to include</Label>
+                {([
+                  ['radar', 'All-around profile (radar)', 'Percentile shape across all metrics (needs ≥3 metrics)'],
+                  ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
+                  ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
+                  ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
+                ] as const).map(([key, title, desc]) => (
+                  <div key={key} className="flex items-start space-x-2">
+                    <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
+                      onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
+                    <div>
+                      <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
+                      <p className="text-sm text-muted-foreground">{desc}</p>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
             </div>
           )}

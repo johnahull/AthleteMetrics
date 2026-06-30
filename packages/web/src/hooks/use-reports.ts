@@ -34,6 +34,7 @@ interface CreateReportData {
       gender?: string;
       positions?: string[];
     };
+    charts?: { radar?: boolean; benchmarkStanding?: boolean; trends?: boolean; distribution?: boolean };
   };
 }
 
