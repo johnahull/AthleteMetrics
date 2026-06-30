@@ -30,7 +30,9 @@ import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
-import type { ReportTrends } from '@shared/report-trends-types';
+import { computeDistribution } from './report-distributions';
+import { resolveChartSelection } from '@shared/report-charts';
+import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 interface TimeframeConfig {
@@ -68,6 +70,7 @@ interface ReportConfig {
   compositeIndex?: CompositeIndexConfig;
   filters?: ReportFilters;
   showTrends?: boolean; // when true, individual reports include time-series trends
+  charts?: { radar?: boolean; benchmarkStanding?: boolean; trends?: boolean; distribution?: boolean };
 }
 
 interface AthletePerformance {
@@ -143,6 +146,7 @@ interface IndividualReportData {
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
   trends?: ReportTrends; // present only when reportConfig.showTrends is true
+  distributions?: ReportDistributions;
 }
 
 export class ReportService extends BaseService {
@@ -429,9 +433,11 @@ export class ReportService extends BaseService {
       config
     );
 
+    const chartSelection = resolveChartSelection(config);
+
     // Build time-series trends when the report opts in (additive; off by default)
     let trends: ReportTrends | undefined;
-    if (config.showTrends) {
+    if (chartSelection.trends) {
       const directions: Record<string, 'higher' | 'lower'> = {};
       // getMetricInfo memoizes, but a selected metric with no measurements in
       // range was not pre-warmed by the bestPerformances loop above — resolve
@@ -449,6 +455,13 @@ export class ReportService extends BaseService {
         config.metrics,
         directions,
         benchmarkComparisons,
+      );
+    }
+
+    let distributions: ReportDistributions | undefined;
+    if (chartSelection.distribution) {
+      distributions = await this.calculateDistributions(
+        report.organizationId, config.metrics, bestPerformances, startDate, endDate,
       );
     }
 
@@ -513,6 +526,7 @@ export class ReportService extends BaseService {
       metricExplanations,
       eventContext,
       trends,
+      distributions,
     };
   }
 
@@ -612,6 +626,44 @@ export class ReportService extends BaseService {
     }
 
     return { percentiles, teamAverages };
+  }
+
+  /** Org-wide peer distribution per metric (same peer set as the percentile). */
+  async calculateDistributions(
+    organizationId: string,
+    metrics: string[],
+    athletePerformances: Record<string, number>,
+    startDate: string,
+    endDate: string,
+  ): Promise<ReportDistributions> {
+    const distributions: ReportDistributions = {};
+    for (const metric of metrics) {
+      const athleteValue = athletePerformances[metric];
+      if (athleteValue === undefined) continue;
+
+      const rows = await db
+        .select({ value: measurements.value, userId: measurements.userId })
+        .from(measurements)
+        .where(and(
+          eq(measurements.organizationId, organizationId),
+          eq(measurements.metric, metric),
+          gte(measurements.date, startDate),
+          lte(measurements.date, endDate),
+        ));
+
+      const info = await this.getMetricInfo(metric);
+      const bestMap = new Map<string, number>();
+      for (const r of rows) {
+        const v = parseFloat(r.value);
+        const cur = bestMap.get(r.userId);
+        if (cur === undefined) bestMap.set(r.userId, v);
+        else if (info.lowerIsBetter ? v < cur : v > cur) bestMap.set(r.userId, v);
+      }
+
+      const dist = computeDistribution(Array.from(bestMap.values()), athleteValue);
+      if (dist) distributions[metric] = dist;
+    }
+    return distributions;
   }
 
   /**
