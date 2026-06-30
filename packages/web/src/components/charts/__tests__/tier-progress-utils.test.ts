@@ -40,6 +40,30 @@ describe('tier-progress-utils', () => {
     // Open-ended band uses the segment center -> (2 + 0.5) / 3.
     expect(pos).toBeCloseTo((index + 0.5) / n, 5);
   });
+  it('returns 0 (no NaN) when there are no tiers', () => {
+    expect(athletePositionPct({ ...cmp, allTiers: [] })).toBe(0);
+    expect(athletePositionPct({ ...cmp, allTiers: undefined })).toBe(0);
+  });
+  it('handles a degenerate band (min === max) without producing NaN', () => {
+    const degenerate: BenchmarkComparison = {
+      ...cmp,
+      athleteValue: 10,
+      allTiers: [{ tierName: 'Only', tierColor: '#ccc', tierOrder: 1, minValue: 10, maxValue: 10 }],
+    };
+    const pos = athletePositionPct(degenerate);
+    expect(Number.isFinite(pos)).toBe(true);
+    expect(pos).toBeCloseTo(0.5, 5); // single segment, center fraction
+  });
+  it('handles fully open-ended (null/null) bands without producing NaN', () => {
+    const allNull: BenchmarkComparison = {
+      ...cmp,
+      athleteValue: 5,
+      allTiers: [{ tierName: 'Any', tierColor: '#ccc', tierOrder: 1, minValue: null, maxValue: null }],
+    };
+    const pos = athletePositionPct(allNull);
+    expect(Number.isFinite(pos)).toBe(true);
+    expect(pos).toBeCloseTo(0.5, 5);
+  });
   it('captions distance to next tier', () => {
     expect(nextTierCaption(cmp, 'in')).toBe('2.5 in to Elite');
     expect(nextTierCaption({ ...cmp, isBestTier: true, nextTierName: null, distanceToNextTier: null }, 'in')).toBe('Top tier ✓');
