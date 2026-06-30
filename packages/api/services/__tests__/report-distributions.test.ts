@@ -31,4 +31,11 @@ describe('computeDistribution', () => {
     const d = computeDistribution([1, 2, 3, 4], 3, 150)!;
     expect(d.values).toEqual([1, 2, 3, 4]);
   });
+
+  it('returns sorted values for unsorted input under the cap', () => {
+    const d = computeDistribution([40, 10, 30, 20], 25, 150)!;
+    expect(d.values).toEqual([10, 20, 30, 40]);
+    expect(d.stats.min).toBe(10);
+    expect(d.stats.max).toBe(40);
+  });
 });

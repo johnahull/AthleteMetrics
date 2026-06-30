@@ -25,7 +25,7 @@ export function computeDistribution(
     max: sorted[sorted.length - 1],
   };
 
-  let values = peerValues;
+  let values = sorted;
   if (peerValues.length > maxPoints) {
     // Even, deterministic down-sampling of the sorted set.
     const step = peerValues.length / maxPoints;
