@@ -20,6 +20,8 @@ interface ChartConfigInput {
  */
 export function resolveChartSelection(config: ChartConfigInput | undefined | null): ChartSelection {
   const c = config?.charts;
+  // A present `charts` object is the explicit selection — an empty object means
+  // all charts off (only legacy reports, which have no `charts`, get the defaults).
   if (c) {
     return {
       radar: c.radar ?? false,

@@ -402,7 +402,7 @@ export class ReportService extends BaseService {
 
     // Calculate org-wide percentiles and team averages (always org-wide, not filtered by event)
     // Note: Don't pass eventId here - org-wide percentiles should compare against all org athletes
-    const { percentiles, teamAverages } = await this.calculatePercentilesAndAverages(
+    const { percentiles, teamAverages, peerValues } = await this.calculatePercentilesAndAverages(
       athleteId,
       report.organizationId,
       config.metrics,
@@ -460,9 +460,14 @@ export class ReportService extends BaseService {
 
     let distributions: ReportDistributions | undefined;
     if (chartSelection.distribution) {
-      distributions = await this.calculateDistributions(
-        report.organizationId, config.metrics, bestPerformances, startDate, endDate,
-      );
+      distributions = {};
+      for (const metric of config.metrics) {
+        const athleteValue = bestPerformances[metric];
+        if (athleteValue === undefined) continue;
+        const dist = computeDistribution(peerValues[metric] ?? [], athleteValue);
+        if (dist) distributions[metric] = dist;
+      }
+      if (Object.keys(distributions).length === 0) distributions = undefined;
     }
 
     const athletePerformance: AthletePerformance = {
@@ -562,9 +567,10 @@ export class ReportService extends BaseService {
     startDate: string,
     endDate: string,
     eventId?: string
-  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number> }> {
+  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number>; peerValues: Record<string, number[]> }> {
     const percentiles: Record<string, number> = {};
     const teamAverages: Record<string, number> = {};
+    const peerValues: Record<string, number[]> = {};
 
     for (const metric of metrics) {
       if (athletePerformances[metric] === undefined) {
@@ -622,48 +628,14 @@ export class ReportService extends BaseService {
 
         // Calculate team average (using best performance per athlete, same as team reports)
         teamAverages[metric] = mean(allValues);
+
+        // Expose the per-metric peer best-values so callers (e.g. distributions)
+        // can reuse this peer set instead of re-running the same query.
+        peerValues[metric] = allValues;
       }
     }
 
-    return { percentiles, teamAverages };
-  }
-
-  /** Org-wide peer distribution per metric (same peer set as the percentile). */
-  async calculateDistributions(
-    organizationId: string,
-    metrics: string[],
-    athletePerformances: Record<string, number>,
-    startDate: string,
-    endDate: string,
-  ): Promise<ReportDistributions> {
-    const distributions: ReportDistributions = {};
-    for (const metric of metrics) {
-      const athleteValue = athletePerformances[metric];
-      if (athleteValue === undefined) continue;
-
-      const rows = await db
-        .select({ value: measurements.value, userId: measurements.userId })
-        .from(measurements)
-        .where(and(
-          eq(measurements.organizationId, organizationId),
-          eq(measurements.metric, metric),
-          gte(measurements.date, startDate),
-          lte(measurements.date, endDate),
-        ));
-
-      const info = await this.getMetricInfo(metric);
-      const bestMap = new Map<string, number>();
-      for (const r of rows) {
-        const v = parseFloat(r.value);
-        const cur = bestMap.get(r.userId);
-        if (cur === undefined) bestMap.set(r.userId, v);
-        else if (info.lowerIsBetter ? v < cur : v > cur) bestMap.set(r.userId, v);
-      }
-
-      const dist = computeDistribution(Array.from(bestMap.values()), athleteValue);
-      if (dist) distributions[metric] = dist;
-    }
-    return distributions;
+    return { percentiles, teamAverages, peerValues };
   }
 
   /**
