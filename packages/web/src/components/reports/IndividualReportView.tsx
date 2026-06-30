@@ -27,6 +27,8 @@ import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
+import { DistributionSection } from "@/components/reports/DistributionSection";
+import { resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
@@ -112,8 +114,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits, metricExplanations, trends } = reportData;
+  const { athlete, metricLabels, metricUnits, metricExplanations, trends, distributions } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
+  const sel = resolveChartSelection(reportData.reportConfig);
 
   return (
     <div className="space-y-6">
@@ -299,7 +302,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </Card>
       )}
 
-      {athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
+      {sel.radar && athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
         <PercentileRadarSection
           athleteId={athlete.userId}
           athleteName={athlete.userName}
@@ -308,7 +311,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         />
       )}
 
-      {athlete?.benchmarkComparisons &&
+      {sel.benchmarkStanding && athlete?.benchmarkComparisons &&
         Object.values(athlete.benchmarkComparisons).some((cs: any) =>
           cs && cs.length > 0
         ) && (
@@ -343,8 +346,18 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
         </Card>
       )}
 
-      {trends && Object.keys(trends).length > 0 && (
+      {sel.trends && trends && Object.keys(trends).length > 0 && (
         <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} />
+      )}
+
+      {sel.distribution && distributions && Object.keys(distributions).length > 0 && (
+        <DistributionSection
+          athleteId={athlete.userId}
+          athleteName={athlete.userName}
+          distributions={distributions}
+          metricLabels={metricLabels}
+          metricUnits={metricUnits}
+        />
       )}
 
       {metricExplanations && (

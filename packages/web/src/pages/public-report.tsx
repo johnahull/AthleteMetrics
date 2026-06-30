@@ -24,6 +24,8 @@ import { MetricExplanation } from "@/components/reports/MetricExplanation";
 import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossary";
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
+import { DistributionSection } from "@/components/reports/DistributionSection";
+import { resolveChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
@@ -75,6 +77,7 @@ export default function PublicReport() {
   const metricLabels = (snapshotData.metricLabels ?? {}) as Record<string, string>;
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = snapshotData.trends as ReportTrends | undefined;
+  const sel = resolveChartSelection(snapshotData.reportConfig);
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
@@ -420,7 +423,7 @@ export default function PublicReport() {
               </Card>
             )}
 
-            {athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
+            {sel.radar && athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
               <PercentileRadarSection
                 athleteId={athlete.userId}
                 athleteName={athlete.userName}
@@ -429,7 +432,7 @@ export default function PublicReport() {
               />
             )}
 
-            {athlete?.benchmarkComparisons &&
+            {sel.benchmarkStanding && athlete?.benchmarkComparisons &&
               Object.values(athlete.benchmarkComparisons).some((cs: any) =>
                 cs && cs.length > 0
               ) && (
@@ -464,6 +467,16 @@ export default function PublicReport() {
               </Card>
             )}
 
+            {sel.distribution && snapshotData.distributions && Object.keys(snapshotData.distributions).length > 0 && (
+              <DistributionSection
+                athleteId={snapshotData.athlete.userId}
+                athleteName={snapshotData.athlete.userName}
+                distributions={snapshotData.distributions}
+                metricLabels={metricLabels}
+                metricUnits={metricUnits}
+              />
+            )}
+
             {/* Glossary of metrics (Individual) */}
             {Object.keys(metricExplanations).length > 0 && (
               <ReportMetricsGlossary
@@ -475,7 +488,7 @@ export default function PublicReport() {
         )}
 
         {/* Time-series trends — gated on the real top-level snapshot reportType */}
-        {reportType === "individual" && trends && Object.keys(trends).length > 0 && (
+        {reportType === "individual" && sel.trends && trends && Object.keys(trends).length > 0 && (
           <TrendSection
             trends={trends}
             metricLabels={metricLabels}
