@@ -37,3 +37,13 @@ export interface MetricTrend {
 
 /** Map of metric code -> trend. Present on a report only when showTrends is on. */
 export type ReportTrends = Record<string, MetricTrend>;
+
+/** Peer distribution for one metric (org-wide), with the athlete's own value. */
+export interface MetricDistribution {
+  values: number[];   // peer best-performances, sampled for display (<= cap)
+  athleteValue: number;
+  stats: { min: number; q1: number; median: number; q3: number; max: number }; // from the FULL set
+}
+
+/** Map of metric code -> distribution. Present only when the distribution chart is enabled. */
+export type ReportDistributions = Record<string, MetricDistribution>;
