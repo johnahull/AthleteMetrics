@@ -1,5 +1,5 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
-import type { ReportTrends } from '@shared/report-trends-types';
+import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 export interface Benchmark {
@@ -85,13 +85,9 @@ export interface IndividualReportConfig {
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs
-    userDefined?: Array<{
-      metricCode: string;
-      value: number;
-      label: string;
-    }>;
   };
   showTrends?: boolean;
+  charts?: { radar?: boolean; benchmarkStanding?: boolean; trends?: boolean; distribution?: boolean };
 }
 
 export interface OrgBranding {
@@ -134,6 +130,7 @@ export interface IndividualReportData {
   metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
   trends?: ReportTrends;
+  distributions?: ReportDistributions;
 }
 
 export type PdfFormat = 'visual' | 'simplified';
