@@ -20,8 +20,19 @@ import {
 import { hasOrganizationAccess, validateOrganizationAccess } from "../helpers/org-access";
 import { getAuthorizationError, AUTH_ERRORS } from "../helpers/auth-errors";
 import { db } from "../db";
-import { users, userTeams, teams } from "@shared/schema";
-import { eq, and, inArray } from "drizzle-orm";
+import {
+  users,
+  userTeams,
+  teams,
+  userOrganizations,
+  measurements,
+  siteMetrics,
+  siteBenchmarks,
+  customBenchmarks,
+  organizationBenchmarks,
+} from "@shared/schema";
+import { eq, and, inArray, isNotNull } from "drizzle-orm";
+import { evaluateTierBenchmark, selectTierGroup } from "../services/benchmark-tiers";
 import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import {
   getPresetDateRange,
@@ -776,6 +787,160 @@ export function registerAnalyticsRoutes(app: Express) {
       console.error("Get at-risk athletes error:", error);
       const message = error instanceof Error ? error.message : "Failed to fetch at-risk athletes";
       res.status(500).json({ message });
+    }
+  });
+
+  /**
+   * Get tier-comparison data for a single athlete + metric.
+   *
+   * Evaluates the athlete's best value for `metric` against the organization's
+   * active tier benchmark group (site benchmarks enabled for the org, plus the
+   * org's own custom benchmarks) using the shared `evaluateTierBenchmark` logic.
+   *
+   * Org resolution: the athlete's organization is used. Non-site-admin callers
+   * must share that organization with the athlete (mirrors the org access check
+   * on the sibling stats endpoint, but uses org membership since tier benchmarks
+   * are org-scoped and independent athletes may have no team).
+   *
+   * No-data contract: returns `{ comparison: null }` (HTTP 200) when the athlete
+   * has no measurement for the metric or the org has no tier benchmarks for it.
+   */
+  app.get("/api/analytics/benchmark-tiers", analyticsLimiter, requireAuth, async (req, res) => {
+    try {
+      const user = req.session.user;
+      if (!user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+
+      const athleteId = req.query.athleteId as string;
+      const metric = req.query.metric as string;
+      if (!athleteId || !metric) {
+        return res.status(400).json({ message: "athleteId and metric are required" });
+      }
+
+      // Permission check: athletes can only view their own data
+      const statsPermission = canViewUserStats(user, athleteId);
+      if (!statsPermission.allowed) {
+        return res.status(403).json({ message: statsPermission.reason });
+      }
+
+      // Resolve the organization whose tier benchmarks apply to this athlete.
+      // SECURITY: Validate the requester shares the athlete's org via DB membership.
+      const athleteOrgs = await db
+        .select({ organizationId: userOrganizations.organizationId })
+        .from(userOrganizations)
+        .where(eq(userOrganizations.userId, athleteId));
+      const athleteOrgIds = athleteOrgs.map((o) => o.organizationId);
+
+      let organizationId: string | null = null;
+      if (isSiteAdmin(user)) {
+        organizationId = athleteOrgIds[0] ?? null;
+      } else {
+        const requesterOrgs = await storage.getUserOrganizations(user.id);
+        const requesterOrgIds = new Set(requesterOrgs.map((o) => o.organizationId));
+        organizationId = athleteOrgIds.find((id) => requesterOrgIds.has(id)) ?? null;
+        if (!organizationId) {
+          return res.status(403).json({ message: getAuthorizationError(AUTH_ERRORS.ATHLETE_ORG_MISMATCH) });
+        }
+      }
+
+      // No organization context → no org tier benchmarks apply.
+      if (!organizationId) {
+        return res.json({ comparison: null });
+      }
+
+      // Fetch the org's active tier benchmarks for this metric from both sources:
+      // site benchmarks enabled for the org, and the org's own custom benchmarks.
+      const [siteRows, customRows] = await Promise.all([
+        db
+          .select({ b: siteBenchmarks })
+          .from(siteBenchmarks)
+          .innerJoin(
+            organizationBenchmarks,
+            and(
+              eq(organizationBenchmarks.benchmarkId, siteBenchmarks.id),
+              eq(organizationBenchmarks.benchmarkType, "site"),
+              eq(organizationBenchmarks.organizationId, organizationId),
+              eq(organizationBenchmarks.isEnabled, true)
+            )
+          )
+          .where(
+            and(
+              eq(siteBenchmarks.isActive, true),
+              eq(siteBenchmarks.metricCode, metric),
+              isNotNull(siteBenchmarks.tierGroupId)
+            )
+          ),
+        db
+          .select({ b: customBenchmarks })
+          .from(customBenchmarks)
+          .innerJoin(
+            organizationBenchmarks,
+            and(
+              eq(organizationBenchmarks.benchmarkId, customBenchmarks.id),
+              eq(organizationBenchmarks.benchmarkType, "custom"),
+              eq(organizationBenchmarks.organizationId, organizationId),
+              eq(organizationBenchmarks.isEnabled, true)
+            )
+          )
+          .where(
+            and(
+              eq(customBenchmarks.organizationId, organizationId),
+              eq(customBenchmarks.isActive, true),
+              eq(customBenchmarks.metricCode, metric),
+              isNotNull(customBenchmarks.tierGroupId)
+            )
+          ),
+      ]);
+
+      // Group tiers by source-namespaced tierGroupId (matching report-service).
+      // An org may have multiple tier groups enabled for a metric; pick one
+      // deterministically (lowest displayOrder, then group key) and evaluate it.
+      const allTierRows = [
+        ...siteRows.map(({ b }) => ({ ...b, _source: "site" })),
+        ...customRows.map(({ b }) => ({ ...b, _source: "custom" })),
+      ];
+      const tiers = selectTierGroup(allTierRows);
+
+      // Determine metric direction (mirrors ReportService.getMetricInfo).
+      const metricRow = await db
+        .select({ metricType: siteMetrics.metricType })
+        .from(siteMetrics)
+        .where(eq(siteMetrics.code, metric))
+        .limit(1)
+        .then((rows) => rows[0]);
+      const lowerIsBetter = metricRow ? metricRow.metricType === "lower_is_better" : true;
+
+      // Compute the athlete's best verified value for the metric in this org.
+      // NOTE: This endpoint intentionally filters isVerified = true (consistent with
+      // other analytics queries). The report path does NOT filter by verified, so the
+      // report and this analytics tier-progress may show different tiers for the same athlete.
+      const measurementRows = await db
+        .select({ value: measurements.value })
+        .from(measurements)
+        .where(
+          and(
+            eq(measurements.userId, athleteId),
+            eq(measurements.metric, metric),
+            eq(measurements.isVerified, true),
+            eq(measurements.organizationId, organizationId)
+          )
+        );
+      const values = measurementRows
+        .map((r) => parseFloat(String(r.value)))
+        .filter((v) => !Number.isNaN(v));
+      const bestValue =
+        values.length === 0 ? null : lowerIsBetter ? Math.min(...values) : Math.max(...values);
+
+      const comparison =
+        bestValue == null || tiers.length === 0
+          ? null
+          : evaluateTierBenchmark(bestValue, lowerIsBetter, tiers);
+
+      res.json({ comparison });
+    } catch (err) {
+      console.error("[GET /api/analytics/benchmark-tiers]", err);
+      res.status(500).json({ message: "Failed to compute benchmark tiers" });
     }
   });
 }

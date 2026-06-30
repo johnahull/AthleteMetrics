@@ -4,6 +4,7 @@
  */
 
 import React, { useEffect, useRef, useMemo, Suspense } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -13,7 +14,9 @@ import { AthleteSelector } from '@/components/ui/athlete-selector';
 import { AthleteSelector as AthleteSelectionEnhanced } from '@/components/ui/athlete-selector-enhanced';
 import { DateSelector } from '@/components/ui/date-selector';
 import { ChartContainer } from '@/components/charts/ChartContainer';
+import { TierProgressChart } from '@/components/charts/TierProgressChart';
 import { useToast } from '@/hooks/use-toast';
+import { useMetricByCode } from '@/hooks/use-available-metrics';
 
 import { AnalyticsProvider, useAnalyticsContext } from '@/contexts/AnalyticsContext';
 import { useAnalyticsOperations } from '@/hooks/useAnalyticsOperations';
@@ -27,6 +30,7 @@ import { BenchmarkLineSelector } from './BenchmarkLineSelector';
 import { useBenchmarksForMetric } from '@/lib/benchmarks-api';
 
 import type { AnalysisType, AnalyticsFilters, AnalyticsResponse, BenchmarkLine, ChartType } from '@shared/analytics-types';
+import type { BenchmarkComparison } from '@shared/benchmark-types';
 import { User, Users, BarChart3 } from 'lucide-react';
 import { devLog } from '@/utils/dev-logger';
 
@@ -214,6 +218,38 @@ function BaseAnalyticsViewContent({
       previousMetricRef.current = state.metrics.primary;
     }
   }, [state.metrics.primary]);
+
+  // Tier-progress chart: single athlete + single metric.
+  // The highlighted athlete is the individual-mode selected athlete; the
+  // metric is the primary selected metric (label/unit from the same source
+  // the rest of the view uses for metric display).
+  const isTierProgress = state.selectedChartType === 'tier_progress';
+  const tierAthleteId =
+    state.analysisType === 'individual' ? state.selectedAthleteId : undefined;
+  const tierMetric = state.metrics.primary;
+  const { metric: tierMetricInfo } = useMetricByCode(tierMetric);
+  const tierMetricLabel = tierMetricInfo?.label ?? tierMetric;
+  const tierUnit = tierMetricInfo?.unit || undefined;
+
+  const {
+    data: tierData,
+    isLoading: isTierLoading,
+    error: tierError,
+  } = useQuery<{ comparison: BenchmarkComparison | null }>({
+    queryKey: ['benchmarkTiers', tierAthleteId, tierMetric],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/analytics/benchmark-tiers?athleteId=${encodeURIComponent(
+          tierAthleteId!
+        )}&metric=${encodeURIComponent(tierMetric)}`
+      );
+      if (!res.ok) {
+        throw new Error('Failed to load benchmark tiers');
+      }
+      return res.json();
+    },
+    enabled: isTierProgress && !!tierAthleteId && !!tierMetric,
+  });
 
   // Fetch data when conditions are met
   useEffect(() => {
@@ -535,9 +571,42 @@ function BaseAnalyticsViewContent({
           </Card>
         )}
 
+        {/* Tier Progress Display (single athlete + single metric) */}
+        {isTierProgress && !state.isLoading && !state.error && (
+          <Card>
+            <CardHeader>
+              <CardTitle>{tierMetricLabel} — Tier Progress</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {!tierAthleteId ? (
+                <p className="text-sm text-muted-foreground">
+                  Select an athlete to view tier progress.
+                </p>
+              ) : isTierLoading ? (
+                <Skeleton className="h-24 w-full" />
+              ) : tierError ? (
+                <Alert variant="destructive">
+                  <AlertDescription>Failed to load benchmark tiers.</AlertDescription>
+                </Alert>
+              ) : tierData?.comparison ? (
+                <TierProgressChart
+                  label={tierMetricLabel}
+                  metricCode={tierMetric}
+                  comparison={tierData.comparison}
+                  unit={tierUnit}
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No benchmark configured for this metric.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Chart Display */}
         {(() => {
-          const shouldShowChart = !state.isLoading && !state.error && (
+          const shouldShowChart = !isTierProgress && !state.isLoading && !state.error && (
             state.analysisType === 'multi_group' ? 
               (selectedGroups.length >= 2 && groupChartData) : 
               (memoizedChartData && (state.analysisType === 'individual' ? state.selectedAthleteId : true))

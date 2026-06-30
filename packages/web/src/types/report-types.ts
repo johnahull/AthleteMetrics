@@ -1,5 +1,6 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends } from '@shared/report-trends-types';
+import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 export interface Benchmark {
   name: string;
@@ -30,29 +31,7 @@ export interface TeamStatistic {
   benchmarks?: Benchmark[];
 }
 
-export interface BenchmarkComparison {
-  benchmarkName: string;
-  benchmarkValue: number;
-  meetsOrExceeds: boolean;
-  // Tier fields (present only for tier/range benchmarks)
-  tierName?: string;
-  tierColor?: string;
-  tierOrder?: number;
-  tierGroupName?: string;
-  distanceToNextTier?: number | null;
-  nextTierName?: string | null;
-  isBestTier?: boolean;
-  /** Tier-specific coaching prose (migration 0137). Surfaced under the tier
-   *  label in reports when present. Null for non-coaching tier rows. */
-  coachingNote?: string | null;
-  allTiers?: Array<{
-    tierName: string;
-    tierColor: string;
-    tierOrder: number;
-    minValue: number | null;
-    maxValue: number | null;
-  }>;
-}
+export type { BenchmarkComparison };
 
 export interface AthleteRanking {
   userId: string;

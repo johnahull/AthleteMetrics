@@ -76,7 +76,7 @@ export class AnalyticsService {
     if (analysisType === 'individual') {
       if (metricCount === 1) {
         if (timeframeType === 'best') {
-          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot');
+          baseCharts.push('box_swarm_combo', 'distribution', 'bar_chart', 'violin_plot', 'tier_progress');
         } else {
           baseCharts.push('line_chart');
         }

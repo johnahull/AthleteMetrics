@@ -265,6 +265,7 @@ export function ChartContainer({
       case 'time_series_box_swarm':
       case 'time_series_violin':
       case 'violin_plot':
+      case 'tier_progress':
         return null;
       default:
         return null;
@@ -333,7 +334,7 @@ export function ChartContainer({
 
   // Only show unsupported chart error for truly unsupported types
   // (ChartComponent is null for both unsupported types AND explicitly handled types)
-  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'time_series_violin', 'violin_plot'];
+  const explicitlyHandledTypes = ['radar_chart', 'line_chart', 'box_swarm_combo', 'time_series_box_swarm', 'time_series_violin', 'violin_plot', 'tier_progress'];
   if (!ChartComponent && !explicitlyHandledTypes.includes(chartType)) {
     const cardHeight = chartType === 'radar_chart' ? CHART_HEIGHT_RADAR : CHART_HEIGHT_DEFAULT;
     return (
@@ -544,6 +545,11 @@ export function ChartContainer({
                       selectedGroups={selectedGroups}
                     />
                   </ErrorBoundary>
+                ) : chartType === 'tier_progress' ? (
+                  // tier_progress is rendered by BaseAnalyticsView, never by ChartContainer.
+                  // Render nothing here (no-op) so it does not fall through to the
+                  // "Unsupported chart type" fallback below.
+                  null
                 ) : ChartComponent ? (
                   <ChartComponent
                     key={`chart-component-${chartType}`}
