@@ -27,7 +27,7 @@ export function DistributionSection({
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="text-sm text-muted-foreground">
-          Each dot is an athlete in your organization with this test; you are the blue dot.
+          Each blue dot is an athlete in your organization with this test; you are the highlighted green star.
         </p>
         {entries.map(([code, dist]) => {
           const label = metricLabels[code] || code;
