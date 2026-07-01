@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { BoxPlotChart } from '@/components/charts/BoxPlotChart';
 import type { ReportDistributions } from '@shared/report-trends-types';
+import type { StatisticalSummary } from '@shared/analytics-types';
 
 interface Props {
   athleteId: string;
@@ -29,13 +30,10 @@ export function DistributionSection({
         </p>
         {entries.map(([code, dist]) => {
           const label = metricLabels[code] || code;
-          // Drop one occurrence of the athlete's own value from the peer dots — the
-          // athlete is shown separately as the highlighted star (the box stats still
-          // reflect the full population, computed on the backend).
-          const peerVals = [...dist.values];
-          const selfIdx = peerVals.indexOf(dist.athleteValue);
-          if (selfIdx !== -1) peerVals.splice(selfIdx, 1);
-          const points = peerVals.map((v, i) => ({
+          // dist.values are the peer dots — the backend already excludes one
+          // occurrence of the athlete's own value (before sampling), so the athlete
+          // is not double-plotted. The athlete is added below as the highlighted star.
+          const points = dist.values.map((v, i) => ({
             athleteId: `peer-${i}`,
             athleteName: '',
             value: v,
@@ -49,6 +47,36 @@ export function DistributionSection({
             date: new Date(),
             metric: code,
           });
+          // Pass the backend's full-population five-number summary so the box reflects
+          // the true distribution rather than the sampled dots. Percentiles not carried
+          // by dist.stats are filled monotonically from min/q1/median/q3/max.
+          const s = dist.stats;
+          const statistics: Record<string, StatisticalSummary> = {
+            [code]: {
+              count: dist.values.length + 1,
+              mean: s.median,
+              median: s.median,
+              min: s.min,
+              max: s.max,
+              std: 0,
+              variance: 0,
+              percentiles: {
+                p5: s.min,
+                p10: s.min,
+                p20: s.min,
+                p25: s.q1,
+                p30: s.q1,
+                p40: s.median,
+                p50: s.median,
+                p60: s.median,
+                p70: s.q3,
+                p75: s.q3,
+                p80: s.q3,
+                p90: s.max,
+                p95: s.max,
+              },
+            },
+          };
           return (
             <div
               key={code}
@@ -59,6 +87,7 @@ export function DistributionSection({
               <BoxPlotChart
                 data={points}
                 rawData={points}
+                statistics={statistics}
                 highlightAthlete={athleteId}
                 showAllPoints
                 compact

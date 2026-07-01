@@ -25,11 +25,19 @@ export function computeDistribution(
     max: sorted[sorted.length - 1],
   };
 
-  let values = sorted;
-  if (peerValues.length > maxPoints) {
-    // Even, deterministic down-sampling of the sorted set.
-    const step = peerValues.length / maxPoints;
-    values = Array.from({ length: maxPoints }, (_, i) => sorted[Math.floor(i * step)]);
+  // Peers shown as dots exclude the athlete's own value (drawn separately as the
+  // marker). Remove one occurrence BEFORE sampling so exclusion is deterministic
+  // at any size. Stats above still reflect the full population (matching the
+  // percentile, which includes the athlete).
+  const peers = [...sorted];
+  const selfIdx = peers.indexOf(athleteValue);
+  if (selfIdx !== -1) peers.splice(selfIdx, 1);
+
+  let values = peers;
+  if (peers.length > maxPoints) {
+    // Even, deterministic down-sampling of the athlete-excluded peers.
+    const step = peers.length / maxPoints;
+    values = Array.from({ length: maxPoints }, (_, i) => peers[Math.floor(i * step)]);
   }
 
   return { values, athleteValue, stats };
