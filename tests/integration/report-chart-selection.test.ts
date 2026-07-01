@@ -334,6 +334,21 @@ describe('POST /api/reports/:id/generate — trends gate via charts', () => {
   });
 });
 
+describe('POST /api/reports/:id/generate — explicit empty charts (all-off)', () => {
+  it('treats a present-but-empty charts object as all-off: no distributions, no trends', async () => {
+    // A peer exists (distribution could resolve) but an explicit empty `charts`
+    // selects nothing — distinguishing it from legacy "no charts" defaults.
+    await seedPeerAthlete('VERTICAL_JUMP', '20.000');
+    const report = await createIndividualReport({ charts: {} });
+
+    const response = await generate(report.id);
+
+    expect(response.status).toBe(200);
+    expect(response.body.distributions).toBeUndefined();
+    expect(response.body.trends).toBeUndefined();
+  });
+});
+
 describe('POST /api/reports/:id/generate — back-compat (no charts field)', () => {
   it('falls back to legacy defaults: showTrends drives trends, distribution off', async () => {
     // A peer exists, but with no `charts` field distribution stays off by default.

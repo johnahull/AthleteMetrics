@@ -20,4 +20,10 @@ describe('resolveChartSelection', () => {
   it('explicit charts overrides legacy showTrends', () => {
     expect(resolveChartSelection({ showTrends: true, charts: { trends: false } }).trends).toBe(false);
   });
+
+  it('treats a present-but-empty charts object as all-off (explicit selection)', () => {
+    expect(resolveChartSelection({ charts: {} })).toEqual({
+      radar: false, benchmarkStanding: false, trends: false, distribution: false,
+    });
+  });
 });

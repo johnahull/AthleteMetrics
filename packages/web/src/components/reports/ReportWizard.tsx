@@ -38,6 +38,7 @@ import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { deriveTierGroupName } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -61,7 +62,7 @@ const reportConfigSchema = z.object({
     benchmarkStanding: z.boolean().default(true),
     trends: z.boolean().default(true),
     distribution: z.boolean().default(true),
-  }).default({ radar: true, benchmarkStanding: true, trends: true, distribution: true }),
+  }).default(DEFAULT_CHART_SELECTION),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
   if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
@@ -111,7 +112,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
-      charts: { radar: true, benchmarkStanding: true, trends: true, distribution: true },
+      charts: DEFAULT_CHART_SELECTION,
     },
   });
 

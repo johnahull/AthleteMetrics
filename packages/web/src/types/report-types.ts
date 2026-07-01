@@ -1,6 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import type { ChartSelection } from '@shared/report-charts';
 
 export interface Benchmark {
   name: string;
@@ -87,7 +88,7 @@ export interface IndividualReportConfig {
     custom?: string[]; // Custom benchmark IDs
   };
   showTrends?: boolean;
-  charts?: { radar?: boolean; benchmarkStanding?: boolean; trends?: boolean; distribution?: boolean };
+  charts?: Partial<ChartSelection>;
 }
 
 export interface OrgBranding {

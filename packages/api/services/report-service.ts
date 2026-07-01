@@ -31,7 +31,7 @@ import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
 import { assembleTrends } from './report-trends';
 import { computeDistribution } from './report-distributions';
-import { resolveChartSelection } from '@shared/report-charts';
+import { resolveChartSelection, type ChartSelection } from '@shared/report-charts';
 import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 
@@ -70,7 +70,7 @@ interface ReportConfig {
   compositeIndex?: CompositeIndexConfig;
   filters?: ReportFilters;
   showTrends?: boolean; // when true, individual reports include time-series trends
-  charts?: { radar?: boolean; benchmarkStanding?: boolean; trends?: boolean; distribution?: boolean };
+  charts?: Partial<ChartSelection>;
 }
 
 interface AthletePerformance {

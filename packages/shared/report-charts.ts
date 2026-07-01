@@ -7,6 +7,11 @@ export interface ChartSelection {
   distribution: boolean;
 }
 
+/** Default chart selection for new reports — all charts on. */
+export const DEFAULT_CHART_SELECTION: ChartSelection = {
+  radar: true, benchmarkStanding: true, trends: true, distribution: true,
+};
+
 /** Config subset this resolver reads. */
 interface ChartConfigInput {
   charts?: Partial<ChartSelection>;
