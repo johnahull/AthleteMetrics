@@ -474,6 +474,7 @@ export default function PublicReport() {
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
                 percentiles={snapshotData.athlete.percentiles}
+                comparisonLabel={snapshotData.comparisonLabel}
               />
             )}
 

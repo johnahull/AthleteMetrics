@@ -29,7 +29,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } 
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
-import { organizations, users, userOrganizations, reports, measurements } from '@shared/schema';
+import { organizations, users, userOrganizations, reports, measurements, teams } from '@shared/schema';
 import { eq, and } from 'drizzle-orm';
 import bcrypt from 'bcrypt';
 import { BCRYPT_SALT_ROUNDS } from '@shared/constants';
@@ -55,6 +55,7 @@ let testAthlete: any;
 let coachAuthCookie: string;
 let createdReportIds: string[] = [];
 let createdPeerIds: string[] = [];
+let createdTeamIds: string[] = [];
 
 beforeAll(async () => {
   // Create Express app and register routes (mirrors the sibling report-trends harness).
@@ -171,6 +172,11 @@ afterEach(async () => {
   }
   createdReportIds = [];
 
+  for (const teamId of createdTeamIds) {
+    await db.delete(teams).where(eq(teams.id, teamId));
+  }
+  createdTeamIds = [];
+
   if (testAthlete) {
     await db.delete(measurements).where(eq(measurements.userId, testAthlete.id));
     await db.delete(userOrganizations).where(eq(userOrganizations.userId, testAthlete.id));
@@ -200,7 +206,7 @@ afterEach(async () => {
  * metric" — so the report athlete plus one peer gives the >= 2 values that
  * computeDistribution requires.
  */
-async function seedPeerAthlete(metric: string, value: string, date = '2024-02-15') {
+async function seedPeerAthlete(metric: string, value: string, date = '2024-02-15', teamId?: string) {
   const stamp = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
   const [peer] = await db.insert(users).values({
     username: `chartselpeer_${stamp}`,
@@ -227,10 +233,21 @@ async function seedPeerAthlete(metric: string, value: string, date = '2024-02-15
     value,
     units: 'in',
     organizationId: testOrg.id,
+    teamId,
     isVerified: true,
   });
 
   return peer;
+}
+
+/** Seed a team in the test org and track it for cleanup. Returns its id. */
+async function seedTeam(name: string): Promise<string> {
+  const [team] = await db.insert(teams).values({
+    organizationId: testOrg.id,
+    name,
+  }).returning();
+  createdTeamIds.push(team.id);
+  return team.id;
 }
 
 /**
@@ -315,6 +332,31 @@ describe('POST /api/reports/:id/generate — distribution payload', () => {
     // The tying peer is kept exactly once; the athlete's own 27.5 is not among the peers.
     expect(dist.values.filter((v: number) => v === 27.5)).toHaveLength(1);
     expect(dist.values).toContain(20);
+  });
+
+  it('scopes the peer cohort to the report filter teams and names the group', async () => {
+    // Two peers ON the filtered team, one peer OFF it. The distribution must
+    // reflect only the on-team peers, and comparisonLabel must name the team.
+    const teamId = await seedTeam('Alpha Squad');
+    await seedPeerAthlete('VERTICAL_JUMP', '22.000', '2024-02-15', teamId);
+    await seedPeerAthlete('VERTICAL_JUMP', '25.000', '2024-02-15', teamId);
+    await seedPeerAthlete('VERTICAL_JUMP', '30.000', '2024-02-15'); // off-team, must be excluded
+    const report = await createIndividualReport({
+      charts: { distribution: true },
+      filters: { teamIds: [teamId] },
+    });
+
+    const response = await generate(report.id);
+    expect(response.status).toBe(200);
+
+    const dist = response.body.distributions.VERTICAL_JUMP;
+    expect(dist).toBeDefined();
+    // Only the two on-team peers are in the cohort; the off-team 30 is excluded.
+    expect(dist.values).toContain(22);
+    expect(dist.values).toContain(25);
+    expect(dist.values).not.toContain(30);
+    // The caption names the cohort.
+    expect(response.body.comparisonLabel).toBe('Alpha Squad');
   });
 
   it('omits distributions when charts.distribution is false', async () => {

@@ -205,7 +205,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Team Average</TableHead>
+                  <TableHead>Group Average</TableHead>
                   <TableHead>Percentile</TableHead>
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
@@ -357,6 +357,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
           metricLabels={metricLabels}
           metricUnits={metricUnits}
           percentiles={athlete.percentiles}
+          comparisonLabel={reportData.comparisonLabel}
         />
       )}
 

@@ -132,6 +132,7 @@ export interface IndividualReportData {
   orgBranding?: OrgBranding;
   trends?: ReportTrends;
   distributions?: ReportDistributions;
+  comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 
 export type PdfFormat = 'visual' | 'simplified';

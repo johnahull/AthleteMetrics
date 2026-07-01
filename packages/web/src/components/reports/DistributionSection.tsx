@@ -9,6 +9,8 @@ interface Props {
   metricUnits?: Record<string, string>;
   /** Direction-normalized "better than X%" per metric, from the report (preferred). */
   percentiles?: Record<string, number>;
+  /** Name of the peer cohort (e.g. "Varsity (Male, WR)"); falls back to "your group". */
+  comparisonLabel?: string;
 }
 
 /** Compact number: integers as-is, otherwise one decimal. */
@@ -26,6 +28,7 @@ function MetricHistogram({
   label,
   unit,
   percentile,
+  groupLabel,
   captureCode,
   captureTitle,
 }: {
@@ -33,6 +36,7 @@ function MetricHistogram({
   label: string;
   unit?: string;
   percentile?: number;
+  groupLabel: string;
   captureCode: string;
   captureTitle: string;
 }) {
@@ -63,10 +67,13 @@ function MetricHistogram({
     <div data-report-chart={`dist:${captureCode}`} data-report-chart-title={captureTitle} className="space-y-1">
       <p className="text-sm text-foreground">
         <span className="font-medium">{label}.</span> You scored better than{' '}
-        <span className="font-semibold text-green-600">{pct}% of your group</span> ({yourValue}).
+        <span className="font-semibold text-green-600">
+          {pct}% of {groupLabel}
+        </span>{' '}
+        ({yourValue}).
       </p>
       <p className="text-xs text-muted-foreground">
-        Each bar shows how many athletes scored in that range · you are the green bar ★
+        Each bar shows how many athletes in {groupLabel} scored in that range · you are the green bar ★
       </p>
       <svg viewBox={`0 0 ${W} 240`} className="w-full" role="img" aria-label={`${label} distribution histogram`}>
         <line x1={plotLeft} y1={baseline} x2={plotRight} y2={baseline} stroke="#cbd5e1" />
@@ -108,9 +115,12 @@ export function DistributionSection({
   metricLabels = {},
   metricUnits = {},
   percentiles = {},
+  comparisonLabel,
 }: Props) {
   const entries = Object.entries(distributions);
   if (entries.length === 0) return null;
+
+  const groupLabel = comparisonLabel ?? 'your group';
 
   return (
     <Card>
@@ -127,6 +137,7 @@ export function DistributionSection({
               label={label}
               unit={metricUnits[code]}
               percentile={percentiles[code]}
+              groupLabel={groupLabel}
               captureCode={code}
               captureTitle={`${label} — where ${athleteName} stands`}
             />
