@@ -400,11 +400,13 @@ describe('POST /api/reports/:id/generate — trends gate via charts', () => {
 });
 
 describe('POST /api/reports/:id/generate — explicit empty charts (all-off)', () => {
-  it('treats a present-but-empty charts object as all-off: no distributions, no trends', async () => {
-    // A peer exists (distribution could resolve) but an explicit empty `charts`
-    // selects nothing — distinguishing it from legacy "no charts" defaults.
+  it('overrides legacy showTrends: empty charts means all-off even with showTrends true', async () => {
+    // A peer exists (distribution could resolve) and legacy showTrends is set —
+    // but an explicit empty `charts` selects nothing and must WIN over showTrends.
+    // If the resolver wrongly fell back to legacy defaults, trends would appear;
+    // seeding showTrends: true is what makes those two behaviors diverge here.
     await seedPeerAthlete('VERTICAL_JUMP', '20.000');
-    const report = await createIndividualReport({ charts: {} });
+    const report = await createIndividualReport({ charts: {}, showTrends: true });
 
     const response = await generate(report.id);
 
