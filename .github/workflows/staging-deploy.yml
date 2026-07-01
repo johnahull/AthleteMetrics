@@ -51,6 +51,16 @@ jobs:
         env:
           DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
+      - name: Seed default metrics
+        run: npx tsx scripts/seed-default-metrics.ts
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
+      - name: Apply cascade delete triggers
+        run: ./scripts/apply-cascade-triggers.sh
+        env:
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+
       - name: Run integration tests
         run: npm run test:integration
         env:
