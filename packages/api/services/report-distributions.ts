@@ -5,6 +5,13 @@ import type { MetricDistribution } from '@shared/report-trends-types';
 export const MAX_DISTRIBUTION_POINTS = 150;
 
 /**
+ * The direction-agnostic core of a distribution. The caller attaches `direction`
+ * (metric metadata) to form the full {@link MetricDistribution}; this keeps the
+ * math pure and independent of higher/lower-is-better.
+ */
+type DistributionCore = Omit<MetricDistribution, 'direction'>;
+
+/**
  * Build a peer distribution for one metric. Stats are computed from the FULL
  * peer set; `values` is evenly sampled down to `maxPoints` for display.
  * Returns null when there are fewer than 2 peers (no meaningful box).
@@ -13,7 +20,7 @@ export function computeDistribution(
   peerValues: number[],
   athleteValue: number,
   maxPoints: number = MAX_DISTRIBUTION_POINTS,
-): MetricDistribution | null {
+): DistributionCore | null {
   if (!peerValues || peerValues.length < 2) return null;
 
   const sorted = [...peerValues].sort((a, b) => a - b);

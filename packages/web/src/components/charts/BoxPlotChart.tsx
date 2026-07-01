@@ -48,7 +48,6 @@ interface BoxPlotChartProps {
   selectedGroups?: GroupDefinition[]; // For multi-group analysis
   benchmarks?: BenchmarkLine[]; // Benchmark lines/ranges to display
   showBenchmarks?: boolean; // Whether to show benchmarks
-  compact?: boolean; // Suppress analytics-only chrome (toggle) for embedded/report use
 }
 
 export const BoxPlotChart = React.memo(function BoxPlotChart({
@@ -61,8 +60,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   showAthleteNames = false,
   selectedGroups,
   benchmarks,
-  showBenchmarks = true,
-  compact = false
+  showBenchmarks = true
 }: BoxPlotChartProps) {
   const { getMetricConfig } = useMetricConfig();
   const chartRef = useRef<ChartJS<'scatter'> | null>(null);
@@ -1529,8 +1527,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
   // Add error boundary wrapper for chart rendering
   return (
     <div className="w-full h-full flex flex-col overflow-hidden">
-      {/* Toggle control for athlete names - only show when swarm mode is enabled (hidden in compact/report mode) */}
-      {showAllPoints && !compact && (
+      {/* Toggle control for athlete names - only show when swarm mode is enabled */}
+      {showAllPoints && (
         <div className="flex items-center space-x-2 mb-4 px-2 flex-shrink-0">
           <Switch
             id="show-names"
@@ -1543,8 +1541,8 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         </div>
       )}
 
-      <div className={compact ? 'flex-1 min-h-0' : 'flex-1 overflow-y-auto'}>
-        <div style={{ position: 'relative', minHeight: compact ? '100%' : '400px', height: compact ? '100%' : undefined, width: '100%' }}>
+      <div className="flex-1 overflow-y-auto">
+        <div style={{ position: 'relative', minHeight: '400px', width: '100%' }}>
           {(() => {
             try {
               // Render chart only if there's data and options

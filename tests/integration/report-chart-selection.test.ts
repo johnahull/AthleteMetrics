@@ -293,6 +293,10 @@ describe('POST /api/reports/:id/generate — distribution payload', () => {
     for (const key of ['min', 'q1', 'median', 'q3', 'max']) {
       expect(typeof dist.stats[key]).toBe('number');
     }
+
+    // direction: VERTICAL_JUMP is higher-is-better (drives the histogram's
+    // "better" axis annotation on the frontend).
+    expect(dist.direction).toBe('higher');
   });
 
   it('omits distributions when charts.distribution is false', async () => {

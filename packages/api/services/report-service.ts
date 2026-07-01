@@ -465,7 +465,12 @@ export class ReportService extends BaseService {
         const athleteValue = bestPerformances[metric];
         if (athleteValue === undefined) continue;
         const dist = computeDistribution(peerValues[metric] ?? [], athleteValue);
-        if (dist) distributions[metric] = dist;
+        if (dist) {
+          // getMetricInfo memoizes (warmed by the bestPerformances loop), so this
+          // is a cache hit; direction lets the histogram annotate the "better" side.
+          const info = await this.getMetricInfo(metric);
+          distributions[metric] = { ...dist, direction: info.lowerIsBetter ? 'lower' : 'higher' };
+        }
       }
       if (Object.keys(distributions).length === 0) distributions = undefined;
     }

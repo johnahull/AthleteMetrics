@@ -1,105 +1,135 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BoxPlotChart } from '@/components/charts/BoxPlotChart';
-import type { ReportDistributions } from '@shared/report-trends-types';
-import type { StatisticalSummary } from '@shared/analytics-types';
+import type { ReportDistributions, MetricDistribution } from '@shared/report-trends-types';
+import { computeHistogram, percentBetterThanPeers } from './histogram-utils';
 
 interface Props {
-  athleteId: string;
   athleteName: string;
   distributions: ReportDistributions;
   metricLabels?: Record<string, string>;
+  metricUnits?: Record<string, string>;
+  /** Direction-normalized "better than X%" per metric, from the report (preferred). */
+  percentiles?: Record<string, number>;
+}
+
+/** Compact number: integers as-is, otherwise one decimal. */
+function fmt(n: number): string {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+/**
+ * "Where you stand" histogram for one metric. Bars = how many athletes scored in
+ * each value range; the athlete's bar is highlighted with a "You" tag. A plain
+ * sentence states the percentile so the takeaway lands without reading the chart.
+ */
+function MetricHistogram({
+  dist,
+  label,
+  unit,
+  percentile,
+  captureCode,
+  captureTitle,
+}: {
+  dist: MetricDistribution;
+  label: string;
+  unit?: string;
+  percentile?: number;
+  captureCode: string;
+  captureTitle: string;
+}) {
+  const bins = computeHistogram(dist.values, dist.athleteValue);
+  const maxCount = Math.max(...bins.map((b) => b.count), 1);
+
+  const pct =
+    percentile !== undefined
+      ? Math.max(0, Math.min(100, Math.round(percentile)))
+      : percentBetterThanPeers(dist.values, dist.athleteValue, dist.direction);
+
+  const betterSide = dist.direction === 'higher' ? 'farther right = better' : 'farther left = better';
+  const yourValue = `${fmt(dist.athleteValue)}${unit ? ` ${unit}` : ''}`;
+
+  // SVG layout (viewBox units).
+  const W = 600;
+  const plotLeft = 40;
+  const plotRight = 585;
+  const plotWidth = plotRight - plotLeft;
+  const baseline = 195;
+  const maxBarH = 150;
+  const n = bins.length;
+  const bw = plotWidth / n;
+  const gap = Math.min(8, bw * 0.2);
+  const barW = bw - gap;
+
+  return (
+    <div data-report-chart={`dist:${captureCode}`} data-report-chart-title={captureTitle} className="space-y-1">
+      <p className="text-sm text-foreground">
+        <span className="font-medium">{label}.</span> You scored better than{' '}
+        <span className="font-semibold text-green-600">{pct}% of your group</span> ({yourValue}).
+      </p>
+      <p className="text-xs text-muted-foreground">
+        Each bar shows how many athletes scored in that range · you are the green bar ★
+      </p>
+      <svg viewBox={`0 0 ${W} 240`} className="w-full" role="img" aria-label={`${label} distribution histogram`}>
+        <line x1={plotLeft} y1={baseline} x2={plotRight} y2={baseline} stroke="#cbd5e1" />
+        {bins.map((b, i) => {
+          const h = (b.count / maxCount) * maxBarH;
+          const x = plotLeft + i * bw + gap / 2;
+          const y = baseline - h;
+          const cx = x + barW / 2;
+          return (
+            <g key={i}>
+              <rect x={x} y={y} width={barW} height={h} fill={b.isAthlete ? '#16a34a' : '#cbd5e1'} rx={2} />
+              {b.count > 0 && (
+                <text x={cx} y={y - 4} textAnchor="middle" fontSize={10} fill="#94a3b8">
+                  {b.count}
+                </text>
+              )}
+              {b.isAthlete && (
+                <text x={cx} y={Math.max(12, y - 16)} textAnchor="middle" fontSize={11} fontWeight={700} fill="#16a34a">
+                  ★ You
+                </text>
+              )}
+              <text x={cx} y={210} textAnchor="middle" fontSize={9} fill="#64748b">
+                {`${fmt(b.start)}–${fmt(b.end)}`}
+              </text>
+            </g>
+          );
+        })}
+        <text x={W / 2} y={232} textAnchor="middle" fontSize={11} fill="#64748b">
+          {`${label}${unit ? ` (${unit})` : ''} — ${betterSide}`}
+        </text>
+      </svg>
+    </div>
+  );
 }
 
 export function DistributionSection({
-  athleteId,
   athleteName,
   distributions,
   metricLabels = {},
+  metricUnits = {},
+  percentiles = {},
 }: Props) {
   const entries = Object.entries(distributions);
   if (entries.length === 0) return null;
 
   return (
-    <Card data-report-chart="distribution" data-report-chart-title="Distribution vs peers">
+    <Card data-report-chart="distribution" data-report-chart-title="Where you stand">
       <CardHeader>
         <CardTitle>Where You Stand (vs your group)</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Each blue dot is an athlete in your organization with this test; you are the highlighted green star.
-        </p>
+      <CardContent className="space-y-6">
         {entries.map(([code, dist]) => {
           const label = metricLabels[code] || code;
-          // dist.values are the peer dots — the backend already excludes one
-          // occurrence of the athlete's own value (before sampling), so the athlete
-          // is not double-plotted. The athlete is added below as the highlighted star.
-          const points = dist.values.map((v, i) => ({
-            athleteId: `peer-${i}`,
-            athleteName: '',
-            value: v,
-            date: new Date(),
-            metric: code,
-          }));
-          points.push({
-            athleteId,
-            athleteName,
-            value: dist.athleteValue,
-            date: new Date(),
-            metric: code,
-          });
-          // Pass the backend's full-population five-number summary so the box reflects
-          // the true distribution rather than the sampled dots. Percentiles not carried
-          // by dist.stats are filled monotonically from min/q1/median/q3/max.
-          const s = dist.stats;
-          const statistics: Record<string, StatisticalSummary> = {
-            [code]: {
-              count: dist.values.length + 1,
-              mean: s.median,
-              median: s.median,
-              min: s.min,
-              max: s.max,
-              std: 0,
-              variance: 0,
-              percentiles: {
-                p5: s.min,
-                p10: s.min,
-                p20: s.min,
-                p25: s.q1,
-                p30: s.q1,
-                p40: s.median,
-                p50: s.median,
-                p60: s.median,
-                p70: s.q3,
-                p75: s.q3,
-                p80: s.q3,
-                p90: s.max,
-                p95: s.max,
-              },
-            },
-          };
           return (
-            <div
+            <MetricHistogram
               key={code}
-              data-report-chart={`dist:${code}`}
-              data-report-chart-title={`${label} — distribution`}
-              className="h-[260px]"
-            >
-              <BoxPlotChart
-                data={points}
-                rawData={points}
-                statistics={statistics}
-                highlightAthlete={athleteId}
-                showAllPoints
-                compact
-                config={{
-                  type: 'box_swarm_combo',
-                  title: label,
-                  showLegend: false,
-                  showTooltips: true,
-                  responsive: true,
-                }}
-              />
-            </div>
+              dist={dist}
+              label={label}
+              unit={metricUnits[code]}
+              percentile={percentiles[code]}
+              captureCode={code}
+              captureTitle={`${label} — where ${athleteName} stands`}
+            />
           );
         })}
       </CardContent>

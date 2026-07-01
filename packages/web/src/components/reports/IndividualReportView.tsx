@@ -352,10 +352,11 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
 
       {sel.distribution && distributions && Object.keys(distributions).length > 0 && (
         <DistributionSection
-          athleteId={athlete.userId}
           athleteName={athlete.userName}
           distributions={distributions}
           metricLabels={metricLabels}
+          metricUnits={metricUnits}
+          percentiles={athlete.percentiles}
         />
       )}
 

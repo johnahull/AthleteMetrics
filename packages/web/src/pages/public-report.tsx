@@ -469,10 +469,11 @@ export default function PublicReport() {
 
             {sel.distribution && snapshotData.distributions && Object.keys(snapshotData.distributions).length > 0 && (
               <DistributionSection
-                athleteId={snapshotData.athlete.userId}
                 athleteName={snapshotData.athlete.userName}
                 distributions={snapshotData.distributions}
                 metricLabels={metricLabels}
+                metricUnits={metricUnits}
+                percentiles={snapshotData.athlete.percentiles}
               />
             )}
 

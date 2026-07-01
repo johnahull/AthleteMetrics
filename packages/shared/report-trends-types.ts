@@ -43,6 +43,7 @@ export interface MetricDistribution {
   values: number[];   // peer best-performances, sampled for display (<= cap)
   athleteValue: number;
   stats: { min: number; q1: number; median: number; q3: number; max: number }; // from the FULL set
+  direction: 'higher' | 'lower';  // higher-is-better vs lower-is-better (for the "better" axis annotation)
 }
 
 /** Map of metric code -> distribution. Present only when the distribution chart is enabled. */
