@@ -6,6 +6,7 @@
 import express, { type Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
+import { planChartPageBreaks } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
@@ -3702,10 +3703,6 @@ async function enforcePublicSnapshotAccess(
 // number of synchronous jsPDF getImageProperties/addImage calls per request.
 const MAX_CHART_IMAGES = 20;
 
-// Trend charts flowed per PDF page. 2 keeps each chart legible at roughly
-// half-height on A4 portrait; bumping it shrinks the charts.
-const MAX_CHARTS_PER_PDF_PAGE = 2;
-
 /**
  * Normalize the client-supplied chartImages payload into a safe, bounded array.
  * Destructuring defaults only guard `undefined`; a client sending `null`, a
@@ -3741,44 +3738,46 @@ function addTrendChartsToPdf(
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
   const imgWidth = pageWidth - margin * 2;
-  const bottomLimit = pageHeight - margin;
-  const maxPerPage = MAX_CHARTS_PER_PDF_PAGE;
+  const startY = 20;
+  const usableHeight = pageHeight - margin - startY;
 
-  // Start the trends section on a fresh page, then flow charts down it.
-  doc.addPage();
-  let yPos = 20;
-  let onPage = 0;
-
+  // Pass 1: measure each chart at full page width, skipping corrupt payloads. A
+  // payload that passes the data:image/png;base64, prefix check but has truncated
+  // bytes throws inside getImageProperties; isolating it here means one bad capture
+  // is dropped rather than aborting the whole PDF with a 500.
+  const measured: Array<{
+    img: { metricCode: string; dataUrl: string; title?: string };
+    imgHeight: number;
+    blockHeight: number;
+  }> = [];
   for (const img of chartImages) {
-    // Isolate each chart: a corrupt payload that passes the data:image/png;base64,
-    // prefix check but has truncated bytes will throw inside getImageProperties or
-    // addImage. Catching per-chart means one bad capture skips rather than aborting
-    // the entire PDF with a 500.
     try {
       const props = doc.getImageProperties(img.dataUrl);
       const imgHeight = (props.height / props.width) * imgWidth;
-      const blockHeight = 6 + imgHeight + 10; // label + image + gap
-
-      // Break to a new page when the page is full (max per page) or the next
-      // chart would overflow the bottom margin. Never break before the first
-      // chart on a page, so an oversized chart still renders.
-      if (onPage > 0 && (onPage >= maxPerPage || yPos + blockHeight > bottomLimit)) {
-        doc.addPage();
-        yPos = 20;
-        onPage = 0;
-      }
-
-      doc.setFontSize(14);
-      doc.setTextColor(40, 40, 40);
-      doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
-      yPos += 6;
-      doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
-      yPos += imgHeight + 10;
-      onPage += 1;
+      measured.push({ img, imgHeight, blockHeight: 6 + imgHeight + 10 }); // label + image + gap
     } catch (err) {
       console.error('[pdf] skipping corrupt chart for', img.metricCode, err);
     }
   }
+  if (!measured.length) return;
+
+  // Pass 2: pack as many charts per page as fit by vertical space (no fixed
+  // per-page count), then flow them down the pages.
+  const breaks = planChartPageBreaks(measured.map((m) => m.blockHeight), usableHeight);
+  doc.addPage();
+  let yPos = startY;
+  measured.forEach(({ img, imgHeight }, i) => {
+    if (breaks[i]) {
+      doc.addPage();
+      yPos = startY;
+    }
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
+    yPos += 6;
+    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+    yPos += imgHeight + 10;
+  });
 }
 
 async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
