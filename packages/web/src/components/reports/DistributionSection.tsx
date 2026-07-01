@@ -123,7 +123,7 @@ export function DistributionSection({
   const groupLabel = comparisonLabel ?? 'your group';
 
   return (
-    <Card>
+    <Card data-report-chart="distribution" data-report-chart-title="Where You Stand">
       <CardHeader>
         <CardTitle>Where You Stand (vs {groupLabel})</CardTitle>
       </CardHeader>

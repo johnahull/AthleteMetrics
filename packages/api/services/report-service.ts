@@ -490,7 +490,9 @@ export class ReportService extends BaseService {
         const rows = await db
           .select({ name: teams.name })
           .from(teams)
-          .where(inArray(teams.id, f.teamIds))
+          // Scope to this report's org so a crafted cross-org teamId can't leak
+          // another org's team name into the caption.
+          .where(and(eq(teams.organizationId, report.organizationId), inArray(teams.id, f.teamIds)))
           .orderBy(teams.name); // deterministic label order for multi-team cohorts
         filterTeamNames = rows.map((r) => r.name);
       }

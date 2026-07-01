@@ -335,7 +335,10 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       };
     }
 
-    config.charts = data.charts;
+    // Chart selection is an individual-report feature; don't pollute team configs.
+    if (data.reportType === "individual") {
+      config.charts = data.charts;
+    }
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
       config.filters = {

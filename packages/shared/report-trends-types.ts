@@ -40,7 +40,7 @@ export type ReportTrends = Record<string, MetricTrend>;
 
 /** Peer distribution for one metric (org-wide), with the athlete's own value. */
 export interface MetricDistribution {
-  values: number[];   // peer best-performances, sampled for display (<= cap)
+  values: number[];   // peer best-performances (sorted; all peers, not sampled)
   athleteValue: number;
   stats: { min: number; q1: number; median: number; q3: number; max: number }; // from the FULL set
   direction: 'higher' | 'lower';  // higher-is-better vs lower-is-better (for the "better" axis annotation)

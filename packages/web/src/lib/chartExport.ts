@@ -209,7 +209,13 @@ export async function getChartPngDataUrl(containerElement: HTMLElement): Promise
  * Report charts carry data-report-chart={metricCode} with optional data-report-chart-title={title}.
  */
 export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string; title?: string }>> {
-  const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric], [data-report-chart]'));
+  const all = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric], [data-report-chart]'));
+
+  // Keep only leaf-most capture targets: skip any element that CONTAINS another
+  // matched element. This lets a section wrapper (e.g. the distribution Card) carry
+  // data-report-chart as a grouping/E2E anchor without being captured as a giant
+  // duplicate of the per-metric charts nested inside it.
+  const nodes = all.filter((node) => !all.some((other) => other !== node && node.contains(other)));
 
   // Capture charts concurrently for speed, but isolate per-chart failures: a
   // single html2canvas error must not reject the whole capture and silently
