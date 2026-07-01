@@ -212,7 +212,7 @@ function AthleteIndividualReportView({ report }: { report: Report }) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Team Average</TableHead>
+                  <TableHead>Group Average</TableHead>
                   <TableHead>Percentile</TableHead>
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>

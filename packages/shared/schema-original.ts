@@ -2194,11 +2194,18 @@ export const insertReportSchema = createInsertSchema(reports).omit({
     benchmarks: z.object({
       site: z.array(z.string()).optional(), // Site benchmark IDs
       custom: z.array(z.string()).optional(), // Custom benchmark IDs
+      // userDefined applies to team reports only (individual reads benchmarks from site/custom)
       userDefined: z.array(z.object({
         metricCode: z.string(),
         value: z.number().positive(),
         label: z.string().max(100),
       })).optional(),
+    }).optional(),
+    charts: z.object({
+      radar: z.boolean().optional(),
+      benchmarkStanding: z.boolean().optional(),
+      trends: z.boolean().optional(),
+      distribution: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),
@@ -2233,11 +2240,18 @@ export const updateReportSchema = z.object({
     benchmarks: z.object({
       site: z.array(z.string()).optional(),
       custom: z.array(z.string()).optional(),
+      // userDefined applies to team reports only (individual reads benchmarks from site/custom)
       userDefined: z.array(z.object({
         metricCode: z.string(),
         value: z.number().positive(),
         label: z.string().max(100),
       })).optional(),
+    }).optional(),
+    charts: z.object({
+      radar: z.boolean().optional(),
+      benchmarkStanding: z.boolean().optional(),
+      trends: z.boolean().optional(),
+      distribution: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),

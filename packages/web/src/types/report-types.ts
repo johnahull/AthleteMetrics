@@ -1,6 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
-import type { ReportTrends } from '@shared/report-trends-types';
+import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
+import type { ChartSelection } from '@shared/report-charts';
 
 export interface Benchmark {
   name: string;
@@ -85,13 +86,9 @@ export interface IndividualReportConfig {
   benchmarks?: {
     site?: string[]; // Site benchmark IDs
     custom?: string[]; // Custom benchmark IDs
-    userDefined?: Array<{
-      metricCode: string;
-      value: number;
-      label: string;
-    }>;
   };
   showTrends?: boolean;
+  charts?: Partial<ChartSelection>;
 }
 
 export interface OrgBranding {
@@ -134,6 +131,8 @@ export interface IndividualReportData {
   metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
   trends?: ReportTrends;
+  distributions?: ReportDistributions;
+  comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 
 export type PdfFormat = 'visual' | 'simplified';
