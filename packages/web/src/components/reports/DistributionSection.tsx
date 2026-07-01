@@ -125,7 +125,7 @@ export function DistributionSection({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Where You Stand (vs your group)</CardTitle>
+        <CardTitle>Where You Stand (vs {groupLabel})</CardTitle>
       </CardHeader>
       <CardContent className="space-y-6">
         {entries.map(([code, dist]) => {

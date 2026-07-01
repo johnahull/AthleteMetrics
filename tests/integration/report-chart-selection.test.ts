@@ -25,7 +25,7 @@ process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';
 process.env.BYPASS_GENERAL_RATE_LIMIT = 'true'; // Bypass rate limits for these tests
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest';
 import request from 'supertest';
 import express, { type Express } from 'express';
 import { db } from '../../packages/api/db';
@@ -70,12 +70,6 @@ beforeAll(async () => {
   );
   app.use(express.urlencoded({ extended: false }));
   await registerRoutes(app);
-});
-
-afterAll(async () => {
-  if (testCoach) {
-    await db.delete(users).where(eq(users.id, testCoach.id));
-  }
 });
 
 beforeEach(async () => {

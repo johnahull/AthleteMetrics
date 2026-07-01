@@ -490,7 +490,8 @@ export class ReportService extends BaseService {
         const rows = await db
           .select({ name: teams.name })
           .from(teams)
-          .where(inArray(teams.id, f.teamIds));
+          .where(inArray(teams.id, f.teamIds))
+          .orderBy(teams.name); // deterministic label order for multi-team cohorts
         filterTeamNames = rows.map((r) => r.name);
       }
       comparisonLabel = buildCohortLabel(filterTeamNames, f.gender, f.positions);
