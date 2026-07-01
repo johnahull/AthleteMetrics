@@ -2,8 +2,6 @@
 import { quantile } from 'simple-statistics';
 import type { MetricDistribution } from '@shared/report-trends-types';
 
-export const MAX_DISTRIBUTION_POINTS = 150;
-
 /**
  * The direction-agnostic core of a distribution. The caller attaches `direction`
  * (metric metadata) to form the full {@link MetricDistribution}; this keeps the
@@ -12,40 +10,33 @@ export const MAX_DISTRIBUTION_POINTS = 150;
 type DistributionCore = Omit<MetricDistribution, 'direction'>;
 
 /**
- * Build a peer distribution for one metric. Stats are computed from the FULL
- * peer set; `values` is evenly sampled down to `maxPoints` for display.
- * Returns null when there are fewer than 2 peers (no meaningful box).
+ * Build a peer distribution for one metric.
+ *
+ * `peers` are the org-wide best-per-athlete values with the focal athlete already
+ * removed BY ID (upstream), so the athlete is never counted among their own peers.
+ * `values` (the histogram/dot inputs) are the peers, sorted; the consumer adds the
+ * athlete back as the highlighted marker. `stats` (five-number summary) are taken
+ * from the full population — the peers plus the athlete — matching the percentile.
+ *
+ * Values are NOT sampled: the histogram derives exact per-range counts from them.
+ * Returns null when there are fewer than 2 peers (no meaningful distribution).
  */
 export function computeDistribution(
-  peerValues: number[],
+  peers: number[],
   athleteValue: number,
-  maxPoints: number = MAX_DISTRIBUTION_POINTS,
 ): DistributionCore | null {
-  if (!peerValues || peerValues.length < 2) return null;
+  if (!peers || peers.length < 2) return null;
 
-  const sorted = [...peerValues].sort((a, b) => a - b);
+  const population = [...peers, athleteValue].sort((a, b) => a - b);
   const stats = {
-    min: sorted[0],
-    q1: quantile(sorted, 0.25),
-    median: quantile(sorted, 0.5),
-    q3: quantile(sorted, 0.75),
-    max: sorted[sorted.length - 1],
+    min: population[0],
+    q1: quantile(population, 0.25),
+    median: quantile(population, 0.5),
+    q3: quantile(population, 0.75),
+    max: population[population.length - 1],
   };
 
-  // Peers shown as dots exclude the athlete's own value (drawn separately as the
-  // marker). Remove one occurrence BEFORE sampling so exclusion is deterministic
-  // at any size. Stats above still reflect the full population (matching the
-  // percentile, which includes the athlete).
-  const peers = [...sorted];
-  const selfIdx = peers.indexOf(athleteValue);
-  if (selfIdx !== -1) peers.splice(selfIdx, 1);
-
-  let values = peers;
-  if (peers.length > maxPoints) {
-    // Even, deterministic down-sampling of the athlete-excluded peers.
-    const step = peers.length / maxPoints;
-    values = Array.from({ length: maxPoints }, (_, i) => peers[Math.floor(i * step)]);
-  }
+  const values = [...peers].sort((a, b) => a - b);
 
   return { values, athleteValue, stats };
 }

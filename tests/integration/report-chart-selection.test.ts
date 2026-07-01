@@ -299,6 +299,24 @@ describe('POST /api/reports/:id/generate — distribution payload', () => {
     expect(dist.direction).toBe('higher');
   });
 
+  it('excludes the athlete by id, not by value: a peer tying the athlete stays', async () => {
+    // A peer whose best equals the athlete's best (27.5). The athlete is removed
+    // from the peer set by id, so this tying peer must remain — the old
+    // value-equality removal would have wrongly dropped it.
+    await seedPeerAthlete('VERTICAL_JUMP', '27.500');
+    await seedPeerAthlete('VERTICAL_JUMP', '20.000');
+    const report = await createIndividualReport({ charts: { distribution: true } });
+
+    const response = await generate(report.id);
+    expect(response.status).toBe(200);
+
+    const dist = response.body.distributions.VERTICAL_JUMP;
+    expect(dist.athleteValue).toBe(27.5);
+    // The tying peer is kept exactly once; the athlete's own 27.5 is not among the peers.
+    expect(dist.values.filter((v: number) => v === 27.5)).toHaveLength(1);
+    expect(dist.values).toContain(20);
+  });
+
   it('omits distributions when charts.distribution is false', async () => {
     await seedPeerAthlete('VERTICAL_JUMP', '20.000');
     const report = await createIndividualReport({ charts: { distribution: false } });

@@ -634,9 +634,14 @@ export class ReportService extends BaseService {
         // Calculate team average (using best performance per athlete, same as team reports)
         teamAverages[metric] = mean(allValues);
 
-        // Expose the per-metric peer best-values so callers (e.g. distributions)
-        // can reuse this peer set instead of re-running the same query.
-        peerValues[metric] = allValues;
+        // Expose the per-metric peer best-values (EXCLUDING the focal athlete by
+        // id) so callers (e.g. distributions) reuse this peer set without a second
+        // query, and the athlete is never counted among their own peers — correct
+        // even when an event filter makes the athlete's shown value differ from
+        // their org-wide best.
+        peerValues[metric] = Array.from(athleteBestMap.entries())
+          .filter(([userId]) => userId !== athleteId)
+          .map(([, value]) => value);
       }
     }
 
