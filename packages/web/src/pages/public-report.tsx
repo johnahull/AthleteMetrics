@@ -467,13 +467,21 @@ export default function PublicReport() {
               </Card>
             )}
 
+            {sel.trends && trends && Object.keys(trends).length > 0 && (
+              <TrendSection
+                trends={trends}
+                metricLabels={metricLabels}
+                metricUnits={metricUnits}
+              />
+            )}
+
             {sel.distribution && snapshotData.distributions && Object.keys(snapshotData.distributions).length > 0 && (
               <DistributionSection
-                athleteName={snapshotData.athlete.userName}
+                athleteName={snapshotData.athlete?.userName ?? ''}
                 distributions={snapshotData.distributions}
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
-                percentiles={snapshotData.athlete.percentiles}
+                percentiles={snapshotData.athlete?.percentiles}
                 comparisonLabel={snapshotData.comparisonLabel}
               />
             )}
@@ -486,15 +494,6 @@ export default function PublicReport() {
               />
             )}
           </>
-        )}
-
-        {/* Time-series trends — gated on the real top-level snapshot reportType */}
-        {reportType === "individual" && sel.trends && trends && Object.keys(trends).length > 0 && (
-          <TrendSection
-            trends={trends}
-            metricLabels={metricLabels}
-            metricUnits={metricUnits}
-          />
         )}
       </div>
     </div>
