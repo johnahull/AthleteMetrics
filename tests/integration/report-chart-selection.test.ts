@@ -261,8 +261,12 @@ async function generate(reportId: string) {
 }
 
 describe('POST /api/reports/:id/generate — distribution payload', () => {
-  it('includes distributions[METRIC] when charts.distribution is true and a peer exists', async () => {
+  it('includes distributions[METRIC] when charts.distribution is true and peers exist', async () => {
+    // Two peers (distinct from the report athlete's 27.5) so the peers-only
+    // `values` array has >= 2 entries. The org population for the box is the
+    // athlete + these two peers = 3.
     await seedPeerAthlete('VERTICAL_JUMP', '20.000');
+    await seedPeerAthlete('VERTICAL_JUMP', '24.000');
     const report = await createIndividualReport({ charts: { distribution: true } });
 
     const response = await generate(report.id);
@@ -274,12 +278,15 @@ describe('POST /api/reports/:id/generate — distribution payload', () => {
     const dist = response.body.distributions.VERTICAL_JUMP;
     expect(dist).toBeDefined();
 
-    // values: sampled peer set, >= 2 (report athlete best + peer)
+    // values: peer dots only — the backend excludes the athlete before sampling
+    // so the athlete is not double-plotted (once as a peer dot, once as the star).
     expect(Array.isArray(dist.values)).toBe(true);
     expect(dist.values.length).toBeGreaterThanOrEqual(2);
 
-    // athleteValue: the report athlete's best (27.5)
+    // athleteValue: the report athlete's best (27.5), and NOT present among the
+    // peer dots (proves the exclusion-before-sampling contract).
     expect(typeof dist.athleteValue).toBe('number');
+    expect(dist.values).not.toContain(dist.athleteValue);
 
     // stats: five-number summary
     expect(dist.stats).toBeDefined();
