@@ -3,6 +3,14 @@ import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import type { BenchmarkOverlay, MetricTrend, TrendPoint } from '@shared/report-trends-types';
 import type { MultiMetricData } from '@shared/analytics-types';
 import { parseColorToRgba } from '@/lib/color-utils';
+import type { AthleteRanking } from '@/types/report-types';
+
+/**
+ * Team charts (radar, trends) render one bold aggregate series plus faint
+ * individual-athlete series for context, capped so the chart stays legible.
+ * Shared by teamRadarDataFromRankings and TeamTrendSection.
+ */
+export const MAX_FAINT_ATHLETES = 8;
 
 /**
  * Direction cue for a metric's trend chart. The y-axis is NOT inverted — values
@@ -117,4 +125,57 @@ export function radarDataFromPercentiles(
   measurements: Record<string, number>,
 ): MultiMetricData {
   return { athleteId, athleteName, metrics: { ...measurements }, percentileRanks: { ...percentiles } };
+}
+
+/** Reserved athlete id for the synthetic team-average radar profile. */
+export const TEAM_AVERAGE_ATHLETE_ID = '__team_avg__';
+
+/**
+ * Build team radar chart data: a synthetic team-average profile (mean
+ * percentile/measurement per metric across all rankings, id
+ * {@link TEAM_AVERAGE_ATHLETE_ID}) followed by up to `cap` individual athlete
+ * profiles (first `cap` by roster order — deterministic). Metrics with no
+ * percentile data from ANY athlete are simply omitted from the team-average
+ * profile rather than defaulting to a misleading value.
+ */
+export function teamRadarDataFromRankings(
+  rankings: AthleteRanking[],
+  metrics: string[],
+  cap = MAX_FAINT_ATHLETES,
+): MultiMetricData[] {
+  const avgPercentiles: Record<string, number> = {};
+  const avgMeasurements: Record<string, number> = {};
+
+  for (const metric of metrics) {
+    const percentileValues = rankings
+      .map((r) => r.percentiles?.[metric])
+      .filter((v): v is number => typeof v === 'number');
+    if (percentileValues.length === 0) continue; // no percentile data anywhere -> omit the spoke entirely
+
+    avgPercentiles[metric] = percentileValues.reduce((a, b) => a + b, 0) / percentileValues.length;
+
+    // RadarChart derives its set of rendered axes from `metrics`' keys (not
+    // `percentileRanks`), so a metric must be gated out of BOTH maps together
+    // — otherwise the axis still renders with no percentile to back it,
+    // silently falling back to a fabricated 50th percentile.
+    const measurementValues = rankings
+      .map((r) => r.measurements?.[metric])
+      .filter((v): v is number => typeof v === 'number');
+    if (measurementValues.length > 0) {
+      avgMeasurements[metric] = measurementValues.reduce((a, b) => a + b, 0) / measurementValues.length;
+    }
+  }
+
+  const teamAverageProfile: MultiMetricData = {
+    athleteId: TEAM_AVERAGE_ATHLETE_ID,
+    athleteName: 'Team Average',
+    metrics: avgMeasurements,
+    percentileRanks: avgPercentiles,
+  };
+
+  const athleteProfiles = rankings
+    .slice(0, cap)
+    .map((r) => radarDataFromPercentiles(r.userId, r.userName, r.percentiles ?? {}, r.measurements ?? {}));
+
+  return [teamAverageProfile, ...athleteProfiles];
 }

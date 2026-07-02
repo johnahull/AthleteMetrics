@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { tierSegments, athletePositionPct, nextTierCaption, benchmarkStandingPct, benchmarkStandingCaption, benchmarkBetterDirection } from '../tier-progress-utils';
-import type { BenchmarkComparison } from '@shared/benchmark-types';
+import { tierSegments, athletePositionPct, nextTierCaption, benchmarkStandingPct, benchmarkStandingCaption, benchmarkBetterDirection, evaluateTierStanding } from '../tier-progress-utils';
+import type { BenchmarkComparison, TierInfo } from '@shared/benchmark-types';
 
 const cmp: BenchmarkComparison = {
   benchmarkName: 'VJ', benchmarkValue: 26, athleteValue: 25.5, meetsOrExceeds: true,
@@ -108,5 +108,78 @@ describe('benchmarkStandingCaption', () => {
   });
   it('omits the unit when none is provided', () => {
     expect(benchmarkStandingCaption({ meetsOrExceeds: true, athleteValue: 22, benchmarkValue: 20 } as BenchmarkComparison)).toBe('✓ Meets (by 2)');
+  });
+});
+
+describe('evaluateTierStanding', () => {
+  const allTiers: TierInfo[] = [
+    { tierName: 'JV', tierColor: '#fde68a', tierOrder: 3, minValue: 20, maxValue: 24 },
+    { tierName: 'Varsity', tierColor: '#86efac', tierOrder: 2, minValue: 24, maxValue: 28 },
+    { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: 28, maxValue: 32 },
+  ];
+
+  it('matches the tier band the value falls into and flags it as not-best', () => {
+    const cmp = evaluateTierStanding(25.5, allTiers, 'Vertical Jump');
+    expect(cmp.tierName).toBe('Varsity');
+    expect(cmp.isBestTier).toBe(false);
+    expect(cmp.nextTierName).toBe('Elite');
+    expect(cmp.distanceToNextTier).toBeCloseTo(2.5, 2);
+    expect(cmp.allTiers).toEqual([...allTiers].sort((a, b) => a.tierOrder - b.tierOrder));
+    expect(cmp.athleteValue).toBe(25.5);
+    expect(cmp.tierGroupName).toBe('Vertical Jump');
+  });
+
+  it('flags the best (lowest tierOrder) tier as isBestTier with no next tier', () => {
+    const cmp = evaluateTierStanding(30, allTiers);
+    expect(cmp.tierName).toBe('Elite');
+    expect(cmp.isBestTier).toBe(true);
+    expect(cmp.nextTierName).toBeUndefined();
+    expect(cmp.distanceToNextTier).toBeNull();
+  });
+
+  it('clamps a value above the best tier band to the best tier', () => {
+    const cmp = evaluateTierStanding(40, allTiers);
+    expect(cmp.tierName).toBe('Elite');
+    expect(cmp.isBestTier).toBe(true);
+  });
+
+  it('clamps a value below the worst tier band to the nearest (worst) tier', () => {
+    const cmp = evaluateTierStanding(5, allTiers);
+    expect(cmp.tierName).toBe('JV');
+    expect(cmp.isBestTier).toBe(false);
+  });
+
+  it('does not produce NaN for a degenerate single-tier group', () => {
+    const cmp = evaluateTierStanding(10, [{ tierName: 'Only', tierColor: '#ccc', tierOrder: 1, minValue: null, maxValue: null }]);
+    expect(cmp.isBestTier).toBe(true);
+    expect(Number.isFinite(cmp.athleteValue)).toBe(true);
+  });
+
+  // Lower-is-better tiers (e.g. a sprint time): tierOrder 1 is still "best",
+  // but "best" now occupies the LOWEST numeric band, the mirror image of the
+  // higher-is-better fixture above.
+  const lowerIsBetterTiers: TierInfo[] = [
+    { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: 1.00, maxValue: 1.20 },
+    { tierName: 'Varsity', tierColor: '#86efac', tierOrder: 2, minValue: 1.20, maxValue: 1.50 },
+    { tierName: 'JV', tierColor: '#fde68a', tierOrder: 3, minValue: 1.50, maxValue: 1.60 },
+  ];
+
+  it('for a lower-is-better metric, clamps a value worse than every band to the worst tier, not the best', () => {
+    // 1.90s is slower than JV's own worst boundary (1.60) — beyond every
+    // defined band. Regression for a bug where the out-of-range fallback
+    // ignored direction and always favored the "value > max" branch,
+    // misclassifying this as Elite.
+    const cmp = evaluateTierStanding(1.90, lowerIsBetterTiers, 'Sprint', true);
+    expect(cmp.tierName).toBe('JV');
+    expect(cmp.isBestTier).toBe(false);
+  });
+
+  it('for a lower-is-better metric, computes distanceToNextTier toward the next tier\'s own boundary', () => {
+    // 1.45s sits in Varsity (1.20-1.50); the next better tier is Elite, whose
+    // relevant boundary to cross is its OWN maxValue (1.20), not matched's.
+    const cmp = evaluateTierStanding(1.45, lowerIsBetterTiers, 'Sprint', true);
+    expect(cmp.tierName).toBe('Varsity');
+    expect(cmp.nextTierName).toBe('Elite');
+    expect(cmp.distanceToNextTier).toBeCloseTo(0.25, 2);
   });
 });

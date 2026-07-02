@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 import type { ChartOptions } from 'chart.js';
 import type { AnnotationOptions } from 'chartjs-plugin-annotation';
 import { Line } from 'react-chartjs-2';
-import type { MetricTrend } from '@shared/report-trends-types';
+import type { MetricTrend, TrendPoint } from '@shared/report-trends-types';
 import {
   buildTrendChartData,
   overlayToAnnotations,
@@ -19,9 +19,26 @@ interface BenchmarkTrendChartProps {
   trend: MetricTrend;
   label: string;
   unit?: string;
+  /**
+   * Optional faint background lines drawn behind the main series (e.g. per-
+   * athlete series behind a team-average main line). Each series is aligned
+   * to the main series's x-axis by exact date match; dates the background
+   * series doesn't have render as a gap that Chart.js bridges (`spanGaps`).
+   * This is a best-effort visual overlay for context, not a precise
+   * per-athlete calendar — acceptable since these lines are intentionally
+   * faint/secondary.
+   */
+  backgroundSeries?: TrendPoint[][];
 }
 
-export function BenchmarkTrendChart({ metricCode, trend, label, unit }: BenchmarkTrendChartProps) {
+/** Map a background series onto the main series's x-axis positions (exact
+ *  date match); missing dates become `null` so Chart.js skips/bridges the gap. */
+function alignToMainDates(mainSeries: TrendPoint[], series: TrendPoint[]): (number | null)[] {
+  const byDate = new Map(series.map((p) => [p.date, p.value]));
+  return mainSeries.map((p) => byDate.get(p.date) ?? null);
+}
+
+export function BenchmarkTrendChart({ metricCode, trend, label, unit, backgroundSeries }: BenchmarkTrendChartProps) {
   const cue = useMemo(() => directionCue(trend.direction), [trend.direction]);
 
   // Index of the personal-best point so we can enlarge + star it on the line.
@@ -43,8 +60,27 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit }: Benchmar
     ds.pointBackgroundColor = trend.series.map((_, i) => (i === pbIdx ? '#f59e0b' : '#2563eb'));
     ds.pointBorderColor = trend.series.map((_, i) => (i === pbIdx ? '#b45309' : '#2563eb'));
     ds.pointBorderWidth = trend.series.map((_, i) => (i === pbIdx ? 2 : 1));
+
+    if (backgroundSeries && backgroundSeries.length > 0) {
+      backgroundSeries.forEach((series, i) => {
+        (d.datasets as Record<string, unknown>[]).push({
+          label: `Athlete context ${i + 1}`,
+          data: alignToMainDates(trend.series, series),
+          borderColor: 'rgba(148, 163, 184, 0.5)',
+          backgroundColor: 'transparent',
+          borderWidth: 1,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          fill: false,
+          tension: 0.1,
+          spanGaps: true,
+          order: 10,
+        });
+      });
+    }
+
     return d;
-  }, [trend, label, pbIdx]);
+  }, [trend, label, pbIdx, backgroundSeries]);
 
   const annotations = useMemo<Record<string, AnnotationOptions>>(() => {
     const ann = overlayToAnnotations(trend.benchmark);

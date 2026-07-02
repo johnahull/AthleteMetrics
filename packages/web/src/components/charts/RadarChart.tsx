@@ -67,6 +67,15 @@ interface RadarChartProps {
   onAthleteSelectionChange?: (athleteIds: string[]) => void;
   maxAthletes?: number;
   compact?: boolean;
+  /**
+   * When `highlightAthlete` is set, render every profile in `data` instead of
+   * only the highlighted one, styling non-highlighted profiles faint/dim so
+   * the highlighted profile still reads as the bold, primary shape. Used for
+   * "aggregate + faint athletes" charts (e.g. team radar: bold team average
+   * with faint individual athletes behind it). Default false preserves the
+   * existing single-athlete highlight behavior byte-for-byte.
+   */
+  dimUnhighlighted?: boolean;
 }
 
 export function RadarChart({
@@ -77,7 +86,8 @@ export function RadarChart({
   selectedAthleteIds,
   onAthleteSelectionChange,
   maxAthletes = 5,
-  compact = false
+  compact = false,
+  dimUnhighlighted = false
 }: RadarChartProps) {
   const { getMetricConfig } = useMetricConfig();
 
@@ -248,7 +258,7 @@ export function RadarChart({
 
     // Individual athlete datasets - filter by selection
     const athletesToShow = highlightAthlete ?
-      processedData.filter(athlete => athlete.athleteId === highlightAthlete) :
+      (dimUnhighlighted ? processedData : processedData.filter(athlete => athlete.athleteId === highlightAthlete)) :
       processedData.filter(athlete => effectiveSelectedAthleteIds.includes(athlete.athleteId));
 
     const colors = [
@@ -270,19 +280,26 @@ export function RadarChart({
         return radarPlotValue(athlete, metric, undefined, getMetricConfig(metric)?.lowerIsBetter);
       });
 
-      const color = colors[index % colors.length];
+      const isHighlighted = highlightAthlete === athlete.athleteId;
+      const isFaint = dimUnhighlighted && !!highlightAthlete && !isHighlighted;
+      const color = isFaint
+        ? { bg: 'rgba(148, 163, 184, 0.06)', border: 'rgba(148, 163, 184, 0.45)' }
+        : colors[index % colors.length];
 
       datasets.push({
         label: athlete.athleteName,
+        // Carried through to the tooltip callback so it can look the athlete
+        // up by id, not by (possibly duplicate) display name.
+        athleteId: athlete.athleteId,
         data: athleteValues,
         backgroundColor: color.bg,
         borderColor: color.border,
-        borderWidth: highlightAthlete === athlete.athleteId ? 3 : 2,
+        borderWidth: isHighlighted ? 3 : (isFaint ? 1 : 2),
         pointBackgroundColor: color.border,
         pointBorderColor: '#fff',
         pointHoverBackgroundColor: '#fff',
         pointHoverBorderColor: color.border,
-        pointRadius: highlightAthlete === athlete.athleteId ? 6 : 4
+        pointRadius: isHighlighted ? 6 : (isFaint ? 0 : 4)
       });
     });
 
@@ -293,7 +310,7 @@ export function RadarChart({
       groupAverages,
       data: processedData // Added for context in the tooltip logic
     };
-  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds]);
+  }, [data, statistics, highlightAthlete, effectiveSelectedAthleteIds, dimUnhighlighted]);
 
   // Chart options
   const options: ChartOptions<'radar'> = {
@@ -325,15 +342,16 @@ export function RadarChart({
 
             if (!metric) return '';
 
-            // Find the actual value for this athlete and metric
-            const athleteName = context.dataset.label;
+            // Find the actual value for this athlete and metric. Looked up by
+            // athleteId (carried on the dataset) rather than display name,
+            // since multiple athletes can share a name.
+            const athleteId = (context.dataset as { athleteId?: string }).athleteId;
             let actualValue = 0;
 
-            if (athleteName === 'Group Average') {
+            if (context.dataset.label === 'Group Average') {
               actualValue = radarData?.groupAverages[metricIndex] || 0;
             } else {
-              // Corrected reference to radarData.data
-              const athlete = radarData?.data.find(a => a.athleteName === athleteName);
+              const athlete = radarData?.data.find(a => a.athleteId === athleteId);
               actualValue = athlete?.metrics[metric] || 0;
             }
 

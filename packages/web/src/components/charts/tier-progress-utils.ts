@@ -84,3 +84,97 @@ export function nextTierCaption(cmp: BenchmarkComparison, unit?: string): string
   const u = unit ? ` ${unit}` : '';
   return `${Math.round(cmp.distanceToNextTier * 100) / 100}${u} to ${cmp.nextTierName}`;
 }
+
+/**
+ * Evaluate an arbitrary value (e.g. a team average, not a single athlete's own
+ * measurement) against a tier group, producing a synthetic {@link
+ * BenchmarkComparison} that TierProgressChart can render as-is. Mirrors the
+ * tierOrder convention used throughout this codebase (1 = best tier,
+ * ascending = worse) and the same "inclusive range, first match wins" and
+ * "clamp outside the defined bands" rules as the backend's per-athlete
+ * evaluator (`evaluateTierBenchmark` in packages/api/services/benchmark-tiers.ts),
+ * adapted for the already-numeric {@link TierInfo} shape used client-side.
+ *
+ * Only the fields TierProgressChart actually reads (tierName, allTiers,
+ * isBestTier, nextTierName, distanceToNextTier, athleteValue) are guaranteed
+ * meaningful; benchmarkName/benchmarkValue/comparisonOperator/percentageDiff
+ * are filled with reasonable placeholders to satisfy the BenchmarkComparison
+ * shape (BenchmarkStandingBar, which relies on those, is used for the
+ * non-tiered case instead — see buildTeamBenchmarkComparisons).
+ */
+export function evaluateTierStanding(
+  value: number,
+  allTiers: TierInfo[],
+  tierGroupName?: string,
+  lowerIsBetter = false,
+): BenchmarkComparison {
+  const sorted = [...allTiers].sort((a, b) => a.tierOrder - b.tierOrder); // ascending: 1 (best) first
+
+  const inBand = (t: TierInfo) =>
+    (t.minValue == null || value >= t.minValue) && (t.maxValue == null || value <= t.maxValue);
+
+  let matched = sorted.find(inBand) ?? null;
+
+  if (!matched && sorted.length > 0) {
+    const best = sorted[0];
+    const worst = sorted[sorted.length - 1];
+    // Direction-aware: for lower-is-better metrics, "beating the best tier"
+    // means falling BELOW its min (or at/under its max), the mirror image of
+    // the higher-is-better case. Matches evaluateTierBenchmark in
+    // packages/api/services/benchmark-tiers.ts.
+    const beatsBest = lowerIsBetter
+      ? (best.minValue != null ? value < best.minValue : best.maxValue != null ? value <= best.maxValue : false)
+      : (best.maxValue != null ? value > best.maxValue : best.minValue != null ? value >= best.minValue : false);
+    if (beatsBest) {
+      matched = best;
+    } else {
+      let minDistance = Infinity;
+      for (const t of sorted) {
+        if (t.minValue != null) {
+          const d = Math.abs(value - t.minValue);
+          if (d < minDistance) { minDistance = d; matched = t; }
+        }
+        if (t.maxValue != null) {
+          const d = Math.abs(value - t.maxValue);
+          if (d < minDistance) { minDistance = d; matched = t; }
+        }
+      }
+      if (!matched) matched = worst;
+    }
+  }
+
+  const isBestTier = !!matched && matched.tierOrder === sorted[0]?.tierOrder;
+  let nextTierName: string | undefined;
+  let distanceToNextTier: number | null = null;
+
+  if (matched && !isBestTier) {
+    const idx = sorted.findIndex((t) => t.tierOrder === matched!.tierOrder);
+    const next = sorted[idx - 1]; // one step better (ascending order, lower index = better)
+    if (next) {
+      nextTierName = next.tierName;
+      // Direction-aware boundary: the value must move toward the NEXT
+      // (better) tier's own boundary — its maxValue if lower-is-better
+      // (need to decrease), its minValue if higher-is-better (need to
+      // increase). Matches evaluateTierBenchmark's distanceToNextTier logic.
+      const boundary = lowerIsBetter ? (next.maxValue ?? next.minValue) : (next.minValue ?? next.maxValue);
+      if (boundary != null) distanceToNextTier = Math.round(Math.abs(boundary - value) * 100) / 100;
+    }
+  }
+
+  return {
+    benchmarkName: tierGroupName || matched?.tierName || 'Tier',
+    benchmarkValue: value,
+    athleteValue: value,
+    meetsOrExceeds: isBestTier,
+    percentageDiff: 0,
+    comparisonOperator: 'range',
+    tierName: matched?.tierName,
+    tierColor: matched?.tierColor,
+    tierOrder: matched?.tierOrder,
+    tierGroupName,
+    distanceToNextTier,
+    nextTierName,
+    isBestTier,
+    allTiers: sorted,
+  };
+}
