@@ -2206,6 +2206,9 @@ export const insertReportSchema = createInsertSchema(reports).omit({
       benchmarkStanding: z.boolean().optional(),
       trends: z.boolean().optional(),
       distribution: z.boolean().optional(),
+      leaderboard: z.boolean().optional(),
+      tierDistribution: z.boolean().optional(),
+      boxSwarm: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),
@@ -2252,6 +2255,9 @@ export const updateReportSchema = z.object({
       benchmarkStanding: z.boolean().optional(),
       trends: z.boolean().optional(),
       distribution: z.boolean().optional(),
+      leaderboard: z.boolean().optional(),
+      tierDistribution: z.boolean().optional(),
+      boxSwarm: z.boolean().optional(),
     }).optional(),
     compositeIndex: z.object({
       enabled: z.boolean(),

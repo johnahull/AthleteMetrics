@@ -22,6 +22,22 @@ interface ComparisonLike {
 
 const DEFAULT_THRESHOLD_COLOR = '#ef4444';
 
+/**
+ * Direction-aware percent change from `from` to `to` (0 when `from` is 0, to
+ * avoid a division-by-zero blowup). Shared by individual and team trend
+ * assembly so "improvement" is defined identically for both.
+ */
+export function computeTrendDelta(
+  direction: 'higher' | 'lower',
+  from: number,
+  to: number,
+): { from: number; to: number; pct: number } {
+  const pct = from === 0 ? 0
+    : direction === 'lower' ? ((from - to) / from) * 100
+    : ((to - from) / from) * 100;
+  return { from, to, pct };
+}
+
 /** Convert a metric's benchmark comparisons into a chart overlay. */
 export function deriveOverlay(comparisons: ComparisonLike[] | undefined): BenchmarkOverlay {
   if (!comparisons || comparisons.length === 0) return { kind: 'none' };
@@ -70,16 +86,12 @@ export function assembleTrends(
     if (series.length < 2) continue;
 
     const direction = directions[metric] ?? 'higher';
-    const from = series[0].value;
-    const to = series[series.length - 1].value;
-    const pct = from === 0 ? 0
-      : direction === 'lower' ? ((from - to) / from) * 100
-      : ((to - from) / from) * 100;
+    const delta = computeTrendDelta(direction, series[0].value, series[series.length - 1].value);
 
     const trend: MetricTrend = {
       series,
       direction,
-      delta: { from, to, pct },
+      delta,
       benchmark: deriveOverlay(comparisons[metric]),
     };
     trends[metric] = trend;

@@ -1,5 +1,5 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
-import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
+import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { ChartSelection } from '@shared/report-charts';
 
@@ -75,6 +75,7 @@ export interface TeamReportConfig {
     enabled: boolean;
     weights?: Record<string, number>;
   };
+  charts?: Partial<ChartSelection>;
 }
 
 export interface IndividualReportConfig {
@@ -108,6 +109,9 @@ export interface TeamReportData {
   metricUnits?: Record<string, string>;
   metricExplanations?: Record<string, MetricExplanation>;
   orgBranding?: OrgBranding;
+  teamTrends?: TeamReportTrends;
+  teamDistributions?: TeamReportDistributions;
+  comparisonLabel?: string;
 }
 
 export interface IndividualAthleteData {

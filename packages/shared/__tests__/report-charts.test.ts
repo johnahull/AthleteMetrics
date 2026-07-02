@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveChartSelection } from '../report-charts';
+import { resolveChartSelection, resolveTeamChartSelection } from '../report-charts';
 
 describe('resolveChartSelection', () => {
   it('uses explicit charts config when present (missing keys -> false)', () => {
@@ -24,6 +24,57 @@ describe('resolveChartSelection', () => {
   it('treats a present-but-empty charts object as all-off (explicit selection)', () => {
     expect(resolveChartSelection({ charts: {} })).toEqual({
       radar: false, benchmarkStanding: false, trends: false, distribution: false,
+    });
+  });
+});
+
+describe('resolveTeamChartSelection', () => {
+  it('uses explicit charts config when present (missing keys -> false)', () => {
+    expect(resolveTeamChartSelection({ charts: { radar: true, boxSwarm: true } })).toEqual({
+      radar: true,
+      benchmarkStanding: false,
+      trends: false,
+      boxSwarm: true,
+      leaderboard: false,
+      tierDistribution: false,
+    });
+  });
+
+  it('respects explicit false overrides', () => {
+    expect(resolveTeamChartSelection({
+      charts: {
+        radar: false, benchmarkStanding: true, trends: true,
+        boxSwarm: false, leaderboard: true, tierDistribution: false,
+      },
+    })).toEqual({
+      radar: false, benchmarkStanding: true, trends: true,
+      boxSwarm: false, leaderboard: true, tierDistribution: false,
+    });
+  });
+
+  it('treats a present-but-empty charts object as all-off (explicit selection)', () => {
+    expect(resolveTeamChartSelection({ charts: {} })).toEqual({
+      radar: false, benchmarkStanding: false, trends: false,
+      boxSwarm: false, leaderboard: false, tierDistribution: false,
+    });
+  });
+
+  // Critical back-compat case: every pre-existing team report has no `charts`
+  // field. If this resolver reused resolveChartSelection's legacy defaults
+  // (radar+benchmarkStanding on), those reports would suddenly sprout charts
+  // they never had. Legacy team configs must resolve to ALL FALSE.
+  it('legacy config with no charts field resolves to ALL FALSE (not the individual defaults)', () => {
+    expect(resolveTeamChartSelection({})).toEqual({
+      radar: false, benchmarkStanding: false, trends: false,
+      boxSwarm: false, leaderboard: false, tierDistribution: false,
+    });
+    expect(resolveTeamChartSelection(undefined)).toEqual({
+      radar: false, benchmarkStanding: false, trends: false,
+      boxSwarm: false, leaderboard: false, tierDistribution: false,
+    });
+    expect(resolveTeamChartSelection(null)).toEqual({
+      radar: false, benchmarkStanding: false, trends: false,
+      boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
   });
 });
