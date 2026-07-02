@@ -100,3 +100,6 @@ E2E_*.md
 
 # Superpowers brainstorm mockups
 .superpowers/
+
+# Git worktrees (local dev isolation, not repo content)
+.worktrees/
