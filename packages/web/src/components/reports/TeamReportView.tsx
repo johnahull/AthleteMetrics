@@ -122,6 +122,15 @@ export function TeamReportView({ report }: TeamReportViewProps) {
     [reportData?.athleteRankings]
   );
 
+  // Backstop label resolution with the org's currently-active metric labels in
+  // case the report payload omits a code (e.g. custom org metric added after
+  // the report ran but before it rendered). Must be called before the early
+  // returns below (Rules of Hooks) — calling it after them meant this hook
+  // only ran once reportData was loaded, so the hook count changed between
+  // the "loading" and "loaded" renders and React threw "Rendered more hooks
+  // than during the previous render."
+  const { getLabel } = useMetricLabels();
+
   if (generateReport.isPending || !reportData) {
     return <ReportLoadingState message="Generating report..." />;
   }
@@ -137,10 +146,6 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   }
 
   const { teamStatistics, athleteRankings, generatedAt, metricLabels, metricUnits, metricExplanations, teamTrends, teamDistributions } = reportData;
-  // Backstop label resolution with the org's currently-active metric labels in
-  // case the report payload omits a code (e.g. custom org metric added after
-  // the report ran but before it rendered).
-  const { getLabel } = useMetricLabels();
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
   const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
@@ -641,6 +646,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           teamStatistics={teamStatistics}
           metricLabels={metricLabels}
           metricUnits={metricUnits}
+          metricDirections={reportData.metricDirections}
         />
       )}
 

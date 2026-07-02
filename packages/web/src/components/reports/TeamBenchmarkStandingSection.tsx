@@ -4,7 +4,6 @@ import { TierProgressChart } from '@/components/charts/TierProgressChart';
 import { BenchmarkStandingBar } from '@/components/charts/BenchmarkStandingBar';
 import { evaluateTierStanding } from '@/components/charts/tier-progress-utils';
 import { deriveTierGroupName } from '@shared/benchmark-utils';
-import { useMetricConfig } from '@/hooks/use-metric-config';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
 import type { TeamStatistic } from '@/types/report-types';
 
@@ -12,6 +11,10 @@ interface Props {
   teamStatistics: TeamStatistic[];
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Per-metric direction from the report payload (server-computed) — not
+   *  derived client-side, since this section also renders on the public
+   *  report view, which has no authenticated org context. */
+  metricDirections?: Record<string, 'higher' | 'lower'>;
 }
 
 /**
@@ -75,12 +78,11 @@ function buildTeamComparisons(stat: TeamStatistic, lowerIsBetter: boolean): Benc
   return comparisons;
 }
 
-export function TeamBenchmarkStandingSection({ teamStatistics, metricLabels = {}, metricUnits = {} }: Props) {
-  const { getMetricConfig } = useMetricConfig();
+export function TeamBenchmarkStandingSection({ teamStatistics, metricLabels = {}, metricUnits = {}, metricDirections = {} }: Props) {
   const rows = teamStatistics
     .map((stat) => ({
       stat,
-      comparisons: buildTeamComparisons(stat, getMetricConfig(stat.metric)?.lowerIsBetter ?? false),
+      comparisons: buildTeamComparisons(stat, metricDirections[stat.metric] === 'lower'),
     }))
     .filter(({ comparisons }) => comparisons.length > 0);
 

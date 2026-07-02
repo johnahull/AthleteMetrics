@@ -25,11 +25,19 @@ import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossar
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
-import { resolveChartSelection } from "@shared/report-charts";
+import { resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
+import { TeamRadarSection } from "@/components/reports/TeamRadarSection";
+import { TeamTrendSection } from "@/components/reports/TeamTrendSection";
+import { TeamBenchmarkStandingSection } from "@/components/reports/TeamBenchmarkStandingSection";
+import { TeamBoxSwarmSection } from "@/components/reports/TeamBoxSwarmSection";
+import { LeaderboardBarSection } from "@/components/reports/LeaderboardBarSection";
+import { TierDistributionChartSection } from "@/components/reports/TierDistributionChartSection";
+import { calculateTierDistributions } from "@shared/benchmark-utils";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
-import type { ReportTrends } from "@shared/report-trends-types";
+import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
+import type { TeamReportConfig } from "@/types/report-types";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -78,11 +86,19 @@ export default function PublicReport() {
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
+  // Team charts: separate resolver + payload fields (mirrors TeamReportView).
+  // Does NOT touch the individual `sel` computation above.
+  const teamSel = resolveTeamChartSelection(snapshotData.reportConfig as TeamReportConfig);
+  const teamTrends = snapshotData.teamTrends as TeamReportTrends | undefined;
+  const teamDistributions = snapshotData.teamDistributions as TeamReportDistributions | undefined;
+  const teamMetricDirections = snapshotData.metricDirections as Record<string, 'higher' | 'lower'> | undefined;
+  const teamMetrics = (snapshotData.reportConfig as TeamReportConfig | undefined)?.metrics ?? [];
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
   const teamStatistics = (snapshotData.teamStatistics ?? []) as any[];
   const athleteRankings = (snapshotData.athleteRankings ?? []) as any[];
+  const teamTierDistributions = calculateTierDistributions(athleteRankings);
 
   // Glossary order recomputed from the real data (was previously read from a
   // stale `dataSnapshot` shape that the producer no longer emits).
@@ -285,6 +301,45 @@ export default function PublicReport() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Charts (additive — gated by resolveTeamChartSelection, same as TeamReportView) */}
+            {teamSel.radar && teamMetrics.length >= 3 && (
+              <TeamRadarSection rankings={athleteRankings} metrics={teamMetrics} />
+            )}
+
+            {teamSel.benchmarkStanding && (
+              <TeamBenchmarkStandingSection
+                teamStatistics={teamStatistics}
+                metricLabels={metricLabels}
+                metricUnits={metricUnits}
+                metricDirections={teamMetricDirections}
+              />
+            )}
+
+            {teamSel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
+              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
+            )}
+
+            {teamSel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
+              <TeamBoxSwarmSection
+                distributions={teamDistributions}
+                metricLabels={metricLabels}
+                generatedAt={generatedAt}
+              />
+            )}
+
+            {teamSel.leaderboard && (
+              <LeaderboardBarSection
+                athleteRankings={athleteRankings}
+                teamStatistics={teamStatistics}
+                metricLabels={metricLabels}
+                generatedAt={generatedAt}
+              />
+            )}
+
+            {teamSel.tierDistribution && teamTierDistributions.length > 0 && (
+              <TierDistributionChartSection tierDistributions={teamTierDistributions} metricLabels={metricLabels} />
             )}
 
             {/* Glossary of metrics (Team) */}

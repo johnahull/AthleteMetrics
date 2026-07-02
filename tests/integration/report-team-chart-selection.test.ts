@@ -294,3 +294,42 @@ describe('POST /api/reports/:id/generate — back-compat (no charts field)', () 
     expect(response.body.teamDistributions).toBeUndefined();
   });
 });
+
+// --- Stage 3: public snapshot surfaces the same team chart payload ---
+//
+// createSnapshot() calls generateTeamReport() directly (see report-service.ts),
+// so the trends/distributions computation itself is already fully covered by
+// the `/generate` tests above. This is a thin end-to-end check that the PUBLIC
+// route (GET /api/public/reports/:token) actually forwards those same fields
+// in snapshotData, rather than re-deriving or dropping them.
+describe('GET /api/public/reports/:token — team chart payload passthrough', () => {
+  it('surfaces teamTrends and teamDistributions on the public snapshot when selected', async () => {
+    await seedAthlete([
+      { date: '2024-01-15', value: '20.000' },
+      { date: '2024-03-15', value: '24.000' },
+    ]);
+    await seedAthlete([
+      { date: '2024-01-15', value: '30.000' },
+      { date: '2024-03-15', value: '32.000' },
+    ]);
+    const report = await createTeamReport({ charts: { trends: true, boxSwarm: true } });
+
+    const snapshotRes = await request(app)
+      .post(`/api/reports/${report.id}/snapshots`)
+      .set('Cookie', coachAuthCookie)
+      .send({ expirationDays: 7 });
+    expect(snapshotRes.status).toBe(201);
+    const publicToken = snapshotRes.body.publicToken;
+    expect(publicToken).toBeTruthy();
+
+    const publicRes = await request(app).get(`/api/public/reports/${publicToken}`);
+
+    expect(publicRes.status).toBe(200);
+    const { snapshotData } = publicRes.body;
+    expect(snapshotData).toHaveProperty('reportType', 'team');
+    expect(snapshotData.teamTrends).toBeDefined();
+    expect(snapshotData.teamTrends).toHaveProperty('VERTICAL_JUMP');
+    expect(snapshotData.teamDistributions).toBeDefined();
+    expect(snapshotData.teamDistributions).toHaveProperty('VERTICAL_JUMP');
+  });
+});

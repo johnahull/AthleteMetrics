@@ -108,6 +108,10 @@ export interface TeamReportData {
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
   metricExplanations?: Record<string, MetricExplanation>;
+  /** Per-metric direction ('lower' = lower-is-better), so client components can
+   *  evaluate tier standing without needing authenticated org-scoped metric
+   *  config — required for the public/anonymous report view. */
+  metricDirections?: Record<string, 'higher' | 'lower'>;
   orgBranding?: OrgBranding;
   teamTrends?: TeamReportTrends;
   teamDistributions?: TeamReportDistributions;
