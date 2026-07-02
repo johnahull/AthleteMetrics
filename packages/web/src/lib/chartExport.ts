@@ -186,6 +186,59 @@ export async function exportChartAsPNG(
 }
 
 /**
+ * Render a DOM element (e.g. a chart card) to a PNG data URL via html2canvas.
+ * Returns the data URL string (does not trigger a download).
+ */
+export async function getChartPngDataUrl(containerElement: HTMLElement): Promise<string> {
+  // Dynamically import html2canvas
+  const html2canvas = (await import('html2canvas')).default;
+
+  const canvas = await html2canvas(containerElement, {
+    backgroundColor: '#ffffff',
+    scale: 2,
+    logging: false,
+    useCORS: true,
+  });
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Capture every chart currently in the DOM (both trend charts and report charts).
+ * Trend charts carry data-chart-metric={metricCode}.
+ * Report charts carry data-report-chart={metricCode} with optional data-report-chart-title={title}.
+ */
+export async function captureTrendCharts(): Promise<Array<{ metricCode: string; dataUrl: string; title?: string }>> {
+  const all = Array.from(document.querySelectorAll<HTMLElement>('[data-chart-metric], [data-report-chart]'));
+
+  // Keep only leaf-most capture targets: skip any element that CONTAINS another
+  // matched element. This lets a section wrapper (e.g. the distribution Card) carry
+  // data-report-chart as a grouping/E2E anchor without being captured as a giant
+  // duplicate of the per-metric charts nested inside it.
+  const nodes = all.filter((node) => !all.some((other) => other !== node && node.contains(other)));
+
+  // Capture charts concurrently for speed, but isolate per-chart failures: a
+  // single html2canvas error must not reject the whole capture and silently
+  // abort the PDF download. Each failed chart resolves to null and is dropped;
+  // array order (and thus the rendered order in the PDF) is preserved.
+  const results = await Promise.all(
+    nodes.map(async (node) => {
+      const metricCode = node.getAttribute('data-chart-metric') || node.getAttribute('data-report-chart') || '';
+      if (!metricCode) return null;
+      const title = node.getAttribute('data-report-chart-title') || undefined;
+      try {
+        return { metricCode, dataUrl: await getChartPngDataUrl(node), title } as { metricCode: string; dataUrl: string; title?: string };
+      } catch (error) {
+        devLog.error(`Failed to capture trend chart for ${metricCode}:`, error);
+        return null;
+      }
+    }),
+  );
+
+  return results.filter((r): r is { metricCode: string; dataUrl: string; title?: string } => r !== null);
+}
+
+/**
  * Copy chart to clipboard as image
  * Uses html2canvas to capture and Clipboard API to copy
  */

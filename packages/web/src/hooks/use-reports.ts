@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { ReportFilters } from "./use-report-filters";
 import type { Report } from "@/types/report-types";
+import type { ChartSelection } from "@shared/report-charts";
 
 interface CreateReportData {
   name: string;
@@ -34,6 +35,7 @@ interface CreateReportData {
       gender?: string;
       positions?: string[];
     };
+    charts?: Partial<ChartSelection>;
   };
 }
 

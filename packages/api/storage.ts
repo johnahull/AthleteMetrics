@@ -38,6 +38,7 @@ import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNu
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
 /**
  * Helper function to create a WHERE condition that excludes soft-deleted users.
@@ -2396,7 +2397,7 @@ export class DatabaseStorage implements IStorage {
         .where(eq(organizations.id, organizationId));
     } catch (error: any) {
       // Handle unique constraint violation (PostgreSQL error code 23505)
-      if (error.code === '23505' || error.message?.includes('unique') || error.message?.includes('duplicate')) {
+      if (getPgErrorCode(error) === PG_UNIQUE_VIOLATION || error.message?.includes('unique') || error.message?.includes('duplicate')) {
         throw new Error('This join code is already in use by another organization');
       }
       throw error;
@@ -4450,7 +4451,7 @@ export class DatabaseStorage implements IStorage {
       return created;
     } catch (error: any) {
       // Handle unique constraint violation (duplicate metric code)
-      if (error.code === '23505') {
+      if (getPgErrorCode(error) === PG_UNIQUE_VIOLATION) {
         throw new Error(`Metric with code ${metric.code} already exists`);
       }
       throw error;

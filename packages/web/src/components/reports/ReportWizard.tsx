@@ -38,6 +38,7 @@ import { TeamAthleteSelector } from "@/components/ui/team-athlete-selector";
 import type { OrganizationBenchmarkWithDetails } from "@shared/schema";
 import { deriveTierGroupName } from "./report-utils";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
+import { DEFAULT_CHART_SELECTION } from "@shared/report-charts";
 
 const reportConfigSchema = z.object({
   reportType: z.enum(["team", "individual"]),
@@ -56,6 +57,12 @@ const reportConfigSchema = z.object({
   positions: z.array(z.string()).optional(),
   audience: z.enum(["coach", "athlete", "parent"]).default("coach"),
   enableCompositeIndex: z.boolean().default(false),
+  charts: z.object({
+    radar: z.boolean().default(true),
+    benchmarkStanding: z.boolean().default(true),
+    trends: z.boolean().default(true),
+    distribution: z.boolean().default(true),
+  }).default(DEFAULT_CHART_SELECTION),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
   if (data.reportType === "individual" && (!data.athleteIds || data.athleteIds.length === 0)) {
@@ -105,6 +112,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       teamIds: [],
       positions: [],
       enableCompositeIndex: false,
+      charts: DEFAULT_CHART_SELECTION,
     },
   });
 
@@ -126,6 +134,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
   const timeframeType = watch("timeframeType");
   const selectedMetrics = watch("metrics");
   const enableCompositeIndex = watch("enableCompositeIndex");
+  const charts = watch("charts");
 
   // Fetch organization's enabled metrics using standardized hook
   const { data: metrics, isLoading: metricsLoading, error: metricsError } = useOrganizationMetrics(
@@ -324,6 +333,11 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
         enabled: true,
         weights: data.compositeWeights,
       };
+    }
+
+    // Chart selection is an individual-report feature; don't pollute team configs.
+    if (data.reportType === "individual") {
+      config.charts = data.charts;
     }
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
@@ -908,6 +922,24 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                 <p className="text-sm text-muted-foreground">
                   Click "Create Report" to finish
                 </p>
+              </div>
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <Label className="font-medium">Charts to include</Label>
+                {([
+                  ['radar', 'All-around profile (radar)', 'Percentile shape across all metrics (needs ≥3 metrics)'],
+                  ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
+                  ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
+                  ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
+                ] as const).map(([key, title, desc]) => (
+                  <div key={key} className="flex items-start space-x-2">
+                    <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
+                      onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
+                    <div>
+                      <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
+                      <p className="text-sm text-muted-foreground">{desc}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}

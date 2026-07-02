@@ -15,6 +15,7 @@
 
 import { useState, useCallback } from 'react';
 import type { PdfFormat } from '@/types/report-types';
+import { captureTrendCharts } from '@/lib/chartExport';
 
 interface UseReportPdfOptions {
   /** The ID of the report to download */
@@ -70,14 +71,13 @@ export function useReportPdf({ reportId, reportName, onError }: UseReportPdfOpti
     setIsDownloading(true);
 
     try {
-      // Build the URL based on which parameter is provided
-      const queryParam = athleteId
-        ? `athleteId=${athleteId}`
-        : `format=${format}`;
+      const chartImages = await captureTrendCharts();
 
-      const response = await fetch(`/api/reports/${reportId}/pdf?${queryParam}`, {
-        method: 'GET',
+      const response = await fetch(`/api/reports/${reportId}/pdf`, {
+        method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format, athleteId, chartImages }),
       });
 
       if (!response.ok) {

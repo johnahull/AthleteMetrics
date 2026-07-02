@@ -25,6 +25,12 @@ import { SendReportToAthleteDialog } from "./SendReportToAthleteDialog";
 import { CoachingInsightsCard } from "./CoachingInsightsCard";
 import { MetricExplanation } from "./MetricExplanation";
 import { ReportMetricsGlossary } from "./ReportMetricsGlossary";
+import { TrendSection } from "@/components/reports/TrendSection";
+import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
+import { DistributionSection } from "@/components/reports/DistributionSection";
+import { resolveChartSelection } from "@shared/report-charts";
+import { TierProgressChart } from "@/components/charts/TierProgressChart";
+import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
 import { format } from "date-fns";
 import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import { extractAthleteId } from "./report-utils";
@@ -108,8 +114,9 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
     );
   }
 
-  const { athlete, metricLabels, metricUnits, metricExplanations } = reportData;
+  const { athlete, metricLabels, metricUnits, metricExplanations, trends, distributions } = reportData;
   const measurementCodes = athlete?.measurements ? Object.keys(athlete.measurements) : [];
+  const sel = resolveChartSelection(reportData.reportConfig);
 
   return (
     <div className="space-y-6">
@@ -198,7 +205,7 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
                 <TableRow>
                   <TableHead>Metric</TableHead>
                   <TableHead>Best Result</TableHead>
-                  <TableHead>Team Average</TableHead>
+                  <TableHead>Group Average</TableHead>
                   <TableHead>Percentile</TableHead>
                   <TableHead>Benchmark Comparisons</TableHead>
                 </TableRow>
@@ -293,6 +300,65 @@ export function IndividualReportView({ report }: IndividualReportViewProps) {
             </Table>
           </CardContent>
         </Card>
+      )}
+
+      {sel.radar && athlete?.percentiles && Object.keys(athlete.percentiles).length >= 3 && (
+        <PercentileRadarSection
+          athleteId={athlete.userId}
+          athleteName={athlete.userName}
+          percentiles={athlete.percentiles}
+          measurements={athlete.measurements}
+        />
+      )}
+
+      {sel.benchmarkStanding && athlete?.benchmarkComparisons &&
+        Object.values(athlete.benchmarkComparisons).some((cs: any) =>
+          cs && cs.length > 0
+        ) && (
+        <Card>
+          <CardHeader><CardTitle>Benchmark Standing</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {Object.entries(athlete.benchmarkComparisons).map(([code, comps]: [string, any]) => {
+              const list = comps || [];
+              const tiered = list.find((c: any) => c.allTiers && c.allTiers.length > 0);
+              if (tiered) {
+                return (
+                  <TierProgressChart
+                    key={code}
+                    label={metricLabels?.[code] || code}
+                    metricCode={code}
+                    comparison={tiered}
+                    unit={metricUnits?.[code]}
+                  />
+                );
+              }
+              return list.map((c: any, i: number) => (
+                <BenchmarkStandingBar
+                  key={`${code}-${i}`}
+                  label={metricLabels?.[code] || code}
+                  metricCode={code}
+                  comparison={c}
+                  unit={metricUnits?.[code]}
+                />
+              ));
+            })}
+          </CardContent>
+        </Card>
+      )}
+
+      {sel.trends && trends && Object.keys(trends).length > 0 && (
+        <TrendSection trends={trends} metricLabels={metricLabels} metricUnits={metricUnits} />
+      )}
+
+      {sel.distribution && distributions && Object.keys(distributions).length > 0 && (
+        <DistributionSection
+          athleteName={athlete.userName}
+          distributions={distributions}
+          metricLabels={metricLabels}
+          metricUnits={metricUnits}
+          percentiles={athlete.percentiles}
+          comparisonLabel={reportData.comparisonLabel}
+        />
       )}
 
       {metricExplanations && (

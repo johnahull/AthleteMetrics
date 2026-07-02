@@ -245,56 +245,69 @@ jobs:
           ENV_ID="${{ steps.env.outputs.env_id }}"
           IS_NEW_ENV="${{ steps.env.outputs.is_new_env }}"
 
-          # For existing environments, Railway's auto-deploy webhook already fired
-          # when GitHub received the push — no action needed here. Running
-          # serviceInstanceUpdate or environmentTriggersDeploy would create
-          # duplicate builds (the root cause of 3x builds per push).
-          if [ "$IS_NEW_ENV" != "true" ]; then
-            echo "Existing environment — auto-deploy webhook handles deployment"
-            # No explicit sleep — the polling loop below (6×10s) gives Railway
-            # up to 60s to register the deployment from the webhook.
-          else
-            # New environment: the trigger was just created and hasn't fired yet.
-            # deploymentTriggerCreate registers the webhook but does NOT auto-fire
-            # an initial build, so we must explicitly trigger one.
-            echo "New environment — firing explicit deploy..."
-            PAYLOAD=$(jq -n \
-              --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
-              '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')
-            RESULT=$(curl -s -X POST "$RAILWAY_API_URL" \
+          # Return the status of the latest deployment, or "NONE" if none exists yet.
+          check_deploy_status() {
+            curl -s -X POST "$RAILWAY_API_URL" \
               -H "Content-Type: application/json" \
               -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "$PAYLOAD")
+              -d "$(jq -n --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+                '{query: "{ deployments(first: 1, input: { environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) { edges { node { id status } } } }"}')" \
+              | jq -r '.data.deployments.edges[0].node.status // "NONE"'
+          }
 
+          # Explicitly trigger a deployment; echoes the raw API response.
+          fire_deploy() {
+            curl -s -X POST "$RAILWAY_API_URL" \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
+              -d "$(jq -n --arg pid "$PROJECT_ID" --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
+                '{query: "mutation { environmentTriggersDeploy(input: { projectId: \"\($pid)\", environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) }"}')"
+          }
+
+          # Poll up to 60s (6×10s) for a deployment to register; sets DEPLOY_STATUS.
+          poll_for_deployment() {
+            DEPLOY_STATUS="NONE"
+            for i in 1 2 3 4 5 6; do
+              sleep 10
+              DEPLOY_STATUS=$(check_deploy_status)
+              echo "  Deployment status (${1:-poll} attempt $i): $DEPLOY_STATUS"
+              [ "$DEPLOY_STATUS" != "NONE" ] && break
+            done
+          }
+
+          if [ "$IS_NEW_ENV" = "true" ]; then
+            # New environment: deploymentTriggerCreate registers the webhook but does
+            # NOT auto-fire an initial build, so we must explicitly trigger one.
+            echo "New environment — firing explicit deploy..."
+            RESULT=$(fire_deploy)
             echo "Deploy API response: $RESULT"
             SUCCESS=$(echo "$RESULT" | jq -r '.data.environmentTriggersDeploy // empty')
             if [ "$SUCCESS" != "true" ]; then
               echo "::error::Failed to trigger deployment: $RESULT"
               exit 1
             fi
+          else
+            # Existing environment: Railway's auto-deploy webhook fires from the
+            # GitHub push. We deliberately do NOT trigger explicitly here, to avoid
+            # the duplicate builds (3x per push) that an extra trigger would create.
+            echo "Existing environment — waiting on auto-deploy webhook"
           fi
 
-          # Verify deployment was created (allow up to 60s)
-          DEPLOY_STATUS="NONE"
-          for i in 1 2 3 4 5 6; do
-            sleep 10
-            CHECK=$(curl -s -X POST "$RAILWAY_API_URL" \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer $RAILWAY_API_TOKEN" \
-              -d "$(jq -n --arg eid "$ENV_ID" --arg sid "$SERVICE_ID" \
-                '{query: "{ deployments(first: 1, input: { environmentId: \"\($eid)\", serviceId: \"\($sid)\" }) { edges { node { id status } } } }"}')")
-            DEPLOY_STATUS=$(echo "$CHECK" | jq -r '.data.deployments.edges[0].node.status // "NONE"')
-            echo "Deployment status (attempt $i): $DEPLOY_STATUS"
-            if [ "$DEPLOY_STATUS" != "NONE" ]; then
-              break
-            fi
-          done
+          poll_for_deployment "webhook"
+
+          # Fallback: if the auto-deploy webhook never registered a deployment
+          # (debounced, slow, or the push did not trigger a build), fire an explicit
+          # deploy instead of hard-failing. This only runs when no deployment exists,
+          # so it cannot create the duplicate builds avoided in the happy path above.
+          if [ "$DEPLOY_STATUS" = "NONE" ] && [ "$IS_NEW_ENV" != "true" ]; then
+            echo "Auto-deploy webhook produced no deployment — firing explicit fallback deploy..."
+            RESULT=$(fire_deploy)
+            echo "Fallback deploy response: $RESULT"
+            poll_for_deployment "fallback"
+          fi
 
           if [ "$DEPLOY_STATUS" = "NONE" ]; then
-            # This can fire for existing environments if Railway's auto-deploy
-            # webhook was slow or the push didn't trigger a build (e.g. no
-            # service-relevant files changed). Re-run the workflow to retry.
-            echo "::error::Deployment was not created within timeout (15s initial + 60s polling)"
+            echo "::error::Deployment was not created — auto-deploy webhook and explicit fallback both produced none"
             exit 1
           fi
 

@@ -117,9 +117,11 @@ describe('useReportPdf', () => {
         await result.current.downloadPdf({ format: 'visual' });
       });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/reports/report-123/pdf?format=visual', {
-        method: 'GET',
+      expect(mockFetch).toHaveBeenCalledWith('/api/reports/report-123/pdf', {
+        method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: 'visual', athleteId: undefined, chartImages: [] }),
       });
     });
 
@@ -160,9 +162,11 @@ describe('useReportPdf', () => {
         await result.current.downloadPdf({ athleteId: 'athlete-789' });
       });
 
-      expect(mockFetch).toHaveBeenCalledWith('/api/reports/report-456/pdf?athleteId=athlete-789', {
-        method: 'GET',
+      expect(mockFetch).toHaveBeenCalledWith('/api/reports/report-456/pdf', {
+        method: 'POST',
         credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: undefined, athleteId: 'athlete-789', chartImages: [] }),
       });
     });
   });

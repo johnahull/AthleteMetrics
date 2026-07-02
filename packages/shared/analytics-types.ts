@@ -179,7 +179,8 @@ export type ChartType =
   | 'box_swarm_combo'
   | 'time_series_box_swarm'
   | 'time_series_violin'
-  | 'violin_plot';
+  | 'violin_plot'
+  | 'tier_progress';
 
 export interface ChartConfiguration {
   type: ChartType;
@@ -367,7 +368,7 @@ export interface AnalyticsEndpoints {
 export const CHART_SELECTION_MATRIX: Record<string, Record<string, Record<string, ChartType[]>>> = {
   individual: {
     '1': {
-      best: ['box_swarm_combo', 'distribution'],
+      best: ['box_swarm_combo', 'distribution', 'tier_progress'],
       trends: ['line_chart']
     },
     '2': {

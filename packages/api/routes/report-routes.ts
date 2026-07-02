@@ -3,9 +3,10 @@
  * Includes report CRUD, generation, snapshots, and PDF export
  */
 
-import type { Express } from "express";
+import express, { type Express } from "express";
 import rateLimit from "express-rate-limit";
 import { ReportService } from "../services/report-service";
+import { planChartPageBreaks } from "./pdf-chart-layout";
 import { requireAuth, requireAIEnabled, type AuthenticatedRequest } from "../middleware";
 import { storage } from "../storage";
 import {
@@ -37,6 +38,7 @@ import { RATE_LIMITS, RATE_LIMIT_WINDOW_MS } from "../constants/rate-limits";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { isLowerBetter, sortAthletesByMetric, getBenchmarkLabel } from "../utils/report-utils";
+import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "../lib/pg-error";
 import { calculateTierDistributions } from "@shared/benchmark-utils";
 import { requireRole } from "../permissions/middleware";
 import { emailService } from "../services/email-service";
@@ -1229,71 +1231,10 @@ export function registerReportRoutes(app: Express) {
         return res.status(404).json({ message: "Snapshot not found" });
       }
 
-      // COPPA: if snapshot is flagged publicAccessRestricted (contains minor data
-      // from an org with COPPA enabled), public link access is never permitted.
-      // Only authenticated users who belong to the report's org (or are a site_admin,
-      // or are a parent of an athlete in that org) may access the data.
-      if (snapshot.publicAccessRestricted) {
-        // Write audit log regardless of whether user is authenticated
-        coppaService.writeCoppaAudit({
-          action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
-          ip: req.ip,
-          userAgent: req.get('User-Agent'),
-          details: { token: req.params.token, authenticated: !!req.session?.user },
-        }).catch((err) => {
-          console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
-        });
-
-        const sessionUser = req.session?.user;
-        if (!sessionUser) {
-          return res.status(403).json({
-            code: 'minor_data_restricted',
-            message: 'This report contains data for minor athletes and cannot be shared via public link.',
-          });
-        }
-
-        // Site admins may always access restricted snapshots.
-        if (!sessionUser.isSiteAdmin) {
-          // Resolve the report's owning organization so we can check membership.
-          const [reportRow] = await db
-            .select({ organizationId: reports.organizationId })
-            .from(reports)
-            .where(eq(reports.id, snapshot.reportId))
-            .limit(1);
-
-          if (!reportRow) {
-            return res.status(403).json({
-              code: 'minor_data_restricted',
-              message: 'This report contains data for minor athletes. Access is restricted.',
-            });
-          }
-
-          const orgId = reportRow.organizationId;
-          const userOrgs = await storage.getUserOrganizations(sessionUser.id);
-          const isMember = userOrgs.some((o) => o.organizationId === orgId);
-
-          if (!isMember) {
-            // Check if the authenticated user is a parent of an athlete in this org.
-            const [parentLink] = await db
-              .select({ id: parentAthleteLinks.id })
-              .from(parentAthleteLinks)
-              .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
-              .where(and(
-                eq(parentAthleteLinks.parentUserId, sessionUser.id),
-                eq(parentAthleteLinks.isActive, true),
-                eq(userOrganizations.organizationId, orgId),
-              ))
-              .limit(1);
-
-            if (!parentLink) {
-              return res.status(403).json({
-                code: 'minor_data_restricted',
-                message: 'This report contains data for minor athletes. Access is restricted to organization members.',
-              });
-            }
-          }
-        }
-      }
+      // COPPA: if the snapshot is flagged publicAccessRestricted (contains minor
+      // data from a COPPA-enabled org), enforce the shared access gate. Same
+      // helper guards the public PDF-export routes so they cannot diverge.
+      if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
 
       res.json(snapshot);
     } catch (error) {
@@ -1357,7 +1298,7 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF
-        const pdf = await generatePDF(report, reportData, format as 'visual' | 'simplified', org);
+        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1400,6 +1341,10 @@ export function registerReportRoutes(app: Express) {
           return res.status(404).json({ message: "Snapshot not found" });
         }
 
+        // COPPA: PDF export must honor the same restriction as the snapshot
+        // route — a token alone cannot unlock minor data via the PDF path.
+        if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
+
         // Get report details
         const report = await db
           .select()
@@ -1416,7 +1361,149 @@ export function registerReportRoutes(app: Express) {
         const org = await fetchOrgForBranding(report.organizationId);
 
         // Generate PDF from snapshot data
-        const pdf = await generatePDF(report, snapshot.snapshotData, format as 'visual' | 'simplified', org);
+        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org);
+
+        // Send PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
+        );
+        res.send(Buffer.from(pdf.output("arraybuffer")));
+      } catch (error) {
+        console.error("Error generating public PDF:", error);
+        res.status(500).json({
+          message:
+            error instanceof Error ? error.message : "Failed to generate PDF",
+        });
+      }
+    }
+  );
+
+  /**
+   * Generate PDF for a report with client-captured trend charts
+   * POST /api/reports/:id/pdf
+   */
+  app.post(
+    "/api/reports/:id/pdf",
+    // Rate-limit and authenticate BEFORE parsing the (up to 15 MB) body, so an
+    // unauthenticated or over-quota caller is rejected on headers alone and the
+    // large chart-image payload is never buffered into memory.
+    reportGenerationLimiter,
+    requireAuth,
+    express.json({ limit: '15mb' }),
+    async (req, res) => {
+      const reportId = req.params.id;
+      const { athleteId, format = 'simplified' } = req.body || {};
+      const chartImages = normalizeChartImages(req.body?.chartImages);
+      let report: Report | undefined;
+
+      try {
+        const user = req.session.user;
+        if (!user?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
+
+        report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Generate report data
+        let reportData: unknown;
+        if (report.reportType === 'team') {
+          reportData = await reportService.generateTeamReport(reportId, user.id);
+        } else {
+          if (!athleteId) {
+            return res
+              .status(400)
+              .json({ message: "Athlete ID required for individual reports" });
+          }
+          reportData = await reportService.generateIndividualReport(
+            reportId,
+            user.id,
+            athleteId
+          );
+        }
+
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
+        // Generate PDF
+        const pdf = await generatePDF(report, reportData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
+
+        // Send PDF
+        res.setHeader("Content-Type", "application/pdf");
+        res.setHeader(
+          "Content-Disposition",
+          `attachment; filename="${sanitizeFilename(report.name)}.pdf"`
+        );
+        res.send(Buffer.from(pdf.output("arraybuffer")));
+      } catch (error) {
+        console.error("Error generating PDF:", {
+          reportId,
+          reportType: report?.reportType || 'unknown',
+          athleteId,
+          format,
+          error: error instanceof Error ? error.message : error,
+        });
+        res.status(500).json({
+          message:
+            error instanceof Error ? error.message : "Failed to generate PDF",
+        });
+      }
+    }
+  );
+
+  /**
+   * Generate PDF for public snapshot with client-captured trend charts (NO AUTH REQUIRED)
+   * POST /api/public/reports/:token/pdf
+   */
+  app.post(
+    "/api/public/reports/:token/pdf",
+    // Rate-limit before parsing the (up to 15 MB) body so large payloads cannot
+    // bypass the per-IP counter or exhaust memory ahead of the limiter.
+    publicSnapshotLimiter,
+    express.json({ limit: '15mb' }),
+    async (req, res) => {
+      try {
+        const token = req.params.token;
+        const { format = 'simplified' } = req.body || {};
+        const chartImages = normalizeChartImages(req.body?.chartImages);
+
+        const snapshot = await reportService.getPublicSnapshot(token);
+
+        if (!snapshot) {
+          return res.status(404).json({ message: "Snapshot not found" });
+        }
+
+        // COPPA: PDF export must honor the same restriction as the snapshot
+        // route — a token alone cannot unlock minor data via the PDF path.
+        if (!(await enforcePublicSnapshotAccess(req, res, snapshot))) return;
+
+        // Get report details
+        const report = await db
+          .select()
+          .from(reports)
+          .where(eq(reports.id, snapshot.reportId))
+          .limit(1)
+          .then((rows) => rows[0]);
+
+        if (!report) {
+          return res.status(404).json({ message: "Report not found" });
+        }
+
+        // Fetch organization branding
+        const org = await fetchOrgForBranding(report.organizationId);
+
+        // Generate PDF from snapshot data
+        const pdf = await generatePDF(report, snapshot.snapshotData, (format === 'visual' ? 'visual' : 'simplified'), org, chartImages);
 
         // Send PDF
         res.setHeader("Content-Type", "application/pdf");
@@ -1915,7 +2002,7 @@ export function registerReportRoutes(app: Express) {
           });
         } catch (insertError: any) {
           // Check for unique constraint violation
-          if (insertError.code === '23505') { // PostgreSQL unique violation
+          if (getPgErrorCode(insertError) === PG_UNIQUE_VIOLATION) {
             return res.status(409).json({
               message: "Report already shared with this athlete",
             });
@@ -3528,7 +3615,172 @@ function tierTint(colorName: string): [number, number, number] {
   ] as [number, number, number];
 }
 
-async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg): Promise<jsPDF> {
+/**
+ * COPPA gate for public snapshot access, shared by the public snapshot-data
+ * route and the public PDF-export routes so they cannot diverge.
+ *
+ * If the snapshot is flagged `publicAccessRestricted` (contains minor data from
+ * a COPPA-enabled org), public-link access is only permitted for an
+ * authenticated site_admin, a member of the report's org, or a parent of an
+ * athlete in that org. Writes the access-blocked audit log and the 403 response
+ * itself; returns `false` when the caller must stop, `true` when allowed.
+ */
+async function enforcePublicSnapshotAccess(
+  req: express.Request,
+  res: express.Response,
+  snapshot: { reportId: string; publicAccessRestricted?: boolean | null },
+): Promise<boolean> {
+  if (!snapshot.publicAccessRestricted) return true;
+
+  // Audit the blocked attempt regardless of whether the user is authenticated.
+  coppaService.writeCoppaAudit({
+    action: COPPA_ACTIONS.SNAPSHOT_ACCESS_BLOCKED,
+    ip: req.ip,
+    userAgent: req.get('User-Agent'),
+    details: { token: req.params.token, authenticated: !!req.session?.user },
+  }).catch((err) => {
+    console.error('[COPPA] Failed to write snapshot access blocked audit log:', err);
+  });
+
+  const sessionUser = req.session?.user;
+  if (!sessionUser) {
+    res.status(403).json({
+      code: 'minor_data_restricted',
+      message: 'This report contains data for minor athletes and cannot be shared via public link.',
+    });
+    return false;
+  }
+
+  // Site admins may always access restricted snapshots.
+  if (!sessionUser.isSiteAdmin) {
+    const [reportRow] = await db
+      .select({ organizationId: reports.organizationId })
+      .from(reports)
+      .where(eq(reports.id, snapshot.reportId))
+      .limit(1);
+
+    if (!reportRow) {
+      res.status(403).json({
+        code: 'minor_data_restricted',
+        message: 'This report contains data for minor athletes. Access is restricted.',
+      });
+      return false;
+    }
+
+    const orgId = reportRow.organizationId;
+    const userOrgs = await storage.getUserOrganizations(sessionUser.id);
+    const isMember = userOrgs.some((o) => o.organizationId === orgId);
+
+    if (!isMember) {
+      // Allow an authenticated parent of an athlete in this org.
+      const [parentLink] = await db
+        .select({ id: parentAthleteLinks.id })
+        .from(parentAthleteLinks)
+        .innerJoin(userOrganizations, eq(userOrganizations.userId, parentAthleteLinks.athleteUserId))
+        .where(and(
+          eq(parentAthleteLinks.parentUserId, sessionUser.id),
+          eq(parentAthleteLinks.isActive, true),
+          eq(userOrganizations.organizationId, orgId),
+        ))
+        .limit(1);
+
+      if (!parentLink) {
+        res.status(403).json({
+          code: 'minor_data_restricted',
+          message: 'This report contains data for minor athletes. Access is restricted to organization members.',
+        });
+        return false;
+      }
+    }
+  }
+
+  return true;
+}
+
+// Upper bound on chart images embedded per PDF. A real individual report plots
+// one chart per selected metric (well under this); the cap stops the
+// unauthenticated public PDF endpoint from being driven to do an unbounded
+// number of synchronous jsPDF getImageProperties/addImage calls per request.
+const MAX_CHART_IMAGES = 20;
+
+/**
+ * Normalize the client-supplied chartImages payload into a safe, bounded array.
+ * Destructuring defaults only guard `undefined`; a client sending `null`, a
+ * string, or malformed items would otherwise reach jsPDF and throw a 500.
+ * Coerce to [], cap the count at MAX_CHART_IMAGES, and keep only well-formed PNG
+ * data-URL entries so a bad/oversized payload degrades gracefully instead of
+ * crashing the export or pinning the event loop.
+ */
+function normalizeChartImages(raw: unknown): Array<{ metricCode: string; dataUrl: string; title?: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .slice(0, MAX_CHART_IMAGES)
+    .filter(
+      (img): img is { metricCode: string; dataUrl: string; title?: string } =>
+        !!img &&
+        typeof img.metricCode === 'string' &&
+        typeof img.dataUrl === 'string' &&
+        // addTrendChartsToPdf calls doc.addImage(dataUrl, 'PNG', …); require a PNG
+        // data URL so a JPEG/WebP can't be silently mis-decoded as PNG.
+        img.dataUrl.startsWith('data:image/png;base64,') &&
+        // Validate title is a string if present
+        (img.title === undefined || typeof img.title === 'string'),
+    );
+}
+
+function addTrendChartsToPdf(
+  doc: jsPDF,
+  chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }>,
+  metricLabels: Record<string, string> = {},
+): void {
+  if (!chartImages.length) return;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const imgWidth = pageWidth - margin * 2;
+  const startY = 20;
+  const usableHeight = pageHeight - margin - startY;
+
+  // Pass 1: measure each chart at full page width, skipping corrupt payloads. A
+  // payload that passes the data:image/png;base64, prefix check but has truncated
+  // bytes throws inside getImageProperties; isolating it here means one bad capture
+  // is dropped rather than aborting the whole PDF with a 500.
+  const measured: Array<{
+    img: { metricCode: string; dataUrl: string; title?: string };
+    imgHeight: number;
+    blockHeight: number;
+  }> = [];
+  for (const img of chartImages) {
+    try {
+      const props = doc.getImageProperties(img.dataUrl);
+      const imgHeight = (props.height / props.width) * imgWidth;
+      measured.push({ img, imgHeight, blockHeight: 6 + imgHeight + 10 }); // label + image + gap
+    } catch (err) {
+      console.error('[pdf] skipping corrupt chart for', img.metricCode, err);
+    }
+  }
+  if (!measured.length) return;
+
+  // Pass 2: pack as many charts per page as fit by vertical space (no fixed
+  // per-page count), then flow them down the pages.
+  const breaks = planChartPageBreaks(measured.map((m) => m.blockHeight), usableHeight);
+  doc.addPage();
+  let yPos = startY;
+  measured.forEach(({ img, imgHeight }, i) => {
+    if (breaks[i]) {
+      doc.addPage();
+      yPos = startY;
+    }
+    doc.setFontSize(14);
+    doc.setTextColor(40, 40, 40);
+    doc.text(img.title || metricLabels[img.metricCode] || img.metricCode, margin, yPos);
+    yPos += 6;
+    doc.addImage(img.dataUrl, 'PNG', margin, yPos, imgWidth, imgHeight);
+    yPos += imgHeight + 10;
+  });
+}
+
+async function generatePDF(report: any, reportData: any, format: 'visual' | 'simplified' = 'simplified', org?: ReportOrg, chartImages: Array<{ metricCode: string; dataUrl: string; title?: string }> = []): Promise<jsPDF> {
   const doc = new jsPDF();
   const isVisual = format === 'visual';
 
@@ -4363,6 +4615,12 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
       },
       margin: { left: 14, right: 14 },
     });
+  }
+
+  // Append trend-chart pages BEFORE adding footers, so the pages those charts
+  // create are included in the footer pass below.
+  if (reportData.reportType === 'individual' && chartImages.length > 0) {
+    addTrendChartsToPdf(doc, chartImages, reportData.metricLabels || {});
   }
 
   // Add footer to content pages — skip page 1 when a cover page was inserted

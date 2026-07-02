@@ -26,9 +26,15 @@ import { eq, and, gte, lte, inArray, desc, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { quantileRank, median, mean, min, max, standardDeviation } from 'simple-statistics';
 import { BaseService } from './base-service';
-import { deriveTierGroupName } from '../utils/report-utils';
+import { evaluateTierBenchmark as evaluateTierBenchmarkPure } from './benchmark-tiers';
 import { type MetricExplanation } from '@shared/metric-explanations';
 import { getMetricExplanationsMap } from './metric-explanation-service';
+import { assembleTrends } from './report-trends';
+import { computeDistribution } from './report-distributions';
+import { buildCohortLabel } from './cohort-label';
+import { resolveChartSelection, type ChartSelection } from '@shared/report-charts';
+import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
+import type { BenchmarkComparison } from '@shared/benchmark-types';
 
 interface TimeframeConfig {
   type: 'preset' | 'custom';
@@ -64,6 +70,8 @@ interface ReportConfig {
   };
   compositeIndex?: CompositeIndexConfig;
   filters?: ReportFilters;
+  showTrends?: boolean; // when true, individual reports include time-series trends
+  charts?: Partial<ChartSelection>;
 }
 
 interface AthletePerformance {
@@ -98,36 +106,6 @@ interface TeamStatistics {
   benchmarks?: Array<{
     name: string;
     value: number;
-  }>;
-}
-
-interface BenchmarkComparison {
-  benchmarkName: string;
-  benchmarkValue: number;
-  athleteValue: number;
-  /** For single-value benchmarks: true if athlete meets the threshold.
-   *  For tier benchmarks: true if athlete is in the top half of tiers (heuristic). */
-  meetsOrExceeds: boolean;
-  percentageDiff: number;
-  comparisonOperator: string;
-  // Tier fields (present only for tier/range benchmarks)
-  tierName?: string;
-  tierColor?: string;
-  tierOrder?: number;
-  tierGroupName?: string;
-  distanceToNextTier?: number | null;
-  nextTierName?: string | null;
-  isBestTier?: boolean;
-  /** Tier-specific coaching prose (migration 0137). Surfaced under the tier
-   *  label in reports when present. Null for non-coaching tier rows. */
-  coachingNote?: string | null;
-  // All tiers in this group (for rendering legends/references)
-  allTiers?: Array<{
-    tierName: string;
-    tierColor: string;
-    tierOrder: number;
-    minValue: number | null;
-    maxValue: number | null;
   }>;
 }
 
@@ -168,6 +146,9 @@ interface IndividualReportData {
   metricExplanations: Record<string, MetricExplanation>;
   eventContext?: EventContext; // Present when eventId filter is used
   orgBranding?: OrgBranding;
+  trends?: ReportTrends; // present only when reportConfig.showTrends is true
+  distributions?: ReportDistributions;
+  comparisonLabel?: string; // cohort name for the "Where You Stand" caption (undefined = org-wide)
 }
 
 export class ReportService extends BaseService {
@@ -421,16 +402,19 @@ export class ReportService extends BaseService {
       }
     }
 
-    // Calculate org-wide percentiles and team averages (always org-wide, not filtered by event)
-    // Note: Don't pass eventId here - org-wide percentiles should compare against all org athletes
-    const { percentiles, teamAverages } = await this.calculatePercentilesAndAverages(
+    // Calculate percentiles and team averages against the report's peer cohort
+    // (narrowed by config.filters — team/gender/positions — or the whole org when
+    // no filters are set). eventId is intentionally NOT passed: the cohort spans
+    // all events so the athlete is ranked against every comparable performance.
+    const { percentiles, teamAverages, peerValues } = await this.calculatePercentilesAndAverages(
       athleteId,
       report.organizationId,
       config.metrics,
       bestPerformances,
       startDate,
-      endDate
-      // eventId intentionally not passed - org percentiles should be org-wide
+      endDate,
+      undefined, // eventId intentionally not passed - cohort spans all events
+      config.filters
     );
 
     // Calculate event percentiles if requested
@@ -453,6 +437,67 @@ export class ReportService extends BaseService {
       bestPerformances,
       config
     );
+
+    const chartSelection = resolveChartSelection(config);
+
+    // Build time-series trends when the report opts in (additive; off by default)
+    let trends: ReportTrends | undefined;
+    if (chartSelection.trends) {
+      const directions: Record<string, 'higher' | 'lower'> = {};
+      // getMetricInfo memoizes, but a selected metric with no measurements in
+      // range was not pre-warmed by the bestPerformances loop above — resolve
+      // any remaining cold lookups concurrently instead of serially.
+      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+      config.metrics.forEach((metric, i) => {
+        directions[metric] = infos[i].lowerIsBetter ? 'lower' : 'higher';
+      });
+      trends = assembleTrends(
+        athleteMeasurements.map(m => ({
+          metric: m.metric,
+          date: typeof m.date === 'string' ? m.date : new Date(m.date).toISOString().split('T')[0],
+          value: m.value,
+        })),
+        config.metrics,
+        directions,
+        benchmarkComparisons,
+      );
+    }
+
+    let distributions: ReportDistributions | undefined;
+    if (chartSelection.distribution) {
+      distributions = {};
+      for (const metric of config.metrics) {
+        const athleteValue = bestPerformances[metric];
+        if (athleteValue === undefined) continue;
+        const dist = computeDistribution(peerValues[metric] ?? [], athleteValue);
+        if (dist) {
+          // getMetricInfo memoizes (warmed by the bestPerformances loop), so this
+          // is a cache hit; direction lets the histogram annotate the "better" side.
+          const info = await this.getMetricInfo(metric);
+          distributions[metric] = { ...dist, direction: info.lowerIsBetter ? 'lower' : 'higher' };
+        }
+      }
+      if (Object.keys(distributions).length === 0) distributions = undefined;
+    }
+
+    // Human label for the peer cohort (names the group in the "Where You Stand"
+    // caption). Undefined when no filter narrows the cohort → frontend says "your group".
+    let comparisonLabel: string | undefined;
+    const f = config.filters;
+    if (f && (f.teamIds?.length || f.gender || f.positions?.length)) {
+      let filterTeamNames: string[] = [];
+      if (f.teamIds?.length) {
+        const rows = await db
+          .select({ name: teams.name })
+          .from(teams)
+          // Scope to this report's org so a crafted cross-org teamId can't leak
+          // another org's team name into the caption.
+          .where(and(eq(teams.organizationId, report.organizationId), inArray(teams.id, f.teamIds)))
+          .orderBy(teams.name); // deterministic label order for multi-team cohorts
+        filterTeamNames = rows.map((r) => r.name);
+      }
+      comparisonLabel = buildCohortLabel(filterTeamNames, f.gender, f.positions);
+    }
 
     const athletePerformance: AthletePerformance = {
       userId: athlete.id,
@@ -514,6 +559,9 @@ export class ReportService extends BaseService {
       metricUnits,
       metricExplanations,
       eventContext,
+      trends,
+      distributions,
+      comparisonLabel,
     };
   }
 
@@ -548,51 +596,48 @@ export class ReportService extends BaseService {
     athletePerformances: Record<string, number>,
     startDate: string,
     endDate: string,
-    eventId?: string
-  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number> }> {
+    eventId?: string,
+    filters?: ReportFilters
+  ): Promise<{ percentiles: Record<string, number>; teamAverages: Record<string, number>; peerValues: Record<string, number[]> }> {
     const percentiles: Record<string, number> = {};
     const teamAverages: Record<string, number> = {};
+    const peerValues: Record<string, number[]> = {};
+
+    // Peer cohort = org athletes narrowed by the report's filters (team / gender /
+    // positions). With no filters this is the whole org (unchanged behavior). One
+    // query for all metrics; grouped per metric below. This peer set feeds the
+    // percentile, team average, AND the distribution, so they stay consistent.
+    const cohortMeasurements = await this.getFilteredMeasurements(
+      organizationId,
+      metrics,
+      filters,
+      startDate,
+      endDate,
+      eventId
+    );
 
     for (const metric of metrics) {
       if (athletePerformances[metric] === undefined) {
         continue;
       }
 
-      // Get all measurements for this metric in the organization (optionally filtered by event)
-      const measurementConditions = [
-        eq(measurements.organizationId, organizationId),
-        eq(measurements.metric, metric),
-        gte(measurements.date, startDate),
-        lte(measurements.date, endDate),
-      ];
-
-      if (eventId) {
-        measurementConditions.push(eq(measurements.eventId, eventId));
-      }
-
-      const allMeasurements = await db
-        .select({
-          value: measurements.value,
-          userId: measurements.userId,
-        })
-        .from(measurements)
-        .where(and(...measurementConditions));
-
-      // Get best performance per athlete
+      // Get best performance per athlete within the cohort
       const athleteBestMap = new Map<string, number>();
       const metricInfo = await this.getMetricInfo(metric);
 
-      for (const m of allMeasurements) {
-        const value = parseFloat(m.value);
-        const current = athleteBestMap.get(m.userId);
+      for (const r of cohortMeasurements) {
+        if (r.measurement.metric !== metric) continue;
+        const value = parseFloat(r.measurement.value);
+        const userId = r.measurement.userId;
+        const current = athleteBestMap.get(userId);
 
         if (current === undefined) {
-          athleteBestMap.set(m.userId, value);
+          athleteBestMap.set(userId, value);
         } else {
           if (metricInfo.lowerIsBetter) {
-            if (value < current) athleteBestMap.set(m.userId, value);
+            if (value < current) athleteBestMap.set(userId, value);
           } else {
-            if (value > current) athleteBestMap.set(m.userId, value);
+            if (value > current) athleteBestMap.set(userId, value);
           }
         }
       }
@@ -609,10 +654,19 @@ export class ReportService extends BaseService {
 
         // Calculate team average (using best performance per athlete, same as team reports)
         teamAverages[metric] = mean(allValues);
+
+        // Expose the per-metric peer best-values (EXCLUDING the focal athlete by
+        // id) so callers (e.g. distributions) reuse this peer set without a second
+        // query, and the athlete is never counted among their own peers — correct
+        // even when an event filter makes the athlete's shown value differ from
+        // their org-wide best.
+        peerValues[metric] = Array.from(athleteBestMap.entries())
+          .filter(([userId]) => userId !== athleteId)
+          .map(([, value]) => value);
       }
     }
 
-    return { percentiles, teamAverages };
+    return { percentiles, teamAverages, peerValues };
   }
 
   /**
@@ -1576,154 +1630,8 @@ export class ReportService extends BaseService {
     metricCode: string,
     allTiers: any[]
   ): Promise<BenchmarkComparison | null> {
-    if (allTiers.length === 0) return null;
-
-    const metricInfo = await this.getMetricInfo(metricCode);
-    const lowerIsBetter = metricInfo.lowerIsBetter;
-
-    // Find which tier the athlete falls into.
-    // Tiers are sorted by tierOrder (1 = best). For adjacent tiers with shared
-    // boundaries (e.g., Tier 1: 1.00–1.20, Tier 2: 1.20–1.40), the inclusive
-    // range check (>= min && <= max) matches both — first match wins, assigning
-    // the better tier. This is intentional: boundary values favor the better tier.
-    let matchedTier: any = null;
-    for (const tier of allTiers) {
-      const minVal = tier.minValue != null ? parseFloat(tier.minValue) : null;
-      const maxVal = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
-
-      if (minVal !== null && maxVal !== null) {
-        if (athleteValue >= minVal && athleteValue <= maxVal) {
-          matchedTier = tier;
-          break;
-        }
-      } else if (tier.benchmarkValue != null) {
-        // Single-value tier with comparison operator
-        const bv = parseFloat(tier.benchmarkValue);
-        if (tier.comparisonOperator === 'lte' && athleteValue <= bv) {
-          matchedTier = tier;
-          break;
-        }
-        if (tier.comparisonOperator === 'gte' && athleteValue >= bv) {
-          matchedTier = tier;
-          break;
-        }
-        if (tier.comparisonOperator === 'eq' && Math.abs(athleteValue - bv) < 0.01) {
-          matchedTier = tier;
-          break;
-        }
-      }
-    }
-
-    // If no tier matched, athlete is outside all defined ranges or in a gap
-    // between non-contiguous ranges. Find the nearest tier by boundary distance.
-    if (!matchedTier) {
-      const bestTier = allTiers[0]; // tierOrder 1 = best
-      const worstTier = allTiers[allTiers.length - 1];
-      const bestMin = bestTier.minValue != null ? parseFloat(bestTier.minValue) : null;
-      const bestMax = bestTier.maxValue != null ? parseFloat(bestTier.maxValue) : null;
-
-      // Check if athlete exceeds the best tier
-      let beatsBest = false;
-      if (lowerIsBetter) {
-        beatsBest = bestMin !== null ? athleteValue < bestMin
-                  : bestMax !== null ? athleteValue <= bestMax
-                  : false;
-      } else {
-        beatsBest = bestMax !== null ? athleteValue > bestMax
-                  : bestMin !== null ? athleteValue >= bestMin
-                  : false;
-      }
-
-      if (beatsBest) {
-        matchedTier = bestTier;
-      } else {
-        // Find nearest tier by minimum distance to any boundary
-        let minDistance = Infinity;
-        for (const tier of allTiers) {
-          const tMin = tier.minValue != null ? parseFloat(tier.minValue) : null;
-          const tMax = tier.maxValue != null ? parseFloat(tier.maxValue) : null;
-          if (tMin !== null) {
-            const d = Math.abs(athleteValue - tMin);
-            if (d < minDistance) { minDistance = d; matchedTier = tier; }
-          }
-          if (tMax !== null) {
-            const d = Math.abs(athleteValue - tMax);
-            if (d < minDistance) { minDistance = d; matchedTier = tier; }
-          }
-        }
-        // Final fallback if no boundaries found at all
-        if (!matchedTier) matchedTier = worstTier;
-      }
-    }
-
-    // Find the next better tier (lower tierOrder = better)
-    const matchedOrder = matchedTier.tierOrder ?? Number.MAX_SAFE_INTEGER;
-    const isBestTier = matchedOrder === 1;
-    let nextTierName: string | null = null;
-    let distanceToNextTier: number | null = null;
-
-    if (!isBestTier) {
-      // Find the next better tier (largest tierOrder strictly less than matchedOrder).
-      // Handles non-sequential tier orders (e.g., 1, 5, 10) — allTiers is sorted ascending.
-      const nextTier = allTiers
-        .filter((t: any) => (t.tierOrder ?? Number.MAX_SAFE_INTEGER) < matchedOrder)
-        .at(-1);
-      if (nextTier) {
-        nextTierName = nextTier.tierName || null;
-        // Calculate distance to the boundary of the next tier
-        if (lowerIsBetter) {
-          // For time-based metrics, athlete needs to decrease to reach next tier's maxValue
-          const boundary = nextTier.maxValue != null ? parseFloat(nextTier.maxValue) :
-                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
-          if (boundary !== null) {
-            distanceToNextTier = Math.abs(athleteValue - boundary);
-          }
-        } else {
-          // For higher-is-better metrics, athlete needs to increase to reach next tier's minValue
-          const boundary = nextTier.minValue != null ? parseFloat(nextTier.minValue) :
-                          nextTier.benchmarkValue != null ? parseFloat(nextTier.benchmarkValue) : null;
-          if (boundary !== null) {
-            distanceToNextTier = Math.abs(boundary - athleteValue);
-          }
-        }
-      }
-    }
-
-    // Use the tier group's base name (derive from first tier's name minus tier-specific suffix)
-    const tierGroupName = matchedTier.tierGroupId
-      ? deriveTierGroupName(allTiers[0]?.name || matchedTier.name)
-      : matchedTier.name;
-
-    // Use midpoint of range as benchmarkValue for compatibility
-    const minVal = matchedTier.minValue != null ? parseFloat(matchedTier.minValue) : null;
-    const maxVal = matchedTier.maxValue != null ? parseFloat(matchedTier.maxValue) : null;
-    const displayValue = matchedTier.benchmarkValue != null
-      ? parseFloat(matchedTier.benchmarkValue)
-      : (minVal !== null && maxVal !== null ? (minVal + maxVal) / 2 : 0);
-
-    return {
-      benchmarkName: tierGroupName,
-      benchmarkValue: displayValue,
-      athleteValue,
-      meetsOrExceeds: isBestTier || matchedOrder <= Math.ceil(allTiers.length / 2),
-      percentageDiff: 0,
-      comparisonOperator: 'range',
-      tierName: matchedTier.tierName || matchedTier.name,
-      tierColor: matchedTier.tierColor || 'gray',
-      tierOrder: matchedTier.tierOrder,
-      tierGroupName,
-      distanceToNextTier,
-      nextTierName,
-      isBestTier,
-      coachingNote: matchedTier.coachingNote ?? null,
-      allTiers: allTiers.map((t: any) => ({
-        tierName: t.tierName || t.name,
-        tierColor: t.tierColor || 'gray',
-        tierOrder: t.tierOrder || 0,
-        minValue: t.minValue != null ? parseFloat(t.minValue) : null,
-        maxValue: t.maxValue != null ? parseFloat(t.maxValue) : null,
-      })),
-    };
+    const info = await this.getMetricInfo(metricCode);
+    return evaluateTierBenchmarkPure(athleteValue, info.lowerIsBetter, allTiers);
   }
 
   private async getBenchmarksForReport(

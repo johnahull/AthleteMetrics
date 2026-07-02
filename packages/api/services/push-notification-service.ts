@@ -18,6 +18,7 @@ import {
   userOrganizations,
   NotificationType,
 } from '@shared/schema';
+import { getPgErrorCode, getPgError, PG_UNIQUE_VIOLATION } from '../lib/pg-error';
 
 // Web Push payload size limit (4KB as per spec)
 // Reserve 200 bytes for ECDH encryption overhead and padding
@@ -265,8 +266,11 @@ export class PushNotificationService {
 
       return result;
     } catch (error: any) {
-      // Check if error is unique constraint violation (PostgreSQL error code 23505)
-      if (error.code === '23505' && error.constraint === 'push_subscriptions_endpoint_unique') {
+      // Check if error is unique constraint violation (PostgreSQL error code 23505).
+      // drizzle-orm >=0.44 wraps driver errors in DrizzleQueryError; walk the
+      // full cause chain via getPgError() to find the raw PG error.
+      const pgError = getPgError(error);
+      if (pgError?.code === PG_UNIQUE_VIOLATION && pgError?.constraint === 'push_subscriptions_endpoint_unique') {
         // Endpoint already exists - must belong to different user
         throw new Error('This device is already registered to a different user');
       }

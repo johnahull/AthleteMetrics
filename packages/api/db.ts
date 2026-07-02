@@ -71,6 +71,14 @@ const client = postgres(DATABASE_URL, {
   ssl: DATABASE_URL.includes('localhost') || process.env.NODE_ENV === 'test' ? false : 'require',
   prepare: true, // Enable prepared statements for 5-10% query performance boost
   onnotice: () => {}, // Suppress PostgreSQL notices in production
+  // Pin non-production sessions to UTC. The schema uses `timestamp without time
+  // zone` columns that store/serialize UTC instants; if a local dev/test
+  // Postgres defaults to a non-UTC timezone, `defaultNow()`, `CURRENT_DATE`, and
+  // `new Date() > col` comparisons skew by the UTC offset. Production (Neon)
+  // already runs in UTC, so it is left untouched; this just makes dev/test match
+  // it. (Gated on !== 'production' rather than === 'test' because under ESM the
+  // hoisted db import sees NODE_ENV before a test file's body can set it.)
+  ...(process.env.NODE_ENV !== 'production' ? { connection: { TimeZone: 'UTC' } } : {}),
 });
 
 const db = drizzle(client, { schema });
