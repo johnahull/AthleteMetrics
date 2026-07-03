@@ -1,7 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
 import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
-import type { ChartSelection } from '@shared/report-charts';
+import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
 
 export interface Benchmark {
   name: string;
@@ -75,7 +75,10 @@ export interface TeamReportConfig {
     enabled: boolean;
     weights?: Record<string, number>;
   };
-  charts?: Partial<ChartSelection>;
+  // Partial<TeamChartSelection>, not ChartSelection: team configs don't have
+  // radar/distribution, so this rejects those individual-only keys at compile
+  // time instead of only filtering them out at wizard-submit time.
+  charts?: Partial<TeamChartSelection>;
 }
 
 export interface IndividualReportConfig {
