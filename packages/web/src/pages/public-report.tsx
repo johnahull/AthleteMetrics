@@ -28,7 +28,6 @@ import { DistributionSection } from "@/components/reports/DistributionSection";
 import { resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
-import { TeamRadarSection } from "@/components/reports/TeamRadarSection";
 import { TeamTrendSection } from "@/components/reports/TeamTrendSection";
 import { TeamBenchmarkStandingSection } from "@/components/reports/TeamBenchmarkStandingSection";
 import { TeamBoxSwarmSection } from "@/components/reports/TeamBoxSwarmSection";
@@ -92,7 +91,6 @@ export default function PublicReport() {
   const teamTrends = snapshotData.teamTrends as TeamReportTrends | undefined;
   const teamDistributions = snapshotData.teamDistributions as TeamReportDistributions | undefined;
   const teamMetricDirections = snapshotData.metricDirections as Record<string, 'higher' | 'lower'> | undefined;
-  const teamMetrics = (snapshotData.reportConfig as TeamReportConfig | undefined)?.metrics ?? [];
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
@@ -304,10 +302,6 @@ export default function PublicReport() {
             )}
 
             {/* Charts (additive — gated by resolveTeamChartSelection, same as TeamReportView) */}
-            {teamSel.radar && teamMetrics.length >= 3 && (
-              <TeamRadarSection rankings={athleteRankings} metrics={teamMetrics} />
-            )}
-
             {teamSel.benchmarkStanding && (
               <TeamBenchmarkStandingSection
                 teamStatistics={teamStatistics}

@@ -17,7 +17,7 @@ import { loginAsDefaultUser } from './helpers/auth';
  *     proving the toggle actually gates the section (not just always-on).
  *
  * Stage 3 additionally verifies:
- *  3. The public shared-report link for a team report renders the same 6
+ *  3. The public shared-report link for a team report renders the same 5
  *     `[data-report-chart]` sections (public-report.tsx team branch).
  *  4. PDF export for a team report (both the authenticated coach-view export
  *     and the public unauthenticated export) succeeds and produces a PDF
@@ -313,9 +313,8 @@ test.describe('Team Report Charts (coach view)', () => {
     await expect(page.locator('[data-report-chart="tierDistribution"]')).toHaveCount(0);
   });
 
-  test('renders all 6 team chart sections on the public shared-report link', async ({ page, context }) => {
+  test('renders all 5 team chart sections on the public shared-report link', async ({ page, context }) => {
     const reportId = await createTeamReport(page, {
-      radar: true,
       benchmarkStanding: true,
       trends: true,
       boxSwarm: true,
@@ -342,10 +341,6 @@ test.describe('Team Report Charts (coach view)', () => {
       await incognitoPage.goto(publicUrl);
       await incognitoPage.waitForLoadState('networkidle');
 
-      const radar = incognitoPage.locator('[data-report-chart="radar"]');
-      await expect(radar).toBeVisible({ timeout: 15000 });
-      await expect(incognitoPage.getByText('Team All-Around Profile (percentiles)')).toBeVisible();
-
       await expect(incognitoPage.locator('[data-report-chart="tier:VERTICAL_JUMP"]')).toBeVisible({ timeout: 15000 });
 
       await expect(incognitoPage.getByTestId('team-trend-section')).toBeVisible({ timeout: 15000 });
@@ -364,12 +359,12 @@ test.describe('Team Report Charts (coach view)', () => {
 
       // Screenshot capture (UI screenshot convention) - desktop then mobile.
       await incognitoPage.setViewportSize({ width: 1280, height: 720 });
-      await radar.scrollIntoViewIfNeeded();
+      await tierDistribution.scrollIntoViewIfNeeded();
       await incognitoPage.screenshot({ path: 'screenshots/team-report-charts-public-view-desktop.png', fullPage: true });
 
       await incognitoPage.setViewportSize({ width: 375, height: 667 });
-      await expect(radar).toBeVisible({ timeout: 15000 });
-      await radar.scrollIntoViewIfNeeded();
+      await expect(tierDistribution).toBeVisible({ timeout: 15000 });
+      await tierDistribution.scrollIntoViewIfNeeded();
       await incognitoPage.screenshot({ path: 'screenshots/team-report-charts-public-view-mobile.png', fullPage: true });
     } finally {
       await incognitoPage.close();
@@ -378,14 +373,13 @@ test.describe('Team Report Charts (coach view)', () => {
   });
 
   test('team PDF export (coach view) succeeds and embeds captured chart images', async ({ page }) => {
-    // A 6-section team report with 3 metrics produces ~15 individual chart
-    // images (box+swarm alone renders 2 charts per metric). Capturing all of
-    // them client-side (html2canvas) plus server-side jsPDF assembly measured
-    // at 60-85s locally in dev mode — give this test generous headroom.
+    // A 5-section team report with 3 metrics produces well over a dozen
+    // individual chart images. Capturing all of them client-side (html2canvas)
+    // plus server-side jsPDF assembly measured at 60-85s locally in dev mode
+    // — give this test generous headroom.
     test.setTimeout(180000);
 
     const reportId = await createTeamReport(page, {
-      radar: true,
       benchmarkStanding: true,
       trends: true,
       boxSwarm: true,
@@ -398,7 +392,6 @@ test.describe('Team Report Charts (coach view)', () => {
 
     // Wait for the charts to actually render before capturing — html2canvas
     // needs live canvases/SVGs in the DOM, not just the section containers.
-    await expect(page.locator('[data-report-chart="radar"]')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[data-report-chart^="leaderboard:"]').first()).toBeVisible({ timeout: 15000 });
 
     const downloadPromise = page.waitForEvent('download', { timeout: 150000 });
@@ -411,9 +404,9 @@ test.describe('Team Report Charts (coach view)', () => {
     expect(path).toBeTruthy();
 
     const stats = statSync(path!);
-    // A team PDF with 6 embedded chart sections is substantially larger than a
+    // A team PDF with 5 embedded chart sections is substantially larger than a
     // tables-only PDF (report-pdf-export.spec.ts uses a >5000-byte threshold
-    // for a single chart; six chart sections push this well past 10KB).
+    // for a single chart; five chart sections push this well past 10KB).
     expect(stats.size).toBeGreaterThan(10000);
     const buffer = readFileSync(path!);
     expect(buffer.slice(0, 4).toString()).toBe('%PDF');
@@ -423,7 +416,6 @@ test.describe('Team Report Charts (coach view)', () => {
     test.setTimeout(180000);
 
     const reportId = await createTeamReport(page, {
-      radar: true,
       benchmarkStanding: true,
       trends: true,
       boxSwarm: true,
@@ -445,7 +437,6 @@ test.describe('Team Report Charts (coach view)', () => {
     try {
       await incognitoPage.goto(publicUrl);
       await incognitoPage.waitForLoadState('networkidle');
-      await expect(incognitoPage.locator('[data-report-chart="radar"]')).toBeVisible({ timeout: 15000 });
       await expect(incognitoPage.locator('[data-report-chart^="leaderboard:"]').first()).toBeVisible({ timeout: 15000 });
 
       const downloadPromise = incognitoPage.waitForEvent('download', { timeout: 150000 });
