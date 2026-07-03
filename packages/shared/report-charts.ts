@@ -25,8 +25,19 @@ export const DEFAULT_CHART_SELECTION: ChartSelection = {
  *  athlete's percentile (computed against an external cohort), a team's
  *  average percentile is computed against its own roster, so averaging it
  *  across the team converges toward ~50% regardless of how good the team
- *  actually is — not a meaningful "team all-around profile." */
-export type TeamChartSelection = Omit<ChartSelection, 'distribution' | 'radar'>;
+ *  actually is — not a meaningful "team all-around profile."
+ *
+ *  A dedicated interface (rather than `Omit<ChartSelection, ...>`) so these
+ *  fields are required booleans here — resolveTeamChartSelection always sets
+ *  all five concretely, even though ChartSelection itself declares them
+ *  optional for the individual resolver's sake. */
+export interface TeamChartSelection {
+  benchmarkStanding: boolean;
+  trends: boolean;
+  leaderboard: boolean;
+  tierDistribution: boolean;
+  boxSwarm: boolean;
+}
 
 /** Config subset this resolver reads. */
 interface ChartConfigInput {

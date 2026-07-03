@@ -85,6 +85,46 @@ describe('assembleTeamTrends', () => {
     const trends = assembleTeamTrends([], ['VJ'], { VJ: 'higher' }, { VJ: [] });
     expect(trends.VJ).toBeUndefined();
   });
+
+  it('collapses same-day retests to the best value instead of double-weighting that athlete in the team average (regression: a second same-date row used to be averaged in as if it were a second athlete)', () => {
+    const rows = [
+      // Alice retested VJ twice on the same day — best (higher-is-better) is 26.
+      row('a1', 'Alice', 'VJ', '2025-09-01', 20),
+      row('a1', 'Alice', 'VJ', '2025-09-01', 26),
+      row('a2', 'Bob', 'VJ', '2025-09-01', 24),
+      row('a1', 'Alice', 'VJ', '2026-02-01', 30),
+      row('a2', 'Bob', 'VJ', '2026-02-01', 32),
+    ];
+    const trends = assembleTeamTrends(rows, ['VJ'], { VJ: 'higher' }, { VJ: [] });
+
+    // Team average must be (26 + 24) / 2 = 25, not (20 + 26 + 24) / 3.
+    expect(trends.VJ.teamSeries).toEqual([
+      { date: '2025-09-01', value: 25 },
+      { date: '2026-02-01', value: 31 },
+    ]);
+
+    // Alice's own series must also collapse to one point for that date.
+    const alice = trends.VJ.athleteSeries.find(s => s.athleteId === 'a1')!;
+    expect(alice.series).toEqual([
+      { date: '2025-09-01', value: 26 },
+      { date: '2026-02-01', value: 30 },
+    ]);
+  });
+
+  it('collapses same-day retests to the lowest value for a lower-is-better metric', () => {
+    const rows = [
+      row('a1', 'Alice', 'DASH', '2025-09-01', 5.6),
+      row('a1', 'Alice', 'DASH', '2025-09-01', 4.9), // faster (better) retest
+      row('a2', 'Bob', 'DASH', '2025-09-01', 5.2),
+      row('a1', 'Alice', 'DASH', '2026-02-01', 4.7),
+      row('a2', 'Bob', 'DASH', '2026-02-01', 5.0),
+    ];
+    const trends = assembleTeamTrends(rows, ['DASH'], { DASH: 'lower' }, { DASH: [] });
+
+    expect(trends.DASH.teamSeries[0]).toEqual({ date: '2025-09-01', value: (4.9 + 5.2) / 2 });
+    const alice = trends.DASH.athleteSeries.find(s => s.athleteId === 'a1')!;
+    expect(alice.series[0]).toEqual({ date: '2025-09-01', value: 4.9 });
+  });
 });
 
 describe('computeTeamDistribution', () => {
