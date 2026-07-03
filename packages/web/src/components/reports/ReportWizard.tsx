@@ -62,6 +62,9 @@ const reportConfigSchema = z.object({
     benchmarkStanding: z.boolean().default(true),
     trends: z.boolean().default(true),
     distribution: z.boolean().default(true),
+    leaderboard: z.boolean().default(true),
+    tierDistribution: z.boolean().default(true),
+    boxSwarm: z.boolean().default(true),
   }).default(DEFAULT_CHART_SELECTION),
   compositeWeights: z.record(z.string(), z.number()).optional(),
 }).superRefine((data, ctx) => {
@@ -245,6 +248,38 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     );
   };
 
+  // Chart selection items shown in the step-8 "Charts to include" panel.
+  // Individual and team reports show different chart sets (team doesn't use
+  // the individual-only `distribution` histogram — it uses `boxSwarm` instead).
+  type ChartItemKey = keyof NonNullable<ReportFormData["charts"]>;
+  const individualChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
+    ['radar', 'All-around profile (radar)', 'Percentile shape across all metrics (needs ≥3 metrics)'],
+    ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
+    ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
+    ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
+  ];
+  const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
+    ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
+    ['trends', 'Progress over time', `${labels.team} average trend line per metric (needs ≥2 measurements)`],
+    ['boxSwarm', 'Distribution (box + swarm)', `The spread of every ${labels.athlete.toLowerCase()}'s performance per metric`],
+    ['leaderboard', 'Leaderboard', `Ranked bar chart of ${labels.athletes.toLowerCase()} per metric`],
+    ['tierDistribution', 'Tier distribution', `${labels.team} composition across benchmark tiers`],
+  ];
+  const renderChartCheckboxes = (items: ReadonlyArray<readonly [ChartItemKey, string, string]>) => (
+    <>
+      {items.map(([key, title, desc]) => (
+        <div key={key} className="flex items-start space-x-2">
+          <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
+            onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
+          <div>
+            <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
+            <p className="text-sm text-muted-foreground">{desc}</p>
+          </div>
+        </div>
+      ))}
+    </>
+  );
+
   const handleNext = (e?: React.MouseEvent) => {
     e?.preventDefault();
 
@@ -335,10 +370,23 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
       };
     }
 
-    // Chart selection is an individual-report feature; don't pollute team configs.
-    if (data.reportType === "individual") {
-      config.charts = data.charts;
-    }
+    // Each report type only persists the chart keys it actually uses, so the
+    // stored config doesn't carry inert fields from the other report type
+    // (e.g. team reports use `boxSwarm`, not `distribution`, and vice versa).
+    config.charts = data.reportType === "team"
+      ? {
+          benchmarkStanding: data.charts.benchmarkStanding,
+          trends: data.charts.trends,
+          boxSwarm: data.charts.boxSwarm,
+          leaderboard: data.charts.leaderboard,
+          tierDistribution: data.charts.tierDistribution,
+        }
+      : {
+          radar: data.charts.radar,
+          benchmarkStanding: data.charts.benchmarkStanding,
+          trends: data.charts.trends,
+          distribution: data.charts.distribution,
+        };
 
     if (data.teamIds?.length || data.gender || data.positions?.length) {
       config.filters = {
@@ -897,6 +945,12 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
                   Skip composite index to create a report without athlete rankings. Click "Create Report" to continue.
                 </p>
               )}
+
+              <Separator />
+              <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
+                <Label className="font-medium">Charts to include</Label>
+                {renderChartCheckboxes(teamChartItems)}
+              </div>
             </div>
           )}
 
@@ -925,21 +979,7 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
               </div>
               <div className="border rounded-lg p-4 bg-muted/30 space-y-4">
                 <Label className="font-medium">Charts to include</Label>
-                {([
-                  ['radar', 'All-around profile (radar)', 'Percentile shape across all metrics (needs ≥3 metrics)'],
-                  ['benchmarkStanding', 'Benchmark standing', 'Where the athlete sits vs each benchmark'],
-                  ['trends', 'Progress over time', 'Trend line per metric (needs ≥2 measurements)'],
-                  ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
-                ] as const).map(([key, title, desc]) => (
-                  <div key={key} className="flex items-start space-x-2">
-                    <Checkbox id={`chart-${key}`} checked={charts?.[key] ?? true}
-                      onCheckedChange={(v) => setValue(`charts.${key}` as const, v as boolean)} className="mt-1" />
-                    <div>
-                      <Label htmlFor={`chart-${key}`} className="cursor-pointer font-medium">{title}</Label>
-                      <p className="text-sm text-muted-foreground">{desc}</p>
-                    </div>
-                  </div>
-                ))}
+                {renderChartCheckboxes(individualChartItems)}
               </div>
             </div>
           )}

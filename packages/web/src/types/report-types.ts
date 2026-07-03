@@ -1,7 +1,7 @@
 import type { MetricExplanation } from '@shared/metric-explanations';
-import type { ReportTrends, ReportDistributions } from '@shared/report-trends-types';
+import type { ReportTrends, ReportDistributions, TeamReportTrends, TeamReportDistributions } from '@shared/report-trends-types';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
-import type { ChartSelection } from '@shared/report-charts';
+import type { ChartSelection, TeamChartSelection } from '@shared/report-charts';
 
 export interface Benchmark {
   name: string;
@@ -75,6 +75,10 @@ export interface TeamReportConfig {
     enabled: boolean;
     weights?: Record<string, number>;
   };
+  // Partial<TeamChartSelection>, not ChartSelection: team configs don't have
+  // radar/distribution, so this rejects those individual-only keys at compile
+  // time instead of only filtering them out at wizard-submit time.
+  charts?: Partial<TeamChartSelection>;
 }
 
 export interface IndividualReportConfig {
@@ -107,7 +111,14 @@ export interface TeamReportData {
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
   metricExplanations?: Record<string, MetricExplanation>;
+  /** Per-metric direction ('lower' = lower-is-better), so client components can
+   *  evaluate tier standing without needing authenticated org-scoped metric
+   *  config — required for the public/anonymous report view. */
+  metricDirections?: Record<string, 'higher' | 'lower'>;
   orgBranding?: OrgBranding;
+  teamTrends?: TeamReportTrends;
+  teamDistributions?: TeamReportDistributions;
+  comparisonLabel?: string;
 }
 
 export interface IndividualAthleteData {
