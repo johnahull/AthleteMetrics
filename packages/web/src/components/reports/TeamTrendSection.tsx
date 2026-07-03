@@ -1,4 +1,5 @@
 // packages/web/src/components/reports/TeamTrendSection.tsx
+import { useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import type { TeamReportTrends } from '@shared/report-trends-types';
 import { BenchmarkTrendChart } from '@/components/charts/BenchmarkTrendChart';
@@ -12,7 +13,16 @@ interface TeamTrendSectionProps {
 }
 
 export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {} }: TeamTrendSectionProps) {
-  const entries = Object.entries(trends);
+  const entries = useMemo(() => Object.entries(trends), [trends]);
+  // Stabilize each chart's faint-athlete series so BenchmarkTrendChart's own
+  // useMemo (keyed on this array) doesn't invalidate on every parent render.
+  const backgroundSeriesByMetric = useMemo(
+    () => Object.fromEntries(
+      entries.map(([code, trend]) => [code, trend.athleteSeries.slice(0, MAX_FAINT_ATHLETES).map((a) => a.series)]),
+    ),
+    [entries],
+  );
+
   if (entries.length === 0) return null;
 
   return (
@@ -40,7 +50,7 @@ export function TeamTrendSection({ trends, metricLabels = {}, metricUnits = {} }
               }}
               label={metricLabels[code] || code}
               unit={metricUnits[code]}
-              backgroundSeries={trend.athleteSeries.slice(0, MAX_FAINT_ATHLETES).map((a) => a.series)}
+              backgroundSeries={backgroundSeriesByMetric[code]}
             />
           ))}
         </div>

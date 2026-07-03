@@ -46,6 +46,7 @@ async function hashPassword(password: string): Promise<string> {
 let app: Express;
 let testOrg: any;
 let testCoach: any;
+let coachAuthCookie: string;
 let createdReportIds: string[] = [];
 let createdAthleteIds: string[] = [];
 
@@ -95,8 +96,6 @@ beforeEach(async () => {
 
   coachAuthCookie = coachLogin.headers['set-cookie'][0];
 });
-
-let coachAuthCookie: string;
 
 afterEach(async () => {
   for (const reportId of createdReportIds) {
