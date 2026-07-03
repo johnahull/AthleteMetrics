@@ -49,12 +49,29 @@ export function assembleTeamTrends(
   const trends: TeamReportTrends = {};
 
   for (const metric of metrics) {
-    const metricRows = rowsByAthlete
+    const direction = directions[metric] ?? 'higher';
+    const isBetter = (candidate: number, current: number) =>
+      direction === 'lower' ? candidate < current : candidate > current;
+
+    const parsedRows = rowsByAthlete
       .filter(r => r.metric === metric)
       .map(r => ({ ...r, value: parseFloat(r.value) }))
       // Drop non-numeric measurement values: a malformed `value` would parse to
       // NaN and poison the team average / delta.
       .filter(r => !Number.isNaN(r.value));
+
+    // Collapse same-day retests to the best value per athlete before
+    // averaging — otherwise a retested athlete counts twice in that date's
+    // team average, silently double-weighting them relative to teammates.
+    const bestByAthleteDate = new Map<string, typeof parsedRows[number]>();
+    for (const r of parsedRows) {
+      const key = `${r.athleteId}|${r.date}`;
+      const existing = bestByAthleteDate.get(key);
+      if (!existing || isBetter(r.value, existing.value)) {
+        bestByAthleteDate.set(key, r);
+      }
+    }
+    const metricRows = Array.from(bestByAthleteDate.values());
 
     // Per-athlete ascending series (faint background context for Stage 2).
     const byAthlete = new Map<string, { athleteName: string; series: TrendPoint[] }>();
@@ -85,7 +102,6 @@ export function assembleTeamTrends(
 
     if (teamSeries.length < 2) continue;
 
-    const direction = directions[metric] ?? 'higher';
     const delta = computeTrendDelta(direction, teamSeries[0].value, teamSeries[teamSeries.length - 1].value);
 
     trends[metric] = {
