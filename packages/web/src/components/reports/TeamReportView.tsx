@@ -50,7 +50,6 @@ import { isFly10Metric, formatFly10Dual } from "@/utils/fly10-conversion";
 import type { Report, TeamReportData, TeamStatistic, AthleteRanking, PdfFormat, TeamReportConfig } from "@/types/report-types";
 import { useContextualLabels } from "@/hooks/useContextualLabels";
 import { resolveTeamChartSelection } from "@shared/report-charts";
-import { TeamRadarSection } from "./TeamRadarSection";
 import { TeamTrendSection } from "./TeamTrendSection";
 import { TeamBenchmarkStandingSection } from "./TeamBenchmarkStandingSection";
 import { TeamBoxSwarmSection } from "./TeamBoxSwarmSection";
@@ -637,10 +636,6 @@ export function TeamReportView({ report }: TeamReportViewProps) {
       )}
 
       {/* Charts (additive — gated by resolveTeamChartSelection; tables above stay as-is) */}
-      {sel.radar && report.config.metrics.length >= 3 && (
-        <TeamRadarSection rankings={athleteRankings} metrics={report.config.metrics} />
-      )}
-
       {sel.benchmarkStanding && (
         <TeamBenchmarkStandingSection
           teamStatistics={teamStatistics}

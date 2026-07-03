@@ -18,10 +18,9 @@ vi.mock('@/hooks/use-metric-config', () => ({
   }),
 }));
 
-// BoxPlotChart uses <Chart>, SwarmChart uses <Scatter> — mock both to avoid canvas rendering.
+// BoxPlotChart uses <Chart> — mock to avoid canvas rendering.
 vi.mock('react-chartjs-2', () => ({
   Chart: vi.fn(() => <div data-testid="mock-boxplot" />),
-  Scatter: vi.fn(() => <div data-testid="mock-swarm" />),
 }));
 
 const distributions: TeamReportDistributions = {
@@ -39,11 +38,10 @@ const distributions: TeamReportDistributions = {
 };
 
 describe('TeamBoxSwarmSection', () => {
-  it('renders a box plot + swarm chart per metric when distributions are present', () => {
+  it('renders a box plot (with every athlete as a point) per metric when distributions are present', () => {
     render(<TeamBoxSwarmSection distributions={distributions} metricLabels={{ VJ: 'Vertical Jump' }} generatedAt="2024-01-01" />);
     expect(screen.getByText('Team Distribution')).toBeInTheDocument();
     expect(screen.getByTestId('mock-boxplot')).toBeInTheDocument();
-    expect(screen.getByTestId('mock-swarm')).toBeInTheDocument();
     expect(document.querySelector('[data-report-chart="boxswarm:VJ"]')).toBeTruthy();
   });
 

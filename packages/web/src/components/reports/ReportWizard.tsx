@@ -259,7 +259,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     ['distribution', 'Where you stand (distribution)', 'The group spread with the athlete marked'],
   ];
   const teamChartItems: ReadonlyArray<readonly [ChartItemKey, string, string]> = [
-    ['radar', 'All-around profile (radar)', `${labels.team} average percentile shape across all metrics (needs ≥3 metrics)`],
     ['benchmarkStanding', 'Benchmark standing', `Where the ${labels.team.toLowerCase()} average sits vs each benchmark`],
     ['trends', 'Progress over time', `${labels.team} average trend line per metric (needs ≥2 measurements)`],
     ['boxSwarm', 'Distribution (box + swarm)', `The spread of every ${labels.athlete.toLowerCase()}'s performance per metric`],
@@ -376,7 +375,6 @@ export function ReportWizard({ open, onClose, onSuccess }: ReportWizardProps) {
     // (e.g. team reports use `boxSwarm`, not `distribution`, and vice versa).
     config.charts = data.reportType === "team"
       ? {
-          radar: data.charts.radar,
           benchmarkStanding: data.charts.benchmarkStanding,
           trends: data.charts.trends,
           boxSwarm: data.charts.boxSwarm,

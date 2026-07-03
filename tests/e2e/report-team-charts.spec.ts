@@ -6,10 +6,12 @@ import { loginAsDefaultUser } from './helpers/auth';
  * TEAM REPORT CHARTS: End-to-End Tests
  *
  * Verifies the Stage 2 coach-view team-report charts end-to-end:
- *  1. All 6 team charts (radar, benchmark standing, trends, box+swarm
- *     distribution, leaderboard, tier distribution) render on the live coach
- *     report when `config.charts` selects them all, via their
- *     `[data-report-chart]` tags.
+ *  1. All 5 team charts (benchmark standing, trends, box+swarm distribution,
+ *     leaderboard, tier distribution) render on the live coach report when
+ *     `config.charts` selects them all, via their `[data-report-chart]` tags.
+ *     (A team radar chart was considered but dropped: a team's average
+ *     percentile-within-its-own-roster converges toward ~50% regardless of
+ *     how good the team actually is, so it wasn't a meaningful chart.)
  *  2. A chart disappears from the live report when its selection checkbox is
  *     unchecked (config.charts.<key> = false) while the others still render —
  *     proving the toggle actually gates the section (not just always-on).
@@ -42,8 +44,8 @@ import { loginAsDefaultUser } from './helpers/auth';
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
 
-// >=3 metrics so the radar (which requires >=3 metrics) renders; each gets
-// >=2 measurements on distinct dates so team trends have a series.
+// 3 metrics for thorough coverage; each gets >=2 measurements on distinct
+// dates so team trends have a series.
 const METRICS: Array<{ code: string; earlier: number; latest: number }> = [
   { code: 'VERTICAL_JUMP', earlier: 24, latest: 28 },
   { code: 'FLY10_TIME', earlier: 1.35, latest: 1.22 },
@@ -99,7 +101,6 @@ test.describe('Team Report Charts (coach view)', () => {
   async function createTeamReport(
     page: any,
     charts: {
-      radar: boolean;
       benchmarkStanding: boolean;
       trends: boolean;
       boxSwarm: boolean;
@@ -148,7 +149,7 @@ test.describe('Team Report Charts (coach view)', () => {
     teamId = (await teamRes.json()).id;
 
     // 3 athletes on the team — enough for a "roster" without exceeding the
-    // radar/trends 8-athlete faint-overlay cap, and >=2 for box+swarm/leaderboard.
+    // trends 8-athlete faint-overlay cap, and >=2 for box+swarm/leaderboard.
     const today = new Date();
     const earlier = new Date(today.getTime() - 60 * 24 * 60 * 60 * 1000);
     const earlierDate = earlier.toISOString().split('T')[0];
@@ -171,7 +172,7 @@ test.describe('Team Report Charts (coach view)', () => {
       });
 
       // Seed >=2 measurements for each of >=3 metrics on distinct dates so
-      // both percentiles (radar) and trends (team-average series) have data.
+      // trends (team-average series) have data.
       for (const { code, earlier: earlyValue, latest: latestValue } of METRICS) {
         for (const [date, value] of [
           [earlierDate, earlyValue],
@@ -248,9 +249,8 @@ test.describe('Team Report Charts (coach view)', () => {
     }
   });
 
-  test('renders all 6 team chart sections on the live coach report', async ({ page }) => {
+  test('renders all 5 team chart sections on the live coach report', async ({ page }) => {
     const reportId = await createTeamReport(page, {
-      radar: true,
       benchmarkStanding: true,
       trends: true,
       boxSwarm: true,
@@ -261,11 +261,6 @@ test.describe('Team Report Charts (coach view)', () => {
     // TeamReportView auto-generates on mount (no Generate button needed).
     await page.goto(`${STAGING_URL}/reports/${reportId}`);
     await page.waitForLoadState('networkidle');
-
-    // --- Radar (team average + faint athletes) ---
-    const radar = page.locator('[data-report-chart="radar"]');
-    await expect(radar).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Team All-Around Profile (percentiles)')).toBeVisible();
 
     // --- Benchmark standing (tiered, VERTICAL_JUMP) ---
     await expect(page.locator('[data-report-chart="tier:VERTICAL_JUMP"]')).toBeVisible({ timeout: 15000 });
@@ -290,18 +285,17 @@ test.describe('Team Report Charts (coach view)', () => {
 
     // Screenshot capture (UI screenshot convention) - desktop then mobile.
     await page.setViewportSize({ width: 1280, height: 720 });
-    await radar.scrollIntoViewIfNeeded();
+    await tierDistribution.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'screenshots/team-report-charts-coach-view-desktop.png', fullPage: true });
 
     await page.setViewportSize({ width: 375, height: 667 });
-    await expect(radar).toBeVisible({ timeout: 15000 });
-    await radar.scrollIntoViewIfNeeded();
+    await expect(tierDistribution).toBeVisible({ timeout: 15000 });
+    await tierDistribution.scrollIntoViewIfNeeded();
     await page.screenshot({ path: 'screenshots/team-report-charts-coach-view-mobile.png', fullPage: true });
   });
 
   test('omits the tier-distribution chart when its selection is false (other charts still render)', async ({ page }) => {
     const reportId = await createTeamReport(page, {
-      radar: true,
       benchmarkStanding: true,
       trends: true,
       boxSwarm: true,
