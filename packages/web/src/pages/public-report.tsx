@@ -317,6 +317,13 @@ export default function PublicReport() {
               <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
             )}
 
+            {/* teamName falls back to comparisonLabel (the cohort filter label,
+                e.g. "Varsity Squad, Male") since the public view has no live
+                teams list to build a richer name from the way the coach view's
+                getTeamNames() does. Known limitation: an unfiltered whole-org
+                report has no comparisonLabel, so these tooltips show
+                "Team: Independent" here even though the coach view shows the
+                real team name(s) for the same report. */}
             {teamSel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
               <TeamBoxSwarmSection
                 distributions={teamDistributions}
