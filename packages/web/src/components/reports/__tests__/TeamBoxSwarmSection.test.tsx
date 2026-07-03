@@ -45,6 +45,15 @@ describe('TeamBoxSwarmSection', () => {
     expect(document.querySelector('[data-report-chart="boxswarm:VJ"]')).toBeTruthy();
   });
 
+  it('gives the box plot a wrapper tall enough for its own 400px content minimum (regression: a shorter wrapper forced BoxPlotChart into its internal scroll fallback)', () => {
+    render(<TeamBoxSwarmSection distributions={distributions} metricLabels={{ VJ: 'Vertical Jump' }} generatedAt="2024-01-01" />);
+    // BoxPlotChart's own JSX nests several wrapper divs around the (mocked)
+    // Chart canvas, so walk up to the ancestor with the height class rather
+    // than assume it's the immediate parent.
+    const heightWrapper = screen.getByTestId('mock-boxplot').closest('[class*="h-[480px]"]');
+    expect(heightWrapper).toBeTruthy();
+  });
+
   it('renders nothing when distributions is empty', () => {
     const { container } = render(<TeamBoxSwarmSection distributions={{}} generatedAt="2024-01-01" />);
     expect(container).toBeEmptyDOMElement();

@@ -6,22 +6,26 @@ export function tierSegments(cmp: BenchmarkComparison): TierInfo[] {
 }
 
 /**
+ * Core of {@link athletePositionPct}, parameterized on a raw `value` and an
+ * already worst->best sorted `segs` array so it can be reused for arbitrary
+ * values (e.g. individual athlete measurements plotted alongside a team
+ * average), not just `cmp.athleteValue`.
+ *
  * Athlete position 0..1, aligned to the equal-width tier segments rendered by
  * TierProgressChart (each segment is `flex-1`). The marker lands inside the
- * athlete's actual tier segment regardless of unequal or open-ended band widths.
+ * value's actual tier segment regardless of unequal or open-ended band widths.
  *
  * Returns `(segmentIndex + intraSegmentFraction) / segmentCount`.
  */
-export function athletePositionPct(cmp: BenchmarkComparison): number {
-  const segs = tierSegments(cmp);
+export function athletePositionPctForValue(value: number, segs: TierInfo[]): number {
   const n = segs.length;
   if (n === 0) return 0;
 
-  const v = cmp.athleteValue;
+  const v = value;
   const lo = (s: TierInfo) => s.minValue ?? -Infinity;
   const hi = (s: TierInfo) => s.maxValue ?? Infinity;
 
-  // Find the segment whose [min, max] band contains the athlete value.
+  // Find the segment whose [min, max] band contains the value.
   let index = segs.findIndex(s => v >= lo(s) && v <= hi(s));
 
   if (index === -1) {
@@ -50,15 +54,31 @@ export function athletePositionPct(cmp: BenchmarkComparison): number {
   return (index + f) / n;
 }
 
-/** Marker position 0..1 on a track centered on the benchmark (0.5).
- *  The benchmark sits at center (0.5); the athlete marker reflects the TRUE
- *  value relationship (right = higher value than the benchmark, left = lower),
- *  so the bar reads like a real value axis regardless of metric direction.
- *  Clamped to [0.05, 0.95]. */
-export function benchmarkStandingPct(cmp: BenchmarkComparison): number {
-  const bv = Math.abs(cmp.benchmarkValue);
-  const rel = bv === 0 ? 0 : Math.max(-0.45, Math.min(0.45, (cmp.athleteValue - cmp.benchmarkValue) / bv));
+/** Athlete position 0..1 for `cmp.athleteValue`. See {@link athletePositionPctForValue}. */
+export function athletePositionPct(cmp: BenchmarkComparison): number {
+  return athletePositionPctForValue(cmp.athleteValue, tierSegments(cmp));
+}
+
+/**
+ * Core of {@link benchmarkStandingPct}, parameterized on a raw `value` instead
+ * of `cmp.athleteValue` so it can be reused for arbitrary values (e.g.
+ * individual athlete measurements plotted alongside a team average).
+ *
+ * Marker position 0..1 on a track centered on the benchmark (0.5).
+ * The benchmark sits at center (0.5); the marker reflects the TRUE
+ * value relationship (right = higher value than the benchmark, left = lower),
+ * so the bar reads like a real value axis regardless of metric direction.
+ * Clamped to [0.05, 0.95].
+ */
+export function benchmarkStandingPctForValue(value: number, benchmarkValue: number): number {
+  const bv = Math.abs(benchmarkValue);
+  const rel = bv === 0 ? 0 : Math.max(-0.45, Math.min(0.45, (value - benchmarkValue) / bv));
   return 0.5 + rel;
+}
+
+/** Marker position 0..1 for `cmp.athleteValue`. See {@link benchmarkStandingPctForValue}. */
+export function benchmarkStandingPct(cmp: BenchmarkComparison): number {
+  return benchmarkStandingPctForValue(cmp.athleteValue, cmp.benchmarkValue);
 }
 
 /** Which direction is "better" for this benchmark, inferred from its operator:

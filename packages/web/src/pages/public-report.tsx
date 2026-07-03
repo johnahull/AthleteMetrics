@@ -308,6 +308,8 @@ export default function PublicReport() {
                 metricLabels={metricLabels}
                 metricUnits={metricUnits}
                 metricDirections={teamMetricDirections}
+                athleteRankings={athleteRankings}
+                timeframe={snapshotData.reportConfig?.timeframe}
               />
             )}
 

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { TeamBenchmarkStandingSection } from '../TeamBenchmarkStandingSection';
-import type { TeamStatistic } from '@/types/report-types';
+import type { TeamStatistic, AthleteRanking } from '@/types/report-types';
 
 // Direction now comes from the `metricDirections` prop (server-computed),
 // not a client hook — this component must work identically for an
@@ -37,6 +37,11 @@ const singleValueStat: TeamStatistic = {
   topPerformer: null,
   benchmarks: [{ name: 'Club Standard', value: 1.4, comparisonOperator: 'lte' }],
 };
+
+const athleteRankings: AthleteRanking[] = [
+  { userId: 'a1', userName: 'Jordan Smith', measurements: { VJ: 22, FLY: 1.25 } },
+  { userId: 'a2', userName: 'Alex Lee', measurements: { VJ: 30 } }, // no FLY value for the single-value case below
+];
 
 const emptyStat: TeamStatistic = {
   metric: 'X',
@@ -118,5 +123,57 @@ describe('TeamBenchmarkStandingSection', () => {
   it('renders nothing when teamStatistics is empty', () => {
     const { container } = render(<TeamBenchmarkStandingSection teamStatistics={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('renders per-athlete markers alongside the team-average marker for a tiered benchmark when athleteRankings is provided', () => {
+    render(
+      <TeamBenchmarkStandingSection
+        teamStatistics={[tieredStat]}
+        metricLabels={{ VJ: 'Vertical Jump' }}
+        metricDirections={{ VJ: 'higher' }}
+        athleteRankings={athleteRankings}
+      />
+    );
+    // team-average marker + one marker per athlete with a VJ value (both athletes have one).
+    expect(document.querySelectorAll('[data-testid^="tier-marker-"]').length).toBe(3);
+    expect(document.querySelector('[data-testid="tier-marker-team-average"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="tier-marker-a1"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="tier-marker-a2"]')).toBeTruthy();
+  });
+
+  it('renders per-athlete markers for a single-value benchmark, filtering out athletes with no value for that metric', () => {
+    render(
+      <TeamBenchmarkStandingSection
+        teamStatistics={[singleValueStat]}
+        metricLabels={{ FLY: 'Fly 10' }}
+        athleteRankings={athleteRankings}
+      />
+    );
+    expect(document.querySelector('[data-testid="benchmark-marker-team-average"]')).toBeTruthy();
+    expect(document.querySelector('[data-testid="benchmark-marker-a1"]')).toBeTruthy();
+    // a2 has no FLY measurement — must not produce a marker.
+    expect(document.querySelector('[data-testid="benchmark-marker-a2"]')).toBeFalsy();
+  });
+
+  it('renders no per-athlete markers when athleteRankings is absent (only the primary marker)', () => {
+    render(<TeamBenchmarkStandingSection teamStatistics={[singleValueStat]} metricLabels={{ FLY: 'Fly 10' }} />);
+    expect(document.querySelector('[data-testid="benchmark-marker-self"]')).toBeTruthy();
+    expect(document.querySelectorAll('[data-testid^="benchmark-marker-"]').length).toBe(1);
+  });
+
+  it('renders the report time range and "best performance" framing when timeframe is provided', () => {
+    render(
+      <TeamBenchmarkStandingSection
+        teamStatistics={[singleValueStat]}
+        metricLabels={{ FLY: 'Fly 10' }}
+        timeframe={{ type: 'preset', preset: 'season' }}
+      />
+    );
+    expect(screen.getByText(/Best performance within Current Season/i)).toBeInTheDocument();
+  });
+
+  it('does not render a time-range line when timeframe is absent', () => {
+    render(<TeamBenchmarkStandingSection teamStatistics={[singleValueStat]} metricLabels={{ FLY: 'Fly 10' }} />);
+    expect(screen.queryByText(/Best performance within/i)).not.toBeInTheDocument();
   });
 });

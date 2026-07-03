@@ -48,4 +48,18 @@ describe('LeaderboardBarSection', () => {
     const { container } = render(<LeaderboardBarSection athleteRankings={[]} teamStatistics={stats} generatedAt="2024-01-01" />);
     expect(container).toBeEmptyDOMElement();
   });
+
+  it('clips BarChart content to its fixed-height wrapper (regression: footer used to bleed into the next metric block)', () => {
+    // BarChart's canvas used to render at 100% of its container's height via
+    // `h-full`, with its Best/Average/Range footer added on top of that —
+    // pushing the total content past the wrapper's fixed height with nothing
+    // to clip it, so the footer visually overlapped whatever rendered next.
+    render(<LeaderboardBarSection athleteRankings={rankings} teamStatistics={stats} metricLabels={{ FLY: 'Fly 10' }} generatedAt="2024-01-01" />);
+    const wrapper = document.querySelector('[data-report-chart="leaderboard:FLY"]');
+    expect(wrapper).toHaveClass('h-[420px]');
+    // BarChart's own root (rendered for real here — only react-chartjs-2's
+    // `Bar` is mocked) must clip its content to whatever height it's given.
+    const barChartRoot = wrapper?.querySelector(':scope > div');
+    expect(barChartRoot).toHaveClass('overflow-hidden');
+  });
 });

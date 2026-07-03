@@ -642,6 +642,8 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           metricLabels={metricLabels}
           metricUnits={metricUnits}
           metricDirections={reportData.metricDirections}
+          athleteRankings={athleteRankings}
+          timeframe={report.config.timeframe}
         />
       )}
 

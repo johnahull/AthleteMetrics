@@ -36,7 +36,11 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
           return (
             <div key={code} data-report-chart={`boxswarm:${code}`} data-report-chart-title={`${label} — team distribution`} className="space-y-4">
               <h3 className="text-base font-semibold">{label}</h3>
-              <div className="h-[340px]">
+              {/* BoxPlotChart's own chart area has a 400px internal minimum
+                  height (plus its "Show athlete names" toggle row above it)
+                  — a shorter wrapper here forces it into its own internal
+                  scroll fallback instead of rendering at full size. */}
+              <div className="h-[480px]">
                 <BoxPlotChart
                   data={points}
                   config={{ type: 'box_plot', title: `${label} — spread`, showLegend: false, showTooltips: true, responsive: true }}
