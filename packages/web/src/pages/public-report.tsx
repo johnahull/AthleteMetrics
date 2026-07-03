@@ -36,7 +36,7 @@ import { TierDistributionChartSection } from "@/components/reports/TierDistribut
 import { calculateTierDistributions } from "@shared/benchmark-utils";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
 import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
-import type { TeamReportConfig } from "@/types/report-types";
+import type { TeamReportConfig, AthleteRanking } from "@/types/report-types";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -95,7 +95,7 @@ export default function PublicReport() {
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
   const teamStatistics = (snapshotData.teamStatistics ?? []) as any[];
-  const athleteRankings = (snapshotData.athleteRankings ?? []) as any[];
+  const athleteRankings = (snapshotData.athleteRankings ?? []) as AthleteRanking[];
   const teamTierDistributions = calculateTierDistributions(athleteRankings);
 
   // Glossary order recomputed from the real data (was previously read from a
