@@ -138,3 +138,4 @@ describe('radarDataFromPercentiles', () => {
     expect(md.metrics).toEqual({ VJ: 25.5, DASH: 4.9 });
   });
 });
+

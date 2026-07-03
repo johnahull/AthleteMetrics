@@ -34,6 +34,7 @@ import { safeNumber, convertAthleteMetricValue } from '@shared/utils/number-conv
 import { generateDeterministicJitter } from './utils/boxPlotStatistics';
 import { resolveLabelsWithSpatialIndex, type LabelPosition } from '@/utils/spatial-index';
 import { isFly10Metric, formatFly10Dual } from '@/utils/fly10-conversion';
+import { percentileOf } from './chart-stats-utils';
 
 // Chart.js components are registered globally in lib/chart-setup.ts
 
@@ -748,14 +749,7 @@ export const BoxPlotChart = React.memo(function BoxPlotChart({
         const max = Math.max(...sortedValues);
 
         // Calculate percentiles
-        const getPercentile = (p: number) => {
-          const index = (p / 100) * (count - 1);
-          const lower = Math.floor(index);
-          const upper = Math.ceil(index);
-          if (lower === upper) return sortedValues[lower];
-          const weight = index - lower;
-          return sortedValues[lower] * (1 - weight) + sortedValues[upper] * weight;
-        };
+        const getPercentile = (p: number) => percentileOf(sortedValues, p);
 
         stats = {
           count,

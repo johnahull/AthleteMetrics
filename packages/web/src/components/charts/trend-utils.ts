@@ -5,6 +5,12 @@ import type { MultiMetricData } from '@shared/analytics-types';
 import { parseColorToRgba } from '@/lib/color-utils';
 
 /**
+ * Team trend charts render one bold team-average series plus faint
+ * individual-athlete series for context, capped so the chart stays legible.
+ */
+export const MAX_FAINT_ATHLETES = 8;
+
+/**
  * Direction cue for a metric's trend chart. The y-axis is NOT inverted — values
  * render in conventional orientation — so we surface which way "better" points:
  * higher-is-better improves upward, lower-is-better improves downward.
@@ -118,3 +124,4 @@ export function radarDataFromPercentiles(
 ): MultiMetricData {
   return { athleteId, athleteName, metrics: { ...measurements }, percentileRanks: { ...percentiles } };
 }
+
