@@ -19,9 +19,15 @@ vi.mock('@/hooks/use-metric-config', () => ({
 }));
 
 vi.mock('react-chartjs-2', () => ({
-  Bar: vi.fn(({ data }: any) => (
+  Bar: vi.fn(({ data, options }: any) => (
     <div data-testid="mock-bar">
       <div data-testid="bar-values">{data.datasets?.[0]?.data?.length ?? 0}</div>
+      {/* Invoke the real tooltip callback (built from BarChart's own athlete
+          data, closed over in `options`) so tests can assert on its actual
+          output rather than reimplementing the lookup logic. */}
+      <div data-testid="bar-team-tooltip">
+        {options?.plugins?.tooltip?.callbacks?.afterLabel?.({ dataIndex: 0 })?.join(' | ')}
+      </div>
     </div>
   )),
 }));
@@ -61,5 +67,23 @@ describe('LeaderboardBarSection', () => {
     // `Bar` is mocked) must clip its content to whatever height it's given.
     const barChartRoot = wrapper?.querySelector(':scope > div');
     expect(barChartRoot).toHaveClass('overflow-hidden');
+  });
+
+  it('shows the resolved team name (not "Independent") in each athlete\'s tooltip when teamName is provided (regression: every athlete previously showed as unaffiliated)', () => {
+    render(
+      <LeaderboardBarSection
+        athleteRankings={rankings}
+        teamStatistics={stats}
+        metricLabels={{ FLY: 'Fly 10' }}
+        generatedAt="2024-01-01"
+        teamName="Varsity Squad"
+      />
+    );
+    expect(screen.getByTestId('bar-team-tooltip')).toHaveTextContent('Team: Varsity Squad');
+  });
+
+  it('falls back to "Independent" only when no teamName is provided (pre-existing shared-chart behavior, unaffected)', () => {
+    render(<LeaderboardBarSection athleteRankings={rankings} teamStatistics={stats} metricLabels={{ FLY: 'Fly 10' }} generatedAt="2024-01-01" />);
+    expect(screen.getByTestId('bar-team-tooltip')).toHaveTextContent('Team: Independent');
   });
 });

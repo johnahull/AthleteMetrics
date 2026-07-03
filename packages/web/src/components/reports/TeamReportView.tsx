@@ -148,6 +148,11 @@ export function TeamReportView({ report }: TeamReportViewProps) {
   const resolveLabel = (code: string) => metricLabels?.[code] ?? getLabel(code);
   const teamMetricCodes = Array.isArray(teamStatistics) ? teamStatistics.map((s: TeamStatistic) => s.metric) : [];
   const sel = resolveTeamChartSelection(report.config as TeamReportConfig);
+  // Resolved once and passed to the leaderboard/distribution charts below —
+  // every athlete plotted in those charts is already scoped to this report's
+  // roster, so their hover tooltips should name this team, not fall back to
+  // "Independent" (the shared chart tooltip's default when no team is given).
+  const resolvedTeamName = getTeamNames(report.config as { filters?: { teamIds?: string[] } }, teams, labels.teams);
 
   // Collect all unique benchmark names across all metrics
   const allBenchmarkNames = new Set<string>();
@@ -656,6 +661,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           distributions={teamDistributions}
           metricLabels={metricLabels}
           generatedAt={generatedAt}
+          teamName={resolvedTeamName}
         />
       )}
 
@@ -665,6 +671,7 @@ export function TeamReportView({ report }: TeamReportViewProps) {
           teamStatistics={teamStatistics}
           metricLabels={metricLabels}
           generatedAt={generatedAt}
+          teamName={resolvedTeamName}
         />
       )}
 

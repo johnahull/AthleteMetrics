@@ -11,9 +11,15 @@ interface Props {
   teamStatistics: TeamStatistic[];
   metricLabels?: Record<string, string>;
   generatedAt: string;
+  /** The report's resolved team name(s) (e.g. "Varsity Squad"), shown in each
+   *  athlete's hover tooltip. Every athlete plotted here is already scoped to
+   *  this report's roster, so without this the shared chart tooltip's
+   *  `teamName || 'Independent'` fallback incorrectly labels every athlete
+   *  as unaffiliated. */
+  teamName?: string;
 }
 
-export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt }: Props) {
+export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricLabels = {}, generatedAt, teamName }: Props) {
   const rows = teamStatistics
     .map((stat) => ({ stat, sorted: sortAthletesByMetric(athleteRankings, stat.metric) }))
     .filter(({ sorted }) => sorted.length > 0);
@@ -35,6 +41,7 @@ export function LeaderboardBarSection({ athleteRankings, teamStatistics, metricL
             value: athlete.measurements[stat.metric],
             date: new Date(generatedAt),
             metric: stat.metric,
+            teamName,
           }));
           const statistics = { [stat.metric]: buildStatisticalSummary(points.map((p) => p.value)) };
 

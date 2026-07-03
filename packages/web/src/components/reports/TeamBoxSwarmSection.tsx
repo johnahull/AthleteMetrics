@@ -9,9 +9,15 @@ interface Props {
   distributions: TeamReportDistributions;
   metricLabels?: Record<string, string>;
   generatedAt: string;
+  /** The report's resolved team name(s) (e.g. "Varsity Squad"), shown in each
+   *  athlete's hover tooltip. Every athlete plotted here is already scoped to
+   *  this report's roster, so without this the shared chart tooltip's
+   *  `teamName || 'Independent'` fallback incorrectly labels every athlete
+   *  as unaffiliated. */
+  teamName?: string;
 }
 
-export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generatedAt }: Props) {
+export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generatedAt, teamName }: Props) {
   const entries = Object.entries(distributions).filter(([, dist]) => dist.athletes.length >= 2);
   if (entries.length === 0) return null;
 
@@ -30,6 +36,7 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
             value: a.value,
             date: new Date(generatedAt),
             metric: code,
+            teamName,
           }));
           const statistics = { [code]: buildStatisticalSummary(dist.values) };
 

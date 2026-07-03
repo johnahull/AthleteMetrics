@@ -322,6 +322,7 @@ export default function PublicReport() {
                 distributions={teamDistributions}
                 metricLabels={metricLabels}
                 generatedAt={generatedAt}
+                teamName={snapshotData.comparisonLabel}
               />
             )}
 
@@ -331,6 +332,7 @@ export default function PublicReport() {
                 teamStatistics={teamStatistics}
                 metricLabels={metricLabels}
                 generatedAt={generatedAt}
+                teamName={snapshotData.comparisonLabel}
               />
             )}
 
