@@ -21,8 +21,12 @@ export const DEFAULT_CHART_SELECTION: ChartSelection = {
 };
 
 /** Team reports don't use the individual-only `distribution` histogram — they
- *  use `boxSwarm` instead. */
-export type TeamChartSelection = Omit<ChartSelection, 'distribution'>;
+ *  use `boxSwarm` instead. They also don't use `radar`: unlike an individual
+ *  athlete's percentile (computed against an external cohort), a team's
+ *  average percentile is computed against its own roster, so averaging it
+ *  across the team converges toward ~50% regardless of how good the team
+ *  actually is — not a meaningful "team all-around profile." */
+export type TeamChartSelection = Omit<ChartSelection, 'distribution' | 'radar'>;
 
 /** Config subset this resolver reads. */
 interface ChartConfigInput {
@@ -67,7 +71,6 @@ export function resolveTeamChartSelection(config: ChartConfigInput | undefined |
   // all charts off (same convention as resolveChartSelection).
   if (c) {
     return {
-      radar: c.radar ?? false,
       benchmarkStanding: c.benchmarkStanding ?? false,
       trends: c.trends ?? false,
       leaderboard: c.leaderboard ?? false,
@@ -76,7 +79,6 @@ export function resolveTeamChartSelection(config: ChartConfigInput | undefined |
     };
   }
   return {
-    radar: false,
     benchmarkStanding: false,
     trends: false,
     leaderboard: false,

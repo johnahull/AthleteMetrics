@@ -30,8 +30,7 @@ describe('resolveChartSelection', () => {
 
 describe('resolveTeamChartSelection', () => {
   it('uses explicit charts config when present (missing keys -> false)', () => {
-    expect(resolveTeamChartSelection({ charts: { radar: true, boxSwarm: true } })).toEqual({
-      radar: true,
+    expect(resolveTeamChartSelection({ charts: { boxSwarm: true } })).toEqual({
       benchmarkStanding: false,
       trends: false,
       boxSwarm: true,
@@ -43,18 +42,18 @@ describe('resolveTeamChartSelection', () => {
   it('respects explicit false overrides', () => {
     expect(resolveTeamChartSelection({
       charts: {
-        radar: false, benchmarkStanding: true, trends: true,
+        benchmarkStanding: true, trends: true,
         boxSwarm: false, leaderboard: true, tierDistribution: false,
       },
     })).toEqual({
-      radar: false, benchmarkStanding: true, trends: true,
+      benchmarkStanding: true, trends: true,
       boxSwarm: false, leaderboard: true, tierDistribution: false,
     });
   });
 
   it('treats a present-but-empty charts object as all-off (explicit selection)', () => {
     expect(resolveTeamChartSelection({ charts: {} })).toEqual({
-      radar: false, benchmarkStanding: false, trends: false,
+      benchmarkStanding: false, trends: false,
       boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
   });
@@ -65,15 +64,15 @@ describe('resolveTeamChartSelection', () => {
   // they never had. Legacy team configs must resolve to ALL FALSE.
   it('legacy config with no charts field resolves to ALL FALSE (not the individual defaults)', () => {
     expect(resolveTeamChartSelection({})).toEqual({
-      radar: false, benchmarkStanding: false, trends: false,
+      benchmarkStanding: false, trends: false,
       boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
     expect(resolveTeamChartSelection(undefined)).toEqual({
-      radar: false, benchmarkStanding: false, trends: false,
+      benchmarkStanding: false, trends: false,
       boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
     expect(resolveTeamChartSelection(null)).toEqual({
-      radar: false, benchmarkStanding: false, trends: false,
+      benchmarkStanding: false, trends: false,
       boxSwarm: false, leaderboard: false, tierDistribution: false,
     });
   });
