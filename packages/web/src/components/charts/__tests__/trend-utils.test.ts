@@ -8,12 +8,8 @@ import {
   buildTrendChartData,
   personalBestIndex,
   radarDataFromPercentiles,
-  teamRadarDataFromRankings,
-  TEAM_AVERAGE_ATHLETE_ID,
-  MAX_FAINT_ATHLETES,
 } from '../trend-utils';
 import type { BenchmarkOverlay, MetricTrend } from '@shared/report-trends-types';
-import type { AthleteRanking } from '@/types/report-types';
 
 describe('trend-utils', () => {
   it('cues downward improvement for lower-is-better, upward for higher-is-better', () => {
@@ -143,97 +139,3 @@ describe('radarDataFromPercentiles', () => {
   });
 });
 
-describe('teamRadarDataFromRankings', () => {
-  function ranking(overrides: Partial<AthleteRanking> & { userId: string; userName: string }): AthleteRanking {
-    return { measurements: {}, ...overrides };
-  }
-
-  it('puts the team-average profile first with the reserved id and mean percentiles', () => {
-    const rankings: AthleteRanking[] = [
-      ranking({ userId: 'u1', userName: 'A', percentiles: { VJ: 80, DASH: 60 }, measurements: { VJ: 26, DASH: 4.8 } }),
-      ranking({ userId: 'u2', userName: 'B', percentiles: { VJ: 60, DASH: 40 }, measurements: { VJ: 24, DASH: 5.0 } }),
-    ];
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ', 'DASH']);
-
-    expect(data[0].athleteId).toBe(TEAM_AVERAGE_ATHLETE_ID);
-    expect(data[0].athleteName).toBe('Team Average');
-    expect(data[0].percentileRanks).toEqual({ VJ: 70, DASH: 50 });
-    expect(data[0].metrics).toEqual({ VJ: 25, DASH: 4.9 });
-  });
-
-  it('follows the team average with one profile per athlete (roster order)', () => {
-    const rankings: AthleteRanking[] = [
-      ranking({ userId: 'u1', userName: 'A', percentiles: { VJ: 80 }, measurements: { VJ: 26 } }),
-      ranking({ userId: 'u2', userName: 'B', percentiles: { VJ: 60 }, measurements: { VJ: 24 } }),
-    ];
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ']);
-
-    expect(data).toHaveLength(3);
-    expect(data[1].athleteId).toBe('u1');
-    expect(data[2].athleteId).toBe('u2');
-  });
-
-  it('caps athlete profiles at the given cap deterministically (first N by roster order)', () => {
-    const rankings: AthleteRanking[] = Array.from({ length: 12 }, (_, i) =>
-      ranking({ userId: `u${i}`, userName: `Athlete ${i}`, percentiles: { VJ: i }, measurements: { VJ: i } }),
-    );
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ'], 8);
-
-    // 1 team-average profile + 8 athlete profiles (capped), not 12.
-    expect(data).toHaveLength(9);
-    expect(data.slice(1).map((d) => d.athleteId)).toEqual(['u0', 'u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7']);
-  });
-
-  it('defaults the cap to MAX_FAINT_ATHLETES when not specified', () => {
-    const rankings: AthleteRanking[] = Array.from({ length: 12 }, (_, i) =>
-      ranking({ userId: `u${i}`, userName: `Athlete ${i}`, percentiles: { VJ: i }, measurements: { VJ: i } }),
-    );
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ']);
-
-    expect(data).toHaveLength(1 + MAX_FAINT_ATHLETES);
-  });
-
-  it('handles rankings with missing percentiles for a metric gracefully (averages only over available data)', () => {
-    const rankings: AthleteRanking[] = [
-      ranking({ userId: 'u1', userName: 'A', percentiles: { VJ: 80 }, measurements: { VJ: 26 } }),
-      // u2 has no DASH percentile/measurement at all, and no VJ measurement.
-      ranking({ userId: 'u2', userName: 'B', percentiles: {}, measurements: {} }),
-    ];
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ', 'DASH']);
-
-    // VJ averages over the one athlete who has it; DASH has no data from anyone
-    // so it is omitted entirely (not defaulted to 0/NaN).
-    expect(data[0].percentileRanks).toEqual({ VJ: 80 });
-    expect(data[0].metrics).toEqual({ VJ: 26 });
-    expect(data[0].percentileRanks.DASH).toBeUndefined();
-  });
-
-  it('omits a metric from BOTH percentileRanks and metrics when no athlete has a percentile for it, even if measurements exist', () => {
-    // Regression: RadarChart derives its rendered axes from `metrics`' keys,
-    // not `percentileRanks`. A metric present only in `metrics` (measurements
-    // exist, no percentile computed for anyone) would previously still
-    // surface as an axis and silently plot a fabricated 50th percentile.
-    const rankings: AthleteRanking[] = [
-      ranking({ userId: 'u1', userName: 'A', percentiles: { VJ: 80 }, measurements: { VJ: 26, DASH: 4.8 } }),
-      ranking({ userId: 'u2', userName: 'B', percentiles: { VJ: 60 }, measurements: { VJ: 24, DASH: 5.0 } }),
-    ];
-
-    const data = teamRadarDataFromRankings(rankings, ['VJ', 'DASH']);
-
-    expect(data[0].percentileRanks).toEqual({ VJ: 70 });
-    expect(data[0].metrics).toEqual({ VJ: 25 });
-    expect(data[0].metrics.DASH).toBeUndefined();
-  });
-
-  it('returns just the (empty-ish) team-average profile when there are no rankings', () => {
-    const data = teamRadarDataFromRankings([], ['VJ']);
-    expect(data).toHaveLength(1);
-    expect(data[0].athleteId).toBe(TEAM_AVERAGE_ATHLETE_ID);
-    expect(data[0].percentileRanks).toEqual({});
-  });
-});

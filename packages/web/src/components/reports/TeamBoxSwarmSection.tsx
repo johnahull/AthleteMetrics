@@ -1,7 +1,6 @@
 // packages/web/src/components/reports/TeamBoxSwarmSection.tsx
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { BoxPlotChart } from '@/components/charts/BoxPlotChart';
-import { SwarmChart } from '@/components/charts/SwarmChart';
 import { buildStatisticalSummary } from '@/components/charts/chart-stats-utils';
 import type { TeamReportDistributions } from '@shared/report-trends-types';
 import type { ChartDataPoint } from '@shared/analytics-types';
@@ -43,13 +42,6 @@ export function TeamBoxSwarmSection({ distributions, metricLabels = {}, generate
                   config={{ type: 'box_plot', title: `${label} — spread`, showLegend: false, showTooltips: true, responsive: true }}
                   statistics={statistics}
                   showAllPoints
-                />
-              </div>
-              <div className="h-[340px]">
-                <SwarmChart
-                  data={points}
-                  config={{ type: 'swarm_plot', title: `${label} — every athlete`, showLegend: false, showTooltips: true, responsive: true }}
-                  statistics={statistics}
                 />
               </div>
             </div>
