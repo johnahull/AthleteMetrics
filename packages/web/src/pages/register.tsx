@@ -36,11 +36,18 @@ export default function Register() {
   // Parse query params for parent registration mode
   const searchParams = new URLSearchParams(window.location.search);
   const isParentMode = searchParams.get('role') === 'parent';
+  // `email` is used by the separate 13-17 parent-notification email link (sent
+  // directly to that address, so it carries no additional exposure) — see
+  // email-service.ts sendParentNotification(). `ref` is an opaque, single-use,
+  // server-issued token minted when consent was granted via /consent/:token;
+  // it replaces passing the parent's email/consentId directly in that flow's
+  // URL, where they would leak into browser history, referrer headers, and
+  // access logs from the SAME browsing session.
   const prefilledEmail = searchParams.get('email') || '';
-  const prefilledConsentId = searchParams.get('consent') || '';
+  const prefilledRef = searchParams.get('ref') || '';
 
   // Dead-end gate: parent mode without any valid context (no email invite, no consent link)
-  const parentModeBlocked = isParentMode && !prefilledEmail && !prefilledConsentId;
+  const parentModeBlocked = isParentMode && !prefilledEmail && !prefilledRef;
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string>('');
@@ -238,8 +245,8 @@ export default function Register() {
       if (!isParentMode) {
         body.birthDate = formData.birthDate || undefined;
         body.parentEmail = minor && formData.parentEmail ? formData.parentEmail.trim().toLowerCase() : undefined;
-      } else if (prefilledConsentId) {
-        body.consentId = prefilledConsentId;
+      } else if (prefilledRef) {
+        body.ref = prefilledRef;
       }
 
       const response = await fetch(endpoint, {

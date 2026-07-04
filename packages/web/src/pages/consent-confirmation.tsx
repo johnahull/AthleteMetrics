@@ -35,6 +35,7 @@ export default function ConsentConfirmation() {
   const [aiConsentGranted, setAiConsentGranted] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<SubmitStatus>('idle');
   const [submitError, setSubmitError] = useState('');
+  const [registrationToken, setRegistrationToken] = useState('');
   const [showParentAccountCta, setShowParentAccountCta] = useState(true);
   const [dataCollectionOpen, setDataCollectionOpen] = useState(false);
   // Synchronous guard prevents double-click from firing two requests before
@@ -76,6 +77,10 @@ export default function ConsentConfirmation() {
         body: JSON.stringify({ granted, aiConsentGranted: granted ? aiConsentGranted : false }),
       });
       if (res.ok) {
+        const body = await res.json().catch(() => ({}));
+        if (granted && body.registrationToken) {
+          setRegistrationToken(body.registrationToken);
+        }
         setSubmitStatus(granted ? 'granted' : 'denied');
       } else {
         const body = await res.json().catch(() => ({}));
@@ -149,10 +154,11 @@ export default function ConsentConfirmation() {
   // ── Post-submit states ──
   if (submitStatus === 'granted') {
     const athleteName = consentData?.athleteName ?? 'the athlete';
-    const parentEmail = consentData?.parentEmail ?? '';
-    const consentId = consentData?.consentId ?? '';
 
-    const registerUrl = `/register?role=parent${parentEmail ? `&email=${encodeURIComponent(parentEmail)}` : ''}${consentId ? `&consent=${encodeURIComponent(consentId)}` : ''}`;
+    // registrationToken is an opaque, single-use, server-issued reference —
+    // it replaces putting the parent's email/consentId in the URL, where they
+    // would leak into browser history, referrer headers, and access logs.
+    const registerUrl = `/register?role=parent${registrationToken ? `&ref=${encodeURIComponent(registrationToken)}` : ''}`;
 
     return (
       <ConsentStatusCard

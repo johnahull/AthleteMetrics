@@ -290,6 +290,30 @@ describe('POST /api/coppa/data-export/request', () => {
     expect(res.status).toBe(404);
   });
 
+  // Security fix: on the authenticated path, requestedByEmail must come from
+  // the session, not the request body — the download-ready notification (a
+  // one-time link to the athlete's full data export) must not be redirectable
+  // to an address the client controls.
+  it('authenticated request ignores body-supplied requestedByEmail, uses session user email', async () => {
+    const res = await request(app)
+      .post('/api/coppa/data-export/request')
+      .set('Cookie', siteAdminCookie)
+      .send({
+        athleteUserId: minorAthleteId,
+        requestedByEmail: 'attacker@evil.example',
+      });
+
+    expect(res.status).toBe(200);
+
+    const stored = await db.select({ requestedByEmail: dataExportRequests.requestedByEmail })
+      .from(dataExportRequests)
+      .where(eq(dataExportRequests.id, res.body.exportRequestId))
+      .then((rows) => rows[0]);
+
+    expect(stored?.requestedByEmail).toBe(process.env.ADMIN_EMAIL);
+    expect(stored?.requestedByEmail).not.toBe('attacker@evil.example');
+  });
+
   it('token-gated: valid consentId + matching parentEmail → 200', async () => {
     const parentEmail = `parent-export-${Date.now()}@testcoppaexport.local`;
 

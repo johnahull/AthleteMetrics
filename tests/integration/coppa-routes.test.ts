@@ -362,6 +362,23 @@ describe('GET /api/coppa/consent/verify/:token', () => {
 
     expect(res.status).toBe(400);
   });
+
+  // The token lives in the URL path, so it leaks into access logs, browser
+  // history, and Referer headers on any outbound link from this page.
+  // These headers stop it from also being cached or forwarded onward.
+  it('sets Cache-Control: no-store and Referrer-Policy: no-referrer', async () => {
+    const { rawToken } = await insertConsentRecord({
+      athleteUserId: pendingMinorId,
+      parentEmail: 'parent@example.com',
+      status: 'pending',
+    });
+
+    const res = await request(app)
+      .get(`/api/coppa/consent/verify/${rawToken}`);
+
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['referrer-policy']).toBe('no-referrer');
+  });
 });
 
 // ============================================================================
