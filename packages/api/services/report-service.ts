@@ -1068,9 +1068,9 @@ export class ReportService extends BaseService {
       if (report.reportType === 'individual') {
         const config = report.config as any;
         if (config?.athleteId) athleteIds.push(config.athleteId);
-      } else if (data?.athletes) {
-        for (const a of data.athletes) {
-          if (a?.userId || a?.id) athleteIds.push(a.userId || a.id);
+      } else if (data?.athleteRankings) {
+        for (const a of data.athleteRankings) {
+          if (a?.userId) athleteIds.push(a.userId);
         }
       }
 
