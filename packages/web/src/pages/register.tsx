@@ -530,7 +530,7 @@ export default function Register() {
                   id="email"
                   type="email"
                   value={formData.email}
-                  onChange={(e) => !isParentMode && setFormData({ ...formData, email: e.target.value })}
+                  onChange={(e) => !(isParentMode && prefilledEmail) && setFormData({ ...formData, email: e.target.value })}
                   placeholder="you@example.com"
                   className={`pl-10 ${isParentMode && prefilledEmail ? 'bg-gray-50' : ''}`}
                   readOnly={isParentMode && !!prefilledEmail}
