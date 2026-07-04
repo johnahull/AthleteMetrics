@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tierSegments, athletePositionPct, nextTierCaption, benchmarkStandingPct, benchmarkStandingCaption, benchmarkBetterDirection, evaluateTierStanding } from '../tier-progress-utils';
+import { tierSegments, athletePositionPct, athletePositionPctForValue, nextTierCaption, benchmarkStandingPct, benchmarkStandingPctForValue, benchmarkStandingCaption, benchmarkBetterDirection, evaluateTierStanding } from '../tier-progress-utils';
 import type { BenchmarkComparison, TierInfo } from '@shared/benchmark-types';
 
 const cmp: BenchmarkComparison = {
@@ -84,6 +84,64 @@ describe('benchmarkStandingPct', () => {
   });
   it('returns center when the benchmark value is zero', () => {
     expect(benchmarkStandingPct({ athleteValue: 5, benchmarkValue: 0 } as BenchmarkComparison)).toBeCloseTo(0.5, 5);
+  });
+});
+
+describe('benchmarkStandingPctForValue', () => {
+  it('places the marker right of center when the value is higher than the benchmark', () => {
+    expect(benchmarkStandingPctForValue(22, 20)).toBeCloseTo(0.6, 5);
+  });
+  it('places the marker left of center when the value is lower than the benchmark', () => {
+    expect(benchmarkStandingPctForValue(18, 20)).toBeCloseTo(0.4, 5);
+  });
+  it('clamps the offset to 0.45 in either direction', () => {
+    expect(benchmarkStandingPctForValue(100, 20)).toBeCloseTo(0.95, 5);
+    expect(benchmarkStandingPctForValue(5, 20)).toBeCloseTo(0.05, 5);
+  });
+  it('returns center when the benchmark value is zero', () => {
+    expect(benchmarkStandingPctForValue(5, 0)).toBeCloseTo(0.5, 5);
+  });
+  it('is the core benchmarkStandingPct delegates to, producing identical results for every case in the wrapper suite above', () => {
+    const cases: Array<[number, number]> = [[22, 20], [18, 20], [100, 20], [5, 20], [5, 0]];
+    for (const [athleteValue, benchmarkValue] of cases) {
+      expect(benchmarkStandingPct({ athleteValue, benchmarkValue } as BenchmarkComparison)).toBe(
+        benchmarkStandingPctForValue(athleteValue, benchmarkValue)
+      );
+    }
+  });
+});
+
+describe('athletePositionPctForValue', () => {
+  const segs = tierSegments(cmp); // [JV(20-24), Varsity(24-28), Elite(28-32)] worst->best
+
+  it('positions a value inside a band correctly', () => {
+    // 25.5 falls in Varsity segment (index 1): (25.5-20)/(32-20) overall range fraction
+    expect(athletePositionPctForValue(25.5, segs)).toBeCloseTo(0.458, 2);
+  });
+
+  it('clamps a value outside all bands to the nearest boundary segment', () => {
+    const openEndedSegs: TierInfo[] = [
+      { tierName: 'Below', tierColor: '#fde68a', tierOrder: 3, minValue: null, maxValue: 10 },
+      { tierName: 'Mid', tierColor: '#86efac', tierOrder: 2, minValue: 10, maxValue: 20 },
+      { tierName: 'Elite', tierColor: '#fbbf24', tierOrder: 1, minValue: 20, maxValue: null },
+    ];
+    const pos = athletePositionPctForValue(25, openEndedSegs);
+    expect(pos).toBeGreaterThanOrEqual(2 / 3);
+    expect(pos).toBeLessThanOrEqual(1);
+  });
+
+  it('positions a value exactly at a segment boundary', () => {
+    // 24 sits exactly at the JV/Varsity boundary; findIndex matches JV first (inclusive on both ends).
+    const pos = athletePositionPctForValue(24, segs);
+    expect(pos).toBeCloseTo(1 / 3, 5); // top of JV segment (index 0, f=1) => (0+1)/3
+  });
+
+  it('returns 0 for an empty segment array', () => {
+    expect(athletePositionPctForValue(10, [])).toBe(0);
+  });
+
+  it('is the core athletePositionPct delegates to, producing identical results', () => {
+    expect(athletePositionPct(cmp)).toBe(athletePositionPctForValue(cmp.athleteValue, tierSegments(cmp)));
   });
 });
 

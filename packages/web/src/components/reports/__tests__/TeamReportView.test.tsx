@@ -825,3 +825,103 @@ describe('TeamReportView - Benchmark Achievement Summary', () => {
     }, { timeout: 5000 });
   });
 });
+
+describe('TeamReportView - Rendered Hooks Consistency', () => {
+  // Regression test for a bug caught in code review: useMetricLabels() was
+  // called AFTER the component's early-return statements (loading/error
+  // states), so the hook only ran once reportData had loaded. That changes
+  // the number of hooks called between the "loading" render and the "loaded"
+  // render, which React detects and throws for ("Rendered more hooks than
+  // during the previous render"). A test that only renders each state in
+  // isolation (as the other describe blocks above do) can't catch this — it
+  // requires an actual state TRANSITION within one mounted component.
+  let queryClient: QueryClient;
+
+  const mockReport: Report = {
+    id: 'report-hooks-1',
+    organizationId: 'org-1',
+    createdBy: 'user-1',
+    name: 'Hooks Consistency Report',
+    reportType: 'team',
+    config: {
+      timeframe: { type: 'preset', preset: 'all_time' },
+      metrics: ['VERTICAL_JUMP'],
+    },
+    isTemplate: false,
+    isPinned: false,
+    createdAt: '2025-01-01T00:00:00Z',
+  };
+
+  const loadedReportData = {
+    reportType: 'team' as const,
+    reportConfig: mockReport.config,
+    teamStatistics: [],
+    athleteRankings: [],
+    athleteCount: 0,
+    teamIds: [],
+    generatedAt: '2025-01-01T12:00:00Z',
+  };
+
+  beforeEach(() => {
+    queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    vi.mocked(useTeams).mockReturnValue({ data: [], isLoading: false, error: null } as any);
+    vi.mocked(useAuth).mockReturnValue({ user: { id: 'user-1', isSiteAdmin: false }, isLoading: false } as any);
+  });
+
+  it('transitions from loading to loaded without a hook-count mismatch', async () => {
+    // reportData is local state, populated by generateReport.mutate's
+    // onSuccess callback (fired from a mount-time useEffect) — not read
+    // directly from the hook's return value. So the loading->loaded
+    // transition happens by capturing and later invoking that callback, not
+    // by changing the mocked hook's return value and re-rendering.
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let capturedOnSuccess: ((response: unknown) => void) | undefined;
+
+    mockGenerateReportMutate.mockImplementation((_params: unknown, options?: { onSuccess?: (r: unknown) => void }) => {
+      capturedOnSuccess = options?.onSuccess;
+      // Deliberately do NOT call onSuccess yet — component stays in loading state.
+    });
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: true,
+      isError: false,
+      data: undefined,
+    } as any);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TeamReportView report={mockReport} />
+      </QueryClientProvider>
+    );
+
+    expect(screen.getByText(/Generating report/i)).toBeInTheDocument();
+    expect(capturedOnSuccess).toBeDefined();
+
+    // Now "load" the report — this is the transition that previously threw
+    // ("Rendered more hooks than during the previous render"), because
+    // useMetricLabels() used to be called only after this point. The early
+    // return checks `generateReport.isPending || !reportData`, so both must
+    // flip together: update the mocked hook's isPending before the state
+    // update (setReportData, via the captured callback) triggers a re-render.
+    vi.mocked(useGenerateReport).mockReturnValue({
+      mutate: mockGenerateReportMutate,
+      isPending: false,
+      isError: false,
+      data: loadedReportData,
+    } as any);
+    capturedOnSuccess!({ data: loadedReportData });
+
+    await waitFor(() => {
+      expect(screen.getByText(mockReport.name)).toBeInTheDocument();
+    });
+
+    const hookOrderErrors = consoleErrorSpy.mock.calls.filter((call) =>
+      String(call[0]).includes('Rendered more hooks') || String(call[0]).includes('Rendered fewer hooks')
+    );
+    expect(hookOrderErrors).toHaveLength(0);
+
+    consoleErrorSpy.mockRestore();
+  });
+});

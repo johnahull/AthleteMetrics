@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync, statSync } from 'fs';
 import { loginAsDefaultUser } from './helpers/auth';
 
 /**
@@ -15,6 +16,17 @@ import { loginAsDefaultUser } from './helpers/auth';
  *     unchecked (config.charts.<key> = false) while the others still render —
  *     proving the toggle actually gates the section (not just always-on).
  *
+ * Stage 3 additionally verifies:
+ *  3. The public shared-report link for a team report renders the same 5
+ *     `[data-report-chart]` sections (public-report.tsx team branch).
+ *  4. PDF export for a team report (both the authenticated coach-view export
+ *     and the public unauthenticated export) succeeds and produces a PDF
+ *     large enough to contain the embedded chart images — mirroring the
+ *     size-threshold pattern used in tests/e2e/report-pdf-export.spec.ts's
+ *     "should export PDF with charts included" (individual-report-charts.spec.ts
+ *     does not itself assert on PDF content, so there is no closer pattern to
+ *     mirror for the chart-embedding check specifically).
+ *
  * Modeled closely on tests/e2e/report-chart-selection.spec.ts and
  * tests/e2e/individual-report-charts.spec.ts (same harness): reports are
  * created directly via the API (mirroring how those two specs validate
@@ -24,8 +36,10 @@ import { loginAsDefaultUser } from './helpers/auth';
  * already covered by its own tests.
  *
  * Screenshots (per the project UI screenshot convention) are written to
- * screenshots/team-report-charts-coach-view-desktop.png and
- * screenshots/team-report-charts-coach-view-mobile.png.
+ * screenshots/team-report-charts-coach-view-desktop.png,
+ * screenshots/team-report-charts-coach-view-mobile.png,
+ * screenshots/team-report-charts-public-view-desktop.png, and
+ * screenshots/team-report-charts-public-view-mobile.png.
  */
 
 const STAGING_URL = process.env.STAGING_URL || 'http://localhost:5000';
@@ -77,6 +91,7 @@ test.describe('Team Report Charts (coach view)', () => {
   let athleteIds: string[] = [];
   let benchmarkIds: string[] = [];
   let createdReportIds: string[] = [];
+  let createdSnapshotIds: Array<{ reportId: string; snapshotId: string }> = [];
 
   /**
    * Create a team report scoped to the seeded team/metrics with an explicit
@@ -120,6 +135,7 @@ test.describe('Team Report Charts (coach view)', () => {
     athleteIds = [];
     benchmarkIds = [];
     createdReportIds = [];
+    createdSnapshotIds = [];
 
     orgId = await resolveOrgId(page);
     expect(orgId, 'an organization is required to create a report').toBeTruthy();
@@ -200,6 +216,13 @@ test.describe('Team Report Charts (coach view)', () => {
   });
 
   test.afterEach(async ({ page }) => {
+    for (const { reportId, snapshotId } of createdSnapshotIds) {
+      try {
+        await page.request.delete(`${STAGING_URL}/api/reports/${reportId}/snapshots/${snapshotId}`);
+      } catch (error) {
+        console.warn(`Failed to cleanup snapshot ${snapshotId}:`, error);
+      }
+    }
     for (const reportId of createdReportIds) {
       try {
         await page.request.delete(`${STAGING_URL}/api/reports/${reportId}`);
@@ -288,5 +311,149 @@ test.describe('Team Report Charts (coach view)', () => {
 
     // Tier distribution is gated off — must not be present at all.
     await expect(page.locator('[data-report-chart="tierDistribution"]')).toHaveCount(0);
+  });
+
+  test('renders all 5 team chart sections on the public shared-report link', async ({ page, context }) => {
+    const reportId = await createTeamReport(page, {
+      benchmarkStanding: true,
+      trends: true,
+      boxSwarm: true,
+      leaderboard: true,
+      tierDistribution: true,
+    });
+
+    // Create a public snapshot via API (freezes the generated chart data),
+    // mirroring individual-report-charts.spec.ts's public-link test.
+    const snapshotRes = await page.request.post(`${STAGING_URL}/api/reports/${reportId}/snapshots`, {
+      data: { expirationDays: 7 },
+    });
+    expect(snapshotRes.ok(), 'snapshot was created').toBeTruthy();
+    const snapshot = await snapshotRes.json();
+    createdSnapshotIds.push({ reportId, snapshotId: snapshot.id });
+
+    const publicUrl = `${STAGING_URL}/public/reports/${snapshot.publicToken}`;
+
+    // Open the public link in a fresh, unauthenticated context.
+    const incognitoContext = await context.browser()!.newContext();
+    const incognitoPage = await incognitoContext.newPage();
+
+    try {
+      await incognitoPage.goto(publicUrl);
+      await incognitoPage.waitForLoadState('networkidle');
+
+      await expect(incognitoPage.locator('[data-report-chart="tier:VERTICAL_JUMP"]')).toBeVisible({ timeout: 15000 });
+
+      await expect(incognitoPage.getByTestId('team-trend-section')).toBeVisible({ timeout: 15000 });
+      await expect(incognitoPage.locator('[data-chart-metric]').first()).toBeVisible({ timeout: 15000 });
+
+      const boxSwarmCharts = incognitoPage.locator('[data-report-chart^="boxswarm:"]');
+      await expect(boxSwarmCharts.first()).toBeVisible({ timeout: 15000 });
+      expect(await boxSwarmCharts.count()).toBeGreaterThanOrEqual(1);
+
+      const leaderboardCharts = incognitoPage.locator('[data-report-chart^="leaderboard:"]');
+      await expect(leaderboardCharts.first()).toBeVisible({ timeout: 15000 });
+      expect(await leaderboardCharts.count()).toBeGreaterThanOrEqual(1);
+
+      const tierDistribution = incognitoPage.locator('[data-report-chart="tierDistribution"]');
+      await expect(tierDistribution).toBeVisible({ timeout: 15000 });
+
+      // Screenshot capture (UI screenshot convention) - desktop then mobile.
+      await incognitoPage.setViewportSize({ width: 1280, height: 720 });
+      await tierDistribution.scrollIntoViewIfNeeded();
+      await incognitoPage.screenshot({ path: 'screenshots/team-report-charts-public-view-desktop.png', fullPage: true });
+
+      await incognitoPage.setViewportSize({ width: 375, height: 667 });
+      await expect(tierDistribution).toBeVisible({ timeout: 15000 });
+      await tierDistribution.scrollIntoViewIfNeeded();
+      await incognitoPage.screenshot({ path: 'screenshots/team-report-charts-public-view-mobile.png', fullPage: true });
+    } finally {
+      await incognitoPage.close();
+      await incognitoContext.close();
+    }
+  });
+
+  test('team PDF export (coach view) succeeds and embeds captured chart images', async ({ page }) => {
+    // A 5-section team report with 3 metrics produces well over a dozen
+    // individual chart images. Capturing all of them client-side (html2canvas)
+    // plus server-side jsPDF assembly measured at 60-85s locally in dev mode
+    // — give this test generous headroom.
+    test.setTimeout(180000);
+
+    const reportId = await createTeamReport(page, {
+      benchmarkStanding: true,
+      trends: true,
+      boxSwarm: true,
+      leaderboard: true,
+      tierDistribution: true,
+    });
+
+    await page.goto(`${STAGING_URL}/reports/${reportId}`);
+    await page.waitForLoadState('networkidle');
+
+    // Wait for the charts to actually render before capturing — html2canvas
+    // needs live canvases/SVGs in the DOM, not just the section containers.
+    await expect(page.locator('[data-report-chart^="leaderboard:"]').first()).toBeVisible({ timeout: 15000 });
+
+    const downloadPromise = page.waitForEvent('download', { timeout: 150000 });
+    await page.click('button:has-text("Export PDF")');
+    await page.click('text=Visual (Match UI)');
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+    const path = await download.path();
+    expect(path).toBeTruthy();
+
+    const stats = statSync(path!);
+    // A team PDF with 5 embedded chart sections is substantially larger than a
+    // tables-only PDF (report-pdf-export.spec.ts uses a >5000-byte threshold
+    // for a single chart; five chart sections push this well past 10KB).
+    expect(stats.size).toBeGreaterThan(10000);
+    const buffer = readFileSync(path!);
+    expect(buffer.slice(0, 4).toString()).toBe('%PDF');
+  });
+
+  test('team PDF export (public link) succeeds and embeds captured chart images', async ({ page, context }) => {
+    test.setTimeout(180000);
+
+    const reportId = await createTeamReport(page, {
+      benchmarkStanding: true,
+      trends: true,
+      boxSwarm: true,
+      leaderboard: true,
+      tierDistribution: true,
+    });
+
+    const snapshotRes = await page.request.post(`${STAGING_URL}/api/reports/${reportId}/snapshots`, {
+      data: { expirationDays: 7 },
+    });
+    expect(snapshotRes.ok(), 'snapshot was created').toBeTruthy();
+    const snapshot = await snapshotRes.json();
+    createdSnapshotIds.push({ reportId, snapshotId: snapshot.id });
+
+    const publicUrl = `${STAGING_URL}/public/reports/${snapshot.publicToken}`;
+    const incognitoContext = await context.browser()!.newContext();
+    const incognitoPage = await incognitoContext.newPage();
+
+    try {
+      await incognitoPage.goto(publicUrl);
+      await incognitoPage.waitForLoadState('networkidle');
+      await expect(incognitoPage.locator('[data-report-chart^="leaderboard:"]').first()).toBeVisible({ timeout: 15000 });
+
+      const downloadPromise = incognitoPage.waitForEvent('download', { timeout: 150000 });
+      await incognitoPage.click('button:has-text("Download PDF")');
+      const download = await downloadPromise;
+
+      expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+      const path = await download.path();
+      expect(path).toBeTruthy();
+
+      const stats = statSync(path!);
+      expect(stats.size).toBeGreaterThan(10000);
+      const buffer = readFileSync(path!);
+      expect(buffer.slice(0, 4).toString()).toBe('%PDF');
+    } finally {
+      await incognitoPage.close();
+      await incognitoContext.close();
+    }
   });
 });

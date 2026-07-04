@@ -275,15 +275,19 @@ export class ReportService extends BaseService {
 
     const chartSelection = resolveTeamChartSelection(config);
 
+    // Per-metric direction, computed unconditionally (getMetricInfo memoizes,
+    // so this is cheap) so client components — including the public/anonymous
+    // report view, which has no authenticated org context to derive this
+    // itself — can evaluate tier standing correctly without a client hook.
+    const directionInfos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
+    const metricDirections: Record<string, 'higher' | 'lower'> = {};
+    config.metrics.forEach((metric, i) => {
+      metricDirections[metric] = directionInfos[i].lowerIsBetter ? 'lower' : 'higher';
+    });
+
     // Build team-average time-series trends when the report opts in (additive; off by default)
     let teamTrends: TeamReportTrends | undefined;
     if (chartSelection.trends) {
-      const infos = await Promise.all(config.metrics.map(m => this.getMetricInfo(m)));
-      const directions: Record<string, 'higher' | 'lower'> = {};
-      config.metrics.forEach((metric, i) => {
-        directions[metric] = infos[i].lowerIsBetter ? 'lower' : 'higher';
-      });
-
       // Reuse the per-athlete benchmark comparisons already computed by
       // calculateAthleteRankings above — tier boundaries don't depend on which
       // athlete's value triggered the evaluation, so any athlete with a
@@ -306,7 +310,7 @@ export class ReportService extends BaseService {
           value: m.measurement.value,
         })),
         config.metrics,
-        directions,
+        metricDirections,
         comparisonsByMetric,
       );
     }
@@ -321,9 +325,7 @@ export class ReportService extends BaseService {
           .map(a => ({ athleteId: a.userId, athleteName: a.userName, value: a.measurements[metric] }));
         const dist = computeTeamDistribution(athletesForMetric);
         if (dist) {
-          // getMetricInfo memoizes (warmed by calculateTeamStatistics/calculateAthleteRankings above).
-          const info = await this.getMetricInfo(metric);
-          teamDistributions[metric] = { ...dist, direction: info.lowerIsBetter ? 'lower' : 'higher' };
+          teamDistributions[metric] = { ...dist, direction: metricDirections[metric] };
         }
       }
       if (Object.keys(teamDistributions).length === 0) teamDistributions = undefined;
@@ -364,6 +366,7 @@ export class ReportService extends BaseService {
       metricLabels,
       metricUnits,
       metricExplanations,
+      metricDirections,
       eventContext,
       teamTrends,
       teamDistributions,

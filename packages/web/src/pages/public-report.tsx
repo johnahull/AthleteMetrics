@@ -25,11 +25,18 @@ import { ReportMetricsGlossary } from "@/components/reports/ReportMetricsGlossar
 import { TrendSection } from "@/components/reports/TrendSection";
 import { PercentileRadarSection } from "@/components/reports/PercentileRadarSection";
 import { DistributionSection } from "@/components/reports/DistributionSection";
-import { resolveChartSelection } from "@shared/report-charts";
+import { resolveChartSelection, resolveTeamChartSelection } from "@shared/report-charts";
 import { TierProgressChart } from "@/components/charts/TierProgressChart";
 import { BenchmarkStandingBar } from "@/components/charts/BenchmarkStandingBar";
+import { TeamTrendSection } from "@/components/reports/TeamTrendSection";
+import { TeamBenchmarkStandingSection } from "@/components/reports/TeamBenchmarkStandingSection";
+import { TeamBoxSwarmSection } from "@/components/reports/TeamBoxSwarmSection";
+import { LeaderboardBarSection } from "@/components/reports/LeaderboardBarSection";
+import { TierDistributionChartSection } from "@/components/reports/TierDistributionChartSection";
+import { calculateTierDistributions } from "@shared/benchmark-utils";
 import type { MetricExplanation as MetricExplanationData } from "@shared/metric-explanations";
-import type { ReportTrends } from "@shared/report-trends-types";
+import type { ReportTrends, TeamReportTrends, TeamReportDistributions } from "@shared/report-trends-types";
+import type { TeamReportConfig, AthleteRanking } from "@/types/report-types";
 
 export default function PublicReport() {
   const labels = useContextualLabels();
@@ -78,11 +85,18 @@ export default function PublicReport() {
   const metricUnits = (snapshotData.metricUnits ?? {}) as Record<string, string>;
   const trends = snapshotData.trends as ReportTrends | undefined;
   const sel = resolveChartSelection(snapshotData.reportConfig);
+  // Team charts: separate resolver + payload fields (mirrors TeamReportView).
+  // Does NOT touch the individual `sel` computation above.
+  const teamSel = resolveTeamChartSelection(snapshotData.reportConfig as TeamReportConfig);
+  const teamTrends = snapshotData.teamTrends as TeamReportTrends | undefined;
+  const teamDistributions = snapshotData.teamDistributions as TeamReportDistributions | undefined;
+  const teamMetricDirections = snapshotData.metricDirections as Record<string, 'higher' | 'lower'> | undefined;
 
   // Real produced shapes (mirror IndividualReportView / TeamReportView).
   const athlete = snapshotData.athlete as any;
   const teamStatistics = (snapshotData.teamStatistics ?? []) as any[];
-  const athleteRankings = (snapshotData.athleteRankings ?? []) as any[];
+  const athleteRankings = (snapshotData.athleteRankings ?? []) as AthleteRanking[];
+  const teamTierDistributions = calculateTierDistributions(athleteRankings);
 
   // Glossary order recomputed from the real data (was previously read from a
   // stale `dataSnapshot` shape that the producer no longer emits).
@@ -285,6 +299,52 @@ export default function PublicReport() {
                   </Table>
                 </CardContent>
               </Card>
+            )}
+
+            {/* Charts (additive — gated by resolveTeamChartSelection, same as TeamReportView) */}
+            {teamSel.benchmarkStanding && (
+              <TeamBenchmarkStandingSection
+                teamStatistics={teamStatistics}
+                metricLabels={metricLabels}
+                metricUnits={metricUnits}
+                metricDirections={teamMetricDirections}
+                athleteRankings={athleteRankings}
+                timeframe={snapshotData.reportConfig?.timeframe}
+              />
+            )}
+
+            {teamSel.trends && teamTrends && Object.keys(teamTrends).length > 0 && (
+              <TeamTrendSection trends={teamTrends} metricLabels={metricLabels} metricUnits={metricUnits} />
+            )}
+
+            {/* teamName falls back to comparisonLabel (the cohort filter label,
+                e.g. "Varsity Squad, Male") since the public view has no live
+                teams list to build a richer name from the way the coach view's
+                getTeamNames() does. Known limitation: an unfiltered whole-org
+                report has no comparisonLabel, so these tooltips show
+                "Team: Independent" here even though the coach view shows the
+                real team name(s) for the same report. */}
+            {teamSel.boxSwarm && teamDistributions && Object.keys(teamDistributions).length > 0 && (
+              <TeamBoxSwarmSection
+                distributions={teamDistributions}
+                metricLabels={metricLabels}
+                generatedAt={generatedAt}
+                teamName={snapshotData.comparisonLabel}
+              />
+            )}
+
+            {teamSel.leaderboard && (
+              <LeaderboardBarSection
+                athleteRankings={athleteRankings}
+                teamStatistics={teamStatistics}
+                metricLabels={metricLabels}
+                generatedAt={generatedAt}
+                teamName={snapshotData.comparisonLabel}
+              />
+            )}
+
+            {teamSel.tierDistribution && teamTierDistributions.length > 0 && (
+              <TierDistributionChartSection tierDistributions={teamTierDistributions} metricLabels={metricLabels} />
             )}
 
             {/* Glossary of metrics (Team) */}

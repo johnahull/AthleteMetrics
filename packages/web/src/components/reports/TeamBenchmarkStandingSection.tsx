@@ -1,17 +1,37 @@
 // packages/web/src/components/reports/TeamBenchmarkStandingSection.tsx
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { TierProgressChart } from '@/components/charts/TierProgressChart';
 import { BenchmarkStandingBar } from '@/components/charts/BenchmarkStandingBar';
+import type { AthleteMarkerValue } from '@/components/charts/BenchmarkStandingBar';
 import { evaluateTierStanding } from '@/components/charts/tier-progress-utils';
 import { deriveTierGroupName } from '@shared/benchmark-utils';
-import { useMetricConfig } from '@/hooks/use-metric-config';
+import { formatDateRange } from './report-utils';
 import type { BenchmarkComparison } from '@shared/benchmark-types';
-import type { TeamStatistic } from '@/types/report-types';
+import type { TeamStatistic, AthleteRanking, TimeframeConfig } from '@/types/report-types';
 
 interface Props {
   teamStatistics: TeamStatistic[];
   metricLabels?: Record<string, string>;
   metricUnits?: Record<string, string>;
+  /** Per-metric direction from the report payload (server-computed) — not
+   *  derived client-side, since this section also renders on the public
+   *  report view, which has no authenticated org context. */
+  metricDirections?: Record<string, 'higher' | 'lower'>;
+  /** Per-athlete rankings for the same report. When provided, each chart also
+   *  plots one small marker per athlete (their best value within the report's
+   *  timeframe for that metric) alongside the bold team-average marker. */
+  athleteRankings?: AthleteRanking[];
+  /** The report's overall timeframe, used only to caption the section with the
+   *  date range each athlete's plotted (best-in-range) value was drawn from. */
+  timeframe?: TimeframeConfig;
+}
+
+/** Per-athlete values for one metric, built from athleteRankings — athletes with no
+ *  recorded value for this metric are omitted (a benchmark chart can't plot them). */
+function buildAthleteValuesForMetric(metric: string, athleteRankings: AthleteRanking[]): AthleteMarkerValue[] {
+  return athleteRankings
+    .filter((a) => a.measurements[metric] != null)
+    .map((a) => ({ athleteId: a.userId, athleteName: a.userName, value: a.measurements[metric] }));
 }
 
 /**
@@ -75,22 +95,40 @@ function buildTeamComparisons(stat: TeamStatistic, lowerIsBetter: boolean): Benc
   return comparisons;
 }
 
-export function TeamBenchmarkStandingSection({ teamStatistics, metricLabels = {}, metricUnits = {} }: Props) {
-  const { getMetricConfig } = useMetricConfig();
+export function TeamBenchmarkStandingSection({
+  teamStatistics,
+  metricLabels = {},
+  metricUnits = {},
+  metricDirections = {},
+  athleteRankings = [],
+  timeframe,
+}: Props) {
   const rows = teamStatistics
     .map((stat) => ({
       stat,
-      comparisons: buildTeamComparisons(stat, getMetricConfig(stat.metric)?.lowerIsBetter ?? false),
+      comparisons: buildTeamComparisons(stat, metricDirections[stat.metric] === 'lower'),
+      athleteValues: buildAthleteValuesForMetric(stat.metric, athleteRankings),
     }))
     .filter(({ comparisons }) => comparisons.length > 0);
 
   if (rows.length === 0) return null;
 
+  // Echoed in each athlete-marker tooltip so "best" is unambiguous without
+  // looking back up at this header — omitted (not a vague fallback string)
+  // when the report has no timeframe, so the tooltip never references an
+  // undefined "range".
+  const rangeLabel = timeframe ? formatDateRange(timeframe) : undefined;
+
   return (
     <Card>
-      <CardHeader><CardTitle>Team Benchmark Standing</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Team Benchmark Standing</CardTitle>
+        {timeframe && (
+          <CardDescription>Best performance within {formatDateRange(timeframe)}</CardDescription>
+        )}
+      </CardHeader>
       <CardContent className="space-y-4">
-        {rows.map(({ stat, comparisons }) =>
+        {rows.map(({ stat, comparisons, athleteValues }) =>
           comparisons.map((comparison, i) => {
             const label = metricLabels[stat.metric] || stat.metric;
             const unit = metricUnits[stat.metric] ?? stat.units;
@@ -101,6 +139,8 @@ export function TeamBenchmarkStandingSection({ teamStatistics, metricLabels = {}
                 metricCode={stat.metric}
                 comparison={comparison}
                 unit={unit}
+                athleteValues={athleteValues}
+                rangeLabel={rangeLabel}
               />
             ) : (
               <BenchmarkStandingBar
@@ -109,6 +149,8 @@ export function TeamBenchmarkStandingSection({ teamStatistics, metricLabels = {}
                 metricCode={stat.metric}
                 comparison={comparison}
                 unit={unit}
+                athleteValues={athleteValues}
+                rangeLabel={rangeLabel}
               />
             );
           })

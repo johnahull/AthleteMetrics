@@ -18,9 +18,26 @@ vi.mock('@/hooks/use-metric-config', () => ({
   }),
 }));
 
-// BoxPlotChart uses <Chart> — mock to avoid canvas rendering.
+// BoxPlotChart uses <Chart> — mock to avoid canvas rendering. Capture
+// `data`/`options` so tests can invoke the real tooltip callback with the
+// real per-athlete scatter point BoxPlotChart built (it reads `context.raw`
+// directly) rather than reimplementing the lookup/transform logic.
 vi.mock('react-chartjs-2', () => ({
-  Chart: vi.fn(() => <div data-testid="mock-boxplot" />),
+  Chart: vi.fn(({ data, options }: any) => {
+    const athletePoint = data?.datasets
+      ?.flatMap((ds: any) => ds.data ?? [])
+      .find((p: any) => p?.athleteName);
+    return (
+      <div data-testid="mock-boxplot">
+        <div data-testid="boxplot-team-tooltip">
+          {athletePoint &&
+            options?.plugins?.tooltip?.callbacks
+              ?.afterLabel?.({ raw: athletePoint, parsed: { x: athletePoint.x, y: athletePoint.y } })
+              ?.join(' | ')}
+        </div>
+      </div>
+    );
+  }),
 }));
 
 const distributions: TeamReportDistributions = {
@@ -45,6 +62,15 @@ describe('TeamBoxSwarmSection', () => {
     expect(document.querySelector('[data-report-chart="boxswarm:VJ"]')).toBeTruthy();
   });
 
+  it('gives the box plot a wrapper tall enough for its own 400px content minimum (regression: a shorter wrapper forced BoxPlotChart into its internal scroll fallback)', () => {
+    render(<TeamBoxSwarmSection distributions={distributions} metricLabels={{ VJ: 'Vertical Jump' }} generatedAt="2024-01-01" />);
+    // BoxPlotChart's own JSX nests several wrapper divs around the (mocked)
+    // Chart canvas, so walk up to the ancestor with the height class rather
+    // than assume it's the immediate parent.
+    const heightWrapper = screen.getByTestId('mock-boxplot').closest('[class*="h-[480px]"]');
+    expect(heightWrapper).toBeTruthy();
+  });
+
   it('renders nothing when distributions is empty', () => {
     const { container } = render(<TeamBoxSwarmSection distributions={{}} generatedAt="2024-01-01" />);
     expect(container).toBeEmptyDOMElement();
@@ -56,5 +82,22 @@ describe('TeamBoxSwarmSection', () => {
     };
     const { container } = render(<TeamBoxSwarmSection distributions={oneAthlete} generatedAt="2024-01-01" />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('shows the resolved team name (not "Independent") in each athlete\'s tooltip when teamName is provided (regression: every athlete previously showed as unaffiliated)', () => {
+    render(
+      <TeamBoxSwarmSection
+        distributions={distributions}
+        metricLabels={{ VJ: 'Vertical Jump' }}
+        generatedAt="2024-01-01"
+        teamName="Varsity Squad"
+      />
+    );
+    expect(screen.getByTestId('boxplot-team-tooltip')).toHaveTextContent('Team: Varsity Squad');
+  });
+
+  it('falls back to "Independent" only when no teamName is provided (pre-existing shared-chart behavior, unaffected)', () => {
+    render(<TeamBoxSwarmSection distributions={distributions} metricLabels={{ VJ: 'Vertical Jump' }} generatedAt="2024-01-01" />);
+    expect(screen.getByTestId('boxplot-team-tooltip')).toHaveTextContent('Team: Independent');
   });
 });

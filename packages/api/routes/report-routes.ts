@@ -3697,11 +3697,15 @@ async function enforcePublicSnapshotAccess(
   return true;
 }
 
-// Upper bound on chart images embedded per PDF. A real individual report plots
-// one chart per selected metric (well under this); the cap stops the
-// unauthenticated public PDF endpoint from being driven to do an unbounded
-// number of synchronous jsPDF getImageProperties/addImage calls per request.
-const MAX_CHART_IMAGES = 20;
+// Upper bound on chart images embedded per PDF. An individual report plots
+// one chart per selected metric (well under this). A team report with all
+// six chart sections enabled plots up to ~4 images per metric (benchmark
+// standing, trends, box+swarm, leaderboard) plus 2 report-wide charts (radar,
+// tier distribution) — comfortably under this bound even at the app's full
+// supported-metric count. The cap stops the unauthenticated public PDF
+// endpoint from being driven to do an unbounded number of synchronous jsPDF
+// getImageProperties/addImage calls per request.
+const MAX_CHART_IMAGES = 60;
 
 /**
  * Normalize the client-supplied chartImages payload into a safe, bounded array.
@@ -4618,8 +4622,11 @@ async function generatePDF(report: any, reportData: any, format: 'visual' | 'sim
   }
 
   // Append trend-chart pages BEFORE adding footers, so the pages those charts
-  // create are included in the footer pass below.
-  if (reportData.reportType === 'individual' && chartImages.length > 0) {
+  // create are included in the footer pass below. Team reports (Stage 3) embed
+  // their 6 captured chart sections the same way individual reports do —
+  // addTrendChartsToPdf is generic (just images + labels), so no team-specific
+  // branching is needed here.
+  if ((reportData.reportType === 'individual' || reportData.reportType === 'team') && chartImages.length > 0) {
     addTrendChartsToPdf(doc, chartImages, reportData.metricLabels || {});
   }
 
