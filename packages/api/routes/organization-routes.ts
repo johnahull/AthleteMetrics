@@ -715,6 +715,17 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid organization ID format" });
       }
 
+      // Only organization administrators (or site admins) may add users.
+      // Membership alone is not sufficient — mirrors the role check on the
+      // sibling PUT /users/:userId/role endpoint.
+      const requestingUser = req.session.user!;
+      const requestingUserRoles = await storage.getUserRoles(requestingUser.id, organizationId);
+      const isOrgAdmin = requestingUserRoles.includes('org_admin');
+      const isSiteAdmin = requestingUser.isSiteAdmin === true;
+      if (!isOrgAdmin && !isSiteAdmin) {
+        return res.status(403).json({ message: "Access denied. Only organization administrators can add users." });
+      }
+
       const user = await organizationService.addUserToOrganization(
         organizationId,
         req.body,

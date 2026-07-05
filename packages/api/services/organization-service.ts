@@ -435,9 +435,14 @@ export class OrganizationService extends BaseService {
       }
 
       // Create user and add to organization
-      // Each user can only have one role per organization
-      const role = userData.role || 'athlete';
-      const user = await this.storage.createUser(userData);
+      // Each user can only have one role per organization.
+      // Clamp the role to valid organization roles and never let a
+      // client-supplied `isSiteAdmin` flag through to createUser — site-admin
+      // status is granted only via dedicated site-admin tooling, never here.
+      const validOrgRoles = ['org_admin', 'coach', 'athlete'];
+      const role = validOrgRoles.includes(userData.role) ? userData.role : 'athlete';
+      const { isSiteAdmin: _ignoredIsSiteAdmin, ...safeUserData } = userData;
+      const user = await this.storage.createUser(safeUserData);
       await this.storage.addUserToOrganization(user.id, organizationId, role);
 
       return user;
