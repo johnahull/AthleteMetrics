@@ -81,6 +81,12 @@ export function registerAuthRoutes(app: Express) {
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 
+      // Regenerate the session before storing the authenticated user to prevent
+      // session fixation (mirrors the OAuth and invitation-acceptance flows).
+      await new Promise<void>((resolve, reject) => {
+        req.session.regenerate((err) => (err ? reject(err) : resolve()));
+      });
+
       // Set session
       req.session.user = {
         id: user.id,

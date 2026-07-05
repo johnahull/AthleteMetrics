@@ -117,6 +117,13 @@ router.post('/login', async (req: Request, res: Response) => {
       }
     }
 
+    // Regenerate the session before storing auth state to prevent session
+    // fixation (mirrors login, registration and the OAuth flow). Must run before
+    // assigning sessionToken/user since regenerate() replaces the session.
+    await new Promise<void>((resolve, reject) => {
+      req.session.regenerate((err) => (err ? reject(err) : resolve()));
+    });
+
     // Set session cookie
     req.session.sessionToken = sessionToken;
     req.session.user = {

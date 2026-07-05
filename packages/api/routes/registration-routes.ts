@@ -356,6 +356,12 @@ export function registerRegistrationRoutes(app: Express) {
       // all other users — including teen minors (13-17) — can log in immediately.
       // Guard against missing session middleware (e.g. in unit test environments).
       if (req.session) {
+        // Regenerate the session before storing the authenticated user to
+        // prevent session fixation (mirrors login and the OAuth flow).
+        await new Promise<void>((resolve, reject) => {
+          req.session.regenerate((err) => (err ? reject(err) : resolve()));
+        });
+
         req.session.user = {
           id: userId,
           username,
