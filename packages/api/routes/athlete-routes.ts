@@ -378,6 +378,34 @@ export function registerAthleteRoutes(app: Express) {
       const updateSchema = insertAthleteSchema.partial();
       const validatedData = updateSchema.parse(req.body);
 
+      // Setting parentEmail creates a parentAthleteLinks row and emails that
+      // address with the minor's name — restrict to org_admin/site_admin so a
+      // coach can't redirect that link (and notification) to an arbitrary
+      // address without admin approval. Checked BEFORE any write so a denied
+      // coach can't get parentEmail persisted via the main update below.
+      if (validatedData.parentEmail !== undefined) {
+        const currentUser = req.session.user!;
+        if (!currentUser.isSiteAdmin) {
+          // Must be org_admin specifically in an org shared with the athlete —
+          // org_admin status in an unrelated org must not combine with a
+          // shared-org coach role (already required by
+          // requireAthleteAccessPermission) to authorize this.
+          const [userOrgs, athleteOrgs] = await Promise.all([
+            storage.getUserOrganizations(currentUser.id),
+            storage.getUserOrganizations(athleteId),
+          ]);
+          const athleteOrgIds = new Set(athleteOrgs.map((org) => org.organizationId));
+          const isOrgAdminForAthlete = userOrgs.some(
+            (org) => org.role === 'org_admin' && athleteOrgIds.has(org.organizationId)
+          );
+          if (!isOrgAdminForAthlete) {
+            return res.status(403).json({
+              message: "Organization admin or site admin role required to update parent email",
+            });
+          }
+        }
+      }
+
       const updatedAthlete = await storage.updateAthlete(athleteId, validatedData);
 
       // Handle parentEmail: persist to user record and create parentAthleteLinks

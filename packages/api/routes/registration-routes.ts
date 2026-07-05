@@ -17,6 +17,7 @@ import {
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
 import { coppaService } from "../services/coppa-service";
+import { consumeRegistrationToken } from "../services/registration-token-store";
 import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
 import { db } from "../db";
 import { parentalConsents, parentAthleteLinks } from "@shared/schema/tables/coppa";
@@ -149,6 +150,10 @@ const parentRegistrationSchema = z.object({
     ),
   // consentId links this registration to a pre-existing VPC consent record
   consentId: z.string().optional(),
+  // Opaque single-use token minted at consent-grant time, resolving server-side
+  // to { consentId, parentEmail } — replaces passing consentId/email via the
+  // /register URL. Takes precedence over a client-supplied consentId.
+  ref: z.string().optional(),
 });
 
 // Validation schema for resend verification
@@ -422,7 +427,23 @@ export function registerRegistrationRoutes(app: Express) {
         return res.status(400).json({ success: false, message: "Validation failed", errors });
       }
 
-      const { firstName, lastName, email, username, password, legalAcceptedAt, consentId } = validationResult.data;
+      const { firstName, lastName, email, username, password, legalAcceptedAt, ref } = validationResult.data;
+      let consentId = validationResult.data.consentId;
+
+      // Resolve the opaque post-consent registration token (if present) to the
+      // consentId it was minted for. Takes precedence over a raw consentId —
+      // the ref token is what the web UI now sends instead.
+      if (ref) {
+        const resolvedConsentId = consumeRegistrationToken(ref);
+        if (!resolvedConsentId) {
+          return res.status(400).json({
+            success: false,
+            message: "This registration link has expired or already been used.",
+            errors: [{ field: 'ref', message: 'Invalid or expired registration link.' }],
+          });
+        }
+        consentId = resolvedConsentId;
+      }
 
       // Check username uniqueness
       const existingUsername = await storage.getUserByUsername(username);

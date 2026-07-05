@@ -131,6 +131,7 @@ async function loginAs(app: Express, username: string) {
 
 let app: Express;
 let coachUser: any;
+let orgAdminUser: any;
 let testOrg: any;
 const createdUserIds: string[] = [];
 const createdOrgIds: string[] = [];
@@ -151,6 +152,10 @@ beforeAll(async () => {
   coachUser = await createUser('coach', 'coach');
   createdUserIds.push(coachUser.id);
   await addUserToOrg(coachUser.id, testOrg.id, 'coach');
+
+  orgAdminUser = await createUser('orgadmin', 'org_admin');
+  createdUserIds.push(orgAdminUser.id);
+  await addUserToOrg(orgAdminUser.id, testOrg.id, 'org_admin');
 });
 
 afterAll(async () => {
@@ -187,7 +192,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_set_${uid()}@example.com`;
 
     const res = await request(app)
@@ -215,7 +220,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_minor_${uid()}@example.com`;
 
     const res = await request(app)
@@ -248,7 +253,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
     const parentEmail = `${TEST_PREFIX}parent_adult_${uid()}@example.com`;
 
     const res = await request(app)
@@ -280,7 +285,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -315,7 +320,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
       isActive: true,
     });
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -345,7 +350,7 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     createdUserIds.push(athlete.id);
     await addUserToOrg(athlete.id, testOrg.id, 'athlete');
 
-    const cookie = await loginAs(app, coachUser.username);
+    const cookie = await loginAs(app, orgAdminUser.username);
 
     const res = await request(app)
       .put(`/api/athletes/${athlete.id}`)
@@ -353,5 +358,91 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
       .send({ parentEmail: 'not-a-valid-email' });
 
     expect(res.status).toBe(400);
+  });
+
+  // Security fix (issue #348): a coach could otherwise set parentEmail to any
+  // address, creating a parentAthleteLinks row and sending that address a
+  // notification containing the minor's name — with no org_admin approval.
+  it("coach role → 403, parentEmail is not updated", async () => {
+    const athlete = await createUser('athlete_coachdenied', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, coachUser.username);
+    const parentEmail = `${TEST_PREFIX}parent_coachdenied_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(403);
+
+    const [updated] = await db
+      .select({ parentEmail: users.parentEmail })
+      .from(users)
+      .where(eq(users.id, athlete.id))
+      .limit(1);
+
+    expect(updated.parentEmail).toBeNull();
+  });
+
+  // A coach must still be able to update other athlete fields — only
+  // parentEmail is gated to org_admin/site_admin.
+  it("coach role → other fields still update successfully", async () => {
+    const athlete = await createUser('athlete_coachother', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, coachUser.username);
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ firstName: 'Updated' });
+
+    expect(res.status).toBe(200);
+  });
+
+  // Security fix: org_admin status must be scoped to an org shared with the
+  // target athlete. A user who is only a coach in the athlete's org, but
+  // org_admin in a wholly unrelated org, must not be able to combine the two
+  // memberships to bypass the parentEmail restriction.
+  it("coach in athlete's org + org_admin in an unrelated org → 403", async () => {
+    const otherOrg = await createOrg(uid());
+    createdOrgIds.push(otherOrg.id);
+
+    const confusedDeputy = await createUser('confused_deputy', 'coach');
+    createdUserIds.push(confusedDeputy.id);
+    await addUserToOrg(confusedDeputy.id, testOrg.id, 'coach');
+    await addUserToOrg(confusedDeputy.id, otherOrg.id, 'org_admin');
+
+    const athlete = await createUser('athlete_confuseddep', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, confusedDeputy.username);
+    const parentEmail = `${TEST_PREFIX}parent_confuseddep_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(403);
+
+    const [updated] = await db
+      .select({ parentEmail: users.parentEmail })
+      .from(users)
+      .where(eq(users.id, athlete.id))
+      .limit(1);
+
+    expect(updated.parentEmail).toBeNull();
   });
 });

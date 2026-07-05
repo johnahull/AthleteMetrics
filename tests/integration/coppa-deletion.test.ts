@@ -403,6 +403,35 @@ describe('POST /api/coppa/data-deletion/request', () => {
     await db.delete(dataDeletionRequests)
       .where(eq(dataDeletionRequests.id, first.body.requestId));
   });
+
+  // Security fix (issue #349): on the authenticated path, requestedByEmail must
+  // come from the session, not the request body — otherwise any authenticated
+  // actor could redirect the deletion-confirmation email (which includes the
+  // minor's name) to an address they control.
+  it('authenticated request ignores body-supplied requestedByEmail, uses session user email', async () => {
+    const res = await request(app)
+      .post('/api/coppa/data-deletion/request')
+      .set('Cookie', siteAdminCookie)
+      .send({
+        athleteUserId: minorAthleteId,
+        requestedByEmail: 'attacker@evil.example',
+        notes: 'Session-email regression test',
+      });
+
+    expect(res.status).toBe(201);
+
+    const stored = await db.select({ requestedByEmail: dataDeletionRequests.requestedByEmail })
+      .from(dataDeletionRequests)
+      .where(eq(dataDeletionRequests.id, res.body.requestId))
+      .then((rows) => rows[0]);
+
+    expect(stored?.requestedByEmail).toBe(process.env.ADMIN_EMAIL);
+    expect(stored?.requestedByEmail).not.toBe('attacker@evil.example');
+
+    // Clean up
+    await db.delete(dataDeletionRequests)
+      .where(eq(dataDeletionRequests.id, res.body.requestId));
+  });
 });
 
 // ============================================================================
