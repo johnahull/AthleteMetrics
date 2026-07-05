@@ -386,9 +386,19 @@ export function registerAthleteRoutes(app: Express) {
       if (validatedData.parentEmail !== undefined) {
         const currentUser = req.session.user!;
         if (!currentUser.isSiteAdmin) {
-          const userOrgs = await storage.getUserOrganizations(currentUser.id);
-          const isOrgAdmin = userOrgs.some((org) => org.role === 'org_admin');
-          if (!isOrgAdmin) {
+          // Must be org_admin specifically in an org shared with the athlete —
+          // org_admin status in an unrelated org must not combine with a
+          // shared-org coach role (already required by
+          // requireAthleteAccessPermission) to authorize this.
+          const [userOrgs, athleteOrgs] = await Promise.all([
+            storage.getUserOrganizations(currentUser.id),
+            storage.getUserOrganizations(athleteId),
+          ]);
+          const athleteOrgIds = new Set(athleteOrgs.map((org) => org.organizationId));
+          const isOrgAdminForAthlete = userOrgs.some(
+            (org) => org.role === 'org_admin' && athleteOrgIds.has(org.organizationId)
+          );
+          if (!isOrgAdminForAthlete) {
             return res.status(403).json({
               message: "Organization admin or site admin role required to update parent email",
             });

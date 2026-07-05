@@ -407,4 +407,42 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
 
     expect(res.status).toBe(200);
   });
+
+  // Security fix: org_admin status must be scoped to an org shared with the
+  // target athlete. A user who is only a coach in the athlete's org, but
+  // org_admin in a wholly unrelated org, must not be able to combine the two
+  // memberships to bypass the parentEmail restriction.
+  it("coach in athlete's org + org_admin in an unrelated org → 403", async () => {
+    const otherOrg = await createOrg(uid());
+    createdOrgIds.push(otherOrg.id);
+
+    const confusedDeputy = await createUser('confused_deputy', 'coach');
+    createdUserIds.push(confusedDeputy.id);
+    await addUserToOrg(confusedDeputy.id, testOrg.id, 'coach');
+    await addUserToOrg(confusedDeputy.id, otherOrg.id, 'org_admin');
+
+    const athlete = await createUser('athlete_confuseddep', 'athlete', {
+      birthDate: adultBirthDate(),
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, testOrg.id, 'athlete');
+
+    const cookie = await loginAs(app, confusedDeputy.username);
+    const parentEmail = `${TEST_PREFIX}parent_confuseddep_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(403);
+
+    const [updated] = await db
+      .select({ parentEmail: users.parentEmail })
+      .from(users)
+      .where(eq(users.id, athlete.id))
+      .limit(1);
+
+    expect(updated.parentEmail).toBeNull();
+  });
 });
