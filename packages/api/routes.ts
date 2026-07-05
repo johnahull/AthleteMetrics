@@ -673,11 +673,10 @@ export async function registerRoutes(app: Express) {
     next();
   });
 
-  // Register OAuth routes - BEFORE other routes
-  registerOAuthRoutes(app);
-
-  // Register new refactored routes - AFTER session middleware
-  registerAllRoutes(app);
+  // NOTE: Application routes are registered further below, AFTER the security
+  // middleware (helmet, CSRF, input sanitization, rate limiting). Express runs
+  // middleware in registration order and a matched route ends the chain, so the
+  // security middleware must be registered first to actually protect the routes.
 
   // Security headers middleware
   app.use(helmet({
@@ -704,6 +703,15 @@ export async function registerRoutes(app: Express) {
   const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
     // Skip CSRF for GET requests (safe operations)
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      return next();
+    }
+
+    // Allow disabling CSRF outside production so the integration test suite can
+    // drive the API without fetching a token. This is IGNORED when
+    // NODE_ENV === 'production', where CSRF is always enforced. (The test suite
+    // runs under NODE_ENV=development, so a NODE_ENV-based check is unreliable;
+    // the flag is set explicitly by tests/setup/integration-setup.ts.)
+    if (process.env.NODE_ENV !== 'production' && process.env.DISABLE_CSRF === 'true') {
       return next();
     }
 
@@ -928,6 +936,14 @@ export async function registerRoutes(app: Express) {
 
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
+
+  // Register application routes AFTER the security middleware above so that
+  // helmet, CSRF protection, input sanitization and rate limiting all run
+  // before any route handler can end the request.
+  // Register OAuth routes - BEFORE other routes
+  registerOAuthRoutes(app);
+  // Register new refactored routes - AFTER session middleware
+  registerAllRoutes(app);
 
   // Email validation function
   const isValidEmail = (value: string): boolean => {
