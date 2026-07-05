@@ -17,6 +17,7 @@ import {
   AUDIT_ACTION_LEGAL_ACCEPTED
 } from "@shared/legal-acceptance";
 import { coppaService } from "../services/coppa-service";
+import { regenerateSession, saveSession } from "../lib/session-helpers";
 import { consumeRegistrationToken } from "../services/registration-token-store";
 import { isUnder13, isMinorAge, isTeenMinor } from "@shared/coppa-utils";
 import { db } from "../db";
@@ -358,9 +359,7 @@ export function registerRegistrationRoutes(app: Express) {
       if (req.session) {
         // Regenerate the session before storing the authenticated user to
         // prevent session fixation (mirrors login and the OAuth flow).
-        await new Promise<void>((resolve, reject) => {
-          req.session.regenerate((err) => (err ? reject(err) : resolve()));
-        });
+        await regenerateSession(req);
 
         req.session.user = {
           id: userId,
@@ -376,12 +375,7 @@ export function registerRegistrationRoutes(app: Express) {
         // Explicitly save the session so the Set-Cookie header is written
         // before the response body is sent. Without this, express-session's
         // lazy save may race with res.json() in test environments.
-        await new Promise<void>((resolve, reject) => {
-          req.session.save((err) => {
-            if (err) reject(err);
-            else resolve();
-          });
-        });
+        await saveSession(req);
       }
 
       // Send verification email (outside transaction - email failure shouldn't rollback registration)

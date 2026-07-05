@@ -212,7 +212,17 @@ process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
 // gracefully shut down on uncaught exceptions instead of dying silently.
 registerProcessSafetyHandlers({
   log: (message) => console.error(message),
-  onFatal: () => shutdownHandler?.('uncaughtException'),
+  onFatal: () => {
+    if (shutdownHandler) {
+      shutdownHandler('uncaughtException');
+    } else {
+      // The crash happened during startup, before the graceful-shutdown handler
+      // was wired up. Exit non-zero so the platform restarts a clean process
+      // instead of leaving a half-initialized one running (health checks would
+      // otherwise fail indefinitely without a restart).
+      process.exit(1);
+    }
+  },
 });
 
 (async () => {

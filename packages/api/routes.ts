@@ -715,6 +715,20 @@ export async function registerRoutes(app: Express) {
       return next();
     }
 
+    // CSRF only defends against an attacker riding a victim's authenticated
+    // session cookie. A request with no authenticated identity (mirrors
+    // requireAuth: no session.user and no legacy session.admin) has no such
+    // surface, so skip it. This covers every pre-authentication and public
+    // token-based endpoint (registration, COPPA/parent consent links,
+    // invitation/event-invitation accept-decline, email verification, magic
+    // links) without having to enumerate each one — those tokens are themselves
+    // unguessable and provide the CSRF protection. Authenticated mutations still
+    // require a token (the web client attaches one to every request).
+    const isAuthenticated = !!((req.session as any)?.user || (req.session as any)?.admin);
+    if (!isAuthenticated) {
+      return next();
+    }
+
     // Skip CSRF for certain API endpoints that use other authentication
     // Note: req.path is relative to the mount point, so '/api' prefix is not included
     // - /login and /register: Pre-authentication endpoints
@@ -792,11 +806,26 @@ export async function registerRoutes(app: Express) {
   app.use('/api', csrfProtection);
 
   // Input sanitization middleware
+  // Credential and opaque-token fields are never HTML-sanitized: DOMPurify would
+  // silently truncate a password/token containing an HTML-special character
+  // (e.g. "abc<def" -> "abc"), corrupting the value before the handler hashes or
+  // compares it and locking the user out. These fields are never rendered as
+  // HTML, so sanitizing them has no security benefit.
+  const SANITIZE_SKIP_FIELDS = new Set([
+    'password',
+    'currentpassword',
+    'newpassword',
+    'oldpassword',
+    'confirmpassword',
+    'confirmnewpassword',
+    'token',
+    '_csrf',
+  ]);
   const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
     // Sanitize string fields in request body
     if (req.body && typeof req.body === 'object') {
       for (const key in req.body) {
-        if (typeof req.body[key] === 'string') {
+        if (typeof req.body[key] === 'string' && !SANITIZE_SKIP_FIELDS.has(key.toLowerCase())) {
           req.body[key] = DOMPurify.sanitize(req.body[key]);
         }
       }

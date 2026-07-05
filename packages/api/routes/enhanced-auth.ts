@@ -5,6 +5,7 @@ import { AuthSecurity } from '../auth/security';
 import { PasswordResetService } from '../auth/password-reset';
 import { RoleManager } from '../auth/role-manager';
 import { requirePermission } from '../permissions/index';
+import { regenerateSession, saveSession } from '../lib/session-helpers';
 import { z } from 'zod';
 
 const router = Router();
@@ -120,9 +121,7 @@ router.post('/login', async (req: Request, res: Response) => {
     // Regenerate the session before storing auth state to prevent session
     // fixation (mirrors login, registration and the OAuth flow). Must run before
     // assigning sessionToken/user since regenerate() replaces the session.
-    await new Promise<void>((resolve, reject) => {
-      req.session.regenerate((err) => (err ? reject(err) : resolve()));
-    });
+    await regenerateSession(req);
 
     // Set session cookie
     req.session.sessionToken = sessionToken;
@@ -144,6 +143,10 @@ router.post('/login', async (req: Request, res: Response) => {
     else if (userRole === 'org_admin') redirectUrl = '/organization';
     else if (userRole === 'coach') redirectUrl = '/coaching';
     else if (userRole === 'athlete') redirectUrl = '/my-dashboard';
+
+    // Persist the regenerated session before responding (avoids a Set-Cookie
+    // vs response-body race with the client's next request).
+    await saveSession(req);
 
     return res.status(200).json({
       success: true,
