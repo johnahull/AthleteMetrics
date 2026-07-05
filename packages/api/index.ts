@@ -6,6 +6,7 @@ import { shutdownAuditLogQueue } from "./middleware/organization-type-middleware
 import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-digest-job";
 import { startWellnessScheduledJob, stopWellnessScheduledJob } from "./jobs/wellness-scheduled-job";
 import { startCoppaTokenCleanupJob, stopCoppaTokenCleanupJob } from "./jobs/coppa-token-cleanup";
+import { registerProcessSafetyHandlers } from "./lib/process-safety";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
@@ -206,6 +207,13 @@ let shutdownHandler: ((signal: string) => Promise<void>) | null = null;
 // Register signal handlers immediately (before server starts)
 process.on('SIGTERM', () => shutdownHandler?.('SIGTERM'));
 process.on('SIGINT', () => shutdownHandler?.('SIGINT'));
+
+// Register process-safety handlers: log unhandled rejections (keep serving) and
+// gracefully shut down on uncaught exceptions instead of dying silently.
+registerProcessSafetyHandlers({
+  log: (message) => console.error(message),
+  onFatal: () => shutdownHandler?.('uncaughtException'),
+});
 
 (async () => {
   const server = await registerRoutes(app);
