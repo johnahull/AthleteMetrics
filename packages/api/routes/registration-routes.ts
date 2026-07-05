@@ -434,15 +434,15 @@ export function registerRegistrationRoutes(app: Express) {
       // consentId it was minted for. Takes precedence over a raw consentId —
       // the ref token is what the web UI now sends instead.
       if (ref) {
-        const resolved = consumeRegistrationToken(ref);
-        if (!resolved) {
+        const resolvedConsentId = consumeRegistrationToken(ref);
+        if (!resolvedConsentId) {
           return res.status(400).json({
             success: false,
             message: "This registration link has expired or already been used.",
             errors: [{ field: 'ref', message: 'Invalid or expired registration link.' }],
           });
         }
-        consentId = resolved.consentId;
+        consentId = resolvedConsentId;
       }
 
       // Check username uniqueness

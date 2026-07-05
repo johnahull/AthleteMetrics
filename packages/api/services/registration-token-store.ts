@@ -18,7 +18,6 @@ const CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // Purge expired entries every 15 mi
 
 interface TokenEntry {
   consentId: string;
-  parentEmail: string;
   expiresAt: number;
 }
 
@@ -33,19 +32,24 @@ function hashToken(raw: string): string {
  * registration page can be linked to without exposing their email or
  * consentId in the URL. Returns the raw (unhashed) token — only the hash is
  * stored.
+ *
+ * Only the consentId is carried: the registration route re-fetches the
+ * consent record by that id and validates the user-supplied email against
+ * its authoritative parentEmail, so there is no need to also carry (and risk
+ * staleness on) a copy of the email here.
  */
-export function generateRegistrationToken(consentId: string, parentEmail: string): string {
+export function generateRegistrationToken(consentId: string): string {
   const raw = crypto.randomBytes(32).toString('hex');
-  store.set(hashToken(raw), { consentId, parentEmail, expiresAt: Date.now() + TOKEN_TTL_MS });
+  store.set(hashToken(raw), { consentId, expiresAt: Date.now() + TOKEN_TTL_MS });
   return raw;
 }
 
 /**
- * Consume a token: returns the { consentId, parentEmail } if the token is
- * valid and not expired, then deletes it (single-use). Returns null if
+ * Consume a token: returns the consentId if the token is valid and not
+ * expired, then deletes it (single-use). Returns null if
  * invalid/expired/already used.
  */
-export function consumeRegistrationToken(rawToken: string): { consentId: string; parentEmail: string } | null {
+export function consumeRegistrationToken(rawToken: string): string | null {
   const hash = hashToken(rawToken);
   const entry = store.get(hash);
 
@@ -56,7 +60,7 @@ export function consumeRegistrationToken(rawToken: string): { consentId: string;
 
   if (Date.now() > entry.expiresAt) return null;
 
-  return { consentId: entry.consentId, parentEmail: entry.parentEmail };
+  return entry.consentId;
 }
 
 // Periodic cleanup of expired entries to prevent unbounded growth

@@ -208,9 +208,10 @@ export function registerCoppaRoutes(app: Express) {
         }
 
         // Opaque, single-use token so the client's "Create Parent Account" link
-        // can carry the parent's email + consentId without putting either in
-        // the /register URL (browser history, referrer headers, access logs).
-        const registrationToken = generateRegistrationToken(consentId, verifyResult.consent!.parentEmail);
+        // can reference this consent without putting the parent's email or the
+        // consentId in the /register URL (browser history, referrer headers,
+        // access logs).
+        const registrationToken = generateRegistrationToken(consentId);
 
         res.json({
           success: true,

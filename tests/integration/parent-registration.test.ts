@@ -510,7 +510,7 @@ describe('POST /api/auth/register/parent', () => {
       const { consent } = await createTestConsent(athlete.id, parentEmail);
       createdConsentIds.push(consent.id);
 
-      const ref = generateRegistrationToken(consent.id, parentEmail);
+      const ref = generateRegistrationToken(consent.id);
       const username = `${TEST_PREFIX}ref${id}`;
 
       const res = await request(app)
@@ -552,6 +552,42 @@ describe('POST /api/auth/register/parent', () => {
       expect(res.body.errors[0].field).toBe('ref');
     });
 
+    // A ref token proves nothing about who is holding it — an intercepted link
+    // must not let an attacker register with their own email against the real
+    // parent's consent record. The token resolves to a consentId, and the
+    // existing consentId→email match rejects a mismatched email even though
+    // the token itself carries the (discarded) real parentEmail.
+    it('rejects a valid ref token when the submitted email does not match the consent record → 400', async () => {
+      const id = uniqueId();
+      const { athlete, parentEmail } = await createTestAthleteUser(`${TEST_PREFIX}refmis_`);
+      createdAthleteIds.push(athlete.id);
+
+      const { consent } = await createTestConsent(athlete.id, parentEmail);
+      createdConsentIds.push(consent.id);
+
+      const ref = generateRegistrationToken(consent.id);
+
+      const res = await request(app)
+        .post('/api/auth/register/parent')
+        .send({
+          firstName: 'Mallory',
+          lastName: 'Attacker',
+          email: `${TEST_PREFIX}attacker_${id}@example.com`, // NOT the consent's parentEmail
+          username: `${TEST_PREFIX}refmis${id}`,
+          password: VALID_PASSWORD,
+          legalAcceptedAt: new Date().toISOString(),
+          ref,
+        });
+
+      expect(res.status).toBe(400);
+      expect(res.body.errors[0].field).toBe('email');
+
+      // No account was created for the attacker.
+      const created = await db.select().from(users)
+        .where(like(users.username, `${TEST_PREFIX}refmis${id}`));
+      expect(created.length).toBe(0);
+    });
+
     it('a ref token is single-use — a second registration attempt with it fails', async () => {
       const id = uniqueId();
       const { athlete, parentEmail } = await createTestAthleteUser(`${TEST_PREFIX}refonce_`);
@@ -560,7 +596,7 @@ describe('POST /api/auth/register/parent', () => {
       const { consent } = await createTestConsent(athlete.id, parentEmail);
       createdConsentIds.push(consent.id);
 
-      const ref = generateRegistrationToken(consent.id, parentEmail);
+      const ref = generateRegistrationToken(consent.id);
       const username1 = `${TEST_PREFIX}ro1${id}`;
       const username2 = `${TEST_PREFIX}ro2${id}`;
 
