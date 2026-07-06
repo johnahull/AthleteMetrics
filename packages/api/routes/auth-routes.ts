@@ -33,11 +33,29 @@ export function registerAuthRoutes(app: Express) {
    */
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
-      const { username, password } = req.body;
+      const { username, password, mfaToken } = req.body;
 
-      const result = await authService.login({ username, password });
+      const result = await authService.login({
+        username,
+        password,
+        mfaToken,
+        ipAddress: req.ip || '0.0.0.0',
+        userAgent: req.get('User-Agent'),
+      });
 
       if (!result.success) {
+        // MFA challenge: not an error — the client should prompt for a code.
+        if (result.requiresMFA) {
+          return res.status(200).json({ requiresMFA: true, message: "Enter your authentication code" });
+        }
+        // Locked account: 423 Locked so the client can show a distinct message.
+        if (result.accountLocked) {
+          return res.status(423).json({
+            message: result.error,
+            accountLocked: true,
+            lockUntil: result.lockUntil,
+          });
+        }
         return res.status(401).json({ message: result.error });
       }
 
