@@ -1733,10 +1733,10 @@ export function registerImportExportRoutes(app: Express) {
       // Determine the effective organization based on permissions so a caller
       // cannot export teams from organizations they do not belong to.
       const { organizationId: requestedOrgId } = req.query;
-      let effectiveOrganizationId: string | undefined;
+      let teams;
       if (currentUser.isSiteAdmin) {
         // Site admins may export a specific org, or all when none is requested.
-        effectiveOrganizationId = requestedOrgId as string | undefined;
+        teams = await storage.getTeams(requestedOrgId as string | undefined);
       } else {
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         if (requestedOrgId) {
@@ -1746,20 +1746,18 @@ export function registerImportExportRoutes(app: Express) {
               message: "You do not have access to export teams from this organization"
             });
           }
-          effectiveOrganizationId = requestedOrgId as string;
+          teams = await storage.getTeams(requestedOrgId as string);
         } else {
-          effectiveOrganizationId = userOrgs[0]?.organizationId;
-          // A non-site-admin with no organization must not receive every team.
-          if (!effectiveOrganizationId) {
+          // Include teams from ALL of the caller's organizations, not just one.
+          const orgIds = new Set(userOrgs.map(uo => uo.organizationId));
+          if (orgIds.size === 0) {
             res.setHeader('Content-Type', 'text/csv');
             res.setHeader('Content-Disposition', 'attachment; filename="teams.csv"');
             return res.send(csvHeaders.join(','));
           }
+          teams = (await storage.getTeams()).filter(t => t.organizationId && orgIds.has(t.organizationId));
         }
       }
-
-      // Get teams scoped to the effective organization
-      const teams = await storage.getTeams(effectiveOrganizationId);
 
       const csvRows = teams.map(team => {
         return [

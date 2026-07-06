@@ -32,8 +32,10 @@ describe('Import/export tenant isolation', () => {
   let app: express.Express;
   let orgA: Organization;
   let orgB: Organization;
+  let orgC: Organization;
   let teamA: Team;
   let teamB: Team;
+  let teamC: Team;
   let userA: User;
   let agentA: ReturnType<typeof request.agent>;
 
@@ -47,8 +49,10 @@ describe('Import/export tenant isolation', () => {
     const ts = Date.now();
     orgA = await storage.createOrganization({ name: `Iso Org A ${ts}`, description: 'a' });
     orgB = await storage.createOrganization({ name: `Iso Org B ${ts}`, description: 'b' });
+    orgC = await storage.createOrganization({ name: `Iso Org C ${ts}`, description: 'c' });
     teamA = await storage.createTeam({ name: `Iso Team A ${ts}`, level: 'Club', organizationId: orgA.id });
     teamB = await storage.createTeam({ name: `Iso Team B ${ts}`, level: 'Club', organizationId: orgB.id });
+    teamC = await storage.createTeam({ name: `Iso Team C ${ts}`, level: 'Club', organizationId: orgC.id });
 
     userA = await storage.createUser({
       username: `isousera${ts}`,
@@ -57,7 +61,9 @@ describe('Import/export tenant isolation', () => {
       firstName: 'Iso',
       lastName: 'UserA',
     });
+    // userA belongs to TWO orgs (A and C) but not B.
     await storage.addUserToOrganization(userA.id, orgA.id, 'org_admin');
+    await storage.addUserToOrganization(userA.id, orgC.id, 'coach');
 
     agentA = request.agent(app);
     await agentA.post('/api/auth/login').send({ username: userA.username, password: PASSWORD }).expect(200);
@@ -67,13 +73,18 @@ describe('Import/export tenant isolation', () => {
     try { await storage.deleteUser(userA.id); } catch { /* ignore */ }
     try { await storage.deleteTeam(teamA.id); } catch { /* ignore */ }
     try { await storage.deleteTeam(teamB.id); } catch { /* ignore */ }
+    try { await storage.deleteTeam(teamC.id); } catch { /* ignore */ }
     try { await storage.deleteOrganization(orgA.id); } catch { /* ignore */ }
     try { await storage.deleteOrganization(orgB.id); } catch { /* ignore */ }
+    try { await storage.deleteOrganization(orgC.id); } catch { /* ignore */ }
   });
 
-  it('GET /api/export/teams returns only the caller\'s organization teams', async () => {
+  it('GET /api/export/teams returns teams from all the caller\'s orgs, and no others', async () => {
     const res = await agentA.get('/api/export/teams').expect(200);
+    // Both of userA's organizations (A and C) are included...
     expect(res.text).toContain(teamA.id);
+    expect(res.text).toContain(teamC.id);
+    // ...but not an organization they don't belong to.
     expect(res.text).not.toContain(teamB.id);
   });
 

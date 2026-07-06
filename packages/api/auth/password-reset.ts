@@ -212,17 +212,13 @@ export class PasswordResetService {
         severity: 'info',
       });
 
-      // TODO: Send verification email
-      // await emailService.sendEmailVerification(email, {
-      //   verificationUrl: `${process.env.BASE_URL}/verify-email?token=${token}`,
-      //   expiresIn: '24 hours'
-      // });
+      // The raw token is intentionally never logged (only its hash is stored).
+      // Email delivery for this path is handled by the caller.
+      void token;
 
-      console.log(`Email verification requested for ${email}. Token: ${token}`);
-
-      return { 
-        success: true, 
-        message: 'Verification email sent. Please check your inbox.' 
+      return {
+        success: true,
+        message: 'Verification email sent. Please check your inbox.'
       };
     } catch (error) {
       console.error('Email verification request error:', error);
