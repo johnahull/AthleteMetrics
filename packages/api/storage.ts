@@ -1,5 +1,5 @@
 import {
-  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, athleteProfiles,
+  organizations, teams, users, measurements, userOrganizations, userTeams, invitations, auditLogs, emailVerificationTokens, accountLinkingTokens, passwordResetTokens, athleteProfiles,
   siteMetrics, organizationMetrics,
   siteBenchmarks, customBenchmarks, organizationBenchmarks,
   siteSettings, reports,
@@ -4061,18 +4061,33 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createPasswordResetToken(token: any): Promise<void> {
-    // Would need passwordResetTokens table implementation
-    console.log('Creating password reset token for user:', token.userId);
+    // Store only the SHA-256 hash — the raw token lives solely in the emailed link.
+    const tokenHash = crypto.createHash('sha256').update(token.token).digest('hex');
+    await db.insert(passwordResetTokens).values({
+      userId: token.userId,
+      tokenHash,
+      expiresAt: token.expiresAt,
+      ipAddress: token.ipAddress ?? null,
+      userAgent: token.userAgent ?? null,
+    });
   }
 
   async findPasswordResetToken(token: string): Promise<any> {
-    // Would need passwordResetTokens table implementation
-    return null;
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const [row] = await db
+      .select()
+      .from(passwordResetTokens)
+      .where(eq(passwordResetTokens.tokenHash, tokenHash))
+      .limit(1);
+    return row ?? null;
   }
 
   async markPasswordResetTokenUsed(token: string): Promise<void> {
-    // Would need passwordResetTokens table implementation
-    console.log('Marking password reset token as used:', token);
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    await db
+      .update(passwordResetTokens)
+      .set({ isUsed: true })
+      .where(eq(passwordResetTokens.tokenHash, tokenHash));
   }
 
   async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {
