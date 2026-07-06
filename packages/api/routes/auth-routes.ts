@@ -11,6 +11,7 @@ import { shouldSkipRateLimiting } from "../utils/rate-limit-utils";
 import { COPPA_ACTIONS } from "@shared/coppa-utils";
 import { storage } from "../storage";
 import { generateParentEmailToken } from "../services/coppa-email-token-store";
+import { regenerateSession, saveSession } from "../lib/session-helpers";
 // Session types are loaded globally
 
 const authService = new AuthService();
@@ -81,6 +82,10 @@ export function registerAuthRoutes(app: Express) {
       // Determine user's actual role and organization context
       const roleContext = await authService.determineUserRoleAndContext(user);
 
+      // Regenerate the session before storing the authenticated user to prevent
+      // session fixation (mirrors the OAuth and invitation-acceptance flows).
+      await regenerateSession(req);
+
       // Set session
       req.session.user = {
         id: user.id,
@@ -108,6 +113,10 @@ export function registerAuthRoutes(app: Express) {
         redirectUrl = '/parent-dashboard';
       }
       // org_admin, coach, and others default to /dashboard
+
+      // Persist the regenerated session before responding so the Set-Cookie is
+      // written before the body (avoids a race with the client's next request).
+      await saveSession(req);
 
       res.json({
         user: req.session.user,

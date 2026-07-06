@@ -15,6 +15,11 @@ process.env.ADMIN_USER = process.env.ADMIN_USER || 'admin';
 process.env.ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@test.com';
 process.env.ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'TestPassword123!';  // MUST match benchmark-integration.test.ts
 
+// The integration suite drives the API with supertest agents that do not fetch
+// CSRF tokens. Disable CSRF for tests via the app's non-production bypass flag.
+// This is ignored when NODE_ENV === 'production', so production stays protected.
+process.env.DISABLE_CSRF = 'true';
+
 // DATABASE_URL validation with production/staging protection
 const dbUrl = process.env.DATABASE_URL || '';
 

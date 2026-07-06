@@ -673,11 +673,10 @@ export async function registerRoutes(app: Express) {
     next();
   });
 
-  // Register OAuth routes - BEFORE other routes
-  registerOAuthRoutes(app);
-
-  // Register new refactored routes - AFTER session middleware
-  registerAllRoutes(app);
+  // NOTE: Application routes are registered further below, AFTER the security
+  // middleware (helmet, CSRF, input sanitization, rate limiting). Express runs
+  // middleware in registration order and a matched route ends the chain, so the
+  // security middleware must be registered first to actually protect the routes.
 
   // Security headers middleware
   app.use(helmet({
@@ -704,6 +703,29 @@ export async function registerRoutes(app: Express) {
   const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
     // Skip CSRF for GET requests (safe operations)
     if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      return next();
+    }
+
+    // Allow disabling CSRF outside production so the integration test suite can
+    // drive the API without fetching a token. This is IGNORED when
+    // NODE_ENV === 'production', where CSRF is always enforced. (The test suite
+    // runs under NODE_ENV=development, so a NODE_ENV-based check is unreliable;
+    // the flag is set explicitly by tests/setup/integration-setup.ts.)
+    if (process.env.NODE_ENV !== 'production' && process.env.DISABLE_CSRF === 'true') {
+      return next();
+    }
+
+    // CSRF only defends against an attacker riding a victim's authenticated
+    // session cookie. A request with no authenticated identity (mirrors
+    // requireAuth: no session.user and no legacy session.admin) has no such
+    // surface, so skip it. This covers every pre-authentication and public
+    // token-based endpoint (registration, COPPA/parent consent links,
+    // invitation/event-invitation accept-decline, email verification, magic
+    // links) without having to enumerate each one — those tokens are themselves
+    // unguessable and provide the CSRF protection. Authenticated mutations still
+    // require a token (the web client attaches one to every request).
+    const isAuthenticated = !!((req.session as any)?.user || (req.session as any)?.admin);
+    if (!isAuthenticated) {
       return next();
     }
 
@@ -784,11 +806,26 @@ export async function registerRoutes(app: Express) {
   app.use('/api', csrfProtection);
 
   // Input sanitization middleware
+  // Credential and opaque-token fields are never HTML-sanitized: DOMPurify would
+  // silently truncate a password/token containing an HTML-special character
+  // (e.g. "abc<def" -> "abc"), corrupting the value before the handler hashes or
+  // compares it and locking the user out. These fields are never rendered as
+  // HTML, so sanitizing them has no security benefit.
+  const SANITIZE_SKIP_FIELDS = new Set([
+    'password',
+    'currentpassword',
+    'newpassword',
+    'oldpassword',
+    'confirmpassword',
+    'confirmnewpassword',
+    'token',
+    '_csrf',
+  ]);
   const sanitizeInput = (req: Request, res: Response, next: NextFunction) => {
     // Sanitize string fields in request body
     if (req.body && typeof req.body === 'object') {
       for (const key in req.body) {
-        if (typeof req.body[key] === 'string') {
+        if (typeof req.body[key] === 'string' && !SANITIZE_SKIP_FIELDS.has(key.toLowerCase())) {
           req.body[key] = DOMPurify.sanitize(req.body[key]);
         }
       }
@@ -928,6 +965,14 @@ export async function registerRoutes(app: Express) {
 
   // Apply general rate limiting to all API routes
   app.use('/api', apiLimiter);
+
+  // Register application routes AFTER the security middleware above so that
+  // helmet, CSRF protection, input sanitization and rate limiting all run
+  // before any route handler can end the request.
+  // Register OAuth routes - BEFORE other routes
+  registerOAuthRoutes(app);
+  // Register new refactored routes - AFTER session middleware
+  registerAllRoutes(app);
 
   // Email validation function
   const isValidEmail = (value: string): boolean => {
