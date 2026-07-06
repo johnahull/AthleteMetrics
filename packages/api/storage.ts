@@ -37,6 +37,7 @@ import { wellnessRepository, type WellnessTrend as RepoWellnessTrend } from "./r
 import { eq, desc, asc, and, gte, lte, gt, inArray, sql, arrayContains, or, isNull, isNotNull, exists, ne, SQL } from "drizzle-orm";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
+import { hashToken } from "./lib/token-hash";
 import { BCRYPT_SALT_ROUNDS } from "@shared/constants";
 import { getPgErrorCode, PG_UNIQUE_VIOLATION } from "./lib/pg-error";
 
@@ -517,14 +518,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createAccountLinkingToken(data: any): Promise<void> {
-    await db.insert(accountLinkingTokens).values(data);
+    // Store only the hash — the raw token lives solely in the emailed link.
+    await db.insert(accountLinkingTokens).values({ ...data, token: hashToken(data.token) });
   }
 
   async getAccountLinkingToken(token: string): Promise<any | null> {
     const [linkingToken] = await db
       .select()
       .from(accountLinkingTokens)
-      .where(eq(accountLinkingTokens.token, token))
+      .where(eq(accountLinkingTokens.token, hashToken(token)))
       .limit(1);
     return linkingToken || null;
   }
@@ -533,14 +535,14 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(accountLinkingTokens)
       .set({ usedAt: new Date() })
-      .where(eq(accountLinkingTokens.token, token));
+      .where(eq(accountLinkingTokens.token, hashToken(token)));
   }
 
   async incrementAccountLinkingTokenFailedAttempts(token: string): Promise<void> {
     await db
       .update(accountLinkingTokens)
       .set({ failedAttempts: sql`${accountLinkingTokens.failedAttempts} + 1` })
-      .where(eq(accountLinkingTokens.token, token));
+      .where(eq(accountLinkingTokens.token, hashToken(token)));
   }
 
   async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
@@ -1640,10 +1642,11 @@ export class DatabaseStorage implements IStorage {
       role: data.role,
       invitedBy: data.invitedBy,
       playerId: data.playerId, // Store athlete ID consistently
-      token,
+      token: hashToken(token), // Store only the hash; the raw token is emailed
       expiresAt,
     }).returning();
-    return invitation;
+    // Return the RAW token so the caller can build the invitation link.
+    return { ...invitation, token };
   }
 
 
@@ -1651,7 +1654,7 @@ export class DatabaseStorage implements IStorage {
   async getInvitation(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
       .where(and(
-        eq(invitations.token, token),
+        eq(invitations.token, hashToken(token)),
         eq(invitations.isUsed, false),
         gte(invitations.expiresAt, new Date())
       ));
@@ -1660,7 +1663,7 @@ export class DatabaseStorage implements IStorage {
 
   async getInvitationByToken(token: string): Promise<Invitation | undefined> {
     const [invitation] = await db.select().from(invitations)
-      .where(eq(invitations.token, token));
+      .where(eq(invitations.token, hashToken(token)));
     return invitation || undefined;
   }
 
@@ -1699,7 +1702,7 @@ export class DatabaseStorage implements IStorage {
       const [invitation] = await tx.select()
         .from(invitations)
         .where(and(
-          eq(invitations.token, token),
+          eq(invitations.token, hashToken(token)),
           eq(invitations.isUsed, false),
           gte(invitations.expiresAt, new Date())
         ))
@@ -1852,7 +1855,7 @@ export class DatabaseStorage implements IStorage {
           acceptedAt: new Date(),
           acceptedBy: user.id
         })
-        .where(eq(invitations.token, token));
+        .where(eq(invitations.token, hashToken(token)));
 
       // Create audit logs as part of the transaction
       // All audit logs must be inside transaction for atomicity and consistency
@@ -1902,10 +1905,11 @@ export class DatabaseStorage implements IStorage {
     await db.insert(emailVerificationTokens).values({
       userId,
       email,
-      token,
+      token: hashToken(token), // Store only the hash; the raw token is emailed
       expiresAt
     });
 
+    // Return the RAW token so the caller can build the verification link.
     return { token, expiresAt };
   }
 
@@ -1916,7 +1920,7 @@ export class DatabaseStorage implements IStorage {
       const [verificationToken] = await tx.select()
         .from(emailVerificationTokens)
         .where(and(
-          eq(emailVerificationTokens.token, token),
+          eq(emailVerificationTokens.token, hashToken(token)),
           eq(emailVerificationTokens.isUsed, false),
           gte(emailVerificationTokens.expiresAt, new Date())
         ))
@@ -1929,7 +1933,7 @@ export class DatabaseStorage implements IStorage {
       // Mark token as used (within same transaction)
       await tx.update(emailVerificationTokens)
         .set({ isUsed: true })
-        .where(eq(emailVerificationTokens.token, token));
+        .where(eq(emailVerificationTokens.token, hashToken(token)));
 
       // Mark user's email as verified (within same transaction)
       await tx.update(users)
@@ -1948,7 +1952,7 @@ export class DatabaseStorage implements IStorage {
     const [verificationToken] = await db.select()
       .from(emailVerificationTokens)
       .where(and(
-        eq(emailVerificationTokens.token, token),
+        eq(emailVerificationTokens.token, hashToken(token)),
         eq(emailVerificationTokens.isUsed, false),
         gte(emailVerificationTokens.expiresAt, new Date())
       ));

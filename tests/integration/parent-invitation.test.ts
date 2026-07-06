@@ -238,14 +238,16 @@ describe('POST /api/invitations/:token/accept — parent role', () => {
     expect(createRes.status).toBe(201);
     createdInvitationIds.push(createRes.body.id);
 
-    // Get the invitation token
+    // The raw token is only in the emailed link (the DB stores its hash), so
+    // extract it from the invite link in the creation response.
     const [inv] = await db.select().from(invitations).where(eq(invitations.id, createRes.body.id));
     expect(inv).toBeDefined();
+    const rawToken = new URL(createRes.body.inviteLink).searchParams.get('token')!;
 
     // Accept the invitation
     const newParentUsername = `${TEST_PREFIX}acc_par_${uniqueId()}`;
     const acceptRes = await request(app)
-      .post(`/api/invitations/${inv.token}/accept`)
+      .post(`/api/invitations/${rawToken}/accept`)
       .send({
         username: newParentUsername,
         password: VALID_PASSWORD,
