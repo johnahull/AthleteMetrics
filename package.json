@@ -115,7 +115,7 @@
     "drizzle-zod": "^0.7.0",
     "jspdf-autotable": "^5.0.7",
     "mathjs": "^15.1.0",
-    "ml-levenberg-marquardt": "^5.0.0",
+    "ml-levenberg-marquardt": "^5.0.1",
     "nanoid": "^5.1.11",
     "openai": "^6.38.0",
     "p-limit": "^7.3.0",
