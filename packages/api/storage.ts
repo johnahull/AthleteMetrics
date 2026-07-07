@@ -467,10 +467,10 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
-  async getUsersByEmail(email: string): Promise<User[]> {
+  async getUsersByEmail(email: string, executor: any = db): Promise<User[]> {
     // Use PostgreSQL array search with ANY operator to find ALL users with the email
     // Order by createdAt ASC for deterministic results (oldest user first)
-    const matchingUsers = await db.select().from(users).where(
+    const matchingUsers = await executor.select().from(users).where(
       and(
         sql`${email} = ANY(${users.emails})`,
         whereUserNotDeleted() // Exclude soft-deleted users
@@ -1726,7 +1726,7 @@ export class DatabaseStorage implements IStorage {
         console.log("Invitation linked to existing athlete:", invitation.playerId);
 
         // Get the existing athlete/user
-        const existingUser = await this.getUser(invitation.playerId);
+        const existingUser = await this.getUser(invitation.playerId, tx);
 
         if (!existingUser) {
           throw new Error("Linked athlete not found");
@@ -1744,7 +1744,7 @@ export class DatabaseStorage implements IStorage {
         console.log("Updated existing athlete with credentials:", user.id);
       } else {
         // Check if a user with this email already exists
-        const existingUsers = await this.getUsersByEmail(invitation.email);
+        const existingUsers = await this.getUsersByEmail(invitation.email, tx);
 
         if (existingUsers.length > 0) {
           // Warn if multiple users found (should be rare after migration)
@@ -1893,11 +1893,13 @@ export class DatabaseStorage implements IStorage {
     // user row is visible on a fresh connection and a failure here cannot roll
     // back the accepted invitation (it is intentionally non-critical).
     if (invitation.teamIds && invitation.teamIds.length > 0) {
-      // Independent inserts — run concurrently. Best-effort: the invitation is
-      // already accepted, so a genuine failure (e.g. the team was deleted between
-      // invite and acceptance) is logged at error level for remediation but must
-      // not block the user from logging in.
-      await Promise.all(invitation.teamIds.map(async (teamId: string) => {
+      // Sequential (not Promise.all): addUserToTeam is a non-atomic
+      // check-then-insert, so concurrent calls for a duplicated team id would
+      // race and create duplicate roster rows. De-duplicate and process one at a
+      // time. Best-effort: the invitation is already accepted, so a genuine
+      // failure (e.g. the team was deleted between invite and acceptance) is
+      // logged at error level for remediation but must not block the user.
+      for (const teamId of [...new Set(invitation.teamIds)] as string[]) {
         try {
           await this.addUserToTeam(user.id, teamId);
         } catch (error) {
@@ -1907,7 +1909,7 @@ export class DatabaseStorage implements IStorage {
             error
           );
         }
-      }));
+      }
     }
 
     return { user, invitation };
@@ -2131,8 +2133,14 @@ export class DatabaseStorage implements IStorage {
         .where(eq(membershipRequests.id, id))
         .returning();
 
-      // Add user to organization (within the transaction for atomicity)
-      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete', tx);
+      // Add user to organization.
+      // NOTE: full atomicity of approval is NOT yet achieved here — linkAthleteAccounts
+      // above transfers measurements/roster and deactivates the old athlete on the
+      // pooled db handle, outside this transaction. Rather than thread tx through only
+      // this call (a mixed state that could partially roll back and corrupt data), keep
+      // it consistent with those writes (no tx). Threading tx through linkAthleteAccounts
+      // to make the whole approval atomic is a separate, larger change.
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
 
       return updated;
     });
