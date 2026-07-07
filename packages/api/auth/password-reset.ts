@@ -75,7 +75,7 @@ export class PasswordResetService {
 
       // Send the reset link. The raw token is only ever transmitted here (never
       // logged or stored) — the database holds only its hash.
-      const baseUrl = process.env.APP_URL || process.env.BASE_URL || '';
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
       const resetLink = `${baseUrl}/reset-password?token=${token}`;
       const recipient = user.emails?.[0];
       if (recipient) {
@@ -215,7 +215,7 @@ export class PasswordResetService {
       // Send the verification link. The raw token is only ever transmitted here
       // (never logged) — the database holds only its hash.
       const user = await storage.getUser(userId);
-      const baseUrl = process.env.APP_URL || process.env.BASE_URL || '';
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || 'https://athletemetrics.app';
       const verificationLink = `${baseUrl}/verify-email?token=${token}`;
       await emailService.sendEmailVerification(email, {
         userName: user?.firstName || 'there',

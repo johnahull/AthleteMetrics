@@ -4066,10 +4066,9 @@ export class DatabaseStorage implements IStorage {
 
   async createPasswordResetToken(token: any): Promise<void> {
     // Store only the SHA-256 hash — the raw token lives solely in the emailed link.
-    const tokenHash = crypto.createHash('sha256').update(token.token).digest('hex');
     await db.insert(passwordResetTokens).values({
       userId: token.userId,
-      tokenHash,
+      tokenHash: hashToken(token.token),
       expiresAt: token.expiresAt,
       ipAddress: token.ipAddress ?? null,
       userAgent: token.userAgent ?? null,
@@ -4077,21 +4076,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async findPasswordResetToken(token: string): Promise<any> {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const [row] = await db
       .select()
       .from(passwordResetTokens)
-      .where(eq(passwordResetTokens.tokenHash, tokenHash))
+      .where(eq(passwordResetTokens.tokenHash, hashToken(token)))
       .limit(1);
     return row ?? null;
   }
 
   async markPasswordResetTokenUsed(token: string): Promise<void> {
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     await db
       .update(passwordResetTokens)
       .set({ isUsed: true })
-      .where(eq(passwordResetTokens.tokenHash, tokenHash));
+      .where(eq(passwordResetTokens.tokenHash, hashToken(token)));
   }
 
   async updateUserPassword(userId: string, hashedPassword: string): Promise<void> {

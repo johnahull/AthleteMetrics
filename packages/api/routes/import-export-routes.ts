@@ -1062,10 +1062,13 @@ export function registerImportExportRoutes(app: Express) {
         // own organizations, so a team name cannot resolve to another tenant's
         // team (which would attribute measurements to the wrong organization).
         const measurementImportUser = req.session.user;
+        if (!measurementImportUser?.id) {
+          return res.status(401).json({ message: "User not authenticated" });
+        }
         let allTeamsForMeasurements = await storage.getTeams();
-        if (!measurementImportUser?.isSiteAdmin) {
+        if (!measurementImportUser.isSiteAdmin) {
           const callerOrgIds = new Set(
-            (await storage.getUserOrganizations(measurementImportUser!.id)).map((o) => o.organizationId)
+            (await storage.getUserOrganizations(measurementImportUser.id)).map((o) => o.organizationId)
           );
           allTeamsForMeasurements = allTeamsForMeasurements.filter(
             (t) => t.organization?.id && callerOrgIds.has(t.organization.id)

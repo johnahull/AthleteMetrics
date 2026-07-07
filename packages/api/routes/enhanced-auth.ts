@@ -22,6 +22,18 @@ const enhancedAuthLimiter = rateLimit({
   skip: (req) => shouldSkipRateLimiting(req, 'auth'),
 });
 
+// Looser limiter for /change-password: it's an authenticated, post-login action
+// (not a credential-stuffing/token-probing target), so it shouldn't share the
+// 5/15min budget with unauthenticated login and reset attempts.
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  message: { success: false, message: 'Too many attempts, please try again in 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
+});
+
 const router = Router();
 
 // Enhanced login with MFA support, account lockout, and security logging
@@ -284,7 +296,7 @@ router.post('/reset-password', enhancedAuthLimiter, async (req: Request, res: Re
 });
 
 // Change password (authenticated users)
-router.post('/change-password', enhancedAuthLimiter, async (req: Request, res: Response) => {
+router.post('/change-password', changePasswordLimiter, async (req: Request, res: Response) => {
   try {
     const user = req.session?.user;
     if (!user) {
