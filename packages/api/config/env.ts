@@ -21,7 +21,10 @@ const WEAK_SECRET_PATTERNS = [
 
 const envSchema = z
   .object({
-    NODE_ENV: z.enum(['development', 'test', 'staging', 'production']).default('production'),
+    // All environments actually used: local dev, the vitest harness ('test'),
+    // Railway's testing/PR-preview env ('testing'), staging, and production.
+    // Omitting a real value here would process.exit(1) that deployment at boot.
+    NODE_ENV: z.enum(['development', 'test', 'testing', 'staging', 'production']).default('production'),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     SESSION_SECRET: z
       .string()

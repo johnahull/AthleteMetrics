@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { parseEnv } from '../env';
 
-// A strong 64-char secret for production checks.
-const STRONG_SECRET = 'f'.padStart(1, 'f') + '9a3b7c1d2e4f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f9';
-const STRONG_32 = '9a3b7c1d2e4f60718293a4b5c6d7e8f9';
+// A strong 64-char secret (no repeated halves, no common words); and a strong
+// 32-char secret (valid outside production, too short for production).
+const STRONG_SECRET = 'a1b2c3d4e5f60718293a4b5c6d7e8f90fedcba9876543210abcdef0123456789';
+const STRONG_32 = 'a1b2c3d4e5f60718293a4b5c6d7e8f90';
 
 function base(overrides: Record<string, string | undefined> = {}) {
   return {
@@ -26,6 +27,11 @@ describe('parseEnv', () => {
     expect(env.NODE_ENV).toBe('production');
   });
 
+  it('accepts NODE_ENV=testing (Railway testing / PR-preview env)', () => {
+    const env = parseEnv(base({ NODE_ENV: 'testing' }));
+    expect(env.NODE_ENV).toBe('testing');
+  });
+
   it('rejects a missing DATABASE_URL', () => {
     expect(() => parseEnv(base({ DATABASE_URL: undefined }))).toThrow();
   });
@@ -34,16 +40,16 @@ describe('parseEnv', () => {
     expect(() => parseEnv(base({ SESSION_SECRET: undefined }))).toThrow();
   });
 
-  it('rejects a SESSION_SECRET shorter than 32 chars', () => {
-    expect(() => parseEnv(base({ SESSION_SECRET: 'tooshort' }))).toThrow();
+  it('rejects a SESSION_SECRET shorter than 32 chars (with the length message)', () => {
+    expect(() => parseEnv(base({ SESSION_SECRET: 'abcdefghij0123456789' }))).toThrow(/at least 32 characters/);
   });
 
-  it('rejects a weak SESSION_SECRET (common word)', () => {
-    expect(() => parseEnv(base({ SESSION_SECRET: 'password'.repeat(5) }))).toThrow();
+  it('rejects a weak SESSION_SECRET (with the weak-pattern message)', () => {
+    expect(() => parseEnv(base({ SESSION_SECRET: 'password'.repeat(5) }))).toThrow(/weak pattern or common word/);
   });
 
-  it('rejects a SESSION_SECRET shorter than 64 chars in production', () => {
-    expect(() => parseEnv(base({ NODE_ENV: 'production', SESSION_SECRET: STRONG_32 }))).toThrow();
+  it('rejects a SESSION_SECRET shorter than 64 chars in production (with the 64-char message)', () => {
+    expect(() => parseEnv(base({ NODE_ENV: 'production', SESSION_SECRET: STRONG_32 }))).toThrow(/64 characters/);
   });
 
   it('accepts a strong 64+ char SESSION_SECRET in production', () => {
