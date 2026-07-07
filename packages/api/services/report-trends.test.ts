@@ -50,6 +50,45 @@ describe('assembleTrends', () => {
     expect(Number.isNaN(trends.VJ.delta.pct)).toBe(false);
   });
 
+  it('keeps only the best (max) same-day measurement for a higher-is-better metric', () => {
+    const rows = [
+      m('VJ', '2025-09-01', 18),
+      m('VJ', '2026-02-01', 24),   // same day, worse
+      m('VJ', '2026-02-01', 25.5), // same day, best
+      m('VJ', '2026-02-01', 23),   // same day, worse
+    ];
+    const trends = assembleTrends(rows, ['VJ'], { VJ: 'higher' }, { VJ: [] });
+    expect(trends.VJ.series).toEqual([
+      { date: '2025-09-01', value: 18 },
+      { date: '2026-02-01', value: 25.5 },
+    ]);
+    expect(trends.VJ.delta.to).toBe(25.5);
+  });
+
+  it('keeps only the best (min) same-day measurement for a lower-is-better metric', () => {
+    const rows = [
+      m('DASH', '2025-09-01', 5.6),
+      m('DASH', '2025-09-01', 5.4),  // same day, best
+      m('DASH', '2026-02-01', 4.92),
+    ];
+    const trends = assembleTrends(rows, ['DASH'], { DASH: 'lower' }, { DASH: [] });
+    expect(trends.DASH.series).toEqual([
+      { date: '2025-09-01', value: 5.4 },
+      { date: '2026-02-01', value: 4.92 },
+    ]);
+    expect(trends.DASH.delta.from).toBe(5.4);
+  });
+
+  it('omits a metric whose measurements all fall on a single day (fewer than 2 points after dedup)', () => {
+    const rows = [
+      m('VJ', '2025-09-01', 18),
+      m('VJ', '2025-09-01', 19),
+      m('VJ', '2025-09-01', 20),
+    ];
+    const trends = assembleTrends(rows, ['VJ'], { VJ: 'higher' }, { VJ: [] });
+    expect(trends.VJ).toBeUndefined();
+  });
+
   it('derives tier zones when comparisons carry allTiers', () => {
     const overlay = deriveOverlay([
       {

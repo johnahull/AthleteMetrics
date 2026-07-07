@@ -60,6 +60,27 @@ export function deriveOverlay(comparisons: ComparisonLike[] | undefined): Benchm
 }
 
 /**
+ * Collapse a date-ascending series to at most one point per day, keeping the
+ * best value for that day. "Best" is direction-aware: 'lower' means
+ * lower-is-better (sprint times), 'higher' means higher-is-better (jumps).
+ */
+export function bestPerDay(
+  series: Array<{ date: string; value: number }>,
+  direction: 'higher' | 'lower',
+): Array<{ date: string; value: number }> {
+  const deduped: Array<{ date: string; value: number }> = [];
+  for (const point of series) {
+    const last = deduped[deduped.length - 1];
+    if (last?.date !== point.date) {
+      deduped.push({ ...point });
+    } else if (direction === 'lower' ? point.value < last.value : point.value > last.value) {
+      last.value = point.value;
+    }
+  }
+  return deduped;
+}
+
+/**
  * Build the per-metric trend map. Pure: no DB access.
  * @param rows           all in-window measurements for the athlete (any order)
  * @param metrics        metric codes selected on the report
@@ -75,17 +96,20 @@ export function assembleTrends(
   const trends: ReportTrends = {};
 
   for (const metric of metrics) {
-    const series = rows
-      .filter(r => r.metric === metric)
-      .map(r => ({ date: r.date, value: parseFloat(r.value) }))
-      // Drop non-numeric measurement values: a malformed `value` would parse to
-      // NaN and poison `from`/`to`/`pct` and the rendered chart line.
-      .filter(p => !Number.isNaN(p.value))
-      .sort((a, b) => a.date.localeCompare(b.date));
+    const direction = directions[metric] ?? 'higher';
+    const series = bestPerDay(
+      rows
+        .filter(r => r.metric === metric)
+        .map(r => ({ date: r.date, value: parseFloat(r.value) }))
+        // Drop non-numeric measurement values: a malformed `value` would parse to
+        // NaN and poison `from`/`to`/`pct` and the rendered chart line.
+        .filter(p => !Number.isNaN(p.value))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+      direction,
+    );
 
     if (series.length < 2) continue;
 
-    const direction = directions[metric] ?? 'higher';
     const delta = computeTrendDelta(direction, series[0].value, series[series.length - 1].value);
 
     const trend: MetricTrend = {
