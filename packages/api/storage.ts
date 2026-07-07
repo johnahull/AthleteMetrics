@@ -636,8 +636,8 @@ export class DatabaseStorage implements IStorage {
       .orderBy(asc(invitations.createdAt));
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(
+  async getUser(id: string, executor: any = db): Promise<User | undefined> {
+    const [user] = await executor.select().from(users).where(
       and(
         eq(users.id, id),
         whereUserNotDeleted() // Exclude soft-deleted users
@@ -699,7 +699,7 @@ export class DatabaseStorage implements IStorage {
 
     // Update computed fields if relevant data changed
     if (user.firstName || user.lastName) {
-      const currentUser = await this.getUser(id);
+      const currentUser = await this.getUser(id, executor);
       if (currentUser) {
         const firstName = user.firstName || currentUser.firstName;
         const lastName = user.lastName || currentUser.lastName;
@@ -1893,14 +1893,21 @@ export class DatabaseStorage implements IStorage {
     // user row is visible on a fresh connection and a failure here cannot roll
     // back the accepted invitation (it is intentionally non-critical).
     if (invitation.teamIds && invitation.teamIds.length > 0) {
-      for (const teamId of invitation.teamIds) {
+      // Independent inserts — run concurrently. Best-effort: the invitation is
+      // already accepted, so a genuine failure (e.g. the team was deleted between
+      // invite and acceptance) is logged at error level for remediation but must
+      // not block the user from logging in.
+      await Promise.all(invitation.teamIds.map(async (teamId: string) => {
         try {
           await this.addUserToTeam(user.id, teamId);
         } catch (error) {
-          // May already be in team, or the team no longer exists — non-critical.
-          console.log("User may already be in team:", error);
+          console.error(
+            `[Invitation] Failed to add user ${user.id} to team ${teamId} after acceptance; ` +
+            `roster membership was NOT created and may need manual remediation:`,
+            error
+          );
         }
-      }
+      }));
     }
 
     return { user, invitation };
@@ -2124,8 +2131,8 @@ export class DatabaseStorage implements IStorage {
         .where(eq(membershipRequests.id, id))
         .returning();
 
-      // Add user to organization
-      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete');
+      // Add user to organization (within the transaction for atomicity)
+      await this.addUserToOrganization(request.userId, request.organizationId, 'athlete', tx);
 
       return updated;
     });
