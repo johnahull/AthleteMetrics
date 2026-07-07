@@ -38,6 +38,8 @@ vi.mock('../../packages/api/services/email-service', () => ({
 }));
 
 import { registerRoutes } from '../../packages/api/routes';
+import { emailService } from '../../packages/api/services/email-service';
+import { PasswordResetService } from '../../packages/api/auth/password-reset';
 
 const OLD_PASSWORD = 'OldPass123!';
 const NEW_PASSWORD = 'BrandNewPass456!';
@@ -137,6 +139,20 @@ describe('Password reset flow', () => {
     expect(found?.userId).toBe(user.id);
     // ...but the raw token value must not appear as a stored column value.
     expect((found as any).token).toBeUndefined();
+
+    await storage.deleteUser(user.id);
+  });
+
+  it('requestEmailVerification actually sends a verification email with a token link', async () => {
+    (emailService.sendEmailVerification as any).mockClear();
+
+    const result = await PasswordResetService.requestEmailVerification(user.id, email, '127.0.0.1');
+    expect(result.success).toBe(true);
+
+    expect(emailService.sendEmailVerification).toHaveBeenCalledTimes(1);
+    const [toEmail, data] = (emailService.sendEmailVerification as any).mock.calls.at(-1);
+    expect(toEmail).toBe(email);
+    expect(data.verificationLink).toMatch(/verify-email\?token=/);
 
     await storage.deleteUser(user.id);
   });

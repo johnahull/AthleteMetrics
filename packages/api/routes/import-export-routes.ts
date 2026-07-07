@@ -1732,11 +1732,15 @@ export function registerImportExportRoutes(app: Express) {
 
       // Determine the effective organization based on permissions so a caller
       // cannot export teams from organizations they do not belong to.
-      const { organizationId: requestedOrgId } = req.query;
+      // Coerce to a single string: a repeated query param (?organizationId=a&organizationId=b)
+      // arrives as an array; treat anything non-string as "no org requested" rather
+      // than passing an array into the org filter and bypassing the access check.
+      const rawRequestedOrgId = req.query.organizationId;
+      const requestedOrgId = typeof rawRequestedOrgId === 'string' ? rawRequestedOrgId : undefined;
       let teams;
       if (currentUser.isSiteAdmin) {
         // Site admins may export a specific org, or all when none is requested.
-        teams = await storage.getTeams(requestedOrgId as string | undefined);
+        teams = await storage.getTeams(requestedOrgId);
       } else {
         const userOrgs = await storage.getUserOrganizations(currentUser.id);
         if (requestedOrgId) {
@@ -1746,7 +1750,7 @@ export function registerImportExportRoutes(app: Express) {
               message: "You do not have access to export teams from this organization"
             });
           }
-          teams = await storage.getTeams(requestedOrgId as string);
+          teams = await storage.getTeams(requestedOrgId);
         } else {
           // Include teams from ALL of the caller's organizations, not just one.
           const orgIds = new Set(userOrgs.map(uo => uo.organizationId));

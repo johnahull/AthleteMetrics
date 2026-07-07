@@ -88,6 +88,17 @@ describe('Import/export tenant isolation', () => {
     expect(res.text).not.toContain(teamB.id);
   });
 
+  it('a repeated organizationId param (array) cannot bypass team-export scoping', async () => {
+    // ?organizationId=orgB&organizationId=orgB arrives as an array; it must be
+    // treated as "no org requested" (caller's own orgs), never leak orgB.
+    const res = await agentA
+      .get('/api/export/teams')
+      .query({ organizationId: [orgB.id, orgB.id] })
+      .expect(200);
+    expect(res.text).toContain(teamA.id);
+    expect(res.text).not.toContain(teamB.id);
+  });
+
   it('blocks importing athletes into an organization the caller does not belong to', async () => {
     const res = await agentA
       .post('/api/import/athletes')

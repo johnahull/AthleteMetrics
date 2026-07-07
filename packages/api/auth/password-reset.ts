@@ -212,9 +212,15 @@ export class PasswordResetService {
         severity: 'info',
       });
 
-      // The raw token is intentionally never logged (only its hash is stored).
-      // Email delivery for this path is handled by the caller.
-      void token;
+      // Send the verification link. The raw token is only ever transmitted here
+      // (never logged) — the database holds only its hash.
+      const user = await storage.getUser(userId);
+      const baseUrl = process.env.APP_URL || process.env.BASE_URL || '';
+      const verificationLink = `${baseUrl}/verify-email?token=${token}`;
+      await emailService.sendEmailVerification(email, {
+        userName: user?.firstName || 'there',
+        verificationLink,
+      });
 
       return {
         success: true,
