@@ -41,9 +41,15 @@ import { registerRoutes } from '../../packages/api/routes';
 
 /** Build a YYYY-MM-DD date string for someone who is exactly `years` years old today */
 function exactlyAge(years: number): string {
+  // Use LOCAL date components (not toISOString, which is UTC): calculateAge
+  // parses YYYY-MM-DD as local midnight, so a UTC-formatted date shifts a day at
+  // the boundary and makes an exactly-N-year-old read as N-1.
   const d = new Date();
   d.setFullYear(d.getFullYear() - years);
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 /** Build a YYYY-MM-DD date string for someone whose birthday is `days` days from now,
