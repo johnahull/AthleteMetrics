@@ -12,6 +12,7 @@ import {
   CategoryScale,
   LinearScale,
   RadialLinearScale,
+  TimeScale,
   PointElement,
   LineElement,
   BarElement,
@@ -25,6 +26,8 @@ import {
 
 import zoomPlugin from 'chartjs-plugin-zoom';
 import annotationPlugin from 'chartjs-plugin-annotation';
+// Date adapter for TimeScale: parses ISO date strings and formats tick labels.
+import 'chartjs-adapter-date-fns';
 
 // Register all Chart.js components used across the application
 ChartJS.register(
@@ -32,6 +35,7 @@ ChartJS.register(
   CategoryScale,
   LinearScale,
   RadialLinearScale,
+  TimeScale,
 
   // Elements
   PointElement,

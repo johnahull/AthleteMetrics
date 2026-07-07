@@ -83,14 +83,17 @@ export function overlayToAnnotations(overlay: BenchmarkOverlay): Record<string, 
   return out;
 }
 
-/** Build a single-series Chart.js dataset config from a metric trend. */
+/**
+ * Build a single-series Chart.js dataset config from a metric trend.
+ * Points carry their own ISO date (`{x, y}` for a time scale) so horizontal
+ * spacing reflects real elapsed time between tests, not measurement count.
+ */
 export function buildTrendChartData(trend: MetricTrend, label: string) {
   return {
-    labels: trend.series.map(p => new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })),
     datasets: [
       {
         label,
-        data: trend.series.map(p => p.value),
+        data: trend.series.map(p => ({ x: p.date, y: p.value })),
         borderColor: 'rgba(37, 99, 235, 1)',
         backgroundColor: 'rgba(37, 99, 235, 0.1)',
         borderWidth: 2.5,
