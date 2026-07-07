@@ -21,21 +21,11 @@ interface BenchmarkTrendChartProps {
   unit?: string;
   /**
    * Optional faint background lines drawn behind the main series (e.g. per-
-   * athlete series behind a team-average main line). Each series is aligned
-   * to the main series's x-axis by exact date match; dates the background
-   * series doesn't have render as a gap that Chart.js bridges (`spanGaps`).
-   * This is a best-effort visual overlay for context, not a precise
-   * per-athlete calendar — acceptable since these lines are intentionally
-   * faint/secondary.
+   * athlete series behind a team-average main line). The time-scale x-axis
+   * places each series' points at their own dates, so no alignment to the
+   * main series is needed.
    */
   backgroundSeries?: TrendPoint[][];
-}
-
-/** Map a background series onto the main series's x-axis positions (exact
- *  date match); missing dates become `null` so Chart.js skips/bridges the gap. */
-function alignToMainDates(mainSeries: TrendPoint[], series: TrendPoint[]): (number | null)[] {
-  const byDate = new Map(series.map((p) => [p.date, p.value]));
-  return mainSeries.map((p) => byDate.get(p.date) ?? null);
 }
 
 export function BenchmarkTrendChart({ metricCode, trend, label, unit, backgroundSeries }: BenchmarkTrendChartProps) {
@@ -65,7 +55,7 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
       backgroundSeries.forEach((series, i) => {
         (d.datasets as Record<string, unknown>[]).push({
           label: `Athlete context ${i + 1}`,
-          data: alignToMainDates(trend.series, series),
+          data: series.map((p) => ({ x: p.date, y: p.value })),
           borderColor: 'rgba(148, 163, 184, 0.5)',
           backgroundColor: 'transparent',
           borderWidth: 1,
@@ -102,13 +92,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
         }
       }
       if (crossIdx >= 0) {
-        const xLabel = new Date(trend.series[crossIdx].date).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        });
         ann.crossing = {
           type: 'label',
-          xValue: xLabel,
+          xValue: trend.series[crossIdx].date,
           yValue: trend.series[crossIdx].value,
           content: ['▲ reached ' + currentTierName(trend.benchmark, trend.series[crossIdx].value)],
           color: '#16a34a',
@@ -119,13 +105,9 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
     }
     // Label the personal-best point so it's unmistakable (not just a styled point).
     if (pbIdx >= 0 && trend.series.length > 1) {
-      const pbLabel = new Date(trend.series[pbIdx].date).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      });
       ann.personalBest = {
         type: 'label',
-        xValue: pbLabel,
+        xValue: trend.series[pbIdx].date,
         yValue: trend.series[pbIdx].value,
         content: ['★ Personal best'],
         color: '#b45309',
@@ -152,7 +134,17 @@ export function BenchmarkTrendChart({ metricCode, trend, label, unit, background
       annotation: Object.keys(annotations).length > 0 ? { annotations } : undefined,
     },
     scales: {
-      x: { title: { display: true, text: 'Date' } },
+      x: {
+        type: 'time',
+        time: {
+          tooltipFormat: 'MMM d, yyyy',
+          displayFormats: { day: 'MMM d', week: 'MMM d', month: 'MMM yyyy' },
+        },
+        // Without a cap the time scale emits a tick every few days over a
+        // season-long window, crushing the plot under rotated labels.
+        ticks: { maxTicksLimit: 8, maxRotation: 0 },
+        title: { display: true, text: 'Date' },
+      },
       y: {
         title: { display: true, text: `${yTitle}  ${cue.arrow} better` },
       },

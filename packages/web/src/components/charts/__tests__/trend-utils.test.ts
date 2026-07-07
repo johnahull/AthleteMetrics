@@ -97,7 +97,7 @@ describe('trend-utils', () => {
   });
 
   describe('buildTrendChartData', () => {
-    it('maps a metric trend into a single-series dataset', () => {
+    it('maps a metric trend into time-scaled {x, y} points (no category labels)', () => {
       const trend: MetricTrend = {
         series: [
           { date: '2024-01-15', value: 24 },
@@ -110,8 +110,13 @@ describe('trend-utils', () => {
 
       const chartData = buildTrendChartData(trend, 'Vertical Jump');
 
-      expect(chartData.labels).toHaveLength(trend.series.length);
-      expect(chartData.datasets[0].data).toEqual([24, 27.5]);
+      // Time axis: points carry their own date so spacing reflects real
+      // elapsed time; a labels array would force equal category spacing.
+      expect(chartData).not.toHaveProperty('labels');
+      expect(chartData.datasets[0].data).toEqual([
+        { x: '2024-01-15', y: 24 },
+        { x: '2024-03-15', y: 27.5 },
+      ]);
       expect(chartData.datasets[0].label).toBe('Vertical Jump');
     });
   });
