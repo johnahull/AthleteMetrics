@@ -34,6 +34,7 @@ describe('Organization route authorization (org-admin gate)', () => {
   let orgAdmin: User;
   let coach: User;
   let athlete: User;
+  let siteAdmin: User;
   const trackedUserIds: string[] = [];
   let seq = 0;
 
@@ -68,6 +69,18 @@ describe('Organization route authorization (org-admin gate)', () => {
     orgAdmin = await makeUser('org_admin');
     coach = await makeUser('coach');
     athlete = await makeUser('athlete');
+
+    // Site admin who is NOT a member of the org (to exercise the site-admin bypass).
+    const saUniq = `${Date.now()}${seq++}`;
+    siteAdmin = await storage.createUser({
+      username: `orgauthsite${saUniq}`,
+      password: PASSWORD,
+      emails: [`orgauthsite${saUniq}@test.com`],
+      firstName: 'Site',
+      lastName: 'Admin',
+      isSiteAdmin: true,
+    });
+    trackedUserIds.push(siteAdmin.id);
   });
 
   afterAll(async () => {
@@ -113,6 +126,12 @@ describe('Organization route authorization (org-admin gate)', () => {
       const res = await agent.put(`/api/organizations/${org.id}/users/${target.id}/role`).send({ role: 'coach' });
       expect(res.status).toBe(200);
     });
+
+    it('blocks an org admin from changing their own role (handler self-guard preserved)', async () => {
+      const agent = await agentFor(orgAdmin);
+      const res = await agent.put(`/api/organizations/${org.id}/users/${orgAdmin.id}/role`).send({ role: 'coach' });
+      expect(res.status).toBe(403);
+    });
   });
 
   describe('PATCH /api/organizations/:id/org-settings', () => {
@@ -120,6 +139,14 @@ describe('Organization route authorization (org-admin gate)', () => {
       const agent = await agentFor(coach);
       const res = await agent.patch(`/api/organizations/${org.id}/org-settings`).send({ someSetting: true });
       expect(res.status).toBe(403);
+    });
+
+    it('allows a site admin (full system access), even without org membership', async () => {
+      // Consistent with every other org-admin route, which all bypass for site
+      // admins. (The pre-refactor inline check was the odd one out.)
+      const agent = await agentFor(siteAdmin);
+      const res = await agent.patch(`/api/organizations/${org.id}/org-settings`).send({ someSetting: true });
+      expect(res.status).not.toBe(403);
     });
   });
 
