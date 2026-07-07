@@ -13,7 +13,7 @@
   },
   "homepage": "https://github.com/johnahull/AthleteMetrics#readme",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.9.0"
   },
   "workspaces": [
     "packages/*"
