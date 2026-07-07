@@ -245,6 +245,51 @@ describe("PUT /api/athletes/:id — parentEmail field", () => {
     expect(links[0].isActive).toBe(true);
   });
 
+  it("scopes the parentAthleteLinks row to the authorizing org, not the alphabetically-first org", async () => {
+    // Athlete belongs to two orgs. getUserOrganizations orders by name, so the
+    // "apex" org sorts first — but the requester is org_admin only in the later
+    // "zebra" org. The link must be attributed to the authorizing (zebra) org.
+    const apexOrg = await createOrg(`aaa_${uid()}`);
+    createdOrgIds.push(apexOrg.id);
+    const zebraOrg = await createOrg(`zzz_${uid()}`);
+    createdOrgIds.push(zebraOrg.id);
+
+    const athlete = await createUser('athlete_multiorg', 'athlete', {
+      birthDate: minorBirthDate(),
+      isMinor: true,
+    });
+    createdUserIds.push(athlete.id);
+    await addUserToOrg(athlete.id, apexOrg.id, 'athlete');
+    await addUserToOrg(athlete.id, zebraOrg.id, 'athlete');
+
+    const admin = await createUser('multiorg_admin', 'org_admin');
+    createdUserIds.push(admin.id);
+    await addUserToOrg(admin.id, zebraOrg.id, 'org_admin');
+
+    const cookie = await loginAs(app, admin.username);
+    const parentEmail = `${TEST_PREFIX}parent_multiorg_${uid()}@example.com`;
+
+    const res = await request(app)
+      .put(`/api/athletes/${athlete.id}`)
+      .set('Cookie', cookie)
+      .send({ parentEmail });
+
+    expect(res.status).toBe(200);
+
+    const links = await db
+      .select({ organizationId: parentAthleteLinks.organizationId })
+      .from(parentAthleteLinks)
+      .where(
+        and(
+          eq(parentAthleteLinks.athleteUserId, athlete.id),
+          eq(parentAthleteLinks.parentEmail, parentEmail.toLowerCase()),
+        ),
+      );
+
+    expect(links.length).toBe(1);
+    expect(links[0].organizationId).toBe(zebraOrg.id);
+  });
+
   it("does NOT create a parentAthleteLinks row for an adult athlete", async () => {
     const athlete = await createUser('athlete_adult_nol', 'athlete', {
       birthDate: adultBirthDate(),

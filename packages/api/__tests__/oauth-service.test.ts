@@ -7,6 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } 
 import { db } from "../db";
 import { users, accountLinkingTokens } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import { hashToken } from '../lib/token-hash';
 import { OAuthService, type OAuthProfile } from "../services/oauth-service";
 import { EmailService } from "../services/email-service";
 
@@ -406,7 +407,7 @@ describe.skip("OAuth Service", () => {
       validToken = "valid_token_" + Math.random().toString(36).substring(2);
       await db.insert(accountLinkingTokens).values({
         userId: testUserId,
-        token: validToken,
+        token: hashToken(validToken),
         provider: "google",
         providerId: "test_google_id",
         providerEmail: `linktest${testSuffix}@example.com`,
@@ -436,7 +437,7 @@ describe.skip("OAuth Service", () => {
       // Verify token was marked as used
       const tokens = await db.select()
         .from(accountLinkingTokens)
-        .where(eq(accountLinkingTokens.token, validToken));
+        .where(eq(accountLinkingTokens.token, hashToken(validToken)));
 
       expect(tokens[0].usedAt).toBeDefined();
     });
@@ -448,7 +449,7 @@ describe.skip("OAuth Service", () => {
           provider: "apple",
           providerId: "test_apple_id",
         })
-        .where(eq(accountLinkingTokens.token, validToken));
+        .where(eq(accountLinkingTokens.token, hashToken(validToken)));
 
       const result = await oauthService.confirmAccountLinking(validToken);
 
@@ -465,7 +466,7 @@ describe.skip("OAuth Service", () => {
       const expiredToken = "expired_token_" + Math.random().toString(36).substring(2);
       await db.insert(accountLinkingTokens).values({
         userId: testUserId,
-        token: expiredToken,
+        token: hashToken(expiredToken),
         provider: "google",
         providerId: "test_google_id_2",
         providerEmail: `linktest${testSuffix}@example.com`,
@@ -486,7 +487,7 @@ describe.skip("OAuth Service", () => {
       // Mark token as used
       await db.update(accountLinkingTokens)
         .set({ usedAt: new Date() })
-        .where(eq(accountLinkingTokens.token, validToken));
+        .where(eq(accountLinkingTokens.token, hashToken(validToken)));
 
       const result = await oauthService.confirmAccountLinking(validToken);
 

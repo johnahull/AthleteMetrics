@@ -10,16 +10,23 @@ import { INVITATION_PENDING_PASSWORD } from "@shared/schema";
 import { db } from "../db";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
 import { eq, and } from "drizzle-orm";
+import { AuthSecurity } from "../auth/security";
 
 export interface LoginCredentials {
   username: string;
   password: string;
+  mfaToken?: string;
+  ipAddress?: string;
+  userAgent?: string;
 }
 
 export interface AuthResult {
   success: boolean;
   user?: User;
   error?: string;
+  requiresMFA?: boolean;
+  accountLocked?: boolean;
+  lockUntil?: Date;
 }
 
 export class AuthService extends BaseService {
@@ -28,7 +35,7 @@ export class AuthService extends BaseService {
    */
   async login(credentials: LoginCredentials): Promise<AuthResult> {
     try {
-      const { username, password } = credentials;
+      const { username, password, mfaToken, ipAddress = '0.0.0.0', userAgent } = credentials;
 
       if (!username || !password) {
         return { success: false, error: "Username and password are required" };
@@ -49,6 +56,19 @@ export class AuthService extends BaseService {
         return { success: false, error: "Your account has been deactivated. Please contact your administrator." };
       }
 
+      // Account lockout: block probing an account that has been locked by
+      // repeated failed attempts (brute-force / credential-stuffing protection).
+      const accountEmail = user.emails?.[0] ?? username;
+      const lock = await AuthSecurity.checkAccountLock(accountEmail);
+      if (lock.isLocked) {
+        return {
+          success: false,
+          accountLocked: true,
+          lockUntil: lock.lockUntil,
+          error: "Account temporarily locked due to too many failed attempts. Please try again later.",
+        };
+      }
+
       // Handle invitation pending state
       if (user.password === INVITATION_PENDING_PASSWORD) {
         return { success: false, error: "Please complete your registration first" };
@@ -66,7 +86,20 @@ export class AuthService extends BaseService {
       // Verify password
       const isValidPassword = await bcrypt.compare(password, user.password);
       if (!isValidPassword) {
+        await AuthSecurity.recordFailedLogin(accountEmail, ipAddress, userAgent);
         return { success: false, error: "Invalid credentials" };
+      }
+
+      // MFA: if enabled, a valid TOTP/backup code is required to complete login.
+      if (user.mfaEnabled === true) {
+        if (!mfaToken) {
+          return { success: false, requiresMFA: true, error: "Authentication code required" };
+        }
+        const mfaValid = !!user.mfaSecret && AuthSecurity.verifyMFAToken(user.mfaSecret, mfaToken);
+        if (!mfaValid) {
+          await AuthSecurity.recordFailedLogin(accountEmail, ipAddress, userAgent);
+          return { success: false, error: "Invalid authentication code" };
+        }
       }
 
       // Check organization status for non-site-admin users
@@ -104,6 +137,9 @@ export class AuthService extends BaseService {
           };
         }
       }
+
+      // Reset failed-attempt counter and record the successful login.
+      await AuthSecurity.recordSuccessfulLogin(user.id, ipAddress, userAgent);
 
       return { success: true, user };
     } catch (error) {

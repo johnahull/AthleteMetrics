@@ -6,12 +6,38 @@ import { PasswordResetService } from '../auth/password-reset';
 import { RoleManager } from '../auth/role-manager';
 import { requirePermission } from '../permissions/index';
 import { regenerateSession, saveSession } from '../lib/session-helpers';
+import rateLimit from 'express-rate-limit';
+import { shouldSkipRateLimiting } from '../utils/rate-limit-utils';
 import { z } from 'zod';
+
+// Per-IP throttle for the sensitive enhanced-auth endpoints. These previously
+// had no rate limiting, allowing credential stuffing / reset-token probing that
+// bypassed the protections on the primary /api/auth/* flow.
+const enhancedAuthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  message: { success: false, message: 'Too many attempts, please try again in 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
+});
+
+// Looser limiter for /change-password: it's an authenticated, post-login action
+// (not a credential-stuffing/token-probing target), so it shouldn't share the
+// 5/15min budget with unauthenticated login and reset attempts.
+const changePasswordLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  message: { success: false, message: 'Too many attempts, please try again in 15 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => shouldSkipRateLimiting(req, 'auth'),
+});
 
 const router = Router();
 
 // Enhanced login with MFA support, account lockout, and security logging
-router.post('/login', async (req: Request, res: Response) => {
+router.post('/login', enhancedAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { username, password, mfaToken, rememberMe = false } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
@@ -194,7 +220,7 @@ router.post('/logout', async (req: Request, res: Response) => {
 });
 
 // Password reset request
-router.post('/forgot-password', async (req: Request, res: Response) => {
+router.post('/forgot-password', enhancedAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
@@ -220,7 +246,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
 });
 
 // Validate password reset token
-router.post('/validate-reset-token', async (req: Request, res: Response) => {
+router.post('/validate-reset-token', enhancedAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { token } = req.body;
 
@@ -244,7 +270,7 @@ router.post('/validate-reset-token', async (req: Request, res: Response) => {
 });
 
 // Complete password reset
-router.post('/reset-password', async (req: Request, res: Response) => {
+router.post('/reset-password', enhancedAuthLimiter, async (req: Request, res: Response) => {
   try {
     const { token, newPassword } = req.body;
     const ipAddress = req.ip || req.connection.remoteAddress || '0.0.0.0';
@@ -270,7 +296,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
 });
 
 // Change password (authenticated users)
-router.post('/change-password', async (req: Request, res: Response) => {
+router.post('/change-password', changePasswordLimiter, async (req: Request, res: Response) => {
   try {
     const user = req.session?.user;
     if (!user) {

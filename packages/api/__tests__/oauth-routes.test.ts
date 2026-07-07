@@ -8,6 +8,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { users, accountLinkingTokens } from "@shared/schema";
 import { eq } from "drizzle-orm";
+import { hashToken } from '../lib/token-hash';
 import crypto from "crypto";
 import type { OAuthProfile, OAuthResult } from "../services/oauth-service";
 
@@ -400,7 +401,7 @@ describe.skip("OAuth Routes", () => {
 
         await db.insert(accountLinkingTokens).values({
           userId: testAthleteId,
-          token: expiredToken,
+          token: hashToken(expiredToken),
           provider: 'google',
           providerId: `google_expired_${testSuffix}`,
           providerEmail: EXISTING_USER_EMAIL,
@@ -412,7 +413,7 @@ describe.skip("OAuth Routes", () => {
         expect(result.error).toMatch(/expired/i);
 
         // Cleanup
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, expiredToken));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(expiredToken)));
       });
 
       it("should reject already-used token", async () => {
@@ -422,7 +423,7 @@ describe.skip("OAuth Routes", () => {
 
         await db.insert(accountLinkingTokens).values({
           userId: testAthleteId,
-          token: usedToken,
+          token: hashToken(usedToken),
           provider: 'apple',
           providerId: `apple_used_${testSuffix}`,
           providerEmail: EXISTING_USER_EMAIL,
@@ -435,7 +436,7 @@ describe.skip("OAuth Routes", () => {
         expect(result.error).toMatch(/already.*used/i);
 
         // Cleanup
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, usedToken));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(usedToken)));
       });
 
       it("should redirect to login with success message after linking", () => {
@@ -455,7 +456,7 @@ describe.skip("OAuth Routes", () => {
 
         await db.insert(accountLinkingTokens).values({
           userId: testAthleteId,
-          token: oneTimeToken,
+          token: hashToken(oneTimeToken),
           provider: 'google',
           providerId: `google_onetime_${testSuffix}`,
           providerEmail: EXISTING_USER_EMAIL,
@@ -472,7 +473,7 @@ describe.skip("OAuth Routes", () => {
         expect(secondResult.error).toMatch(/already.*used/i);
 
         // Cleanup
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, oneTimeToken));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(oneTimeToken)));
       });
     });
 
@@ -514,7 +515,7 @@ describe.skip("OAuth Routes", () => {
         expect(linkingToken?.providerId).toBe('google_123');
         expect(linkingToken?.providerEmail).toBe('test@example.com');
 
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, token));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(token)));
       });
     });
   });
@@ -591,7 +592,7 @@ describe.skip("OAuth Routes", () => {
         expect(usedToken?.usedAt).toBeDefined();
         expect(usedToken?.usedAt).toBeInstanceOf(Date);
 
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, token));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(token)));
       });
 
       it("should prevent token reuse", async () => {
@@ -615,7 +616,7 @@ describe.skip("OAuth Routes", () => {
         const secondResult = await storage.confirmAccountLinking(token);
         expect(secondResult.success).toBe(false);
 
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, token));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(token)));
       });
 
       it("should enforce token expiration", async () => {
@@ -635,7 +636,7 @@ describe.skip("OAuth Routes", () => {
         expect(result.success).toBe(false);
         expect(result.error).toMatch(/expired/i);
 
-        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, token));
+        await db.delete(accountLinkingTokens).where(eq(accountLinkingTokens.token, hashToken(token)));
       });
     });
 

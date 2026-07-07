@@ -23,6 +23,8 @@ import {
 } from "@shared/legal-acceptance";
 import { db } from "../db";
 import { parentAthleteLinks } from "@shared/schema/tables/coppa";
+import crypto from "crypto";
+import { hashToken } from "../lib/token-hash";
 
 // Rate limiting for invitation endpoints
 const invitationLimiter = rateLimit({
@@ -463,17 +465,27 @@ export function registerInvitationRoutes(app: Express) {
         return res.status(400).json({ message: "Invitation has been cancelled" });
       }
 
+      // Rotate the token on resend: the stored token is only a hash and cannot
+      // be reversed to build a working link, so issue a fresh token, store its
+      // hash, and email the raw value. (This invalidates any earlier link.)
+      const newRawToken = crypto.randomUUID();
+
       // Extend expiration regardless of current state (atomic update)
       // Validate and clamp expiry days between 1 and 90 days
       const expiryDays = Math.max(1, Math.min(90, parseInt(process.env.INVITATION_EXPIRY_DAYS || '7', 10)));
       const newExpiration = new Date(Date.now() + expiryDays * 24 * 60 * 60 * 1000);
       await storage.updateInvitation(invitationId, {
+        token: hashToken(newRawToken),
         expiresAt: newExpiration,
         status: 'pending'
       });
 
-      // Send invitation email using shared helper
-      const emailSent = await sendInvitationEmailWithTracking(invitation, userId, req);
+      // Send invitation email using shared helper, with the raw token for the link.
+      const emailSent = await sendInvitationEmailWithTracking(
+        { ...invitation, token: newRawToken },
+        userId,
+        req,
+      );
 
       // Audit log
       await storage.createAuditLog({
