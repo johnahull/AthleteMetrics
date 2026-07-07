@@ -545,7 +545,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(accountLinkingTokens.token, hashToken(token)));
   }
 
-  async createUser(user: InsertUser | InsertOAuthUser): Promise<User> {
+  async createUser(user: InsertUser | InsertOAuthUser, executor: any = db): Promise<User> {
     // Check if this is an OAuth user (has googleId or appleId but no password)
     const isOAuthUser = ((user as any).googleId || (user as any).appleId) && !user.password;
 
@@ -605,7 +605,7 @@ export class DatabaseStorage implements IStorage {
       }
     });
 
-    const [newUser] = await db.insert(users).values(finalData).returning();
+    const [newUser] = await executor.insert(users).values(finalData).returning();
     return newUser;
   }
 
@@ -669,7 +669,7 @@ export class DatabaseStorage implements IStorage {
       );
   }
 
-  async updateUser(id: string, user: Partial<InsertUser>): Promise<User> {
+  async updateUser(id: string, user: Partial<InsertUser>, executor: any = db): Promise<User> {
     // List of valid database columns that can be updated
     const validUserColumns = [
       'username', 'emails', 'password', 'firstName', 'lastName',
@@ -711,7 +711,7 @@ export class DatabaseStorage implements IStorage {
       updateData.birthYear = new Date(user.birthDate).getFullYear();
     }
 
-    const [updatedUser] = await db.update(users)
+    const [updatedUser] = await executor.update(users)
       .set(updateData)
       .where(eq(users.id, id))
       .returning();
@@ -1442,21 +1442,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   // User Management
-  async addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization> {
+  async addUserToOrganization(userId: string, organizationId: string, role: string, executor: any = db): Promise<UserOrganization> {
     // Validate that role is organization-specific only
     if (!['org_admin', 'coach', 'athlete'].includes(role)) {
       throw new Error(`Invalid organization role: ${role}. Must be org_admin, coach, or athlete`);
     }
 
     // First remove any existing roles for this user in this organization
-    await db.delete(userOrganizations)
+    await executor.delete(userOrganizations)
       .where(and(
         eq(userOrganizations.userId, userId),
         eq(userOrganizations.organizationId, organizationId)
       ));
 
     // Then insert the new single role
-    const [userOrg] = await db.insert(userOrganizations).values({
+    const [userOrg] = await executor.insert(userOrganizations).values({
       userId,
       organizationId,
       role
@@ -1696,7 +1696,7 @@ export class DatabaseStorage implements IStorage {
     }
   ): Promise<{ user: User; invitation: Invitation }> {
     // Use database transaction with row-level locking to prevent race conditions
-    return await db.transaction(async (tx: any) => {
+    const { user, invitation } = await db.transaction(async (tx: any) => {
       // Lock the invitation row with SELECT FOR UPDATE
       // This prevents concurrent acceptance attempts
       const [invitation] = await tx.select()
@@ -1739,7 +1739,7 @@ export class DatabaseStorage implements IStorage {
           password: userInfo.password,
           isActive: true,
           ...legalData
-        });
+        }, tx);
 
         console.log("Updated existing athlete with credentials:", user.id);
       } else {
@@ -1785,7 +1785,7 @@ export class DatabaseStorage implements IStorage {
 
           // Only update if there's something to update
           if (Object.keys(updateData).length > 0) {
-            user = await this.updateUser(existingUser.id, updateData);
+            user = await this.updateUser(existingUser.id, updateData, tx);
             console.log("[Invitation] Updated existing user for invitation:", user.id);
           } else {
             user = existingUser;
@@ -1814,7 +1814,7 @@ export class DatabaseStorage implements IStorage {
           }
 
           try {
-            user = await this.createUser(createUserData);
+            user = await this.createUser(createUserData, tx);
             console.log("User created successfully:", user.id);
           } catch (error) {
             console.error("Error creating user:", error);
@@ -1833,19 +1833,12 @@ export class DatabaseStorage implements IStorage {
         organizationId: invitation.organizationId,
         role: orgRole
       });
-      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole);
+      await this.addUserToOrganization(user.id, invitation.organizationId, orgRole, tx);
 
-      // Add user to teams if specified
-      if (invitation.teamIds && invitation.teamIds.length > 0) {
-        for (const teamId of invitation.teamIds) {
-          try {
-            await this.addUserToTeam(user.id, teamId);
-          } catch (error) {
-            // May already be in team - that's okay
-            console.log("User may already be in team:", error);
-          }
-        }
-      }
+      // NOTE: team membership is added AFTER the transaction commits (see below).
+      // It is best-effort (errors are swallowed) and must not run inside the
+      // transaction: a swallowed failure would poison the transaction, and a
+      // separate-connection insert cannot see the not-yet-committed user.
 
       // Mark the invitation as used and accepted (using transaction connection)
       await tx.update(invitations)
@@ -1895,6 +1888,22 @@ export class DatabaseStorage implements IStorage {
 
       return { user, invitation };
     });
+
+    // Best-effort team membership, AFTER the transaction has committed so the
+    // user row is visible on a fresh connection and a failure here cannot roll
+    // back the accepted invitation (it is intentionally non-critical).
+    if (invitation.teamIds && invitation.teamIds.length > 0) {
+      for (const teamId of invitation.teamIds) {
+        try {
+          await this.addUserToTeam(user.id, teamId);
+        } catch (error) {
+          // May already be in team, or the team no longer exists — non-critical.
+          console.log("User may already be in team:", error);
+        }
+      }
+    }
+
+    return { user, invitation };
   }
 
   // Email Verification
