@@ -8,6 +8,7 @@ import { OrganizationService } from "../services/organization-service";
 import { OrganizationTypeService } from "../services/organization-type-service";
 import { profileMergeService } from "../services/profile-merge-service";
 import { requireAuth, requireSiteAdmin } from "../middleware";
+import { requireOrgAccess } from "../permissions/middleware";
 import { storage } from "../storage";
 import type { OrganizationType } from "@shared/schema";
 import { isSafeLogoUrl } from "./report-branding-utils";
@@ -372,7 +373,7 @@ export function registerOrganizationRoutes(app: Express) {
    *
    * Allows org admins to update only aiEnabled flag (if aiEnabledBySiteAdmin is true)
    */
-  app.patch("/api/organizations/:id/org-settings", updateLimiter, requireAuth, async (req, res) => {
+  app.patch("/api/organizations/:id/org-settings", updateLimiter, requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'id' }), async (req, res) => {
     try {
       const user = req.session.user;
       if (!user?.id) {
@@ -392,13 +393,7 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(404).json({ message: "Organization not found" });
       }
 
-      // Verify user is org admin for this organization
-      const userOrgs = await storage.getUserOrganizations(user.id);
-      const userOrg = userOrgs.find((uo: any) => uo.organizationId === organizationId);
-
-      if (!userOrg || userOrg.role !== 'org_admin') {
-        return res.status(403).json({ message: "Access denied. Org admin role required." });
-      }
+      // Org-admin authorization is enforced by requireOrgAccess middleware.
 
       // Only allow updating specific org-admin fields
       const { aiEnabled, wellnessEnabled, eventsEnabled, sprintFvEnabled, brandLogoUrl, brandPrimaryColor, brandSecondaryColor, brandTagline, aiPromptContext } = req.body;
@@ -706,24 +701,14 @@ export function registerOrganizationRoutes(app: Express) {
   /**
    * Add user to organization
    */
-  app.post("/api/organizations/:id/users", requireAuth, async (req, res) => {
+  // Only organization administrators (or site admins) may add users.
+  app.post("/api/organizations/:id/users", requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'id' }), async (req, res) => {
     try {
       const organizationId = req.params.id;
 
       // Validate UUID format
       if (!isValidUUID(organizationId)) {
         return res.status(400).json({ message: "Invalid organization ID format" });
-      }
-
-      // Only organization administrators (or site admins) may add users.
-      // Membership alone is not sufficient — mirrors the role check on the
-      // sibling PUT /users/:userId/role endpoint.
-      const requestingUser = req.session.user!;
-      const requestingUserRoles = await storage.getUserRoles(requestingUser.id, organizationId);
-      const isOrgAdmin = requestingUserRoles.includes('org_admin');
-      const isSiteAdmin = requestingUser.isSiteAdmin === true;
-      if (!isOrgAdmin && !isSiteAdmin) {
-        return res.status(403).json({ message: "Access denied. Only organization administrators can add users." });
       }
 
       const user = await organizationService.addUserToOrganization(
@@ -745,11 +730,12 @@ export function registerOrganizationRoutes(app: Express) {
    * Update user role within organization
    * Allows org admins to change roles of users within their organization
    */
-  app.put("/api/organizations/:id/users/:userId/role", updateLimiter, requireAuth, async (req, res) => {
+  app.put("/api/organizations/:id/users/:userId/role", updateLimiter, requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'id' }), async (req, res) => {
     try {
       const { id: organizationId, userId } = req.params;
       const { role } = req.body;
       const requestingUser = req.session.user!;
+      const isSiteAdmin = requestingUser.isSiteAdmin === true;
 
       // Validate UUID formats
       if (!isValidUUID(organizationId) || !isValidUUID(userId)) {
@@ -767,14 +753,7 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(403).json({ message: "Cannot change your own role" });
       }
 
-      // Check requesting user's access to this organization
-      const requestingUserRoles = await storage.getUserRoles(requestingUser.id, organizationId);
-      const isOrgAdmin = requestingUserRoles.includes('org_admin');
-      const isSiteAdmin = requestingUser.isSiteAdmin === true;
-
-      if (!isOrgAdmin && !isSiteAdmin) {
-        return res.status(403).json({ message: "Access denied. Only organization administrators can change user roles." });
-      }
+      // Org-admin authorization is enforced by requireOrgAccess middleware.
 
       // Check if target user is in this organization
       const targetUserRoles = await storage.getUserRoles(userId, organizationId);
@@ -994,7 +973,7 @@ export function registerOrganizationRoutes(app: Express) {
    * Returns what would happen if two athlete profiles were merged
    * POST /api/organizations/:orgId/merge-profiles/preview
    */
-  app.post("/api/organizations/:orgId/merge-profiles/preview", profileMergeLimiter, requireAuth, async (req, res) => {
+  app.post("/api/organizations/:orgId/merge-profiles/preview", profileMergeLimiter, requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'orgId' }), async (req, res) => {
     try {
       const { orgId } = req.params;
       const { sourceUserId, targetUserId } = req.body;
@@ -1010,17 +989,7 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Invalid target user ID format" });
       }
 
-      // Fail-fast authorization check (before calling service)
-      const user = req.session.user!;
-      if (!user.isSiteAdmin) {
-        // Check if user is org admin for this organization
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
-
-        if (!orgMembership || orgMembership.role !== "org_admin") {
-          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
-        }
-      }
+      // Org-admin authorization is enforced by requireOrgAccess middleware.
 
       const preview = await profileMergeService.previewMerge(
         orgId,
@@ -1047,7 +1016,7 @@ export function registerOrganizationRoutes(app: Express) {
    * Merges source athlete profile into target, then soft-deletes source
    * POST /api/organizations/:orgId/merge-profiles
    */
-  app.post("/api/organizations/:orgId/merge-profiles", profileMergeLimiter, requireAuth, async (req, res) => {
+  app.post("/api/organizations/:orgId/merge-profiles", profileMergeLimiter, requireAuth, requireOrgAccess({ role: 'org_admin', fromParam: 'orgId' }), async (req, res) => {
     try {
       const { orgId } = req.params;
       const { sourceUserId, targetUserId, conflictResolution, dryRun } = req.body;
@@ -1068,17 +1037,7 @@ export function registerOrganizationRoutes(app: Express) {
         return res.status(400).json({ message: "Cannot merge a user with themselves" });
       }
 
-      // Fail-fast authorization check (before calling service)
-      const user = req.session.user!;
-      if (!user.isSiteAdmin) {
-        // Check if user is org admin for this organization
-        const userOrgs = await storage.getUserOrganizations(user.id);
-        const orgMembership = userOrgs.find(uo => uo.organizationId === orgId);
-
-        if (!orgMembership || orgMembership.role !== "org_admin") {
-          return res.status(403).json({ message: "Access denied. Organization administrator role required." });
-        }
-      }
+      // Org-admin authorization is enforced by requireOrgAccess middleware.
 
       // Capture request context for audit logging
       const context = {
