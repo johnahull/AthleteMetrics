@@ -85,7 +85,8 @@ describe('acceptInvitation transaction atomicity', () => {
     // No orphaned user, and the invitation is still acceptable (not marked used).
     expect(await storage.getUserByUsername(username)).toBeFalsy();
     const invAfter = await storage.getInvitationByToken(rawToken);
-    expect(invAfter?.isUsed).toBe(false);
+    expect(invAfter).not.toBeUndefined();
+    expect(invAfter!.isUsed).toBe(false);
   });
 
   it('rolls back an existing user\'s update when a later step fails', async () => {
@@ -121,7 +122,8 @@ describe('acceptInvitation transaction atomicity', () => {
     const after = await storage.getUser(existing.id);
     expect(after?.legalAcceptedAt).toBeFalsy();
     const invAfter = await storage.getInvitationByToken(inv.token);
-    expect(invAfter?.isUsed).toBe(false);
+    expect(invAfter).not.toBeUndefined();
+    expect(invAfter!.isUsed).toBe(false);
   });
 
   it('accepts the invitation and creates the user + membership on success', async () => {

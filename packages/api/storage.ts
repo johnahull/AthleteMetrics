@@ -56,15 +56,16 @@ export interface IStorage {
   authenticateUser(username: string, password: string): Promise<User | null>;
   authenticateUserByEmail(email: string, password: string): Promise<User | null>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  getUsersByEmail(email: string): Promise<User[]>;
+  // executor?: pass a transaction handle to run within an existing db.transaction.
+  getUsersByEmail(email: string, executor?: any): Promise<User[]>;
   getUserByUsername(username: string): Promise<User | undefined>;
   getUserByGoogleId(googleId: string): Promise<User | null>;
   getUserByAppleId(appleId: string): Promise<User | null>;
-  createUser(user: InsertUser | InsertOAuthUser): Promise<User>;
+  createUser(user: InsertUser | InsertOAuthUser, executor?: any): Promise<User>;
   getUsers(): Promise<User[]>;
-  getUser(id: string): Promise<User | undefined>;
+  getUser(id: string, executor?: any): Promise<User | undefined>;
   getUsersBatch(ids: string[]): Promise<Map<string, User>>;
-  updateUser(id: string, user: Partial<InsertUser>): Promise<User>;
+  updateUser(id: string, user: Partial<InsertUser>, executor?: any): Promise<User>;
   deleteUser(id: string): Promise<void>;
   hardDeleteUser(id: string): Promise<void>;
   getUserOrganizations(userId: string): Promise<(UserOrganization & { organization: Organization })[]>;
@@ -100,7 +101,7 @@ export interface IStorage {
   updateTeamMembership(teamId: string, userId: string, membershipData: { leftAt?: Date; season?: string }): Promise<any>;
 
   // User Management
-  addUserToOrganization(userId: string, organizationId: string, role: string): Promise<UserOrganization>;
+  addUserToOrganization(userId: string, organizationId: string, role: string, executor?: any): Promise<UserOrganization>;
   addUserToTeam(userId: string, teamId: string): Promise<UserTeam>;
   removeUserFromOrganization(userId: string, organizationId: string, validateLastAdmin?: boolean): Promise<void>;
   removeUserFromTeam(userId: string, teamId: string): Promise<void>;
