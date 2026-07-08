@@ -209,6 +209,12 @@ describe('Server Startup Validation', () => {
     });
   });
 
+  // Note: a startup-level "missing DATABASE_URL exits" test is intentionally not
+  // added here — index.ts's transitive imports read DATABASE_URL at import time
+  // and can throw before validateEnvOrExit runs, making such a test order-
+  // dependent. The DATABASE_URL requirement is covered deterministically by the
+  // parseEnv unit tests in config/__tests__/env.test.ts.
+
   describe('Combined validation', () => {
     it('should default NODE_ENV then validate SESSION_SECRET', async () => {
       delete process.env.NODE_ENV;

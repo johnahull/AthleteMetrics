@@ -11,6 +11,12 @@ import { z } from 'zod';
  * The SESSION_SECRET rules mirror the previous hand-rolled checks in index.ts.
  */
 
+/**
+ * Fail-secure default applied when NODE_ENV is unset. Shared with index.ts's
+ * early `process.env.NODE_ENV` mutation so the two cannot drift.
+ */
+export const DEFAULT_NODE_ENV = 'production';
+
 // Weak-secret detection (repeated chars/patterns and common words).
 const WEAK_SECRET_PATTERNS = [
   /^(.)\1+$/,           // single repeated character
@@ -24,7 +30,7 @@ const envSchema = z
     // All environments actually used: local dev, the vitest harness ('test'),
     // Railway's testing/PR-preview env ('testing'), staging, and production.
     // Omitting a real value here would process.exit(1) that deployment at boot.
-    NODE_ENV: z.enum(['development', 'test', 'testing', 'staging', 'production']).default('production'),
+    NODE_ENV: z.enum(['development', 'test', 'testing', 'staging', 'production']).default(DEFAULT_NODE_ENV),
     DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
     SESSION_SECRET: z
       .string()
@@ -71,10 +77,19 @@ export function validateEnvOrExit(source: NodeJS.ProcessEnv = process.env): Env 
   const result = envSchema.safeParse(source);
   if (!result.success) {
     console.error('❌ FATAL: Invalid environment configuration:');
+    const failedFields = new Set<string>();
     for (const issue of result.error.issues) {
-      console.error(`   - ${issue.path.join('.') || '(root)'}: ${issue.message}`);
+      const field = issue.path.join('.') || '(root)';
+      failedFields.add(field);
+      console.error(`   - ${field}: ${issue.message}`);
     }
-    console.error('   Generate a secure SESSION_SECRET: openssl rand -hex 64');
+    // Targeted remediation hints only for the fields that actually failed.
+    if (failedFields.has('SESSION_SECRET')) {
+      console.error('   Generate a secure SESSION_SECRET: openssl rand -hex 64');
+    }
+    if (failedFields.has('DATABASE_URL')) {
+      console.error('   Set DATABASE_URL to a valid PostgreSQL connection string.');
+    }
     process.exit(1);
   }
   return result.data;

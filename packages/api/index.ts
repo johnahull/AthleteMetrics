@@ -7,13 +7,13 @@ import { startWellnessDigestJob, stopWellnessDigestJob } from "./jobs/wellness-d
 import { startWellnessScheduledJob, stopWellnessScheduledJob } from "./jobs/wellness-scheduled-job";
 import { startCoppaTokenCleanupJob, stopCoppaTokenCleanupJob } from "./jobs/coppa-token-cleanup";
 import { registerProcessSafetyHandlers } from "./lib/process-safety";
-import { validateEnvOrExit } from "./config/env";
+import { validateEnvOrExit, DEFAULT_NODE_ENV } from "./config/env";
 
 // Default NODE_ENV to production for security (fail-secure approach)
 // Production mode ensures: error sanitization, rate limiting, secure cookies
 // This is safer than failing or defaulting to development mode
 if (!process.env.NODE_ENV) {
-  process.env.NODE_ENV = 'production';
+  process.env.NODE_ENV = DEFAULT_NODE_ENV;
   console.warn('⚠️  NODE_ENV not set, defaulting to production for security');
   console.warn('   Set NODE_ENV=development explicitly for local development');
 }

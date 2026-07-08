@@ -48,6 +48,17 @@ describe('parseEnv', () => {
     expect(() => parseEnv(base({ SESSION_SECRET: 'password'.repeat(5) }))).toThrow(/weak pattern or common word/);
   });
 
+  it('rejects weak SESSION_SECRETs based on repetition, not just common words', () => {
+    // single-char repeat, 2-char repeat, and whole-string-repeated-twice.
+    expect(() => parseEnv(base({ SESSION_SECRET: 'a'.repeat(64) }))).toThrow(/weak pattern or common word/);
+    expect(() => parseEnv(base({ SESSION_SECRET: 'ab'.repeat(32) }))).toThrow(/weak pattern or common word/);
+    expect(() => parseEnv(base({ SESSION_SECRET: STRONG_32 + STRONG_32 }))).toThrow(/weak pattern or common word/);
+  });
+
+  it('rejects an invalid NODE_ENV value (locks the enum)', () => {
+    expect(() => parseEnv(base({ NODE_ENV: 'foo' }))).toThrow();
+  });
+
   it('rejects a SESSION_SECRET shorter than 64 chars in production (with the 64-char message)', () => {
     expect(() => parseEnv(base({ NODE_ENV: 'production', SESSION_SECRET: STRONG_32 }))).toThrow(/64 characters/);
   });
