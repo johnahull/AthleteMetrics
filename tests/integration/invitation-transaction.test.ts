@@ -24,6 +24,7 @@ describe('acceptInvitation transaction atomicity', () => {
   let org: Organization;
   let inviter: User;
   const trackedUserIds: string[] = [];
+  const createdInvitationIds: string[] = [];
 
   beforeAll(async () => {
     if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL must be set.');
@@ -40,6 +41,10 @@ describe('acceptInvitation transaction atomicity', () => {
   });
 
   afterAll(async () => {
+    // Delete invitations first (they reference the org and inviter).
+    for (const id of createdInvitationIds) {
+      try { await storage.deleteInvitation(id); } catch { /* ignore */ }
+    }
     for (const id of trackedUserIds) {
       try { await storage.deleteUser(id); } catch { /* ignore */ }
     }
@@ -47,7 +52,7 @@ describe('acceptInvitation transaction atomicity', () => {
   });
 
   async function makeInvitation(email: string) {
-    return storage.createInvitation({
+    const inv = await storage.createInvitation({
       email,
       firstName: 'Tx',
       lastName: 'Invitee',
@@ -56,6 +61,8 @@ describe('acceptInvitation transaction atomicity', () => {
       invitedBy: inviter.id,
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     });
+    createdInvitationIds.push(inv.id);
+    return inv;
   }
 
   it('rolls back the created user when a later step fails', async () => {
@@ -78,6 +85,42 @@ describe('acceptInvitation transaction atomicity', () => {
     // No orphaned user, and the invitation is still acceptable (not marked used).
     expect(await storage.getUserByUsername(username)).toBeFalsy();
     const invAfter = await storage.getInvitationByToken(rawToken);
+    expect(invAfter?.isUsed).toBe(false);
+  });
+
+  it('rolls back an existing user\'s update when a later step fails', async () => {
+    const ts = `${Date.now()}c`;
+    const email = `txexisting${ts}@test.com`;
+    // Pre-create a user with the invitation email → the existing-account accept
+    // path (updateUser), which the fix also threads the transaction into.
+    const existing = await storage.createUser({
+      username: `txexisting${ts}`,
+      password: PASSWORD,
+      emails: [email],
+      firstName: 'Ex',
+      lastName: 'Isting',
+    });
+    trackedUserIds.push(existing.id);
+    const inv = await makeInvitation(email);
+
+    // Inject a failure after updateUser (addUserToOrganization runs after it).
+    const spy = vi.spyOn(storage, 'addUserToOrganization').mockRejectedValueOnce(new Error('injected failure'));
+    try {
+      await expect(
+        storage.acceptInvitation(inv.token, {
+          email, username: `ignored${ts}`, password: PASSWORD, firstName: 'Ex', lastName: 'Isting',
+          legalAcceptedAt: new Date().toISOString(),
+        })
+      ).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+
+    // The legal-acceptance update on the existing user was rolled back, and the
+    // invitation is still acceptable.
+    const after = await storage.getUser(existing.id);
+    expect(after?.legalAcceptedAt).toBeFalsy();
+    const invAfter = await storage.getInvitationByToken(inv.token);
     expect(invAfter?.isUsed).toBe(false);
   });
 
