@@ -60,28 +60,8 @@ function uid() {
   return crypto.randomBytes(4).toString('hex');
 }
 
-/** Build a YYYY-MM-DD date string for someone exactly `years` years old today */
-function exactlyAge(years: number): string {
-  // Use LOCAL date components (not toISOString, which is UTC): calculateAge
-  // parses YYYY-MM-DD as local midnight, so a UTC-formatted date shifts a day at
-  // the boundary and makes an exactly-N-year-old read as N-1.
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - years);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/** Build a YYYY-MM-DD date string for a minor (14 years old by default) */
-function minorBirthDate(): string {
-  return exactlyAge(14);
-}
-
-/** Build a YYYY-MM-DD date string for an adult (25 years old) */
-function adultBirthDate(): string {
-  return exactlyAge(25);
-}
+// Date-of-birth helpers are shared to keep the timezone-safe logic in one place.
+import { exactlyAge, minorBirthDate, adultBirthDate } from '../shared/age-helpers';
 
 async function createUser(
   suffix: string,
